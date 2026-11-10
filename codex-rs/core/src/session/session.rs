@@ -263,7 +263,11 @@ impl SessionConfiguration {
                     .approvals_reviewer
                     .can_set(&ApprovalsReviewer::User)
             })
-            .and_then(|()| step_settings.approval_policy.set(AskForApproval::UnlessTrusted))?;
+            .and_then(|()| {
+                step_settings
+                    .approval_policy
+                    .set(AskForApproval::UnlessTrusted)
+            })?;
         step_settings.approvals_reviewer = ApprovalsReviewer::User;
         self.step_settings = Arc::new(step_settings);
         self.aggressive_approvals = true;
@@ -1534,16 +1538,16 @@ impl Session {
             // Issue #535: configured writable links into another root's
             // read-only path are left out of the sandbox; say so at launch
             // (once, not again in each sub-agent's thread).
-            let excluded_writable_links = if session_configuration.session_source.is_non_root_agent()
-            {
-                Vec::new()
-            } else {
-                crate::tools::writable_root_notices::excluded_writable_link_warnings(
-                    thread_id,
-                    &session_file_system_policy,
-                    session_configuration.cwd().as_path(),
-                )
-            };
+            let excluded_writable_links =
+                if session_configuration.session_source.is_non_root_agent() {
+                    Vec::new()
+                } else {
+                    crate::tools::writable_root_notices::excluded_writable_link_warnings(
+                        thread_id,
+                        &session_file_system_policy,
+                        session_configuration.cwd().as_path(),
+                    )
+                };
             for message in config
                 .startup_warnings
                 .iter()
@@ -2104,52 +2108,56 @@ impl Session {
                 thread_store: Arc::clone(&thread_store),
                 attestation_provider: attestation_provider.clone(),
                 time_provider,
-                model_client: arc_swap::ArcSwap::from_pointee(ModelClient::new(
-                    Some(Arc::clone(&auth_manager)),
-                    if config.features.enabled(Feature::UseAgentIdentity) {
-                        AgentIdentityAuthPolicy::ChatGptAuth
-                    } else {
-                        AgentIdentityAuthPolicy::JwtOnly
-                    },
-                    thread_id,
-                    session_configuration.provider.info().clone(),
-                    session_configuration.session_source.clone(),
-                    session_configuration.originator.clone(),
-                    config.model_verbosity,
-                    config.features.enabled(Feature::ContentItemKinds),
-                    reasoning_effort_override_enabled,
-                    config.features.enabled(Feature::EnableRequestCompression),
-                    config.features.enabled(Feature::RuntimeMetrics),
-                    Self::build_model_client_beta_features_header(config.as_ref()),
-                    /*concurrent_reasoning_summaries_enabled*/
-                    config
-                        .features
-                        .enabled(Feature::ConcurrentReasoningSummaries),
-                    config.features.enabled(Feature::OutputTokenReplay),
-                    attestation_provider,
-                    config.http_client_factory(),
-                    workspace_routing.as_ref().clone(),
-                    extensions.model_request_contributors().to_vec(),
-                )
-                .with_ingress_policy(config.security_level, ingress_policy)
-                .with_source_envelopes(config.features.enabled(Feature::SourceEnvelopes))
-                .with_source_origin_key(config.codex_home.as_path())
-                .with_executed_tool_calls(executed_tool_calls.clone())
-                .with_restored_history(matches!(
-                    &initial_history,
-                    InitialHistory::Resumed(_) | InitialHistory::Forked(_)
-                ))
-                .with_session_context(
-                    prompt_cache_key,
-                    crate::guardian::prompt_cache_key_override_for_review_session(
-                        &session_configuration.session_source,
-                        session_configuration.parent_thread_id,
+                model_client: arc_swap::ArcSwap::from_pointee(
+                    ModelClient::new(
+                        Some(Arc::clone(&auth_manager)),
+                        if config.features.enabled(Feature::UseAgentIdentity) {
+                            AgentIdentityAuthPolicy::ChatGptAuth
+                        } else {
+                            AgentIdentityAuthPolicy::JwtOnly
+                        },
+                        thread_id,
+                        session_configuration.provider.info().clone(),
+                        session_configuration.session_source.clone(),
+                        session_configuration.originator.clone(),
+                        config.model_verbosity,
+                        config.features.enabled(Feature::ContentItemKinds),
+                        reasoning_effort_override_enabled,
+                        config.features.enabled(Feature::EnableRequestCompression),
+                        config.features.enabled(Feature::RuntimeMetrics),
+                        Self::build_model_client_beta_features_header(config.as_ref()),
+                        /*concurrent_reasoning_summaries_enabled*/
+                        config
+                            .features
+                            .enabled(Feature::ConcurrentReasoningSummaries),
+                        config.features.enabled(Feature::OutputTokenReplay),
+                        attestation_provider,
+                        config.http_client_factory(),
+                        workspace_routing.as_ref().clone(),
+                        extensions.model_request_contributors().to_vec(),
                     )
-                    .or(fork_cache_key),
-                    tx_event.clone(),
-                    codex_responses_headers,
-                    crate::cyber_access_program::ApiKeyCyberAccessPrograms::from_config(&config),
-                )),
+                    .with_ingress_policy(config.security_level, ingress_policy)
+                    .with_source_envelopes(config.features.enabled(Feature::SourceEnvelopes))
+                    .with_source_origin_key(config.codex_home.as_path())
+                    .with_executed_tool_calls(executed_tool_calls.clone())
+                    .with_restored_history(matches!(
+                        &initial_history,
+                        InitialHistory::Resumed(_) | InitialHistory::Forked(_)
+                    ))
+                    .with_session_context(
+                        prompt_cache_key,
+                        crate::guardian::prompt_cache_key_override_for_review_session(
+                            &session_configuration.session_source,
+                            session_configuration.parent_thread_id,
+                        )
+                        .or(fork_cache_key),
+                        tx_event.clone(),
+                        codex_responses_headers,
+                        crate::cyber_access_program::ApiKeyCyberAccessPrograms::from_config(
+                            &config,
+                        ),
+                    ),
+                ),
                 executed_tool_calls: executed_tool_calls.clone(),
                 code_mode_service: crate::tools::code_mode::CodeModeService::new(
                     thread_id,
