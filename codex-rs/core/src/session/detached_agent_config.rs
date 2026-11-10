@@ -5,13 +5,12 @@
 //! Windows sandbox and the security level in force, including what changed
 //! since the thread started.
 
-use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_security_policy::SecurityLevel;
 
 use super::session::Session;
 use crate::config::Config;
 use crate::security::SecurityPolicyError;
-use crate::windows_sandbox::WindowsSandboxLevelExt;
+use crate::windows_sandbox::raise_windows_sandbox;
 
 impl Session {
     pub(crate) async fn detached_agent_config(&self) -> Config {
@@ -39,32 +38,6 @@ impl Session {
             Err(_) => config.security_level = SecurityLevel::Aggressive,
         }
         config
-    }
-}
-
-fn windows_sandbox_rank(level: WindowsSandboxLevel) -> u8 {
-    match level {
-        WindowsSandboxLevel::Disabled => 0,
-        WindowsSandboxLevel::RestrictedToken => 1,
-        WindowsSandboxLevel::Elevated => 2,
-    }
-}
-
-/// Selects `level`'s Windows sandbox in `config` when it is stronger than
-/// the one `config` selects; never lowers it.
-fn raise_windows_sandbox(config: &mut Config, level: WindowsSandboxLevel) {
-    if windows_sandbox_rank(level) <= windows_sandbox_rank(WindowsSandboxLevel::from_config(config))
-    {
-        return;
-    }
-    match level {
-        WindowsSandboxLevel::Elevated => {
-            config.set_windows_elevated_sandbox_enabled(/*value*/ true)
-        }
-        WindowsSandboxLevel::RestrictedToken => {
-            config.set_windows_sandbox_enabled(/*value*/ true)
-        }
-        WindowsSandboxLevel::Disabled => {}
     }
 }
 

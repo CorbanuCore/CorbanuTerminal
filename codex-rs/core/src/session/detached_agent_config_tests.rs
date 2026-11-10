@@ -8,8 +8,8 @@ use pretty_assertions::assert_eq;
 use super::super::session::SessionSettingsUpdate;
 use super::super::tests::make_session_and_context;
 use super::super::tests::make_session_and_context_with_rx;
-use super::raise_windows_sandbox;
 use crate::windows_sandbox::WindowsSandboxLevelExt;
+use crate::windows_sandbox::raise_windows_sandbox;
 
 /// #2015: an agent a client starts from a thread gets the thread's current
 /// settings, including changes made after the thread started.
