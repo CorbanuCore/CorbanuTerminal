@@ -386,6 +386,17 @@ pub async fn build_exec_request(
         enforce_managed_network,
     );
     tracing::debug!("Sandbox type: {sandbox_type:?}");
+    // D446 before any override resolution, so a network working folder gets
+    // its own refusal rather than a path error from the resolver.
+    // `attach_windows_sandbox_filesystem_overrides` checks it again.
+    if sandbox_type == SandboxType::WindowsRestrictedToken
+        && !windows_sandbox_uses_elevated_backend(windows_sandbox_level, enforce_managed_network)
+    {
+        for folder in [cwd.as_path(), sandbox_cwd.as_path()] {
+            codex_sandboxing::refuse_network_working_folder(folder)
+                .map_err(CodexErr::UnsupportedOperation)?;
+        }
+    }
 
     if let Some(network) = network.as_ref() {
         network
