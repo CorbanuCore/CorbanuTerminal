@@ -21,7 +21,9 @@ use super::build_exec_request;
 use crate::sandboxing::SandboxPermissions;
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::PermissionProfile;
+use codex_sandboxing::SandboxType;
 use codex_utils_absolute_path::AbsolutePathBuf;
+use codex_utils_path_uri::PathUri;
 use futures::FutureExt;
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -129,16 +131,18 @@ async fn command_exec(
             network_environment_id: None,
             sandbox_permissions: SandboxPermissions::UseDefault,
             windows_sandbox_level: level,
-            windows_sandbox_private_desktop: false,
             justification: None,
             arg0: None,
         },
         profile,
         cwd,
-        std::slice::from_ref(cwd),
+        &[PathUri::from_abs_path(cwd)],
         &None,
+        /*codex_self_exe*/ &None,
+        SandboxType::WindowsRestrictedToken,
         /*use_legacy_landlock*/ false,
     )
+    .await
     .map_err(|err| format!("refused: {err}"))?;
     let output = crate::sandboxing::execute_env(request, /*stdout_stream*/ None)
         .await
