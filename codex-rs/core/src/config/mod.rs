@@ -1889,9 +1889,7 @@ pub fn gpu_runtime_model_provider(
     provider.auth = Some(ModelProviderAuthInfo {
         command: current_corbanu_auth_helper(),
         args: vec![
-            codex_login::auth::GPU_ENDPOINT_TOKEN_HELPER_SUBCOMMAND
-                .to_string()
-                .into(),
+            codex_login::auth::GPU_ENDPOINT_TOKEN_HELPER_SUBCOMMAND.into(),
             record.rental_id.into(),
         ],
         // Vault access may briefly serialize with the rental controller in another process.
@@ -5005,7 +5003,8 @@ impl Config {
             .map(str::to_string);
         let provider_came_from_override = model_provider.is_some();
         let model_came_from_override = model.is_some();
-        let requested_provider_was_explicit = required_model_provider.is_some()
+        let provider_is_required = required_model_provider.is_some();
+        let requested_provider_was_explicit = provider_is_required
             || model_provider.is_some()
             || cfg.model_provider.is_some();
         let requested_model_provider_id = required_model_provider
@@ -5014,7 +5013,9 @@ impl Config {
             .unwrap_or_else(|| DEFAULT_MODEL_PROVIDER_ID.to_string());
         let requested_model_provider_id =
             canonical_provider_id(&requested_model_provider_id).to_string();
-        let stale_runtime_provider = requested_model_provider_id.starts_with("gpu-")
+        // A required provider is never replaced: if it is missing, loading fails below.
+        let stale_runtime_provider = !provider_is_required
+            && requested_model_provider_id.starts_with("gpu-")
             && !model_providers.contains_key(&requested_model_provider_id);
         if stale_runtime_provider {
             startup_warnings.push(format!(
@@ -6267,7 +6268,7 @@ impl Config {
         } else {
             NetworkProxyConfig::default()
         };
-        let prepared_network = PreparedNetworkConfig::from_inputs(NetworkConfigInputs {
+        let mut prepared_network = PreparedNetworkConfig::from_inputs(NetworkConfigInputs {
             configured_proxy: configured_network_proxy_config,
             feature_enabled: profile_allows_network_proxy
                 && self.features.enabled(Feature::NetworkProxy),
@@ -6275,6 +6276,25 @@ impl Config {
             candidate_permission_profile: permission_profile,
             credential_broker_base_url: cfg.openai_base_url.as_deref(),
         });
+        // PF-33 / PF-27-S02: a profile switch keeps the network security
+        // settings the load path applies (see `load_config_with_layer_stack`).
+        if profile_allows_network_proxy
+            && self.features.enabled(Feature::NetworkProxy)
+            && permission_profile.network_sandbox_policy().is_enabled()
+        {
+            apply_security_network_features(&mut prepared_network.configured_proxy, &self.features);
+            apply_secretless_launch_network_config(
+                &mut prepared_network.configured_proxy,
+                self.features.enabled(Feature::SecretlessAgentLaunch),
+                &self.permissions.shell_environment_policy,
+                &self
+                    .model_providers
+                    .values()
+                    .filter_map(|provider| provider.env_key.clone())
+                    .collect::<Vec<_>>(),
+                &self.codex_home,
+            );
+        }
         build_network_proxy_spec(
             prepared_network.configured_proxy,
             self.config_layer_stack.requirements().network.clone(),
