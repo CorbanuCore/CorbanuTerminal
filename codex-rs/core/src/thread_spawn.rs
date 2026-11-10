@@ -20,6 +20,8 @@ use crate::session::session::Session;
 use crate::session::step_context::StepContext;
 use codex_prompts::ResolvedModelMessages;
 use codex_protocol::AgentPath;
+use codex_protocol::crew::AgentClass;
+use codex_protocol::crew::RetentionPolicy;
 use codex_protocol::error::CodexErr;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::MultiAgentVersion;
@@ -94,14 +96,14 @@ pub enum ThreadSpawnError {
     Backend(#[from] CodexErr),
 }
 
-pub(crate) async fn spawn(
+/// Corbanu: starts a child prepared by [`prepare_with_model_provider`], after the caller has
+/// applied its PF-84 account and checked the message codec against the final runtime.
+pub(crate) async fn spawn_prepared(
     session: &Session,
-    step_context: &StepContext,
-    call_id: &str,
-    request: ThreadSpawnRequest,
+    settings: ChildSpawnSettings,
+    message: AgentMessage,
+    task_name: AgentPath,
 ) -> Result<ThreadSpawnResult, ThreadSpawnError> {
-    let (request, message) = request.into_parts()?;
-    let (settings, task_name) = prepare(session, step_context, call_id, request).await?;
     let request = SpawnRequest {
         caller: session.thread_id,
         config: settings.config,
@@ -127,6 +129,25 @@ pub(crate) async fn prepare(
     call_id: &str,
     request: ThreadCreateRequest,
 ) -> Result<(ChildSpawnSettings, AgentPath), ThreadSpawnError> {
+    prepare_with_model_provider(
+        session,
+        step_context,
+        call_id,
+        request,
+        /*model_provider*/ None,
+    )
+    .await
+}
+
+/// Corbanu: [`prepare`] with an explicit child provider (the plaintext spawn adapter's
+/// `model_provider`); `prepare_agent_spawn_config` checks it against the provider allowlist.
+pub(crate) async fn prepare_with_model_provider(
+    session: &Session,
+    step_context: &StepContext,
+    call_id: &str,
+    request: ThreadCreateRequest,
+    model_provider: Option<&str>,
+) -> Result<(ChildSpawnSettings, AgentPath), ThreadSpawnError> {
     let turn = &step_context.turn;
     let ThreadCreateRequest {
         task_name,
@@ -139,6 +160,14 @@ pub(crate) async fn prepare(
         .as_deref()
         .map(str::trim)
         .filter(|role| !role.is_empty());
+    // Corbanu (as main): resolve the canonical path before runtime policy so a malformed task
+    // name gets the routing error whatever the parent runtime's catalogue state.
+    let task_name = turn
+        .session_source
+        .get_agent_path()
+        .unwrap_or_else(AgentPath::root)
+        .join(&task_name)
+        .map_err(ThreadSpawnError::Preparation)?;
     let prepared = prepare_agent_spawn_config(
         session,
         step_context,
@@ -146,7 +175,7 @@ pub(crate) async fn prepare(
             version: SpawnConfigVersion::V2,
             full_history_fork: matches!(fork_mode, Some(SpawnAgentForkMode::FullHistory)),
             role_name,
-            model_provider: None,
+            model_provider,
             model: model.as_deref(),
             reasoning_effort,
         },
@@ -154,18 +183,17 @@ pub(crate) async fn prepare(
     .await
     .map_err(ThreadSpawnError::Preparation)?;
     let config = prepared.config;
-    let task_name = turn
-        .session_source
-        .get_agent_path()
-        .unwrap_or_else(AgentPath::root)
-        .join(&task_name)
-        .map_err(ThreadSpawnError::Preparation)?;
     let spawn_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
         parent_thread_id: session.thread_id,
         depth: next_thread_spawn_depth(&turn.session_source),
         agent_path: Some(task_name.clone()),
         agent_nickname: None,
         agent_role: prepared.role_name,
+        // Corbanu (as main): the spawning call id is the child's assignment id.
+        agent_class: Some(AgentClass::EphemeralTask {
+            assignment_id: call_id.to_string(),
+            retention: RetentionPolicy::Retain,
+        }),
     });
     let multi_agent_v2_usage_hints = if matches!(fork_mode, Some(SpawnAgentForkMode::FullHistory))
         && turn.multi_agent_version == MultiAgentVersion::V2

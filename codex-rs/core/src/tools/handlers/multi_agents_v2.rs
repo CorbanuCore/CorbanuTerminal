@@ -13,13 +13,7 @@ use crate::tools::handlers::multi_agents_common::*;
 use crate::tools::handlers::parse_arguments;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::ToolExecutor;
-<<<<<<< HEAD
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
-use codex_protocol::AgentPath;
-||||||| 413492cd6c
-use codex_protocol::AgentPath;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::items::CollabAgentTool;
 use codex_protocol::items::CollabAgentToolCallItem;
 use codex_protocol::items::CollabAgentToolCallStatus;
@@ -216,51 +210,16 @@ pub(crate) async fn emit_sub_agent_activity(
 fn agent_message_from_tool(
     message: String,
     source: &crate::tools::context::ToolCallSource,
-<<<<<<< HEAD
     provider_id: &str,
-    trigger_turn: bool,
-) -> InterAgentCommunication {
+) -> AgentMessage {
+    // Corbanu (#1016/#820): only a direct call whose codec is OpenAI carries native encrypted
+    // content; every other provider, plaintext adapter and code-mode call sends plaintext.
     if provider_id == OPENAI_PROVIDER_ID
         && matches!(source, crate::tools::context::ToolCallSource::Direct)
     {
-        return InterAgentCommunication::new_encrypted(
-            author,
-            recipient,
-            Vec::new(),
-            message,
-            trigger_turn,
-        );
-    }
-    let message_type = if trigger_turn {
-        InterAgentMessageType::NewTask
-||||||| 413492cd6c
-    trigger_turn: bool,
-) -> InterAgentCommunication {
-    if !matches!(
-        source,
-        crate::tools::context::ToolCallSource::DirectPlaintextMessage
-    ) {
-        return InterAgentCommunication::new_encrypted(
-            author,
-            recipient,
-            Vec::new(),
-            message,
-            trigger_turn,
-        );
-    }
-    let message_type = if trigger_turn {
-        InterAgentMessageType::NewTask
-=======
-) -> AgentMessage {
-    if matches!(
-        source,
-        crate::tools::context::ToolCallSource::DirectPlaintextMessage
-            | crate::tools::context::ToolCallSource::CodeMode { .. }
-    ) {
-        AgentMessage::Plaintext(message)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-    } else {
         AgentMessage::Encrypted(message)
+    } else {
+        AgentMessage::Plaintext(message)
     }
 }
 
@@ -276,6 +235,27 @@ pub(super) fn ensure_manager_tool_allowed(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent::types::MessageDeliveryMode;
+    use codex_protocol::AgentPath;
+    use codex_protocol::protocol::InterAgentCommunication;
+
+    /// Main's helper, composed from the tool codec choice and the backend's delivery rendering.
+    fn communication_from_tool_message(
+        author: AgentPath,
+        recipient: AgentPath,
+        message: String,
+        source: &crate::tools::context::ToolCallSource,
+        provider_id: &str,
+        trigger_turn: bool,
+    ) -> InterAgentCommunication {
+        let mode = if trigger_turn {
+            MessageDeliveryMode::TriggerTurn
+        } else {
+            MessageDeliveryMode::QueueOnly
+        };
+        agent_message_from_tool(message, source, provider_id)
+            .into_communication(author, recipient, mode)
+    }
 
     fn assert_plaintext_new_task(source: crate::tools::context::ToolCallSource, provider_id: &str) {
         let communication = communication_from_tool_message(

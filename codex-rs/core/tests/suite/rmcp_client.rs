@@ -417,6 +417,7 @@ fn insert_mcp_server(
             omit_tools_from: None,
             disabled_reason: None,
             startup_timeout_sec: Some(Duration::from_secs(10)),
+            discover_timeout_sec: None,
             tool_timeout_sec: options.tool_timeout_sec,
             default_tools_approval_mode: None,
             enabled_tools: None,

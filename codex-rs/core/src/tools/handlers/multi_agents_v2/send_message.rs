@@ -68,17 +68,24 @@ impl ToolExecutor<ToolInvocation> for PlaintextHandler {
 
     fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
         Box::pin(async move {
-            let arguments = function_arguments(invocation.payload.clone())?;
-            let args: SendMessageArgs = parse_arguments(&arguments)?;
-            handle_message_string_tool(
-                invocation,
-                MessageDeliveryMode::QueueOnly,
-                CollaborationMessageEncoding::PlaintextAdapter,
-                args.target,
-                args.message,
-            )
-            .await
-            .map(boxed_tool_output)
+            let mut analytics = ToolCallAnalytics::new(&invocation, CollabAgentTool::SendMessage);
+            let result = async {
+                let arguments = function_arguments(invocation.payload.clone())?;
+                let args: SendMessageArgs = parse_arguments(&arguments)?;
+                handle_message_string_tool(
+                    invocation,
+                    MessageDeliveryMode::QueueOnly,
+                    CollaborationMessageEncoding::PlaintextAdapter,
+                    args.target,
+                    args.message,
+                    &mut analytics,
+                )
+                .await
+                .map(boxed_tool_output)
+            }
+            .await;
+            analytics.finish(&result);
+            result
         })
     }
 }

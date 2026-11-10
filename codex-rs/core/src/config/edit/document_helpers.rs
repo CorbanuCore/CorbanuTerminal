@@ -132,6 +132,9 @@ fn serialize_mcp_server_table(config: &McpServerConfig) -> anyhow::Result<TomlTa
     if let Some(timeout) = config.startup_timeout_sec {
         entry["startup_timeout_sec"] = value(timeout.as_secs_f64());
     }
+    if let Some(timeout) = config.discover_timeout_sec {
+        entry["discover_timeout_sec"] = value(timeout.as_secs_f64());
+    }
     if let Some(timeout) = config.tool_timeout_sec {
         entry["tool_timeout_sec"] = value(timeout.as_secs_f64());
     }

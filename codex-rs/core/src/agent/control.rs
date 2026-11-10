@@ -126,6 +126,29 @@ pub(crate) struct ListedAgent {
     pub(crate) last_result_message: Option<String>,
 }
 
+impl From<LiveAgent> for ListedAgent {
+    /// The row for an agent from upstream's `list_agents`, named by its canonical path (its
+    /// thread id when it has none), as main listed it.
+    fn from(agent: LiveAgent) -> Self {
+        let LiveAgent {
+            thread_id,
+            metadata,
+            status,
+        } = agent;
+        Self {
+            agent_name: metadata
+                .agent_path
+                .as_ref()
+                .map_or_else(|| thread_id.to_string(), ToString::to_string),
+            agent_nickname: metadata.agent_nickname,
+            agent_role: metadata.agent_role,
+            agent_status: status,
+            last_task_message: metadata.last_task_message,
+            last_result_message: metadata.last_result_message,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct NativeAutoLoopState {
     operator_input_seen: bool,
@@ -500,6 +523,27 @@ impl LocalAgentControl {
                 .await;
         }
         Ok(())
+    }
+
+    /// Corbanu (as main's `send_message`/`followup_task`): admit the message to the durable
+    /// mailbox even when every agent slot is busy; a follow-up's turn then waits for a slot
+    /// instead of the message being refused.
+    pub(crate) async fn send_inter_agent_communication_without_capacity_check(
+        &self,
+        agent_id: ThreadId,
+        communication: InterAgentCommunication,
+        agent_communication_context: AgentCommunicationContext,
+        start_options: TurnStartOptions,
+    ) -> CodexResult<String> {
+        let state = self.runtime.upgrade()?;
+        self.send_inter_agent_communication_after_capacity_check(
+            agent_id,
+            &state,
+            communication,
+            agent_communication_context,
+            start_options,
+        )
+        .await
     }
 
     async fn send_inter_agent_communication_after_capacity_check(
