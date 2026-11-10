@@ -10785,9 +10785,9 @@ async fn recv_terminal_event(
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct NeverEndingTask {
-    pub(crate) kind: TaskKind,
-    pub(crate) listen_to_cancellation_token: bool,
+struct NeverEndingTask {
+    kind: TaskKind,
+    listen_to_cancellation_token: bool,
 }
 
 impl SessionTask for NeverEndingTask {
