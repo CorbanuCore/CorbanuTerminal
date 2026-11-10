@@ -95,6 +95,9 @@ pub(crate) type SessionTaskResult = CodexResult<Option<String>>;
 pub(crate) const TURN_PANICKED_MESSAGE: &str =
     "this turn stopped because of an internal error (a panic); the details are in the log";
 
+/// Attempts to submit one refused follow-up input again before it is reported.
+const FOLLOW_UP_SUBMIT_ATTEMPTS: usize = 3;
+
 /// How a turn ended, for its mailbox messages.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum MailboxTurnEnd {
@@ -1313,38 +1316,22 @@ impl Session {
         // User input waiting for admission's answer, settled in submission order.
         let mut awaiting_admission = Vec::new();
         for (input, final_output_json_schema) in follow_up_input {
-            let submitted = match input.clone() {
-                TurnInput::UserInput {
-                    content,
-                    client_id,
-                    metadata,
-                } => {
-                    let (reply, reply_rx) = tokio::sync::oneshot::channel();
-                    let mut request =
-                        TurnInputRequest::new(SubmittedTurnInput::UserInput { content, client_id })
-                            .on_start(TurnStartOptions {
-                                final_output_json_schema: final_output_json_schema.clone(),
-                                // Keeps a heartbeat's origin (`UserInputOrigin::from_turn_trigger`).
-                                turn_trigger: (metadata.origin
-                                    == codex_history::UserInputOrigin::Heartbeat)
-                                    .then(|| "automation_heartbeat_scheduled".to_string()),
-                                ..Default::default()
-                            });
-                    request.user_item_uuid = metadata.response_item_uuid;
-                    let op = Op::TurnInput {
-                        request: Box::new(request),
-                        mode: TurnInputMode::StartOrSteer,
-                        reply,
-                    };
-                    let submitted = self.submit_internal_follow_up(op).await;
-                    if submitted.is_ok() {
-                        awaiting_admission.push((reply_rx, input, final_output_json_schema));
+            let submitted = match &input {
+                TurnInput::UserInput { .. } => {
+                    match self
+                        .submit_follow_up_user_input(&input, final_output_json_schema.clone())
+                        .await
+                    {
+                        Ok(reply_rx) => {
+                            awaiting_admission.push((reply_rx, input, final_output_json_schema));
+                            Ok(())
+                        }
+                        Err(err) => Err(err),
                     }
-                    submitted
                 }
                 TurnInput::InterAgentCommunication(communication) => {
                     let delivery = communication.delivery.clone();
-                    let mut communication = (*communication).clone();
+                    let mut communication = (**communication).clone();
                     communication.trigger_turn = true;
                     let op = Op::InterAgentCommunication {
                         communication,
@@ -1374,10 +1361,49 @@ impl Session {
         tokio::spawn(async move {
             for (reply_rx, input, final_output_json_schema) in awaiting_admission {
                 session
-                    .settle_follow_up_input(reply_rx.await, input, final_output_json_schema)
+                    .settle_follow_up_input(reply_rx, input, final_output_json_schema)
                     .await;
             }
         });
+    }
+
+    /// Submits follow-up user input as a start-or-steer turn input; the receiver gets
+    /// admission's answer.
+    async fn submit_follow_up_user_input(
+        &self,
+        input: &TurnInput,
+        final_output_json_schema: Option<serde_json::Value>,
+    ) -> CodexResult<tokio::sync::oneshot::Receiver<CodexResult<TurnInputSubmission>>> {
+        let TurnInput::UserInput {
+            content,
+            client_id,
+            metadata,
+        } = input
+        else {
+            return Err(CodexErr::InvalidRequest(
+                "only user input is submitted as turn input".to_string(),
+            ));
+        };
+        let (reply, reply_rx) = tokio::sync::oneshot::channel();
+        let mut request = TurnInputRequest::new(SubmittedTurnInput::UserInput {
+            content: content.clone(),
+            client_id: client_id.clone(),
+        })
+        .on_start(TurnStartOptions {
+            final_output_json_schema,
+            // Keeps a heartbeat's origin (`UserInputOrigin::from_turn_trigger`).
+            turn_trigger: (metadata.origin == codex_history::UserInputOrigin::Heartbeat)
+                .then(|| "automation_heartbeat_scheduled".to_string()),
+            ..Default::default()
+        });
+        request.user_item_uuid = metadata.response_item_uuid;
+        self.submit_internal_follow_up(Op::TurnInput {
+            request: Box::new(request),
+            mode: TurnInputMode::StartOrSteer,
+            reply,
+        })
+        .await?;
+        Ok(reply_rx)
     }
 
     /// Follow-up user input that admission did not take, typically because another turn is
@@ -1390,32 +1416,35 @@ impl Session {
         reason = "deferring into the running turn must not race its end"
     )]
     async fn settle_follow_up_input(
-        self: &Arc<Self>,
-        reply: std::result::Result<
-            CodexResult<TurnInputSubmission>,
-            tokio::sync::oneshot::error::RecvError,
-        >,
+        &self,
+        mut reply_rx: tokio::sync::oneshot::Receiver<CodexResult<TurnInputSubmission>>,
         input: TurnInput,
         final_output_json_schema: Option<serde_json::Value>,
     ) {
-        let reason = match reply {
-            Ok(Ok(TurnInputSubmission::Started { .. } | TurnInputSubmission::Steered { .. })) => {
+        // Each retry follows the end of the turn that refused it; the bound only stops a loop.
+        for _ in 0..FOLLOW_UP_SUBMIT_ATTEMPTS {
+            let reason = match reply_rx.await {
+                Ok(Ok(
+                    TurnInputSubmission::Started { .. } | TurnInputSubmission::Steered { .. },
+                )) => return,
+                Ok(Ok(TurnInputSubmission::NotSubmitted { reason })) => reason,
+                Ok(Err(err)) => {
+                    self.report_unsubmitted_follow_up(&err.to_string()).await;
+                    return;
+                }
+                // The session ended before admission answered.
+                Err(_) => return,
+            };
+            if !matches!(
+                reason,
+                NotSubmittedReason::AuthorizationChanged
+                    | NotSubmittedReason::ActiveTurnNotSteerable { .. }
+                    | NotSubmittedReason::ActiveTurnOutputSchemaMismatch
+            ) {
+                self.report_unsubmitted_follow_up(&not_submitted_reason_text(&reason))
+                    .await;
                 return;
             }
-            Ok(Ok(TurnInputSubmission::NotSubmitted { reason })) => reason,
-            Ok(Err(err)) => {
-                self.report_unsubmitted_follow_up(&err.to_string()).await;
-                return;
-            }
-            // The session ended before admission answered.
-            Err(_) => return,
-        };
-        if matches!(
-            reason,
-            NotSubmittedReason::AuthorizationChanged
-                | NotSubmittedReason::ActiveTurnNotSteerable { .. }
-                | NotSubmittedReason::ActiveTurnOutputSchemaMismatch
-        ) {
             {
                 // Under the active-turn lock, as every end of a turn takes its input under it:
                 // a turn that is ending no longer has a task and never reads its queue again.
@@ -1431,12 +1460,18 @@ impl Session {
                 }
             }
             // The turn that refused it has ended: admission takes it now.
-            let resubmit: BoxFuture<'_, ()> =
-                Box::pin(self.submit_follow_up_input(vec![(input, final_output_json_schema)]));
-            resubmit.await;
-            return;
+            reply_rx = match self
+                .submit_follow_up_user_input(&input, final_output_json_schema.clone())
+                .await
+            {
+                Ok(reply_rx) => reply_rx,
+                Err(err) => {
+                    self.report_unsubmitted_follow_up(&err.to_string()).await;
+                    return;
+                }
+            };
         }
-        self.report_unsubmitted_follow_up(&not_submitted_reason_text(&reason))
+        self.report_unsubmitted_follow_up("it was refused repeatedly")
             .await;
     }
 
