@@ -210,7 +210,10 @@ pub(super) async fn run_remote_compact_v2_attempt(
         } else {
             tool_router.model_visible_specs()
         },
-        parallel_tool_calls: true,
+        // D508 (D521 pending, option (a) provisional): see `build_prompt`.
+        parallel_tool_calls: crate::client_common::model_allows_parallel_tool_calls(
+            &model_info.slug,
+        ),
         base_instructions,
         output_schema: None,
         output_schema_strict: true,

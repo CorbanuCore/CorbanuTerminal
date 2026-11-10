@@ -14,6 +14,7 @@ use crate::environment_selection::validate_environment_ids_and_cwds;
 use crate::exec_policy::AllowPrefixRules;
 use codex_features::Feature;
 use codex_prompts::ResolvedModelMessages;
+use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::openai_models::CatalogModel;
 use codex_protocol::openai_models::GuardianV2ModelConfig;
 use codex_protocol::openai_models::GuardianV2TranscriptModelConfig;
@@ -361,6 +362,17 @@ impl Session {
                 proposed,
             )
             .map_err(|error| error.to_string())?;
+            // #505: approval for every command, set when a person confirmed Aggressive,
+            // holds until the restart; a live reviewer change does not lower it.
+            if state.session_configuration.aggressive_approvals
+                && update
+                    .approvals_reviewer
+                    .is_some_and(|reviewer| reviewer != ApprovalsReviewer::User)
+            {
+                return Err(
+                    "approval for every command holds until the session restarts".to_string(),
+                );
+            }
             // Neither a reviewer nor an environment change changes model-owned authority.
             if requires_model_switching {
                 check_legacy_turn_safety(
@@ -376,6 +388,20 @@ impl Session {
             return TurnSettingsUpdateOutcome::Rejected { reason };
         }
 
+        // D532 (a), provisional: a new reviewer or environment list changes the running turn's
+        // execution authority; input not yet taken, and later input, waits for the next turn.
+        let changes_authority = candidate_settings.approvals_reviewer()
+            != current.approvals_reviewer()
+            || environments.is_some()
+                && state
+                    .session_configuration
+                    .effective_permission_profile(&current_environments)
+                    != state
+                        .session_configuration
+                        .effective_permission_profile(proposed);
+        if changes_authority && let Some(active_turn) = active.as_ref() {
+            self.hold_input_after_authority_change(active_turn).await;
+        }
         // Save changed settings first. The manager then installs any new environment list before
         // waking waiting work. The next step cannot read either until we release this lock.
         if let Some(settings) = updated_settings {

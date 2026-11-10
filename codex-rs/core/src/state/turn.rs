@@ -90,7 +90,9 @@ pub(crate) struct RunningTask {
     pub(crate) _agent_execution_guard: Option<AgentExecutionGuard>,
     /// Covers the complete admitted task, including mailbox input moved out of InputQueue before
     /// the model loop starts.
-    pub(crate) _native_auto_turn_guard: NativeAutoTurnGuard,
+    /// `None` only on a controller without Corbanu's local backend, on which no session
+    /// starts (D530 (a)).
+    pub(crate) _native_auto_turn_guard: Option<NativeAutoTurnGuard>,
     pub(crate) _diagnostics_guard: GaugeGuard,
     // Timer recorded when the task drops to capture the full turn duration.
     pub(crate) _timer: Option<codex_otel::Timer>,
