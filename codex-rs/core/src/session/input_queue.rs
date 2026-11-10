@@ -848,6 +848,16 @@ impl TurnInputQueue {
         self.items.is_empty()
     }
 
+    /// D532 (a): moves the input the turn may take to input deferred to re-admission.
+    pub(crate) fn defer_items(&mut self, final_output_json_schema: Option<serde_json::Value>) {
+        let items = self.take_items();
+        self.deferred.extend(
+            items
+                .into_iter()
+                .map(|input| (input, final_output_json_schema.clone())),
+        );
+    }
+
     /// Takes the input the turn may take, leaving input deferred to re-admission.
     fn take_items(&mut self) -> Vec<TurnInput> {
         self.notified_activity = None;

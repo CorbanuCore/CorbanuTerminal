@@ -286,12 +286,19 @@ impl Session {
     /// The running turn and future turns may use different environments. Update the matching
     /// selection or selections so work already waiting can still finish, and check successful
     /// configuration before saving either list.
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "D532: hold the running turn's input in the same step as the update"
+    )]
     async fn update_environment_configuration(
         &self,
         selection: &TurnEnvironmentSelection,
         result: Result<EnvironmentConfig, String>,
         source: ConfigUpdateSource,
     ) -> CodexResult<()> {
+        // D532 (a): the running turn is held under the same lock order as admission
+        // (active turn, then state).
+        let active = self.active_turn.lock().await;
         let mut state = self.state.lock().await;
         let mut current = self.services.turn_environments.selections();
         let mut future = state.session_configuration.environments.clone();
@@ -368,6 +375,11 @@ impl Session {
         }
         state.session_configuration.environments = future;
         if update_current {
+            // D532 (a), provisional: new configuration changes the running turn's execution
+            // authority; input it has not taken, and later input, waits for the next turn.
+            if let Some(active_turn) = active.as_ref() {
+                Self::hold_input_after_authority_change(active_turn).await;
+            }
             // Invalidate MCP before installed configuration can wake a waiting turn.
             self.mark_mcp_runtime_dirty();
             self.services.turn_environments.update_selections(&current);

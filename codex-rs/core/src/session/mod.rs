@@ -3651,11 +3651,37 @@ impl Session {
     /// authority `current` grants now: approval policy, permission profile with
     /// the primary environment's roots, approvals reviewer, and Windows sandbox
     /// level and backend (see [`TurnAuthority`]).
+    /// D532 (a), provisional: never once a live update changed the running turn's
+    /// authority after it was admitted.
     pub(super) fn authorization_matches(
         current: &SessionConfiguration,
         captured: &TurnContext,
     ) -> bool {
-        TurnAuthority::of(current) == captured.authority
+        !captured
+            .authority_changed_mid_turn
+            .load(std::sync::atomic::Ordering::Acquire)
+            && TurnAuthority::of(current) == captured.authority
+    }
+
+    /// D532 (a), provisional (owner decision pending): a live turn-settings or environment
+    /// update changed the execution authority of the turn running in `active_turn`. Input it
+    /// has not taken yet, and input arriving later, waits for the next turn. Callers hold the
+    /// `active_turn` lock, which every admission into the running turn also takes.
+    pub(super) async fn hold_input_after_authority_change(
+        active_turn: &crate::state::ActiveTurn,
+    ) {
+        let Some(task) = active_turn.task.as_ref() else {
+            return;
+        };
+        task.turn_context
+            .authority_changed_mid_turn
+            .store(true, std::sync::atomic::Ordering::Release);
+        active_turn
+            .turn_state
+            .lock()
+            .await
+            .pending_input
+            .defer_items(task.turn_context.final_output_json_schema.clone());
     }
 
     /// #945: the policy marker the open approval prompt `approval_id` was

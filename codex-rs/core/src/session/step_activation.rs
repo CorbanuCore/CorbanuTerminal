@@ -20,6 +20,7 @@ use codex_protocol::openai_models::GuardianV2TranscriptModelConfig;
 use codex_protocol::openai_models::MODEL_SPECIALTY_CYBER;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelOrigin;
+use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::protocol::EnvironmentConfigState;
 use codex_protocol::protocol::TurnEnvironmentSelection;
 use codex_protocol::protocol::TurnSettingsUpdate;
@@ -361,6 +362,15 @@ impl Session {
                 proposed,
             )
             .map_err(|error| error.to_string())?;
+            // #505: approval for every command, set when a person confirmed Aggressive,
+            // holds until the restart; a live reviewer change does not lower it.
+            if state.session_configuration.aggressive_approvals
+                && candidate_settings.approvals_reviewer() != ApprovalsReviewer::User
+            {
+                return Err(
+                    "approval for every command holds until the session restarts".to_string(),
+                );
+            }
             // Neither a reviewer nor an environment change changes model-owned authority.
             if requires_model_switching {
                 check_legacy_turn_safety(
@@ -376,6 +386,13 @@ impl Session {
             return TurnSettingsUpdateOutcome::Rejected { reason };
         }
 
+        // D532 (a), provisional: a new reviewer or environment list changes the running turn's
+        // execution authority; input not yet taken, and later input, waits for the next turn.
+        let changes_authority = environments.is_some()
+            || candidate_settings.approvals_reviewer() != current.approvals_reviewer();
+        if changes_authority && let Some(active_turn) = active.as_ref() {
+            Self::hold_input_after_authority_change(active_turn).await;
+        }
         // Save changed settings first. The manager then installs any new environment list before
         // waking waiting work. The next step cannot read either until we release this lock.
         if let Some(settings) = updated_settings {

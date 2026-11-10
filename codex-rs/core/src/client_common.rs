@@ -69,6 +69,34 @@ impl Default for Prompt {
     }
 }
 
+/// D508 (owner decision D521 pending; option (a) provisional): models main's
+/// catalog marked `supports_parallel_tool_calls: false` before upstream dropped
+/// that field (rust-v0.167.0). Requests for them keep parallel tool calls off.
+const SERIAL_TOOL_CALL_MODELS: [&str; 17] = [
+    "x-ai/grok-4.7",
+    "deepseek/deepseek-v4.1-flash",
+    "xiaomi/mimo-v2.6-pro",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "vercel/moonshotai/kimi-k3",
+    "vercel/deepseek/deepseek-v4-pro",
+    "deepseek-v4-pro",
+    "x-ai/grok-4.6",
+    "x-ai/grok-4.5",
+    "deepseek-flash",
+    "deepseek-v4-flash",
+    "deepseek/deepseek-v4-pro",
+    "deepseek/deepseek-v4-pro-0813",
+    "deepseek/deepseek-v4-flash-0731",
+    "tencent/hy3:free",
+    "moonshotai/kimi-k3",
+    "corbanu/deepseek-v4.1-flash",
+];
+
+/// Whether a request for the model `slug` may ask for parallel tool calls.
+pub(crate) fn model_allows_parallel_tool_calls(slug: &str) -> bool {
+    !SERIAL_TOOL_CALL_MODELS.contains(&slug)
+}
+
 impl Prompt {
     pub(crate) fn get_formatted_input_for_request(
         &self,
