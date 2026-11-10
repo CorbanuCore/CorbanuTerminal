@@ -57,7 +57,9 @@ SEC_ADJ = re.compile(
     r"^(protocol/src/permissions|app-server-protocol/.*permissions"
     r"|core/src/(config/(permissions|network_proxy_spec|mod\.rs)|session/mod\.rs|mcp_tool_call|safety|guardian/)"
     r"|login/src/auth/manager|arg0/|secrets/|cli/src/debug_sandbox|apply-patch/"
-    r"|tui/src/.*(approval_overlay|permission_popups|windows_sandbox)|ext/guardian)"
+    r"|tui/src/.*(approval_overlay|permission_popups|windows_sandbox)|ext/guardian"
+    r"|http-client/src/address_filter|exec-server-protocol/src/address_policy"
+    r"|exec-server/src/client/route_aware_http_client|rmcp-client/src/oauth_http_client)"
 )
 
 # slice -> (tier, owner role, contributor-friendly)
