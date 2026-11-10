@@ -5671,3 +5671,7 @@ mod stale_approval_tests;
 #[cfg(test)]
 #[path = "withdrawn_approval_tests.rs"]
 mod withdrawn_approval_tests;
+
+#[cfg(test)]
+#[path = "windows_sandbox_settings_tests.rs"]
+mod windows_sandbox_settings_tests;

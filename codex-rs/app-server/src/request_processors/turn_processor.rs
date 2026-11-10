@@ -216,6 +216,28 @@ struct ThreadSettingsBuildParams {
     summary: Option<ReasoningSummary>,
     collaboration_mode: Option<CollaborationMode>,
     personality: Option<Personality>,
+    /// #2000: apply the Windows sandbox config now selects.
+    refresh_windows_sandbox: bool,
+}
+
+/// #2000: the Windows sandbox level a `refreshWindowsSandbox` update applies:
+/// the one config selects, read by the server and never taken from the
+/// client. The elevated sandbox must be set up first. Core keeps the thread's
+/// level when it is the same and rejects a weaker one.
+fn refreshed_windows_sandbox_level(
+    windows: bool,
+    configured: WindowsSandboxLevel,
+    elevated_setup_complete: bool,
+) -> Result<Option<WindowsSandboxLevel>, JSONRPCErrorError> {
+    if !windows {
+        return Ok(None);
+    }
+    if configured == WindowsSandboxLevel::Elevated && !elevated_setup_complete {
+        return Err(invalid_request(
+            "invalid thread settings override: the default Windows sandbox is not set up yet",
+        ));
+    }
+    Ok(Some(configured))
 }
 
 impl TurnRequestProcessor {
@@ -652,6 +674,7 @@ impl TurnRequestProcessor {
                     summary: params.summary,
                     collaboration_mode: params.collaboration_mode,
                     personality: params.personality,
+                    refresh_windows_sandbox: false,
                 },
             )
             .await?;
@@ -805,6 +828,7 @@ impl TurnRequestProcessor {
             summary,
             collaboration_mode,
             personality,
+            refresh_windows_sandbox,
         } = params;
 
         if sandbox_policy.is_some() && permissions.is_some() {
@@ -824,7 +848,31 @@ impl TurnRequestProcessor {
             None
         };
 
+        let windows_sandbox_level = if refresh_windows_sandbox {
+            let cwd = thread.config_snapshot().await.cwd().to_path_buf();
+            let config = self
+                .config_manager
+                .load_for_cwd(
+                    /*request_overrides*/ None,
+                    ConfigOverrides {
+                        cwd: Some(cwd.clone()),
+                        ..Default::default()
+                    },
+                    Some(cwd),
+                )
+                .await
+                .map_err(|err| config_load_error(&err))?;
+            refreshed_windows_sandbox_level(
+                cfg!(windows),
+                WindowsSandboxLevel::from_config(&config),
+                sandbox_setup_is_complete(config.codex_home.as_path()),
+            )?
+        } else {
+            None
+        };
+
         let has_any_overrides = has_environment_override
+            || windows_sandbox_level.is_some()
             || approval_policy.is_some()
             || approvals_reviewer.is_some()
             || sandbox_policy.is_some()
@@ -907,7 +955,7 @@ impl TurnRequestProcessor {
                     permission_profile: permission_profile.clone(),
                     active_permission_profile: active_permission_profile.clone(),
                     profile_workspace_roots: profile_workspace_roots.clone(),
-                    windows_sandbox_level: None,
+                    windows_sandbox_level,
                     model: model.clone(),
                     model_provider: model_provider.clone(),
                     effort: effort.clone(),
@@ -930,7 +978,7 @@ impl TurnRequestProcessor {
             sandbox_policy,
             permission_profile,
             active_permission_profile,
-            windows_sandbox_level: None,
+            windows_sandbox_level,
             model,
             model_provider,
             effort,
@@ -973,6 +1021,7 @@ impl TurnRequestProcessor {
                     summary: params.summary,
                     collaboration_mode: params.collaboration_mode,
                     personality: params.personality,
+                    refresh_windows_sandbox: params.refresh_windows_sandbox,
                 },
             )
             .await?;
@@ -1745,6 +1794,48 @@ fn xcode_26_4_mcp_elicitations_auto_deny(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #2000: the refreshed level is config's, read by the server; the
+    /// default sandbox needs its setup first; other platforms keep theirs.
+    #[test]
+    fn issue_2000_refreshed_windows_sandbox_level() {
+        for level in [
+            WindowsSandboxLevel::Disabled,
+            WindowsSandboxLevel::RestrictedToken,
+            WindowsSandboxLevel::Elevated,
+        ] {
+            assert_eq!(
+                refreshed_windows_sandbox_level(
+                    /*windows*/ true, level, /*elevated_setup_complete*/ true
+                )
+                .expect("set up"),
+                Some(level)
+            );
+            assert_eq!(
+                refreshed_windows_sandbox_level(
+                    /*windows*/ false, level, /*elevated_setup_complete*/ true
+                )
+                .expect("not Windows"),
+                None
+            );
+        }
+        assert_eq!(
+            refreshed_windows_sandbox_level(
+                /*windows*/ true,
+                WindowsSandboxLevel::RestrictedToken,
+                /*elevated_setup_complete*/ false,
+            )
+            .expect("the non-admin sandbox needs no elevated setup"),
+            Some(WindowsSandboxLevel::RestrictedToken)
+        );
+        let err = refreshed_windows_sandbox_level(
+            /*windows*/ true,
+            WindowsSandboxLevel::Elevated,
+            /*elevated_setup_complete*/ false,
+        )
+        .expect_err("the default sandbox is not set up");
+        assert!(err.message.contains("not set up yet"), "{}", err.message);
+    }
 
     #[test]
     fn execution_capacity_turn_start_error_is_structured() {

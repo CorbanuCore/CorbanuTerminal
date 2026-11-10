@@ -13,14 +13,14 @@
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_security_policy::SecurityLevel;
 
-/// How to set the default Windows sandbox up or leave the level. A session
-/// keeps the Windows sandbox it started with, so the setup applies from the
-/// next one.
+/// How to set the default Windows sandbox up or leave the level. Set up in
+/// the TUI, the sandbox applies to the running session from its next turn
+/// (#2000); a config.toml edit applies from the next session.
 const STEPS: &str = "To set it up, open /permissions, choose a mode that uses the sandbox (such \
-     as \"Ask for approval\"), pick \"Set up default sandbox\" (it needs Administrator \
-     permission) and start a new session with /new; or set `sandbox = \"elevated\"` under \
-     `[windows]` in config.toml. Or a person can switch to Permissive in /security (it applies \
-     after a restart).";
+     as \"Ask for approval\") and pick \"Set up default sandbox\" (it needs Administrator \
+     permission); this session uses it from the next message. Or set `sandbox = \"elevated\"` \
+     under `[windows]` in config.toml and start a new session with /new. Or a person can switch \
+     to Permissive in /security (it applies after a restart).";
 
 /// Whether `level` refuses agent commands and file tools here because no
 /// Windows sandbox is selected.

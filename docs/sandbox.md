@@ -17,8 +17,8 @@ starts, so you can set the sandbox up or change the level:
 
 - In the TUI, open `/permissions`, choose a mode that uses the sandbox (such
   as "Ask for approval") and pick "Set up default sandbox" (it needs
-  Administrator permission). A session keeps the Windows sandbox it started
-  with, so start a new session with `/new` afterwards.
+  Administrator permission). The running session uses it from your next
+  message (#2000); there is no need to start a new one.
 - Or set `[windows] sandbox = "elevated"` as below; it applies from the next
   session.
 - Or switch to Permissive in `/security` (it applies after a restart).

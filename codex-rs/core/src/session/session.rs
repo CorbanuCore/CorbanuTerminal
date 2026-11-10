@@ -391,6 +391,23 @@ impl SessionConfiguration {
             next_configuration.try_require_approval_for_every_command()?;
         }
         if let Some(windows_sandbox_level) = updates.windows_sandbox_level {
+            // #2000: mid-session the Windows sandbox only gets stronger (a
+            // set-up sandbox applies at once); a weaker one waits for a new
+            // session, so nothing can lower it under a running session.
+            if windows_sandbox_strength(windows_sandbox_level)
+                < windows_sandbox_strength(self.windows_sandbox_level)
+            {
+                return Err(ConstraintError::InvalidValue {
+                    field_name: "windows_sandbox_level",
+                    candidate: format!("{windows_sandbox_level:?}"),
+                    allowed: format!(
+                        "this session's Windows sandbox ({:?}) or a stronger one; a weaker one \
+                         applies from the next session",
+                        self.windows_sandbox_level
+                    ),
+                    requirement_source: codex_config::RequirementSource::Unknown,
+                });
+            }
             next_configuration.windows_sandbox_level = windows_sandbox_level;
         }
 
@@ -527,6 +544,15 @@ impl SessionConfiguration {
 
         self.permission_profile_state
             .set_permission_profile_snapshot(permission_snapshot)
+    }
+}
+
+/// #2000: how strongly each Windows sandbox level confines commands.
+fn windows_sandbox_strength(level: WindowsSandboxLevel) -> u8 {
+    match level {
+        WindowsSandboxLevel::Disabled => 0,
+        WindowsSandboxLevel::RestrictedToken => 1,
+        WindowsSandboxLevel::Elevated => 2,
     }
 }
 

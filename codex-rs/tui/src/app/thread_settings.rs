@@ -125,7 +125,7 @@ impl App {
             approvals_reviewer,
             permission_profile: _,
             active_permission_profile,
-            windows_sandbox_level: _,
+            windows_sandbox_level,
             model,
             effort,
             summary,
@@ -151,6 +151,10 @@ impl App {
             service_tier: service_tier.clone(),
             collaboration_mode: collaboration_mode.clone(),
             personality: *personality,
+            // #2000: after the Windows sandbox is set up, the server applies
+            // the mode its config now selects (never a weaker one) to this
+            // session, rather than taking a level from the client.
+            refresh_windows_sandbox: windows_sandbox_level.is_some(),
             ..ThreadSettingsUpdateParams::default()
         };
         self.send_thread_settings_update(app_server, params).await;
@@ -297,4 +301,5 @@ fn thread_settings_update_has_changes(params: &ThreadSettingsUpdateParams) -> bo
         || params.summary.is_some()
         || params.collaboration_mode.is_some()
         || params.personality.is_some()
+        || params.refresh_windows_sandbox
 }
