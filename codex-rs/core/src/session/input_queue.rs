@@ -393,33 +393,26 @@ impl InputQueue {
         input
     }
 
+    /// #2047: tests poll pending input the way a running task does. With no active turn (a
+    /// detached task, or an idle session) mailbox mail stays queued, as in production; tests
+    /// that inspect queued mail use `drain_mailbox_input_items` or `has_pending_mailbox_items`.
     #[cfg(test)]
     pub(crate) async fn get_pending_input(
         &self,
         active_turn: &Mutex<Option<ActiveTurn>>,
     ) -> (Vec<TurnInput>, Option<String>) {
-        self.get_pending_input_inner(active_turn, /*allow_untracked_mailbox*/ true)
-            .await
+        self.get_pending_input_for_running_task(active_turn).await
     }
 
     /// Takes input for an already-running task. A task detached by any stop path must not drain
     /// mailbox mail: it no longer has a turn state that can record its outcome.
-    pub(crate) async fn get_pending_input_for_running_task(
-        &self,
-        active_turn: &Mutex<Option<ActiveTurn>>,
-    ) -> (Vec<TurnInput>, Option<String>) {
-        self.get_pending_input_inner(active_turn, /*allow_untracked_mailbox*/ false)
-            .await
-    }
-
     #[allow(
         clippy::await_holding_invalid_type,
         reason = "taking mail off the queue and noting it in the turn state must remain atomic"
     )]
-    async fn get_pending_input_inner(
+    pub(crate) async fn get_pending_input_for_running_task(
         &self,
         active_turn: &Mutex<Option<ActiveTurn>>,
-        allow_untracked_mailbox: bool,
     ) -> (Vec<TurnInput>, Option<String>) {
         let (pending_input, accepts_mailbox_delivery, turn_id, turn_state) =
             Self::take_turn_pending_input(active_turn).await;
@@ -436,11 +429,7 @@ impl InputQueue {
                 turn_state.track_taken_mailbox_messages(&mailbox_items);
                 (mailbox_items, parent_turn_id)
             }
-            // Test-only: older tests poll an empty slot to inspect queued mail. Executing tasks
-            // use the fail-closed path above.
-            None if allow_untracked_mailbox => {
-                self.drain_mailbox_input_for_turn(turn_id.as_deref()).await
-            }
+            // No turn state can note the mail (a detached task): it stays queued.
             None => (Vec::new(), None),
         };
         if pending_input.is_empty() {

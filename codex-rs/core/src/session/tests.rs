@@ -11555,7 +11555,7 @@ async fn interrupt_clears_steered_input_without_follow_up_turn() {
     assert!(sess.active_turn.lock().await.is_none());
     assert_eq!(
         (Vec::<TurnInput>::new(), None),
-        sess.input_queue.get_pending_input(&sess.active_turn).await
+        sess.input_queue.drain_mailbox_input_items().await
     );
     assert!(
         tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv())
@@ -11706,7 +11706,41 @@ async fn try_start_turn_if_idle_rejects_plan_mode_without_injecting() {
     assert!(sess.active_turn.lock().await.is_none());
     assert_eq!(
         (Vec::<TurnInput>::new(), None),
-        sess.input_queue.get_pending_input(&sess.active_turn).await
+        sess.input_queue.drain_mailbox_input_items().await
+    );
+}
+
+/// #2047: the test-only `get_pending_input` behaves like production with no active turn: it takes
+/// no mailbox mail (no turn state could note it), and the mail stays queued for the next turn.
+#[tokio::test]
+async fn get_pending_input_without_active_turn_leaves_mailbox_mail_queued() {
+    let (sess, _tc, _rx) = make_session_and_context_with_rx().await;
+    let communication = InterAgentCommunication::new(
+        AgentPath::root(),
+        AgentPath::root(),
+        Vec::new(),
+        "queued while idle".to_string(),
+        /*trigger_turn*/ false,
+    );
+    sess.input_queue
+        .enqueue_mailbox_communication(communication.clone(), /*parent_turn_id*/ None)
+        .await;
+    assert!(sess.active_turn.lock().await.is_none());
+
+    assert_eq!(
+        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        sess.input_queue
+            .get_pending_input_for_running_task(&sess.active_turn)
+            .await,
+    );
+    assert_eq!(
+        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        (Vec::new(), None)
+    );
+    assert!(sess.input_queue.has_pending_mailbox_items().await);
+    assert_eq!(
+        sess.input_queue.drain_mailbox_input_items().await.0,
+        vec![TurnInput::InterAgentCommunication(communication)]
     );
 }
 
@@ -11764,7 +11798,7 @@ async fn try_start_turn_if_idle_rejects_active_review_turn_without_injecting() {
     assert_eq!(vec![item], err.into_input());
     assert_eq!(
         (Vec::<TurnInput>::new(), None),
-        sess.input_queue.get_pending_input(&sess.active_turn).await
+        sess.input_queue.drain_mailbox_input_items().await
     );
 
     sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
@@ -13227,7 +13261,7 @@ async fn queue_only_mailbox_mail_waits_for_next_turn_after_answer_boundary() {
     sess.abort_all_tasks(TurnAbortReason::Replaced).await;
 
     assert_eq!(
-        (sess.input_queue.get_pending_input(&sess.active_turn).await).0,
+        sess.input_queue.drain_mailbox_input_items().await.0,
         vec![TurnInput::InterAgentCommunication(communication)],
     );
 }
