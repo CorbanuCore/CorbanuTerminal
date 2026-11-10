@@ -11555,9 +11555,7 @@ async fn interrupt_clears_steered_input_without_follow_up_turn() {
     assert!(sess.active_turn.lock().await.is_none());
     assert_eq!(
         (Vec::<TurnInput>::new(), None),
-        sess.input_queue
-            .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
-            .await
+        sess.input_queue.drain_mailbox_input_items().await
     );
     assert!(
         tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv())
@@ -11691,7 +11689,7 @@ async fn try_start_turn_if_idle_rejects_active_turn_without_injecting() {
 
 #[tokio::test]
 async fn try_start_turn_if_idle_rejects_plan_mode_without_injecting() {
-    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    let (sess, _tc, _rx) = make_session_and_context_with_rx().await;
     let mut collaboration_mode = sess.collaboration_mode().await;
     collaboration_mode.mode = ModeKind::Plan;
     {
@@ -11710,9 +11708,7 @@ async fn try_start_turn_if_idle_rejects_plan_mode_without_injecting() {
     assert!(sess.active_turn.lock().await.is_none());
     assert_eq!(
         (Vec::<TurnInput>::new(), None),
-        sess.input_queue
-            .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
-            .await
+        sess.input_queue.drain_mailbox_input_items().await
     );
 }
 
@@ -13258,12 +13254,7 @@ async fn queue_only_mailbox_mail_waits_for_next_turn_after_answer_boundary() {
     sess.abort_all_tasks(TurnAbortReason::Replaced).await;
 
     // With no active turn there is no turn state to record the mail, so it stays queued.
-    assert_eq!(
-        sess.input_queue
-            .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
-            .await,
-        (Vec::new(), None)
-    );
+    assert!(sess.input_queue.has_pending_mailbox_items().await);
 
     let next_turn = sess.new_default_turn().await;
     sess.spawn_task(
