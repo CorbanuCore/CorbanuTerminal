@@ -466,7 +466,7 @@ fn pf_27_s06_broker_exits_when_its_controller_is_killed() {
         .expect("controller reported its broker");
     // SAFETY: wait-only access; closed below.
     let broker = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, broker_pid) };
-    assert_ne!(broker, 0, "the broker is running");
+    assert!(!broker.is_null(), "the broker is running");
     controller.kill().expect("kill controller");
     let _ = controller.wait();
     // SAFETY: `broker` is open.
@@ -499,7 +499,7 @@ fn disable_debug_privilege() {
         LowPart: 0,
         HighPart: 0,
     };
-    let mut token = 0;
+    let mut token = std::ptr::null_mut();
     // SAFETY: valid pointers; the token is closed below.
     unsafe {
         if LookupPrivilegeValueW(std::ptr::null(), name.as_ptr(), &mut luid) == 0
@@ -541,7 +541,7 @@ async fn pf_27_s06_windows_broker_uses_pipes_and_cannot_be_read() {
         // SAFETY: plain OpenProcess; the handle is closed at once.
         unsafe {
             let handle = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, 0, pid);
-            if handle == 0 {
+            if handle.is_null() {
                 Err(GetLastError())
             } else {
                 CloseHandle(handle);
