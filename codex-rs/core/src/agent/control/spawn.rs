@@ -383,9 +383,16 @@ impl AgentControl {
             // Reapply the persisted role before resolving the stored runtime. Role files may own
             // custom provider definitions; resolving first makes a valid cold-resumed agent look
             // unconfigured. The persisted provider/model below still win over role-file changes.
+            // #2000: the role may rebuild the config from the starting layers;
+            // keep a Windows sandbox set up since (a stronger role one stays).
+            let runtime_windows_sandbox =
+                <codex_protocol::config_types::WindowsSandboxLevel as crate::windows_sandbox::WindowsSandboxLevelExt>::from_config(
+                    &config,
+                );
             apply_role_to_config_for_multi_agent_v2(&mut config, Some(role_name))
                 .await
                 .map_err(CodexErr::InvalidRequest)?;
+            crate::windows_sandbox::raise_windows_sandbox(&mut config, runtime_windows_sandbox);
             config
                 .permissions
                 .approval_policy
@@ -746,6 +753,18 @@ impl AgentControl {
         )
         .await?;
 
+        // D435: until its first turn starts, an interrupt must still reach it.
+        let starts_turn = match &initial_input {
+            SpawnInitialInput::UserInput(_) => true,
+            SpawnInitialInput::InterAgentCommunication(communication, _) => {
+                communication.trigger_turn
+            }
+        };
+        new_thread
+            .thread
+            .session
+            .spawned_with_first_turn
+            .store(starts_turn, std::sync::atomic::Ordering::Release);
         match initial_input {
             SpawnInitialInput::UserInput(input) => {
                 // The spawning agent wrote this task; it carries that agent's standing.

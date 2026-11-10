@@ -142,6 +142,7 @@ async fn exec_command_with_tty(
             network_approval: None,
             session: Arc::downgrade(session),
             last_used: started_at,
+            windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
         };
         manager
             .process_store
@@ -626,6 +627,7 @@ async fn terminating_initial_exec_command_rechecks_initial_response_state() -> a
             network_approval: None,
             session: Arc::downgrade(&session),
             last_used: Instant::now(),
+            windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
         },
     );
 
@@ -700,6 +702,7 @@ async fn terminating_during_stdin_poll_returns_exited_response() -> anyhow::Resu
             network_approval: None,
             session: Arc::downgrade(&session),
             last_used,
+            windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
         },
     );
 

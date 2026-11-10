@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::path::PathBuf;
@@ -151,21 +152,27 @@ pub fn refuse_unenforceable_windows_restricted_token_profile(
         return Ok(());
     }
     refuse_unenforceable_windows_read_restrictions(sandbox, permission_profile)?;
-    let (mut file_system_sandbox_policy, network_sandbox_policy) =
-        permission_profile.to_runtime_permissions();
-    // As the resolver: only where it gets that far.
-    if permission_profile_supports_windows_restricted_token_sandbox(permission_profile)
-        && !file_system_sandbox_policy
-            .needs_direct_runtime_enforcement(network_sandbox_policy, sandbox_policy_cwd)
-    {
-        return Ok(());
-    }
+    let (file_system_sandbox_policy, _) = permission_profile.to_runtime_permissions();
+    refuse_writable_inside_read_only(file_system_sandbox_policy, sandbox_policy_cwd)
+}
+
+/// D331 for any profile, including one in the older workspace-write format
+/// that needs no direct enforcement (#1810): its protected `.git`, `.codex`
+/// and `.agents` folders can hold a writable folder too.
+fn refuse_writable_inside_read_only(
+    mut file_system_sandbox_policy: FileSystemSandboxPolicy,
+    sandbox_policy_cwd: &AbsolutePathBuf,
+) -> std::result::Result<(), String> {
     file_system_sandbox_policy.remove_skip_missing_path_entries();
     let split_writable_roots =
         file_system_sandbox_policy.get_writable_roots_with_cwd(sandbox_policy_cwd);
-    match reopened_writable_descendant(&split_writable_roots) {
+    match reopened_writable_descendant(
+        &file_system_sandbox_policy,
+        &split_writable_roots,
+        sandbox_policy_cwd,
+    ) {
         Some((read_only, descendant)) => {
-            Err(writable_inside_read_only_refusal(read_only, descendant))
+            Err(writable_inside_read_only_refusal(&read_only, &descendant))
         }
         None => Ok(()),
     }
@@ -195,6 +202,8 @@ pub fn resolve_windows_restricted_token_filesystem_overrides(
     if permission_profile_supports_windows_restricted_token_sandbox(permission_profile)
         && !needs_direct_runtime_enforcement
     {
+        // #1810: D331 holds for these too.
+        refuse_writable_inside_read_only(file_system_sandbox_policy, sandbox_policy_cwd)?;
         return Ok(None);
     }
 
@@ -231,8 +240,12 @@ pub fn resolve_windows_restricted_token_filesystem_overrides(
 
     let split_writable_roots =
         file_system_sandbox_policy.get_writable_roots_with_cwd(sandbox_policy_cwd);
-    if let Some((read_only, descendant)) = reopened_writable_descendant(&split_writable_roots) {
-        return Err(writable_inside_read_only_refusal(read_only, descendant));
+    if let Some((read_only, descendant)) = reopened_writable_descendant(
+        &file_system_sandbox_policy,
+        &split_writable_roots,
+        sandbox_policy_cwd,
+    ) {
+        return Err(writable_inside_read_only_refusal(&read_only, &descendant));
     }
 
     let legacy_projection = compatibility_sandbox_policy_for_permission_profile(
@@ -240,14 +253,21 @@ pub fn resolve_windows_restricted_token_filesystem_overrides(
         sandbox_policy_cwd.as_path(),
     );
     let legacy_writable_roots = legacy_projection.get_writable_roots_with_cwd(sandbox_policy_cwd);
-    let legacy_root_paths: BTreeSet<PathBuf> = legacy_writable_roots
+    // D398 (#1766): both sets compare by real path. The split roots are
+    // already partly resolved (a `subst` or mapped drive, an 8.3 name or the
+    // letter case), the legacy roots are as spelled, so a working folder
+    // spelled one of those ways differed by spelling only. Real paths are
+    // equal only for the same folders, where both grants land.
+    let legacy_real_roots: Vec<PathBuf> = legacy_writable_roots
         .iter()
-        .map(|root| normalize_windows_override_path(root.root.as_path()))
+        .map(|root| real_windows_override_path(root.root.as_path()))
         .collect::<std::result::Result<_, _>>()?;
-    let split_root_paths: BTreeSet<PathBuf> = split_writable_roots
+    let legacy_root_paths: BTreeSet<&PathBuf> = legacy_real_roots.iter().collect();
+    let split_real_roots: Vec<PathBuf> = split_writable_roots
         .iter()
-        .map(|root| normalize_windows_override_path(root.root.as_path()))
+        .map(|root| real_windows_override_path(root.root.as_path()))
         .collect::<std::result::Result<_, _>>()?;
+    let split_root_paths: BTreeSet<&PathBuf> = split_real_roots.iter().collect();
 
     if legacy_root_paths != split_root_paths {
         return Err(
@@ -256,24 +276,31 @@ pub fn resolve_windows_restricted_token_filesystem_overrides(
         );
     }
 
+    // The legacy read-only paths by real path. Two spellings of one root
+    // (the workspace by its real path, the working folder through a `subst`
+    // drive) each bring theirs; the backend denies all of them, whichever
+    // root brought it.
+    let mut legacy_read_only: BTreeMap<&PathBuf, BTreeSet<PathBuf>> = BTreeMap::new();
+    for (legacy_root, real_root) in legacy_writable_roots.iter().zip(&legacy_real_roots) {
+        let paths = legacy_read_only.entry(real_root).or_default();
+        for read_only_subpath in &legacy_root.read_only_subpaths {
+            paths.insert(real_windows_override_path(read_only_subpath.as_path())?);
+        }
+    }
+
     let mut additional_deny_write_paths = BTreeSet::new();
-    for split_root in &split_writable_roots {
-        let split_root_path = normalize_windows_override_path(split_root.root.as_path())?;
-        let Some(legacy_root) = legacy_writable_roots.iter().find(|candidate| {
-            normalize_windows_override_path(candidate.root.as_path())
-                .is_ok_and(|candidate_path| candidate_path == split_root_path)
-        }) else {
+    for (split_root, real_root) in split_writable_roots.iter().zip(&split_real_roots) {
+        let Some(already_read_only) = legacy_read_only.get(real_root) else {
             return Err(
                 "windows unelevated restricted-token sandbox cannot enforce split writable root sets directly; refusing to run unsandboxed"
                     .to_string(),
             );
         };
-
         for read_only_subpath in &split_root.read_only_subpaths {
-            if !legacy_root
-                .read_only_subpaths
-                .iter()
-                .any(|candidate| candidate == read_only_subpath)
+            // Any other read-only path is passed on as an extra deny-write
+            // path, as spelled.
+            if !already_read_only
+                .contains(&real_windows_override_path(read_only_subpath.as_path())?)
             {
                 additional_deny_write_paths.insert(normalize_windows_override_path(
                     read_only_subpath.as_path(),
@@ -331,8 +358,12 @@ pub fn resolve_windows_elevated_filesystem_overrides(
 
     let split_writable_roots =
         file_system_sandbox_policy.get_writable_roots_with_cwd(sandbox_policy_cwd);
-    if let Some((read_only, descendant)) = reopened_writable_descendant(&split_writable_roots) {
-        return Err(writable_inside_read_only_refusal(read_only, descendant));
+    if let Some((read_only, descendant)) = reopened_writable_descendant(
+        &file_system_sandbox_policy,
+        &split_writable_roots,
+        sandbox_policy_cwd,
+    ) {
+        return Err(writable_inside_read_only_refusal(&read_only, &descendant));
     }
 
     let needs_direct_runtime_enforcement = file_system_sandbox_policy
@@ -450,6 +481,35 @@ fn normalize_windows_override_path(path: &Path) -> std::result::Result<PathBuf, 
         .map_err(|err| err.to_string())
 }
 
+/// D398: `path` by its real location ([`canonicalize_allowing_missing`]),
+/// or as [`normalize_windows_override_path`] has it when that can't be
+/// resolved.
+fn real_windows_override_path(path: &Path) -> std::result::Result<PathBuf, String> {
+    match canonicalize_allowing_missing(path) {
+        Some(real) => normalize_windows_override_path(&real),
+        None => normalize_windows_override_path(path),
+    }
+}
+
+/// D446: refuses a working folder on a network (a UNC path, or a path whose
+/// real path is one, such as a mapped drive) for `command/exec` under the
+/// unelevated restricted-token backend. Its commands couldn't write there in
+/// #1866's measurement, so they would run as if the folder were read-only;
+/// refuse with a clear message instead. `\\localhost` paths are refused
+/// earlier (#1863).
+pub fn refuse_network_working_folder(cwd: &Path) -> std::result::Result<(), String> {
+    use codex_windows_sandbox::local_drive::is_network_path;
+    let network = is_network_path(cwd)
+        || canonicalize_allowing_missing(cwd).is_some_and(|real| is_network_path(&real));
+    if network {
+        return Err(format!(
+            "`{}` is a network folder (a UNC path or a mapped network drive). The Windows non-admin sandbox can't let commands write there, so it doesn't run them in it; use a folder on a local drive instead.",
+            cwd.display()
+        ));
+    }
+    Ok(())
+}
+
 fn windows_policy_has_root_read_access(
     file_system_sandbox_policy: &FileSystemSandboxPolicy,
     cwd: &AbsolutePathBuf,
@@ -468,10 +528,20 @@ fn permission_profile_display_name(permission_profile: &PermissionProfile) -> &'
     }
 }
 
-/// A read-only subpath of one writable root and another writable root at or
-/// inside it, if any.
-fn reopened_writable_descendant(writable_roots: &[WritableRoot]) -> Option<(&Path, &Path)> {
-    writable_roots.iter().find_map(|writable_root| {
+/// A read-only path of one writable root and another writable root at or
+/// inside it, if any (D331): compared as spelled, and also by real
+/// (link-followed) path (#1801), so a junction, folder link or `subst` drive
+/// on either folder or on the working folder doesn't hide the shape. As the
+/// non-admin backend does (#1780), a root's read-only paths include the
+/// profile's explicit read-only and deny paths inside it by real path only.
+/// By real path only a root strictly inside counts: the same folder named
+/// read-only and writable under two spellings stays read-only (#1780).
+fn reopened_writable_descendant(
+    file_system_sandbox_policy: &FileSystemSandboxPolicy,
+    writable_roots: &[WritableRoot],
+    cwd: &AbsolutePathBuf,
+) -> Option<(PathBuf, PathBuf)> {
+    let spelled = writable_roots.iter().find_map(|writable_root| {
         writable_root
             .read_only_subpaths
             .iter()
@@ -485,9 +555,95 @@ fn reopened_writable_descendant(writable_roots: &[WritableRoot]) -> Option<(&Pat
                                 .as_path()
                                 .starts_with(read_only_subpath.as_path())
                     })
-                    .map(|candidate| (read_only_subpath.as_path(), candidate.root.as_path()))
+                    .map(|candidate| {
+                        (
+                            read_only_subpath.to_path_buf(),
+                            candidate.root.to_path_buf(),
+                        )
+                    })
             })
-    })
+    });
+    if spelled.is_some() {
+        return spelled;
+    }
+    let explicit_non_write: Vec<(AbsolutePathBuf, Option<PathBuf>)> = file_system_sandbox_policy
+        .get_read_only_paths_with_cwd(cwd.as_path())
+        .into_iter()
+        .chain(file_system_sandbox_policy.get_unreadable_roots_with_cwd(cwd.as_path()))
+        .map(|path| {
+            let real = canonicalize_allowing_missing(path.as_path());
+            (path, real)
+        })
+        .collect();
+    let real_roots: Vec<Option<PathBuf>> = writable_roots
+        .iter()
+        .map(|writable_root| canonicalize_allowing_missing(writable_root.root.as_path()))
+        .collect();
+    for (writable_root, real_root) in writable_roots.iter().zip(&real_roots) {
+        let Some(real_root) = real_root else {
+            continue;
+        };
+        let read_only_paths = writable_root
+            .read_only_subpaths
+            .iter()
+            .map(|path| (path, canonicalize_allowing_missing(path.as_path())))
+            .chain(
+                explicit_non_write
+                    .iter()
+                    .filter(|(_, real)| {
+                        real.as_ref()
+                            .is_some_and(|real| strictly_inside(real, real_root))
+                    })
+                    .map(|(path, real)| (path, real.clone())),
+            );
+        for (read_only, real_read_only) in read_only_paths {
+            let Some(real_read_only) = real_read_only else {
+                continue;
+            };
+            let reopened = writable_roots
+                .iter()
+                .zip(&real_roots)
+                .find(|(candidate, real)| {
+                    candidate.root.as_path() != writable_root.root.as_path()
+                        && real
+                            .as_ref()
+                            .is_some_and(|real| strictly_inside(real, &real_read_only))
+                });
+            if let Some((candidate, _)) = reopened {
+                return Some((read_only.to_path_buf(), candidate.root.to_path_buf()));
+            }
+        }
+    }
+    None
+}
+
+fn strictly_inside(path: &Path, root: &Path) -> bool {
+    path != root && path.starts_with(root)
+}
+
+/// `path` with links followed: its nearest existing ancestor canonicalized,
+/// plus the rest as spelled (as `codex-windows-sandbox` resolves it, #1780).
+/// `None` when that fails other than for a missing folder.
+fn canonicalize_allowing_missing(path: &Path) -> Option<PathBuf> {
+    let mut missing = Vec::new();
+    let mut existing = path;
+    loop {
+        match dunce::canonicalize(existing) {
+            Ok(real) => {
+                return Some(
+                    missing
+                        .iter()
+                        .rev()
+                        .fold(real, |path, part| path.join(part)),
+                );
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                missing.push(existing.file_name()?.to_os_string());
+                existing = existing.parent()?;
+            }
+            Err(_) => return None,
+        }
+    }
 }
 
 #[cfg(test)]

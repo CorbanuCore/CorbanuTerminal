@@ -10,6 +10,21 @@ use super::shell::SimpleCommand;
 use super::shell::basename;
 use super::work;
 use base64::Engine;
+use std::cell::Cell;
+
+thread_local! {
+    /// Whether an actual sudo option reader consumed a word differently from
+    /// the pre-#1773 reader during this judgment.
+    static SUDO_OPTION_BOUNDARY_CHANGED: Cell<bool> = const { Cell::new(false) };
+}
+
+pub(super) fn reset_sudo_option_boundary_changed() {
+    SUDO_OPTION_BOUNDARY_CHANGED.with(|changed| changed.set(false));
+}
+
+pub(super) fn sudo_option_boundary_changed() -> bool {
+    SUDO_OPTION_BOUNDARY_CHANGED.with(Cell::get)
+}
 
 /// Bytes of one script file the classifier reads.
 pub(super) const SCRIPT_READ_LIMIT: u64 = 256 * 1024;
@@ -375,7 +390,11 @@ fn sudo_value_letter(letter: char, value_options: &[&str]) -> bool {
 /// cluster letter (`sudo --us root`, `sudo -xu root`).
 pub(super) fn option_words(wrapper: &str, option: &str, value_options: &[&str]) -> usize {
     if wrapper == "sudo" {
-        return sudo_option_words(option, value_options);
+        let current = sudo_option_words(option, value_options);
+        if current != sudo_legacy_option_words(option) {
+            SUDO_OPTION_BOUNDARY_CHANGED.with(|changed| changed.set(true));
+        }
+        return current;
     }
     if value_options.contains(&option) {
         return 2;
@@ -510,7 +529,10 @@ fn sudo_option_boundaries_differ_in(words: &[String]) -> bool {
     for (at, word) in words.iter().enumerate().rev() {
         work::step();
         different_from[at] = if word.starts_with('-') {
-            let current = option_words("sudo", word, value_options);
+            // This compatibility-only scan must not set the per-judgment
+            // reader flag below; only a reader that actually follows sudo's
+            // options may do that.
+            let current = sudo_option_words(word, value_options);
             let legacy = sudo_legacy_option_words(word);
             current != legacy
                 || different_from
@@ -523,30 +545,10 @@ fn sudo_option_boundaries_differ_in(words: &[String]) -> bool {
             false
         };
     }
-    if words.iter().enumerate().any(|(at, word)| {
+    words.iter().enumerate().any(|(at, word)| {
         work::step();
         basename(word).eq_ignore_ascii_case("sudo") && different_from[at + 1]
-    }) {
-        return true;
-    }
-
-    // Quote-blind words split a quoted value such as `"a b"`, whereas the
-    // quote-aware readers keep it whole. Do not require the two readings to
-    // remain aligned: once a sudo word appears, any later changed option keeps
-    // the line prompt-only. This can add a prompt for data named `sudo`, but
-    // avoids reintroducing reader-specific gaps.
-    let mut saw_sudo = false;
-    for word in words {
-        work::step();
-        saw_sudo |= basename(word).eq_ignore_ascii_case("sudo");
-        if saw_sudo
-            && word.starts_with('-')
-            && option_words("sudo", word, value_options) != sudo_legacy_option_words(word)
-        {
-            return true;
-        }
-    }
-    false
+    })
 }
 
 /// `command_word`, telling `wrapper` the position of each wrapper skipped.
@@ -654,20 +656,23 @@ pub(super) fn misread_command(command: &SimpleCommand, words: &[String]) -> bool
 /// delimiter (`<<EOF ./x`), while the words without those run a command
 /// this reading would judge by more than its name: a program named by a
 /// path, a shell or interpreter, `eval`, `source`, `.` or `trap` (`>log
-/// eval ./x`), or a word starting with `-` (`&>log` is lexed as `&` and
-/// `>log`, so `sudo &>log -u root ./x` leaves `-u root ./x`). The shell
+/// eval ./x`), or a word starting with `-` (main's reading, as `sh` runs
+/// it, lexes `&>log` as `&` and `>log`, so `sudo &>log -u root ./x` leaves
+/// `-u root ./x`; #1772 lexes it as one redirection otherwise). The shell
 /// removes the redirection's words, so that command is never judged.
 /// `2>/dev/null git status`, `exec >out` and foreign text read as shell
 /// (`<?php echo 1;`) are read as before. `from`: the operands of `eval`.
+/// #1772 item 1: the command word is the one as written: the lexer moves
+/// a redirection's words last (`SimpleCommand::written_at`).
 pub(super) fn redirect_hides_command(
     command: &SimpleCommand,
     words: &[String],
     from: usize,
 ) -> bool {
-    let Some(rest) = words.get(from..) else {
+    let Some((rest, rest_held)) = as_written(command, words, from) else {
         return false;
     };
-    if !command_word(rest).is_some_and(|(at, _)| held(command, from + at)) {
+    if !command_word(&rest).is_some_and(|(at, _)| rest_held[at]) {
         return false;
     }
     let Some(runs) = unredirected(command, words, from) else {
@@ -680,15 +685,47 @@ pub(super) fn redirect_hides_command(
     }) || invocation(&runs).is_some()
 }
 
+/// #1772 item 1: the words from `from` on in the order they were written,
+/// and whether a redirection holds each. `from` counts the words as the
+/// lexer left them; the words before it keep their order, so it stands
+/// after the written position of the word before it.
+fn as_written(
+    command: &SimpleCommand,
+    words: &[String],
+    from: usize,
+) -> Option<(Vec<String>, Vec<bool>)> {
+    let rest = words.get(from..)?;
+    if command.written_at.len() != words.len() {
+        let holds = (from..words.len()).map(|at| held(command, at)).collect();
+        return Some((rest.to_vec(), holds));
+    }
+    let start = from
+        .checked_sub(1)
+        .map_or(0, |before| command.written_at[before] + 1);
+    let mut written: Vec<(usize, usize)> = (0..words.len())
+        .map(|now| {
+            work::step();
+            (command.written_at[now], now)
+        })
+        .filter(|(at, _)| *at >= start)
+        .collect();
+    written.sort_unstable();
+    let holds = written.iter().map(|(_, now)| held(command, *now)).collect();
+    let words = written
+        .iter()
+        .map(|(_, now)| {
+            work::step();
+            words[*now].clone()
+        })
+        .collect();
+    Some((words, holds))
+}
+
 /// #1482 item 2: whether the word at `at` is part of a redirection
 /// (`redirect_hides_command`). The lexer adds the indexes in ascending
 /// order, so each lookup is a binary search, not a scan of the line.
 fn held(command: &SimpleCommand, at: usize) -> bool {
-    work::step();
-    command.writes_to.binary_search(&at).is_ok()
-        || command.redirect_words.binary_search(&at).is_ok()
-        || command.stdin_from == Some(at)
-        || command.here_string == Some(at)
+    command.held(at)
 }
 
 /// #1482 items 2 and 4: the words from `from` on without those a

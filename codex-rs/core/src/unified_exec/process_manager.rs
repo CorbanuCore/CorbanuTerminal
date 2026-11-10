@@ -73,6 +73,7 @@ use codex_protocol::error::SandboxErr;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ExecCommandSource;
 use codex_protocol::protocol::TerminalInteractionEvent;
+use codex_protocol::shell_environment::set_env_var;
 use codex_sandboxing::SandboxCommand;
 use codex_tools::ToolName;
 use codex_utils_output_truncation::approx_tokens_from_byte_count;
@@ -115,7 +116,8 @@ fn should_use_deterministic_process_ids() -> bool {
 
 fn apply_unified_exec_env(mut env: HashMap<String, String>) -> HashMap<String, String> {
     for (key, value) in UNIFIED_EXEC_ENV {
-        env.insert(key.to_string(), value.to_string());
+        // On Windows this also replaces an inherited `Pager` or `Term` (#1805).
+        set_env_var(&mut env, key, value.to_string());
     }
     env
 }
@@ -1123,6 +1125,7 @@ impl UnifiedExecProcessManager {
             network_approval,
             session: Arc::downgrade(&context.session),
             last_used: started_at,
+            windows_sandbox_level: context.turn.windows_sandbox_level,
         };
         let pruned_entry = {
             let mut store = self.process_store.lock().await;
@@ -1679,6 +1682,19 @@ impl UnifiedExecProcessManager {
             unregister_network_approval_for_entry(&entry).await;
             entry.process.terminate();
         }
+    }
+
+    /// #2000: the Windows sandbox level of the turn that started
+    /// `process_id`, if it is running.
+    pub(crate) async fn process_windows_sandbox_level(
+        &self,
+        process_id: i32,
+    ) -> Option<codex_protocol::config_types::WindowsSandboxLevel> {
+        let store = self.process_store.lock().await;
+        store
+            .processes
+            .get(&process_id)
+            .map(|entry| entry.windows_sandbox_level)
     }
 
     pub(crate) async fn list_processes(&self) -> Vec<BackgroundTerminalInfo> {
