@@ -11,14 +11,14 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-85-S00"
 created: 2026-11-07
-updated: 2026-11-07
+updated: 2026-11-10
 ---
 
 # PF-85-S01 — Tier 1: crates below core
 
 ## Execution mandate
 
-- Deliver: Every Tier 1 ledger row resolved (S1a protocol, S1b config/providers/auth, S1c other crates incl. migration renumbering, S1d tooling, S3a Tier 1 sandbox crates); main merge #1.
+- Deliver: Every Tier 1 ledger row resolved (S1a protocol, S1b config/providers/auth, S1c other crates incl. migration renumbering, S1d tooling, S3a Tier 1 sandbox crates); main merge #2 (S1 exit; #1 was an earlier catch-up).
 - Excludes: core and crates above it.
 - Tracking issue: #1628. Details: [program plan §6](../../../management/upstreamSyncPlan.md).
 
@@ -43,13 +43,13 @@ updated: 2026-11-07
 ## Done
 
 - [x] Sprint record created and linked to one plan feature.
+- [x] Main merge #2 (S1 exit): #2012/#2014 (#1 was #1915/#1922).
 
 ## Remaining
 
 - [ ] Slice PRs per the ledger; security-owner review on security paths.
 - [ ] D319 fixtures (plan §6 S1) generated from `main` and committed before any `age`/`zip` change; then the security owner's decision.
 - [ ] Migration renumbering with an upgrade test from the latest released state DB.
-- [ ] Main merge #1.
 - [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.
 
 ## Verification

@@ -48,8 +48,12 @@ jobs:
 
   # PR checks do not run this workflow, so a red main went unnoticed for 40
   # runs. Keep one labelled issue open while main is red (a comment per
-  # failed run, which notifies its subscribers) and close it when the newest
-  # main commit goes green. Cancelled (superseded) runs change nothing.
+  # failed run, which notifies its subscribers) and close it once every failed
+  # job has passed again in a later main run. Cancelled (superseded) runs
+  # change nothing. Runs overlap (v8-canary has a group per run), so results
+  # can arrive out of order; postmerge_report.py sorts that out (#1697). No
+  # concurrency group: a shared one keeps a single pending run and cancels
+  # any other waiting report.
   report:
     name: Report main status
     needs:
@@ -58,39 +62,23 @@ jobs:
       - results
     if: ${{ !cancelled() && !contains(needs.*.result, 'cancelled') && (needs.results.result == 'failure' || needs.results.result == 'success') }}
     runs-on: ubuntu-24.04
-    concurrency:
-      group: postmerge-ci-report
-      cancel-in-progress: false
     permissions:
+      # Read other main runs' jobs, to tell a stale result from a current one.
+      actions: read
       contents: read
       issues: write
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
       - name: Open, update or close the red-main issue
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RESULT: ${{ needs.results.result }}
+          RUN_ID: ${{ github.run_id }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          label="postmerge-red"
-          gh label create "${label}" --color B60205 \
-            --description "postmerge-ci is failing on main" 2>/dev/null || true
-          number="$(gh issue list --state open --label "${label}" --json number --jq '.[0].number // empty')"
-          if [[ "${RESULT}" == "failure" ]]; then
-            body="postmerge-ci failed on ${SHA::10}: ${RUN_URL}"
-            if [[ -n "${number}" ]]; then
-              gh issue comment "${number}" --body "${body}"
-            else
-              note="PR checks do not run postmerge-ci (full Linux tests, musl and Windows clippy). This issue closes itself when the newest main commit is green."
-              gh issue create --title "postmerge-ci is failing on main" --label "${label}" \
-                --body "${body}"$'\n\n'"${note}"
-            fi
-          elif [[ -n "${number}" ]]; then
-            # A green run for an older commit says nothing about main now.
-            head="$(gh api "repos/${GH_REPO}/commits/main" --jq .sha)"
-            if [[ "${head}" == "${SHA}" ]]; then
-              gh issue close "${number}" --comment "postmerge-ci is green again on ${SHA::10}: ${RUN_URL}"
-            fi
-          fi
+        run: python3 .github/scripts/postmerge_report.py

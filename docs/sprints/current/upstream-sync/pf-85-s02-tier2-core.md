@@ -11,14 +11,14 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-85-S01"
 created: 2026-11-07
-updated: 2026-11-07
+updated: 2026-11-10
 ---
 
 # PF-85-S02 — Tier 2: core
 
 ## Execution mandate
 
-- Deliver: `codex-core` compiles with tests on macOS, Linux and Windows (S2a–S2c and S3a core paths); config schema regenerated; main merge #2.
+- Deliver: `codex-core` compiles with tests on macOS, Linux and Windows (S2a–S2c and S3a core paths); config schema regenerated; main merge #3 (S2 exit; numbering in the program plan §4).
 - Excludes: S3b port behaviour (listed as S3b ledger rows).
 - Tracking issue: #1629. Details: [program plan §6](../../../management/upstreamSyncPlan.md).
 
@@ -48,7 +48,7 @@ updated: 2026-11-07
 
 - [ ] Slice PRs S2a, S2b, S2c and S3a core paths.
 - [ ] Security-owner approval of `turn.rs`/`client.rs` call sites.
-- [ ] Main merge #2.
+- [ ] Main merge #3 (S2 exit).
 - [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.
 
 ## Verification
