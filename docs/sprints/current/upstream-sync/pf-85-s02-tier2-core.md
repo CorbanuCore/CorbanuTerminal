@@ -18,7 +18,7 @@ updated: 2026-11-07
 
 ## Execution mandate
 
-- Deliver: `codex-core` compiles with tests on macOS, Linux and Windows (S2a–S2c and S3a core paths); config schema regenerated; main merge #2.
+- Deliver: `codex-core` compiles with tests on macOS, Linux and Windows (S2a–S2c and S3a core paths); config schema regenerated; main merge #3 (S2 exit; numbering in the program plan §4).
 - Excludes: S3b port behaviour (listed as S3b ledger rows).
 - Tracking issue: #1629. Details: [program plan §6](../../../management/upstreamSyncPlan.md).
 

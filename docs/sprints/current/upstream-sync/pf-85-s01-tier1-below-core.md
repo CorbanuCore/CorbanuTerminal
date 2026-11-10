@@ -18,7 +18,7 @@ updated: 2026-11-07
 
 ## Execution mandate
 
-- Deliver: Every Tier 1 ledger row resolved (S1a protocol, S1b config/providers/auth, S1c other crates incl. migration renumbering, S1d tooling, S3a Tier 1 sandbox crates); main merge #1.
+- Deliver: Every Tier 1 ledger row resolved (S1a protocol, S1b config/providers/auth, S1c other crates incl. migration renumbering, S1d tooling, S3a Tier 1 sandbox crates); main merge #2 (S1 exit; #1 was an earlier catch-up).
 - Excludes: core and crates above it.
 - Tracking issue: #1628. Details: [program plan §6](../../../management/upstreamSyncPlan.md).
 

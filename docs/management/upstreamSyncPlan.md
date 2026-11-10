@@ -1,6 +1,6 @@
 # Upstream OpenAI Codex sync: sprint plan
 
-Status: active (slot 2, D304), updated 2026-11-07. Program issue: #1532. Starting point: #94 by @goodalexander (OpenAI Codex `rust-v0.147.0`
+Status: active (slot 2, D304), updated 2026-11-10. Program issue: #1532. Starting point: #94 by @goodalexander (OpenAI Codex `rust-v0.147.0`
 sync, closed 2026-10-29 with thanks; Task Node `task_6853a901e19885ca5aa6c75c9a44bee8`). Owner decisions on #1532:
 D273 (do it now as a dedicated, owned program), D274 (target `rust-v0.165.0`, fixed at the start, after re-scoping),
 D275 (follow upstream's removals; rebuild our permission and sandbox behaviour on the new path in a "needs security
@@ -169,11 +169,14 @@ newer releases wait for the cadence.
   jobs for PRs whose base is `sync/**` until the workspace compiles (otherwise ~40 red jobs per push), and adds a
   package-scoped dispatch (Windows clippy and tests for `codex-core` and its dependencies, plus the security lanes)
   for S2 and S3b, since `rust-ci` covers the whole workspace and can't pass while tui has markers. S4 reverts all
-  of it (an S5 entry criterion). The sync-branch CODEOWNERS entry stays until main merge #3 is done and is reverted as
+  of it (an S5 entry criterion). The sync-branch CODEOWNERS entry stays until the final main merge (#4, in S5) is done and is reverted as
   the last sync-branch commit before the final PR opens, and before the S5 full run and the SG3 diff, so neither
   reaches `main` and the full run tests the final head. `.github/CODEOWNERS` isn't in `security_paths.txt`, so the
   revert doesn't change the SG3 diff.
-- **Main merges** happen at tier exits (end of S1, end of S2) and in S5. The integrator merges `origin/main` into the
+- **Main merges** happen at tier exits (end of S1, end of S2) and in S5, numbered: #1 (during S1, #1915/#1922),
+  #2 (S1 exit, D471, #2012/#2014), #2b (interim catch-up of `main` 063a1704e9..1855c92ae1 with the #2004 D487
+  security port), #3 (S2 exit), #4 (S5, ≤48 hours before the final merge; the last sync-branch change before the
+  CODEOWNERS revert). Extra interim merges take a letter suffix (#2b, #3b) so these numbers stay fixed. The integrator merges `origin/main` into the
   sync branch. Where `main`'s change to a path that still carries skeleton markers conflicts, the integrator keeps the
   sync side and adds a ledger row "re-apply `git diff <old-main>..<new-main> -- <path>`" for the path's owner; this
   avoids nested markers and keeps one owner per path. Where it merges cleanly, git places it in the ours side and the
@@ -304,7 +307,7 @@ reels, code-blind functional runs).
 - **Exit:** every Tier 1 ledger row resolved; `cargo check -p` green for each Tier 1 crate and `cargo test -p` green
   for each one whose dev-dependencies are below core (`codex-linux-sandbox` and `codex-login` dev-depend on core
   test support, so their tests move to the S2 exit) on macOS (local, `-j8`) and Linux (glitch, `-j10`); Linux clippy for the sandbox crates on glitch; app-server schemas
-  regenerated and checked; main merge #1 done.
+  regenerated and checked; main merge #2 done (#2012/#2014).
 - **Contributor-friendly:** S1b, S1c (except `state` migrations), S1d.
 
 ### S2 Tier 2: core
@@ -320,7 +323,7 @@ reels, code-blind functional runs).
   S3b rows, plus the `codex-linux-sandbox` and `codex-login` tests, on macOS and glitch; Windows via the
   package-scoped dispatch (§4); config schema regenerated
   (`just write-config-schema` runs `codex-core`); security owner approved the call sites in `turn.rs`/`client.rs`;
-  main merge #2 done.
+  main merge #3 done.
 - **Contributor-friendly:** S2b and core test-suite resolution.
 
 ### S3 Security port (S3b needs security sign-off)
@@ -341,6 +344,9 @@ reels, code-blind functional runs).
   functional-test model. Green: the core-security lane (`rust-ci-core-security.yml` dispatch on Linux and macOS), `security-platform-contract`,
   `security-ingress-contract`, `credential-boundary-canary`, `windows-security-probes` (dispatch), Linux sandbox tests
   on glitch, seatbelt tests on macOS, Windows sandbox tests on native Windows CI and on the Windows PC.
+- **Gate before SG2:** the `core/src/exec.rs` re-apply row (main merge #2) is done and tested. D446's network-folder
+  refusal (and D398) live there; until it is re-applied, `sandboxing`'s D446 check has no caller on the sync branch,
+  so the refusal is not active. The S3 PR doesn't go to SG2 while that row is open.
 - **Security gate SG2:** Travis's sign-off on that PR, recorded against its exact head SHA. It doesn't merge into the
   sync branch before then, and S5 can't start without it.
 - **Contributor role:** tests, reviews and reproduction only; implementation stays with maintainers.
@@ -364,9 +370,9 @@ reels, code-blind functional runs).
 ### S5 Qualification and merge
 
 - **Entry:** SG2 signed and S3b merged; S4 exit; `blocking-ci` fully green; CI mode change reverted (the sync-branch
-  CODEOWNERS entry goes after main merge #3, before the full run and the final PR); every ledger row resolved,
+  CODEOWNERS entry goes after main merge #4, before the full run and the final PR); every ledger row resolved,
   including re-apply and migration rows; repository-wide marker scan clean.
-- **Scope:** main merge #3 (≤48 hours before the final merge, with a soft freeze on hotspot files); full run:
+- **Scope:** main merge #4 (≤48 hours before the final merge, with a soft freeze on hotspot files); full run:
   `blocking-ci` (incl. Windows clippy `-D warnings --tests` and Windows native tests), `rust-ci-full` (Linux full
   suite, dispatch), `windows-security-probes`, `bazel`, cargo-deny, codespell, nightly lanes (dispatch); `just test` on
   macOS; Linux clippy on glitch; the Windows PC gate; release dry run of `corbanu-terminal-release`; the
@@ -405,6 +411,10 @@ reels, code-blind functional runs).
   [`upstream-sync-rust-v0.167.0.md`](../plans/active/upstream-sync-rust-v0.167.0.md), sprints PF-85-S00..S06.
 - The upgrade record follows `upstream-integration.md` (required upstream-touch record and qualification).
 - Status goes on #1532 weekly; each sprint has its own tracking issue.
+- **Calendar:** 2026-11-23, RUSTSEC-2026-0459 exception re-review (`deny.toml`, `.cargo/audit.toml`, on `main` and the
+  sync branch): drop the exception text's claim that project config can set `sqlite_home`/`log_dir`. D483 (#1996)
+  put both keys (and `debug.config_lockfile`) on the project-config denylist, and main merge #2 carried it onto the
+  sync branch's upstream-shaped config loader.
 
 ## 8. Contributors and Task Node credit
 
