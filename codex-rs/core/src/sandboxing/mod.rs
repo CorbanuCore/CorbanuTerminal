@@ -72,6 +72,15 @@ pub struct ExecRequest {
     pub(crate) exec_server_network_proxy: Option<RemoteNetworkProxyLaunchConfig>,
 }
 
+/// Who resolves an [`ExecRequest`]'s Windows filesystem overrides.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WindowsSandboxOverrides {
+    /// [`ExecRequest::from_sandbox_exec_request_with`] resolves them.
+    Resolve,
+    /// The caller attaches (elevated) or refuses (non-admin) them itself.
+    AttachedByCaller,
+}
+
 impl ExecRequest {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -119,6 +128,26 @@ impl ExecRequest {
         options: ExecOptions,
         windows_sandbox_workspace_roots: Vec<AbsolutePathBuf>,
     ) -> Result<Self, CodexErr> {
+        Self::from_sandbox_exec_request_with(
+            request,
+            options,
+            windows_sandbox_workspace_roots,
+            WindowsSandboxOverrides::Resolve,
+        )
+        .await
+    }
+
+    /// [`Self::from_sandbox_exec_request`]; with
+    /// [`WindowsSandboxOverrides::AttachedByCaller`] no Windows filesystem
+    /// overrides are resolved here (and none of the resolver's refusals
+    /// apply): the caller attaches or refuses them itself, as main does for
+    /// the agent's commands (D542 (a)).
+    pub(crate) async fn from_sandbox_exec_request_with(
+        request: SandboxExecRequest,
+        options: ExecOptions,
+        windows_sandbox_workspace_roots: Vec<AbsolutePathBuf>,
+        windows_overrides: WindowsSandboxOverrides,
+    ) -> Result<Self, CodexErr> {
         codex_exec_server::run_integrity_checks(&request).await;
         let SandboxExecRequest {
             command,
@@ -138,6 +167,7 @@ impl ExecRequest {
             capture_policy,
         } = options;
         let windows_sandbox_filesystem_overrides = if sandbox == SandboxType::WindowsRestrictedToken
+            && windows_overrides == WindowsSandboxOverrides::Resolve
         {
             let sandbox_policy_cwd = windows_sandbox_policy_cwd
                 .to_abs_path()

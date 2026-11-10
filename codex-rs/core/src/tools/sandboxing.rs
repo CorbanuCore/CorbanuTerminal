@@ -669,11 +669,32 @@ impl<'a> SandboxAttempt<'a> {
         environment_id: Option<&str>,
     ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
         let network = self.network_proxy(network);
+        // D537 (b), provisional: a `\\localhost` folder is refused for the
+        // agent's commands too, as main's path URIs refused it everywhere
+        // (#1863; command/exec refuses it in `build_exec_request`).
+        // A local launch's folders are native; one that doesn't convert
+        // (a `\\localhost` folder whose URI lost the host) fails here with
+        // its own message.
+        for folder in [&command.cwd, self.sandbox_cwd] {
+            crate::exec::refuse_localhost_unc_folder(&folder.to_abs_path()?)?;
+        }
         let protected = self.protect_launch(
             contract,
             &mut command,
             /*exec_server*/ false,
             /*proxy_enforced*/ network.is_some(),
+        )?;
+        // D541 (a), provisional: nor does MXC run them where Corbanu's
+        // protected-file read blocks apply (D446's network-folder refusal is
+        // command/exec's only, D474). Refused before the transform does any
+        // work on the host; checked again on the transformed request below.
+        let effective =
+            effective_permission_profile(self.permissions, command.additional_permissions.as_ref());
+        crate::exec::refuse_mxc_without_corbanu_protections(
+            self.sandbox,
+            protected.as_ref().unwrap_or(&effective),
+            contract.is_some(),
+            /*folders*/ &[],
         )?;
         let mut request = self
             .manager
@@ -696,12 +717,23 @@ impl<'a> SandboxAttempt<'a> {
             .iter()
             .map(PathUri::to_abs_path)
             .collect::<std::io::Result<Vec<_>>>()?;
-        let mut exec_request = crate::sandboxing::ExecRequest::from_sandbox_exec_request(
+        // D542 (a), provisional: as on main, the agent's commands get no
+        // resolved overrides on the non-admin backend (it applies the
+        // profile's read-only paths itself, #1686), only the #300/D331
+        // refusals below; the elevated backend's are attached below (#294).
+        let mut exec_request = crate::sandboxing::ExecRequest::from_sandbox_exec_request_with(
             request,
             options,
             workspace_roots,
+            crate::sandboxing::WindowsSandboxOverrides::AttachedByCaller,
         )
         .await?;
+        crate::exec::refuse_mxc_without_corbanu_protections(
+            exec_request.sandbox,
+            &exec_request.permission_profile,
+            contract.is_some(),
+            /*folders*/ &[],
+        )?;
         if exec_request.sandbox == SandboxType::WindowsRestrictedToken {
             let sandbox_cwd = self.sandbox_cwd.to_abs_path()?;
             if codex_sandboxing::windows_sandbox_uses_elevated_backend(

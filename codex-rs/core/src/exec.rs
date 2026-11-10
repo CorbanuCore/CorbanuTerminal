@@ -390,6 +390,12 @@ pub async fn build_exec_request(
     for folder in [&cwd, sandbox_cwd] {
         refuse_localhost_unc_folder(folder)?;
     }
+    refuse_mxc_without_corbanu_protections(
+        sandbox_type,
+        permission_profile,
+        crate::security::launch_contract::active().is_some(),
+        &[cwd.as_path(), sandbox_cwd.as_path()],
+    )?;
     // D446 before any override resolution, so a network working folder gets
     // its own refusal rather than a path error from the resolver.
     // `attach_windows_sandbox_filesystem_overrides` checks it again.
@@ -479,12 +485,50 @@ pub async fn build_exec_request(
     Ok(exec_req)
 }
 
+/// D541 (a), provisional: upstream's MXC sandbox gets neither the D446
+/// network-folder refusal nor Corbanu's protected-file read blocks (the
+/// launch contract's deny-reads, attached only for the elevated backend, and
+/// the profile's own deny-read entries), so an MXC launch is refused whenever
+/// one of them would apply: a launch contract is armed, the profile denies
+/// some reads, or one of `folders` (command/exec's working folders, where
+/// D446 applies) is on a network.
+pub(crate) fn refuse_mxc_without_corbanu_protections(
+    sandbox: SandboxType,
+    permission_profile: &PermissionProfile,
+    contract_armed: bool,
+    folders: &[&std::path::Path],
+) -> Result<()> {
+    if sandbox != SandboxType::WindowsMxc {
+        return Ok(());
+    }
+    let refusal = |why: &str| {
+        Err(CodexErr::UnsupportedOperation(format!(
+            "The Windows MXC sandbox can't apply Corbanu's protections here ({why}), so Corbanu doesn't run commands in it. Use the elevated or non-admin Windows sandbox instead: set `windows.sandbox` to one of them and turn off `prefer_mxc` (an administrator's `require_mxc` requirement prevents this)."
+        )))
+    };
+    if contract_armed {
+        return refusal("Corbanu's protected files must stay unreadable");
+    }
+    let (file_system_sandbox_policy, _) = permission_profile.to_runtime_permissions();
+    if file_system_sandbox_policy.has_denied_read_restrictions() {
+        return refusal("the permission profile denies some reads");
+    }
+    if cfg!(windows) {
+        for folder in folders {
+            if codex_sandboxing::refuse_network_working_folder(folder).is_err() {
+                return refusal("the working folder is a network folder");
+            }
+        }
+    }
+    Ok(())
+}
+
 /// #1863: main refused a `\\localhost` working folder for command/exec at
 /// every sandbox level, because its path URI lost `localhost`. Upstream's
 /// path URIs now keep such a folder, so command/exec refuses it here, with
 /// the same message. Covers `\\localhost\`, `\\?\UNC\localhost\` and
 /// `\\.\UNC\localhost\`, in any letter case.
-fn refuse_localhost_unc_folder(folder: &AbsolutePathBuf) -> Result<()> {
+pub(crate) fn refuse_localhost_unc_folder(folder: &AbsolutePathBuf) -> Result<()> {
     if !cfg!(windows) {
         return Ok(());
     }
