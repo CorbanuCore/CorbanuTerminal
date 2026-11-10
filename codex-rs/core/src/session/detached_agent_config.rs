@@ -50,8 +50,12 @@ fn raise_windows_sandbox(config: &mut Config, level: WindowsSandboxLevel) {
         return;
     }
     match level {
-        WindowsSandboxLevel::Elevated => config.set_windows_elevated_sandbox_enabled(/*value*/ true),
-        WindowsSandboxLevel::RestrictedToken => config.set_windows_sandbox_enabled(/*value*/ true),
+        WindowsSandboxLevel::Elevated => {
+            config.set_windows_elevated_sandbox_enabled(/*value*/ true)
+        }
+        WindowsSandboxLevel::RestrictedToken => {
+            config.set_windows_sandbox_enabled(/*value*/ true)
+        }
         WindowsSandboxLevel::Disabled => {}
     }
 }
