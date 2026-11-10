@@ -407,6 +407,7 @@ async fn accounting_responses_native_spawned_role_children() -> anyhow::Result<(
                     config_file: Some(role.to_path_buf()),
                     description: None,
                     nickname_candidates: None,
+                    ..Default::default()
                 },
             );
         })

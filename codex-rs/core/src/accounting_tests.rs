@@ -357,6 +357,7 @@ async fn accounting_role_reload_preserves_internal_binding_without_changing_off_
                 config_file: Some(path.to_path_buf()),
                 description: Some("fixture".into()),
                 nickname_candidates: None,
+                ..Default::default()
             },
         );
         let mode = config.accounting.clone();
@@ -426,6 +427,7 @@ web_search_max_uses = 2
             config_file: Some(role.to_path_buf()),
             description: None,
             nickname_candidates: None,
+            ..Default::default()
         },
     );
     let mode = config.accounting.clone();

@@ -3009,6 +3009,39 @@ pub struct AgentRoleConfig {
     pub config_file: Option<PathBuf>,
     /// Candidate nicknames for agents spawned with this role.
     pub nickname_candidates: Option<Vec<String>>,
+    /// Where `config_file` was declared. A project's role file gets the same
+    /// denylist as the project's own config (D512, #1997).
+    pub source: AgentRoleSource,
+}
+
+/// The kind of config that declared an agent role's config file.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum AgentRoleSource {
+    /// Shipped with Corbanu.
+    BuiltIn,
+    /// The person's own config (user config, `~/.codex/agents/`) or launch
+    /// flags.
+    #[default]
+    User,
+    /// System, MDM or enterprise-managed config.
+    Managed,
+    /// A trusted project's `.codex` folder: repository contents, so the
+    /// project-config denylist applies.
+    Project,
+}
+
+impl AgentRoleSource {
+    pub(crate) fn from_layer(source: &ConfigLayerSource) -> Self {
+        match source {
+            ConfigLayerSource::Project { .. } => Self::Project,
+            ConfigLayerSource::User { .. } | ConfigLayerSource::SessionFlags => Self::User,
+            ConfigLayerSource::Mdm { .. }
+            | ConfigLayerSource::System { .. }
+            | ConfigLayerSource::EnterpriseManaged { .. }
+            | ConfigLayerSource::LegacyManagedConfigTomlFromFile { .. }
+            | ConfigLayerSource::LegacyManagedConfigTomlFromMdm => Self::Managed,
+        }
+    }
 }
 
 fn resolve_tool_suggest_config(
