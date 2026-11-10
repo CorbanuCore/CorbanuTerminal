@@ -869,7 +869,8 @@ impl TurnInputQueue {
     /// D532 (a): moves admitted input the turn has not taken (user input and agent mail) to
     /// input deferred to re-admission. Items the turn queued for itself (tool outputs,
     /// response items) stay; so does context a client steered in as response items, which is
-    /// information only and grants the turn nothing.
+    /// information only and grants the turn nothing, and a standalone function-call output a
+    /// client steered in (D532 (a), provisional: the owner decides with this case in view).
     pub(crate) fn defer_admitted_items(
         &mut self,
         final_output_json_schema: Option<serde_json::Value>,

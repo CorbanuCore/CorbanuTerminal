@@ -71,6 +71,7 @@ use codex_protocol::turn_input::TurnInputMode;
 use codex_protocol::turn_input::TurnInputRequest;
 use codex_protocol::turn_input::TurnInputSubmission;
 use codex_protocol::turn_input::TurnStartOptions;
+use codex_protocol::user_input::UserInput;
 use codex_thread_store::PersistContext;
 
 use codex_features::Feature;
@@ -1422,14 +1423,15 @@ impl Session {
         final_output_json_schema: Option<serde_json::Value>,
     ) {
         // Each retry follows the end of the turn that refused it; the bound only stops a loop.
-        for _ in 0..FOLLOW_UP_SUBMIT_ATTEMPTS {
+        for attempt in 1..=FOLLOW_UP_SUBMIT_ATTEMPTS {
             let reason = match reply_rx.await {
                 Ok(Ok(
                     TurnInputSubmission::Started { .. } | TurnInputSubmission::Steered { .. },
                 )) => return,
                 Ok(Ok(TurnInputSubmission::NotSubmitted { reason })) => reason,
                 Ok(Err(err)) => {
-                    self.report_unsubmitted_follow_up(&err.to_string()).await;
+                    self.report_unsubmitted_follow_up(&input, &err.to_string())
+                        .await;
                     return;
                 }
                 // The session ended before admission answered.
@@ -1441,7 +1443,7 @@ impl Session {
                     | NotSubmittedReason::ActiveTurnNotSteerable { .. }
                     | NotSubmittedReason::ActiveTurnOutputSchemaMismatch
             ) {
-                self.report_unsubmitted_follow_up(&not_submitted_reason_text(&reason))
+                self.report_unsubmitted_follow_up(&input, &not_submitted_reason_text(&reason))
                     .await;
                 return;
             }
@@ -1459,6 +1461,10 @@ impl Session {
                     return;
                 }
             }
+            if attempt == FOLLOW_UP_SUBMIT_ATTEMPTS {
+                // Not submitted again: its answer would be read by no one.
+                break;
+            }
             // The turn that refused it has ended: admission takes it now.
             reply_rx = match self
                 .submit_follow_up_user_input(&input, final_output_json_schema.clone())
@@ -1466,24 +1472,26 @@ impl Session {
             {
                 Ok(reply_rx) => reply_rx,
                 Err(err) => {
-                    self.report_unsubmitted_follow_up(&err.to_string()).await;
+                    self.report_unsubmitted_follow_up(&input, &err.to_string())
+                        .await;
                     return;
                 }
             };
         }
-        self.report_unsubmitted_follow_up("it was refused repeatedly")
+        self.report_unsubmitted_follow_up(&input, "it was refused repeatedly")
             .await;
     }
 
-    async fn report_unsubmitted_follow_up(&self, reason: &str) {
+    async fn report_unsubmitted_follow_up(&self, input: &TurnInput, reason: &str) {
         warn!(%reason, "follow-up input after a finished turn was not submitted");
+        let preview = follow_up_preview(input);
         // A warning, not an error: an error event would end whatever turn runs now.
         self.send_event_raw(Event {
             id: uuid::Uuid::new_v4().to_string(),
             msg: EventMsg::Warning(WarningEvent {
                 message: format!(
-                    "Input that arrived while a turn was running could not be sent afterwards: \
-                     {reason}. Please send it again."
+                    "Input that arrived while a turn was running could not be sent afterwards \
+                     ({reason}); please send it again: \"{preview}\""
                 ),
             }),
         })
@@ -1673,8 +1681,20 @@ impl Session {
 fn not_submitted_reason_text(reason: &NotSubmittedReason) -> String {
     match reason {
         NotSubmittedReason::ServerDraining => "the server is shutting down".to_string(),
-        NotSubmittedReason::PlanMode => "plan mode does not take it now".to_string(),
         NotSubmittedReason::EmptyInput => "it was empty".to_string(),
+        NotSubmittedReason::PendingTriggerTurn => {
+            "agent messages were waiting to start a turn first".to_string()
+        }
+        NotSubmittedReason::Superseded | NotSubmittedReason::NotIdle => {
+            "another request took its place".to_string()
+        }
+        // Not reached for start-or-steer user input; listed so the match stays exhaustive.
+        NotSubmittedReason::PlanMode
+        | NotSubmittedReason::NoActiveTurn
+        | NotSubmittedReason::ExpectedTurnMismatch { .. } => {
+            "the thread was not ready for it".to_string()
+        }
+        // Retried by `settle_follow_up_input`, so reported only after repeated refusals.
         NotSubmittedReason::AuthorizationChanged => {
             "the running turn's permissions changed".to_string()
         }
@@ -1684,13 +1704,28 @@ fn not_submitted_reason_text(reason: &NotSubmittedReason) -> String {
         NotSubmittedReason::ActiveTurnOutputSchemaMismatch => {
             "the running turn expects another output format".to_string()
         }
-        NotSubmittedReason::Superseded
-        | NotSubmittedReason::NotIdle
-        | NotSubmittedReason::PendingTriggerTurn
-        | NotSubmittedReason::NoActiveTurn
-        | NotSubmittedReason::ExpectedTurnMismatch { .. } => {
-            "another request took its place".to_string()
-        }
+    }
+}
+
+/// A short, single-line preview of follow-up text for a report.
+fn follow_up_preview(input: &TurnInput) -> String {
+    const PREVIEW_CHARS: usize = 80;
+    let TurnInput::UserInput { content, .. } = input else {
+        return String::new();
+    };
+    let text = content
+        .iter()
+        .filter_map(|item| match item {
+            UserInput::Text { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if text.chars().count() > PREVIEW_CHARS {
+        format!("{}...", text.chars().take(PREVIEW_CHARS).collect::<String>())
+    } else {
+        text
     }
 }
 
