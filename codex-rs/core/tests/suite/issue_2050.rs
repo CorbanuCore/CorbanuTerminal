@@ -227,9 +227,9 @@ async fn issue_2050_remote_windows_without_its_sandbox_refuses_commands_and_file
     ] {
         for host in [Host::Windows, Host::OlderWindows, Host::Linux] {
             let refused = level != SecurityLevel::Permissive && !matches!(host, Host::Linux);
-            // A Windows client keeps refusing every command under these
-            // levels without its own sandbox (#1976, #2049); not this test's
-            // concern.
+            // A Windows client without its own sandbox keeps refusing every
+            // command under these levels, and file tools with #1976's wording
+            // (#2049); not this test's concern.
             let client_refuses = cfg!(windows) && level != SecurityLevel::Permissive;
             let command = run(level, host, Call::Command).await?;
             let expected = format!("Security level {name} refused this command");
@@ -263,7 +263,7 @@ async fn issue_2050_remote_windows_without_its_sandbox_refuses_commands_and_file
             let expected = format!("Security level {name} refused this file access");
             let ok = if refused {
                 image.output.contains(&expected)
-                    && image.output.contains("environment `remote`")
+                    && (client_refuses || image.output.contains("environment `remote`"))
                     && !image
                         .reached
                         .iter()

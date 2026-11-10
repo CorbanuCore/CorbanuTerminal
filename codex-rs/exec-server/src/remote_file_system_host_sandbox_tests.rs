@@ -109,16 +109,29 @@ fn assert_refused(result: io::Result<()>, requests: Vec<String>) {
 #[tokio::test]
 async fn issue_2050_windows_executor_without_its_sandbox_is_refused_here() {
     // No Windows sandbox for this session, or the elevated one not set up.
-    let (result, requests) = read(windows(true), WindowsSandboxLevel::Disabled, true).await;
+    let (result, requests) = read(
+        windows(/*set_up*/ true),
+        WindowsSandboxLevel::Disabled,
+        /*refusal*/ true,
+    )
+    .await;
     assert_refused(result, requests);
-    let (result, requests) = read(windows(false), WindowsSandboxLevel::Elevated, true).await;
+    let (result, requests) = read(
+        windows(/*set_up*/ false),
+        WindowsSandboxLevel::Elevated,
+        /*refusal*/ true,
+    )
+    .await;
     assert_refused(result, requests);
     // The elevated sandbox set up there, or the non-admin one: served there.
     for (info, level) in [
-        (windows(true), WindowsSandboxLevel::Elevated),
-        (windows(false), WindowsSandboxLevel::RestrictedToken),
+        (windows(/*set_up*/ true), WindowsSandboxLevel::Elevated),
+        (
+            windows(/*set_up*/ false),
+            WindowsSandboxLevel::RestrictedToken,
+        ),
     ] {
-        let (result, requests) = read(info, level, true).await;
+        let (result, requests) = read(info, level, /*refusal*/ true).await;
         assert!(result.is_ok(), "{result:?}");
         assert_eq!(requests, vec!["fs/readFile".to_string()]);
     }
@@ -131,12 +144,22 @@ async fn issue_2050_older_executors_fail_closed_unless_clearly_posix() {
         "shell": { "name": "powershell", "path": "powershell.exe" },
         "cwd": "file:///C:/work",
     });
-    let (result, requests) = read(older_windows, WindowsSandboxLevel::Elevated, true).await;
+    let (result, requests) = read(
+        older_windows,
+        WindowsSandboxLevel::Elevated,
+        /*refusal*/ true,
+    )
+    .await;
     assert_refused(result, requests);
     // An older Linux executor keeps working (it re-checks on its side).
     let older_linux =
         json!({ "shell": { "name": "bash", "path": "/bin/bash" }, "cwd": "file:///home/me" });
-    let (result, requests) = read(older_linux, WindowsSandboxLevel::Disabled, true).await;
+    let (result, requests) = read(
+        older_linux,
+        WindowsSandboxLevel::Disabled,
+        /*refusal*/ true,
+    )
+    .await;
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(requests, vec!["fs/readFile".to_string()]);
 }
@@ -145,7 +168,7 @@ async fn issue_2050_older_executors_fail_closed_unless_clearly_posix() {
 /// for and the request goes through.
 #[tokio::test]
 async fn issue_2050_permissive_is_unchanged() {
-    let (url, methods) = fake_executor(windows(false)).await;
+    let (url, methods) = fake_executor(windows(/*set_up*/ false)).await;
     let environment = Environment::create_for_tests(Some(url)).expect("environment");
     let context = FileSystemSandboxContext::from_permission_profile(PermissionProfile::Disabled);
     let path = PathUri::parse("file:///C:/work/secret.txt").expect("uri");

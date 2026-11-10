@@ -70,12 +70,16 @@ fn issue_2050_windows_host_without_its_sandbox_is_not_confined() {
 fn issue_2050_older_executors_fail_closed_unless_clearly_posix() {
     // Older Windows executors: a Windows working directory or shell.
     for older_windows in [
-        info(POWERSHELL, Some("file:///C:/work"), None),
-        info(POWERSHELL, None, None),
-        info(("cmd", "cmd.exe"), None, None),
-        info(("bash", r"C:\Program Files\Git\bin\bash.exe"), None, None),
-        info(ZSH, Some("file:///C:/work"), None),
-        info(ZSH, Some("file://server/share/work"), None),
+        info(POWERSHELL, Some("file:///C:/work"), /*host*/ None),
+        info(POWERSHELL, /*cwd*/ None, /*host*/ None),
+        info(("cmd", "cmd.exe"), /*cwd*/ None, /*host*/ None),
+        info(
+            ("bash", r"C:\Program Files\Git\bin\bash.exe"),
+            /*cwd*/ None,
+            /*host*/ None,
+        ),
+        info(ZSH, Some("file:///C:/work"), /*host*/ None),
+        info(ZSH, Some("file://server/share/work"), /*host*/ None),
     ] {
         assert_eq!(
             verdicts(&older_windows),
@@ -84,12 +88,15 @@ fn issue_2050_older_executors_fail_closed_unless_clearly_posix() {
         );
     }
     // Nothing to tell the platform by.
-    assert_eq!(verdicts(&info(("sh", "sh"), None, None)), [Unreported; 3]);
+    assert_eq!(
+        verdicts(&info(("sh", "sh"), /*cwd*/ None, /*host*/ None)),
+        [Unreported; 3]
+    );
     // Older Linux or macOS executors keep working.
     for older_posix in [
-        info(ZSH, Some("file:///home/me"), None),
-        info(ZSH, None, None),
-        info(("sh", "sh"), Some("file:///srv/work"), None),
+        info(ZSH, Some("file:///home/me"), /*host*/ None),
+        info(ZSH, /*cwd*/ None, /*host*/ None),
+        info(("sh", "sh"), Some("file:///srv/work"), /*host*/ None),
     ] {
         assert_eq!(verdicts(&older_posix), [Confined; 3], "{older_posix:?}");
     }
@@ -120,7 +127,8 @@ fn issue_2050_host_sandbox_report_is_backward_compatible() {
     }))
     .expect("older executor info");
     assert_eq!(older.host_sandbox, None);
-    let unreported = serde_json::to_value(info(ZSH, None, None)).expect("serialize");
+    let unreported =
+        serde_json::to_value(info(ZSH, /*cwd*/ None, /*host*/ None)).expect("serialize");
     assert!(unreported.get("hostSandbox").is_none());
     // An operating system this client does not know: it cannot tell.
     let future: HostSandboxInfo =

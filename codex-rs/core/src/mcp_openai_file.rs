@@ -446,7 +446,7 @@ mod tests {
                 refused.filter(|_| client_without_sandbox)
             );
         }
-        assert_eq!(refused_here(&local, None), None);
+        assert_eq!(refused_here(&local, /*read_sandbox*/ None), None);
     }
 
     #[tokio::test]

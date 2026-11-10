@@ -181,22 +181,22 @@ async fn issue_2050_a_remote_gap_follows_the_executor_report() {
     use WindowsSandboxLevel::RestrictedToken;
     let cases = [
         (
-            Some(windows_info(false)),
+            Some(windows_info(/*set_up*/ false)),
             Disabled,
             Some(RemoteGap::WindowsSandboxNotSelected),
         ),
         (
-            Some(windows_info(true)),
+            Some(windows_info(/*set_up*/ true)),
             Disabled,
             Some(RemoteGap::WindowsSandboxNotSelected),
         ),
         (
-            Some(windows_info(false)),
+            Some(windows_info(/*set_up*/ false)),
             Elevated,
             Some(RemoteGap::WindowsSandboxNotSetUp),
         ),
-        (Some(windows_info(true)), Elevated, None),
-        (Some(windows_info(false)), RestrictedToken, None),
+        (Some(windows_info(/*set_up*/ true)), Elevated, None),
+        (Some(windows_info(/*set_up*/ false)), RestrictedToken, None),
         (
             Some(serde_json::json!({
                 "shell": { "name": "bash", "path": "/bin/bash" },
@@ -225,7 +225,7 @@ async fn issue_2050_a_remote_gap_follows_the_executor_report() {
             "{info:?} {level:?}"
         );
     }
-    let local = turn_environment(None);
+    let local = turn_environment(/*url*/ None);
     assert_eq!(remote_gap(&local.environment, Disabled).await, None);
 }
 
@@ -297,8 +297,8 @@ fn issue_2050_remote_refusals_name_the_level_environment_and_steps() {
 
 #[tokio::test]
 async fn issue_2050_file_refusal_follows_where_the_tool_runs() {
-    let remote = turn_environment(Some(fake_executor(None).await));
-    let local = turn_environment(None);
+    let remote = turn_environment(Some(fake_executor(/*info*/ None).await));
+    let local = turn_environment(/*url*/ None);
     for level in [SecurityLevel::Moderate, SecurityLevel::Aggressive] {
         for sandbox in [
             WindowsSandboxLevel::Disabled,
