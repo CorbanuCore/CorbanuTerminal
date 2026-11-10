@@ -79,7 +79,7 @@ pub(super) fn prepare_policy(
 ) -> io::Result<FileSystemSandboxPolicy> {
     let command_cwd = request.cwd.to_abs_path()?;
     let needs_home = policy.entries.iter().any(|entry| match &entry.path {
-        FileSystemPath::GlobPattern { pattern } => pattern.starts_with('~'),
+        FileSystemPath::GlobPattern { pattern, .. } => pattern.starts_with('~'),
         FileSystemPath::Special {
             value: FileSystemSpecialPath::Tmpdir,
         } => request

@@ -199,15 +199,14 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
 
         let is_discovery_request = mcp_method.as_deref() == Some(DiscoverRequestMethod::VALUE);
         let is_event_stream_request = mcp_method.as_deref() == Some("events/stream");
-        let uses_modern_protocol = headers
-            .get(HEADER_MCP_PROTOCOL_VERSION)
-            .and_then(|value| value.to_str().ok())
-            == Some(ProtocolVersion::V_2026_07_28.as_str());
-        let maximum_response_bytes = if is_event_stream_request {
-            Some(MAX_EVENT_NOTIFICATION_BYTES)
+        // Custom HTTP clients do not inherit rmcp's built-in response-body
+        // cap. Apply the same bounded collection to legacy initialize and
+        // error responses before authentication or protocol negotiation.
+        let maximum_response_bytes = Some(if is_event_stream_request {
+            MAX_EVENT_NOTIFICATION_BYTES
         } else {
-            (is_discovery_request || uses_modern_protocol).then_some(MAX_MCP_STDIO_LINE_BYTES)
-        };
+            MAX_MCP_STDIO_LINE_BYTES
+        });
         let redirect_policy = if is_discovery_request {
             HttpRedirectPolicy::Stop
         } else {
@@ -596,12 +595,12 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
             }
         }
 
-        let uses_modern_protocol = headers
-            .get(HEADER_MCP_PROTOCOL_VERSION)
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(|version| version == ProtocolVersion::V_2026_07_28.as_str());
-        let maximum_response_bytes = uses_modern_protocol.then_some(MAX_MCP_STDIO_LINE_BYTES);
-        Ok(sse_stream_from_body(body_stream, maximum_response_bytes))
+        // Bounded for legacy sessions too (#1946): custom HTTP clients do not
+        // inherit rmcp's built-in response-body cap.
+        Ok(sse_stream_from_body(
+            body_stream,
+            Some(MAX_MCP_STDIO_LINE_BYTES),
+        ))
     }
 }
 

@@ -46,6 +46,7 @@ use crate::oauth_client_registration::PreparedOAuthLogin;
 use crate::oauth_client_registration::start_authorization as start_client_registration;
 use crate::oauth_http_client::OAuthHttpClientAdapter;
 use crate::save_oauth_tokens;
+use crate::startup_error::auth_error_with_reason;
 use crate::utils::build_default_headers;
 use codex_config::types::AuthKeyringBackendKind;
 use codex_config::types::OAuthCredentialsStoreMode;
@@ -890,7 +891,11 @@ async fn resolve_authorization_manager(
     let mut auth_manager =
         AuthorizationManager::new_with_oauth_http_client(server_url, http_client).await?;
     auth_manager.set_allow_missing_issuer(true);
-    let metadata = auth_manager.resolve_metadata().await?.metadata;
+    let metadata = auth_manager
+        .resolve_metadata()
+        .await
+        .map_err(auth_error_with_reason)?
+        .metadata;
     validate_authorization_server_endpoints(&metadata)?;
     Ok((auth_manager, metadata))
 }

@@ -1102,7 +1102,7 @@ pub(super) fn git_remote_unseen(
 }
 
 /// Whether `word` holds text the line does not show.
-fn git_word_unseen(word: &str) -> bool {
+pub(super) fn git_word_unseen(word: &str) -> bool {
     word.contains(['$', '`']) || word.contains(UNSEEN_OUTPUT)
 }
 

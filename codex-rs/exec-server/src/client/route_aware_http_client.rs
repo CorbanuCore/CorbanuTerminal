@@ -231,7 +231,7 @@ impl RouteAwareHttpRequestRunner {
         let body = response.bytes().await.map_err(|error| {
             internal_error(format!(
                 "failed to read http/request response body: {}",
-                codex_http_client::redact_reqwest_error(&error)
+                error.redacted_message()
             ))
         })?;
 
@@ -284,7 +284,7 @@ impl RouteAwareHttpRequestRunner {
                             seq,
                             delta: Vec::new().into(),
                             done: true,
-                            error: Some(codex_http_client::redact_reqwest_error(&error)),
+                            error: Some(error.redacted_message()),
                         },
                     )
                     .await;

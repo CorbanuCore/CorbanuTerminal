@@ -45,6 +45,7 @@ mod loader_variables;
 mod mktemp;
 mod named_shell;
 mod nested;
+mod option_globs;
 mod outbound;
 mod outputs;
 mod paths;
@@ -436,6 +437,62 @@ pub(crate) fn classify_as_named(
     classify_as_named_with(action, codex_home, dirs::home_dir().as_deref())
 }
 
+/// #1897 follow-up: a hint for the approval prompt when the line pushes a
+/// branch named by a variable (`git push origin "$b"`), which asks because
+/// git would read a value starting with `-` as an option. Text only; it
+/// decides nothing.
+pub(crate) const PUSH_BRANCH_HINT: &str = "Tip: git may read a branch held in a variable after \
+     `git push` (`git push origin \"$b\"`) as an option; `refs/heads/\"$b\"` or `-- \"$b\"` \
+     names it as a branch and avoids that check.";
+
+/// [`PUSH_BRANCH_HINT`] for an action judged `kind`, when one of its
+/// command lines has `git push` (with git options but no option values
+/// before `push`), then, after the first operand (the remote), a word
+/// starting with `$` (after quotes) in the same command.
+pub(crate) fn approval_hint(
+    action: &ApprovalAction,
+    kind: ProtectedActionKind,
+) -> Option<&'static str> {
+    let (ApprovalAction::Shell { command, .. } | ApprovalAction::ExecCommand { command, .. }) =
+        action
+    else {
+        return None;
+    };
+    if kind != ProtectedActionKind::UnseenCode {
+        return None;
+    }
+    for line in command.iter().flat_map(|part| part.split('\n')) {
+        work::step();
+        // None: no `git … push` yet; Some(n): after it, with n operands.
+        let (mut git, mut operands) = (false, None);
+        for word in line.split_whitespace() {
+            work::step();
+            match operands {
+                Some(n) if !word.starts_with('-') => {
+                    if n >= 1 && word.trim_start_matches(['"', '\'']).starts_with('$') {
+                        return Some(PUSH_BRANCH_HINT);
+                    }
+                    operands = Some(n + 1);
+                }
+                Some(_) => {}
+                None if basename(word) == "git" => git = true,
+                // `push` as git's subcommand, its first word.
+                None if git && !word.starts_with('-') => {
+                    git = false;
+                    if word == "push" {
+                        operands = Some(0);
+                    }
+                }
+                None => {}
+            }
+            if word.contains([';', '&', '|']) {
+                (git, operands) = (false, None);
+            }
+        }
+    }
+    None
+}
+
 pub(super) fn classify_with(
     action: &ApprovalAction,
     codex_home: &Path,
@@ -707,6 +764,7 @@ impl Classifier {
             stat_builtin: false,
             stat_pending: false,
             quoted_text: false,
+            lexed_unseen: false,
             brace_unsure: false,
             launched: launched_git::Launch::default(),
             substitution_budget: Budget {
@@ -1523,6 +1581,14 @@ struct Classifier {
     /// which the word lexer ignores: it may end a command early there
     /// (`'a; b'`, `'a ( b'`, `a\;b`).
     quoted_text: bool,
+    /// #1910: a word the word lexer read in this line (or one that runs it)
+    /// holds text it does not show. Until then it has given a value to every
+    /// expansion it read (`r=origin; git fetch "$r"`), so the quote-aware
+    /// reading leaves remotes to it. That value comes from the assignments it
+    /// read, which may be misread from quoted text (`echo 'x;r=o'`) or may
+    /// not run (`(r=origin)`); those are on `main` already. The lines it
+    /// reads for itself (a script, joined literals) do not count.
+    lexed_unseen: bool,
     /// D258: the line (or one that runs it) holds more than plain words,
     /// operators, quotes and well-formed brace groups ([`brace_plain`]). The
     /// word lexer may then cut or misread a command where the quote-aware
@@ -1872,6 +1938,7 @@ impl Classifier {
         }
         let outer_sudo_redefined = self.sudo_redefined;
         let outer_quoted_text = self.quoted_text;
+        let outer_lexed_unseen = self.lexed_unseen;
         self.quoted_text |= command.iter().any(|part| part.contains(['\'', '"', '\\']));
         let outer_brace_unsure = self.brace_unsure;
         self.brace_unsure |= command.iter().any(|part| !brace_plain(part));
@@ -2368,6 +2435,7 @@ impl Classifier {
         self.sed_scope = outer_scope;
         self.sudo_redefined = outer_sudo_redefined;
         self.quoted_text = outer_quoted_text;
+        self.lexed_unseen = outer_lexed_unseen;
         self.brace_unsure = outer_brace_unsure;
         self.visited = outer_visited;
         self.visited_all = outer_visited_all;
@@ -2397,6 +2465,11 @@ impl Classifier {
             || folders.lost
             || self.unknown_folder > 0;
         let lower: Vec<String> = words.iter().map(|word| word.to_lowercase()).collect();
+        self.lexed_unseen = self.lexed_unseen
+            || words.iter().any(|word| {
+                work::step();
+                rerun::git_word_unseen(word)
+            });
         let (hidden, mut unchecked) = self.word_marks(simple, words, variables);
         loops.read(&simple.words);
         let looped = loops.marks(&simple.words);
@@ -3951,3 +4024,15 @@ mod tainted_action_linear_tests;
 #[cfg(test)]
 #[path = "tainted_action_git_ext_tests.rs"]
 mod tainted_action_git_ext_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_git_quoted_tests.rs"]
+mod tainted_action_git_quoted_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_option_glob_tests.rs"]
+mod tainted_action_option_glob_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_timing_probe_tests.rs"]
+mod tainted_action_timing_probe_tests;

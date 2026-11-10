@@ -12,6 +12,7 @@ use codex_rmcp_client::ElicitationResponse;
 use codex_rmcp_client::LocalStdioServerLauncher;
 use codex_rmcp_client::McpProtocolMode;
 use codex_rmcp_client::RmcpClient;
+use codex_rmcp_client::is_authentication_required_error;
 use futures::FutureExt;
 use pretty_assertions::assert_eq;
 use rmcp::model::ClientCapabilities;
@@ -583,7 +584,7 @@ async fn modern_http_rejects_oversized_discovery_and_tool_json_responses() -> an
 }
 
 #[tokio::test]
-async fn legacy_http_keeps_existing_large_json_response_behavior() -> anyhow::Result<()> {
+async fn legacy_http_rejects_oversized_json_response() -> anyhow::Result<()> {
     let server = MockServer::start().await;
     let padding = Arc::new("x".repeat(MAX_MCP_MESSAGE_BYTES + 1));
     Mock::given(method("POST"))
@@ -612,13 +613,11 @@ async fn legacy_http_keeps_existing_large_json_response_behavior() -> anyhow::Re
 
     let client = create_client(&server, McpProtocolMode::Legacy).await?;
     initialize_client(&client).await?;
-    let tools = client
+    let error = client
         .list_tools(/*params*/ None, Some(Duration::from_secs(15)))
-        .await?;
-    assert_eq!(
-        tools.tools[0].description.as_deref().map(str::len),
-        Some(MAX_MCP_MESSAGE_BYTES + 1)
-    );
+        .await
+        .expect_err("legacy oversized JSON response must be rejected");
+    assert!(format!("{error:#}").contains("8388608 bytes"));
     client.shutdown().await;
     Ok(())
 }
@@ -1501,6 +1500,49 @@ async fn modern_mode_falls_back_for_plain_404_and_405_discovery_responses() -> a
         );
         client.shutdown().await;
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn modern_mode_legacy_fallback_reports_initialize_auth_required() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let observed = Arc::new(Mutex::new(Vec::<String>::new()));
+    let recorded = Arc::clone(&observed);
+
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .respond_with(move |request: &Request| {
+            let body: Value = request.body_json().expect("valid JSON-RPC request");
+            let method = body["method"].as_str().expect("JSON-RPC method");
+            recorded.lock().expect("requests lock").push(method.into());
+            match method {
+                "server/discover" => ResponseTemplate::new(404).set_body_string("legacy endpoint"),
+                "initialize" => ResponseTemplate::new(401)
+                    .insert_header("www-authenticate", r#"Bearer realm="legacy""#),
+                other => panic!("unexpected request after the fallback: {other}"),
+            }
+        })
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    let client = create_client(&server, McpProtocolMode::V20260728).await?;
+    let error = initialize_client(&client)
+        .await
+        .expect_err("a 401 from the fallback initialize must fail startup");
+
+    assert_eq!(
+        *observed.lock().expect("requests lock"),
+        vec!["server/discover", "initialize"]
+    );
+    assert!(
+        is_authentication_required_error(&error),
+        "the fallback's 401 must still mean login required: {error:#}"
+    );
+    assert!(
+        error.to_string().contains("Auth required"),
+        "startup error text must keep the fallback's reason: {error}"
+    );
     Ok(())
 }
 

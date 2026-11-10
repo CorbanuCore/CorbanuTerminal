@@ -14,6 +14,7 @@ use crate::oauth_callback::McpOAuthCallbackMode;
 use crate::oauth_callback::append_callback_id_to_redirect_uri;
 use crate::oauth_callback::callback_mode;
 use crate::oauth_callback::validate_callback_redirect;
+use crate::startup_error::auth_error_with_reason;
 
 /// OAuth client-registration strategy for one interactive HTTP MCP login.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -45,7 +46,11 @@ pub(crate) async fn start_authorization(
     let mut auth_manager =
         AuthorizationManager::new_with_oauth_http_client(server_url, http_client).await?;
     auth_manager.set_allow_missing_issuer(true);
-    let metadata = auth_manager.resolve_metadata().await?.metadata;
+    let metadata = auth_manager
+        .resolve_metadata()
+        .await
+        .map_err(auth_error_with_reason)?
+        .metadata;
     validate_authorization_server_endpoints(&metadata)?;
     let authorization_server_issuer = metadata.issuer.clone();
     let callback_mode = callback_mode(&metadata)?;

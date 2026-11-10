@@ -212,6 +212,7 @@ mod tests {
         ("mktemp.rs", include_str!("mktemp.rs")),
         ("named_shell.rs", include_str!("named_shell.rs")),
         ("nested.rs", include_str!("nested.rs")),
+        ("option_globs.rs", include_str!("option_globs.rs")),
         ("code_tables.rs", include_str!("code_tables.rs")),
         ("code_variables.rs", include_str!("code_variables.rs")),
         ("outbound.rs", include_str!("outbound.rs")),
