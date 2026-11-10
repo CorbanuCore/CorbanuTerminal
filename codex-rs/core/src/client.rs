@@ -6149,6 +6149,7 @@ fn append_chat_message_for_response_item(
         | ResponseItem::AdditionalTools { .. }
         | ResponseItem::Compaction { .. }
         | ResponseItem::CompactionTrigger { .. }
+        | ResponseItem::ConfigurationUpdate { .. }
         | ResponseItem::ContextCompaction { .. }
         | ResponseItem::Other => {}
     }
@@ -6396,7 +6397,7 @@ fn append_anthropic_message_for_response_item(
                         })
                     }
                     // Only inline images reach these providers; an uploaded file id does not.
-                    ContentItem::InputImage { image, .. } => match inline_image_url(image) {
+                    ContentItem::InputImage { image, .. } => match inline_image_url(&image) {
                         Some(url) => anthropic_image_block(url),
                         None => continue,
                     },
@@ -6518,6 +6519,7 @@ fn append_anthropic_message_for_response_item(
         | ResponseItem::AdditionalTools { .. }
         | ResponseItem::Compaction { .. }
         | ResponseItem::CompactionTrigger { .. }
+        | ResponseItem::ConfigurationUpdate { .. }
         | ResponseItem::ContextCompaction { .. }
         | ResponseItem::Other => {}
     }
