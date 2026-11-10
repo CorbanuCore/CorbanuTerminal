@@ -657,8 +657,14 @@ fn goal_tools_under_the_functions_namespace_match_the_plain_names() {
         }
         // An MCP, client or built-in tool of that name is not the goal tool.
         assert_eq!(coverage(ToolOrigin::Mcp, &plain), Coverage::OwnCheck);
-        assert_eq!(coverage(ToolOrigin::Dynamic, &plain), Coverage::Unclassified);
-        assert_eq!(coverage(ToolOrigin::Builtin, &plain), Coverage::Unclassified);
+        assert_eq!(
+            coverage(ToolOrigin::Dynamic, &plain),
+            Coverage::Unclassified
+        );
+        assert_eq!(
+            coverage(ToolOrigin::Builtin, &plain),
+            Coverage::Unclassified
+        );
         assert_eq!(coverage(ToolOrigin::Mcp, &functions), Coverage::OwnCheck);
         assert_eq!(
             coverage(ToolOrigin::Dynamic, &functions),
