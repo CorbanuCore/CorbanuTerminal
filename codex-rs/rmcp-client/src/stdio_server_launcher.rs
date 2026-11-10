@@ -978,9 +978,14 @@ impl ExecutorStdioServerLauncher {
         // The executor call can't run under the slot lock, so register the replacement after
         // it starts, and stop it if `shutdown()` closed the slot in the meantime.
         if let Some(slot) = replacement_slot {
-            let mut slot = slot.lock().await;
-            if slot.closed {
-                drop(slot);
+            let registered = {
+                let mut slot = slot.lock().await;
+                if !slot.closed {
+                    slot.process = transport.process_ref();
+                }
+                !slot.closed
+            };
+            if !registered {
                 if let Err(error) = transport.process.terminate().await {
                     warn!("failed to terminate remote MCP server process after shutdown: {error}");
                 }
@@ -989,7 +994,6 @@ impl ExecutorStdioServerLauncher {
                     "MCP client is shut down",
                 ));
             }
-            slot.process = transport.process_ref();
         }
         Ok(transport)
     }
