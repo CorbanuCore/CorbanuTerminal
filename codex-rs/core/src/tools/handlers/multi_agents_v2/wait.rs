@@ -1,17 +1,13 @@
 use super::*;
-<<<<<<< HEAD
 use crate::agent::control::ListedAgent;
-use crate::session::InputQueueActivity;
-||||||| 413492cd6c
-use crate::session::InputQueueActivity;
-=======
 use crate::thread_input::InputWaitOutcome as WaitOutcome;
 use crate::thread_input::subscribe_input_activity;
 use crate::thread_input::wait_for_activity;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::tools::handlers::multi_agents_spec::WaitAgentTimeoutOptions;
 use crate::tools::handlers::multi_agents_spec::create_wait_agent_tool_v2;
+use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
+use codex_protocol::protocol::InterAgentCommunication;
 use codex_tools::ToolSpec;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -87,18 +83,25 @@ impl Handler {
             None => default_timeout_ms,
         };
 
-<<<<<<< HEAD
+        // Corbanu (D527 (a)): the child check, the #1701 filter and the watchdog run on the
+        // shared handle's local backend; any other backend fails closed.
+        let local_agent_control = session
+            .services
+            .agent_control
+            .local_or_unsupported()
+            .map_err(|err| FunctionCallError::RespondToModel(err.to_string()))?;
         let current_path = turn
             .session_source
             .get_agent_path()
             .unwrap_or_else(AgentPath::root);
         let descendant_prefix = format!("{}/", current_path.as_str().trim_end_matches('/'));
-        let agents = session
-            .services
-            .agent_control
+        let agents: Vec<ListedAgent> = local_agent_control
             .list_agents(&turn.session_source, /*path_prefix*/ None)
             .await
-            .unwrap_or_default();
+            .unwrap_or_default()
+            .into_iter()
+            .map(ListedAgent::from)
+            .collect();
         if !agents.iter().any(|agent| {
             agent.agent_name.starts_with(&descendant_prefix)
                 && !matches!(
@@ -124,27 +127,8 @@ impl Handler {
             ));
         }
 
-        let turn_state = session
-            .input_queue
-            .turn_state_for_sub_id(&session.active_turn, &turn.sub_id)
-            .await;
-        let (mut activity_rx, pending_activity) = session
-            .input_queue
-            .subscribe_activity(turn_state.as_deref())
-            .await;
-||||||| 413492cd6c
-        let turn_state = session
-            .input_queue
-            .turn_state_for_sub_id(&session.active_turn, &turn.sub_id)
-            .await;
-        let (mut activity_rx, pending_activity) = session
-            .input_queue
-            .subscribe_activity(turn_state.as_deref())
-            .await;
-=======
         let (activity_rx, pending_activity) =
             subscribe_input_activity(&session, &turn.sub_id).await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         session
             .emit_turn_item_started(
@@ -165,77 +149,6 @@ impl Handler {
             )
             .await;
 
-<<<<<<< HEAD
-        let deadline = Instant::now() + Duration::from_millis(timeout_ms as u64);
-        let outcome = wait_for_activity(&mut activity_rx, pending_activity, deadline).await;
-        let consecutive_empty_waits = {
-            let mut counts = self.empty_waits_by_thread.lock().await;
-            let count = counts.entry(session.thread_id).or_default();
-            if outcome == WaitOutcome::TimedOut {
-                *count = count.saturating_add(1);
-            } else {
-                *count = 0;
-            }
-            *count
-        };
-        let watchdog_escalated = consecutive_empty_waits >= 3;
-        let mut agents = session
-            .services
-            .agent_control
-            .list_agents(&turn.session_source, /*path_prefix*/ None)
-            .await
-            .unwrap_or_default();
-        // #1701: report only the caller's own agents (and theirs), not other
-        // loaded threads and their final messages.
-        let own_agents = session
-            .services
-            .agent_control
-            .spawn_descendant_agent_names(session.thread_id)
-            .await
-            .unwrap_or_default();
-        agents.retain(|agent| own_agents.contains(&agent.agent_name));
-        let result = WaitAgentResult::from_outcome(
-            outcome,
-            agents,
-            current_path.to_string(),
-            consecutive_empty_waits,
-            watchdog_escalated,
-        );
-
-        if watchdog_escalated
-            && let Some(parent_thread_id) = turn.parent_thread_id
-            && let Some(parent) = session
-                .services
-                .agent_control
-                .get_agent_metadata(parent_thread_id)
-            && let Some(parent_path) = parent.agent_path
-        {
-            let communication = InterAgentCommunication::new(
-                current_path.clone(),
-                parent_path,
-                Vec::new(),
-                format!(
-                    "WATCHDOG ESCALATION — {current_path} reached {consecutive_empty_waits} consecutive empty waits. Automatic polling is now blocked; dispatch real work or end the manager turn."
-                ),
-                /*trigger_turn*/ true,
-            )
-            .with_kind(codex_protocol::protocol::AgentMessageKind::ControlRequest);
-            session
-                .services
-                .agent_control
-                .send_persisted_inter_agent_communication(
-                    parent_thread_id,
-                    communication,
-                    /*parent_turn_id*/ None,
-                )
-                .await
-                .map_err(|err| collab_agent_error(parent_thread_id, err))?;
-        }
-||||||| 413492cd6c
-        let deadline = Instant::now() + Duration::from_millis(timeout_ms as u64);
-        let outcome = wait_for_activity(&mut activity_rx, pending_activity, deadline).await;
-        let result = WaitAgentResult::from_outcome(outcome);
-=======
         let wait_started = Instant::now();
         let outcome = tokio::time::timeout(
             Duration::from_millis(timeout_ms as u64),
@@ -257,8 +170,67 @@ impl Handler {
                 },
             )],
         );
-        let result = WaitAgentResult::from_outcome(outcome, requested_timeout_ms, timeout_ms);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let consecutive_empty_waits = {
+            let mut counts = self.empty_waits_by_thread.lock().await;
+            let count = counts.entry(session.thread_id).or_default();
+            if outcome == WaitOutcome::TimedOut {
+                *count = count.saturating_add(1);
+            } else {
+                *count = 0;
+            }
+            *count
+        };
+        let watchdog_escalated = consecutive_empty_waits >= 3;
+        let mut agents: Vec<ListedAgent> = local_agent_control
+            .list_agents(&turn.session_source, /*path_prefix*/ None)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(ListedAgent::from)
+            .collect();
+        // #1701: report only the caller's own agents (and theirs), not other
+        // loaded threads and their final messages.
+        let own_agents = local_agent_control
+            .spawn_descendant_agent_names(session.thread_id)
+            .await
+            .unwrap_or_default();
+        agents.retain(|agent| own_agents.contains(&agent.agent_name));
+        let result = WaitAgentResult::from_outcome(
+            outcome,
+            agents,
+            current_path.to_string(),
+            consecutive_empty_waits,
+            watchdog_escalated,
+            requested_timeout_ms,
+            timeout_ms,
+        );
+
+        if watchdog_escalated
+            && let Some(parent_thread_id) = turn.parent_thread_id
+            && let Some(parent) = local_agent_control.get_agent_metadata(parent_thread_id)
+            && let Some(parent_path) = parent.agent_path
+        {
+            let communication = InterAgentCommunication::new(
+                current_path.clone(),
+                parent_path,
+                Vec::new(),
+                format!(
+                    "WATCHDOG ESCALATION — {current_path} reached {consecutive_empty_waits} consecutive empty waits. Automatic polling is now blocked; dispatch real work or end the manager turn."
+                ),
+                /*trigger_turn*/ true,
+            )
+            .with_kind(codex_protocol::protocol::AgentMessageKind::ControlRequest);
+            // As main: straight to the parent's durable mailbox, without the turn-capacity gate.
+            local_agent_control
+                .send_persisted_inter_agent_communication(
+                    parent_thread_id,
+                    communication,
+                    crate::TurnStartOptions::default(),
+                    /*message_delivery*/ None,
+                )
+                .await
+                .map_err(|err| collab_agent_error(parent_thread_id, err))?;
+        }
 
         session
             .emit_turn_item_completed(
@@ -312,17 +284,12 @@ pub(crate) struct WaitAgentResult {
 impl WaitAgentResult {
     fn from_outcome(
         outcome: WaitOutcome,
-<<<<<<< HEAD
         agents: Vec<ListedAgent>,
         waiting_for: String,
         consecutive_empty_waits: u8,
         watchdog_escalated: bool,
-||||||| 413492cd6c
-    fn from_outcome(outcome: WaitOutcome) -> Self {
-=======
         requested_timeout_ms: Option<i64>,
         timeout_ms: i64,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     ) -> Self {
         let message = match outcome {
             WaitOutcome::MailboxActivity => "Wait completed.",

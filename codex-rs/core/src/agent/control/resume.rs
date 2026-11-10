@@ -16,12 +16,17 @@ impl LocalAgentControl {
         config: Config,
         thread_id: ThreadId,
         source: SessionSource,
-    ) -> CodexResult<(LiveAgent, ThreadConfigSnapshot)> {
+    ) -> CodexResult<(LiveAgent, ThreadConfigSnapshot, Vec<(ThreadId, String)>)> {
         let manager = self.runtime.upgrade()?;
+        // Corbanu (#1144): open V1 descendants that could not be resumed are returned with why.
+        let mut refused_descendants = Vec::new();
         let thread = match manager.get_thread(thread_id).await {
             Ok(thread) => thread,
             Err(err) if matches!(err.details(), CodexErrorDetails::ThreadNotFound(_)) => {
-                Box::pin(self.resume_agent_from_rollout(config, thread_id, source)).await?;
+                let (_, refused) =
+                    Box::pin(self.resume_agent_tree_from_rollout(config, thread_id, source))
+                        .await?;
+                refused_descendants = refused;
                 manager.get_thread(thread_id).await?
             }
             Err(err) => return Err(err),
@@ -32,6 +37,6 @@ impl LocalAgentControl {
             status: thread.agent_status().await,
         };
         let config = thread.config_snapshot().await;
-        Ok((agent, config))
+        Ok((agent, config, refused_descendants))
     }
 }

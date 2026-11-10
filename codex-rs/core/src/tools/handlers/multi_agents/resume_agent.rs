@@ -1,15 +1,7 @@
 use super::*;
 use crate::agent::child_config::build_agent_resume_config;
 use crate::agent::next_thread_spawn_depth;
-<<<<<<< HEAD
 use crate::config::resume_default_key_error;
-use crate::session::session::Session;
-use crate::session::turn_context::TurnContext;
-||||||| 413492cd6c
-use crate::session::session::Session;
-use crate::session::turn_context::TurnContext;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::tools::handlers::multi_agents_spec::create_resume_agent_tool;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::WarningEvent;
@@ -56,10 +48,12 @@ async fn handle_resume_agent(
     let receiver_thread_id = ThreadId::from_string(&args.id).map_err(|err| {
         FunctionCallError::RespondToModel(format!("invalid agent id {}: {err:?}", args.id))
     })?;
+    // Corbanu (D527 (a)): the shared handle's local backend; any other backend fails closed.
     let local_agent_control = session
         .services
-        .local_agent_runtime
-        .control(session.session_id());
+        .agent_control
+        .local_or_unsupported()
+        .map_err(|err| collab_agent_error(receiver_thread_id, err))?;
     let receiver_agent = local_agent_control
         .get_agent_metadata(receiver_thread_id)
         .unwrap_or_default();
@@ -94,101 +88,29 @@ async fn handle_resume_agent(
         )
         .await;
 
-<<<<<<< HEAD
-    let mut status = session
-        .services
-        .agent_control
-        .get_status(receiver_thread_id)
-        .await;
-    let mut descendants_not_resumed = Vec::new();
-    let (receiver_agent, error) = if matches!(status, AgentStatus::NotFound) {
-        match Box::pin(try_resume_closed_agent(
-            &session,
-            &turn,
-            receiver_thread_id,
-||||||| 413492cd6c
-    let mut status = session
-        .services
-        .agent_control
-        .get_status(receiver_thread_id)
-        .await;
-    let (receiver_agent, error) = if matches!(status, AgentStatus::NotFound) {
-        match Box::pin(try_resume_closed_agent(
-            &session,
-            &turn,
-            receiver_thread_id,
-=======
     let result = async {
         let config = build_agent_resume_config(&turn).map_err(FunctionCallError::RespondToModel)?;
+        // #1074: an agent that must be started again is refused before it starts when its
+        // connection has no credential of its own (#689).
+        if matches!(
+            local_agent_control.get_status(receiver_thread_id).await,
+            AgentStatus::NotFound
+        ) && let Some(message) = resume_default_key_error(
+            &config,
+            &config.model_provider_id,
+            &config.model_provider,
+            &turn.config.model_provider_id,
+            turn.provider.info(),
+        ) {
+            return Err(FunctionCallError::RespondToModel(message));
+        }
         let source = thread_spawn_source(
             session.thread_id(),
             &turn.session_source,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             child_depth,
-<<<<<<< HEAD
-        ))
-        .await
-        {
-            Ok(refused) => {
-                descendants_not_resumed = refused;
-                status = session
-                    .services
-                    .agent_control
-                    .get_status(receiver_thread_id)
-                    .await;
-                (
-                    session
-                        .services
-                        .agent_control
-                        .get_agent_metadata(receiver_thread_id)
-                        .unwrap_or(receiver_agent),
-                    None,
-                )
-            }
-            Err(err) => {
-                status = session
-                    .services
-                    .agent_control
-                    .get_status(receiver_thread_id)
-                    .await;
-                (receiver_agent, Some(err))
-            }
-        }
-    } else {
-        (receiver_agent, None)
-||||||| 413492cd6c
-        ))
-        .await
-        {
-            Ok(()) => {
-                status = session
-                    .services
-                    .agent_control
-                    .get_status(receiver_thread_id)
-                    .await;
-                (
-                    session
-                        .services
-                        .agent_control
-                        .get_agent_metadata(receiver_thread_id)
-                        .unwrap_or(receiver_agent),
-                    None,
-                )
-            }
-            Err(err) => {
-                status = session
-                    .services
-                    .agent_control
-                    .get_status(receiver_thread_id)
-                    .await;
-                (receiver_agent, Some(err))
-            }
-        }
-    } else {
-        (receiver_agent, None)
-=======
             /*agent_role*/ None,
             /*task_name*/ None,
+            Some(format!("resume:{receiver_thread_id}")),
         )?;
         local_agent_control
             .resume_agent(config, receiver_thread_id, source)
@@ -196,14 +118,26 @@ async fn handle_resume_agent(
             .map_err(|err| collab_agent_error(receiver_thread_id, err))
     }
     .await;
-    let (status, receiver_agent, error) = match result {
-        Ok((agent, _)) => (agent.status, agent.metadata, None),
+    // #1144: open sub-agents that stayed closed are reported with why.
+    let (status, receiver_agent, error, descendants_not_resumed) = match result {
+        Ok((agent, _, refused)) => (
+            agent.status,
+            agent.metadata,
+            None,
+            refused
+                .into_iter()
+                .map(|(id, error)| DescendantNotResumed {
+                    id: id.to_string(),
+                    error,
+                })
+                .collect(),
+        ),
         Err(err) => (
             local_agent_control.get_status(receiver_thread_id).await,
             receiver_agent,
             Some(err),
+            Vec::new(),
         ),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
     session
         .emit_turn_item_completed(
@@ -297,78 +231,3 @@ impl ToolOutput for ResumeAgentResult {
         tool_output_code_mode_result(self, "resume_agent")
     }
 }
-<<<<<<< HEAD
-
-async fn try_resume_closed_agent(
-    session: &Arc<Session>,
-    turn: &Arc<TurnContext>,
-    receiver_thread_id: ThreadId,
-    child_depth: i32,
-) -> Result<Vec<DescendantNotResumed>, FunctionCallError> {
-    let config = build_agent_resume_config(turn.as_ref())?;
-    // #1074: refused before it starts when its connection has no credential
-    // of its own (#689).
-    if let Some(message) = resume_default_key_error(
-        &config,
-        &config.model_provider_id,
-        &config.model_provider,
-        &turn.config.model_provider_id,
-        turn.provider.info(),
-    ) {
-        return Err(FunctionCallError::RespondToModel(message));
-    }
-    Box::pin(
-        session
-            .services
-            .agent_control
-            .resume_agent_tree_from_rollout(
-                config,
-                receiver_thread_id,
-                thread_spawn_source(
-                    session.thread_id(),
-                    &turn.session_source,
-                    child_depth,
-                    /*agent_role*/ None,
-                    /*task_name*/ None,
-                    Some(format!("resume:{receiver_thread_id}")),
-                )?,
-            ),
-    )
-    .await
-    .map(|(_, refused_descendants)| {
-        refused_descendants
-            .into_iter()
-            .map(|(id, error)| DescendantNotResumed {
-                id: id.to_string(),
-                error,
-            })
-            .collect()
-    })
-    .map_err(|err| collab_agent_error(receiver_thread_id, err))
-}
-||||||| 413492cd6c
-
-async fn try_resume_closed_agent(
-    session: &Arc<Session>,
-    turn: &Arc<TurnContext>,
-    receiver_thread_id: ThreadId,
-    child_depth: i32,
-) -> Result<(), FunctionCallError> {
-    let config = build_agent_resume_config(turn.as_ref())?;
-    Box::pin(session.services.agent_control.resume_agent_from_rollout(
-        config,
-        receiver_thread_id,
-        thread_spawn_source(
-            session.thread_id(),
-            &turn.session_source,
-            child_depth,
-            /*agent_role*/ None,
-            /*task_name*/ None,
-        )?,
-    ))
-    .await
-    .map(|_| ())
-    .map_err(|err| collab_agent_error(receiver_thread_id, err))
-}
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

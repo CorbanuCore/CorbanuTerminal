@@ -126,6 +126,29 @@ pub(crate) struct ListedAgent {
     pub(crate) last_result_message: Option<String>,
 }
 
+impl From<LiveAgent> for ListedAgent {
+    /// The row for an agent from upstream's `list_agents`, named by its canonical path (its
+    /// thread id when it has none), as main listed it.
+    fn from(agent: LiveAgent) -> Self {
+        let LiveAgent {
+            thread_id,
+            metadata,
+            status,
+        } = agent;
+        Self {
+            agent_name: metadata
+                .agent_path
+                .as_ref()
+                .map_or_else(|| thread_id.to_string(), ToString::to_string),
+            agent_nickname: metadata.agent_nickname,
+            agent_role: metadata.agent_role,
+            agent_status: status,
+            last_task_message: metadata.last_task_message,
+            last_result_message: metadata.last_result_message,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct NativeAutoLoopState {
     operator_input_seen: bool,
