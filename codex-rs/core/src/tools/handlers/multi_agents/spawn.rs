@@ -8,14 +8,10 @@ use crate::agent::control::render_input_preview;
 use crate::agent::exceeds_thread_spawn_depth_limit;
 use crate::agent::next_thread_spawn_depth;
 use crate::agent::role::DEFAULT_ROLE_NAME;
-<<<<<<< HEAD
-use crate::tools::handlers::multi_agents_account::apply_spawn_agent_account;
-use crate::tools::handlers::multi_agents_account::spawned_account_name;
-||||||| 413492cd6c
-=======
 use crate::agent::types::SpawnAgentForkMode;
 use crate::agent::types::SpawnAgentOptions;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use crate::tools::handlers::multi_agents_account::apply_spawn_agent_account;
+use crate::tools::handlers::multi_agents_account::spawned_account_name;
 use crate::tools::handlers::multi_agents_spec::SpawnAgentToolOptions;
 use crate::tools::handlers::multi_agents_spec::create_spawn_agent_tool_v1;
 use codex_protocol::protocol::MultiAgentVersion;
@@ -104,26 +100,22 @@ async fn handle_spawn_agent(
         .await;
     let prepared = prepare_agent_spawn_config(
         &session,
-<<<<<<< HEAD
-        turn.as_ref(),
-        &mut config,
-        args.model.as_deref(),
-        args.reasoning_effort.clone(),
+        step_context.as_ref(),
+        SpawnConfigOptions {
+            version: SpawnConfigVersion::V1,
+            full_history_fork: args.fork_context,
+            role_name,
+            // Corbanu: v1 has no per-call provider; the account below may still pick one.
+            model_provider: None,
+            model: args.model.as_deref(),
+            reasoning_effort: args.reasoning_effort.clone(),
+        },
     )
-    .await?;
-    if !args.fork_context {
-        apply_spawn_agent_role(&session, &mut config, role_name).await?;
-    }
-    apply_spawn_agent_service_tier(
-        &session,
-        &mut config,
-        turn.config.service_tier.as_deref(),
-        args.service_tier.as_deref(),
-    )
-    .await?;
-    apply_spawn_agent_runtime_overrides(&mut config, turn.as_ref())?;
-    ensure_spawn_provider_authorized(&config, &config.model_provider_id)?;
-    ensure_spawn_runtime_eligible(&session, &config).await?;
+    .await
+    .map_err(FunctionCallError::RespondToModel)?;
+    let mut config = prepared.config;
+    // Corbanu PF-84: the requested account is applied to the final runtime (after the role and
+    // the provider allowlist in `prepare_agent_spawn_config`).
     apply_spawn_agent_account(
         &session,
         turn.as_ref(),
@@ -134,75 +126,6 @@ async fn handle_spawn_agent(
     )
     .await?;
     let account = spawned_account_name(&config);
-
-    let result = Box::pin(session.services.agent_control.spawn_agent_with_metadata(
-        config,
-        input_items,
-        Some(thread_spawn_source(
-            session.thread_id,
-            &turn.session_source,
-            child_depth,
-||||||| 413492cd6c
-        turn.as_ref(),
-        &mut config,
-        args.model.as_deref(),
-        args.reasoning_effort.clone(),
-    )
-    .await?;
-    if !args.fork_context {
-        apply_spawn_agent_role(&session, &mut config, role_name).await?;
-    }
-    apply_spawn_agent_service_tier(
-        &session,
-        &mut config,
-        turn.config.service_tier.as_deref(),
-        args.service_tier.as_deref(),
-    )
-    .await?;
-    apply_spawn_agent_runtime_overrides(&mut config, turn.as_ref())?;
-
-    let result = Box::pin(session.services.agent_control.spawn_agent_with_metadata(
-        config,
-        input_items,
-        Some(thread_spawn_source(
-            session.thread_id,
-            &turn.session_source,
-            child_depth,
-=======
-        step_context.as_ref(),
-        SpawnConfigOptions {
-            version: SpawnConfigVersion::V1,
-            full_history_fork: args.fork_context,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-            role_name,
-<<<<<<< HEAD
-            /*task_name*/ None,
-            Some(call_id.clone()),
-        )?),
-        SpawnAgentOptions {
-            fork_parent_spawn_call_id: args.fork_context.then(|| call_id.clone()),
-            fork_mode: args.fork_context.then_some(SpawnAgentForkMode::FullHistory),
-            parent_thread_id: Some(session.thread_id),
-            parent_turn_id: Some(turn.sub_id.clone()),
-            environments: Some(step_context.environments.to_selections()),
-||||||| 413492cd6c
-            /*task_name*/ None,
-        )?),
-        SpawnAgentOptions {
-            fork_parent_spawn_call_id: args.fork_context.then(|| call_id.clone()),
-            fork_mode: args.fork_context.then_some(SpawnAgentForkMode::FullHistory),
-            parent_thread_id: Some(session.thread_id),
-            parent_turn_id: Some(turn.sub_id.clone()),
-            environments: Some(step_context.environments.to_selections()),
-=======
-            model: args.model.as_deref(),
-            reasoning_effort: args.reasoning_effort.clone(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-        },
-    )
-    .await
-    .map_err(FunctionCallError::RespondToModel)?;
-    let config = prepared.config;
     let fork_mode = args.fork_context.then_some(SpawnAgentForkMode::FullHistory);
     let result = session
         .services
@@ -217,6 +140,7 @@ async fn handle_spawn_agent(
                 child_depth,
                 prepared.role_name.as_deref(),
                 /*task_name*/ None,
+                /*assignment_id*/ Some(call_id.clone()),
             )?,
             options: SpawnAgentOptions {
                 fork_parent_spawn_call_id: fork_mode.as_ref().map(|_| call_id.clone()),
@@ -319,13 +243,8 @@ struct SpawnAgentArgs {
     agent_type: Option<String>,
     model: Option<String>,
     reasoning_effort: Option<ReasoningEffort>,
-<<<<<<< HEAD
-    service_tier: Option<String>,
+    /// PF-84: the child's named account.
     account: Option<String>,
-||||||| 413492cd6c
-    service_tier: Option<String>,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     #[serde(default)]
     fork_context: bool,
 }
