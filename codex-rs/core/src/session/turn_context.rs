@@ -1432,6 +1432,13 @@ impl Session {
             );
         }
         per_turn_config.features = config.features.clone();
+        // #2000: a Windows sandbox set up during the session (it only gets
+        // stronger) is the one for everything started from this config, such
+        // as child agents, not the one the session started with.
+        crate::windows_sandbox::raise_windows_sandbox(
+            &mut per_turn_config,
+            session_configuration.windows_sandbox_level,
+        );
         per_turn_config
     }
 

@@ -103,8 +103,12 @@ class PrLinuxClippyTest(unittest.TestCase):
         self.assertNotIn("save_caches", self.workflow("rust-ci-full.yml"))
         self.assertEqual(self.workflow("rust-ci.yml").count("save_caches: false"), 2)
 
-    def test_pr_ci_skips_linux_test_suite(self) -> None:
-        self.assertNotIn("nextest", self.workflow("rust-ci.yml"))
+    def test_pr_ci_skips_full_linux_test_suite(self) -> None:
+        # PRs run only the changed crates' tests (#1972); the whole suite
+        # stays postmerge.
+        rust_ci = self.workflow("rust-ci.yml")
+        self.assertNotIn("nextest", rust_ci)
+        self.assertNotIn("rust-ci-full-nextest-platform.yml", rust_ci)
 
     def test_lint_build_definition_is_shared(self) -> None:
         full = self.workflow("rust-ci-full.yml")

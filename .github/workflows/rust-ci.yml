@@ -26,6 +26,7 @@ jobs:
       argument_comment_lint_package: ${{ steps.detect.outputs.argument_comment_lint_package }}
       argument_comment_lint_packages: ${{ steps.detect.outputs.argument_comment_lint_packages }}
       app_server_schema: ${{ steps.detect.outputs.app_server_schema }}
+      changed_crate_test_packages: ${{ steps.detect.outputs.changed_crate_test_packages }}
       codex: ${{ steps.detect.outputs.codex }}
       windows_native_tests: ${{ steps.detect.outputs.windows_native_tests }}
       windows_native_targets: ${{ steps.detect.outputs.windows_native_targets }}
@@ -111,6 +112,13 @@ jobs:
           fi
           echo "Argument comment lint packages: ${packages:-none}"
           echo "argument_comment_lint_packages=${packages% }" >> "$GITHUB_OUTPUT"
+          # Crates whose tests run on Linux: any file under them changed (#1972).
+          test_packages=""
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            test_packages="$(python3 .github/scripts/changed_crate_test_packages.py "$BASE_SHA" "$HEAD_SHA" | tr '\n' ' ')"
+          fi
+          echo "Changed crate test packages: ${test_packages:-none}"
+          echo "changed_crate_test_packages=${test_packages% }" >> "$GITHUB_OUTPUT"
           echo "app_server_schema=$app_server_schema" >> "$GITHUB_OUTPUT"
           echo "codex=$codex" >> "$GITHUB_OUTPUT"
           echo "windows_native_tests=$windows_native_tests" >> "$GITHUB_OUTPUT"
@@ -247,6 +255,16 @@ jobs:
       # postmerge rust-ci-full saves the macOS cache for the same commit.
       save_cache: ${{ matrix.runner != 'macos-15' }}
     secrets: inherit
+
+  # Tests of the crates a PR changes, on Linux (#1972): before this no PR job
+  # ran most crates' tests on Linux or macOS (full suite postmerge only).
+  changed_crate_tests:
+    name: Changed crate tests
+    needs: changed
+    if: ${{ needs.changed.outputs.changed_crate_test_packages != '' }}
+    uses: ./.github/workflows/rust-ci-changed-crate-tests.yml
+    with:
+      packages: ${{ needs.changed.outputs.changed_crate_test_packages }}
 
   # Native Windows Bazel tests of codex-tui, codex-core, codex-state and
   # codex-login on PRs that change one of them (#636, owner decision
@@ -537,6 +555,7 @@ jobs:
         lint_build_linux,
         lint_build_windows,
         core_security_tests,
+        changed_crate_tests,
         windows_native_tests,
         app_server_schema_fixtures,
         argument_comment_lint_package,
@@ -557,11 +576,18 @@ jobs:
           echo "lint   : ${{ needs.lint_build_linux.result }}"
           echo "winlint: ${{ needs.lint_build_windows.result }}"
           echo "coresec: ${{ needs.core_security_tests.result }}"
+          echo "crates : ${{ needs.changed_crate_tests.result }}"
           echo "winnat : ${{ needs.windows_native_tests.result }}"
           echo "schema : ${{ needs.app_server_schema_fixtures.result }}"
 
           # Every decision below reads its outputs.
           [[ '${{ needs.changed.result }}' == 'success' ]] || { echo 'changed failed'; exit 1; }
+
+          # Required whenever it runs, checked before the early exit below: a
+          # canary path such as scripts/codex_package/rg sets no area flag.
+          if [[ -n "${NEEDS_CHANGED_OUTPUTS_CHANGED_CRATE_TEST_PACKAGES}" ]]; then
+            [[ '${{ needs.changed_crate_tests.result }}' == 'success' ]] || { echo 'changed_crate_tests failed'; exit 1; }
+          fi
 
           # If nothing relevant changed (PR touching only root README, etc.),
           # declare success regardless of other jobs.
@@ -607,3 +633,4 @@ jobs:
           NEEDS_CHANGED_OUTPUTS_APP_SERVER_SCHEMA: ${{ needs.changed.outputs.app_server_schema }}
           NEEDS_CHANGED_OUTPUTS_ARGUMENT_COMMENT_LINT_PACKAGE: ${{ needs.changed.outputs.argument_comment_lint_package }}
           NEEDS_CHANGED_OUTPUTS_ARGUMENT_COMMENT_LINT_PACKAGES: ${{ needs.changed.outputs.argument_comment_lint_packages }}
+          NEEDS_CHANGED_OUTPUTS_CHANGED_CRATE_TEST_PACKAGES: ${{ needs.changed.outputs.changed_crate_test_packages }}

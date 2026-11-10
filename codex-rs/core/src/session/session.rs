@@ -647,6 +647,30 @@ impl SessionConfiguration {
 =======
 >>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if let Some(windows_sandbox_level) = updates.windows_sandbox_level {
+            // #2000: mid-session the Windows sandbox only gets stronger (a
+            // set-up sandbox applies at once); a weaker one waits for a new
+            // session, so nothing can lower it under a running session.
+            if crate::windows_sandbox::windows_sandbox_strength(windows_sandbox_level)
+                < crate::windows_sandbox::windows_sandbox_strength(self.windows_sandbox_level)
+            {
+                return Err(ConstraintError::InvalidValue {
+                    field_name: "windows_sandbox_level",
+                    candidate: format!("{windows_sandbox_level:?}"),
+                    allowed: format!(
+                        "this session's Windows sandbox ({:?}) or a stronger one; a weaker one \
+                         applies from the next session",
+                        self.windows_sandbox_level
+                    ),
+                    requirement_source: codex_config::RequirementSource::Unknown,
+                });
+            }
+            if windows_sandbox_level != next_configuration.windows_sandbox_level {
+                // What reads the session's config (agents reloaded later,
+                // the memory agent) gets the raised sandbox too.
+                let mut config = (*next_configuration.original_config_do_not_use).clone();
+                crate::windows_sandbox::raise_windows_sandbox(&mut config, windows_sandbox_level);
+                next_configuration.original_config_do_not_use = Arc::new(config);
+            }
             next_configuration.windows_sandbox_level = windows_sandbox_level;
         }
 
