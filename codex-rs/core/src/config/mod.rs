@@ -4912,6 +4912,9 @@ impl Config {
         }
         let agent_provider_allowlist =
             narrow_project_provider_allowlist(&config_layer_stack, agent_provider_allowlist);
+        if agent_provider_allowlist.as_ref().is_some_and(Vec::is_empty) {
+            startup_warnings.push(NO_PROVIDER_LEFT_WARNING.to_string());
+        }
         let agent_max_depth = cfg
             .agents
             .as_ref()
@@ -5961,6 +5964,11 @@ fn explicit_feature_setting(
                 .find_map(|(_, value)| value.as_bool())
         })
 }
+
+/// Shown when a project's narrowing leaves `agents.provider_allowlist` empty.
+const NO_PROVIDER_LEFT_WARNING: &str = "No provider is allowed for spawned agents: a project's \
+config or agent role sets `agents.provider_allowlist` to providers your own list doesn't allow. \
+A project can only remove providers from your list.";
 
 /// D525 (#2052): `agents.provider_allowlist` is operator spend policy. A
 /// project's config or a project-declared agent role can narrow it but not

@@ -174,6 +174,26 @@ async fn project_role_hook_needs_the_same_trust_review_as_project_config_hooks()
 }
 
 #[tokio::test]
+async fn project_role_hook_stays_a_project_hook_under_a_nested_role() {
+    let fixture = Fixture::new();
+    fixture.write_project_role(&hook_toml(None));
+    fixture.write_user_role("");
+    let hook = listed_hook(&fixture.child("relay").await);
+    fixture.write_project_role(&hook_toml(Some(&hook)));
+
+    let mut grandchild = fixture.child("relay").await;
+    apply_role_to_config(&mut grandchild, Some("helper"))
+        .await
+        .expect("nested role should apply");
+    let hook = listed_hook(&grandchild);
+
+    assert_eq!(
+        (hook.source, hook.trust_status),
+        (HookSource::Project, HookTrustStatus::Untrusted)
+    );
+}
+
+#[tokio::test]
 async fn user_role_hook_keeps_its_own_trust_state() {
     let fixture = Fixture::new();
     fixture.write_user_role(&hook_toml(None));
@@ -314,6 +334,17 @@ async fn project_config_and_roles_can_narrow_the_provider_allowlist() {
 
     let config = fixture.config().await;
     assert_eq!(allowed(&config), Some(vec!["openai".to_string()]));
+    // The role removes the last provider: none is allowed, with a warning.
+    let project_child = fixture.child("relay").await;
+    assert_eq!(allowed(&project_child), Some(Vec::new()));
+    assert!(
+        project_child
+            .startup_warnings
+            .iter()
+            .any(|warning| warning.contains("No provider is allowed for spawned agents")),
+        "{:?}",
+        project_child.startup_warnings
+    );
 
     // Unrestricted until a project narrows it.
     let fixture = Fixture::new();
