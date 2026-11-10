@@ -1784,8 +1784,8 @@ impl ModelClient {
 
     /// PF-84: the client after a provider switch. Everything session-scoped stays (session
     /// context and prompt cache key, event sender, executed tool calls, request contributors,
-    /// attestation, runtime auth, native ingress); the provider and its request settings come
-    /// from `config`.
+    /// attestation, native ingress, and runtime auth where its checks pass for the new
+    /// provider); the provider and its request settings come from `config`.
     pub(crate) fn for_provider_switch(
         &self,
         provider: SharedModelProvider,
@@ -1797,7 +1797,18 @@ impl ModelClient {
     /// A client on `provider` with isolated transport and fallback state. Request settings
     /// come from `config` when given, else from this client.
     fn with_provider(&self, provider: SharedModelProvider, config: Option<&Config>) -> Self {
-        let same_provider = provider.info() == self.state.provider.info();
+        // Upstream's runtime authentication is validated for one first-party provider and its
+        // credential owner; it carries over only where the same checks pass for `provider`.
+        let runtime_auth = self.runtime_auth.clone().filter(|(manager, _)| {
+            codex_model_provider::validate_runtime_destination(provider.info().base_url.as_deref())
+                .is_ok()
+                && codex_model_provider::validate_runtime_provider(
+                    provider.info(),
+                    provider.auth_manager().as_ref(),
+                    manager,
+                )
+                .is_ok()
+        });
         let codex_api_key_env_enabled = provider
             .auth_manager()
             .as_ref()
@@ -1873,9 +1884,7 @@ impl ModelClient {
                 self.api_key_cyber_access_programs,
                 cyber_access_program::ApiKeyCyberAccessPrograms::from_config,
             ),
-            // Upstream's runtime authentication is validated for one first-party provider;
-            // another provider gets none (it would need its own runtime owner).
-            runtime_auth: self.runtime_auth.clone().filter(|_| same_provider),
+            runtime_auth,
         }
     }
 
@@ -6277,7 +6286,10 @@ fn chat_tool_result_image_parts(
         .iter()
         .filter_map(|item| match item {
             codex_protocol::models::FunctionCallOutputContentItem::InputImage { image, detail } => {
-                inline_image_url(image).map(|url| chat_image_part(url.to_string(), *detail))
+                Some(match inline_image_url(image) {
+                    Some(url) => chat_image_part(url.to_string(), *detail),
+                    None => ChatContentPart::text(UNAVAILABLE_IMAGE_TEXT.to_string()),
+                })
             }
             codex_protocol::models::FunctionCallOutputContentItem::InputText { .. }
             | codex_protocol::models::FunctionCallOutputContentItem::EncryptedContent { .. }
@@ -6346,7 +6358,15 @@ fn anthropic_tool_result_content(
                     codex_protocol::models::FunctionCallOutputContentItem::InputImage {
                         image,
                         ..
-                    } => inline_image_url(image).map(anthropic_image_block),
+                    } => Some(inline_image_url(image).map_or_else(
+                        || {
+                            json!({
+                                "type": "text",
+                                "text": UNAVAILABLE_IMAGE_TEXT,
+                            })
+                        },
+                        anthropic_image_block,
+                    )),
                     codex_protocol::models::FunctionCallOutputContentItem::EncryptedContent {
                         ..
                     }
