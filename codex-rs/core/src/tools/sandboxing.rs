@@ -85,13 +85,13 @@ tokio::task_local! {
     static PERSON_ASKED: std::cell::Cell<bool>;
 }
 
-/// Issue #513: runs `approval` (a runtime's `start_approval_async`) and says
-/// whether a person was asked during it, as opposed to an answer remembered
-/// from earlier (the approval cache) or a stored grant. Unmarked counts as
-/// not asked (fail closed).
-pub(crate) async fn asking_person<Fut>(approval: impl FnOnce() -> Fut) -> (ReviewDecision, bool)
+/// Issue #513: runs `approval` (a person's prompt) and says whether a person
+/// was asked during it, as opposed to an answer remembered from earlier (the
+/// approval cache) or a stored grant. Unmarked counts as not asked (fail
+/// closed).
+pub(crate) async fn asking_person<T, Fut>(approval: impl FnOnce() -> Fut) -> (T, bool)
 where
-    Fut: Future<Output = ReviewDecision>,
+    Fut: Future<Output = T>,
 {
     // The whole call, its synchronous part included, runs in the scope.
     PERSON_ASKED
@@ -175,30 +175,10 @@ where
     decision
 }
 
-<<<<<<< HEAD
-#[derive(Clone)]
-pub(crate) struct ApprovalCtx<'a> {
-    pub session: &'a Arc<Session>,
-    pub turn: &'a Arc<TurnContext>,
-    pub call_id: &'a str,
-    pub retry_reason: Option<String>,
-    pub network_approval_context: Option<NetworkApprovalContext>,
-    /// PF-30-S03: ask the human about this exact action; no cache, no preapproval.
-    pub fresh_human_authority: bool,
-||||||| 413492cd6c
-#[derive(Clone)]
-pub(crate) struct ApprovalCtx<'a> {
-    pub session: &'a Arc<Session>,
-    pub turn: &'a Arc<TurnContext>,
-    pub call_id: &'a str,
-    pub retry_reason: Option<String>,
-    pub network_approval_context: Option<NetworkApprovalContext>,
-=======
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ApprovalRequestReasons {
     pub(crate) approval: Option<String>,
     pub(crate) retry: Option<String>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub(crate) use super::approvals::ApprovalAction;
@@ -452,27 +432,12 @@ pub(crate) trait Approvable<Req> {
         None
     }
 
-<<<<<<< HEAD
     /// Called with each decision the person or the automatic reviewer gave
-    /// on this request (not permission hooks, which show nothing). Clients
-    /// show the command as running while it is reviewed (#466).
-    fn note_review_decision(&mut self, _decision: &ReviewDecision, _ctx: &ApprovalCtx<'_>) {}
+    /// on this request (not permission hooks, which show nothing), and
+    /// whether it was a network review. Clients show the command as running
+    /// while it is reviewed (#466).
+    fn note_review_decision(&mut self, _decision: &ReviewDecision, _network_review: bool) {}
 
-    /// Return hook input for approval-time policy hooks when this runtime wants
-    /// hook evaluation to run before guardian or user approval.
-    fn permission_request_payload(&self, _req: &Req) -> Option<PermissionRequestPayload> {
-        None
-    }
-
-||||||| 413492cd6c
-    /// Return hook input for approval-time policy hooks when this runtime wants
-    /// hook evaluation to run before guardian or user approval.
-    fn permission_request_payload(&self, _req: &Req) -> Option<PermissionRequestPayload> {
-        None
-    }
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     /// Decide we can request an approval for no-sandbox execution.
     fn wants_no_sandbox_approval(&self, policy: AskForApproval) -> bool {
         match policy {
@@ -636,7 +601,6 @@ impl<'a> SandboxAttempt<'a> {
         }
     }
 
-<<<<<<< HEAD
     /// PF-27-S02: when the secretless launch contract is armed, refuses
     /// launches it cannot contain, scrubs the command's environment and
     /// returns `permissions` with the protected paths denied.
@@ -678,12 +642,7 @@ impl<'a> SandboxAttempt<'a> {
         Ok(Some(protected))
     }
 
-    pub fn env_for(
-||||||| 413492cd6c
-    pub fn env_for(
-=======
     pub async fn env_for(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         &self,
         command: SandboxCommand,
         options: ExecOptions,
@@ -697,10 +656,11 @@ impl<'a> SandboxAttempt<'a> {
             network,
             environment_id,
         )
+        .await
     }
 
     /// [`Self::env_for`] with an explicit PF-27-S02 launch contract.
-    pub(crate) fn env_for_with_contract(
+    pub(crate) async fn env_for_with_contract(
         &self,
         contract: Option<&crate::security::launch_contract::LaunchContract>,
         mut command: SandboxCommand,
@@ -709,19 +669,13 @@ impl<'a> SandboxAttempt<'a> {
         environment_id: Option<&str>,
     ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
         let network = self.network_proxy(network);
-<<<<<<< HEAD
         let protected = self.protect_launch(
             contract,
             &mut command,
             /*exec_server*/ false,
             /*proxy_enforced*/ network.is_some(),
         )?;
-        let request = self
-||||||| 413492cd6c
-        let request = self
-=======
         let mut request = self
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             .manager
             .transform(SandboxTransformRequest {
                 command,
@@ -742,12 +696,12 @@ impl<'a> SandboxAttempt<'a> {
             .iter()
             .map(PathUri::to_abs_path)
             .collect::<std::io::Result<Vec<_>>>()?;
-<<<<<<< HEAD
         let mut exec_request = crate::sandboxing::ExecRequest::from_sandbox_exec_request(
             request,
             options,
             workspace_roots,
-        );
+        )
+        .await?;
         if exec_request.sandbox == SandboxType::WindowsRestrictedToken {
             let sandbox_cwd = self.sandbox_cwd.to_abs_path()?;
             if codex_sandboxing::windows_sandbox_uses_elevated_backend(
@@ -778,16 +732,6 @@ impl<'a> SandboxAttempt<'a> {
             }
         }
         Ok(exec_request)
-||||||| 413492cd6c
-        Ok(crate::sandboxing::ExecRequest::from_sandbox_exec_request(
-            request,
-            options,
-            workspace_roots,
-        ))
-=======
-        crate::sandboxing::ExecRequest::from_sandbox_exec_request(request, options, workspace_roots)
-            .await
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub async fn env_for_exec_server(
@@ -800,12 +744,13 @@ impl<'a> SandboxAttempt<'a> {
             command,
             options,
         )
+        .await
     }
 
     /// [`Self::env_for_exec_server`] with an explicit launch contract. A
     /// remote environment rebuilds the child environment on its own host, so
     /// an armed contract refuses it (PF-27-S02).
-    pub(crate) fn env_for_exec_server_with_contract(
+    pub(crate) async fn env_for_exec_server_with_contract(
         &self,
         contract: Option<&crate::security::launch_contract::LaunchContract>,
         mut command: SandboxCommand,
