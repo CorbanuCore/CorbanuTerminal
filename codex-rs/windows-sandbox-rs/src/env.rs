@@ -138,6 +138,24 @@ fn ensure_denybin(tools: &[&str], denybin_dir: Option<&Path>) -> Result<PathBuf>
 }
 
 pub fn apply_no_network_to_env(env_map: &mut HashMap<String, String>) -> Result<()> {
+    apply_no_network_env_vars(env_map);
+
+    let base = ensure_denybin(&["ssh", "scp"], /*denybin_dir*/ None)?;
+    for tool in ["curl", "wget"] {
+        for ext in [".bat", ".cmd"] {
+            let p = base.join(format!("{tool}{ext}"));
+            if p.exists() {
+                let _ = fs::remove_file(&p);
+            }
+        }
+    }
+    prepend_path(env_map, &base.to_string_lossy());
+    reorder_pathext_for_stubs(env_map);
+    Ok(())
+}
+
+/// The no-network environment variables, without the deny stubs.
+fn apply_no_network_env_vars(env_map: &mut HashMap<String, String>) {
     env_map.insert("SBX_NONET_ACTIVE".into(), "1".into());
     env_map
         .entry("HTTP_PROXY".into())
@@ -172,22 +190,11 @@ pub fn apply_no_network_to_env(env_map: &mut HashMap<String, String>) -> Result<
     env_map
         .entry("GIT_SSH_COMMAND".into())
         .or_insert_with(|| "cmd /c exit 1".into());
-    env_map
-        .entry("GIT_ALLOW_PROTOCOLS".into())
-        .or_insert_with(|| "".into());
-
-    let base = ensure_denybin(&["ssh", "scp"], /*denybin_dir*/ None)?;
-    for tool in ["curl", "wget"] {
-        for ext in [".bat", ".cmd"] {
-            let p = base.join(format!("{tool}{ext}"));
-            if p.exists() {
-                let _ = fs::remove_file(&p);
-            }
-        }
-    }
-    prepend_path(env_map, &base.to_string_lossy());
-    reorder_pathext_for_stubs(env_map);
-    Ok(())
+    // D475 (#1921): git allows only its local `file` transport, so it refuses
+    // network transports and `ext` before connecting or running anything.
+    // Set over any value the caller passed, in any spelling (names ignore case
+    // on Windows). This was `GIT_ALLOW_PROTOCOLS`, a name git doesn't read.
+    set_env_var(env_map, "GIT_ALLOW_PROTOCOL", "file".into());
 }
 
 #[cfg(test)]

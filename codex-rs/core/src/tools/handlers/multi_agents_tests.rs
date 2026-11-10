@@ -326,6 +326,7 @@ model_reasoning_effort = "low"
             description: Some("Role with model overrides".to_string()),
             config_file: Some(role_config_path),
             nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
         },
     );
     turn.config = Arc::new(config);
@@ -1699,6 +1700,7 @@ service_tier = "priority"
                 description: Some("Role with a child service tier".to_string()),
                 config_file: Some(role_config_path),
                 nickname_candidates: None,
+                source: crate::config::AgentRoleSource::User,
             },
         );
         turn.config = Arc::new(config);
@@ -1782,6 +1784,7 @@ service_tier = "turbo"
             description: Some("Role with an unsupported child tier".to_string()),
             config_file: Some(role_config_path),
             nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
         },
     );
     turn.config = Arc::new(config);
@@ -1854,6 +1857,7 @@ service_tier = "priority"
             description: Some("Role with a supported child tier".to_string()),
             config_file: Some(role_config_path),
             nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
         },
     );
     turn.config = Arc::new(config);
@@ -9291,5 +9295,48 @@ async fn settle_agent_waits_for_the_spawn_turn_after_an_error() {
     assert_eq!(
         manager.agent_control().get_status(agent_id).await,
         AgentStatus::Running
+    );
+}
+
+/// #2000: a child agent whose role sets permissions (so its config is rebuilt
+/// from the session's starting layers, without the Windows sandbox set up
+/// since) still gets the session's raised Windows sandbox.
+#[tokio::test]
+async fn issue_2000_a_role_rebuilt_child_keeps_the_raised_windows_sandbox() {
+    use crate::windows_sandbox::WindowsSandboxLevelExt;
+    use codex_protocol::config_types::WindowsSandboxLevel;
+    let (_session, mut turn) = make_session_and_context().await;
+    tokio::fs::create_dir_all(&turn.config.codex_home)
+        .await
+        .expect("codex home should be created");
+    let role_config_path = turn.config.codex_home.as_path().join("sandbox-role.toml");
+    tokio::fs::write(&role_config_path, "sandbox_mode = \"workspace-write\"\n")
+        .await
+        .expect("role config should be written");
+    let mut config = (*turn.config).clone();
+    config.agent_roles.insert(
+        "sandbox-role".to_string(),
+        AgentRoleConfig {
+            description: Some("Role that sets its own sandbox".to_string()),
+            config_file: Some(role_config_path),
+            nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
+        },
+    );
+    let starting = WindowsSandboxLevel::from_config(&config);
+    assert_eq!(starting, WindowsSandboxLevel::Disabled);
+    // The session's per-turn config after "Set up default sandbox".
+    turn.windows_sandbox_level = WindowsSandboxLevel::Elevated;
+    config.set_windows_elevated_sandbox_enabled(/*value*/ true);
+
+    crate::agent::role::apply_role_to_config(&mut config, Some("sandbox-role"))
+        .await
+        .expect("role should apply");
+    // The role rebuilt the config from the starting layers.
+    assert_eq!(WindowsSandboxLevel::from_config(&config), starting);
+    apply_spawn_agent_runtime_overrides(&mut config, &turn).expect("runtime overrides");
+    assert_eq!(
+        WindowsSandboxLevel::from_config(&config),
+        WindowsSandboxLevel::Elevated
     );
 }

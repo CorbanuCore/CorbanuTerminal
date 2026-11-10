@@ -280,6 +280,20 @@ pub struct McpServerConfig {
     )]
     pub startup_timeout_sec: Option<Duration>,
 
+    /// How long a stdio server that opted in to MCP 2026-07-28
+    /// (`CODEX_MCP_PROTOCOL_VERSION=2026-07-28`) may take to answer `server/discover`.
+    /// A server that doesn't answer in time is stopped and started again with legacy
+    /// `initialize`, which gets the startup timeout of its own, so a server that never
+    /// answers `server/discover` can take up to about twice the startup timeout to start.
+    /// Defaults to, and is capped at, the startup timeout. Must be greater than 0; omit it for
+    /// the default. Ignored for servers that haven't opted in.
+    #[serde(
+        default,
+        with = "option_duration_secs",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub discover_timeout_sec: Option<Duration>,
+
     /// Default timeout for MCP tool calls initiated via this server.
     #[serde(default, with = "option_duration_secs")]
     pub tool_timeout_sec: Option<Duration>,
@@ -419,6 +433,12 @@ pub struct RawMcpServerConfig {
     pub startup_timeout_sec: Option<f64>,
     #[serde(default)]
     pub startup_timeout_ms: Option<u64>,
+    /// Seconds a stdio server that opted in to MCP 2026-07-28 may take to answer
+    /// `server/discover` before Corbanu falls back to legacy `initialize`. Must be greater
+    /// than 0; omit it to wait up to `startup_timeout_sec`.
+    #[serde(default, with = "option_duration_secs")]
+    #[schemars(with = "Option<f64>")]
+    pub discover_timeout_sec: Option<Duration>,
     #[serde(default, with = "option_duration_secs")]
     #[schemars(with = "Option<f64>")]
     pub tool_timeout_sec: Option<Duration>,
@@ -478,6 +498,7 @@ impl TryFrom<RawMcpServerConfig> for McpServerConfig {
             auth,
             startup_timeout_sec,
             startup_timeout_ms,
+            discover_timeout_sec,
             tool_timeout_sec,
             enabled,
             required,
@@ -524,6 +545,13 @@ impl TryFrom<RawMcpServerConfig> for McpServerConfig {
             throw_if_set("stdio", "oauth", oauth.as_ref())?;
             throw_if_set("stdio", "oauth_resource", oauth_resource.as_ref())?;
             throw_if_set("stdio", "auth", auth.as_ref())?;
+            // `0` would skip `server/discover` entirely, which reads as "no limit" (#2020).
+            if discover_timeout_sec == Some(Duration::ZERO) {
+                return Err(
+                    "discover_timeout_sec must be greater than 0; omit it to wait up to startup_timeout_sec"
+                        .to_string(),
+                );
+            }
             let env_vars = env_vars.unwrap_or_default();
             for env_var in &env_vars {
                 env_var.validate_source()?;
@@ -556,6 +584,11 @@ impl TryFrom<RawMcpServerConfig> for McpServerConfig {
                     "http_headers_helper is only supported for local MCP servers".to_string(),
                 );
             }
+            throw_if_set(
+                "streamable_http",
+                "discover_timeout_sec",
+                discover_timeout_sec.as_ref(),
+            )?;
             McpServerTransportConfig::StreamableHttp {
                 url,
                 bearer_token_env_var,
@@ -613,6 +646,7 @@ impl TryFrom<RawMcpServerConfig> for McpServerConfig {
             auth,
             environment_id,
             startup_timeout_sec,
+            discover_timeout_sec,
             tool_timeout_sec,
             enabled: enabled.unwrap_or_else(default_enabled),
             required: required.unwrap_or_default(),

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import contextlib
+import io
 import os
 import subprocess
 import tempfile
@@ -7,7 +9,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import argument_comment_lint_packages
 from argument_comment_lint_packages import CANARY_PACKAGE
+from argument_comment_lint_packages import cargo_packages
 from argument_comment_lint_packages import changed_files
 from argument_comment_lint_packages import lint_packages
 from argument_comment_lint_packages import workspace_packages
@@ -131,10 +135,12 @@ class ArgumentCommentLintPackagesTest(unittest.TestCase):
             ["codex-core", "codex-tui"],
         )
 
-    def test_nested_crate_wins_over_its_parent(self) -> None:
+    def test_nested_crate_selects_its_parent_too(self) -> None:
+        # The parent's tests call the nested support crate, so a renamed
+        # parameter there must re-check their argument comments.
         self.assertEqual(
             lint_packages(["codex-rs/core/tests/common/lib.rs"], PACKAGES),
-            ["core_test_support"],
+            ["codex-core", "core_test_support"],
         )
 
     def test_non_rust_and_out_of_workspace_files_select_nothing(self) -> None:
@@ -165,6 +171,44 @@ class ArgumentCommentLintPackagesTest(unittest.TestCase):
         packages = workspace_packages(ROOT)
         self.assertEqual(packages["codex-rs/core"], "codex-core")
         self.assertIn(CANARY_PACKAGE, packages.values())
+
+    def test_path_dependency_members_are_linted(self) -> None:
+        # Cargo makes crates that members depend on by path members too,
+        # though `members` omits them; the job lints them like the changed-
+        # crate test job tests them (#2027). (Upstream #42993 removed the
+        # codex-mcp-server crate, so main's mcp-server case is dropped here.)
+        packages = cargo_packages(ROOT)
+        members = workspace_packages(ROOT).values()
+        for path, expected in (
+            ("codex-rs/chatgpt/src/lib.rs", ["codex-chatgpt"]),
+            ("codex-rs/message-history/src/lib.rs", ["codex-message-history"]),
+            ("codex-rs/windows-sandbox-rs/src/lib.rs", ["codex-windows-sandbox"]),
+            ("codex-rs/core/tests/common/lib.rs", ["codex-core", "core_test_support"]),
+            (
+                "codex-rs/app-server/tests/common/lib.rs",
+                ["app_test_support", "codex-app-server"],
+            ),
+        ):
+            with self.subTest(path=path):
+                # Each case adds one crate the `members` list lacks.
+                self.assertEqual(len(set(expected) - set(members)), 1)
+                self.assertEqual(lint_packages([path], packages), expected)
+
+    def test_both_changed_crate_jobs_share_one_crate_list(self) -> None:
+        import changed_crate_test_packages
+
+        self.assertIs(changed_crate_test_packages.tested_packages, cargo_packages)
+        stdout = io.StringIO()
+        with (
+            mock.patch("sys.argv", ["lint", "base", "head"]),
+            mock.patch(
+                "argument_comment_lint_packages.changed_files",
+                return_value=["codex-rs/chatgpt/src/lib.rs"],
+            ),
+            contextlib.redirect_stdout(stdout),
+        ):
+            argument_comment_lint_packages.main()
+        self.assertEqual(stdout.getvalue(), "codex-chatgpt\n")
 
 
 if __name__ == "__main__":

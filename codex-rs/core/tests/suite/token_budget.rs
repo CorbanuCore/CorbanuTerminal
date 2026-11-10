@@ -791,6 +791,7 @@ async fn token_budget_context_injects_plain_thread_hint_text(cached_subagent: bo
                     omit_tools_from: None,
                     disabled_reason: None,
                     startup_timeout_sec: Some(Duration::from_secs(10)),
+                    discover_timeout_sec: None,
                     tool_timeout_sec: None,
                     default_tools_approval_mode: None,
                     enabled_tools: Some(vec!["thread_hint".to_string()]),

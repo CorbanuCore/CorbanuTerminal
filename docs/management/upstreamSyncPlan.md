@@ -175,8 +175,11 @@ newer releases wait for the cadence.
   revert doesn't change the SG3 diff.
 - **Main merges** happen at tier exits (end of S1, end of S2) and in S5, numbered: #1 (during S1, #1915/#1922),
   #2 (S1 exit, D471, #2012/#2014), #2b (interim catch-up of `main` 063a1704e9..1855c92ae1 with the #2004 D487
-  security port), #3 (S2 exit), #4 (S5, ≤48 hours before the final merge; the last sync-branch change before the
-  CODEOWNERS revert). Extra interim merges take a letter suffix (#2b, #3b) so these numbers stay fixed. The integrator merges `origin/main` into the
+  security port), #2c (interim catch-up of `main` 1855c92ae1..ede11f0d21; a second PR ports the
+  #1978/#2028/#2030 MCP timeout work and brings the sync CODEOWNERS block and `security_paths.txt` up to `main`'s
+  security paths), #3 (S2 exit), #4 (S5, ≤48 hours before the final merge; the last sync-branch change before the
+  CODEOWNERS revert). Extra interim merges take a letter suffix (#2b, #3b) so these numbers stay fixed. The
+  integrator merges `origin/main` into the
   sync branch. Where `main`'s change to a path that still carries skeleton markers conflicts, the integrator keeps the
   sync side and adds a ledger row "re-apply `git diff <old-main>..<new-main> -- <path>`" for the path's owner; this
   avoids nested markers and keeps one owner per path. Where it merges cleanly, git places it in the ours side and the
@@ -227,6 +230,11 @@ layers:
   `login/src/auth/manager.rs`, `secrets/src/local.rs`, `arg0/src/lib.rs`, `cli/src/debug_sandbox.rs`,
   `apply-patch/src/lib.rs`, and tui `approval_overlay.rs` (+1 snapshot), `permission_popups.rs`, `windows_sandbox.rs`.
   The owning slice resolves them; the security owner must approve.
+- **Main's D318 block:** since main merge #2c the named layer also carries every path `main`'s CODEOWNERS gives
+  @corbanu-security (sandboxes, approvals, permission profiles, D487 enforcement, credentials, dependency policy,
+  D465 security CI and release signing; 74 pathspecs), except `.github/CODEOWNERS`. `ci_mode.py codeowners drift`
+  fails when `main`'s block names a path that the sync CODEOWNERS block or this list lacks. `blocking-ci.yml` is on
+  the list, so S4's CI-mode revert appears in the SG3 diff; the integrator points it out when posting SG3.
 - **Footprint:** S0 extends the list from the fork-patch footprint, i.e. the files changed by Corbanu's security
   commits (PF-23 to PF-41 sprints, security-plan PRs), not from path names alone. A keyword match over `main`'s
   commit messages touches 492 of the 899 conflicted files, so S0 curates by commit. Each footprint file gets a ledger

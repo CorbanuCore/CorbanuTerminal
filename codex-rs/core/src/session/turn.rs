@@ -684,7 +684,7 @@ pub(crate) async fn run_turn(
         // may support this, the model might not.
         let pending_input = if can_drain_pending_input {
             sess.input_queue
-                .get_pending_input(&sess.active_turn)
+                .get_pending_input_for_running_task(&sess.active_turn)
                 .await
                 .0
         } else {

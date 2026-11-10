@@ -287,6 +287,25 @@ pub fn planted_after_command_notice(
     Some(parts.join("\n"))
 }
 
+/// #1877 item 5 (D486): when each recorded folder and repository was last
+/// recorded, for confirming it as shown. Read it before
+/// [`planted_project_metadata`] and [`planted_git_changes`]. Empty off
+/// Windows, and when the records can't be read (confirming then refuses
+/// any path recorded with a stamp, so it is asked about again).
+pub fn planted_stamps() -> std::collections::BTreeMap<PathBuf, u64> {
+    #[cfg(target_os = "windows")]
+    {
+        codex_windows_sandbox::planted_stamps().unwrap_or_else(|err| {
+            tracing::warn!("could not read the planted records' stamps: {err:#}");
+            std::collections::BTreeMap::new()
+        })
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::collections::BTreeMap::new()
+    }
+}
+
 /// The planted folders not confirmed yet. Always empty off Windows.
 pub fn planted_project_metadata() -> PlantedProjectMetadata {
     #[cfg(target_os = "windows")]

@@ -429,7 +429,7 @@ impl CodexThread {
     /// Call after installing host services such as the thread's attestation routing.
     pub async fn prewarm(&self) {
         self.session
-            .schedule_startup_prewarm(PrewarmInput::Base)
+            .schedule_startup_prewarm(PrewarmInput::Base, /*reopened*/ false)
             .await;
     }
 
@@ -438,7 +438,7 @@ impl CodexThread {
     /// still extends this history and its request settings match. Uses the same handoff as `prewarm`.
     pub async fn prewarm_with_history(&self) {
         self.session
-            .schedule_startup_prewarm(PrewarmInput::History)
+            .schedule_startup_prewarm(PrewarmInput::History, /*reopened*/ true)
             .await;
     }
 

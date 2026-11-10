@@ -4,6 +4,7 @@
 //! Permissive is unchanged, and so is every level on other platforms.
 
 use codex_core::config::Constrained;
+use codex_core::security_inspection;
 use codex_features::Feature;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::NetworkSandboxPolicy;
@@ -38,6 +39,8 @@ struct Outcome {
     /// Whether the model got an image.
     attached: bool,
     warnings: Vec<String>,
+    /// What the security inspector lists for the session.
+    denials: Vec<&'static str>,
 }
 
 #[derive(Clone, Copy)]
@@ -46,6 +49,9 @@ enum Call {
     ReadOnlyCommand,
     /// The image tool on a plain image in the workspace.
     ViewImage,
+    /// Typing into a running command (`write_stdin`); the typing is judged
+    /// before the process is looked up, so no process needs to run.
+    TypeIntoCommand,
 }
 
 fn png() -> anyhow::Result<Vec<u8>> {
@@ -75,6 +81,13 @@ async fn run(level: SecurityLevel, call: Call) -> anyhow::Result<Outcome> {
                     /*exclude_slash_tmp*/ true,
                 ))
                 .expect("profile");
+            if matches!(call, Call::TypeIntoCommand) {
+                config.use_experimental_unified_exec_tool = true;
+                config
+                    .features
+                    .enable(Feature::UnifiedExec)
+                    .expect("test config should allow feature update");
+            }
         })
         .build(&server)
         .await?;
@@ -85,6 +98,10 @@ async fn run(level: SecurityLevel, call: Call) -> anyhow::Result<Outcome> {
             std::fs::write(&image, png()?)?;
             ("view_image", json!({ "path": image.display().to_string() }))
         }
+        Call::TypeIntoCommand => (
+            "write_stdin",
+            json!({ "session_id": 1000, "chars": format!("echo {RAN}\n"), "yield_time_ms": 200 }),
+        ),
     };
     let captured = mount_sse_sequence(
         &server,
@@ -134,6 +151,16 @@ async fn run(level: SecurityLevel, call: Call) -> anyhow::Result<Outcome> {
             .get("output")
             .is_some_and(Value::is_array),
         warnings,
+        denials: security_inspection::observe(
+            test.codex_home_path(),
+            level,
+            Some(test.session_configured.thread_id),
+            i64::MAX / 2,
+        )
+        .denials
+        .into_iter()
+        .map(|denial| denial.reason)
+        .collect(),
     })
 }
 
@@ -183,6 +210,42 @@ async fn issue_1976_windows_without_its_sandbox_refuses_commands_and_file_tools(
             wrong.push(format!(
                 "{name} image: attached {}; output {}; warnings {:?}",
                 image.attached, image.output, image.warnings
+            ));
+        }
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+    Ok(())
+}
+
+/// #2000 follow-up: typing into a running command, refused like the command
+/// itself, is listed in the security inspector like the other refusals.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_1976_refused_typing_is_listed_in_the_inspector() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+    const TYPING: &str = "typing into a running command without the Windows sandbox";
+    let mut wrong = Vec::new();
+    for (level, name) in [
+        (SecurityLevel::Permissive, "Permissive"),
+        (SecurityLevel::Moderate, "Moderate"),
+        (SecurityLevel::Aggressive, "Aggressive"),
+    ] {
+        let refused = cfg!(windows) && level != SecurityLevel::Permissive;
+        let typed = run(level, Call::TypeIntoCommand).await?;
+        let expected = format!("Security level {name} refused this command");
+        let listed = typed.denials.contains(&TYPING);
+        let ok = if refused {
+            typed.output.contains(&expected) && listed
+        } else {
+            // The typing reached the process lookup (no process 1000 runs).
+            typed.output.contains("Unknown process id 1000")
+                && !typed.output.contains("Security level")
+                && !listed
+        };
+        if !ok {
+            wrong.push(format!(
+                "{name}: output {}; denials {:?}",
+                typed.output, typed.denials
             ));
         }
     }
