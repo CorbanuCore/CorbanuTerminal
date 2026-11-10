@@ -3236,6 +3236,13 @@ impl ModelClient {
     /// lockstep when auth/provider resolution changes.
     async fn current_client_setup(&self, routing: ClientRouting) -> Result<CurrentClientSetup> {
         if let Some((manager, mode)) = &self.runtime_auth {
+            // PF-27-S05: with a credential broker the model credential never reaches this
+            // process; upstream's runtime authentication signs here, so it is refused.
+            if codex_model_provider::model_key_broker_required() {
+                return Err(CodexErr::UnsupportedOperation(
+                    "runtime authentication is off under broker_model_auth".to_string(),
+                ));
+            }
             let selected = codex_model_provider::select_runtime_auth(
                 manager,
                 &self.state.provider.info().build_header_map()?,
