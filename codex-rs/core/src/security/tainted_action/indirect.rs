@@ -748,6 +748,37 @@ fn unredirected(command: &SimpleCommand, words: &[String], from: usize) -> Optio
     any.then_some(runs)
 }
 
+/// #1821: the commands a finder's `-exec`/`-execdir`/`-ok`/`-okdir` runs,
+/// as `(start, end)` word ranges, each up to its `;` or a `+` after `{}`.
+/// Read in every command, from any exec option: the word lexer ends a
+/// command at `;` (even quoted) and at the `}` of `{}`, so a later exec
+/// option may follow `-o`, `!`, `-a` or `+` in a command of its own
+/// (`find . -exec a \; -o -exec sudo -A ./x \;`), and any finder's
+/// spelling is covered (`gfind`, wrapped finders). A prompt still needs a
+/// sudo that runs a helper or chroot right there. Each word is read once.
+pub(super) fn finder_exec_commands(words: &[String]) -> Vec<(usize, usize)> {
+    let exec_option = |word: &str| matches!(word, "-exec" | "-execdir" | "-ok" | "-okdir");
+    let mut commands = Vec::new();
+    let mut at = 0;
+    while at < words.len() {
+        work::step();
+        if exec_option(&words[at]) {
+            let start = at + 1;
+            let end = (start..words.len())
+                .find(|&end| {
+                    work::step();
+                    words[end] == ";"
+                        || (words[end] == "+" && end > start && words[end - 1].ends_with("{}"))
+                })
+                .unwrap_or(words.len());
+            commands.push((start, end));
+            at = end;
+        }
+        at += 1;
+    }
+    commands
+}
+
 /// #1482 item 4: whether a sudo among the programs of these words runs an
 /// askpass helper, an editor named by the environment, or code inside a
 /// chroot (`sudo -A`, `sudo -e`, `--askpass`, `--edit`, `sudoedit`,
