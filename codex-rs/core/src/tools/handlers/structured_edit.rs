@@ -14,6 +14,7 @@ use crate::tools::handlers::resolve_tool_environment;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::ToolExecutor;
 use codex_exec_server::ReadFileOptions;
+use codex_protocol::openai_models::ModelInfo;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiTool;
 use codex_tools::ToolName;
@@ -119,12 +120,20 @@ pub(crate) fn structured_edit_protocol_enabled(turn_context: &TurnContext) -> bo
 }
 
 pub(crate) fn native_structured_edit_protocol_enabled(turn_context: &TurnContext) -> bool {
+    native_structured_edit_protocol_enabled_for(turn_context, turn_context.model_info())
+}
+
+/// [`native_structured_edit_protocol_enabled`] for the model a step plans tools for.
+pub(crate) fn native_structured_edit_protocol_enabled_for(
+    turn_context: &TurnContext,
+    model_info: &ModelInfo,
+) -> bool {
     let provider = turn_context.provider.info();
     if provider.is_zai() || provider.is_ambient() || provider.is_meta() {
         return true;
     }
 
-    let slug = turn_context.model_info().slug.to_ascii_lowercase();
+    let slug = model_info.slug.to_ascii_lowercase();
     slug.contains("glm") || slug.contains("zai-org")
 }
 

@@ -69,7 +69,8 @@ impl ToolExecutor<ToolInvocation> for ExtensionToolAdapter {
         ToolInvocation: 'a,
     {
         Box::pin(async move {
-            let contexts = current_extension_file_contexts(&invocation, &mut || {}).await?;
+            let (contexts, built_under) =
+                current_extension_file_contexts(&invocation, &mut || {}).await?;
             let accessors: Vec<_> = contexts
                 .into_iter()
                 .map(|(environment, sandbox)| {
@@ -92,9 +93,15 @@ impl ToolExecutor<ToolInvocation> for ExtensionToolAdapter {
                     )
                 })
                 .collect();
-            self.0
-                .handle(to_extension_call(&invocation, environments).await)
-                .await
+            let call = to_extension_call(&invocation, environments).await;
+            // D71 (a): building the call awaits the history; a transition meanwhile
+            // refuses it, as one during the file contexts' build would.
+            if extension_call_basis(invocation.session.as_ref()) != built_under {
+                return Err(codex_tools::FunctionCallError::RespondToModel(
+                    EXTENSION_PREPARED_REFUSAL.to_string(),
+                ));
+            }
+            self.0.handle(call).await
         })
     }
 }
@@ -107,9 +114,9 @@ pub(crate) const EXTENSION_PREPARED_REFUSAL: &str = "Not run: the security polic
 /// The level-dependent state an extension call is built under: the policy
 /// marker its grants are fenced by and the live level its file context is
 /// protected for.
-fn extension_call_basis(
-    session: &Session,
-) -> (Option<(u64, u64)>, codex_security_policy::SecurityLevel) {
+type ExtensionCallBasis = (Option<(u64, u64)>, codex_security_policy::SecurityLevel);
+
+fn extension_call_basis(session: &Session) -> ExtensionCallBasis {
     (
         session.services.authority_marker(),
         session.services.model_client().live_level(),
@@ -151,7 +158,8 @@ async fn extension_file_contexts(
 }
 
 /// #1057 (D71, option A): the extension's file contexts built under the
-/// policy in force when the extension starts. They (grants included) are
+/// policy in force when the extension starts, with that policy's basis (the
+/// caller re-checks it once the call is built). They (grants included) are
 /// built from the policy at build time; when a security transition lands
 /// while they are built, they are rebuilt once under the new policy, and the
 /// call is refused when another lands meanwhile. `after_build` runs after each
@@ -160,13 +168,19 @@ async fn extension_file_contexts(
 async fn current_extension_file_contexts<'i>(
     invocation: &'i ToolInvocation,
     after_build: &mut (dyn FnMut() + Send),
-) -> Result<Vec<(&'i TurnEnvironment, FileSystemSandboxContext)>, codex_tools::FunctionCallError> {
+) -> Result<
+    (
+        Vec<(&'i TurnEnvironment, FileSystemSandboxContext)>,
+        ExtensionCallBasis,
+    ),
+    codex_tools::FunctionCallError,
+> {
     for _ in 0..2 {
         let built_under = extension_call_basis(invocation.session.as_ref());
         let contexts = extension_file_contexts(invocation).await;
         after_build();
         if extension_call_basis(invocation.session.as_ref()) == built_under {
-            return Ok(contexts);
+            return Ok((contexts, built_under));
         }
     }
     Err(codex_tools::FunctionCallError::RespondToModel(

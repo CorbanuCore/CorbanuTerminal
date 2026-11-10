@@ -86,6 +86,7 @@ pub(crate) use structured_edit::StructuredWriteHandler;
 pub(crate) use structured_edit::emit_model_edit_compat_metric;
 pub(crate) use structured_edit::emit_model_edit_fallback_activated_metric;
 pub(crate) use structured_edit::native_structured_edit_protocol_enabled;
+pub(crate) use structured_edit::native_structured_edit_protocol_enabled_for;
 pub(crate) use structured_edit::reject_source_write_heredoc_when_structured_edit_enabled;
 pub(crate) use structured_edit::validate_structured_write_arguments;
 pub use test_sync::TestSyncHandler;
@@ -449,6 +450,7 @@ pub(crate) fn with_granted_permissions(
         additional_permissions.as_ref(),
         granted_permissions.as_ref(),
     );
+    // Only resolves the grants' paths for the comparison below; it grants nothing.
     let sandbox_context = environment.sandbox_context(/*additional_permissions*/ None);
     let context = file_system_sandbox_policy_context_for_cwd(&sandbox_context, cwd);
     let preapproved_permissions = granted_permissions.as_ref().and_then(|granted| {
