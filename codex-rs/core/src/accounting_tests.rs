@@ -357,6 +357,7 @@ async fn accounting_role_reload_preserves_internal_binding_without_changing_off_
                 config_file: Some(path.to_path_buf()),
                 description: Some("fixture".into()),
                 nickname_candidates: None,
+                source: crate::config::AgentRoleSource::User,
             },
         );
         let mode = config.accounting.clone();
@@ -365,14 +366,9 @@ async fn accounting_role_reload_preserves_internal_binding_without_changing_off_
             .await
             .map_err(anyhow::Error::msg)?;
         assert_eq!(config.accounting, mode);
-        if on {
-            assert_eq!(config.model_provider, provider);
-        } else {
-            assert_eq!(
-                config.model_provider,
-                ModelProviderInfo::create_anthropic_provider()
-            );
-        }
+        // Since the upstream sync a role is applied to a copy of the parent's config
+        // (D526 (a)), so the parent's live provider is kept with or without accounting.
+        assert_eq!(config.model_provider, provider);
     }
     Ok(())
 }
@@ -426,6 +422,7 @@ web_search_max_uses = 2
             config_file: Some(role.to_path_buf()),
             description: None,
             nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
         },
     );
     let mode = config.accounting.clone();

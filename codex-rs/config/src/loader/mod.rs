@@ -1329,6 +1329,20 @@ pub(crate) fn validate_project_mitm_profiles<'a>(
     Ok(())
 }
 
+/// Removes what a project's repository contents may not choose from an agent
+/// role file a project declares (D512, #1997) and returns the dotted names of
+/// the keys it removed. Uses the enabled credential-broker state, which strips
+/// the most, since a role file is applied without the project's broker context;
+/// with no trusted provider env keys, only the broker's own keys are matched
+/// (roles don't apply `shell_environment_policy`).
+pub fn sanitize_project_role_config(config: &mut TomlValue) -> Vec<String> {
+    sanitize_project_config(
+        config,
+        CredentialBrokerProjectState::Enabled,
+        /*trusted_provider_env_keys*/ &[],
+    )
+}
+
 fn sanitize_project_config(
     config: &mut TomlValue,
     credential_broker: CredentialBrokerProjectState,

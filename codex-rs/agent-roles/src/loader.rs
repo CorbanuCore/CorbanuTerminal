@@ -1,9 +1,11 @@
 use crate::AgentRoleConfig;
+use crate::AgentRoleSource;
 use crate::ResolvedAgentRoleFile;
 use crate::agent_role_config::normalize_agent_role_description;
 use crate::agent_role_config::normalize_agent_role_nickname_candidates;
 use crate::discovery::collect_agent_role_files;
 use crate::parse_agent_role_file_contents;
+use crate::role_source::push_role_file_warnings;
 use codex_config::ConfigLayerStack;
 use codex_config::config_toml::AgentRoleToml;
 use codex_config::config_toml::AgentsToml;
@@ -35,6 +37,7 @@ pub async fn load_agent_roles(
     for layer in layers {
         let mut layer_roles: BTreeMap<String, AgentRoleConfig> = BTreeMap::new();
         let mut declared_role_files = BTreeSet::new();
+        let source = AgentRoleSource::from_layer(&layer.name);
         let config_folder = layer.config_folder();
         let agents_toml = match agents_toml_from_layer(&layer.config, config_folder.as_deref()) {
             Ok(agents_toml) => agents_toml,
@@ -45,14 +48,21 @@ pub async fn load_agent_roles(
         };
         if let Some(agents_toml) = agents_toml {
             for (declared_role_name, role_toml) in &agents_toml.roles {
-                let (role_name, role) =
-                    match read_declared_role(fs, declared_role_name, role_toml).await {
-                        Ok(role) => role,
-                        Err(err) => {
-                            push_agent_role_warning(startup_warnings, err);
-                            continue;
-                        }
-                    };
+                let (role_name, role) = match read_declared_role(
+                    fs,
+                    declared_role_name,
+                    role_toml,
+                    source,
+                    startup_warnings,
+                )
+                .await
+                {
+                    Ok(role) => role,
+                    Err(err) => {
+                        push_agent_role_warning(startup_warnings, err);
+                        continue;
+                    }
+                };
                 if let Some(config_file) = role.config_file.clone() {
                     declared_role_files.insert(config_file);
                 }
@@ -77,6 +87,7 @@ pub async fn load_agent_roles(
                 fs,
                 &config_folder.join("agents"),
                 &declared_role_files,
+                source,
                 startup_warnings,
             )
             .await?
@@ -129,7 +140,14 @@ async fn load_agent_roles_without_layers(
     let mut roles = BTreeMap::new();
     if let Some(agents_toml) = cfg.agents.as_ref() {
         for (declared_role_name, role_toml) in &agents_toml.roles {
-            let (role_name, role) = read_declared_role(fs, declared_role_name, role_toml).await?;
+            let (role_name, role) = read_declared_role(
+                fs,
+                declared_role_name,
+                role_toml,
+                AgentRoleSource::User,
+                &mut Vec::new(),
+            )
+            .await?;
             validate_required_agent_role_description(&role_name, role.description.as_deref())?;
 
             if roles.insert(role_name.clone(), role).is_some() {
@@ -148,13 +166,22 @@ async fn read_declared_role(
     fs: &dyn ExecutorFileSystem,
     declared_role_name: &str,
     role_toml: &AgentRoleToml,
+    source: AgentRoleSource,
+    startup_warnings: &mut Vec<String>,
 ) -> std::io::Result<(String, AgentRoleConfig)> {
     let mut role = agent_role_config_from_toml(fs, declared_role_name, role_toml).await?;
+    role.source = source;
     let mut role_name = declared_role_name.to_string();
     if let Some(config_file) = role.config_file.as_deref() {
         let config_file = AbsolutePathBuf::from_absolute_path(config_file)?;
         let parsed_file =
             read_resolved_agent_role_file(fs, &config_file, Some(declared_role_name)).await?;
+        push_role_file_warnings(
+            source,
+            config_file.as_path(),
+            &parsed_file.config,
+            startup_warnings,
+        );
         role_name = parsed_file.role_name;
         role.description = parsed_file.description.or(role.description);
         role.nickname_candidates = parsed_file.nickname_candidates.or(role.nickname_candidates);
@@ -165,7 +192,11 @@ async fn read_declared_role(
 
 fn merge_missing_role_fields(role: &mut AgentRoleConfig, fallback: &AgentRoleConfig) {
     role.description = role.description.clone().or(fallback.description.clone());
-    role.config_file = role.config_file.clone().or(fallback.config_file.clone());
+    // `source` describes where `config_file` was declared, so it moves with it.
+    if role.config_file.is_none() {
+        role.config_file.clone_from(&fallback.config_file);
+        role.source = fallback.source;
+    }
     role.nickname_candidates = role
         .nickname_candidates
         .clone()
@@ -213,6 +244,7 @@ async fn agent_role_config_from_toml(
         description,
         config_file: config_file.map(AbsolutePathBuf::into_path_buf),
         nickname_candidates,
+        source: AgentRoleSource::Project,
     })
 }
 
@@ -291,6 +323,7 @@ async fn discover_agent_roles_in_dir(
     fs: &dyn ExecutorFileSystem,
     agents_dir: &AbsolutePathBuf,
     declared_role_files: &BTreeSet<PathBuf>,
+    source: AgentRoleSource,
     startup_warnings: &mut Vec<String>,
 ) -> std::io::Result<BTreeMap<String, AgentRoleConfig>> {
     let mut roles = BTreeMap::new();
@@ -321,12 +354,19 @@ async fn discover_agent_roles_in_dir(
             );
             continue;
         }
+        push_role_file_warnings(
+            source,
+            agent_file.as_path(),
+            &parsed_file.config,
+            startup_warnings,
+        );
         roles.insert(
             role_name,
             AgentRoleConfig {
                 description: parsed_file.description,
                 config_file: Some(agent_file.to_path_buf()),
                 nickname_candidates: parsed_file.nickname_candidates,
+                source,
             },
         );
     }
