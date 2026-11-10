@@ -1,3 +1,4 @@
+use crate::AgentRoleSource;
 use codex_config::config_toml::ConfigToml;
 use codex_utils_absolute_path::AbsolutePathBufGuard;
 use serde::Deserialize;
@@ -15,6 +16,9 @@ pub struct AgentRoleConfig {
     pub config_file: Option<PathBuf>,
     /// Candidate nicknames for agents spawned with this role.
     pub nickname_candidates: Option<Vec<String>>,
+    /// Where `config_file` was declared. A project's role file gets the same
+    /// denylist as the project's own config (D512, #1997).
+    pub source: AgentRoleSource,
 }
 
 #[derive(Deserialize, Debug, Clone, Default, PartialEq)]
