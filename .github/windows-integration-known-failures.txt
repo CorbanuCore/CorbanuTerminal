@@ -6,6 +6,7 @@
 # 42626867876 and failed in the other two; startup_prewarm failed in
 # 42626867876 and passed in 42634961756.
 # Format: <cargo package> <exact nextest test name> #<issue>
+# (a test at the top of its own binary, tests/<binary>.rs, has no module path)
 # Remove a line once its test passes on Windows; a line naming a test that no
 # longer exists fails .github/scripts/test_windows_integration_known_failures.py.
 
@@ -14,7 +15,7 @@ codex-core suite::client::provider_auth_command_refreshes_after_401 #1968
 codex-core suite::client::provider_auth_command_supplies_bearer_token #1968
 codex-core suite::git_enrichment::concurrent_turns_keep_distinct_worktree_and_repository_metadata #1968
 codex-core suite::git_enrichment::startup_prewarm_skips_git_enrichment_and_user_turn_observes_fresh_state #1968
-codex-core suite::windows_sandbox::windows_elevated_enforces_deny_read_and_protects_setup_marker #1968
+codex-core windows_elevated_enforces_deny_read_and_protects_setup_marker #1968
 
 codex-app-server suite::v2::named_session_account_backend::a_session_started_on_a_named_account_never_sends_the_default_login #1969
 codex-app-server suite::v2::named_session_account_backend::a_thread_the_user_left_does_not_count #1969
