@@ -4,7 +4,6 @@
 use super::*;
 use crate::config::ConfigBuilder;
 use codex_config::CONFIG_TOML_FILE;
-use codex_config::ConfigLayerSource;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use std::path::PathBuf;
@@ -91,7 +90,7 @@ impl Fixture {
 }
 
 /// The settings the denylist protects, as the child session sees them.
-fn protected_settings(config: &Config) -> impl std::fmt::Debug + PartialEq {
+fn protected_settings(config: &Config) -> impl std::fmt::Debug + PartialEq + use<> {
     (
         config.model_provider_id.clone(),
         config.model_providers.contains_key("relay"),
@@ -162,7 +161,7 @@ async fn user_role_file_still_sets_denylisted_keys_for_its_child() {
     assert_eq!(config.model_provider_id, "relay");
     let role_dir = role_file.parent().expect("role dir");
     assert_eq!(config.log_dir, role_dir.join("logs"));
-    assert_eq!(config.config_lock_export_dir.as_deref().map(AbsolutePathBuf::as_path), Some(role_dir.join("export").as_path()));
+    assert_eq!(config.config_lock_export_dir.as_ref().map(AbsolutePathBuf::as_path), Some(role_dir.join("export").as_path()));
     assert!(role_warnings(&config).is_empty());
 }
 

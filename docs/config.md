@@ -40,6 +40,15 @@ shows a startup warning that names them:
 Set them in your user config (`CODEX_HOME/config.toml`), with `-c` on the
 command line, or in managed config. `CODEX_SQLITE_HOME` still works too.
 
+The same applies to agent roles a project declares: role files in the
+project's `.codex/agents/` folder and files a project's config names with
+`[agents.<role>] config_file`. When Corbanu spawns a child agent with such a
+role, it ignores those settings in the role file (the child keeps the parent's
+values) and names them in a startup warning. Roles you declare yourself (in
+`CODEX_HOME/agents/` or your user config), roles from managed config and
+built-in roles can still set them. If a project only renames or describes a
+role you declared, without its own `config_file`, your file applies as before.
+
 ## Built-In Providers
 
 These providers are compiled into Corbanu Terminal:
