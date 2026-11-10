@@ -4060,8 +4060,9 @@ impl Session {
     }
 
     /// Whether `captured` (a running turn) was admitted under the execution
-    /// authority `current` grants now: approval policy, permission profile,
-    /// approvals reviewer and Windows sandbox level (see [`TurnAuthority`]).
+    /// authority `current` grants now: approval policy, permission profile with
+    /// the primary environment's roots, approvals reviewer, and Windows sandbox
+    /// level and backend (see [`TurnAuthority`]).
     pub(super) fn authorization_matches(
         current: &SessionConfiguration,
         captured: &TurnContext,

@@ -1307,10 +1307,14 @@ impl TurnContext {
 
 /// The execution authority a turn was admitted under: its approval policy, its permission
 /// profile with project roots expanded from the primary environment (so moving the working
-/// folder or workspace roots changes it, as on `main`), approvals reviewer, and Windows sandbox
-/// level and backend. Input that arrives under other authority (a steer, agent mail) does not
-/// join the running turn; it waits for a turn admitted under the current one. Both sides are read from the session configuration the same way, so user-layer
-/// reloads, model settings and config provenance cannot affect the comparison.
+/// folder or workspace roots changes it, as on `main`), approvals reviewer, and Windows
+/// sandbox level and backend. Input that arrives under other authority (a steer, agent mail)
+/// does not join the running turn; it waits for a turn admitted under the current one. Both
+/// sides are read from the session configuration the same way, so user-layer reloads, model
+/// settings and config provenance cannot affect the comparison.
+///
+/// A snapshot taken when the turn is built: upstream's live turn-settings and environment
+/// updates (`step_activation.rs`, `environment.rs`) do not refresh it yet (open security rows).
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TurnAuthority {
     approval_policy: AskForApproval,
