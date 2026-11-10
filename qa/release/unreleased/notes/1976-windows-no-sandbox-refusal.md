@@ -6,8 +6,8 @@
   used to run there with no sandbox and could read the files these levels
   protect. Now each is refused, and so is typing into a running command,
   with a message naming the level and how to set the default sandbox up
-  (`/permissions`, a mode that uses the sandbox, "Set up default sandbox",
-  then `/new`); a notice says so when the session starts. The session still
+  (`/permissions`, a mode that uses the sandbox, "Set up default sandbox");
+  a notice says so when the session starts. The session still
   starts, so you can set the sandbox up or switch to Permissive. This applies
   however the level was set: any config layer, a level saved with
   `/security`, or Aggressive enforced because the saved state could not be

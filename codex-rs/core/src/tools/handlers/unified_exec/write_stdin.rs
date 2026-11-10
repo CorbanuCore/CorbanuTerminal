@@ -93,12 +93,19 @@ impl WriteStdinHandler {
         let args: WriteStdinArgs = parse_arguments_for_tool("write_stdin", &arguments)?;
         // #1976 (D491): nothing is typed into a process without the Windows
         // sandbox under Moderate or Aggressive (one started before the level
-        // rose); polling and interrupts still work.
-        if !args.chars.is_empty()
-            && !is_interrupt(&args.chars)
-            && let Some(refusal) = crate::security::windows_unsandboxed::session_command_refusal(
+        // rose); polling and interrupts still work. #2000: a process started
+        // before the session's Windows sandbox was set up still runs without
+        // it, so typing into it is judged by the sandbox it started with.
+        let typing = !args.chars.is_empty() && !is_interrupt(&args.chars);
+        if typing
+            && let Some(refusal) = crate::security::windows_unsandboxed::session_typing_refusal(
                 &session,
                 turn.windows_sandbox_level,
+                session
+                    .services
+                    .unified_exec_manager
+                    .process_windows_sandbox_level(args.session_id)
+                    .await,
             )
         {
             crate::security::inspection::record_refusal(
