@@ -7,6 +7,10 @@
   the legacy `initialize`, so a late discover reply can no longer fail startup.
   The second start gets the startup timeout of its own, so a server that never
   answers `server/discover` can take up to about twice `startup_timeout_sec`.
+  That timeout also covers stopping the first process and starting the second,
+  so a remote executor that never finishes either can no longer hang startup
+  (#2019). On a remote executor Corbanu doesn't wait for the first process to
+  exit, so the old and new server processes can briefly overlap.
 - **New `discover_timeout_sec` setting** for these servers: how long Corbanu
   waits for `server/discover` before it falls back. It defaults to, and is
   capped at, `startup_timeout_sec`, and is ignored for servers that haven't

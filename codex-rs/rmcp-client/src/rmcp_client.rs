@@ -1174,8 +1174,10 @@ impl RmcpClient {
     /// `startup_timeout`. The discover wait is `discover_timeout_sec` when set, else the
     /// startup timeout. A server that rejects discover as legacy, or does not answer in time,
     /// is stopped and gets a legacy `initialize` on a fresh transport, so no discover reply can
-    /// arrive during that handshake. A server that never answers discover can therefore take
-    /// up to about twice the startup timeout to start.
+    /// arrive during that handshake. The second phase covers stopping the first server,
+    /// starting the second one and its `initialize`, so an executor that never finishes a
+    /// terminate or a spawn cannot hang startup. A server that never answers discover can
+    /// therefore take up to about twice the startup timeout to start.
     async fn discover_or_initialize_fresh(
         &self,
         pending_transport: PendingTransport,
@@ -1205,42 +1207,50 @@ impl RmcpClient {
             Err(wait) => LegacyFallback::NoDiscoverReply { wait },
         };
 
-        // Stop the first server process, and give it a moment to exit, before starting the
-        // one that gets `initialize`, so the two never hold the same lock file or port.
-        let previous_process = self.stdio_process.lock().await.take();
-        if let Some(previous) = previous_process {
-            if let Err(error) = previous.terminate().await {
-                warn!("failed to terminate MCP stdio server process after discover: {error}");
-            }
-            previous.wait_for_exit(TERMINATED_SERVER_EXIT_WAIT).await;
-        }
-        // A `shutdown()` that already ran must not leave a fallback server behind.
-        self.ensure_not_shut_down().await?;
-        let fresh_transport = Self::create_pending_transport(&self.transport_recipe)
-            .await
-            .context("failed to start the MCP server again for the legacy initialize fallback")?;
-        if let PendingTransport::Stdio { transport } = &fresh_transport {
-            let process = transport.process_handle();
-            *self.stdio_process.lock().await = Some(process.clone());
-            // `shutdown()` closes the state before it reads the process handle, so it either
-            // terminates this process itself or this check sees the client closed.
-            if let Err(error) = self.ensure_not_shut_down().await {
-                if let Err(terminate_error) = process.terminate().await {
-                    warn!("failed to terminate MCP stdio server process: {terminate_error}");
+        // The restart runs inside the fallback's startup timeout: on the remote executor,
+        // terminate and spawn are executor calls that might never complete (#2019).
+        let restart_and_initialize = async {
+            // Stop the first server process, and give it a moment to exit, before starting
+            // the one that gets `initialize`, so the two never hold the same lock file or
+            // port. On the remote executor `wait_for_exit` returns at once, so the two
+            // processes can briefly overlap there.
+            let previous_process = self.stdio_process.lock().await.take();
+            if let Some(previous) = previous_process {
+                if let Err(error) = previous.terminate().await {
+                    warn!("failed to terminate MCP stdio server process after discover: {error}");
                 }
-                return Err(error);
+                previous.wait_for_exit(TERMINATED_SERVER_EXIT_WAIT).await;
             }
-        }
-        // Match `Auto`: its legacy `initialize` uses 2025-06-18 whatever the caller passed.
-        let (transport, _) = Self::serve_pending_transport(
-            fresh_transport,
-            client_service.with_protocol_version(LEGACY_FALLBACK_PROTOCOL_VERSION),
-            ClientLifecycleMode::Initialize,
-        );
-        let transport = transport.map(|result| result.map_err(|error| fallback.into_error(error)));
+            // A `shutdown()` that already ran must not leave a fallback server behind.
+            self.ensure_not_shut_down().await?;
+            let fresh_transport = Self::create_pending_transport(&self.transport_recipe)
+                .await
+                .context(
+                    "failed to start the MCP server again for the legacy initialize fallback",
+                )?;
+            if let PendingTransport::Stdio { transport } = &fresh_transport {
+                let process = transport.process_handle();
+                *self.stdio_process.lock().await = Some(process.clone());
+                // `shutdown()` closes the state before it reads the process handle, so it
+                // either terminates this process itself or this check sees the client closed.
+                if let Err(error) = self.ensure_not_shut_down().await {
+                    if let Err(terminate_error) = process.terminate().await {
+                        warn!("failed to terminate MCP stdio server process: {terminate_error}");
+                    }
+                    return Err(error);
+                }
+            }
+            // Match `Auto`: its legacy `initialize` uses 2025-06-18 whatever the caller passed.
+            let (transport, _) = Self::serve_pending_transport(
+                fresh_transport,
+                client_service.with_protocol_version(LEGACY_FALLBACK_PROTOCOL_VERSION),
+                ClientLifecycleMode::Initialize,
+            );
+            transport.await.map_err(|error| fallback.into_error(error))
+        };
         handshake_within(
             startup_timeout,
-            transport,
+            restart_and_initialize,
             " during the legacy initialize fallback",
         )
         .await
