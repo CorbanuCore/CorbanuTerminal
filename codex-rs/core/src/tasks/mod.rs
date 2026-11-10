@@ -54,7 +54,6 @@ use codex_otel::TURN_TOOL_CALL_METRIC;
 use codex_otel::TURN_UNIFIED_EXEC_RUNNING_PROCESSES_METRIC;
 use codex_otel::auth_storage::AuthStorageOriginator;
 use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::CodexErrorInfo;
 use codex_protocol::protocol::ErrorEvent;
 use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
@@ -1311,6 +1310,8 @@ impl Session {
         self: &Arc<Self>,
         follow_up_input: Vec<(TurnInput, Option<serde_json::Value>)>,
     ) {
+        // User input waiting for admission's answer, settled in submission order.
+        let mut awaiting_admission = Vec::new();
         for (input, final_output_json_schema) in follow_up_input {
             let submitted = match input.clone() {
                 TurnInput::UserInput {
@@ -1335,19 +1336,11 @@ impl Session {
                         mode: TurnInputMode::StartOrSteer,
                         reply,
                     };
-                    self.submit_internal_follow_up(op).await.map(|()| {
-                        // The input left this turn's queue: a refusal must not lose it.
-                        let session = Arc::clone(self);
-                        tokio::spawn(async move {
-                            session
-                                .settle_follow_up_input(
-                                    reply_rx.await,
-                                    input,
-                                    final_output_json_schema,
-                                )
-                                .await;
-                        });
-                    })
+                    let submitted = self.submit_internal_follow_up(op).await;
+                    if submitted.is_ok() {
+                        awaiting_admission.push((reply_rx, input, final_output_json_schema));
+                    }
+                    submitted
                 }
                 TurnInput::InterAgentCommunication(communication) => {
                     let delivery = communication.delivery.clone();
@@ -1363,20 +1356,41 @@ impl Session {
                     self.submit_internal_follow_up_with_delivery(op, delivery)
                         .await
                 }
-                TurnInput::ResponseItem(_) | TurnInput::FunctionCallOutput(_) => continue,
+                // The turn's own items (tool outputs, injected context) do not start work.
+                TurnInput::ResponseItem(_) | TurnInput::FunctionCallOutput(_) => {
+                    debug!("leftover non-user input after a finished turn is not submitted again");
+                    continue;
+                }
             };
             if let Err(err) = submitted {
                 warn!(%err, "failed to submit follow-up input after task finished");
             }
         }
+        if awaiting_admission.is_empty() {
+            return;
+        }
+        // The input left this turn's queue: a refusal must not lose it.
+        let session = Arc::clone(self);
+        tokio::spawn(async move {
+            for (reply_rx, input, final_output_json_schema) in awaiting_admission {
+                session
+                    .settle_follow_up_input(reply_rx.await, input, final_output_json_schema)
+                    .await;
+            }
+        });
     }
 
     /// Follow-up user input that admission did not take, typically because another turn is
     /// running that it may not join (D529 (a): another authority, a non-steerable turn, another
     /// output schema): it waits in that turn's deferred input and is admitted again when the
-    /// turn ends. Anything else is reported, as for client input.
+    /// turn ends; with no turn running any more it is submitted again. Anything else is
+    /// reported, as for client input.
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "deferring into the running turn must not race its end"
+    )]
     async fn settle_follow_up_input(
-        &self,
+        self: &Arc<Self>,
         reply: std::result::Result<
             CodexResult<TurnInputSubmission>,
             tokio::sync::oneshot::error::RecvError,
@@ -1390,7 +1404,7 @@ impl Session {
             }
             Ok(Ok(TurnInputSubmission::NotSubmitted { reason })) => reason,
             Ok(Err(err)) => {
-                self.report_unsubmitted_follow_up(err.to_string()).await;
+                self.report_unsubmitted_follow_up(&err.to_string()).await;
                 return;
             }
             // The session ended before admission answered.
@@ -1402,33 +1416,40 @@ impl Session {
                 | NotSubmittedReason::ActiveTurnNotSteerable { .. }
                 | NotSubmittedReason::ActiveTurnOutputSchemaMismatch
         ) {
-            let turn_state = self
-                .active_turn
-                .lock()
-                .await
-                .as_ref()
-                .map(|active_turn| Arc::clone(&active_turn.turn_state));
-            if let Some(turn_state) = turn_state {
-                self.input_queue
-                    .defer_input_for_turn_state(&turn_state, vec![input], final_output_json_schema)
-                    .await;
-                return;
+            {
+                // Under the active-turn lock, as every end of a turn takes its input under it:
+                // a turn that is ending no longer has a task and never reads its queue again.
+                let active = self.active_turn.lock().await;
+                if let Some(active_turn) = active.as_ref().filter(|turn| turn.task.is_some()) {
+                    active_turn
+                        .turn_state
+                        .lock()
+                        .await
+                        .pending_input
+                        .defer_with_schema(input, final_output_json_schema);
+                    return;
+                }
             }
+            // The turn that refused it has ended: admission takes it now.
+            let resubmit: BoxFuture<'_, ()> =
+                Box::pin(self.submit_follow_up_input(vec![(input, final_output_json_schema)]));
+            resubmit.await;
+            return;
         }
-        self.report_unsubmitted_follow_up(format!("{reason:?}"))
+        self.report_unsubmitted_follow_up(&not_submitted_reason_text(&reason))
             .await;
     }
 
-    async fn report_unsubmitted_follow_up(&self, reason: String) {
+    async fn report_unsubmitted_follow_up(&self, reason: &str) {
         warn!(%reason, "follow-up input after a finished turn was not submitted");
+        // A warning, not an error: an error event would end whatever turn runs now.
         self.send_event_raw(Event {
             id: uuid::Uuid::new_v4().to_string(),
-            msg: EventMsg::Error(ErrorEvent {
-                misalignment: None,
+            msg: EventMsg::Warning(WarningEvent {
                 message: format!(
-                    "A message sent while the previous turn was ending was not submitted ({reason}); please send it again."
+                    "Input that arrived while a turn was running could not be sent afterwards: \
+                     {reason}. Please send it again."
                 ),
-                codex_error_info: Some(CodexErrorInfo::BadRequest),
             }),
         })
         .await;
@@ -1609,6 +1630,31 @@ impl Session {
         // thread writers may not flush it without another explicit barrier.
         if let Err(err) = self.flush_rollout().await {
             warn!("failed to flush rollout after emitting terminal turn event: {err}");
+        }
+    }
+}
+
+/// Plain-language text for a refused follow-up (never a debug dump).
+fn not_submitted_reason_text(reason: &NotSubmittedReason) -> String {
+    match reason {
+        NotSubmittedReason::ServerDraining => "the server is shutting down".to_string(),
+        NotSubmittedReason::PlanMode => "plan mode does not take it now".to_string(),
+        NotSubmittedReason::EmptyInput => "it was empty".to_string(),
+        NotSubmittedReason::AuthorizationChanged => {
+            "the running turn's permissions changed".to_string()
+        }
+        NotSubmittedReason::ActiveTurnNotSteerable { .. } => {
+            "the running turn does not take new input".to_string()
+        }
+        NotSubmittedReason::ActiveTurnOutputSchemaMismatch => {
+            "the running turn expects another output format".to_string()
+        }
+        NotSubmittedReason::Superseded
+        | NotSubmittedReason::NotIdle
+        | NotSubmittedReason::PendingTriggerTurn
+        | NotSubmittedReason::NoActiveTurn
+        | NotSubmittedReason::ExpectedTurnMismatch { .. } => {
+            "another request took its place".to_string()
         }
     }
 }

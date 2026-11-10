@@ -3986,7 +3986,8 @@ async fn try_run_sampling_request(
     let effort = sess
         .reasoning_effort_for_request(&step_context.settings, super::RequestEffortUsage::Sampling)
         .await;
-    // The lease comes first: a throttled request runs no model-request hook.
+    // The lease comes first, so a throttled request runs no model-request hook; a slow
+    // synchronous hook then holds the lease while it runs.
     let provider_request_throttle = acquire_provider_request_lease(
         sess.as_ref(),
         turn_context.as_ref(),
