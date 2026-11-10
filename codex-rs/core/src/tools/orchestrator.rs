@@ -287,9 +287,13 @@ impl ToolOrchestrator {
         // Windows sandbox, no agent command runs (read-only ones included),
         // before anyone is asked; checked each round, so a level raised while
         // a person was asked counts too. Judged on the sandbox this run's
-        // environment launches with. D522 (a), provisional: upstream's MXC
-        // backend counts as no sandbox, however it was selected.
-        let unsandboxed_level = if windows_sandbox_type == SandboxType::WindowsMxc {
+        // environment launches with, and (as on main, and as file tools are)
+        // on the turn's level: either without a sandbox refuses. D522 (a),
+        // provisional: upstream's MXC backend counts as no sandbox, however
+        // it was selected.
+        let unsandboxed_level = if windows_sandbox_type == SandboxType::WindowsMxc
+            || turn_ctx.windows_sandbox_level == WindowsSandboxLevel::Disabled
+        {
             WindowsSandboxLevel::Disabled
         } else {
             sandbox_config.windows_sandbox_level
