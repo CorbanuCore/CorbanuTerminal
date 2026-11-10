@@ -9,7 +9,7 @@
   ci_mode.py codeowners apply|revert|check|drift <worktree> [@owner]
                                  sync-branch CODEOWNERS block for the named security paths, the
                                  dependency-policy files and main's D318 paths (reverted after main
-                                 merge #3, as the last sync-branch commit before the final PR); drift
+                                 merge #4, as the last sync-branch commit before the final PR); drift
                                  exits 1 if origin/main's D318 block names a pattern the block lacks,
                                  the block isn't last, or (given @owner) another owner appears
 

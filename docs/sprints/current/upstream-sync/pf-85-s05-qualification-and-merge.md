@@ -11,7 +11,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-85-S03, PF-85-S04"
 created: 2026-11-07
-updated: 2026-11-07
+updated: 2026-11-10
 ---
 
 # PF-85-S05 — Qualification and merge to main
@@ -46,7 +46,7 @@ updated: 2026-11-07
 
 ## Remaining
 
-- [ ] Main merge #3; revert the CODEOWNERS block; full run; SG1 re-run; SG3.
+- [ ] Main merge #4 (the last one); revert the CODEOWNERS block; full run; SG1 re-run; SG3.
 - [ ] Rollback: synced-build vault files and the upgraded state DB open in the last released binary (D319; state-DB upgrade test from S1c).
 - [ ] Final review (up to 8 rounds, D307); merge; 48-hour merge hold on `main` (D306) and canary.
 - [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.

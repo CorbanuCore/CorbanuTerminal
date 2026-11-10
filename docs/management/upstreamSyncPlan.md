@@ -344,9 +344,10 @@ reels, code-blind functional runs).
   functional-test model. Green: the core-security lane (`rust-ci-core-security.yml` dispatch on Linux and macOS), `security-platform-contract`,
   `security-ingress-contract`, `credential-boundary-canary`, `windows-security-probes` (dispatch), Linux sandbox tests
   on glitch, seatbelt tests on macOS, Windows sandbox tests on native Windows CI and on the Windows PC.
-- **Gate before SG2:** the `core/src/exec.rs` re-apply row (main merge #2) is done and tested. D446's network-folder
-  refusal (and D398) live there; until it is re-applied, `sandboxing`'s D446 check has no caller on the sync branch,
-  so the refusal is not active. The S3 PR doesn't go to SG2 while that row is open.
+- **Gate before SG2:** the open `core/src/exec.rs` rows (the `main-merge` row from main merge #1, #1880, and the
+  `re-apply` row from main merge #2) are done and tested. D446's network-folder refusal (and D398) live there; until
+  they are re-applied, `sandboxing`'s D446 check (`refuse_network_working_folder`) has no caller on the sync branch,
+  so the refusal is not active. The S3 PR doesn't go to SG2 while either row is open.
 - **Security gate SG2:** Travis's sign-off on that PR, recorded against its exact head SHA. It doesn't merge into the
   sync branch before then, and S5 can't start without it.
 - **Contributor role:** tests, reviews and reproduction only; implementation stays with maintainers.
