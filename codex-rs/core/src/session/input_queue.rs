@@ -393,33 +393,15 @@ impl InputQueue {
         input
     }
 
-    #[cfg(test)]
-    pub(crate) async fn get_pending_input(
-        &self,
-        active_turn: &Mutex<Option<ActiveTurn>>,
-    ) -> (Vec<TurnInput>, Option<String>) {
-        self.get_pending_input_inner(active_turn, /*allow_untracked_mailbox*/ true)
-            .await
-    }
-
     /// Takes input for an already-running task. A task detached by any stop path must not drain
     /// mailbox mail: it no longer has a turn state that can record its outcome.
-    pub(crate) async fn get_pending_input_for_running_task(
-        &self,
-        active_turn: &Mutex<Option<ActiveTurn>>,
-    ) -> (Vec<TurnInput>, Option<String>) {
-        self.get_pending_input_inner(active_turn, /*allow_untracked_mailbox*/ false)
-            .await
-    }
-
     #[allow(
         clippy::await_holding_invalid_type,
         reason = "taking mail off the queue and noting it in the turn state must remain atomic"
     )]
-    async fn get_pending_input_inner(
+    pub(crate) async fn get_pending_input_for_running_task(
         &self,
         active_turn: &Mutex<Option<ActiveTurn>>,
-        allow_untracked_mailbox: bool,
     ) -> (Vec<TurnInput>, Option<String>) {
         let (pending_input, accepts_mailbox_delivery, turn_id, turn_state) =
             Self::take_turn_pending_input(active_turn).await;
@@ -436,11 +418,7 @@ impl InputQueue {
                 turn_state.track_taken_mailbox_messages(&mailbox_items);
                 (mailbox_items, parent_turn_id)
             }
-            // Test-only: older tests poll an empty slot to inspect queued mail. Executing tasks
-            // use the fail-closed path above.
-            None if allow_untracked_mailbox => {
-                self.drain_mailbox_input_for_turn(turn_id.as_deref()).await
-            }
+            // No turn state can record taking the mail, so it stays queued for the next turn.
             None => (Vec::new(), None),
         };
         if pending_input.is_empty() {
@@ -862,7 +840,9 @@ mod tests {
             .enqueue_mailbox_communication(mail.clone(), /*parent_turn_id*/ None)
             .await;
 
-        let (input, _) = input_queue.get_pending_input(&active_turn).await;
+        let (input, _) = input_queue
+            .get_pending_input_for_running_task(&active_turn)
+            .await;
 
         assert_eq!(input, vec![TurnInput::InterAgentCommunication(mail)]);
         let turn_state = Arc::clone(
@@ -905,7 +885,10 @@ mod tests {
         // A subsequently admitted turn receives the preserved item normally.
         let next_turn = Mutex::new(Some(ActiveTurn::default()));
         assert_eq!(
-            input_queue.get_pending_input(&next_turn).await.0,
+            input_queue
+                .get_pending_input_for_running_task(&next_turn)
+                .await
+                .0,
             vec![TurnInput::InterAgentCommunication(mail)]
         );
         assert!(!input_queue.has_pending_mailbox_items().await);

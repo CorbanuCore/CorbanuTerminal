@@ -5674,6 +5674,10 @@ mod stale_approval_tests;
 mod stale_poll_mail_tests;
 
 #[cfg(test)]
+#[path = "running_task_poll_tests.rs"]
+mod running_task_poll_tests;
+
+#[cfg(test)]
 #[path = "withdrawn_approval_tests.rs"]
 mod withdrawn_approval_tests;
 

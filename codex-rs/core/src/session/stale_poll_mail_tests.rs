@@ -1,4 +1,4 @@
-//! #2010 reproduction (rev-2033): every stop path removes the active-turn slot before it waits
+//! #2010 reproduction: every stop path removes the active-turn slot before it waits
 //! for the stopped task. A task that reaches its next input poll in that window (as `run_turn`
 //! does at the top of its loop) must not take mailbox mail it can no longer note; the mail must
 //! still be queued once the stop has finished.
