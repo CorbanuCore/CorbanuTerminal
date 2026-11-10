@@ -1723,7 +1723,10 @@ fn follow_up_preview(input: &TurnInput) -> String {
         .join(" ");
     let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if text.chars().count() > PREVIEW_CHARS {
-        format!("{}...", text.chars().take(PREVIEW_CHARS).collect::<String>())
+        format!(
+            "{}...",
+            text.chars().take(PREVIEW_CHARS).collect::<String>()
+        )
     } else {
         text
     }
