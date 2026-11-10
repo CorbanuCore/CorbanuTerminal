@@ -8543,6 +8543,7 @@ async fn issue_2000_a_role_rebuilt_child_keeps_the_raised_windows_sandbox() {
             description: Some("Role that sets its own sandbox".to_string()),
             config_file: Some(role_config_path),
             nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
         },
     );
     let starting = WindowsSandboxLevel::from_config(&config);
