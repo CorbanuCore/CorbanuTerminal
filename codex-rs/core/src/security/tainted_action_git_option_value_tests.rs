@@ -131,9 +131,17 @@ fn issue_1975_literal_brace_values_stay_quiet() {
         r"git pull -o \{\} -- origin",
         r#"git pull -o {""} -- origin"#,
         "{ git fetch origin; }",
-        // Review round 1: the old redirection reading split at `{}` and
-        // mistook data passed to echo for a workspace program.
-        "echo {} >'a b' ./x",
     ];
     assert_eq!(wrong(&lines, /*expected*/ None), Vec::<String>::new());
+}
+
+#[test]
+fn issue_1975_full_main_floor_preserves_existing_false_positive() {
+    // Review round 3: full main includes new redirections with old braces.
+    // That reading mistakes echo's argument for a workspace program. Keep
+    // its prompt too; the previous quiet assertion weakened the main floor.
+    assert_eq!(
+        script("echo {} >'a b' ./x"),
+        Some(ProtectedActionKind::UnseenCode)
+    );
 }

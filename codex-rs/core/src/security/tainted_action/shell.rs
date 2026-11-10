@@ -122,8 +122,10 @@ pub(super) struct Lexed {
     /// quoted or escaped redirection file holding a blank as one word,
     /// `&>` as one redirection, a redirection's words moved last, a second
     /// `<` or `<<<`, a substitution with its stdout redirected left
-    /// unspliced, or literal braces retained (see `simple_commands_read`).
-    pub(super) read_newly: bool,
+    /// unspliced (see `simple_commands_read`).
+    pub(super) redirections_read_newly: bool,
+    /// #1975: literal braces retained instead of discarded or read as groups.
+    pub(super) braces_read_newly: bool,
 }
 
 /// How deeply substitutions (`$(`, `<(`, `>(`, backticks) are read inside
@@ -145,27 +147,33 @@ pub(super) fn basename(word: &str) -> &str {
 /// `holds_git_name`, arithmetic's) keep main's reading; only the
 /// classifier's own lexing reads newly (`simple_commands_read`).
 pub(super) fn simple_commands(command: &[String]) -> Lexed {
-    simple_commands_read(command, /*main_reading*/ true)
+    simple_commands_read(command, Reading::Legacy)
 }
 
-/// [`simple_commands`], with `main_reading`: as main reads redirections and braces.
-/// #1772 review 1: the lexer cannot tell whether the `>` or `<` before a
-/// quote was inside quotes, a comment, a `case` pattern or a here-document
-/// (`echo '>"'; ./x; echo '"'`), and `&>` splits under `sh` and `dash`
-/// (`true &>f ./x` runs `./x`). So a quoted or escaped redirection file is
-/// one word and `&>` one redirection only when `main_reading` is off; the
-/// classifier then also judges the action with it on and keeps the
-/// stricter verdict (`Lexed::read_newly`).
-/// #1975: braces outside command-word position are literal in the new
-/// reading. The main reading's verdict is still a floor, including for
-/// zsh's less restrictive group closings and xargs replacement words.
-/// #1772 review 2: with `main_reading` on, nothing is read otherwise than on main: no word moves
-/// (`SimpleCommand::redirections_last`), only the last `<` and `<<<` are
-/// kept, and a substitution with its stdout redirected is spliced.
-pub(super) fn simple_commands_read(command: &[String], main_reading: bool) -> Lexed {
+/// Which lexer changes are enabled for one independent judgment. Pre-#1975
+/// main used both `Legacy` and `Redirections`; retaining only `Legacy` is
+/// insufficient when a brace group contains a redirected `cd`.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub(super) enum Reading {
+    /// Before #1772: original redirections and braces; also used by helpers.
+    Legacy,
+    /// #1772 redirections, with the original brace handling.
+    Redirections,
+    /// #1772 redirections and #1975 literal brace arguments.
+    #[default]
+    LiteralBraces,
+}
+
+/// [`simple_commands`] under one reading. The classifier combines the
+/// strongest finding from the changed reading and both pre-#1975 readings.
+/// Redirection changes are enabled except in `Legacy`; literal brace
+/// handling is enabled only in `LiteralBraces`. Helper lexers stay `Legacy`.
+/// Each flag records whether its change affected the lexed text, so an
+/// equivalent reading need not be judged again.
+pub(super) fn simple_commands_read(command: &[String], reading: Reading) -> Lexed {
     let mut lexer = Lexer {
         joint: Some(Joint::Start),
-        main_reading,
+        reading,
         ..Lexer::default()
     };
     let mut incomplete = false;
@@ -197,12 +205,13 @@ pub(super) fn simple_commands_read(command: &[String], main_reading: bool) -> Le
     }
     let too_deep = lexer.too_deep;
     // #1772 review 2: after `finish`, which reorders the last command.
-    let (commands, read_newly) = lexer.finish();
+    let (commands, redirections_read_newly, braces_read_newly) = lexer.finish();
     Lexed {
         commands,
         incomplete,
         too_deep,
-        read_newly,
+        redirections_read_newly,
+        braces_read_newly,
     }
 }
 
@@ -677,11 +686,12 @@ struct Lexer {
     real_open: usize,
     /// D194: the operators since the last word (`None`: a word).
     joint: Option<Joint>,
-    /// #1772/#1975: redirections and braces are read as on main
-    /// (`simple_commands_read`).
-    main_reading: bool,
-    /// #1772 review 1: see `Lexed::read_newly`.
-    read_newly: bool,
+    /// Independent redirection/brace reading for this judgment.
+    reading: Reading,
+    /// #1772 review 1: see `Lexed::redirections_read_newly`.
+    redirections_read_newly: bool,
+    /// #1975: see `Lexed::braces_read_newly`.
+    braces_read_newly: bool,
 }
 
 impl Lexer {
@@ -705,18 +715,18 @@ impl Lexer {
             let clobber = std::mem::take(&mut self.clobber) && redirect == Redirect::Stdout;
             match redirect {
                 // #1772 review 2: main keeps only the last one.
-                Redirect::Stdin if self.main_reading => {
+                Redirect::Stdin if self.reading == Reading::Legacy => {
                     self.current.stdin_from = index.into_iter().collect()
                 }
-                Redirect::HereString if self.main_reading => {
+                Redirect::HereString if self.reading == Reading::Legacy => {
                     self.current.here_string = index.into_iter().collect();
                 }
                 Redirect::Stdin => {
-                    self.read_newly |= !self.current.stdin_from.is_empty();
+                    self.redirections_read_newly |= !self.current.stdin_from.is_empty();
                     self.current.stdin_from.extend(index);
                 }
                 Redirect::HereString => {
-                    self.read_newly |= !self.current.here_string.is_empty();
+                    self.redirections_read_newly |= !self.current.here_string.is_empty();
                     self.current.here_string.extend(index);
                 }
                 Redirect::Stdout => self.current.writes_to.extend(index),
@@ -809,8 +819,8 @@ impl Lexer {
         let mut finished = std::mem::replace(&mut self.current, next);
         // #1772 review 2: main's reading moves no word (`>/dev/null done`
         // keeps bash's reading: `done` is no reserved word there).
-        if !self.main_reading {
-            self.read_newly |= finished.redirections_last();
+        if self.reading != Reading::Legacy {
+            self.redirections_read_newly |= finished.redirections_last();
         }
         // A compound command fed by a pipe feeds every command inside it.
         let first = finished.words.first().map(|word| word.to_lowercase());
@@ -949,8 +959,8 @@ impl Lexer {
             _ if open.output || open.process => None,
             // #1772 review 3: `$(>&2 echo x)`, `$(echo x >log)` print
             // nothing here.
-            [only] if !self.main_reading && self.done[*only].stdout_redirected => {
-                self.read_newly = true;
+            [only] if self.reading != Reading::Legacy && self.done[*only].stdout_redirected => {
+                self.redirections_read_newly = true;
                 None
             }
             [only] => substitution_output(&self.done[*only].words),
@@ -995,15 +1005,19 @@ impl Lexer {
         }
     }
 
-    /// The commands, and whether any text was read newly
-    /// (`Lexed::read_newly`).
-    fn finish(mut self) -> (Vec<SimpleCommand>, bool) {
+    /// The commands and independent redirection/brace change flags,
+    /// collected after finishing the last command and its substitutions.
+    fn finish(mut self) -> (Vec<SimpleCommand>, bool, bool) {
         while !self.open.is_empty() {
             work::step();
             self.close_substitution(/*arithmetic_close*/ false);
         }
         self.finish_current();
-        (self.done, self.read_newly)
+        (
+            self.done,
+            self.redirections_read_newly,
+            self.braces_read_newly,
+        )
     }
 
     fn arg(&mut self, arg: &str) {
@@ -1072,10 +1086,10 @@ impl Lexer {
                 // #1772 item 2: an escaped space in a redirection's file
                 // (`>a\ b ./x`) is part of the file name.
                 '\\' if self.redirect != Redirect::None
-                    && !self.main_reading
+                    && self.reading != Reading::Legacy
                     && next.is_some_and(char::is_whitespace) =>
                 {
-                    self.read_newly = true;
+                    self.redirections_read_newly = true;
                     self.current.escaped = true;
                     self.word.extend(next);
                     index += 2;
@@ -1087,7 +1101,7 @@ impl Lexer {
                 // escaped quote (`>\'a`), are read as before.
                 '\'' | '"'
                     if self.redirect != Redirect::None
-                        && !self.main_reading
+                        && self.reading != Reading::Legacy
                         && previous != Some('\\')
                         && !unclosed[usize::from(ch == '"')]
                         && read_as_before.is_none_or(|end| index > end) =>
@@ -1103,7 +1117,7 @@ impl Lexer {
                             continue;
                         }
                     };
-                    self.read_newly = true;
+                    self.redirections_read_newly = true;
                     for inner in &chars[index + 1..end] {
                         work::step();
                         if *inner == HIDDEN {
@@ -1133,17 +1147,22 @@ impl Lexer {
                 // remote. Keep the main reading for its separate judgment.
                 '{' if self.word.is_empty()
                     && next.is_none_or(char::is_whitespace)
-                    && (self.main_reading || self.current.words.is_empty()) =>
+                    && (self.reading != Reading::LiteralBraces
+                        || self.current.words.is_empty()) =>
                 {
                     self.open_bracket();
                 }
                 '}' if self.word.is_empty()
-                    && (self.main_reading || self.current.words.is_empty()) =>
+                    && (self.reading != Reading::LiteralBraces
+                        || self.current.words.is_empty()) =>
                 {
                     self.close_bracket();
                 }
-                '{' | '}' if !self.main_reading && (!parameter_brace || self.word.is_empty()) => {
-                    self.read_newly = true;
+                '{' | '}'
+                    if self.reading == Reading::LiteralBraces
+                        && (!parameter_brace || self.word.is_empty()) =>
+                {
+                    self.braces_read_newly = true;
                     self.word.push(ch);
                 }
                 '\\' => self.current.escaped = true,
@@ -1214,8 +1233,8 @@ impl Lexer {
                 // #1772 item 4: `&>` and `&>>` redirect stdout and stderr
                 // in bash and zsh; the `>` is read next. Not a command
                 // separator. `sh` and `dash` read `&` and `>` (review 2).
-                '&' if next == Some('>') && !self.main_reading => {
-                    self.read_newly = true;
+                '&' if next == Some('>') && self.reading != Reading::Legacy => {
+                    self.redirections_read_newly = true;
                     self.flush();
                 }
                 ';' | '&' | '\n' => {
