@@ -177,7 +177,7 @@ newer releases wait for the cadence.
   sync branch. Where `main`'s change to a path that still carries skeleton markers conflicts, the integrator keeps the
   sync side and adds a ledger row "re-apply `git diff <old-main>..<new-main> -- <path>`" for the path's owner; this
   avoids nested markers and keeps one owner per path. Where it merges cleanly, git places it in the ours side and the
-  path gets an open `main-merge` row so its owner keeps it (main merge #1, #1915). S5 entry requires every re-apply row done. New main changes to security paths (including the
+  path gets an open `main-merge` row so its owner keeps it (main merge #1, #1915; these rows are in `ledger-<tag>-main-merges.tsv` since main merge #2). S5 entry requires every re-apply row done. New main changes to security paths (including the
   P1 security hardening plan's work) get rows for the security owner.
 - **Final merge:** PR `sync/upstream-<tag>` → `main`, merged with `gh pr merge N --merge --match-head-commit <sha>`
   only when every check is green and SG2/SG3 are recorded. Before it, tag `main` as `pre-upstream-sync-<tag>`.
