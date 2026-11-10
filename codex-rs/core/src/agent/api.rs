@@ -168,10 +168,21 @@ pub trait AgentControl: Send + Sync {
     ) -> BoxFuture<'a, ()>;
 }
 
-impl dyn AgentControl {
-    /// Corbanu: the local backend behind this controller, if that is what it is.
+impl dyn AgentControl + '_ {
+    /// Corbanu: the local backend behind this controller, if that is what it is. Use only
+    /// where `None` is harmless (display, lookups); security and admission checks use
+    /// [`Self::local_or_unsupported`].
     pub(crate) fn local(&self) -> Option<&crate::agent::LocalAgentControl> {
         self.local_backend_any()?.downcast_ref()
+    }
+
+    /// Corbanu: the local backend, or an error so callers fail closed on any other backend.
+    pub(crate) fn local_or_unsupported(&self) -> Result<&crate::agent::LocalAgentControl> {
+        self.local().ok_or_else(|| {
+            codex_protocol::error::CodexErr::UnsupportedOperation(
+                "this agent operation needs Corbanu's local agent backend".to_string(),
+            )
+        })
     }
 }
 
