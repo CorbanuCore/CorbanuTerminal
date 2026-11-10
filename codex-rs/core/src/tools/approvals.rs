@@ -1139,7 +1139,7 @@ pub(super) enum DeclineRecord {
 pub(super) async fn resolve_tool_approval<Rq, Out, T>(
     tool: &mut T,
     req: &Rq,
-    mut ctx: ApprovalContext,
+    ctx: ApprovalContext,
     tool_ctx: &ToolCtx,
     fresh_human_authority: bool,
     decline_record: DeclineRecord,
@@ -1161,6 +1161,33 @@ where
             };
         }
     };
+    resolve_tool_action_approval::<Rq, Out, T>(
+        tool,
+        action,
+        ctx,
+        tool_ctx,
+        fresh_human_authority,
+        decline_record,
+        asked_again,
+    )
+    .await
+}
+
+/// [`resolve_tool_approval`] of an `action` the caller prepared from the
+/// runtime's request (a retry outside the sandbox reviews the authority it
+/// actually runs with).
+pub(super) async fn resolve_tool_action_approval<Rq, Out, T>(
+    tool: &mut T,
+    action: ApprovalAction,
+    mut ctx: ApprovalContext,
+    tool_ctx: &ToolCtx,
+    fresh_human_authority: bool,
+    decline_record: DeclineRecord,
+    asked_again: bool,
+) -> ApprovalResult
+where
+    T: ToolRuntime<Rq, Out>,
+{
     let what = approval_kind(&flat_tool_name(&tool_ctx.tool_name));
     let thread = tool_ctx.session.thread_id();
     // An interrupted wait is "declined by you" only when the person was
