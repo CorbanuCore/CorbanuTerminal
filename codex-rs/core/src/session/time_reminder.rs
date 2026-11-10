@@ -191,20 +191,11 @@ pub(super) async fn maybe_record_current_time_reminder(
 
     let response_item =
         ContextualUserFragment::into(crate::context::CurrentTimeReminder::new(current_time));
-<<<<<<< HEAD
     sess.record_conversation_items_from(
-        turn_context,
-        std::slice::from_ref(&response_item),
-        Some(crate::security::ingress::MessageOrigin::Host),
-||||||| 413492cd6c
-    sess.record_conversation_items(turn_context, std::slice::from_ref(&response_item))
-        .await;
-=======
-    sess.record_conversation_items(
         turn_context,
         turn_context.model_info(),
         std::slice::from_ref(&response_item),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        Some(crate::security::ingress::MessageOrigin::Host),
     )
     .await;
 

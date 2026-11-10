@@ -13,12 +13,8 @@ use codex_exec_server::EnvironmentConnectionState;
 use codex_exec_server::EnvironmentInfo;
 use codex_exec_server::EnvironmentManager;
 use codex_exec_server::ExecServerError;
-<<<<<<< HEAD
 use codex_exec_server::ExecutorFileSystem;
 use codex_exec_server::LOCAL_ENVIRONMENT_ID;
-||||||| 413492cd6c
-use codex_exec_server::ExecutorFileSystem;
-=======
 use codex_exec_server::SelectedCapabilityRootsStatus;
 use codex_protocol::capabilities::CapabilityRootLocation;
 use codex_protocol::capabilities::EnvironmentCapabilityRoots;
@@ -29,7 +25,6 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EnvironmentConfig;
 use codex_protocol::protocol::EnvironmentConfigState;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::protocol::EnvironmentConnectionEvent;
 use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
@@ -1346,7 +1341,6 @@ impl TurnEnvironmentSnapshot {
         self.turn_environments().next()
     }
 
-<<<<<<< HEAD
     /// True when this turn may run work on a remote executor: a ready remote
     /// environment, or a non-local environment that is still starting.
     pub(crate) fn may_run_remotely(&self) -> bool {
@@ -1355,8 +1349,8 @@ impl TurnEnvironmentSnapshot {
             || self
                 .starting()
                 .any(|environment| environment.selection.environment_id != LOCAL_ENVIRONMENT_ID)
-||||||| 413492cd6c
-=======
+    }
+
     /// Returns the first selection's executor paths, even when setup is not ready yet.
     pub(crate) fn primary_workspace_root_uris(&self) -> &[PathUri] {
         let selection = match self.environments.first() {
@@ -1376,7 +1370,6 @@ impl TurnEnvironmentSnapshot {
         self.primary()
             .map(TurnEnvironment::permission_profile_with_workspace_roots)
             .unwrap_or_else(fallback)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) fn local(&self) -> Option<&TurnEnvironment> {
@@ -1516,15 +1509,8 @@ mod tests {
 
     use crate::config::PermissionProfileSnapshot;
     use codex_exec_server::Environment;
-<<<<<<< HEAD
-    use codex_exec_server::ExecServerRuntimePaths;
-||||||| 413492cd6c
-    use codex_exec_server::ExecServerRuntimePaths;
-    use codex_exec_server::LOCAL_ENVIRONMENT_ID;
-=======
     use codex_exec_server::ExecServerRuntimeOptions;
     use codex_exec_server::LOCAL_ENVIRONMENT_ID;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     use codex_exec_server::REMOTE_ENVIRONMENT_ID;
     use codex_exec_server_test_support::environment_manager_without_environments;
     use codex_http_client::HttpClientFactory;

@@ -7,15 +7,9 @@ mod session;
 mod turn;
 mod turn_token_usage;
 
-<<<<<<< HEAD
-pub(crate) use crate::tools::ExecutedToolCallRecorder;
-pub(crate) use active_auth::ActiveAuthManager;
-||||||| 413492cd6c
-pub(crate) use crate::tools::ExecutedToolCallRecorder;
-=======
 pub(crate) use crate::tools::ExecutedToolCalls;
+pub(crate) use active_auth::ActiveAuthManager;
 pub(crate) use additional_context::AdditionalContextFormat;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub(crate) use additional_context::AdditionalContextStore;
 pub(crate) use auto_compact_window::AutoCompactWindowIds;
 pub(crate) use auto_compact_window::AutoCompactWindowSnapshot;

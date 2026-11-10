@@ -51,12 +51,8 @@ mod subagent_notification;
 mod subagent_turn_budget_finalization;
 mod token_budget_context;
 mod turn_aborted;
-<<<<<<< HEAD
 mod turn_completion_continuation;
-||||||| 413492cd6c
-=======
 mod unsupported_media;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod user_instructions;
 mod user_shell_command;
 mod user_verification_notice;
@@ -143,13 +139,9 @@ pub(crate) use token_budget_context::TokenBudgetContext;
 pub(crate) use token_budget_context::TokenBudgetRemainingContext;
 pub(crate) use token_budget_context::TokenBudgetReminder;
 pub(crate) use turn_aborted::TurnAborted;
-<<<<<<< HEAD
 pub(crate) use turn_completion_continuation::TurnCompletionContinuation;
-||||||| 413492cd6c
-=======
 pub(crate) use unsupported_media::UnsupportedMedia;
 pub use user_goal::UserGoalUpdate;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub(crate) use user_instructions::UserInstructions;
 pub(crate) use user_shell_command::UserShellCommand;
 pub(crate) use user_verification_notice::UserVerificationNotice;

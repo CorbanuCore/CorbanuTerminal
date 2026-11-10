@@ -15,15 +15,9 @@ use crate::elicitation::ElicitationService;
 use crate::environment_selection::ThreadEnvironments;
 use crate::exec_policy::ExecPolicyManager;
 use crate::mcp::McpManager;
-<<<<<<< HEAD
-use crate::state::ActiveAuthManager;
-use crate::tools::ExecutedToolCallRecorder;
-||||||| 413492cd6c
-use crate::tools::ExecutedToolCallRecorder;
-=======
 use crate::mcp_tool_exposure::McpHandlerCache;
+use crate::state::ActiveAuthManager;
 use crate::tools::ExecutedToolCalls;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::tools::code_mode::CodeModeService;
 use crate::tools::handlers::ToolSearchHandlerCache;
 use crate::tools::network_approval::NetworkApprovalService;
@@ -111,23 +105,14 @@ pub(crate) struct SessionServices {
     pub(crate) attestation_provider: Option<Arc<dyn AttestationProvider>>,
     pub(crate) time_provider: Arc<dyn TimeProvider>,
     /// Session-scoped model client shared across turns.
-<<<<<<< HEAD
     pub(crate) model_client: ArcSwap<ModelClient>,
-    pub(crate) executed_tool_calls: Option<Arc<ExecutedToolCallRecorder>>,
-||||||| 413492cd6c
-    pub(crate) model_client: ModelClient,
-    pub(crate) executed_tool_calls: Option<Arc<ExecutedToolCallRecorder>>,
-=======
-    pub(crate) model_client: ModelClient,
     pub(crate) executed_tool_calls: ExecutedToolCalls,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub(crate) code_mode_service: CodeModeService,
     pub(crate) tool_search_handler_cache: ToolSearchHandlerCache,
     pub(crate) turn_environments: Arc<ThreadEnvironments>,
 }
 
 impl SessionServices {
-<<<<<<< HEAD
     /// The sign-in account-bound services use now (PF-84): it follows a
     /// mid-session provider switch, so take it per use, not once.
     pub(crate) fn auth_manager(&self) -> Arc<AuthManager> {
@@ -185,8 +170,9 @@ impl SessionServices {
                     codex_protocol::protocol::ReviewDecision::ApprovedForSession,
                 );
             }
-||||||| 413492cd6c
-=======
+        }
+    }
+
     #[expect(
         clippy::expect_used,
         reason = "poisoned grant state must not authorize further operations"
@@ -204,7 +190,6 @@ impl SessionServices {
             merge_permission_profiles(grants.get(environment_id), Some(&permissions));
         if let Some(granted_permissions) = granted_permissions {
             grants.insert(environment_id.to_string(), granted_permissions);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 }

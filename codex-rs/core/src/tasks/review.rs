@@ -58,26 +58,12 @@ impl SessionTask for ReviewTask {
         input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
     ) -> SessionTaskResult {
-<<<<<<< HEAD
-        session.session.services.session_telemetry.counter(
-            "codex.task.review",
-            /*inc*/ 1,
-            &[],
-        );
-        // The review sub-session stays quiet; announce on this thread instead.
-        crate::session::turn::notify_openai_api_key_env_fallback(&session.session, &ctx).await;
-||||||| 413492cd6c
-        session.session.services.session_telemetry.counter(
-            "codex.task.review",
-            /*inc*/ 1,
-            &[],
-        );
-=======
         session
             .services
             .session_telemetry
             .counter("codex.task.review", /*inc*/ 1, &[]);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        // The review sub-session stays quiet; announce on this thread instead.
+        crate::session::turn::notify_openai_api_key_env_fallback(&session, &ctx).await;
 
         let mut user_input = Vec::new();
         for item in input {
@@ -143,7 +129,7 @@ async fn start_review_conversation(
     sub_agent_config.model = Some(model);
     (run_codex_thread_one_shot(
         sub_agent_config,
-        Arc::clone(&session.services.auth_manager),
+        session.services.auth_manager(),
         Arc::clone(&session.services.models_manager),
         input,
         Arc::clone(&session),

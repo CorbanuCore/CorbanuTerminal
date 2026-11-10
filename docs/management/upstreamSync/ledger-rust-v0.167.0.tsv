@@ -251,19 +251,19 @@ codex-rs/core/src/config/config_tests.rs	content	UU	core	S2a core session/client
 codex-rs/core/src/config/mod.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		20	723	false	false	true	false	D483 (#1945, main #1996): a project .codex/config.toml may not set sqlite_home or log_dir (PROJECT_LOCAL_CONFIG_DENYLIST, plus debug.config_lockfile); keep both keys denied when resolving (loader/mod.rs, S1b). On this branch an explicit log_dir also moves pfterminal_logs_2.sqlite, so S2 adds a test that a project log_dir moves neither the TUI log nor the logs database.
 codex-rs/core/src/config/network_proxy_spec.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		3	50	false	false	true	true	
 codex-rs/core/src/config/permissions.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	10	false	false	true	false	
-codex-rs/core/src/connectors.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		3	29	false	false	false	false	
-codex-rs/core/src/context/mod.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	5	false	false	false	false	
-codex-rs/core/src/context/world_state/mod.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	34	false	false	false	false	
-codex-rs/core/src/context/world_state/world_state_tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	85	true	false	false	false	
-codex-rs/core/src/context_manager/history.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	75	false	false	false	false	
-codex-rs/core/src/context_manager/history_tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	46	true	false	false	true	
-codex-rs/core/src/context_manager/mod.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	6	false	false	false	true	
-codex-rs/core/src/context_manager/normalize.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		6	121	false	false	false	true	
-codex-rs/core/src/context_manager/updates.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		3	97	false	false	false	false	
-codex-rs/core/src/environment_selection.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		3	42	false	false	false	true	
+codex-rs/core/src/connectors.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	ported	3	29	false	false	false	false	S2a (sync-s2a): upstream fallible AuthManager::shared_from_config; PF-84 session_auth/for_session kept
+codex-rs/core/src/context/mod.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	2	5	false	false	false	false	S2a (sync-s2a): both module lists kept (turn_completion_continuation + upstream unsupported_media/user_goal)
+codex-rs/core/src/context/world_state/mod.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	ported	1	34	false	false	false	false	S2a (sync-s2a): upstream's (snapshot, updates) render_diff; #578 section attribution kept: each fragment update is wrapped in SourcedFragment with its section ID (WorldStateUpdate::attributed_to); HOST_SKILLS_CONTEXT_SOURCE_ID now from codex-skills-extension (core-skills removed upstream)
+codex-rs/core/src/context/world_state/world_state_tests.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	ported	1	85	true	false	false	false	S2a (sync-s2a): upstream test kept; Corbanu's section-ID attribution test rewritten for the new contribution/render API (merge_world_state_updates)
+codex-rs/core/src/context_manager/history.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	ported	2	75	false	false	false	false	S2a (sync-s2a): upstream envelope history; #578 for_turn_prompt kept (async, takes input modalities + image store, adapts envelopes via provider_items::adapt_for_provider_by); Corbanu's producer-bytes estimate adjustment dropped: upstream no longer serializes items to estimate
+codex-rs/core/src/context_manager/history_tests.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	2	46	true	false	false	true	S2a (sync-s2a): TurnContextItem security_level kept with upstream's Option summary; reasoning test takes upstream's helper (anthropic_content_block fields checked at tier-exit compile)
+codex-rs/core/src/context_manager/mod.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	ported	1	6	false	false	false	true	S2a (sync-s2a): upstream exports + Corbanu placeholder consts (security ingress); strip_images_when_unsupported test wrapper over bare items so core/src/security tests stay identical to main
+codex-rs/core/src/context_manager/normalize.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	ported	6	121	false	false	false	true	S2a (sync-s2a): upstream envelope normalizer; Corbanu's aggregated missing/orphan logging (count + sample, warn, no debug panic for orphans) re-applied; placeholder consts pub(crate)
+codex-rs/core/src/context_manager/updates.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	ported	3	97	false	false	false	false	S2a (sync-s2a): upstream RenderedFragment message builder; #578 producer IDs carried (build_sourced_message via context_message); Corbanu ContextSection/build_developer_update_item removed with upstream's text-section builders (session/mod.rs callers move to the sourced builder)
+codex-rs/core/src/environment_selection.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	3	42	false	false	false	true	S2a (sync-s2a): Corbanu may_run_remotely + LOCAL_ENVIRONMENT_ID kept beside upstream's new helpers
 codex-rs/core/src/event_mapping_tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	2	true	false	false	false	
 codex-rs/core/src/exec.rs	content	UU	core	S3a security resolution	1+2	security owner	no	open		2	81	false	false	true	false	
-codex-rs/core/src/exec_env.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	105	false	false	false	true	
+codex-rs/core/src/exec_env.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	1	105	false	false	false	true	S2a (sync-s2a): Corbanu provider-credential stripping (create_shell_tool_env, blocked/remove_provider_auth_env_vars) kept beside upstream inject_session_env
 codex-rs/core/src/exec_policy.rs	content	UU	core	S3a security resolution	1+2	security owner	no	open		6	306	false	false	true	true	
 codex-rs/core/src/exec_policy_tests.rs	content	UU	core	S3a security resolution	1+2	security owner	no	open		1	466	true	false	true	true	
 codex-rs/core/src/exec_tests.rs	content	UU	core	S3a security resolution	1+2	security owner	no	open		1	51	true	false	true	true	
@@ -271,15 +271,15 @@ codex-rs/core/src/git_info_tests.rs	content	UU	core	S2a core session/client/turn
 codex-rs/core/src/guardian/review.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	83	false	false	true	false	
 codex-rs/core/src/guardian/review_session.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		4	1261	false	false	true	true	
 codex-rs/core/src/guardian/tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		4	146	true	false	true	false	
-codex-rs/core/src/hook_runtime.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	10	false	false	false	true	
-codex-rs/core/src/image_preparation.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	71	false	false	false	false	
-codex-rs/core/src/image_preparation_tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	40	true	false	false	false	
-codex-rs/core/src/lib.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	7	false	false	false	true	
+codex-rs/core/src/hook_runtime.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	ported	1	10	false	false	false	true	S2a (sync-s2a): hook output keeps MessageOrigin::External(Hook) ingress via record_conversation_items_from with upstream's model_info argument; may_run_remotely now on step_context.environments
+codex-rs/core/src/image_preparation.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	ported	1	71	false	false	false	false	S2a (sync-s2a): upstream moved limits to codex-utils-image; Corbanu's 2000 px high-detail limit (Anthropic >20 images) kept as a core HIGH_DETAIL_MODE
+codex-rs/core/src/image_preparation_tests.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	1	40	true	false	false	false	S2a (sync-s2a): Corbanu 2000 px cases added to upstream's table
+codex-rs/core/src/lib.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	2	7	false	false	false	true	S2a (sync-s2a): both module/export lists kept
 codex-rs/core/src/mcp_openai_file.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		12	96	false	false	false	true	
-codex-rs/core/src/mcp_skill_dependencies.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	15	false	false	false	false	
+codex-rs/core/src/mcp_skill_dependencies.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	2	15	false	false	false	false	S2a (sync-s2a): Corbanu MCP name-clash warning kept; upstream dropped the updated flag
 codex-rs/core/src/mcp_tool_call.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		15	421	false	false	true	true	
 codex-rs/core/src/mcp_tool_call_tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		4	899	true	false	true	true	
-codex-rs/core/src/prompt_debug.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	9	false	false	false	false	
+codex-rs/core/src/prompt_debug.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	ported	1	9	false	false	false	false	S2a (sync-s2a): #578 for_turn_prompt with upstream step-context modalities + image store
 codex-rs/core/src/realtime_conversation.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		25	504	false	false	false	true	
 codex-rs/core/src/realtime_conversation_tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		3	1412	true	false	false	true	
 codex-rs/core/src/responses_retry.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		4	161	false	false	false	false	
@@ -288,18 +288,18 @@ codex-rs/core/src/session/handlers.rs	content	UU	core	S2a core session/client/tu
 codex-rs/core/src/session/inject.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		3	46	false	false	false	false	
 codex-rs/core/src/session/input_queue.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		12	299	false	false	false	false	
 codex-rs/core/src/session/mcp.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		4	51	false	false	false	false	
-codex-rs/core/src/session/mcp_runtime.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	7	false	false	false	false	
+codex-rs/core/src/session/mcp_runtime.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	ported	1	7	false	false	false	false	S2a (sync-s2a): upstream runtime input; auth manager is the PF-84 active one (services.auth_manager())
 codex-rs/core/src/session/mod.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		75	2381	false	false	true	false	
 codex-rs/core/src/session/review.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	45	false	false	false	false	
-codex-rs/core/src/session/rollout_budget.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	16	false	false	false	true	
+codex-rs/core/src/session/rollout_budget.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	1	16	false	false	false	true	S2a (sync-s2a): MessageOrigin::Host ingress kept on upstream's model_info recording + agent_control reminder
 codex-rs/core/src/session/rollout_reconstruction.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		4	18	false	false	false	true	
 codex-rs/core/src/session/rollout_reconstruction_tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		14	86	true	false	false	true	
 codex-rs/core/src/session/session.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		22	459	false	false	false	true	
 codex-rs/core/src/session/startup_prewarm.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		5	177	false	false	false	false	
 codex-rs/core/src/session/tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		55	3555	true	false	false	true	
 codex-rs/core/src/session/tests/guardian_tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		15	240	true	false	false	true	
-codex-rs/core/src/session/time_reminder.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	8	false	false	false	true	
-codex-rs/core/src/session/token_budget.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	45	false	false	false	true	
+codex-rs/core/src/session/time_reminder.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	1	8	false	false	false	true	S2a (sync-s2a): MessageOrigin::Host ingress kept with upstream's model_info argument
+codex-rs/core/src/session/token_budget.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	2	45	false	false	false	true	S2a (sync-s2a): MessageOrigin::Host ingress kept with upstream's model_info argument (2 sites)
 codex-rs/core/src/session/turn.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		43	698	false	false	false	true	
 codex-rs/core/src/session/turn_context.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		18	322	false	false	false	true	
 codex-rs/core/src/session/turn_tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	83	true	false	false	true	
@@ -308,15 +308,15 @@ codex-rs/core/src/session_prefix_tests.rs	content	UU	core	S2a core session/clien
 codex-rs/core/src/shell_snapshot.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		14	726	false	false	false	false	
 codex-rs/core/src/shell_snapshot_tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		13	1199	true	false	false	false	
 codex-rs/core/src/spawn.rs	content	UU	core	S3a security resolution	1+2	security owner	no	open		1	3	false	false	true	false	
-codex-rs/core/src/state/mod.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	4	false	false	false	true	
-codex-rs/core/src/state/service.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		3	82	false	false	false	true	
+codex-rs/core/src/state/mod.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	1	4	false	false	false	true	S2a (sync-s2a): upstream ExecutedToolCalls/AdditionalContextFormat + Corbanu ActiveAuthManager
+codex-rs/core/src/state/service.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	3	82	false	false	false	true	S2a (sync-s2a): PF-84 ArcSwap model client + active auth, PF-23-S03 approval fencing methods kept; upstream non-optional ExecutedToolCalls, McpHandlerCache and services-level record_granted_permissions added (D51 fencing of that store: see session/mod.rs + turn_context.rs rows)
 codex-rs/core/src/state/session.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		8	80	false	false	false	true	
 codex-rs/core/src/state/turn.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		10	181	false	false	false	true	
-codex-rs/core/src/stream_events_utils.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		3	55	false	false	false	true	
-codex-rs/core/src/tasks/compact.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	17	false	false	false	false	
+codex-rs/core/src/stream_events_utils.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	3	55	false	false	false	true	S2a (sync-s2a): #1536 memory-mode check before recording and MessageOrigin::Model ingress kept on upstream's step-context recording + agent-response logging; MalformedToolCall + call-id pairing kept with upstream's observe_non_dispatched_call
+codex-rs/core/src/tasks/compact.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	1	17	false	false	false	false	S2a (sync-s2a): OPENAI_API_KEY fallback notice kept before upstream's compaction span/step context
 codex-rs/core/src/tasks/mod.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		18	458	false	false	false	true	
-codex-rs/core/src/tasks/regular.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	14	false	false	false	false	
-codex-rs/core/src/tasks/review.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	11	false	false	false	false	
+codex-rs/core/src/tasks/regular.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	1	14	false	false	false	false	S2a (sync-s2a): #445 refusal loop guard kept after upstream's terminal-error return
+codex-rs/core/src/tasks/review.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	merged	1	11	false	false	false	false	S2a (sync-s2a): OPENAI_API_KEY fallback notice kept; upstream telemetry form; PF-84 services.auth_manager()
 codex-rs/core/src/thread_manager.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		7	202	false	false	false	false	
 codex-rs/core/src/thread_manager_tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		5	1087	true	false	false	false	
 codex-rs/core/src/tools/approvals.rs	content	UU	core	S3a security resolution	1+2	security owner	no	open		8	584	false	false	true	true	
@@ -1790,3 +1790,5 @@ codex-rs/core/src (S2)	follow-up	--	core	S2 core	2	unassigned	no	open		0	0	false
 codex-rs/login/src/auth/manager_named_account_tests.rs	follow-up	--	config/providers/auth	S1b config/providers/auth	1	sync-s1b2 (maintainer)	no	resolved	merged	0	0	true	false	false	false	named-account tests follow the merged manager; D499 policy and named reload tests added (sync-s1b2)
 codex-rs/login/src/auth/storage_error_tests.rs	follow-up	--	config/providers/auth	S1b config/providers/auth	1	sync-s1b2 (maintainer)	no	resolved	merged	0	0	true	false	false	false	upstream keyring-error diagnostics test forces a keyring read past Corbanu's secrets cache
 codex-rs/login/src/oauth_session_storage_tests.rs	follow-up	--	config/providers/auth	S1b config/providers/auth	1	sync-s1b2 (maintainer)	no	resolved	merged	0	0	true	false	false	false	upstream blocked-keyring-read tests force the read past Corbanu's secrets cache
+codex-rs/core/src/context_manager/provider_items.rs	follow-up	--	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	ported	0	0	false	false	false	false	#578 adapt_for_provider_by: the same adaptation over history envelopes (upstream's history stores envelopes)
+codex-rs/core/src/context/unsupported_media.rs	follow-up	--	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	ported	0	0	false	false	false	false	placeholder texts come from context_manager's consts so the security ingress registry and the model-visible text cannot drift

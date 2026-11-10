@@ -34,10 +34,7 @@ impl SessionTask for CompactTask {
         cancellation_token: CancellationToken,
     ) -> SessionTaskResult {
         let _profile_guard = ctx.turn_timing_state.begin_compaction();
-<<<<<<< HEAD
         crate::session::turn::notify_openai_api_key_env_fallback(&session, &ctx).await;
-||||||| 413492cd6c
-=======
         let _compaction_span = tracing::trace_span!(
             "codex.compaction",
             codex.turn.phase = "compaction",
@@ -54,7 +51,6 @@ impl SessionTask for CompactTask {
                 .build_world_state_for_step(&step_context, /*new_window*/ true)
                 .await?,
         );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if ctx.config.features.enabled(Feature::TokenBudget) {
             crate::compact_token_budget::run_manual_compact_task(
                 session,

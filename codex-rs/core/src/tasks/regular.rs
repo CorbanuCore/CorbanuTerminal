@@ -124,7 +124,11 @@ impl SessionTask for RegularTask {
             )
             .instrument(run_turn_span.clone())
             .await?;
-<<<<<<< HEAD
+            // Terminal errors are already reported. Let task completion preserve pending
+            // input instead of restarting the failed turn for that same input.
+            if ctx.terminal_error.lock().await.is_some() {
+                return Ok(last_agent_message);
+            }
             // Issue #445: a refused turn takes no pending input; looping here
             // would refuse forever. Agent messages stay queued for a later wake
             // after the kill switch is off or the named account is signed in
@@ -133,16 +137,6 @@ impl SessionTask for RegularTask {
             if !sess.input_queue.has_pending_input(&sess.active_turn).await
                 || turn_refusal(&sess, &ctx).await.is_some()
             {
-||||||| 413492cd6c
-            if !sess.input_queue.has_pending_input(&sess.active_turn).await {
-=======
-            // Terminal errors are already reported. Let task completion preserve pending
-            // input instead of restarting the failed turn for that same input.
-            if ctx.terminal_error.lock().await.is_some() {
-                return Ok(last_agent_message);
-            }
-            if !sess.input_queue.has_pending_input(&sess.active_turn).await {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 return Ok(last_agent_message);
             }
             next_input = Vec::new();
