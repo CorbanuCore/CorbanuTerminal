@@ -11,7 +11,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-85-S00"
 created: 2026-11-07
-updated: 2026-11-07
+updated: 2026-11-10
 ---
 
 # PF-85-S01 — Tier 1: crates below core
@@ -43,13 +43,13 @@ updated: 2026-11-07
 ## Done
 
 - [x] Sprint record created and linked to one plan feature.
+- [x] Main merge #2 (S1 exit): #2012/#2014 (#1 was #1915/#1922).
 
 ## Remaining
 
 - [ ] Slice PRs per the ledger; security-owner review on security paths.
 - [ ] D319 fixtures (plan §6 S1) generated from `main` and committed before any `age`/`zip` change; then the security owner's decision.
 - [ ] Migration renumbering with an upgrade test from the latest released state DB.
-- [ ] Main merge #1.
 - [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.
 
 ## Verification
