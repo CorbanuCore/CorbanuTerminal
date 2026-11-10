@@ -388,12 +388,15 @@ pub async fn build_exec_request(
     tracing::debug!("Sandbox type: {sandbox_type:?}");
     // D446 before any override resolution, so a network working folder gets
     // its own refusal rather than a path error from the resolver.
-    // `attach_windows_sandbox_filesystem_overrides` checks it again.
+    // `attach_windows_sandbox_filesystem_overrides` checks it again. Each
+    // folder first goes through the path conversion the launch uses, so a
+    // `\\localhost` folder still gets #1863's refusal.
     if sandbox_type == SandboxType::WindowsRestrictedToken
         && !windows_sandbox_uses_elevated_backend(windows_sandbox_level, enforce_managed_network)
     {
-        for folder in [cwd.as_path(), sandbox_cwd.as_path()] {
-            codex_sandboxing::refuse_network_working_folder(folder)
+        for folder in [&cwd, sandbox_cwd] {
+            let folder = PathUri::from_abs_path(folder).to_abs_path()?;
+            codex_sandboxing::refuse_network_working_folder(folder.as_path())
                 .map_err(CodexErr::UnsupportedOperation)?;
         }
     }
