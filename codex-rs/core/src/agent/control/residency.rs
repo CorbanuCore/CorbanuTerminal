@@ -321,19 +321,28 @@ pub(super) fn is_v2_resident_session_source(session_source: &SessionSource) -> b
 }
 
 async fn is_unloadable(thread: &CodexThread) -> bool {
+    let status = thread.agent_status().await;
+    // Corbanu (D435): a `PendingInit` session that `spawn_agent` created with its first turn
+    // queued has not started that turn yet; evicting it would drop the task.
+    let pending_first_turn = matches!(status, AgentStatus::PendingInit)
+        && thread
+            .session
+            .spawned_with_first_turn
+            .load(std::sync::atomic::Ordering::Acquire);
     matches!(
-        thread.agent_status().await,
+        status,
         AgentStatus::PendingInit
             | AgentStatus::Completed(_)
             | AgentStatus::Errored(_)
             | AgentStatus::Interrupted
-    ) && thread.session.active_turn.lock().await.is_none()
+    ) && !pending_first_turn
+        && thread.session.active_turn.lock().await.is_none()
         && !thread.session.has_outstanding_durable_sleep()
-        && !thread
-            .session
-            .input_queue
-            .has_trigger_turn_mailbox_items()
-            .await
+        // Corbanu (#1545, #1999/#2033): a session holding any mailbox item stays loaded.
+        // Its items are durable rows handed to this session's incarnation; evicting it would
+        // move them to the in-memory queue while reload recovery requeues the same rows, so
+        // the message would be delivered twice.
+        && !thread.session.input_queue.has_pending_mailbox_items().await
 }
 
 #[cfg(test)]
