@@ -464,6 +464,7 @@ codex-rs/core/tests/suite/unified_exec_process_events.rs
 codex-rs/core/tests/suite/user_shell_cmd.rs
 codex-rs/core/tests/suite/windows_sandbox.rs
 codex-rs/deny.toml
+codex-rs/exec-server/src/client/route_aware_http_client.rs
 codex-rs/exec-server/tests/file_system_unix.rs
 codex-rs/exec/src/event_processor_with_human_output.rs
 codex-rs/exec/src/event_processor_with_jsonl_output.rs
