@@ -1515,8 +1515,11 @@ impl TurnRequestProcessor {
                 "paginated threads do not support detached review",
             ));
         }
-        let mut config = self.config.as_ref().clone();
-        if let Some(review_model) = &config.review_model {
+        // #2015: the review runs with the parent thread's current settings
+        // (permissions, approvals, Windows sandbox, security level), not with
+        // the config this server started with.
+        let mut config = parent_thread.detached_agent_config().await;
+        if let Some(review_model) = &self.config.review_model {
             config.model = Some(review_model.clone());
         }
 

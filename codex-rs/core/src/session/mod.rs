@@ -213,6 +213,7 @@ mod code_mode_warning;
 mod config_lock;
 mod confirmed_aggressive;
 pub(crate) mod context_window;
+mod detached_agent_config;
 mod extension_metrics;
 mod handlers;
 mod inject;
