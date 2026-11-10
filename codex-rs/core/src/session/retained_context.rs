@@ -94,21 +94,38 @@ impl Session {
         let mut item = ContextualUserFragment::into(update);
         Self::stamp_response_item_for_history(&mut item, &context.sub_id);
         Self::assign_missing_response_item_id(&mut item);
-        let mut item = ResponseItemEnvelope {
+        let item = ResponseItemEnvelope {
             item,
             metadata: Some(CodexHarnessMetadata {
                 user_input_order: Some(user_input_order),
                 ..Default::default()
             }),
         };
+        // Corbanu: the user's goal passes the checks every recorded item does
+        // (PF-28-S01 gate, PF-30 origin and taint); a withheld one is dropped.
+        let Some(mut item) = self
+            .admit_recorded_items(
+                vec![item],
+                Some(crate::security::ingress::MessageOrigin::Human),
+            )
+            .pop()
+        else {
+            return Ok(());
+        };
         if let Some(live_thread) = self.live_thread() {
             // Capture settings under the same permit as the instruction, including when a
             // goal creates the rollout. No fallible settings catch-up runs after publication.
+            let rollout_items = [
+                RolloutItem::EventMsg(thread_settings::applied_event(self).await),
+                RolloutItem::ResponseItem(item.clone()),
+            ];
+            // PF-28-S01: the transcript gate `persist_rollout_items` applies.
+            let gated = crate::security::disclosure_gate::gate_values(
+                codex_secret_broker::output_gate::OutputSink::Transcript,
+                &rollout_items,
+            );
             live_thread
-                .append_items(&[
-                    RolloutItem::EventMsg(thread_settings::applied_event(self).await),
-                    RolloutItem::ResponseItem(item.clone()),
-                ])
+                .append_items(gated.as_deref().unwrap_or(&rollout_items))
                 .await
                 .map_err(std::io::Error::other)?;
         }

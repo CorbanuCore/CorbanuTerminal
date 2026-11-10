@@ -515,8 +515,9 @@ impl SessionConfiguration {
                             }
                         )
                 });
-        // PF-84: the runtime provider itself is rebuilt with the session's
-        // sign-in by `Session::apply_session_settings`.
+        // PF-84: the switched provider is rebuilt on the account the session
+        // follows in `Session::update_settings_if`; until then it carries no
+        // sign-in (previews and snapshots only read its definition).
         if let Some(model_provider_id) = updates.model_provider.clone() {
             let mut config = (*next_configuration.original_config_do_not_use).clone();
             let Some(provider) = config.model_providers.get(&model_provider_id).cloned() else {
@@ -528,7 +529,12 @@ impl SessionConfiguration {
                 });
             };
             config.model_provider_id = model_provider_id;
-            config.model_provider = provider;
+            config.model_provider = provider.clone();
+            // Unchanged definitions keep the provider and its sign-in.
+            if next_configuration.provider.info() != &provider {
+                next_configuration.provider =
+                    codex_model_provider::create_model_provider(provider, /*auth_manager*/ None);
+            }
             next_configuration.original_config_do_not_use = Arc::new(config);
         }
         if let Some(runtime_model_context_window) = updates.runtime_model_context_window {

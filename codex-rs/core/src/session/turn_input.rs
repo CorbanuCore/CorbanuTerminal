@@ -403,6 +403,7 @@ async fn start_or_steer(
             settings.required_active_final_output_json_schema(),
             responsesapi_client_metadata.clone(),
             input_metadata,
+            settings.thread_settings_update.as_ref(),
         )
         .await
     {
@@ -689,6 +690,7 @@ async fn steer(
             settings.required_active_final_output_json_schema(),
             responsesapi_client_metadata,
             input_metadata,
+            settings.thread_settings_update.as_ref(),
         )
         .await
     {
@@ -874,6 +876,7 @@ impl Session {
         required_final_output_json_schema: Option<&Value>,
         responsesapi_client_metadata: ResponsesApiClientMetadataUpdate,
         input_metadata: UserInputMetadata,
+        pending_update: Option<&SessionSettingsUpdate>,
     ) -> Result<(String, String), NotSubmittedReason> {
         let mut active = self.active_turn.lock().await;
         let Some(active_turn) = active.as_mut() else {
@@ -911,16 +914,6 @@ impl Session {
         if matches!(input, SubmittedTurnInput::UserInput { content, .. } if content.is_empty()) {
             return Err(NotSubmittedReason::EmptyInput);
         }
-        // Corbanu: a running turn keeps the permissions it was admitted under,
-        // so input never joins it after they changed: its exec sessions could
-        // still be driven through write_stdin. The input is returned instead.
-        // Checked again below, with the session state held through admission.
-        if !Self::authorization_matches(
-            &self.state.lock().await.session_configuration,
-            &active_task.turn_context,
-        ) {
-            return Err(NotSubmittedReason::AuthorizationChanged);
-        }
         // Compare JSON values directly instead of serialized schema text.
         // Value equality ignores object key order while preserving array and
         // scalar distinctions; broader JSON Schema equivalence is out of scope.
@@ -929,42 +922,77 @@ impl Session {
         {
             return Err(NotSubmittedReason::ActiveTurnOutputSchemaMismatch);
         }
-        let mut pending_input =
-            merge_additional_context_input(self, &active_task.turn_context, additional_context)
-                .await;
+        // Prepared before the admission lock: a refused input only leaves a
+        // gap in the input order.
+        let (acceptance_order, prepared_input) = match &*input {
+            SubmittedTurnInput::UserInput { .. } => (Some(self.reserve_user_input_order().await), None),
+            input => (
+                None,
+                Some(
+                    pending_turn_input(
+                        self,
+                        input.clone(),
+                        sender_messages,
+                        active_turn_id,
+                        input_metadata,
+                    )
+                    .await,
+                ),
+            ),
+        };
+        // Corbanu: a running turn keeps the permissions it was admitted under,
+        // so input never joins it under others: its exec sessions could still
+        // be driven through write_stdin. The comparison uses the permissions
+        // this request's own settings update would leave (they are committed
+        // only after admission), and the session state stays held from the
+        // comparison through admission, so no settings update commits between
+        // them and nothing is changed for refused input, which goes back to
+        // the client.
+        let mut state = self.state.lock().await;
+        let authorized = match pending_update {
+            None => Self::authorization_matches(&state.session_configuration, &active_task.turn_context),
+            Some(update) => self
+                .apply_session_settings(&state.session_configuration, update)
+                .is_ok_and(|next| Self::authorization_matches(&next, &active_task.turn_context)),
+        };
+        if !authorized {
+            return Err(NotSubmittedReason::AuthorizationChanged);
+        }
+        let format = if self.enabled(Feature::UntrustedAsToolOutput) {
+            AdditionalContextFormat::ToolOutputs
+        } else {
+            AdditionalContextFormat::Messages
+        };
+        let mut pending_input = state
+            .additional_context
+            .merge(
+                additional_context,
+                format,
+                &active_task.turn_context.session_telemetry,
+            )
+            .into_iter()
+            .map(|item| self.annotate_client_response_item(item))
+            .map(TurnInput::ResponseItem)
+            .collect::<Vec<_>>();
 
         active_task
             .turn_context
             .turn_metadata_state
             .update_responsesapi_client_metadata(responsesapi_client_metadata);
 
-        let input = match input {
-            SubmittedTurnInput::UserInput { content, client_id } => TurnInput::UserInput {
+        let input = match (input, prepared_input) {
+            (_, Some(prepared_input)) => prepared_input,
+            (SubmittedTurnInput::UserInput { content, client_id }, None) => TurnInput::UserInput {
                 content: std::mem::take(content),
                 client_id: client_id.clone(),
                 metadata: super::UserInputMetadata {
-                    acceptance_order: Some(self.reserve_user_input_order().await),
+                    acceptance_order,
                     ..input_metadata
                 },
             },
-            input => {
-                pending_turn_input(
-                    self,
-                    input.clone(),
-                    sender_messages,
-                    active_turn_id,
-                    input_metadata,
-                )
-                .await
-            }
+            (_, None) => unreachable!("only user input is prepared under the admission lock"),
         };
         pending_input.push(input);
-        // Serialize the authorization comparison and admission with settings
-        // updates, so none commits between them.
-        let state = self.state.lock().await;
-        if !Self::authorization_matches(&state.session_configuration, &active_task.turn_context) {
-            return Err(NotSubmittedReason::AuthorizationChanged);
-        }
         self.input_queue
             .extend_pending_input_and_accept_mailbox_delivery_for_turn_state(
                 active_turn.turn_state.as_ref(),

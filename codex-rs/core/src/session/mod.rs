@@ -74,6 +74,7 @@ use codex_attachment_store::AttachmentStore;
 use codex_attachment_store::InlineAttachmentStore;
 use codex_connectors::connector_runtime_context_key;
 use codex_context_fragments::RenderedFragment;
+use crate::context_manager::updates::SourcedRenderedFragment;
 use codex_exec_server::Environment;
 use codex_exec_server::EnvironmentManager;
 use codex_execpolicy::prefix_rule_migration;
@@ -1391,8 +1392,6 @@ async fn thread_title_from_thread_store(
     (!title.is_empty() && thread.preview.trim() != title).then(|| title.to_string())
 }
 
-/// PF-28-S01: [`crate::security::disclosure_gate::gate_values`] for envelopes,
-/// one item at a time so each keeps its metadata; a withheld item is dropped.
 /// The text a context contributor's fragment carries (`source_envelopes`
 /// moves stored data out of the host message as text).
 fn prompt_fragment_text(fragment: &PromptFragment) -> String {
@@ -1402,6 +1401,8 @@ fn prompt_fragment_text(fragment: &PromptFragment) -> String {
     }
 }
 
+/// PF-28-S01: [`crate::security::disclosure_gate::gate_values`] for envelopes,
+/// one item at a time so each keeps its metadata; a withheld item is dropped.
 fn gate_recorded_envelopes(items: Vec<ResponseItemEnvelope>) -> Vec<ResponseItemEnvelope> {
     items
         .into_iter()
@@ -4995,6 +4996,28 @@ impl Session {
         .await;
     }
 
+    /// The Corbanu checks every recorded item passes before history, rollout
+    /// and clients see it: the PF-28-S01 gate (tool results and model output),
+    /// then its origin (PF-30), the taint note and native-ingress observation.
+    pub(crate) fn admit_recorded_items(
+        &self,
+        items: Vec<ResponseItemEnvelope>,
+        origin: Option<crate::security::ingress::MessageOrigin>,
+    ) -> Vec<ResponseItemEnvelope> {
+        let items = gate_recorded_envelopes(items);
+        let recorded = items
+            .iter()
+            .map(|envelope| envelope.item.clone())
+            .collect::<Vec<_>>();
+        let model_client = self.services.model_client();
+        if let Some(origin) = origin {
+            model_client.register_message_origin(&recorded, origin);
+        }
+        model_client.note_recorded_for_taint(&recorded);
+        model_client.observe_native_ingress(&recorded);
+        items
+    }
+
     async fn record_prepared_conversation_items(
         &self,
         turn_context: &TurnContext,
@@ -5022,21 +5045,7 @@ impl Session {
         image_preparations: Vec<ImagePreparationMetadata>,
         origin: Option<crate::security::ingress::MessageOrigin>,
     ) {
-        // PF-28-S01: tool results and model output are gated before history,
-        // rollout and clients see them.
-        let mut items = gate_recorded_envelopes(items);
-        {
-            let recorded = items
-                .iter()
-                .map(|envelope| envelope.item.clone())
-                .collect::<Vec<_>>();
-            let model_client = self.services.model_client();
-            if let Some(origin) = origin {
-                model_client.register_message_origin(&recorded, origin);
-            }
-            model_client.note_recorded_for_taint(&recorded);
-            model_client.observe_native_ingress(&recorded);
-        }
+        let mut items = self.admit_recorded_items(items, origin);
         // Save the originating history budget for replay.
         // Preserve any existing tool-specific override.
         let policy: codex_utils_output_truncation::TruncationPolicy =
@@ -6103,12 +6112,13 @@ impl Session {
                     stored_data_sections.push(prompt_fragment_text(&fragment));
                     continue;
                 }
-                developer_sections.push(fragment.into());
+                let source_id = fragment.source_id();
+                developer_sections.push((fragment.into(), source_id));
             }
         }
 
         let mut items: Vec<ResponseItem> =
-            crate::context_manager::updates::build_rendered_message(developer_sections)
+            crate::context_manager::updates::build_sourced_message(developer_sections)
                 .into_iter()
                 .collect();
         self.push_stored_data_messages(
@@ -6128,7 +6138,7 @@ impl Session {
         world_state: &WorldState,
     ) -> (Vec<WorldStateUpdate>, WorldStateSnapshot) {
         let turn_context = step_context.turn.as_ref();
-        let mut developer_sections = Vec::<RenderedFragment>::with_capacity(8);
+        let mut developer_sections = Vec::<SourcedRenderedFragment>::with_capacity(8);
         let mut contextual_user_sections = Vec::<RenderedFragment>::with_capacity(2);
         let mut separate_developer_messages = Vec::<ResponseItem>::new();
         let mut context_window_hints = Vec::new();
@@ -6147,8 +6157,10 @@ impl Session {
             && let Some(developer_instructions) = turn_context.developer_instructions.as_deref()
             && !developer_instructions.is_empty()
         {
-            developer_sections
-                .push(DeveloperInstructions::new(developer_instructions).render_fragment());
+            developer_sections.push((
+                DeveloperInstructions::new(developer_instructions).render_fragment(),
+                /*source_id*/ None,
+            ));
         }
         let loaded_plugins = self
             .services
@@ -6199,7 +6211,8 @@ impl Session {
                         context_window_hints.push(fragment.into_content());
                     }
                     PromptSlot::DeveloperPolicy | PromptSlot::DeveloperCapabilities => {
-                        developer_sections.push(fragment.into());
+                        let source_id = fragment.source_id();
+                        developer_sections.push((fragment.into(), source_id));
                     }
                 }
             }
@@ -6220,7 +6233,8 @@ impl Session {
                     stored_data_sections.push(prompt_fragment_text(&fragment));
                     continue;
                 }
-                developer_sections.push(fragment.into());
+                let source_id = fragment.source_id();
+                developer_sections.push((fragment.into(), source_id));
             }
         }
         // This is full-context metadata. Steady-state context diffs should not re-emit it.
@@ -6316,7 +6330,8 @@ impl Session {
                         if fragment.markers().0 == ModelSwitchInstructions::type_markers().0 =>
                     {
                         // New-model instructions must precede the rest of the developer context.
-                        developer_sections.insert(0, fragment.render_fragment());
+                        let source_id = fragment.source_id();
+                        developer_sections.insert(0, (fragment.render_fragment(), source_id));
                     }
                     "developer" if fragment.markers().0 == MULTI_AGENT_MODE_OPEN_TAG => {
                         initial_multi_agent_mode = Some(fragment);
@@ -6338,7 +6353,10 @@ impl Session {
                     {
                         separate_developer_messages.push(fragment.render_fragment().into());
                     }
-                    "developer" => developer_sections.push(fragment.render_fragment()),
+                    "developer" => {
+                        let source_id = fragment.source_id();
+                        developer_sections.push((fragment.render_fragment(), source_id));
+                    }
                     "user" => contextual_user_sections.push(fragment.render_fragment()),
                     _ => {}
                 }
@@ -6349,10 +6367,10 @@ impl Session {
                     .as_deref()
                     .and_then(RecommendedPluginsInstructions::from_plugins)
             {
-                developer_sections.push(recommended_plugins.render_fragment());
+                developer_sections.push((recommended_plugins.render_fragment(), /*source_id*/ None));
             }
 
-            if let Some(developer_message) = crate::context_manager::updates::build_rendered_message(
+            if let Some(developer_message) = crate::context_manager::updates::build_sourced_message(
                 std::mem::take(&mut developer_sections),
             ) {
                 items.push(developer_message);
@@ -6663,11 +6681,15 @@ impl Session {
         let security_level_changed = reference_context_item
             .as_ref()
             .is_some_and(|reference| reference.security_level != turn_context_item.security_level);
+        // A new context window starts only without a reference; a host-context
+        // reinjection (PF-30-S02) re-sends full context within the window.
+        let world_state = self
+            .build_world_state_for_step(step_context, reference_context_item.is_none())
+            .await?;
+        // Taken only once the world state is built, so a failed build leaves
+        // the reinjection pending for the next turn.
         let reinject_host_context = self.services.model_client().take_host_context_reinjection();
         let should_inject_full_context = reference_context_item.is_none() || reinject_host_context;
-        let world_state = self
-            .build_world_state_for_step(step_context, should_inject_full_context)
-            .await?;
         // Full initial context resets the baseline; later turns persist only its changes.
         let (mut context_items, world_state_item) = if should_inject_full_context {
             let (context_updates, snapshot) = self
