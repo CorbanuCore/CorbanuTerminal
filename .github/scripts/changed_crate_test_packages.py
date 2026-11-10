@@ -18,6 +18,7 @@ arguments for helper binaries the given packages' tests need.
 """
 
 import argparse
+import os
 import sys
 import tomllib
 from pathlib import Path
@@ -70,21 +71,53 @@ HELPER_BINARIES = {
 }
 
 
-def test_packages(root: Path) -> dict[str, str]:
-    """The workspace members plus the crates only `[workspace.dependencies]`
-    names by path, which Cargo makes members too (#2027: missing these, the
-    job never ran codex-windows-sandbox's tests, and #2011 broke two of them)."""
+DEPENDENCY_TABLES = ("dependencies", "dev-dependencies", "build-dependencies")
+
+
+def path_dependencies(table: dict) -> list[str]:
+    """The `path`s of a manifest's dependency tables (target tables too)."""
+    found = []
+    for name in DEPENDENCY_TABLES:
+        for dependency in table.get(name, {}).values():
+            if isinstance(dependency, dict) and "path" in dependency:
+                found.append(dependency["path"])
+    for target in table.get("target", {}).values():
+        found.extend(path_dependencies(target))
+    return found
+
+
+def tested_packages(root: Path) -> dict[str, str]:
+    """The workspace members plus the crates Cargo makes members because a
+    member depends on them by path (#2027: missing these, the job never ran
+    codex-windows-sandbox's tests, and #2011 broke two of them): path
+    dependencies inside the workspace and not excluded, in `[workspace.
+    dependencies]` or a member's own tables, and theirs in turn."""
     packages = workspace_packages(root)
     manifest = tomllib.loads((root / WORKSPACE / "Cargo.toml").read_text())
-    for dependency in manifest["workspace"].get("dependencies", {}).values():
-        path = dependency.get("path") if isinstance(dependency, dict) else None
-        # Cargo adds only path dependencies inside the workspace.
-        if path is None or PurePosixPath(path).parts[0] == "..":
-            continue
-        directory = f"{WORKSPACE}/{PurePosixPath(path)}"
-        if directory not in packages:
-            crate = tomllib.loads((root / directory / "Cargo.toml").read_text())
-            packages[directory] = crate["package"]["name"]
+    workspace = manifest["workspace"]
+    excluded = [os.path.normpath(path) for path in workspace.get("exclude", [])]
+    # (directory relative to the workspace, dependency paths relative to it)
+    pending = [(".", path_dependencies(workspace))]
+    for directory in packages:
+        member = tomllib.loads((root / directory / "Cargo.toml").read_text())
+        pending.append(
+            (os.path.relpath(directory, WORKSPACE), path_dependencies(member))
+        )
+    while pending:
+        base, paths = pending.pop()
+        for path in paths:
+            crate = os.path.normpath(os.path.join(base, path))
+            # Outside the workspace, or the virtual root manifest itself.
+            if os.path.isabs(crate) or crate in (".", "..") or crate.startswith("../"):
+                continue
+            if any(crate == ex or crate.startswith(ex + "/") for ex in excluded):
+                continue
+            directory = f"{WORKSPACE}/{crate}"
+            if directory in packages:
+                continue
+            member = tomllib.loads((root / directory / "Cargo.toml").read_text())
+            packages[directory] = member["package"]["name"]
+            pending.append((crate, path_dependencies(member)))
     return packages
 
 
@@ -126,7 +159,7 @@ def main() -> None:
     if args.base is None or args.head is None:
         parser.error("base and head are required")
     selected = selected_packages(
-        changed_files(args.base, args.head), test_packages(ROOT)
+        changed_files(args.base, args.head), tested_packages(ROOT)
     )
     for package in selected:
         print(package)

@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 
 import re
+import tempfile
 import unittest
+from pathlib import Path
 
 from changed_crate_test_packages import CANARY_PACKAGE
 from changed_crate_test_packages import HELPER_BINARIES
 from changed_crate_test_packages import ROOT
 from changed_crate_test_packages import helper_build_args
 from changed_crate_test_packages import selected_packages
-from changed_crate_test_packages import test_packages
+from changed_crate_test_packages import tested_packages
 from changed_crate_test_packages import workspace_packages
 
 PACKAGES = {
@@ -53,7 +55,7 @@ class ChangedCrateTestPackagesTest(unittest.TestCase):
         # #2027: Cargo makes `[workspace.dependencies]` path crates members
         # though `members` omits them; the job must see them too.
         self.assertNotIn("codex-rs/windows-sandbox-rs", workspace_packages(ROOT))
-        packages = test_packages(ROOT)
+        packages = tested_packages(ROOT)
         self.assertEqual(
             selected_packages(
                 ["codex-rs/windows-sandbox-rs/src/git_config_targets_tests.rs"],
@@ -62,6 +64,36 @@ class ChangedCrateTestPackagesTest(unittest.TestCase):
             ["codex-windows-sandbox"],
         )
         self.assertLessEqual(workspace_packages(ROOT).items(), packages.items())
+
+    def test_implicit_members_follow_cargo(self) -> None:
+        manifests = {
+            "Cargo.toml": (
+                '[workspace]\nmembers = ["a"]\nexclude = ["skip"]\n'
+                "[workspace.dependencies]\n"
+                'b = { path = "b" }\nv = "1"\nout = { path = "../out" }\n'
+                's = { path = "skip/c" }\nroot = { path = "" }\n'
+            ),
+            "a/Cargo.toml": (
+                '[package]\nname = "a"\n[dependencies]\nc = { path = "../c" }\n'
+                "[target.'cfg(windows)'.dev-dependencies]\n"
+                'd = { path = "../x/../d" }\nb = { path = "../b" }\n'
+            ),
+            "b/Cargo.toml": '[package]\nname = "b"\n',
+            "c/Cargo.toml": (
+                '[package]\nname = "c"\n[build-dependencies]\ne = { path = "../e" }\n'
+            ),
+            "d/Cargo.toml": '[package]\nname = "d"\n',
+            "e/Cargo.toml": '[package]\nname = "e"\n',
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, text in manifests.items():
+                path = Path(tmp, "codex-rs", name)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text)
+            self.assertEqual(
+                tested_packages(Path(tmp)),
+                {f"codex-rs/{name}": name for name in "abcde"},
+            )
 
     def test_job_changes_select_the_canary(self) -> None:
         for path in (
@@ -91,7 +123,7 @@ class ChangedCrateTestPackagesTest(unittest.TestCase):
         )
 
     def test_named_packages_exist(self) -> None:
-        names = set(test_packages(ROOT).values())
+        names = set(tested_packages(ROOT).values())
         named = {CANARY_PACKAGE} | set(HELPER_BINARIES)
         named |= {
             package for helpers in HELPER_BINARIES.values() for package, _ in helpers
