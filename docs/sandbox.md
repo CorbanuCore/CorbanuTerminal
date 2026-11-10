@@ -63,8 +63,10 @@ it up. To fix it:
 
 An exec-server older than this version can't report its sandbox. Under
 Moderate or Aggressive, work for such a machine is refused too (fail
-closed), unless it clearly runs on Linux or macOS (its working folder or
-shell is a POSIX one): update Corbanu Terminal on that machine. Remote Linux
+closed), unless it clearly runs on Linux or macOS (a POSIX working folder or
+shell, and a default shell other than PowerShell or cmd), and so is one that
+reports an operating system this version doesn't know: update Corbanu
+Terminal on that machine. Remote Linux
 and macOS machines use their own sandbox and are unchanged. A Windows
 computer without its own sandbox still refuses commands for every
 environment, remote Linux ones included (#2049).

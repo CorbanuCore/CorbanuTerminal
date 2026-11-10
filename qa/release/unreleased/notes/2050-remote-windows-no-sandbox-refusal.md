@@ -10,5 +10,6 @@
   commands and file tool access on such a machine are refused, naming the
   level, the environment and the setup steps for that machine. An
   exec-server too old to report is refused as well unless it clearly runs on
-  Linux or macOS. Permissive, remote Linux and macOS machines, and a Windows
+  Linux or macOS (an older Linux one whose default shell is PowerShell is
+  refused too; update it). Permissive, remote Linux and macOS machines, and a Windows
   computer sending work to a remote Linux machine (#2049) are unchanged.

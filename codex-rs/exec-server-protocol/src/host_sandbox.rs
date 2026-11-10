@@ -50,13 +50,14 @@ impl HostOs {
 /// Whether work sent to an executor runs inside a platform sandbox there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HostSandboxVerdict {
-    /// Not Windows, or Windows with a sandbox for the requested level.
+    /// Linux or macOS, or Windows with a sandbox for the requested level.
     Confined,
     /// Windows with no sandbox for the requested level: the client sends no
     /// Windows sandbox, or the elevated one is not set up there.
     WindowsWithoutSandbox,
     /// The executor did not report its sandbox (it predates #2050) and does
-    /// not clearly run on Linux or macOS.
+    /// not clearly run on Linux or macOS, or reported a system this client
+    /// does not know.
     Unreported,
 }
 
@@ -77,8 +78,12 @@ impl EnvironmentInfo {
                 HostSandboxVerdict::Unreported
             };
         };
-        if host.os != HostOs::Windows {
-            return HostSandboxVerdict::Confined;
+        match host.os {
+            HostOs::Linux | HostOs::Macos => return HostSandboxVerdict::Confined,
+            // A system this client does not know: it cannot tell (fail
+            // closed).
+            HostOs::Other => return HostSandboxVerdict::Unreported,
+            HostOs::Windows => {}
         }
         match windows_sandbox_level {
             WindowsSandboxLevel::Disabled => HostSandboxVerdict::WindowsWithoutSandbox,

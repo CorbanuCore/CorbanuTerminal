@@ -224,8 +224,7 @@ async fn build_uploaded_argument_value(
         .join(file_path)
         .map_err(|error| contextualize_error(error.to_string()))?;
     let fs = turn_environment.environment.get_filesystem();
-    // #1976 (D491): the host read below would run outside any sandbox.
-    if let Some(refusal) = read_sandbox.and_then(|sandbox| sandbox.unsandboxed_refusal.as_ref()) {
+    if let Some(refusal) = refused_here(turn_environment, read_sandbox) {
         return Err(contextualize_error(refusal.clone()));
     }
     let (size, contents) = if let Some(policy) = read_policy
@@ -312,6 +311,21 @@ async fn build_uploaded_argument_value(
 }
 
 /// The upload's size and bytes, read through `read_sandbox` when it runs.
+/// #1976 (D491): on this host the read below would run outside any sandbox,
+/// so its refusal ends the upload here. #2050: a remote executor's file
+/// system judges the refusal against the executor's own report
+/// (`RemoteFileSystem`): it refuses there, or reads inside that executor's
+/// sandbox (a remote Linux or macOS machine).
+fn refused_here<'a>(
+    environment: &crate::session::turn_context::TurnEnvironment,
+    read_sandbox: Option<&'a FileSystemSandboxContext>,
+) -> Option<&'a String> {
+    if environment.environment.is_remote() {
+        return None;
+    }
+    read_sandbox.and_then(|sandbox| sandbox.unsandboxed_refusal.as_ref())
+}
+
 async fn read_upload_contents(
     fs: &dyn codex_exec_server::ExecutorFileSystem,
     path_uri: &codex_utils_path_uri::PathUri,
@@ -391,6 +405,33 @@ mod tests {
             Vec::new(),
             primary.shell.clone(),
         );
+    }
+
+    /// #2050: only a local refusal ends an upload before the read; a remote
+    /// environment's file system judges it against the executor's report.
+    #[test]
+    fn issue_2050_only_a_local_refusal_ends_an_upload_early() {
+        let environment = |url: Option<String>| {
+            crate::session::turn_context::TurnEnvironment::new(
+                "env".to_string(),
+                Arc::new(codex_exec_server::Environment::create_for_tests(url).expect("env")),
+                codex_utils_path_uri::PathUri::parse("file:///work").expect("cwd"),
+                Vec::new(),
+                /*shell*/ None,
+            )
+        };
+        let mut sandbox = FileSystemSandboxContext::from_permission_profile(
+            codex_protocol::models::PermissionProfile::Disabled,
+        );
+        sandbox.unsandboxed_refusal = Some("refused".to_string());
+        let local = environment(None);
+        let remote = environment(Some("ws://127.0.0.1:9".to_string()));
+        assert_eq!(
+            refused_here(&local, Some(&sandbox)),
+            Some(&"refused".to_string())
+        );
+        assert_eq!(refused_here(&remote, Some(&sandbox)), None);
+        assert_eq!(refused_here(&local, None), None);
     }
 
     #[tokio::test]

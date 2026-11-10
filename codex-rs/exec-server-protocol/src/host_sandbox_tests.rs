@@ -122,8 +122,12 @@ fn issue_2050_host_sandbox_report_is_backward_compatible() {
     assert_eq!(older.host_sandbox, None);
     let unreported = serde_json::to_value(info(ZSH, None, None)).expect("serialize");
     assert!(unreported.get("hostSandbox").is_none());
-    // An operating system this client does not know is not Windows.
+    // An operating system this client does not know: it cannot tell.
     let future: HostSandboxInfo =
         serde_json::from_value(serde_json::json!({ "os": "plan9" })).expect("future os");
     assert_eq!(future.os, HostOs::Other);
+    assert_eq!(
+        verdicts(&info(ZSH, Some("file:///home/me"), Some(future))),
+        [Unreported; 3]
+    );
 }
