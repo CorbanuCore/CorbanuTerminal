@@ -92,7 +92,9 @@ doesn't change (through a dependency) shows up on `main`.
   (`rust-ci / Changed crate tests / cargo nextest (changed crates)`, #1972):
   `cargo nextest run -p <crate>...` (unit and integration tests) for every
   `codex-rs` crate under which the PR changes any file
-  (`.github/scripts/changed_crate_test_packages.py`). It does not add the
+  (`.github/scripts/changed_crate_test_packages.py`), including crates Cargo
+  makes members only because a member depends on them by path, such as
+  `codex-windows-sandbox` (#2027). It does not add the
   crates that depend on them, and a `Cargo.lock`-only change runs nothing. It
   runs codex-core's remote-aware tests locally, without postmerge's Docker
   remote environment. It first builds the helper binaries some suites
