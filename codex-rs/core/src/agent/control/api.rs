@@ -46,7 +46,10 @@ impl AgentControl for LocalAgentControl {
     ) -> BoxFuture<'a, Result<ThreadId>> {
         Box::pin(async move {
             self.runtime.register_session_root(caller, parent);
-            if let Ok(thread_id) = ThreadId::from_string(target) {
+            // Corbanu (c453245251): operator pane assignments address agents as
+            // `thread:<id>`.
+            let thread_id = target.strip_prefix("thread:").unwrap_or(target);
+            if let Ok(thread_id) = ThreadId::from_string(thread_id) {
                 return Ok(thread_id);
             }
             self.runtime

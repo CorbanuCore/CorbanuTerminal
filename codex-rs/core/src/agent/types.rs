@@ -16,6 +16,10 @@ pub struct AgentMetadata {
     pub agent_path: Option<AgentPath>,
     pub agent_nickname: Option<String>,
     pub agent_role: Option<String>,
+    /// Corbanu: the last task sent to this agent and its last result, shown by
+    /// `/spawn`'s agent graph and list tools.
+    pub last_task_message: Option<String>,
+    pub last_result_message: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
