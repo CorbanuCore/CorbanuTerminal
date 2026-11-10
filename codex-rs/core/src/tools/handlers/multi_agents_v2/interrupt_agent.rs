@@ -1,24 +1,24 @@
 use super::analytics::ToolCallAnalytics;
 use super::*;
-<<<<<<< HEAD
 use crate::agent_communication::AgentCommunicationContext;
 use crate::agent_communication::AgentCommunicationKind;
-||||||| 413492cd6c
-=======
-use crate::agent::api::AgentTarget;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::tools::handlers::multi_agents_spec::create_interrupt_agent_tool_v2;
-<<<<<<< HEAD
+use codex_protocol::AgentPath;
+use codex_protocol::error::CodexErr;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ResponseItemMetadata;
-||||||| 413492cd6c
-use codex_protocol::error::CodexErrorDetails;
-=======
-use codex_protocol::protocol::MultiAgentVersion;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_protocol::protocol::InterAgentCommunication;
 use codex_tools::ToolSpec;
 
 pub(crate) struct Handler;
+
+/// What an interrupt does to an agent that isn't running (D404).
+const NOT_RUNNING_EFFECT: &str =
+    "not running: nothing was interrupted and the agent was not started";
+
+/// What an interrupt does to a just-spawned agent whose first turn has not
+/// started yet (D435).
+const PENDING_EFFECT: &str = "pending: interrupt sent to stop its first turn; a first turn still held back (by the agent limit, the kill switch or its account) is not cancelled; no new turn was started";
 
 impl ToolExecutor<ToolInvocation> for Handler {
     fn tool_name(&self) -> ToolName {
@@ -57,7 +57,6 @@ async fn handle_interrupt_agent(
     ensure_manager_tool_allowed(&turn, "interrupt_agent")?;
     let arguments = function_arguments(payload)?;
     let args: InterruptAgentArgs = parse_arguments(&arguments)?;
-<<<<<<< HEAD
     // OpenAI's reserved collaboration schema exposes only `target`. Keep the richer PF reason
     // outside that wire contract and synthesize a truthful audit reason when the native call does
     // not provide one. Provider-neutral callers may still supply the explicit reason exposed by
@@ -79,15 +78,21 @@ async fn handle_interrupt_agent(
         ));
     }
     let agent_id = resolve_agent_target(&session, &turn, &args.target).await?;
-    if session.services.agent_control.is_root_thread(agent_id) {
+    analytics.set_receiver(agent_id);
+    // Corbanu (D527 (a)): main's D404/D435 interrupt runs on the shared handle's local backend;
+    // any other backend fails closed.
+    let local_agent_control = session
+        .services
+        .agent_control
+        .local_or_unsupported()
+        .map_err(|err| collab_agent_error(agent_id, err))?;
+    if local_agent_control.is_root_thread(agent_id) {
         return Err(FunctionCallError::RespondToModel(
             "root is not a spawned agent".to_string(),
         ));
     }
     let receiver_agent = match explicit_agent_path.as_ref() {
-        Some(agent_path) => session
-            .services
-            .agent_control
+        Some(agent_path) => local_agent_control
             .get_agent_metadata_for_path(agent_path)
             .filter(|metadata| metadata.agent_id == Some(agent_id))
             .ok_or_else(|| {
@@ -95,11 +100,9 @@ async fn handle_interrupt_agent(
                     "live agent path `{agent_path}` no longer matches its resolved thread"
                 ))
             })?,
-        None => session
-            .services
-            .agent_control
-            .ensure_agent_known(agent_id)
-            .map_err(|err| collab_agent_error(agent_id, err))?,
+        None => local_agent_control
+            .get_agent_metadata(agent_id)
+            .ok_or_else(|| collab_agent_error(agent_id, CodexErr::ThreadNotFound(agent_id)))?,
     };
     if agent_id == session.thread_id {
         return Err(FunctionCallError::RespondToModel(
@@ -108,48 +111,9 @@ async fn handle_interrupt_agent(
         ));
     }
     let receiver_agent_path = receiver_agent.agent_path.clone().ok_or_else(|| {
-||||||| 413492cd6c
-    let agent_id = resolve_agent_target(&session, &turn, &args.target).await?;
-    let receiver_agent = session
-        .services
-        .agent_control
-        .ensure_agent_known(agent_id)
-        .map_err(|err| collab_agent_error(agent_id, err))?;
-    if receiver_agent
-        .agent_path
-        .as_ref()
-        .is_some_and(AgentPath::is_root)
-    {
-        return Err(FunctionCallError::RespondToModel(
-            "root is not a spawned agent".to_string(),
-        ));
-    }
-    if agent_id == session.thread_id {
-        return Err(FunctionCallError::RespondToModel(
-            "an agent cannot interrupt itself; return your result and let the parent interrupt you if needed"
-                .to_string(),
-        ));
-    }
-    let receiver_agent_path = receiver_agent.agent_path.clone().ok_or_else(|| {
-=======
-    let agent_id = resolve_agent_target(&session, &turn, &args.target).await?;
-    analytics.set_receiver(agent_id);
-    let snapshot = session
-        .services
-        .agent_control
-        .interrupt(
-            session.thread_id,
-            AgentTarget::Id(agent_id),
-            MultiAgentVersion::V2,
-        )
-        .await
-        .map_err(|err| collab_v2_agent_error(agent_id, err))?;
-    let agent_path = snapshot.metadata().agent_path.clone().ok_or_else(|| {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         FunctionCallError::RespondToModel("target agent is missing an agent_path".to_string())
     })?;
-<<<<<<< HEAD
-    let status = session.services.agent_control.get_status(agent_id).await;
+    let status = local_agent_control.get_status(agent_id).await;
     let actor_path = turn
         .session_source
         .get_agent_path()
@@ -170,106 +134,95 @@ async fn handle_interrupt_agent(
         (Some(nickname), None) => format!("{nickname} · {receiver_agent_path}"),
         (None, _) => receiver_agent_path.to_string(),
     };
+    let not_running = InterruptAgentResult {
+        previous_status: status.clone(),
+        actor: actor.clone(),
+        target: target.clone(),
+        reason: reason.to_string(),
+        superseding_task: superseding_task.clone(),
+        process_effect: NOT_RUNNING_EFFECT.to_string(),
+    };
+    // D404 (#1796): an agent without a running turn is neither interrupted
+    // nor woken (the audit message below would start a turn): the call only
+    // reports its status, at every security level.
+    // D435: a just-spawned agent whose first turn hasn't started still gets
+    // the interrupt, which stops that turn, but not the message, which would
+    // start another. A session reloaded without a turn also reads
+    // `PendingInit`; it is idle, so D404 applies.
+    let pending = status == AgentStatus::PendingInit
+        && local_agent_control.spawned_with_first_turn(agent_id).await;
+    if !pending && status != AgentStatus::Running {
+        return Ok(not_running);
+    }
+    match local_agent_control.interrupt_agent(agent_id).await {
+        Ok(_) => {}
+        // Its runtime is gone, so it no longer runs: don't wake it either.
+        Err(err)
+            if matches!(
+                err.details(),
+                CodexErrorDetails::ThreadNotFound(_) | CodexErrorDetails::InternalAgentDied
+            ) =>
+        {
+            return Ok(InterruptAgentResult {
+                previous_status: local_agent_control.get_status(agent_id).await,
+                ..not_running
+            });
+        }
+        Err(err) => return Err(collab_agent_error(agent_id, err)),
+    }
+    let interrupted = SubAgentActivityItem {
+        model: None,
+        reasoning_effort: None,
+        id: call_id.clone(),
+        agent_thread_id: agent_id,
+        agent_path: receiver_agent_path.clone(),
+        kind: SubAgentActivityKind::Interrupted,
+    };
+    if pending {
+        emit_sub_agent_activity(&session, &turn, interrupted).await;
+        return Ok(InterruptAgentResult {
+            process_effect: PENDING_EFFECT.to_string(),
+            ..not_running
+        });
+    }
     let process_effect = "model turn aborted; active turn-owned tool processes receive SIGTERM cleanup before abort; durable unified-exec background processes are preserved and remain inspectable in /ps".to_string();
     let audit_copy = format!(
         "Actor: {actor}\nTarget: {target}\nReason: {reason}\nSuperseding task/dispatch: {}\nProcess effect: {process_effect}",
         superseding_task.as_deref().unwrap_or("none")
     );
-    // A shutdown V2 worker remains a durable graph identity that can be reloaded later. Sending
-    // an interrupt to its dead runtime reports `InternalAgentDied`, whose generic cleanup path
-    // removes that identity. Treat the already-terminal interrupt as idempotent instead.
-    let interrupt_result = if matches!(status, AgentStatus::Shutdown) {
-        Ok(String::new())
-    } else {
-        session
-            .services
-            .agent_control
-            .interrupt_agent(agent_id)
-            .await
-    };
-    let result = match interrupt_result {
-        Ok(_) => Ok(()),
-        Err(err)
-            if matches!(
-                err.details(),
-                CodexErrorDetails::ThreadNotFound(_) | CodexErrorDetails::InternalAgentDied
-            ) =>
-        {
-            Ok(())
-        }
-        Err(err) => Err(collab_agent_error(agent_id, err)),
-    };
-    result?;
-    if !matches!(
-        status,
-        AgentStatus::NotFound | AgentStatus::Unloaded | AgentStatus::Shutdown
-    ) {
-        // The runtime owns this plaintext audit record. Keep it typed as a control request so the
-        // target pane and durable mailbox retain the full actor/reason/process tuple.
-        let mut communication = InterAgentCommunication::new(
-            actor_path,
-            receiver_agent_path.clone(),
-            Vec::new(),
-            format!("CONTROL EVENT — INTERRUPT\n{audit_copy}"),
-            /*trigger_turn*/ true,
-        )
-        .with_kind(codex_protocol::protocol::AgentMessageKind::ControlRequest);
-        communication
-            .metadata
-            .get_or_insert_with(ResponseItemMetadata::default)
-            .source_call_id = Some(call_id.clone());
-        let context =
-            AgentCommunicationContext::new(AgentCommunicationKind::Message, session.thread_id);
-        session
-            .services
-            .agent_control
-            .send_inter_agent_communication(
-                agent_id,
-                communication,
-                context,
-                Some(turn.sub_id.clone()),
-            )
-            .await
-            .map_err(|err| collab_agent_error(agent_id, err))?;
-    }
-||||||| 413492cd6c
-    let status = session.services.agent_control.get_status(agent_id).await;
-    let result = match session
-        .services
-        .agent_control
-        .interrupt_agent(agent_id)
-        .await
-    {
-        Ok(_) => Ok(()),
-        Err(err)
-            if matches!(
-                err.details(),
-                CodexErrorDetails::ThreadNotFound(_) | CodexErrorDetails::InternalAgentDied
-            ) =>
-        {
-            Ok(())
-        }
-        Err(err) => Err(collab_agent_error(agent_id, err)),
-    };
-    result?;
-=======
-    let previous_status = snapshot.status().cloned().unwrap_or(AgentStatus::NotFound);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-    emit_sub_agent_activity(
-        &session,
-        &turn,
-        SubAgentActivityItem {
-            model: None,
-            reasoning_effort: None,
-            id: call_id,
-            agent_thread_id: agent_id,
-            agent_path,
-            kind: SubAgentActivityKind::Interrupted,
-        },
+    // The runtime owns this plaintext audit record. Keep it typed as a control request so the
+    // target pane and durable mailbox retain the full actor/reason/process tuple.
+    let mut communication = InterAgentCommunication::new(
+        actor_path,
+        receiver_agent_path,
+        Vec::new(),
+        format!("CONTROL EVENT — INTERRUPT\n{audit_copy}"),
+        /*trigger_turn*/ true,
     )
-    .await;
+    .with_kind(codex_protocol::protocol::AgentMessageKind::ControlRequest);
+    communication
+        .metadata
+        .get_or_insert_with(ResponseItemMetadata::default)
+        .source_call_id = Some(call_id);
+    let context =
+        AgentCommunicationContext::new(AgentCommunicationKind::Message, session.thread_id);
+    local_agent_control
+        .send_inter_agent_communication(
+            agent_id,
+            communication,
+            context,
+            crate::TurnStartOptions {
+                parent_turn_id: Some(turn.sub_id.clone()),
+                root_turn_id: turn.turn_metadata_state.root_turn_id(),
+                turn_trigger: turn.turn_metadata_state.current_turn_trigger(),
+                cyber_access_program: turn.cyber_access_program,
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(|err| collab_agent_error(agent_id, err))?;
+    emit_sub_agent_activity(&session, &turn, interrupted).await;
 
-<<<<<<< HEAD
     Ok(InterruptAgentResult {
         previous_status: status,
         actor,
@@ -278,13 +231,6 @@ async fn handle_interrupt_agent(
         superseding_task,
         process_effect,
     })
-||||||| 413492cd6c
-    Ok(InterruptAgentResult {
-        previous_status: status,
-    })
-=======
-    Ok(InterruptAgentResult { previous_status })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl CoreToolRuntime for Handler {

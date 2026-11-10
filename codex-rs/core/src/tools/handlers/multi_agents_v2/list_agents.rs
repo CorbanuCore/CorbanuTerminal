@@ -1,6 +1,8 @@
 use super::analytics::ToolCallAnalytics;
 use super::*;
+use crate::agent::control::ListedAgent;
 use crate::tools::handlers::multi_agents_spec::create_list_agents_tool;
+use codex_protocol::AgentPath;
 use codex_tools::ToolSpec;
 
 pub(crate) struct Handler;
@@ -57,18 +59,26 @@ impl Handler {
             .await
             .map_err(collab_spawn_error)?;
 
-        let agents = agents
-            .into_iter()
-            .map(|agent| ListedAgent {
-                agent_name: agent
-                    .metadata
-                    .agent_path
-                    .as_ref()
-                    .map(ToString::to_string)
-                    .unwrap_or_else(|| agent.thread_id.to_string()),
-                agent_status: agent.status,
-            })
-            .collect();
+        // Corbanu: main's rows (nickname, role, last task and result, as `/spawn` shows them).
+        let mut agents: Vec<ListedAgent> = agents.into_iter().map(ListedAgent::from).collect();
+        // #1756 (as #1701 for `wait_agent`): list only the caller itself and its own agents
+        // (and theirs), not other loaded threads and their results. The ownership check needs
+        // Corbanu's local backend (D527 (a)); any other backend fails closed.
+        let mut own_agents = session
+            .services
+            .agent_control
+            .local_or_unsupported()
+            .map_err(collab_spawn_error)?
+            .own_agent_names(session.thread_id)
+            .await
+            .unwrap_or_default();
+        own_agents.push(
+            turn.session_source
+                .get_agent_path()
+                .unwrap_or_else(AgentPath::root)
+                .to_string(),
+        );
+        agents.retain(|agent| own_agents.contains(&agent.agent_name));
         Ok(boxed_tool_output(ListAgentsResult { agents }))
     }
 }
@@ -86,12 +96,6 @@ impl CoreToolRuntime for Handler {
 #[serde(deny_unknown_fields)]
 struct ListAgentsArgs {
     path_prefix: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct ListedAgent {
-    agent_name: String,
-    agent_status: AgentStatus,
 }
 
 #[derive(Debug, Serialize)]
