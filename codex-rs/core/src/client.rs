@@ -87,6 +87,7 @@ use codex_api::auth_header_telemetry;
 use codex_api::build_session_headers;
 use codex_api::create_text_param_for_request;
 use codex_api::response_create_client_metadata;
+use codex_features::Feature;
 use codex_features::RuntimeAuthMode;
 use codex_http_client::ClientRouteClass;
 use codex_http_client::HttpClientFactory;
@@ -162,6 +163,7 @@ use crate::attestation::AttestationContext;
 use crate::attestation::AttestationProvider;
 use crate::attestation::X_OAI_ATTESTATION_HEADER;
 use crate::client_common::Prompt;
+use crate::config::Config;
 use crate::client_common::ResponseEvent;
 use crate::client_common::ResponseStream;
 use crate::client_common::retain_latest_contextual_developer_fragments;
@@ -771,7 +773,7 @@ fn incremental_items_for_request(
     last_response: Option<&LastResponse>,
     allow_empty_delta: bool,
 ) -> Option<Vec<ResponseItem>> {
-    if !responses_request_properties_match(previous_request, request) {
+    if responses_request_properties_mismatch(previous_request, request).is_some() {
         trace!("incremental request failed, reuse properties didn't match");
         return None;
     }
@@ -877,6 +879,7 @@ fn terminal_item_is_assistant_output(item: &ResponseItem) -> Option<bool> {
         | ResponseItem::ContextCompaction { .. } => Some(false),
         ResponseItem::AdditionalTools { .. }
         | ResponseItem::Reasoning { .. }
+        | ResponseItem::ConfigurationUpdate { .. }
         | ResponseItem::CompactionTrigger { .. }
         | ResponseItem::Other => None,
     }
@@ -884,6 +887,8 @@ fn terminal_item_is_assistant_output(item: &ResponseItem) -> Option<bool> {
 
 fn append_synthetic_responses_user_turn(input: &mut Vec<ResponseItem>) {
     input.push(ResponseItem::Message {
+        encrypted_content: None,
+        status: None,
         id: None,
         role: "user".to_string(),
         content: vec![ContentItem::InputText {
@@ -943,6 +948,7 @@ fn is_model_output_item(item: &ResponseItem) -> bool {
         | ResponseItem::ToolSearchOutput { .. }
         | ResponseItem::CustomToolCallOutput { .. }
         | ResponseItem::AdditionalTools { .. }
+        | ResponseItem::ConfigurationUpdate { .. }
         | ResponseItem::CompactionTrigger { .. }
         | ResponseItem::Other => false,
     }
@@ -995,7 +1001,7 @@ fn trace_stream_timing(label: &str, start: Instant) {
 
 fn response_event_name(event: &ResponseEvent) -> &'static str {
     match event {
-        ResponseEvent::Created => "created",
+        ResponseEvent::Created { .. } => "created",
         ResponseEvent::OutputItemDone(_) => "output_item_done",
         ResponseEvent::OutputItemAdded(_) => "output_item_added",
         ResponseEvent::ServerModel(_) => "server_model",
@@ -1764,9 +1770,24 @@ impl ModelClient {
         if self.state.provider.info() == provider_info {
             return self.clone();
         }
+        let provider = create_model_provider(
+            provider_info.clone(),
+            self.state.provider.auth_manager(),
+        );
+        self.with_provider(provider, /*config*/ None)
+    }
 
-        let auth_manager = self.state.provider.auth_manager();
-        let provider = create_model_provider(provider_info.clone(), auth_manager);
+    /// PF-84: the client after a provider switch. Everything session-scoped stays (session
+    /// context and prompt cache key, event sender, executed tool calls, request contributors,
+    /// attestation, runtime auth, native ingress); the provider and its request settings come
+    /// from `config`.
+    pub(crate) fn for_provider_switch(&self, provider: SharedModelProvider, config: &Config) -> Self {
+        self.with_provider(provider, Some(config))
+    }
+
+    /// A client on `provider` with isolated transport and fallback state. Request settings
+    /// come from `config` when given, else from this client.
+    fn with_provider(&self, provider: SharedModelProvider, config: Option<&Config>) -> Self {
         let codex_api_key_env_enabled = provider
             .auth_manager()
             .as_ref()
@@ -1774,38 +1795,71 @@ impl ModelClient {
         let auth_env_telemetry =
             collect_auth_env_telemetry(provider.info(), codex_api_key_env_enabled);
         let include_attestation = provider.supports_attestation();
+        let state = &self.state;
+        let feature = |feature: Feature, current: bool| {
+            config.map_or(current, |config| config.features.enabled(feature))
+        };
         Self {
             state: Arc::new(ModelClientState {
-                thread_id: self.state.thread_id,
+                thread_id: state.thread_id,
                 provider,
+                workspace_routing: state.workspace_routing.clone(),
                 auth_env_telemetry,
-                session_source: self.state.session_source.clone(),
-                originator: self.state.originator.clone(),
-                model_verbosity: self.state.model_verbosity,
-                enable_request_compression: self.state.enable_request_compression,
-                include_timing_metrics: self.state.include_timing_metrics,
-                beta_features_header: self.state.beta_features_header.clone(),
-                concurrent_reasoning_summaries_enabled: self
-                    .state
-                    .concurrent_reasoning_summaries_enabled,
+                session_source: state.session_source.clone(),
+                originator: state.originator.clone(),
+                model_verbosity: config.map_or(state.model_verbosity, |config| config.model_verbosity),
+                content_item_kinds_enabled: feature(
+                    Feature::ContentItemKinds,
+                    state.content_item_kinds_enabled,
+                ),
+                reasoning_effort_override_enabled: state.reasoning_effort_override_enabled,
+                enable_request_compression: feature(
+                    Feature::EnableRequestCompression,
+                    state.enable_request_compression,
+                ),
+                include_timing_metrics: feature(Feature::RuntimeMetrics, state.include_timing_metrics),
+                beta_features_header: state.beta_features_header.clone(),
+                concurrent_reasoning_summaries_enabled: feature(
+                    Feature::ConcurrentReasoningSummaries,
+                    state.concurrent_reasoning_summaries_enabled,
+                ),
+                output_token_replay_enabled: feature(
+                    Feature::OutputTokenReplay,
+                    state.output_token_replay_enabled,
+                ),
                 include_attestation,
-                attestation_provider: self.state.attestation_provider.clone(),
+                attestation_provider: state.attestation_provider.clone(),
                 disable_websockets: AtomicBool::new(false),
-                agent_identity_session_fallback: self.state.agent_identity_session_fallback.clone(),
+                agent_identity_session_fallback: state.agent_identity_session_fallback.clone(),
                 cached_websocket_session: StdMutex::new(WebsocketSession::default()),
                 server_conversation_state: Arc::new(StdMutex::new(None)),
                 http_server_state_rejected: AtomicBool::new(false),
                 vercel_vendor_pin_rejected: AtomicBool::new(false),
                 legacy_synthetic_continuation: AtomicBool::new(false),
                 unresolvable_item_ids: StdMutex::new(HashSet::new()),
+                last_inference_tools: StdMutex::new(None),
             }),
             agent_identity_policy: self.agent_identity_policy,
-            prompt_cache_key_override: self.prompt_cache_key_override.clone(),
-            http_client_factory: self.http_client_factory.clone(),
+            prompt_cache_key_policy: self.prompt_cache_key_policy.clone(),
+            session_id_override: self.session_id_override.clone(),
+            codex_responses_headers: self.codex_responses_headers.clone(),
+            event_sender: self.event_sender.clone(),
+            http_client_factory: config.map_or_else(
+                || self.http_client_factory.clone(),
+                Config::http_client_factory,
+            ),
             ingress_level: self.ingress_level,
             ingress_policy: self.ingress_policy.clone(),
             stage_one_memory_binding: self.stage_one_memory_binding.clone(),
             ingress_items: Arc::clone(&self.ingress_items),
+            restored_history: self.restored_history,
+            request_contributors: self.request_contributors.clone(),
+            executed_tool_calls: self.executed_tool_calls.clone(),
+            api_key_cyber_access_programs: config.map_or(
+                self.api_key_cyber_access_programs,
+                cyber_access_program::ApiKeyCyberAccessPrograms::from_config,
+            ),
+            runtime_auth: self.runtime_auth.clone(),
         }
     }
 
@@ -7694,7 +7748,17 @@ async fn handle_unauthorized(
     event_sender: Option<&Sender<ProtocolEvent>>,
     turn_id: Option<&str>,
 ) -> Result<UnauthorizedRecoveryExecution> {
-    match try_unauthorized_recovery(transport, auth_recovery, session_telemetry, provider).await {
+    match try_unauthorized_recovery(
+        transport,
+        auth_recovery,
+        provider_auth_recovery_attempted,
+        session_telemetry,
+        provider,
+        event_sender,
+        turn_id,
+    )
+    .await
+    {
         Err(error) => Err(named_sign_in_revoked(provider).await.unwrap_or(error)),
         recovered => recovered,
     }
@@ -7721,8 +7785,11 @@ async fn named_sign_in_revoked(provider: &SharedModelProvider) -> Option<CodexEr
 async fn try_unauthorized_recovery(
     transport: TransportError,
     auth_recovery: &mut Option<UnauthorizedRecovery>,
+    provider_auth_recovery_attempted: &mut bool,
     session_telemetry: &SessionTelemetry,
     provider: &SharedModelProvider,
+    event_sender: Option<&Sender<ProtocolEvent>>,
+    turn_id: Option<&str>,
 ) -> Result<UnauthorizedRecoveryExecution> {
     let debug = extract_response_debug_context(&transport);
     if !*provider_auth_recovery_attempted {
