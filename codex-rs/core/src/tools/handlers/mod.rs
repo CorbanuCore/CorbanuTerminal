@@ -88,6 +88,7 @@ pub(crate) use structured_edit::emit_model_edit_fallback_activated_metric;
 pub(crate) use structured_edit::native_structured_edit_protocol_enabled;
 pub(crate) use structured_edit::native_structured_edit_protocol_enabled_for;
 pub(crate) use structured_edit::reject_source_write_heredoc_when_structured_edit_enabled;
+pub(crate) use structured_edit::reject_source_write_heredoc_when_structured_edit_enabled_for;
 pub(crate) use structured_edit::validate_structured_write_arguments;
 pub use test_sync::TestSyncHandler;
 pub(crate) use tool_search::ToolSearchHandlerCache;

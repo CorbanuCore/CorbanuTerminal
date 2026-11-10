@@ -588,9 +588,13 @@ pub(crate) fn finalize_tool_router(
         tool_namespaces_info,
         &child_management_tools,
     )
-    .with_flat_tool_names(flat_tool_names.with_multi_agent_v2_namespace(
-        multi_agent_v2_tool_namespace(turn_context).map(str::to_owned),
-    ))
+    // The namespace earlier V2 calls were recorded under on a Responses wire, so their
+    // replay on a wire without namespaces keeps the bare name; deliberately not gated.
+    .with_flat_tool_names(
+        flat_tool_names.with_multi_agent_v2_namespace(
+            turn_context.config.multi_agent_v2.tool_namespace.clone(),
+        ),
+    )
     .with_omitted_tools(omitted_tools))
 }
 
@@ -928,7 +932,7 @@ pub(crate) fn search_tool_enabled(turn_context: &TurnContext, model_info: &Model
 
 /// The V2 multi-agent namespace, only where the wire carries namespaces (main
 /// and the base kept these tools plain on Chat Completions/Anthropic wires).
-fn multi_agent_v2_tool_namespace(turn_context: &TurnContext) -> Option<&str> {
+pub(crate) fn multi_agent_v2_tool_namespace(turn_context: &TurnContext) -> Option<&str> {
     namespace_tools_enabled(turn_context)
         .then_some(turn_context.config.multi_agent_v2.tool_namespace.as_deref())
         .flatten()
