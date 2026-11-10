@@ -523,11 +523,11 @@ async fn schedule_startup_prewarm_inner(
 /// `reopened_by_prompt_edit` (#1038): editing the first message continues in
 /// a conversation with no history, which is a reopen all the same.
 pub(crate) fn is_reopen(
-    history: &codex_protocol::protocol::InitialHistory,
+    history: &codex_history::InitialHistory,
     source: &codex_protocol::protocol::SessionSource,
     reopened_by_prompt_edit: bool,
 ) -> bool {
-    use codex_protocol::protocol::InitialHistory;
+    use codex_history::InitialHistory;
     let reopened = match history {
         InitialHistory::Resumed(_) | InitialHistory::Forked(_) => true,
         InitialHistory::New => reopened_by_prompt_edit,

@@ -29,7 +29,7 @@ impl Session {
         }
         let state = self.state.lock().await;
         let configuration = &state.session_configuration;
-        if &configuration.provider != expected_provider {
+        if configuration.provider.info() != expected_provider {
             return Err(StageOneMemoryDenial::ProviderChanged);
         }
         let policy = self
@@ -38,10 +38,10 @@ impl Session {
             .snapshot_for_agent(self.thread_id)
             .map_err(|_| StageOneMemoryDenial::PolicyUnavailable)?;
         let mut config = (*configuration.original_config_do_not_use).clone();
-        config.model_provider = configuration.provider.clone();
+        config.model_provider = configuration.provider.info().clone();
         Ok(MemoryStageOneConfiguration {
             config: Arc::new(config),
-            thread: configuration.thread_config_snapshot(),
+            thread: configuration.thread_config_snapshot(configuration.environments.clone()),
             level: policy.level,
             runtime_nonce: policy.runtime_nonce,
             session_id: policy.session_id.as_str().to_owned(),

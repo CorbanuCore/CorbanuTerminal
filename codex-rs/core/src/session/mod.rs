@@ -73,8 +73,6 @@ use codex_async_utils::OrCancelExt;
 use codex_attachment_store::AttachmentStore;
 use codex_attachment_store::InlineAttachmentStore;
 use codex_connectors::connector_runtime_context_key;
-use codex_core_skills::injection::HOST_SKILLS_CONTEXT_SOURCE_ID;
-use codex_core_skills::injection::HostSkillsCatalogInWorldState;
 use codex_context_fragments::RenderedFragment;
 use codex_exec_server::Environment;
 use codex_exec_server::EnvironmentManager;
@@ -236,7 +234,6 @@ use crate::config::PermissionProfileState;
 use crate::config::StartedNetworkProxy;
 use crate::config::resolve_web_search_mode_for_turn;
 use crate::context_manager::ContextManager;
-use crate::context_manager::updates::ContextSection;
 use crate::context_manager::HistoryReplacement;
 use crate::thread_rollout_truncation::initial_history_has_prior_user_turns;
 use codex_config::CONFIG_TOML_FILE;
@@ -427,7 +424,7 @@ use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ExecApprovalRequestEvent;
 use codex_protocol::protocol::ExecApprovalRequestWithdrawnEvent;
-use codex_protocol::protocol::InitialHistory;
+use codex_history::InitialHistory;
 use codex_protocol::protocol::ModelRerouteEvent;
 use codex_protocol::protocol::ModelRerouteReason;
 use codex_protocol::protocol::ModelResponseCompletedEvent;
@@ -1396,6 +1393,15 @@ async fn thread_title_from_thread_store(
 
 /// PF-28-S01: [`crate::security::disclosure_gate::gate_values`] for envelopes,
 /// one item at a time so each keeps its metadata; a withheld item is dropped.
+/// The text a context contributor's fragment carries (`source_envelopes`
+/// moves stored data out of the host message as text).
+fn prompt_fragment_text(fragment: &PromptFragment) -> String {
+    match fragment.content() {
+        ContentItem::InputText { text } | ContentItem::OutputText { text, .. } => text.clone(),
+        _ => String::new(),
+    }
+}
+
 fn gate_recorded_envelopes(items: Vec<ResponseItemEnvelope>) -> Vec<ResponseItemEnvelope> {
     items
         .into_iter()
@@ -1911,7 +1917,7 @@ impl Session {
 
                 if let Some(event) =
                     Self::last_model_response_completed_from_rollout(&rollout_items)
-                    && event.model == turn_context.model_info.slug.as_str()
+                    && event.model == turn_context.model_info().slug.as_str()
                     && event.model_provider_id == turn_context.config.model_provider_id.as_str()
                 {
                     self.services
@@ -2252,6 +2258,8 @@ impl Session {
             }
             _ => None,
         })
+    }
+
     fn last_token_usage_record_from_rollout(
         rollout_items: &[RolloutItem],
     ) -> Option<TokenUsageRecord> {
@@ -2471,10 +2479,10 @@ impl Session {
     /// state lock by every path that changes the provider. Returns whether the
     /// account changed; connectors are then marked for reconnection.
     pub(super) fn follow_provider_account(&self, next: &SessionConfiguration) -> bool {
-        if !self.services.active_auth.follow_provider(&next.provider) {
+        if !self.services.active_auth.follow_provider(next.provider.info()) {
             return false;
         }
-        let account = codex_model_provider::named_sign_in_account(&next.provider)
+        let account = codex_model_provider::named_sign_in_account(next.provider.info())
             .map_or_else(|| "default".to_string(), |account| account.to_string());
         info!(
             %account,
@@ -2501,7 +2509,7 @@ impl Session {
                     .http_client_factory(),
             )
         };
-        let account = codex_model_provider::named_sign_in_account(&provider);
+        let account = codex_model_provider::named_sign_in_account(provider.info());
         if !self
             .services
             .models_manager
@@ -2592,40 +2600,17 @@ impl Session {
         configuration: &SessionConfiguration,
     ) -> ModelClient {
         let config = configuration.original_config_do_not_use.as_ref();
-        ModelClient::new(
-            Some(self.services.auth_manager()),
-            if config.features.enabled(Feature::UseAgentIdentity) {
-                codex_login::auth::AgentIdentityAuthPolicy::ChatGptAuth
-            } else {
-                codex_login::auth::AgentIdentityAuthPolicy::JwtOnly
-            },
-            self.thread_id,
-            configuration.provider.clone(),
-            configuration.session_source.clone(),
-            configuration.originator.clone(),
-            config.model_verbosity,
-            config.features.enabled(Feature::EnableRequestCompression),
-            config.features.enabled(Feature::RuntimeMetrics),
-            Self::build_model_client_beta_features_header(config),
-            config
-                .features
-                .enabled(Feature::ConcurrentReasoningSummaries),
-            self.services.attestation_provider.clone(),
-            config.http_client_factory(),
-        )
-        .with_ingress_policy(
-            config.security_level,
-            self.services.security_policy.clone(),
-        )
-        .with_native_ingress_from(&self.services.model_client())
-        .with_source_envelopes(config.features.enabled(Feature::SourceEnvelopes))
-        .with_source_origin_key(config.codex_home.as_path())
-        .with_prompt_cache_key_override(
-            crate::guardian::prompt_cache_key_override_for_review_session(
-                &configuration.session_source,
-                configuration.parent_thread_id,
-            ),
-        )
+        // PF-84: a provider switch keeps everything session-scoped from the
+        // current client (session context and prompt cache key, executed tool
+        // calls, request contributors, attestation, native ingress) and takes
+        // the new provider with its request settings.
+        self.services
+            .model_client()
+            .for_provider_switch(configuration.provider.clone(), config)
+            .with_ingress_policy(config.security_level, self.services.security_policy.clone())
+            .with_native_ingress_from(&self.services.model_client())
+            .with_source_envelopes(config.features.enabled(Feature::SourceEnvelopes))
+            .with_source_origin_key(config.codex_home.as_path())
     }
 
     pub(crate) async fn preview_settings(
@@ -2972,7 +2957,10 @@ impl Session {
             // (exec --ephemeral) has no thread to record under.
             Ok(None) => {
                 let parent_session = if depth < MAX_DEPTH && parent != self.thread_id {
-                    self.services.agent_control.live_session(parent).await
+                    match self.services.agent_control.local() {
+                        Some(local) => local.live_session(parent).await,
+                        None => None,
+                    }
                 } else {
                     None
                 };
@@ -5747,7 +5735,7 @@ impl Session {
         turn_context: &Arc<TurnContext>,
         server_model: &str,
     ) {
-        let requested_model = turn_context.model_info.slug.as_str();
+        let requested_model = turn_context.model_info().slug.as_str();
         if server_model.eq_ignore_ascii_case(requested_model) {
             info!("server reported model {server_model} (matches requested model)");
             return;
@@ -5846,7 +5834,7 @@ impl Session {
                     // Validate immediately before slicing and replacing the captured prefix.
                     if state.history.history_version() != prefix.generation
                         || state.history.annotated_items().len() < prefix.len
-                        || self.services.model_client.auth_owner_generation()
+                        || self.services.model_client().auth_owner_generation()
                             != prefix.auth_owner_generation
                     {
                         return false;
@@ -6065,9 +6053,9 @@ impl Session {
         kind: codex_protocol::provenance::SourceKind,
     ) {
         for section in sections {
-            if let Some(message) =
-                crate::context_manager::updates::build_developer_update_item(vec![section])
-            {
+            if let Some(message) = crate::context_manager::updates::build_rendered_message(vec![
+                DeveloperInstructions::new(section).render_fragment(),
+            ]) {
                 self.services.model_client().register_message_origin(
                     std::slice::from_ref(&message),
                     crate::security::ingress::MessageOrigin::External(kind),
@@ -6100,7 +6088,7 @@ impl Session {
                 .await
             {
                 if separate_stored_data && fragment.is_stored_data() {
-                    stored_data_sections.push(fragment.text().to_string());
+                    stored_data_sections.push(prompt_fragment_text(&fragment));
                     continue;
                 }
                 developer_sections.push(fragment.into());
@@ -6191,7 +6179,7 @@ impl Session {
                 .await
             {
                 if separate_stored_data && fragment.is_stored_data() {
-                    stored_data_sections.push(fragment.text().to_string());
+                    stored_data_sections.push(prompt_fragment_text(&fragment));
                     continue;
                 }
                 match fragment.slot() {
@@ -6217,7 +6205,7 @@ impl Session {
                 .await
             {
                 if separate_stored_data && fragment.is_stored_data() {
-                    stored_data_sections.push(fragment.text().to_string());
+                    stored_data_sections.push(prompt_fragment_text(&fragment));
                     continue;
                 }
                 developer_sections.push(fragment.into());
@@ -6440,7 +6428,7 @@ impl Session {
         let Err(e) = live_thread.append_items(items).await else {
             // #616: only an append that wrote something shows the home works.
             if items.iter().any(|item| {
-                codex_rollout::is_persisted_rollout_item(item, live_thread.history_mode())
+                codex_rollout::persisted_rollout_item(item, live_thread.history_mode()).is_some()
             }) {
                 crate::home_access::note_rollout_written(self.thread_id());
             }
@@ -6483,8 +6471,8 @@ impl Session {
         fn output_call_id(item: &ResponseItem) -> Option<&str> {
             match item {
                 ResponseItem::FunctionCallOutput { call_id, .. }
-                | ResponseItem::CustomToolCallOutput { call_id, .. } => Some(call_id),
-                ResponseItem::ToolSearchOutput { call_id, .. } => call_id.as_deref(),
+                | ResponseItem::ToolSearchOutput { call_id, .. } => call_id.as_deref(),
+                ResponseItem::CustomToolCallOutput { call_id, .. } => Some(call_id),
                 _ => None,
             }
         }
@@ -6492,13 +6480,11 @@ impl Session {
         let recorded: HashSet<&str> = state
             .history
             .raw_items()
-            .iter()
             .filter_map(output_call_id)
             .collect();
         outputs.retain(|item| output_call_id(item).is_none_or(|id| !recorded.contains(id)));
     }
 
-    pub(crate) async fn current_window_id(&self) -> String {
     /// Captures the history lifetime without exposing mutable session state.
     pub(crate) async fn history_reset(&self) -> (u64, CancellationToken) {
         let state = self.state.lock().await;
@@ -7145,17 +7131,17 @@ impl Session {
         self.send_event(turn_context, event).await;
     }
 
-    pub(crate) async fn submit_internal_follow_up(
-        &self,
-        op: Op,
-        client_user_message_id: Option<String>,
-    ) -> CodexResult<()> {
+    /// Queues `op` as this session's own follow-up submission.
+    pub(crate) async fn submit_internal_follow_up(&self, op: Op) -> CodexResult<()> {
         let sub = Submission {
             id: Uuid::now_v7().to_string(),
             op,
-            parent_turn_id: None,
-            client_user_message_id,
+            turn_extension_init: None,
             trace: current_span_w3c_trace_context(),
+            parent_turn_id: None,
+            root_turn_id: None,
+            residency_guard: None,
+            message_delivery: None,
         };
         self.tx_sub
             .send(sub)

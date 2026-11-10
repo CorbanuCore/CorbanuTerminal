@@ -1523,7 +1523,8 @@ impl Session {
                     }),
                 });
             }
-            let session_file_system_policy = session_configuration.file_system_sandbox_policy();
+            let session_file_system_policy =
+                session_configuration.file_system_sandbox_policy(environment_selections);
             // Issue #536: where each writable root leads when the session
             // starts; a command is refused once one leads elsewhere.
             codex_sandboxing::writable_root_ledger::record_writable_roots(
@@ -2064,7 +2065,7 @@ impl Session {
                 active_auth: crate::state::ActiveAuthManager::new(Arc::clone(&auth_manager))
                     .for_user_session(
                         !session_configuration.session_source.is_non_root_agent(),
-                        &session_configuration.provider,
+                        session_configuration.provider.info(),
                     ),
                 openai_file_upload_client_pool: RouteAwareClientPool::new_without_request_logging(
                     config.http_client_factory(),
@@ -2343,7 +2344,7 @@ impl Session {
             // its warm-up is shown as such, and can be skipped. A sub-agent or
             // reviewer started with copied history is not one; its warm-up
             // stays an ordinary one.
-            let reopened = crate::session_startup_prewarm::is_reopen(
+            let reopened = super::startup_prewarm::is_reopen(
                 &initial_history,
                 &session_configuration.session_source,
                 config.reopened_by_prompt_edit,
