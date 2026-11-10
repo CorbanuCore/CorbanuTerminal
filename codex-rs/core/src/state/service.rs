@@ -88,6 +88,9 @@ pub(crate) struct SessionServices {
     pub(crate) mcp_thread_init: ExtensionDataInit,
     pub(crate) agent_control: Arc<dyn AgentControl>,
     pub(crate) local_agent_runtime: LocalAgentRuntime,
+    /// PF-23-S03: the live security policy of this session's agent tree, from the
+    /// local backend (a session cannot start on a controller without one).
+    pub(crate) security_policy: crate::security::EffectivePolicyView,
     pub(crate) network_proxy: ArcSwapOption<StartedNetworkProxy>,
     pub(crate) network_proxy_audit_metadata: NetworkProxyAuditMetadata,
     pub(crate) managed_network_requirements_configured: bool,

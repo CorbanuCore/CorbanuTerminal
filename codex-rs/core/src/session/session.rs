@@ -100,7 +100,6 @@ pub(crate) struct Session {
     pub(crate) active_turn: Mutex<Option<ActiveTurn>>,
     pub(crate) async_hook_results: async_channel::Receiver<HookCompletedEvent>,
     pub(crate) input_queue: InputQueue,
-<<<<<<< HEAD
     /// Stable mailbox IDs already materialized into this thread's model-visible history.
     ///
     /// This is seeded from persisted rollout items on resume so a crash between rollout flush
@@ -110,11 +109,6 @@ pub(crate) struct Session {
     /// same process gives a new session. A mailbox delivery attempt records the incarnation of
     /// the recipient session it was reserved for.
     pub(crate) mailbox_incarnation: String,
-    pub(crate) guardian_review_session: GuardianReviewSessionManager,
-||||||| 413492cd6c
-    pub(crate) guardian_review_session: GuardianReviewSessionManager,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub(crate) services: SessionServices,
     pub(super) git_enrichment_policy: GitEnrichmentPolicy,
     pub(super) fork_persistence: ForkPersistence,
@@ -131,17 +125,6 @@ pub(crate) struct SessionConfiguration {
     /// Runtime provider and its provider-specific execution policy.
     pub(super) provider: SharedModelProvider,
 
-<<<<<<< HEAD
-    pub(super) collaboration_mode: CollaborationMode,
-    pub(super) model_reasoning_summary: Option<ReasoningSummaryConfig>,
-    pub(super) service_tier: Option<String>,
-    /// Endpoint-specific context cap for an ephemeral runtime provider.
-    pub(super) runtime_model_context_window: Option<i64>,
-||||||| 413492cd6c
-    pub(super) collaboration_mode: CollaborationMode,
-    pub(super) model_reasoning_summary: Option<ReasoningSummaryConfig>,
-    pub(super) service_tier: Option<String>,
-=======
     /// Desired configured inputs inherited by future turns.
     pub(super) step_settings: Arc<StepSettings>,
     /// Host-supplied extension data inherited by future turns.
@@ -150,7 +133,8 @@ pub(crate) struct SessionConfiguration {
     pub(super) environments: Vec<TurnEnvironmentSelection>,
     /// Explicit startup overrides used when resolving effective model metadata.
     pub(super) model_info_overrides: ModelInfoOverrides,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    /// Endpoint-specific context cap for an ephemeral runtime provider.
+    pub(super) runtime_model_context_window: Option<i64>,
 
     /// Developer instructions that supplement the base instructions.
     pub(super) developer_instructions: Option<String>,
@@ -158,26 +142,10 @@ pub(crate) struct SessionConfiguration {
     /// Base instructions for the session.
     pub(super) base_instructions: String,
 
-<<<<<<< HEAD
-    /// Compact prompt override.
-    pub(super) compact_prompt: Option<String>,
-
-    /// When to escalate for approval for execution
-    pub(super) approval_policy: Constrained<AskForApproval>,
-    pub(super) approvals_reviewer: ApprovalsReviewer,
     /// #505: a person confirmed Aggressive in `/security` in this process, so
     /// approval for every command (`untrusted`, reviewer: user) holds until
     /// the restart; settings updates cannot lower it.
     pub(super) aggressive_approvals: bool,
-||||||| 413492cd6c
-    /// Compact prompt override.
-    pub(super) compact_prompt: Option<String>,
-
-    /// When to escalate for approval for execution
-    pub(super) approval_policy: Constrained<AskForApproval>,
-    pub(super) approvals_reviewer: ApprovalsReviewer,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     /// Permission profile state for the session. Keep the constrained profile,
     /// active profile id, and profile-defined workspace roots in sync by using
     /// the methods below instead of mutating the fields independently.
@@ -258,7 +226,6 @@ impl SessionConfiguration {
         self.permission_profile_state.permission_profile().clone()
     }
 
-<<<<<<< HEAD
     /// #505: approval for every command that is not known read-only, decided
     /// by a person, as Aggressive requires, unless a managed requirement rules
     /// out the policy or the reviewer (then nothing changes). Internal
@@ -285,7 +252,9 @@ impl SessionConfiguration {
         if self.aggressive_approvals {
             return Ok(true);
         }
-        self.approval_policy
+        let mut step_settings = (*self.step_settings).clone();
+        step_settings
+            .approval_policy
             .can_set(&AskForApproval::UnlessTrusted)
             .and_then(|()| {
                 self.original_config_do_not_use
@@ -294,24 +263,17 @@ impl SessionConfiguration {
                     .approvals_reviewer
                     .can_set(&ApprovalsReviewer::User)
             })
-            .and_then(|()| self.approval_policy.set(AskForApproval::UnlessTrusted))?;
-        self.approvals_reviewer = ApprovalsReviewer::User;
+            .and_then(|()| {
+                step_settings
+                    .approval_policy
+                    .set(AskForApproval::UnlessTrusted)
+            })?;
+        step_settings.approvals_reviewer = ApprovalsReviewer::User;
+        self.step_settings = Arc::new(step_settings);
         self.aggressive_approvals = true;
         Ok(true)
     }
 
-    pub(super) fn mcp_inputs_differ(&self, next: &Self) -> bool {
-        self.environments != next.environments
-            || self.approval_policy.value() != next.approval_policy.value()
-            || self.approvals_reviewer != next.approvals_reviewer
-            || self.permission_profile() != next.permission_profile()
-||||||| 413492cd6c
-    pub(super) fn mcp_inputs_differ(&self, next: &Self) -> bool {
-        self.environments != next.environments
-            || self.approval_policy.value() != next.approval_policy.value()
-            || self.approvals_reviewer != next.approvals_reviewer
-            || self.permission_profile() != next.permission_profile()
-=======
     fn materialized_permission_profile(
         &self,
         environments: &[TurnEnvironmentSelection],
@@ -319,7 +281,6 @@ impl SessionConfiguration {
         let workspace_roots = ThreadEnvironments::primary_workspace_roots_for(environments);
         self.permission_profile()
             .materialize_project_roots_with_workspace_roots(&workspace_roots)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(super) fn effective_permission_profile(
@@ -423,8 +384,7 @@ impl SessionConfiguration {
             parent_thread_id: self.parent_thread_id,
             thread_source: self.thread_source.clone(),
             originator: self.originator.clone(),
-<<<<<<< HEAD
-            provider_account: Some(self.provider.account.as_ref().map_or_else(
+            provider_account: Some(self.provider.info().account.as_ref().map_or_else(
                 || {
                     format!(
                         "{}:default",
@@ -433,11 +393,8 @@ impl SessionConfiguration {
                 },
                 ToString::to_string,
             )),
-||||||| 413492cd6c
-=======
             disabled_plugin_ids: self.disabled_plugin_ids.clone(),
             turn_extension_init: self.turn_extension_init.clone(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
@@ -558,10 +515,9 @@ impl SessionConfiguration {
                             }
                         )
                 });
-<<<<<<< HEAD
-        if let Some(collaboration_mode) = updates.collaboration_mode.clone() {
-            next_configuration.collaboration_mode = collaboration_mode;
-        }
+        // PF-84: the switched provider is rebuilt on the account the session
+        // follows in `Session::update_settings_if`; until then it carries no
+        // sign-in (previews and snapshots only read its definition).
         if let Some(model_provider_id) = updates.model_provider.clone() {
             let mut config = (*next_configuration.original_config_do_not_use).clone();
             let Some(provider) = config.model_providers.get(&model_provider_id).cloned() else {
@@ -574,78 +530,17 @@ impl SessionConfiguration {
             };
             config.model_provider_id = model_provider_id;
             config.model_provider = provider.clone();
-            next_configuration.provider = provider;
+            // Unchanged definitions keep the provider and its sign-in.
+            if next_configuration.provider.info() != &provider {
+                next_configuration.provider = codex_model_provider::create_model_provider(
+                    provider, /*auth_manager*/ None,
+                );
+            }
             next_configuration.original_config_do_not_use = Arc::new(config);
         }
         if let Some(runtime_model_context_window) = updates.runtime_model_context_window {
             next_configuration.runtime_model_context_window = runtime_model_context_window;
         }
-        if let Some(summary) = updates.reasoning_summary {
-            next_configuration.model_reasoning_summary = Some(summary);
-        }
-        if let Some(service_tier) = updates.service_tier.clone() {
-            // TODO(aibrahim): Remove once v2 clients no longer send the legacy
-            // "fast" service tier value.
-            next_configuration.service_tier = match service_tier {
-                Some(service_tier) => Some(
-                    ServiceTier::from_request_value(&service_tier)
-                        .map_or(service_tier, |service_tier| {
-                            service_tier.request_value().to_string()
-                        }),
-                ),
-                None => Some(SERVICE_TIER_DEFAULT_REQUEST_VALUE.to_string()),
-            };
-        }
-        if let Some(personality) = updates.personality {
-            next_configuration.personality = Some(personality);
-        }
-        // #505: approval for every command, set when a person confirmed
-        // Aggressive, holds until the restart: a client replaying its earlier
-        // values does not lower it.
-        if !next_configuration.aggressive_approvals {
-            if let Some(approval_policy) = updates.approval_policy {
-                next_configuration.approval_policy.set(approval_policy)?;
-            }
-            if let Some(approvals_reviewer) = updates.approvals_reviewer {
-                next_configuration.approvals_reviewer = approvals_reviewer;
-            }
-        }
-        if updates.aggressive_approvals {
-            // A requirement that rules it out fails the update: nothing
-            // changes, and the caller reports it.
-            next_configuration.try_require_approval_for_every_command()?;
-        }
-||||||| 413492cd6c
-        if let Some(collaboration_mode) = updates.collaboration_mode.clone() {
-            next_configuration.collaboration_mode = collaboration_mode;
-        }
-        if let Some(summary) = updates.reasoning_summary {
-            next_configuration.model_reasoning_summary = Some(summary);
-        }
-        if let Some(service_tier) = updates.service_tier.clone() {
-            // TODO(aibrahim): Remove once v2 clients no longer send the legacy
-            // "fast" service tier value.
-            next_configuration.service_tier = match service_tier {
-                Some(service_tier) => Some(
-                    ServiceTier::from_request_value(&service_tier)
-                        .map_or(service_tier, |service_tier| {
-                            service_tier.request_value().to_string()
-                        }),
-                ),
-                None => Some(SERVICE_TIER_DEFAULT_REQUEST_VALUE.to_string()),
-            };
-        }
-        if let Some(personality) = updates.personality {
-            next_configuration.personality = Some(personality);
-        }
-        if let Some(approval_policy) = updates.approval_policy {
-            next_configuration.approval_policy.set(approval_policy)?;
-        }
-        if let Some(approvals_reviewer) = updates.approvals_reviewer {
-            next_configuration.approvals_reviewer = approvals_reviewer;
-        }
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if let Some(windows_sandbox_level) = updates.windows_sandbox_level {
             next_configuration.windows_sandbox_level = windows_sandbox_level;
         }
@@ -775,10 +670,29 @@ impl SessionConfiguration {
         )?;
         // Apply step settings last: the proposed permissions and environment
         // selections must be complete before deriving their validation constraints.
+        // #505: approval for every command, set when a person confirmed
+        // Aggressive, holds until the restart: a client replaying its earlier
+        // values does not lower it.
+        let held_step_settings;
+        let step_settings_update = if next_configuration.aggressive_approvals {
+            held_step_settings = StepSettingsUpdate {
+                approval_policy: None,
+                approvals_reviewer: None,
+                ..updates.step_settings.clone()
+            };
+            &held_step_settings
+        } else {
+            &updates.step_settings
+        };
         next_configuration.step_settings = Arc::new(self.step_settings.apply(
-            &updates.step_settings,
+            step_settings_update,
             &next_configuration.step_settings_constraints(next_environments),
         )?);
+        if updates.aggressive_approvals {
+            // A requirement that rules it out fails the update: nothing
+            // changes, and the caller reports it.
+            next_configuration.try_require_approval_for_every_command()?;
+        }
         Ok(next_configuration)
     }
 
@@ -837,33 +751,17 @@ pub(crate) struct SessionSettingsUpdate {
     pub(crate) permission_profile: Option<PermissionProfile>,
     pub(crate) active_permission_profile: Option<ActivePermissionProfile>,
     pub(crate) windows_sandbox_level: Option<WindowsSandboxLevel>,
-<<<<<<< HEAD
-    pub(crate) collaboration_mode: Option<CollaborationMode>,
-    pub(crate) model_provider: Option<String>,
-    pub(crate) runtime_model_context_window: Option<Option<i64>>,
-    pub(crate) reasoning_summary: Option<ReasoningSummaryConfig>,
-    pub(crate) service_tier: Option<Option<String>>,
-    pub(crate) final_output_json_schema: Option<Option<Value>>,
-    pub(crate) personality: Option<Personality>,
-||||||| 413492cd6c
-    pub(crate) collaboration_mode: Option<CollaborationMode>,
-    pub(crate) reasoning_summary: Option<ReasoningSummaryConfig>,
-    pub(crate) service_tier: Option<Option<String>>,
-    pub(crate) final_output_json_schema: Option<Option<Value>>,
-    pub(crate) personality: Option<Personality>,
-=======
     pub(crate) service_tier_for_turn: Option<String>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    /// PF-84: switch the session's model provider (and the account with it).
+    pub(crate) model_provider: Option<String>,
+    /// Endpoint-specific context cap for an ephemeral runtime provider.
+    pub(crate) runtime_model_context_window: Option<Option<i64>>,
     pub(crate) app_server_client_name: Option<String>,
     pub(crate) app_server_client_version: Option<String>,
-<<<<<<< HEAD
+    pub(crate) disabled_plugin_ids: Option<Vec<String>>,
     /// #505: require approval for every command (see
     /// [`SessionConfiguration::require_approval_for_every_command`]).
     pub(crate) aggressive_approvals: bool,
-||||||| 413492cd6c
-=======
-    pub(crate) disabled_plugin_ids: Option<Vec<String>>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub(crate) struct AppServerClientMetadata {
@@ -1102,22 +1000,26 @@ impl Session {
                 .model(),
             session_configuration.provider
         );
-<<<<<<< HEAD
         // PF-84-S06: a session on a named OpenAI sign-in account uses that
         // account's manager for everything (requests, refresh, connectors),
         // never the default login; any other provider uses the default login,
         // also when spawned from a session on a named account (as after a
         // mid-session switch, `ActiveAuthManager::follow_provider`).
-        let auth_manager =
-            match codex_model_provider::named_sign_in_account(&session_configuration.provider) {
-                Some(account) => auth_manager.for_named_account_loaded(account).await,
-                None => auth_manager.default_account_manager(),
-            };
+        let auth_manager = match codex_model_provider::named_sign_in_account(
+            session_configuration.provider.info(),
+        ) {
+            Some(account) => auth_manager.for_named_account_loaded(account).await,
+            None => auth_manager.default_account_manager(),
+        };
+        // The runtime provider carries its sign-in: rebuild it on the
+        // account's manager chosen above.
+        session_configuration.provider = codex_model_provider::create_model_provider(
+            session_configuration.provider.info().clone(),
+            Some(Arc::clone(&auth_manager)),
+        );
         // PF-27-S05: provider credentials move into the broker before anything
         // (MCP servers, hooks, tools) starts from this process.
         crate::model_broker_auth::install_for_config(config.as_ref()).await;
-||||||| 413492cd6c
-=======
         let base_instructions_provenance = if config.base_instructions.is_some() {
             Some(
                 config
@@ -1139,7 +1041,6 @@ impl Session {
                 model: model_info.slug.clone(),
             })
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let forked_from_id = session_configuration
             .forked_from_thread_id
             .or_else(|| initial_history.forked_from_id());
@@ -1260,37 +1161,6 @@ impl Session {
             }
         });
         let initial_auto_compact_window_ids = AutoCompactWindowIds::new_initial();
-<<<<<<< HEAD
-        // PF-23-S03: the stored level and revocations, read again at every
-        // session start; unreadable state is reported below.
-        let security_recovery =
-            crate::security::recovery::recover(config.codex_home.as_path(), config.security_level);
-        let security_recovery_warning = security_recovery
-            .warning()
-            .filter(|warning| !config.startup_warnings.contains(warning));
-        let agent_control = agent_control
-            .with_session_id(
-                session_id,
-                config
-                    .effective_agent_max_threads(MultiAgentVersion::V2)
-                    .unwrap_or(usize::MAX),
-            )
-            .with_recovered_security_policy(
-                security_recovery,
-                thread_id,
-                matches!(
-                    session_configuration.session_source,
-                    SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
-                ),
-            )?;
-||||||| 413492cd6c
-        let agent_control = agent_control.with_session_id(
-            session_id,
-            config
-                .effective_agent_max_threads(MultiAgentVersion::V2)
-                .unwrap_or(usize::MAX),
-        );
-=======
         let restore_child_window = matches!(&initial_history, InitialHistory::Forked(_))
             && session_configuration.session_source.is_non_root_agent()
             && config.features.enabled(Feature::TokenBudget);
@@ -1305,14 +1175,31 @@ impl Session {
                 }
             }
         }
+        // PF-23-S03: the stored level and revocations, read again at every
+        // session start; unreadable state is reported below.
+        let security_recovery =
+            crate::security::recovery::recover(config.codex_home.as_path(), config.security_level);
+        let security_recovery_warning = security_recovery
+            .warning()
+            .filter(|warning| !config.startup_warnings.contains(warning));
+        let inherits_from_spawn_parent = matches!(
+            session_configuration.session_source,
+            SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
+        );
         let (agent_control, local_agent_runtime): (Arc<dyn AgentControl>, _) = match agent_control {
             AgentControlInit::Local(control) => {
-                let control = control.with_session_id(
-                    session_id,
-                    config
-                        .effective_agent_max_threads(MultiAgentVersion::V2)
-                        .unwrap_or(usize::MAX),
-                );
+                let control = control
+                    .with_session_id(
+                        session_id,
+                        config
+                            .effective_agent_max_threads(MultiAgentVersion::V2)
+                            .unwrap_or(usize::MAX),
+                    )
+                    .with_recovered_security_policy(
+                        security_recovery,
+                        thread_id,
+                        inherits_from_spawn_parent,
+                    )?;
                 if parent_thread_id.is_none() {
                     control.propagate_config_update(AgentConfigUpdate::ServiceTier(
                         session_configuration
@@ -1333,45 +1220,43 @@ impl Session {
                     ))
                     .into());
                 }
+                // Corbanu: the security policy lives on the local backend; a
+                // controller without one cannot start a session (fail closed).
+                let Some(local) = control.local() else {
+                    return Err(CodexErr::UnsupportedOperation(
+                        "this agent controller has no Corbanu security policy".to_string(),
+                    )
+                    .into());
+                };
+                // The clone shares the backend's policy tree, so the recovered
+                // state reaches the provided controller too.
+                local.clone().with_recovered_security_policy(
+                    security_recovery,
+                    thread_id,
+                    inherits_from_spawn_parent,
+                )?;
                 (control, runtime)
             }
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        // Present on both arms above.
+        let Some(security_policy) = agent_control
+            .local()
+            .map(crate::agent::LocalAgentControl::effective_security_policy)
+        else {
+            return Err(CodexErr::UnsupportedOperation(
+                "this agent controller has no Corbanu security policy".to_string(),
+            )
+            .into());
+        };
         let time_provider = crate::current_time::resolve_time_provider(
             config.current_time_reminder.as_ref(),
             external_time_provider,
         )?;
-<<<<<<< HEAD
-        let ingress_policy = agent_control.effective_security_policy();
-        let selected_capability_roots =
-            match thread_extension_init.get::<Vec<SelectedCapabilityRoot>>() {
-                Some(roots) => roots.as_ref().clone(),
-                None => {
-                    let roots = initial_history.get_selected_capability_roots();
-                    if !roots.is_empty() {
-                        thread_extension_init.insert(roots.clone());
-                    }
-                    roots
-                }
-            };
-||||||| 413492cd6c
-        let selected_capability_roots =
-            match thread_extension_init.get::<Vec<SelectedCapabilityRoot>>() {
-                Some(roots) => roots.as_ref().clone(),
-                None => {
-                    let roots = initial_history.get_selected_capability_roots();
-                    if !roots.is_empty() {
-                        thread_extension_init.insert(roots.clone());
-                    }
-                    roots
-                }
-            };
-=======
+        let ingress_policy = security_policy.clone();
         let selected_capability_roots = thread_extension_init
             .get::<Vec<SelectedCapabilityRoot>>()
             .map(|roots| roots.as_ref().clone())
             .unwrap_or_default();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         thread_extension_init.insert(codex_extension_api::ThreadOriginator(
             session_configuration.originator.clone(),
         ));
@@ -1638,37 +1523,6 @@ impl Session {
                     session_configuration.sandbox_policy(environment_selections)
                 ),
             };
-<<<<<<< HEAD
-            let rollout_thread_trace = if crate::security::disclosure_gate::active().is_some() {
-                // PF-28-S01: rollout traces record raw tool and model output.
-                ThreadTraceContext::disabled()
-            } else if matches!(
-                session_configuration.session_source,
-                SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
-            ) {
-                // Spawned child threads are part of their root rollout tree. If the
-                // parent had no trace bundle, do not create an orphan child bundle
-                // that looks like an independent rollout.
-                parent_rollout_thread_trace.start_child_thread_trace_or_disabled(trace_metadata)
-            } else {
-                ThreadTraceContext::start_root_or_disabled(trace_metadata)
-            };
-
-||||||| 413492cd6c
-            let rollout_thread_trace = if matches!(
-                session_configuration.session_source,
-                SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
-            ) {
-                // Spawned child threads are part of their root rollout tree. If the
-                // parent had no trace bundle, do not create an orphan child bundle
-                // that looks like an independent rollout.
-                parent_rollout_thread_trace.start_child_thread_trace_or_disabled(trace_metadata)
-            } else {
-                ThreadTraceContext::start_root_or_disabled(trace_metadata)
-            };
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             let mut post_session_configured_events = Vec::<Event>::new();
 
             for usage in config.features.legacy_feature_usages() {
@@ -1680,7 +1534,8 @@ impl Session {
                     }),
                 });
             }
-            let session_file_system_policy = session_configuration.file_system_sandbox_policy();
+            let session_file_system_policy =
+                session_configuration.file_system_sandbox_policy(environment_selections);
             // Issue #536: where each writable root leads when the session
             // starts; a command is refused once one leads elsewhere.
             codex_sandboxing::writable_root_ledger::record_writable_roots(
@@ -1690,16 +1545,16 @@ impl Session {
             // Issue #535: configured writable links into another root's
             // read-only path are left out of the sandbox; say so at launch
             // (once, not again in each sub-agent's thread).
-            let excluded_writable_links = if session_configuration.session_source.is_non_root_agent()
-            {
-                Vec::new()
-            } else {
-                crate::tools::writable_root_notices::excluded_writable_link_warnings(
-                    thread_id,
-                    &session_file_system_policy,
-                    session_configuration.cwd().as_path(),
-                )
-            };
+            let excluded_writable_links =
+                if session_configuration.session_source.is_non_root_agent() {
+                    Vec::new()
+                } else {
+                    crate::tools::writable_root_notices::excluded_writable_link_warnings(
+                        thread_id,
+                        &session_file_system_policy,
+                        session_configuration.cwd().as_path(),
+                    )
+                };
             for message in config
                 .startup_warnings
                 .iter()
@@ -1873,13 +1728,9 @@ impl Session {
                     thread_id,
                     session_telemetry.clone(),
                     state_db_ctx.clone(),
-<<<<<<< HEAD
-                    crate::exec_env::all_provider_auth_env_vars(&config),
-||||||| 413492cd6c
-=======
                     snapshot_credential_broker,
                     prefer_executor_shell_snapshots,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                    crate::exec_env::all_provider_auth_env_vars(&config),
                 )
             } else {
                 ShellSnapshot::disabled()
@@ -1948,9 +1799,6 @@ impl Session {
                 );
             }
             session_configuration.thread_name = thread_name.clone();
-<<<<<<< HEAD
-            validate_config_lock_if_configured(&session_configuration).await?;
-            export_config_lock_if_configured(&session_configuration, thread_id).await?;
             // #505: a person confirmed Aggressive in this process on this
             // home: the session starts requiring approval for every command.
             let started_confirmed =
@@ -1969,14 +1817,7 @@ impl Session {
                     });
                 }
             }
-            let state = SessionState::new_with_auto_compact_window_ids(
-||||||| 413492cd6c
-            validate_config_lock_if_configured(&session_configuration).await?;
-            export_config_lock_if_configured(&session_configuration, thread_id).await?;
-            let state = SessionState::new_with_auto_compact_window_ids(
-=======
             let mut state = SessionState::new_with_auto_compact_window_ids(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 session_configuration.clone(),
                 initial_auto_compact_window_ids,
                 ContextManager::for_session(
@@ -2029,70 +1870,21 @@ impl Session {
                             Arc::clone(network_policy_decider_session),
                         )
                     });
-<<<<<<< HEAD
-            let (network_proxy, session_network_proxy) =
-                if let Some(spec) = config.permissions.network.as_ref() {
-                    // D52 (#1001): under Aggressive (as the model client reads
-                    // the level), network allow rules saved outside it are
-                    // suspended.
-                    let live_aggressive = crate::client::live_level_of(
-                        config.security_level,
-                        Some(&ingress_policy),
-                        thread_id,
-                    ) == codex_security_policy::SecurityLevel::Aggressive;
-                    let current_exec_policy = exec_policy.current_for(live_aggressive);
-                    let (network_proxy, session_network_proxy) = Self::start_managed_network_proxy(
-                        spec,
-                        current_exec_policy.as_ref(),
-                        config.permissions.permission_profile(),
-                        network_policy_decider.as_ref().map(Arc::clone),
-                        blocked_request_observer.as_ref().map(Arc::clone),
-                        managed_network_requirements_configured,
-                        network_proxy_audit_metadata.clone(),
-                    )
-                    .instrument(info_span!(
-                        "session_init.network_proxy",
-                        otel.name = "session_init.network_proxy",
-                        session_init.managed_network_requirements_enabled =
-                            managed_network_requirements_enabled,
-                    ))
-                    .await?;
-                    (Some(network_proxy), Some(session_network_proxy))
-                } else {
-                    (None, None)
-                };
-||||||| 413492cd6c
-            let (network_proxy, session_network_proxy) =
-                if let Some(spec) = config.permissions.network.as_ref() {
-                    let current_exec_policy = exec_policy.current();
-                    let (network_proxy, session_network_proxy) = Self::start_managed_network_proxy(
-                        spec,
-                        current_exec_policy.as_ref(),
-                        config.permissions.permission_profile(),
-                        network_policy_decider.as_ref().map(Arc::clone),
-                        blocked_request_observer.as_ref().map(Arc::clone),
-                        managed_network_requirements_configured,
-                        network_proxy_audit_metadata.clone(),
-                    )
-                    .instrument(info_span!(
-                        "session_init.network_proxy",
-                        otel.name = "session_init.network_proxy",
-                        session_init.managed_network_requirements_enabled =
-                            managed_network_requirements_enabled,
-                    ))
-                    .await?;
-                    (Some(network_proxy), Some(session_network_proxy))
-                } else {
-                    (None, None)
-                };
-=======
             let (network_proxy, session_network_proxy) = if let Some(spec) = config
                 .permissions
                 .network
                 .as_ref()
                 .filter(|spec| spec.enabled())
             {
-                let current_exec_policy = exec_policy.current();
+                // D52 (#1001): under Aggressive (as the model client reads
+                // the level), network allow rules saved outside it are
+                // suspended.
+                let live_aggressive = crate::client::live_level_of(
+                    config.security_level,
+                    Some(&ingress_policy),
+                    thread_id,
+                ) == codex_security_policy::SecurityLevel::Aggressive;
+                let current_exec_policy = exec_policy.current_for(live_aggressive);
                 let (network_proxy, session_network_proxy) = Self::start_managed_network_proxy(
                     spec,
                     current_exec_policy.as_ref(),
@@ -2125,7 +1917,6 @@ impl Session {
                     SnapshotCredentialBrokerState::Ready(network_proxy.proxy()),
                 );
             }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
             // Hooks and extensions share one stable thread-owned MCP runtime handle.
             let mcp_runtime = Arc::new(McpRuntime::empty(
@@ -2235,7 +2026,10 @@ impl Session {
             let reasoning_effort_override_enabled =
                 config.features.enabled(Feature::ReasoningEffortOverride) && !title_request;
             // Once tracing starts, startup cleanup must own the session before the next await.
-            let rollout_thread_trace = if matches!(
+            let rollout_thread_trace = if crate::security::disclosure_gate::active().is_some() {
+                // PF-28-S01: rollout traces record raw tool and model output.
+                Ok(ThreadTraceContext::disabled())
+            } else if matches!(
                 session_configuration.session_source,
                 SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
             ) {
@@ -2282,7 +2076,7 @@ impl Session {
                 active_auth: crate::state::ActiveAuthManager::new(Arc::clone(&auth_manager))
                     .for_user_session(
                         !session_configuration.session_source.is_non_root_agent(),
-                        &session_configuration.provider,
+                        session_configuration.provider.info(),
                     ),
                 openai_file_upload_client_pool: RouteAwareClientPool::new_without_request_logging(
                     config.http_client_factory(),
@@ -2307,88 +2101,71 @@ impl Session {
                 mcp_thread_init,
                 client_mcp_extensions,
                 local_agent_runtime,
+                security_policy,
                 agent_control,
                 network_proxy: arc_swap::ArcSwapOption::from(network_proxy.map(Arc::new)),
                 network_proxy_audit_metadata,
                 managed_network_requirements_configured,
                 network_approval: Arc::clone(&network_approval),
                 state_db: state_db_ctx.clone(),
-<<<<<<< HEAD
                 accounting_notices: Default::default(),
                 state_db_fallback_noticed: Default::default(),
-                live_thread: live_thread_init.as_ref().cloned(),
-||||||| 413492cd6c
-                live_thread: live_thread_init.as_ref().cloned(),
-=======
                 live_thread: live_thread.clone(),
                 image_store,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 thread_store: Arc::clone(&thread_store),
                 attestation_provider: attestation_provider.clone(),
                 time_provider,
-                model_client: arc_swap::ArcSwap::from_pointee(ModelClient::new(
-                    Some(Arc::clone(&auth_manager)),
-                    if config.features.enabled(Feature::UseAgentIdentity) {
-                        AgentIdentityAuthPolicy::ChatGptAuth
-                    } else {
-                        AgentIdentityAuthPolicy::JwtOnly
-                    },
-                    thread_id,
-                    session_configuration.provider.info().clone(),
-                    session_configuration.session_source.clone(),
-                    session_configuration.originator.clone(),
-                    config.model_verbosity,
-                    config.features.enabled(Feature::ContentItemKinds),
-                    reasoning_effort_override_enabled,
-                    config.features.enabled(Feature::EnableRequestCompression),
-                    config.features.enabled(Feature::RuntimeMetrics),
-                    Self::build_model_client_beta_features_header(config.as_ref()),
-                    /*concurrent_reasoning_summaries_enabled*/
-                    config
-                        .features
-                        .enabled(Feature::ConcurrentReasoningSummaries),
-                    config.features.enabled(Feature::OutputTokenReplay),
-                    attestation_provider,
-                    config.http_client_factory(),
-                    workspace_routing.as_ref().clone(),
-                    extensions.model_request_contributors().to_vec(),
-                )
-<<<<<<< HEAD
-                .with_ingress_policy(config.security_level, ingress_policy)
-                .with_source_envelopes(config.features.enabled(Feature::SourceEnvelopes))
-                .with_source_origin_key(config.codex_home.as_path())
-                .with_prompt_cache_key_override(
-||||||| 413492cd6c
-                .with_prompt_cache_key_override(
-=======
-                .with_executed_tool_calls(executed_tool_calls.clone())
-                .with_restored_history(matches!(
-                    &initial_history,
-                    InitialHistory::Resumed(_) | InitialHistory::Forked(_)
-                ))
-                .with_session_context(
-                    prompt_cache_key,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-                    crate::guardian::prompt_cache_key_override_for_review_session(
-                        &session_configuration.session_source,
-                        session_configuration.parent_thread_id,
-<<<<<<< HEAD
-                    ),
-                )),
-                executed_tool_calls,
-||||||| 413492cd6c
-                    ),
-                ),
-                executed_tool_calls,
-=======
+                model_client: arc_swap::ArcSwap::from_pointee(
+                    ModelClient::new(
+                        Some(Arc::clone(&auth_manager)),
+                        if config.features.enabled(Feature::UseAgentIdentity) {
+                            AgentIdentityAuthPolicy::ChatGptAuth
+                        } else {
+                            AgentIdentityAuthPolicy::JwtOnly
+                        },
+                        thread_id,
+                        session_configuration.provider.info().clone(),
+                        session_configuration.session_source.clone(),
+                        session_configuration.originator.clone(),
+                        config.model_verbosity,
+                        config.features.enabled(Feature::ContentItemKinds),
+                        reasoning_effort_override_enabled,
+                        config.features.enabled(Feature::EnableRequestCompression),
+                        config.features.enabled(Feature::RuntimeMetrics),
+                        Self::build_model_client_beta_features_header(config.as_ref()),
+                        /*concurrent_reasoning_summaries_enabled*/
+                        config
+                            .features
+                            .enabled(Feature::ConcurrentReasoningSummaries),
+                        config.features.enabled(Feature::OutputTokenReplay),
+                        attestation_provider,
+                        config.http_client_factory(),
+                        workspace_routing.as_ref().clone(),
+                        extensions.model_request_contributors().to_vec(),
                     )
-                    .or(fork_cache_key),
-                    tx_event.clone(),
-                    codex_responses_headers,
-                    crate::cyber_access_program::ApiKeyCyberAccessPrograms::from_config(&config),
+                    .with_ingress_policy(config.security_level, ingress_policy)
+                    .with_source_envelopes(config.features.enabled(Feature::SourceEnvelopes))
+                    .with_source_origin_key(config.codex_home.as_path())
+                    .with_executed_tool_calls(executed_tool_calls.clone())
+                    .with_restored_history(matches!(
+                        &initial_history,
+                        InitialHistory::Resumed(_) | InitialHistory::Forked(_)
+                    ))
+                    .with_session_context(
+                        prompt_cache_key,
+                        crate::guardian::prompt_cache_key_override_for_review_session(
+                            &session_configuration.session_source,
+                            session_configuration.parent_thread_id,
+                        )
+                        .or(fork_cache_key),
+                        tx_event.clone(),
+                        codex_responses_headers,
+                        crate::cyber_access_program::ApiKeyCyberAccessPrograms::from_config(
+                            &config,
+                        ),
+                    ),
                 ),
                 executed_tool_calls: executed_tool_calls.clone(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 code_mode_service: crate::tools::code_mode::CodeModeService::new(
                     thread_id,
                     Arc::clone(&code_mode_session_provider),
@@ -2429,21 +2206,13 @@ impl Session {
                     && services.live_thread.is_some())
                 .then(|| Mutex::new(Default::default())),
                 active_turn: Mutex::new(None),
-<<<<<<< HEAD
-                input_queue: InputQueue::new(),
-                applied_agent_message_ids: Mutex::new(applied_agent_message_ids),
-                mailbox_incarnation: uuid::Uuid::now_v7().to_string(),
-                guardian_review_session: GuardianReviewSessionManager::default(),
-||||||| 413492cd6c
-                input_queue: InputQueue::new(),
-                guardian_review_session: GuardianReviewSessionManager::default(),
-=======
                 async_hook_results,
                 input_queue: InputQueue::with_controller(
                     thread_id,
                     Arc::clone(&services.agent_control),
                 ),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                applied_agent_message_ids: Mutex::new(applied_agent_message_ids),
+                mailbox_incarnation: uuid::Uuid::now_v7().to_string(),
                 services,
                 git_enrichment_policy,
                 fork_persistence,
@@ -2470,8 +2239,7 @@ impl Session {
             // PF-23-S03: a restrictive security transition or the kill switch
             // revokes this session's brokered credentials.
             sess.services
-                .agent_control
-                .effective_security_policy()
+                .security_policy
                 .register_revocation_sink(Arc::downgrade(&sess) as _);
             // #505: a person's Aggressive confirmation in this process
             // reaches this session's stored settings.
@@ -2484,13 +2252,12 @@ impl Session {
             let kill_switch_stop = sess.services.thread_extension_data.get_or_init(|| {
                 crate::security::kill_switch_stop::KillSwitchStop::new(
                     Arc::downgrade(&sess),
-                    sess.services.agent_control.effective_security_policy(),
+                    sess.services.security_policy.clone(),
                     tokio::runtime::Handle::current(),
                 )
             });
             sess.services
-                .agent_control
-                .effective_security_policy()
+                .security_policy
                 .register_revocation_sink(Arc::downgrade(&kill_switch_stop) as _);
             // Extensions own their own model clients - image generation ships on
             // by default - and those requests are billed to the operator like
@@ -2542,14 +2309,8 @@ impl Session {
             if startup_auth_changed {
                 mcp_auth_changes.mark_unchanged();
             }
-<<<<<<< HEAD
             let latest_auth = sess.services.auth_manager().auth().await;
-||||||| 413492cd6c
-            let latest_auth = sess.services.auth_manager.auth().await;
-=======
-            let latest_auth = sess.services.auth_manager.auth().await;
             let resolved_environment_selections = resolved_environments.all_selections();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             let mcp_projection = if startup_auth_changed
                 || mcp_auth_changes.has_changed().unwrap_or(false)
                 || resolved_environment_selections.as_slice() != environment_selections
@@ -2589,33 +2350,22 @@ impl Session {
             ))
             .await?;
             sess.start_mcp_prewarm_worker(mcp_prewarm_rx, mcp_auth_changes);
-<<<<<<< HEAD
+            sess.follow_inherited_environment_configurations(
+                &inherited_environments,
+                &session_configuration.environments,
+            );
             // #403: a conversation the user resumes or forks (restart, `/resume`,
             // `/side`, editing a message, the first one too: #1038) is a reopen:
             // its warm-up is shown as such, and can be skipped. A sub-agent or
             // reviewer started with copied history is not one; its warm-up
             // stays an ordinary one.
-            let reopened = crate::session_startup_prewarm::is_reopen(
+            let reopened = super::startup_prewarm::is_reopen(
                 &initial_history,
                 &session_configuration.session_source,
                 config.reopened_by_prompt_edit,
             );
-            sess.schedule_startup_prewarm(
-                session_configuration.base_instructions.clone(),
-                reopened,
-            )
-            .await;
-||||||| 413492cd6c
-            sess.schedule_startup_prewarm(session_configuration.base_instructions.clone())
+            sess.schedule_startup_prewarm(super::startup_prewarm::PrewarmInput::Base, reopened)
                 .await;
-=======
-            sess.follow_inherited_environment_configurations(
-                &inherited_environments,
-                &session_configuration.environments,
-            );
-            sess.schedule_startup_prewarm(super::startup_prewarm::PrewarmInput::Base)
-                .await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             let session_start_source = match &initial_history {
                 InitialHistory::Forked(_) if forked_from_id.is_some() => {
                     codex_hooks::SessionStartSource::Fork
@@ -2655,19 +2405,13 @@ impl Session {
                 Ok(sess)
             }
             Err(err) => {
-<<<<<<< HEAD
-                live_thread_init.discard().await;
-                // #872: its init appends may have failed; nothing writes them now.
-                crate::home_access::note_thread_ended(thread_id);
-||||||| 413492cd6c
-                live_thread_init.discard().await;
-=======
                 if let Err(error) = live_thread_init.discard().await {
                     tracing::warn!(
                         "failed to discard thread persistence for failed session init: {error}"
                     );
                 }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                // #872: its init appends may have failed; nothing writes them now.
+                crate::home_access::note_thread_ended(thread_id);
                 Err(err)
             }
         }
