@@ -189,15 +189,33 @@ async fn read_declared_role(
     Ok((role_name, role))
 }
 
-/// Strips the project-config denylist from a role file's config layer when a
-/// project declared the role (D512, #1997), returning the removed keys. User,
-/// managed and built-in roles are unchanged.
+/// Strips the project-config denylist, and any role declarations, from a role
+/// file's config layer when a project declared the role (D512, #1997),
+/// returning the removed keys. User, managed and built-in roles are unchanged.
 pub(crate) fn sanitize_role_config_layer(
     source: AgentRoleSource,
     config: &mut TomlValue,
 ) -> Vec<String> {
     match source {
-        AgentRoleSource::Project => sanitize_project_config(config),
+        AgentRoleSource::Project => {
+            let mut ignored_keys = sanitize_project_config(config);
+            // A child reloads its roles from this layer as launch-flag roles,
+            // so a project role must not declare roles of its own: they would
+            // reach a grandchild unsanitized. Role entries are the tables
+            // under `agents`; its settings (`max_depth`, ...) are not tables.
+            if let Some(agents) = config.get_mut("agents").and_then(TomlValue::as_table_mut) {
+                let roles = agents
+                    .iter()
+                    .filter(|(_, value)| value.is_table())
+                    .map(|(name, _)| name.clone())
+                    .collect::<Vec<_>>();
+                for name in roles {
+                    agents.remove(&name);
+                    ignored_keys.push(format!("agents.{name}"));
+                }
+            }
+            ignored_keys
+        }
         AgentRoleSource::BuiltIn | AgentRoleSource::User | AgentRoleSource::Managed => Vec::new(),
     }
 }
@@ -283,7 +301,7 @@ async fn agent_role_config_from_toml(
         description,
         config_file: config_file.map(AbsolutePathBuf::into_path_buf),
         nickname_candidates,
-        source: AgentRoleSource::default(),
+        source: AgentRoleSource::Project,
     })
 }
 

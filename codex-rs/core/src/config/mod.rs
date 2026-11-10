@@ -3021,12 +3021,13 @@ pub enum AgentRoleSource {
     BuiltIn,
     /// The person's own config (user config, `~/.codex/agents/`) or launch
     /// flags.
-    #[default]
     User,
     /// System, MDM or enterprise-managed config.
     Managed,
     /// A trusted project's `.codex` folder: repository contents, so the
-    /// project-config denylist applies.
+    /// project-config denylist applies. The default, so a role whose origin
+    /// was not recorded gets the denylist.
+    #[default]
     Project,
 }
 

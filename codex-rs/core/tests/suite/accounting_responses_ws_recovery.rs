@@ -337,7 +337,7 @@ async fn accounting_responses_ws_native_spawned_role_children_and_fork() -> anyh
                     config_file: Some(role.to_path_buf()),
                     description: None,
                     nickname_candidates: None,
-                    ..Default::default()
+                    source: codex_core::config::AgentRoleSource::User,
                 },
             );
         })

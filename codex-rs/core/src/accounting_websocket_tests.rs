@@ -677,7 +677,7 @@ async fn accounting_responses_ws_role_inheritance_preserves_reserved_provider_ru
             config_file: Some(role.to_path_buf()),
             description: None,
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     );
     crate::agent::role::apply_role_to_config(&mut config, Some("fixture"))

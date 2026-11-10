@@ -217,7 +217,7 @@ async fn apply_role_returns_unavailable_for_missing_user_role_file() {
             description: None,
             config_file: Some(PathBuf::from("/path/does/not/exist.toml")),
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     );
 
@@ -238,7 +238,7 @@ async fn apply_role_returns_unavailable_for_invalid_user_role_toml() {
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     );
 
@@ -271,7 +271,7 @@ model_provider = "openai"
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     );
 
@@ -310,7 +310,7 @@ async fn apply_role_preserves_unspecified_keys() {
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     );
 
@@ -352,7 +352,7 @@ service_tier = "priority"
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     );
 
@@ -383,7 +383,7 @@ async fn apply_role_preserves_existing_service_tier_without_override() {
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     );
 
@@ -428,7 +428,7 @@ writable_roots = ["./sandbox-root"]
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     );
 
@@ -491,7 +491,7 @@ async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() 
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     );
 
@@ -536,7 +536,7 @@ enabled = false
             description: None,
             config_file: Some(role_path),
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     );
 
@@ -578,7 +578,7 @@ fn spawn_tool_spec_build_deduplicates_user_defined_built_in_roles() {
                 description: Some("user override".to_string()),
                 config_file: None,
                 nickname_candidates: None,
-                ..Default::default()
+                source: crate::config::AgentRoleSource::User,
             },
         ),
         ("researcher".to_string(), AgentRoleConfig::default()),
@@ -600,7 +600,7 @@ fn spawn_tool_spec_lists_user_defined_roles_before_built_ins() {
             description: Some("first".to_string()),
             config_file: None,
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     )]);
 
@@ -628,7 +628,7 @@ fn spawn_tool_spec_marks_role_locked_model_and_reasoning_effort() {
             description: Some("Research carefully.".to_string()),
             config_file: Some(role_path),
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     )]);
 
@@ -654,7 +654,7 @@ fn spawn_tool_spec_marks_role_locked_reasoning_effort_only() {
             description: Some("Review carefully.".to_string()),
             config_file: Some(role_path),
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     )]);
 
@@ -680,7 +680,7 @@ fn spawn_tool_spec_marks_role_locked_service_tier() {
             description: Some("Stay fast.".to_string()),
             config_file: Some(role_path),
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     )]);
 
@@ -874,7 +874,7 @@ base_instructions = "Custom role base"
             description: Some("Custom base role.".to_string()),
             config_file: Some(role_path),
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     );
 

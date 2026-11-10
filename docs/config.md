@@ -46,8 +46,11 @@ project's `.codex/agents/` folder and files a project's config names with
 role, it ignores those settings in the role file (the child keeps the parent's
 values) and names them in a startup warning. Roles you declare yourself (in
 `CODEX_HOME/agents/` or your user config), roles from managed config and
-built-in roles can still set them. If a project only renames or describes a
-role you declared, without its own `config_file`, your file applies as before.
+built-in roles can still set them. A project role file also can't declare
+further roles (`[agents.<role>]` tables) for its child to spawn; declare those
+in the project's `.codex/agents/` folder instead. If a project only re-describes
+a role you declared or adds nicknames, without its own `config_file`, your file
+applies as before.
 
 ## Built-In Providers
 

@@ -8,7 +8,9 @@
   `otel`, `sqlite_home`, `log_dir` or `[debug.config_lockfile]`, even though a
   project's `.codex/config.toml` can't set them. Corbanu now ignores those
   settings in project roles, the child keeps its parent's values, and a startup
-  warning names the ignored settings.
+  warning names the ignored settings. A project role file also can't declare
+  roles of its own for the child to spawn (`[agents.<role>]` tables), which
+  would otherwise have reached a grandchild agent with those settings.
 - Not changed: roles you declare yourself (in `CODEX_HOME/agents/` or your user
   config), roles from managed config and built-in roles. If one of your
   projects' roles chose a provider, declare that role in your user config.

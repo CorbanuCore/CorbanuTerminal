@@ -612,7 +612,7 @@ async fn accounting_chat_role_inheritance_reserved_id_parity() -> anyhow::Result
             config_file: Some(role.to_path_buf()),
             description: None,
             nickname_candidates: None,
-            ..Default::default()
+            source: crate::config::AgentRoleSource::User,
         },
     );
     std::fs::write(

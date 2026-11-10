@@ -415,7 +415,7 @@ async fn openai_reserved_spawn_schema_is_not_mutated_by_pf_role_configuration(
                         description: Some("Research role".to_string()),
                         config_file: None,
                         nickname_candidates: None,
-                        ..Default::default()
+                        source: codex_core::config::AgentRoleSource::User,
                     },
                 );
             }

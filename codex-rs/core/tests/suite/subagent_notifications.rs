@@ -2042,7 +2042,7 @@ async fn spawn_agent_role_overrides_requested_model_and_reasoning_settings() -> 
                         description: Some("Custom role".to_string()),
                         config_file: Some(role_path.to_path_buf()),
                         nickname_candidates: None,
-                        ..Default::default()
+                        source: codex_core::config::AgentRoleSource::User,
                     },
                 );
             })
@@ -2079,7 +2079,7 @@ async fn spawn_agent_preserves_configured_defaults_through_unrelated_role() -> R
                         description: Some("Custom role".to_string()),
                         config_file: Some(role_path.to_path_buf()),
                         nickname_candidates: None,
-                        ..Default::default()
+                        source: codex_core::config::AgentRoleSource::User,
                     },
                 );
                 config.agent_default_subagent_model = Some(REQUESTED_MODEL.to_string());
@@ -2154,7 +2154,7 @@ async fn spawn_agent_rejects_reasoning_effort_unsupported_by_role_model() -> Res
                     description: Some("Custom role".to_string()),
                     config_file: Some(role_path.to_path_buf()),
                     nickname_candidates: None,
-                    ..Default::default()
+                    source: codex_core::config::AgentRoleSource::User,
                 },
             );
             config.agent_default_subagent_model = Some("gpt-5.6-sol".to_string());
@@ -2229,7 +2229,7 @@ async fn spawn_agent_tool_description_mentions_role_locked_settings() -> Result<
                     description: Some("Custom role".to_string()),
                     config_file: Some(role_path.to_path_buf()),
                     nickname_candidates: None,
-                    ..Default::default()
+                    source: codex_core::config::AgentRoleSource::User,
                 },
             );
         });

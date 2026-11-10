@@ -69,13 +69,6 @@ impl Fixture {
         path
     }
 
-    fn append_user_config(&self, contents: &str) {
-        let path = self.codex_home.path().join(CONFIG_TOML_FILE);
-        let mut config = std::fs::read_to_string(&path).expect("read user config");
-        config.push_str(contents);
-        std::fs::write(path, config).expect("write user config");
-    }
-
     async fn config(&self) -> Config {
         ConfigBuilder::without_managed_config_for_tests()
             .codex_home(self.codex_home.path().to_path_buf())
@@ -175,6 +168,8 @@ async fn user_role_file_still_sets_denylisted_keys_for_its_child() {
 async fn roles_record_where_they_were_declared_and_project_roles_warn() {
     let fixture = Fixture::new();
     let project_file = Fixture::write(&fixture.project_agents(), "relay.toml", DENYLISTED_ROLE);
+    // The project's `relay` replaces the user's role of the same name.
+    Fixture::write(&fixture.user_agents(), "relay.toml", DENYLISTED_ROLE);
     let user_file = Fixture::write(
         &fixture.user_agents(),
         "user-relay.toml",
@@ -191,6 +186,13 @@ async fn roles_record_where_they_were_declared_and_project_roles_warn() {
 
     let source = |name: &str| config.agent_roles.get(name).map(|role| role.source);
     assert_eq!(source("relay"), Some(AgentRoleSource::Project));
+    assert_eq!(
+        config
+            .agent_roles
+            .get("relay")
+            .and_then(|role| role.config_file.clone()),
+        Some(project_file.clone())
+    );
     assert_eq!(source("user-relay"), Some(AgentRoleSource::User));
     assert_eq!(
         config
@@ -220,6 +222,48 @@ async fn roles_record_where_they_were_declared_and_project_roles_warn() {
 }
 
 #[tokio::test]
+async fn project_role_cannot_declare_roles_for_a_grandchild() {
+    let fixture = Fixture::new();
+    let agents = fixture.project_agents();
+    Fixture::write(
+        &agents,
+        "outer.toml",
+        r#"
+name = "outer"
+description = "Outer role"
+developer_instructions = "Delegate"
+
+[agents]
+max_depth = 3
+
+[agents.inner]
+description = "Inner role"
+config_file = "../inner/inner.toml"
+"#,
+    );
+    // Outside `.codex/agents/`, so only the outer role's entry names it.
+    Fixture::write(
+        &fixture.repo.path().join(".codex").join("inner"),
+        "inner.toml",
+        &DENYLISTED_ROLE.replace("name = \"relay\"", "name = \"inner\""),
+    );
+    let mut config = fixture.config().await;
+    assert!(!config.agent_roles.contains_key("inner"));
+    let before = protected_settings(&config);
+
+    apply_role_to_config(&mut config, Some("outer"))
+        .await
+        .expect("project role should apply");
+
+    assert!(!config.agent_roles.contains_key("inner"));
+    assert_eq!(
+        apply_role_to_config(&mut config, Some("inner")).await,
+        Err("unknown agent_type 'inner'".to_string())
+    );
+    assert_eq!(protected_settings(&config), before);
+}
+
+#[tokio::test]
 async fn project_role_is_sanitized_when_spawned_not_only_when_discovered() {
     let fixture = Fixture::new();
     let mut config = fixture.config().await;
@@ -241,6 +285,51 @@ async fn project_role_is_sanitized_when_spawned_not_only_when_discovered() {
         .expect("project role should apply");
 
     assert_eq!(protected_settings(&config), before);
+}
+
+#[test]
+fn project_role_layer_keeps_agent_settings_but_not_role_declarations() {
+    let mut layer: TomlValue = toml::from_str(
+        r#"
+model = "gpt-5.5"
+sqlite_home = "/tmp/state"
+
+[agents]
+max_depth = 3
+provider_allowlist = ["openai"]
+
+[agents.inner]
+description = "Inner role"
+"#,
+    )
+    .expect("toml");
+    let user_layer = layer.clone();
+
+    let ignored = sanitize_role_config_layer(AgentRoleSource::Project, &mut layer);
+
+    assert_eq!(ignored, vec!["sqlite_home", "agents.inner"]);
+    assert_eq!(
+        layer,
+        toml::from_str::<TomlValue>(
+            r#"
+model = "gpt-5.5"
+
+[agents]
+max_depth = 3
+provider_allowlist = ["openai"]
+"#
+        )
+        .expect("toml")
+    );
+    for source in [
+        AgentRoleSource::User,
+        AgentRoleSource::Managed,
+        AgentRoleSource::BuiltIn,
+    ] {
+        let mut unchanged = user_layer.clone();
+        assert!(sanitize_role_config_layer(source, &mut unchanged).is_empty());
+        assert_eq!(unchanged, user_layer);
+    }
 }
 
 #[test]
