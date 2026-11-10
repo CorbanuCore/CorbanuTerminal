@@ -6,13 +6,8 @@ use codex_protocol::protocol::EventMsg;
 pub(crate) fn agent_status_from_event(msg: &EventMsg) -> Option<AgentStatus> {
     match msg {
         EventMsg::TurnStarted(_) => Some(AgentStatus::Running),
-<<<<<<< HEAD
         // #481: a turn that ended on an error (a 401 from a rejected account,
         // say) is not a completed one, so a parent waiting on it hears why.
-||||||| 413492cd6c
-        EventMsg::TurnComplete(ev) => Some(AgentStatus::Completed(ev.last_agent_message.clone())),
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         EventMsg::TurnComplete(ev) => Some(match &ev.error {
             Some(error) => AgentStatus::Errored(error.message.clone()),
             None => AgentStatus::Completed(ev.last_agent_message.clone()),
