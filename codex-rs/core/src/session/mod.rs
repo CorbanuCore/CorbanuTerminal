@@ -79,6 +79,7 @@ use codex_exec_server::EnvironmentManager;
 use codex_execpolicy::prefix_rule_migration;
 use codex_extension_api::ConversationHistorySnapshot;
 use codex_extension_api::ExtensionDataInit;
+use codex_extension_api::PromptFragment;
 use codex_extension_api::PromptSlot;
 use codex_extension_api::TurnContextContributionInput;
 use codex_features::FEATURES;
@@ -424,7 +425,6 @@ use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ExecApprovalRequestEvent;
 use codex_protocol::protocol::ExecApprovalRequestWithdrawnEvent;
-use codex_history::InitialHistory;
 use codex_protocol::protocol::ModelRerouteEvent;
 use codex_protocol::protocol::ModelRerouteReason;
 use codex_protocol::protocol::ModelResponseCompletedEvent;
@@ -2329,7 +2329,7 @@ impl Session {
             follows_model_list,
         ) = {
             let mut state = self.state.lock().await;
-            let updated = match self.apply_session_settings(&state.session_configuration, &updates)
+            let mut updated = match self.apply_session_settings(&state.session_configuration, &updates)
             {
                 Ok(updated) => updated,
                 Err(err) => {
@@ -2372,6 +2372,14 @@ impl Session {
                 || state.session_configuration.provider.info() != updated.provider.info();
             // PF-84: the account follows the provider first.
             let account_switched = model_provider_changed && self.follow_provider_account(&updated);
+            if model_provider_changed {
+                // The runtime provider carries its sign-in: rebuild it on the
+                // account the session follows now.
+                updated.provider = create_model_provider(
+                    updated.provider.info().clone(),
+                    Some(self.services.auth_manager()),
+                );
+            }
             if model_provider_changed {
                 // Publish while updates are serialized, before the new configuration
                 // becomes observable. Frame guards read this client without state locks.
@@ -2977,7 +2985,7 @@ impl Session {
                         // thread to record under (#898).
                         if owner.thread == parent {
                             parent_session
-                                .try_ensure_rollout_materialized()
+                                .try_ensure_rollout_materialized(PersistContext::Standard)
                                 .await
                                 .map_err(|_| Uncollected::Failed("parent thread not saved"))?;
                         }
