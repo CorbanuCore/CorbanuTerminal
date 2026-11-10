@@ -517,3 +517,117 @@ async fn sec_513_fresh_human_authority_and_remembered_answers() -> anyhow::Resul
     assert!(matches!(fresh.result, Ok(ReviewDecision::Approved)));
     Ok(())
 }
+
+/// PF-30-S03: granted permissions preapprove a patch, but not a post-taint
+/// protected one: with fresh human authority the person is asked.
+#[tokio::test]
+async fn pf_30_s03_fresh_authority_ignores_patch_preapproval() -> anyhow::Result<()> {
+    use anyhow::Context;
+    let (session, turn, events) = make_session_and_context_with_rx().await;
+    *session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
+    #[allow(deprecated)]
+    let cwd = PathUri::from_abs_path(&turn.cwd);
+    let action = ApprovalAction::ApplyPatch {
+        id: "pf30-patch".to_string(),
+        environment_id: codex_exec_server::LOCAL_ENVIRONMENT_ID.to_string(),
+        cwd: cwd.clone(),
+        files: vec![cwd],
+        patch: "*** Begin Patch\n*** End Patch\n".to_string(),
+        changes: Arc::new(HashMap::new()),
+        permissions_preapproved: true,
+    };
+    let (_, mut context) = exec_approval(&turn, "pf30-patch", ApprovalsReviewer::User);
+    context.tool_name = ToolName::plain("apply_patch");
+
+    let preapproved = session
+        .request_user_approval_with_authority(
+            &action, &context, /*fresh_human_authority*/ false,
+        )
+        .await;
+    assert_eq!(preapproved.decision, ReviewDecision::Approved);
+    assert!(
+        events.try_recv().is_err(),
+        "a preapproved patch asks nobody"
+    );
+
+    let fresh = session.request_user_approval_with_authority(
+        &action, &context, /*fresh_human_authority*/ true,
+    );
+    tokio::pin!(fresh);
+    tokio::select! {
+        resolution = &mut fresh => panic!("expected a prompt, got {resolution:?}"),
+        event = events.recv() => {
+            let codex_protocol::protocol::EventMsg::ApplyPatchApprovalRequest(request) =
+                event.context("receive patch prompt")?.msg
+            else {
+                panic!("expected a patch approval prompt");
+            };
+            session
+                .notify_approval(&request.call_id, ReviewDecision::ApprovedForSession)
+                .await;
+        }
+    }
+    assert_eq!(fresh.await.decision, ReviewDecision::Approved);
+    Ok(())
+}
+
+/// Issue #709: "approve for session" of a patch in one environment is not an
+/// approval of the same path in another; each environment asks on its own
+/// (ported from the runtime's `approval_keys` to `ApprovalAction::cache_keys`).
+#[tokio::test]
+async fn issue_709_session_approval_does_not_carry_across_environments() {
+    let (session, turn) = crate::session::tests::make_session_and_context().await;
+    #[allow(deprecated)]
+    let path = PathUri::from_abs_path(&turn.cwd.join("issue-709-approval-scope.txt"));
+    let keys_for = |environment_id: &str| {
+        ApprovalAction::ApplyPatch {
+            id: "issue-709".to_string(),
+            environment_id: environment_id.to_string(),
+            cwd: path.clone(),
+            files: vec![path.clone()],
+            patch: String::new(),
+            changes: Arc::new(HashMap::new()),
+            permissions_preapproved: false,
+        }
+        .cache_keys()
+    };
+    let ask = |keys, decision: ReviewDecision| {
+        let services = &session.services;
+        asking_person(move || {
+            with_cached_approval(
+                services,
+                "apply_patch",
+                keys,
+                /*fresh_human_authority*/ false,
+                move || async move { decision },
+            )
+        })
+    };
+    let denied = || ReviewDecision::denied("issue 709");
+
+    // A person approves the local patch for the session.
+    assert_eq!(
+        ask(keys_for("local"), ReviewDecision::ApprovedForSession).await,
+        (ReviewDecision::ApprovedForSession, true)
+    );
+    // The same path in the remote environment still asks the person.
+    assert_eq!(ask(keys_for("remote"), denied()).await, (denied(), true));
+    // The local approval is still remembered for the local environment.
+    assert_eq!(
+        ask(keys_for("local"), denied()).await,
+        (ReviewDecision::ApprovedForSession, false)
+    );
+    // A remote session approval covers the remote environment only.
+    assert_eq!(
+        ask(keys_for("remote"), ReviewDecision::ApprovedForSession).await,
+        (ReviewDecision::ApprovedForSession, true)
+    );
+    assert_eq!(
+        ask(keys_for("remote"), denied()).await,
+        (ReviewDecision::ApprovedForSession, false)
+    );
+    assert_eq!(
+        ask(keys_for("other-remote"), denied()).await,
+        (denied(), true)
+    );
+}

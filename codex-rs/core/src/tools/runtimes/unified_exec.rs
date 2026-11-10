@@ -35,21 +35,9 @@ use crate::tools::sandboxing::ToolError;
 use crate::tools::sandboxing::ToolRuntime;
 use crate::tools::sandboxing::executor_windows_sandbox_selection;
 use crate::tools::sandboxing::managed_network_for_sandbox_permissions;
-<<<<<<< HEAD
 use crate::tools::sandboxing::sandbox_permissions_for_session;
-use crate::tools::sandboxing::with_cached_approval;
-use crate::unified_exec::NoopSpawnLifecycle;
-use crate::unified_exec::UnifiedExecError;
-||||||| 413492cd6c
-use crate::tools::sandboxing::sandbox_permissions_preserving_denied_reads;
-use crate::tools::sandboxing::with_cached_approval;
-use crate::unified_exec::NoopSpawnLifecycle;
-use crate::unified_exec::UnifiedExecError;
-=======
-use crate::tools::sandboxing::sandbox_permissions_preserving_denied_reads;
 use crate::unified_exec::TerminalPermissions;
 use crate::unified_exec::TerminalSandboxSource;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::unified_exec::UnifiedExecProcess;
 use crate::unified_exec::UnifiedExecProcessManager;
 use codex_core_plugins::PluginMetricsSidecar;
@@ -62,26 +50,15 @@ use codex_network_proxy::RemoteCredentialMasking;
 use codex_network_proxy::RemoteNetworkProxyConfig;
 use codex_protocol::error::CodexErr;
 use codex_protocol::models::AdditionalPermissionProfile;
-<<<<<<< HEAD
+use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::NetworkPolicyRuleAction;
 use codex_protocol::protocol::ReviewDecision;
-||||||| 413492cd6c
-use codex_protocol::protocol::ReviewDecision;
-=======
-use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::WarningEvent;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_sandboxing::SandboxCommand;
 use codex_sandboxing::SandboxablePreference;
 use codex_sandboxing::policy_transforms::merge_permission_profiles;
 use codex_shell_command::powershell::prefix_powershell_script_with_utf8;
-<<<<<<< HEAD
-use codex_tools::UnifiedExecShellMode;
 use codex_utils_absolute_path::AbsolutePathBuf;
-||||||| 413492cd6c
-use codex_tools::UnifiedExecShellMode;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_utils_path_uri::PathUri;
 use std::collections::HashMap;
 use std::io;
@@ -159,8 +136,6 @@ pub struct UnifiedExecApprovalKey {
 /// unified-exec side while delegating process startup to the manager.
 pub struct UnifiedExecRuntime<'a> {
     manager: &'a UnifiedExecProcessManager,
-<<<<<<< HEAD
-    shell_mode: UnifiedExecShellMode,
     /// #466: whether the command is shown as running because of a review
     /// that approved it. A review shows it (the app server starts its item);
     /// a refusal ends it there. An approved one must end even when the
@@ -170,16 +145,12 @@ pub struct UnifiedExecRuntime<'a> {
     /// before it) failed with `ToolError::Rejected`: a setup or spawn
     /// failure, shown as failed rather than as refused by policy.
     start_rejected: bool,
-||||||| 413492cd6c
-    shell_mode: UnifiedExecShellMode,
-=======
 }
 
 pub(crate) struct UnifiedExecAttempt {
     pub(crate) process: UnifiedExecProcess,
     pub(crate) metrics_sidecar: Option<PluginMetricsSidecar>,
     pub(crate) permissions: TerminalPermissions,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn unified_exec_options(
@@ -217,24 +188,12 @@ fn build_unified_exec_sandbox_command(
 
 impl<'a> UnifiedExecRuntime<'a> {
     /// Creates a runtime bound to the shared unified-exec process manager.
-<<<<<<< HEAD
-    pub fn new(manager: &'a UnifiedExecProcessManager, shell_mode: UnifiedExecShellMode) -> Self {
+    pub fn new(manager: &'a UnifiedExecProcessManager) -> Self {
         Self {
             manager,
-            shell_mode,
             shown_by_review: false,
             start_rejected: false,
         }
-||||||| 413492cd6c
-    pub fn new(manager: &'a UnifiedExecProcessManager, shell_mode: UnifiedExecShellMode) -> Self {
-        Self {
-            manager,
-            shell_mode,
-        }
-=======
-    pub fn new(manager: &'a UnifiedExecProcessManager) -> Self {
-        Self { manager }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Whether the last review of this command (the person's or the
@@ -264,169 +223,7 @@ impl Sandboxable for UnifiedExecRuntime<'_> {
     }
 }
 
-<<<<<<< HEAD
-impl Approvable<UnifiedExecRequest> for UnifiedExecRuntime<'_> {
-    type ApprovalKey = UnifiedExecApprovalKey;
-
-    fn approval_keys(&self, req: &UnifiedExecRequest) -> Vec<Self::ApprovalKey> {
-        vec![UnifiedExecApprovalKey {
-            environment_id: req.turn_environment.environment_id.clone(),
-            command: canonicalize_command_for_approval(&req.command),
-            cwd: req.cwd.clone(),
-            tty: req.tty,
-            sandbox_permissions: req.sandbox_permissions,
-            additional_permissions: req.additional_permissions.clone(),
-        }]
-    }
-
-    fn note_review_decision(&mut self, decision: &ReviewDecision, ctx: &ApprovalCtx<'_>) {
-        // A person's network review neither shows nor ends the command.
-        // (Unified exec never retries with a network context today, so an
-        // automatic review never gets one either.)
-        if ctx.network_approval_context.is_some() {
-            return;
-        }
-        self.shown_by_review = match decision {
-            ReviewDecision::Denied { .. } | ReviewDecision::TimedOut | ReviewDecision::Abort => {
-                false
-            }
-            ReviewDecision::NetworkPolicyAmendment {
-                network_policy_amendment,
-            } => network_policy_amendment.action != NetworkPolicyRuleAction::Deny,
-            ReviewDecision::Approved
-            | ReviewDecision::ApprovedExecpolicyAmendment { .. }
-            | ReviewDecision::ApprovedForSession => true,
-        };
-    }
-
-    fn start_approval_async<'b>(
-        &'b mut self,
-        req: &'b UnifiedExecRequest,
-        ctx: ApprovalCtx<'b>,
-    ) -> BoxFuture<'b, ReviewDecision> {
-        let keys = self.approval_keys(req);
-        let session = ctx.session;
-        let turn = ctx.turn;
-        let call_id = ctx.call_id.to_string();
-        let command = req.command.clone();
-        let environment_id = Some(req.turn_environment.environment_id.clone());
-        let reason = ctx
-            .retry_reason
-            .clone()
-            .or_else(|| req.justification.clone());
-        Box::pin(async move {
-            let native_cwd = match req.cwd.to_abs_path() {
-                Ok(c) => c,
-                Err(e) => {
-                    // TODO(anp) make sandboxing work for foreign OSes, in the meantime this should
-                    // be impossible for single-OS app-servers
-                    error!(cwd = %req.cwd, ?e, "got non-native path in start_approval_async");
-                    return ReviewDecision::Abort;
-                }
-            };
-            let fresh = ctx.fresh_human_authority;
-            with_cached_approval(
-                &session.services,
-                "unified_exec",
-                keys,
-                fresh,
-                || async move {
-                    let available_decisions = None;
-                    session
-                        .request_command_approval(
-                            turn,
-                            call_id,
-                            /*approval_id*/ None,
-                            environment_id,
-                            command,
-                            native_cwd,
-                            reason,
-                            ctx.network_approval_context.clone(),
-                            // A post-taint approval covers this action only:
-                            // no "don't ask again" rule (PF-30-S03).
-                            req.exec_approval_requirement
-                                .proposed_execpolicy_amendment()
-                                .filter(|_| !fresh)
-                                .cloned(),
-                            req.additional_permissions.clone(),
-                            available_decisions,
-                            /*plugin_attribution_override*/ None,
-                        )
-                        .await
-                },
-            )
-            .await
-        })
-    }
-
-||||||| 413492cd6c
-impl Approvable<UnifiedExecRequest> for UnifiedExecRuntime<'_> {
-    type ApprovalKey = UnifiedExecApprovalKey;
-
-    fn approval_keys(&self, req: &UnifiedExecRequest) -> Vec<Self::ApprovalKey> {
-        vec![UnifiedExecApprovalKey {
-            environment_id: req.turn_environment.environment_id.clone(),
-            command: canonicalize_command_for_approval(&req.command),
-            cwd: req.cwd.clone(),
-            tty: req.tty,
-            sandbox_permissions: req.sandbox_permissions,
-            additional_permissions: req.additional_permissions.clone(),
-        }]
-    }
-
-    fn start_approval_async<'b>(
-        &'b mut self,
-        req: &'b UnifiedExecRequest,
-        ctx: ApprovalCtx<'b>,
-    ) -> BoxFuture<'b, ReviewDecision> {
-        let keys = self.approval_keys(req);
-        let session = ctx.session;
-        let turn = ctx.turn;
-        let call_id = ctx.call_id.to_string();
-        let command = req.command.clone();
-        let environment_id = Some(req.turn_environment.environment_id.clone());
-        let reason = ctx
-            .retry_reason
-            .clone()
-            .or_else(|| req.justification.clone());
-        Box::pin(async move {
-            let native_cwd = match req.cwd.to_abs_path() {
-                Ok(c) => c,
-                Err(e) => {
-                    // TODO(anp) make sandboxing work for foreign OSes, in the meantime this should
-                    // be impossible for single-OS app-servers
-                    error!(cwd = %req.cwd, ?e, "got non-native path in start_approval_async");
-                    return ReviewDecision::Abort;
-                }
-            };
-            with_cached_approval(&session.services, "unified_exec", keys, || async move {
-                let available_decisions = None;
-                session
-                    .request_command_approval(
-                        turn,
-                        call_id,
-                        /*approval_id*/ None,
-                        environment_id,
-                        command,
-                        native_cwd,
-                        reason,
-                        ctx.network_approval_context.clone(),
-                        req.exec_approval_requirement
-                            .proposed_execpolicy_amendment()
-                            .cloned(),
-                        req.additional_permissions.clone(),
-                        available_decisions,
-                        /*plugin_attribution_override*/ None,
-                    )
-                    .await
-            })
-            .await
-        })
-    }
-
-=======
 impl Approvable<UnifiedExecRequest<'_>> for UnifiedExecRuntime<'_> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     fn approval_action(
         &self,
         req: &UnifiedExecRequest<'_>,
@@ -450,9 +247,28 @@ impl Approvable<UnifiedExecRequest<'_>> for UnifiedExecRuntime<'_> {
 
     fn additional_permissions<'r>(
         &self,
-        req: &'r UnifiedExecRequest,
-    ) -> Option<&'r codex_protocol::models::AdditionalPermissionProfile> {
-        req.additional_permissions.as_ref()
+        req: &'r UnifiedExecRequest<'_>,
+    ) -> Option<&'r AdditionalPermissionProfile> {
+        req.prepared.permissions.additional_permissions.as_ref()
+    }
+
+    fn note_review_decision(&mut self, decision: &ReviewDecision, network_review: bool) {
+        // A person's network review neither shows nor ends the command.
+        if network_review {
+            return;
+        }
+        self.shown_by_review = match decision {
+            ReviewDecision::Denied { .. } | ReviewDecision::TimedOut | ReviewDecision::Abort => {
+                false
+            }
+            ReviewDecision::NetworkPolicyAmendment {
+                network_policy_amendment,
+            } => network_policy_amendment.action != NetworkPolicyRuleAction::Deny,
+            ReviewDecision::Approved
+            | ReviewDecision::ApprovedExecpolicyAmendment { .. }
+            | ReviewDecision::ApprovedForSession
+            | ReviewDecision::ApprovedMcpPolicyAmendment => true,
+        };
     }
 }
 
@@ -469,12 +285,12 @@ impl<'a> ToolRuntime<UnifiedExecRequest<'_>, UnifiedExecAttempt> for UnifiedExec
         Some(req.prepared.turn_environment.cwd())
     }
 
-    fn command_cwd(&self, req: &UnifiedExecRequest) -> Option<AbsolutePathBuf> {
-        req.cwd.to_abs_path().ok()
+    fn command_cwd(&self, req: &UnifiedExecRequest<'_>) -> Option<AbsolutePathBuf> {
+        req.prepared.cwd.to_abs_path().ok()
     }
 
-    fn local_search_path<'b>(&self, req: &'b UnifiedExecRequest) -> Option<&'b str> {
-        (!req.turn_environment.environment.is_remote())
+    fn local_search_path<'b>(&self, req: &'b UnifiedExecRequest<'_>) -> Option<&'b str> {
+        (!req.prepared.turn_environment.environment.is_remote())
             .then(|| req.env.get("PATH").map(String::as_str))
             .flatten()
     }
@@ -484,23 +300,13 @@ impl<'a> ToolRuntime<UnifiedExecRequest<'_>, UnifiedExecAttempt> for UnifiedExec
         req: &UnifiedExecRequest<'_>,
         ctx: &ToolCtx,
     ) -> Option<NetworkApprovalSpec> {
-<<<<<<< HEAD
-        let file_system_sandbox_policy = ctx.turn.file_system_sandbox_policy();
-        let sandbox_permissions = sandbox_permissions_for_session(
-            req.sandbox_permissions,
-||||||| 413492cd6c
-        let file_system_sandbox_policy = ctx.turn.file_system_sandbox_policy();
-        let sandbox_permissions = sandbox_permissions_preserving_denied_reads(
-            req.sandbox_permissions,
-=======
         let prepared = req.prepared;
         let file_system_sandbox_policy = prepared
             .turn_environment
             .permission_profile()
             .file_system_sandbox_policy();
-        let sandbox_permissions = sandbox_permissions_preserving_denied_reads(
+        let sandbox_permissions = sandbox_permissions_for_session(
             prepared.permissions.sandbox_permissions,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             &file_system_sandbox_policy,
             &ctx.session,
         );
@@ -539,8 +345,7 @@ impl<'a> ToolRuntime<UnifiedExecRequest<'_>, UnifiedExecAttempt> for UnifiedExec
         req: &UnifiedExecRequest<'_>,
         attempt: &SandboxAttempt<'_>,
         ctx: &ToolCtx,
-<<<<<<< HEAD
-    ) -> Result<UnifiedExecProcess, ToolError> {
+    ) -> Result<UnifiedExecAttempt, ToolError> {
         let result = self.start_process(req, attempt, ctx).await;
         self.start_rejected = matches!(result, Err(ToolError::Rejected(_)));
         result
@@ -550,20 +355,13 @@ impl<'a> ToolRuntime<UnifiedExecRequest<'_>, UnifiedExecAttempt> for UnifiedExec
 impl UnifiedExecRuntime<'_> {
     async fn start_process(
         &mut self,
-        req: &UnifiedExecRequest,
+        req: &UnifiedExecRequest<'_>,
         attempt: &SandboxAttempt<'_>,
         ctx: &ToolCtx,
-    ) -> Result<UnifiedExecProcess, ToolError> {
-        let base_command = &req.command;
-||||||| 413492cd6c
-    ) -> Result<UnifiedExecProcess, ToolError> {
-        let base_command = &req.command;
-=======
     ) -> Result<UnifiedExecAttempt, ToolError> {
         let prepared = req.prepared;
         let base_command = &prepared.resolved.command;
         let requested_shell = &prepared.resolved.shell.shell;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let windows_sandbox_proxy_settings_mode = ctx.session.windows_sandbox_proxy_settings_mode;
         let session_shell = ctx.session.user_shell();
         let environment_shell = prepared
@@ -572,26 +370,44 @@ impl UnifiedExecRuntime<'_> {
             .as_ref()
             .unwrap_or(session_shell.as_ref());
         let (file_system_sandbox_policy, _) = attempt.permissions.to_runtime_permissions();
-<<<<<<< HEAD
         // PF-23-S02: remember whether this process can read credentials, from
         // the sandbox that really runs it, for typing into it later.
         {
             // Both a Corbanu store and a user credential folder must be
             // unreadable (a profile may deny one on its own).
             let markers = [
-                Some(ctx.turn.config.codex_home.join("auth.json").into_path_buf()),
+                Some(
+                    ctx.step_context
+                        .turn
+                        .config
+                        .codex_home
+                        .join("auth.json")
+                        .into_path_buf(),
+                ),
                 dirs::home_dir().map(|home| home.join(".ssh")),
             ];
             let cwd = attempt.sandbox_cwd.to_abs_path().ok();
-            let confined = !environment_is_remote
-                && attempt.sandbox != codex_sandboxing::SandboxType::None
+            // A sandbox the executor applies (remote, or with a shell
+            // snapshot) is not seen here; and D522 (a), provisional:
+            // upstream's MXC backend counts as no sandbox. Neither counts as
+            // confined (fail closed). The policy check answers "denied" when
+            // it cannot be evaluated, so the folder the command runs in must
+            // read as readable first (fail closed).
+            let confined = !prepared.turn_environment.environment.is_remote()
+                && !self.uses_executor_managed_process_sandbox(req)
+                && !matches!(
+                    attempt.sandbox,
+                    codex_sandboxing::SandboxType::None | codex_sandboxing::SandboxType::WindowsMxc
+                )
                 && cwd.is_some_and(|cwd| {
-                    markers.iter().all(|marker| {
-                        marker.as_ref().is_some_and(|marker| {
-                            !file_system_sandbox_policy
-                                .can_read_path_with_cwd(marker, cwd.as_path())
+                    file_system_sandbox_policy
+                        .can_read_local_path_with_cwd(cwd.as_path(), cwd.as_path())
+                        && markers.iter().all(|marker| {
+                            marker.as_ref().is_some_and(|marker| {
+                                !file_system_sandbox_policy
+                                    .can_read_local_path_with_cwd(marker, cwd.as_path())
+                            })
                         })
-                    })
                 });
             crate::security::protected_surface::confined::note_start(
                 ctx.session.thread_id(),
@@ -600,14 +416,7 @@ impl UnifiedExecRuntime<'_> {
             );
         }
         let launch_sandbox_permissions = sandbox_permissions_for_session(
-            req.sandbox_permissions,
-||||||| 413492cd6c
-        let launch_sandbox_permissions = sandbox_permissions_preserving_denied_reads(
-            req.sandbox_permissions,
-=======
-        let launch_sandbox_permissions = sandbox_permissions_preserving_denied_reads(
             prepared.permissions.sandbox_permissions,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             &file_system_sandbox_policy,
             &ctx.session,
         );
@@ -677,23 +486,6 @@ impl UnifiedExecRuntime<'_> {
         };
         let (mut env, managed_network_context, network_proxy_launch) = match managed_network {
             Some(network) if environment_is_remote => {
-<<<<<<< HEAD
-                let mut launch = network.remote_launch_config().await.map_err(|err| {
-                    ToolError::Codex(CodexErr::Io(io::Error::other(err.to_string())))
-                })?;
-                if network.remote_policy_decider().is_some()
-                    && let Some(timeout) = remote_network_policy_decision_timeout(
-                        routes_approval_to_guardian(&ctx.turn),
-                        launch.proxy.mode,
-                        ctx.session.hooks().max_permission_request_timeout(),
-                    )
-||||||| 413492cd6c
-                let mut launch = network.remote_launch_config().await.map_err(|err| {
-                    ToolError::Codex(CodexErr::Io(io::Error::other(err.to_string())))
-                })?;
-                if routes_approval_to_guardian(&ctx.turn)
-                    && network.remote_policy_decider().is_some()
-=======
                 let (mut launch, credential_masking) = remote_network_proxy_launch(
                     &prepared.turn_environment,
                     network,
@@ -707,13 +499,17 @@ impl UnifiedExecRuntime<'_> {
                     &launch.proxy,
                 )
                 .await;
-                if routes_approval_policy_to_guardian(
-                    ctx.step_context.settings.approval_policy(),
-                    ctx.step_context.settings.approvals_reviewer(),
-                ) && network
+                if network
                     .remote_policy_decider(launch.proxy.allow_local_binding)
                     .is_some()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                    && let Some(timeout) = remote_network_policy_decision_timeout(
+                        routes_approval_policy_to_guardian(
+                            ctx.step_context.settings.approval_policy(),
+                            ctx.step_context.settings.approvals_reviewer(),
+                        ),
+                        launch.proxy.mode,
+                        ctx.session.hooks().max_permission_request_timeout(),
+                    )
                 {
                     launch.policy_decision_timeout_ms =
                         Some(u64::try_from(timeout.as_millis()).map_err(|_| {
@@ -723,58 +519,12 @@ impl UnifiedExecRuntime<'_> {
                             )
                         })?);
                 }
-<<<<<<< HEAD
                 // #722 (D278): the remote proxy's own denials (blocked sites,
                 // local addresses, mode limits, misses nobody here decides)
                 // come back to this machine and end the command as failed.
                 // Executors that predate it ignore the request.
                 launch.report_denials = network.remote_denial_recorder().is_some();
-                if !launch.proxy.enabled {
-                    (env, None, None)
-                } else {
-                    let environment_info =
-                        req.turn_environment
-                            .environment
-                            .info()
-                            .await
-                            .map_err(|err| {
-                                ToolError::Codex(CodexErr::Io(io::Error::other(format!(
-                                    "failed to query exec-server capabilities: {err}"
-                                ))))
-                            })?;
-                    if !environment_info.capabilities.network_proxy_launch {
-                        return Err(ToolError::Rejected(
-                            "selected exec-server does not support executor-local network proxy launches"
-                                .to_string(),
-                        ));
-                    }
-                    (env, None, Some(launch))
-                }
-||||||| 413492cd6c
-                if !launch.proxy.enabled {
-                    (env, None, None)
-                } else {
-                    let environment_info =
-                        req.turn_environment
-                            .environment
-                            .info()
-                            .await
-                            .map_err(|err| {
-                                ToolError::Codex(CodexErr::Io(io::Error::other(format!(
-                                    "failed to query exec-server capabilities: {err}"
-                                ))))
-                            })?;
-                    if !environment_info.capabilities.network_proxy_launch {
-                        return Err(ToolError::Rejected(
-                            "selected exec-server does not support executor-local network proxy launches"
-                                .to_string(),
-                        ));
-                    }
-                    (env, None, Some(launch))
-                }
-=======
                 (env, None, launch.proxy.enabled.then_some(launch))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
             Some(network) => {
                 let child_environment = snapshot_credential_context
@@ -856,6 +606,10 @@ impl UnifiedExecRuntime<'_> {
                     explicit_env_overrides.insert(key, value.clone());
                 }
             }
+        }
+        // D447: no git `ext::` transport after untrusted content.
+        if crate::security::git_ext_guard::applies(&ctx.session) {
+            crate::security::git_ext_guard::apply(&mut env, &mut explicit_env_overrides);
         }
         let metrics_sidecar = sidecar_for_command(
             ctx,
@@ -976,53 +730,6 @@ impl UnifiedExecRuntime<'_> {
         } else {
             command
         };
-<<<<<<< HEAD
-
-        if let UnifiedExecShellMode::ZshFork(zsh_fork_config) = &self.shell_mode {
-            let command = build_unified_exec_sandbox_command(
-                &command,
-                &req.cwd,
-                &env,
-                managed_network_context.clone(),
-                req.additional_permissions.clone(),
-            )
-            .map_err(|error| match error {
-                ToolError::Rejected(_) | ToolError::Declined(_) => {
-                    ToolError::Rejected("missing command line for PTY".to_string())
-                }
-                error @ ToolError::Codex(_) => error,
-            })?;
-            let options = unified_exec_options(attempt.network_denial_cancellation_token.clone());
-            let mut exec_env = attempt
-                .env_for(
-                    command,
-                    options,
-                    managed_network,
-                    Some(&req.turn_environment.environment_id),
-||||||| 413492cd6c
-
-        if let UnifiedExecShellMode::ZshFork(zsh_fork_config) = &self.shell_mode {
-            let command = build_unified_exec_sandbox_command(
-                &command,
-                &req.cwd,
-                &env,
-                managed_network_context.clone(),
-                req.additional_permissions.clone(),
-            )
-            .map_err(|error| match error {
-                ToolError::Rejected(_) => {
-                    ToolError::Rejected("missing command line for PTY".to_string())
-                }
-                error @ ToolError::Codex(_) => error,
-            })?;
-            let options = unified_exec_options(attempt.network_denial_cancellation_token.clone());
-            let mut exec_env = attempt
-                .env_for(
-                    command,
-                    options,
-                    managed_network,
-                    Some(&req.turn_environment.environment_id),
-=======
         let sidecar_permissions = metrics_sidecar
             .as_ref()
             .map(PluginMetricsSidecar::additional_permissions);
@@ -1039,106 +746,7 @@ impl UnifiedExecRuntime<'_> {
                         .turn_environment
                         .permission_profile_with_workspace_roots(),
                     attempt.sandbox_cwd,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 )
-<<<<<<< HEAD
-                .map_err(ToolError::Codex)?;
-            exec_env.exec_server_env_config = req.exec_server_env_config.clone();
-            match zsh_fork_backend::maybe_prepare_unified_exec(
-                req,
-                attempt,
-                ctx,
-                exec_env,
-                zsh_fork_config,
-            )
-            .await?
-            {
-                Some(prepared) => {
-                    if req.turn_environment.environment.is_remote() {
-                        return Err(ToolError::Rejected(
-                            "unified_exec zsh-fork is not supported for remote environments"
-                                .to_string(),
-                        ));
-                    }
-                    return self
-                        .manager
-                        .open_session_with_prepared_exec_env(
-                            req.process_id,
-                            &prepared.exec_request,
-                            windows_sandbox_proxy_settings_mode,
-                            /*network_policy_decider*/ None,
-                            /*network_denial_observer*/ None,
-                            req.tty,
-                            prepared.spawn_lifecycle,
-                            req.turn_environment.environment.as_ref(),
-                        )
-                        .await
-                        .map_err(|err| match err {
-                            UnifiedExecError::SandboxDenied { output, .. } => {
-                                ToolError::Codex(CodexErr::Sandbox(SandboxErr::Denied {
-                                    output: Box::new(output),
-                                    network_policy_decision: None,
-                                }))
-                            }
-                            other => ToolError::Rejected(other.to_string()),
-                        });
-                }
-                None => {
-                    tracing::warn!(
-                        "UnifiedExec ZshFork backend specified, but conditions for using it were not met, falling back to direct execution",
-                    );
-                }
-            }
-        }
-||||||| 413492cd6c
-                .map_err(ToolError::Codex)?;
-            exec_env.exec_server_env_config = req.exec_server_env_config.clone();
-            match zsh_fork_backend::maybe_prepare_unified_exec(
-                req,
-                attempt,
-                ctx,
-                exec_env,
-                zsh_fork_config,
-            )
-            .await?
-            {
-                Some(prepared) => {
-                    if req.turn_environment.environment.is_remote() {
-                        return Err(ToolError::Rejected(
-                            "unified_exec zsh-fork is not supported for remote environments"
-                                .to_string(),
-                        ));
-                    }
-                    return self
-                        .manager
-                        .open_session_with_prepared_exec_env(
-                            req.process_id,
-                            &prepared.exec_request,
-                            windows_sandbox_proxy_settings_mode,
-                            /*network_policy_decider*/ None,
-                            req.tty,
-                            prepared.spawn_lifecycle,
-                            req.turn_environment.environment.as_ref(),
-                        )
-                        .await
-                        .map_err(|err| match err {
-                            UnifiedExecError::SandboxDenied { output, .. } => {
-                                ToolError::Codex(CodexErr::Sandbox(SandboxErr::Denied {
-                                    output: Box::new(output),
-                                    network_policy_decision: None,
-                                }))
-                            }
-                            other => ToolError::Rejected(other.to_string()),
-                        });
-                }
-                None => {
-                    tracing::warn!(
-                        "UnifiedExec ZshFork backend specified, but conditions for using it were not met, falling back to direct execution",
-                    );
-                }
-            }
-        }
-=======
             });
         let internal_permissions =
             merge_permission_profiles(sidecar_permissions.as_ref(), snapshot_permissions.as_ref());
@@ -1174,7 +782,6 @@ impl UnifiedExecRuntime<'_> {
             permissions
         };
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let command = build_unified_exec_sandbox_command(
             &command,
             &prepared.cwd,
@@ -1326,38 +933,6 @@ mod tests {
         )
     }
 
-    /// #722 (D246): remote network decisions reach this machine for the
-    /// user too, except in limited mode, which keeps failing closed remotely.
-    #[test]
-    fn remote_network_decisions_route_here_except_user_limited_mode() {
-        let hooks = Duration::from_secs(7);
-        let margin = REMOTE_NETWORK_POLICY_DECISION_MARGIN;
-        assert_eq!(
-            remote_network_policy_decision_timeout(
-                /*routes_to_guardian*/ false,
-                NetworkMode::Full,
-                hooks,
-            ),
-            Some(hooks + REMOTE_NETWORK_USER_DECISION_TIMEOUT + margin)
-        );
-        assert_eq!(
-            remote_network_policy_decision_timeout(
-                /*routes_to_guardian*/ false,
-                NetworkMode::Limited,
-                hooks,
-            ),
-            None
-        );
-        for mode in [NetworkMode::Full, NetworkMode::Limited] {
-            assert_eq!(
-                remote_network_policy_decision_timeout(
-                    /*routes_to_guardian*/ true, mode, hooks
-                ),
-                Some(hooks + GUARDIAN_REVIEW_TIMEOUT + margin)
-            );
-        }
-    }
-
     #[test]
     fn unified_exec_options_combines_default_timeout_with_network_denial_cancellation() {
         let cancellation = CancellationToken::new();
@@ -1378,52 +953,6 @@ mod tests {
             }
             other => panic!("expected timeout-or-cancellation expiration, got {other:?}"),
         }
-    }
-
-    /// #466: the last review of the command decides whether Core must end
-    /// it; a network review neither shows nor ends it.
-    #[tokio::test]
-    async fn the_last_command_review_decides_whether_core_ends_it() {
-        use codex_protocol::approvals::NetworkApprovalContext;
-        use codex_protocol::approvals::NetworkApprovalProtocol;
-        use codex_protocol::approvals::NetworkPolicyAmendment;
-        let (session, turn, _rx) = crate::session::tests::make_session_and_context_with_rx().await;
-        let ctx = |network: bool| ApprovalCtx {
-            session: &session,
-            turn: &turn,
-            call_id: "call-466",
-            retry_reason: None,
-            network_approval_context: network.then(|| NetworkApprovalContext {
-                host: "example.com".to_string(),
-                protocol: NetworkApprovalProtocol::Https,
-            }),
-            fresh_human_authority: false,
-        };
-        let amendment = |action| ReviewDecision::NetworkPolicyAmendment {
-            network_policy_amendment: NetworkPolicyAmendment {
-                host: "example.com".to_string(),
-                action,
-            },
-        };
-        let manager = UnifiedExecProcessManager::default();
-        let mut runtime = UnifiedExecRuntime::new(&manager, UnifiedExecShellMode::Direct);
-        assert!(!runtime.shown_by_review());
-        for (decision, shown) in [
-            (ReviewDecision::Approved, true),
-            (ReviewDecision::denied("no"), false),
-            (ReviewDecision::ApprovedForSession, true),
-            (ReviewDecision::TimedOut, false),
-            (amendment(NetworkPolicyRuleAction::Allow), true),
-            (ReviewDecision::Abort, false),
-            (amendment(NetworkPolicyRuleAction::Deny), false),
-        ] {
-            runtime.note_review_decision(&decision, &ctx(/*network*/ false));
-            assert_eq!(runtime.shown_by_review(), shown, "{decision:?}");
-        }
-        // A network review after an approval leaves the command shown.
-        runtime.note_review_decision(&ReviewDecision::Approved, &ctx(/*network*/ false));
-        runtime.note_review_decision(&ReviewDecision::denied("no"), &ctx(/*network*/ true));
-        assert!(runtime.shown_by_review());
     }
 
     #[tokio::test]
@@ -1511,5 +1040,69 @@ mod tests {
                 proposed_execpolicy_amendment: None,
             },
         }
+    }
+
+    /// #722 (D246): remote network decisions reach this machine for the
+    /// user too, except in limited mode, which keeps failing closed remotely.
+    #[test]
+    fn remote_network_decisions_route_here_except_user_limited_mode() {
+        let hooks = Duration::from_secs(7);
+        let margin = REMOTE_NETWORK_POLICY_DECISION_MARGIN;
+        assert_eq!(
+            remote_network_policy_decision_timeout(
+                /*routes_to_guardian*/ false,
+                NetworkMode::Full,
+                hooks,
+            ),
+            Some(hooks + REMOTE_NETWORK_USER_DECISION_TIMEOUT + margin)
+        );
+        assert_eq!(
+            remote_network_policy_decision_timeout(
+                /*routes_to_guardian*/ false,
+                NetworkMode::Limited,
+                hooks,
+            ),
+            None
+        );
+        for mode in [NetworkMode::Full, NetworkMode::Limited] {
+            assert_eq!(
+                remote_network_policy_decision_timeout(
+                    /*routes_to_guardian*/ true, mode, hooks
+                ),
+                Some(hooks + GUARDIAN_REVIEW_TIMEOUT + margin)
+            );
+        }
+    }
+
+    /// #466: the last review of the command decides whether Core must end
+    /// it; a network review neither shows nor ends it.
+    #[test]
+    fn the_last_command_review_decides_whether_core_ends_it() {
+        use codex_protocol::approvals::NetworkPolicyAmendment;
+        let amendment = |action| ReviewDecision::NetworkPolicyAmendment {
+            network_policy_amendment: NetworkPolicyAmendment {
+                host: "example.com".to_string(),
+                action,
+            },
+        };
+        let manager = UnifiedExecProcessManager::default();
+        let mut runtime = UnifiedExecRuntime::new(&manager);
+        assert!(!runtime.shown_by_review());
+        for (decision, shown) in [
+            (ReviewDecision::Approved, true),
+            (ReviewDecision::denied("no"), false),
+            (ReviewDecision::ApprovedForSession, true),
+            (ReviewDecision::TimedOut, false),
+            (amendment(NetworkPolicyRuleAction::Allow), true),
+            (ReviewDecision::Abort, false),
+            (amendment(NetworkPolicyRuleAction::Deny), false),
+        ] {
+            runtime.note_review_decision(&decision, /*network_review*/ false);
+            assert_eq!(runtime.shown_by_review(), shown, "{decision:?}");
+        }
+        // A network review after an approval leaves the command shown.
+        runtime.note_review_decision(&ReviewDecision::Approved, /*network_review*/ false);
+        runtime.note_review_decision(&ReviewDecision::denied("no"), /*network_review*/ true);
+        assert!(runtime.shown_by_review());
     }
 }
