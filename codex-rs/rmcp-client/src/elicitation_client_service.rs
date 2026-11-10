@@ -71,6 +71,12 @@ impl ElicitationClientService {
         }
     }
 
+    /// The same service, sending `protocol_version` in its `initialize` request.
+    pub(crate) fn with_protocol_version(mut self, protocol_version: ProtocolVersion) -> Self {
+        self.handler.set_protocol_version(protocol_version);
+        self
+    }
+
     async fn create_elicitation(
         &self,
         request: Elicitation,

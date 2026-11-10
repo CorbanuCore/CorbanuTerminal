@@ -277,6 +277,24 @@ impl ToolOrchestrator {
     where
         T: ToolRuntime<Rq, Out>,
     {
+        // #1976 (D491): under Moderate or Aggressive on Windows without the
+        // Windows sandbox, no agent command runs (read-only ones included),
+        // before anyone is asked; checked each round, so a level raised while
+        // a person was asked counts too.
+        if let Some(refusal) = crate::security::windows_unsandboxed::session_command_refusal(
+            &tool_ctx.session,
+            turn_ctx.windows_sandbox_level,
+        ) {
+            crate::security::inspection::record_refusal(
+                tool_ctx.session.thread_id(),
+                crate::security::windows_unsandboxed::INSPECTED,
+                crate::security::windows_unsandboxed::inspected_outcome(
+                    tool_ctx.session.services.model_client().live_level(),
+                ),
+            );
+            warn(tool_ctx, &refusal).await;
+            return Err(ToolError::Rejected(refusal));
+        }
         let otel = turn_ctx.session_telemetry.clone();
         let otel_tn = flat_tool_name(&tool_ctx.tool_name).into_owned();
         let otel_ci = &tool_ctx.call_id;

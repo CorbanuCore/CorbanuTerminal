@@ -71,6 +71,17 @@
 /codex-rs/config/src/security_state.rs @corbanu-security
 # Network proxy policy, MITM and credential injection.
 /codex-rs/network-proxy/ @corbanu-security
+# MCP OAuth resolved-address (SSRF) policy (D487, #2004) and its tests.
+/codex-rs/http-client/src/address_filter* @corbanu-security
+/codex-rs/exec-server-protocol/src/address_policy* @corbanu-security
+/codex-rs/exec-server/src/client/route_aware_http_client* @corbanu-security
+/codex-rs/rmcp-client/src/oauth_http_client* @corbanu-security
+# Enforcement around it (D465 extension): the pool checks every redirect and
+# sets proxy exemptions, the builder installs the address-checking resolver,
+# and the RPC client refuses a policy an older executor would drop.
+/codex-rs/http-client/src/route_aware_client_pool* @corbanu-security
+/codex-rs/http-client/src/client_builder* @corbanu-security
+/codex-rs/exec-server/src/client/rpc_http_client* @corbanu-security
 # Security levels, policy, audit and untrusted-content boundaries.
 /codex-rs/core/src/security/ @corbanu-security
 /codex-rs/security-level/ @corbanu-security
@@ -100,4 +111,37 @@
 /codex-rs/deny.toml @corbanu-security
 /codex-rs/.cargo/audit.toml @corbanu-security
 /.github/workflows/cargo-deny.yml @corbanu-security
+# Security CI (D465): workflows that run security checks, and the scripts only they run.
+# Not owned (changed too often): rust-ci.yml and rust-ci-full.yml, which call
+# rust-ci-core-security.yml; see the handoff, section 4.
+/.github/workflows/codeql.yml @corbanu-security
+/.github/workflows/credential-boundary-canary.yml @corbanu-security
+/.github/workflows/rust-ci-core-security.yml @corbanu-security
+/.github/workflows/security-ingress-contract.yml @corbanu-security
+/.github/workflows/security-platform-contract.yml @corbanu-security
+/.github/workflows/windows-security-probes.yml @corbanu-security
+# The required-checks gate and the setup actions the security workflows run.
+/.github/workflows/blocking-ci.yml @corbanu-security
+/.github/scripts/check_ci_results.py @corbanu-security
+/.github/actions/setup-ci/ @corbanu-security
+/.github/actions/check-clean-worktree/ @corbanu-security
+/.github/scripts/run-at-medium-integrity.ps1 @corbanu-security
+/scripts/security-credential-canary @corbanu-security
+/scripts/security_credential_canary.py @corbanu-security
+/scripts/test_security_credential_canary.py @corbanu-security
+/scripts/security-classifier-eval @corbanu-security
+/scripts/security_classifier_eval.py @corbanu-security
+/scripts/test_security_classifier_eval.py @corbanu-security
+/scripts/security-platform-probe @corbanu-security
+/scripts/security_platform_probe.py @corbanu-security
+/scripts/security_platform_self_test.py @corbanu-security
+/scripts/test_security_platform_probe.py @corbanu-security
+/scripts/test_security_platform_self_test.py @corbanu-security
+# Release signing (D465): release workflows that sign, and the signing actions and scripts.
+/.github/workflows/rust-release.yml @corbanu-security
+/.github/workflows/rust-release-windows.yml @corbanu-security
+/.github/actions/linux-code-sign/ @corbanu-security
+/.github/actions/windows-code-sign/ @corbanu-security
+/.github/actions/setup-akv-pkcs11-codesigning/ @corbanu-security
+/.github/scripts/macos-signing/ @corbanu-security
 # END Corbanu security owners

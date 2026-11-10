@@ -313,6 +313,11 @@ pub struct FileSystemSandboxContext {
     pub windows_sandbox_proxy_settings_mode: Option<WindowsSandboxProxySettingsMode>,
     #[serde(default)]
     pub use_legacy_landlock: bool,
+    /// #1976 (D491): when set, an operation that would run without a
+    /// platform sandbox on the host is refused with this text instead (on
+    /// Windows without the Windows sandbox, under Moderate or Aggressive).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unsandboxed_refusal: Option<String>,
 }
 
 impl FileSystemSandboxContext {
@@ -354,6 +359,7 @@ impl FileSystemSandboxContext {
             windows_sandbox_private_desktop: false,
             windows_sandbox_proxy_settings_mode: None,
             use_legacy_landlock: false,
+            unsandboxed_refusal: None,
         }
     }
 

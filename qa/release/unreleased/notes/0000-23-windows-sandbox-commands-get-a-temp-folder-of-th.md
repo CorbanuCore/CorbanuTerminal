@@ -37,6 +37,8 @@
   in the Corbanu home's `.sandbox` log. A typical session leaves several
   hundred (Node's `node-compile-cache`, `MSBuildTemp`, temp files tools
   kept); on CI all were taken in under a second.
-- Not changed: the non-admin sandbox still uses `%TEMP%` itself, and
-  sandboxed commands can still read (not write) other sessions' temp
-  folders.
+- Not changed, and accepted (D444): the non-admin sandbox still uses
+  `%TEMP%` itself; sandboxed commands can still read (not write) other
+  sessions' temp folders; and running an older version puts the old grant
+  back until the next session of this version removes it. `docs/sandbox.md`
+  now lists these limits.

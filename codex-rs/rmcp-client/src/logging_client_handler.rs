@@ -11,6 +11,7 @@ use rmcp::model::LoggingLevel;
 #[allow(deprecated)]
 use rmcp::model::LoggingMessageNotificationParam;
 use rmcp::model::ProgressNotificationParam;
+use rmcp::model::ProtocolVersion;
 use rmcp::model::ResourceUpdatedNotificationParam;
 use rmcp::service::NotificationContext;
 use rmcp::service::RequestContext;
@@ -34,6 +35,10 @@ impl LoggingClientHandler {
             client_info,
             send_elicitation: Arc::new(send_elicitation),
         }
+    }
+
+    pub(crate) fn set_protocol_version(&mut self, protocol_version: ProtocolVersion) {
+        self.client_info.protocol_version = protocol_version;
     }
 }
 

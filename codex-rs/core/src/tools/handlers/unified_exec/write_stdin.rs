@@ -91,6 +91,25 @@ impl WriteStdinHandler {
         };
 
         let args: WriteStdinArgs = parse_arguments_for_tool("write_stdin", &arguments)?;
+        // #1976 (D491): nothing is typed into a process without the Windows
+        // sandbox under Moderate or Aggressive (one started before the level
+        // rose); polling and interrupts still work.
+        if !args.chars.is_empty()
+            && !is_interrupt(&args.chars)
+            && let Some(refusal) = crate::security::windows_unsandboxed::session_command_refusal(
+                &session,
+                turn.windows_sandbox_level,
+            )
+        {
+            crate::security::inspection::record_refusal(
+                session.thread_id(),
+                crate::security::windows_unsandboxed::INSPECTED_TYPING,
+                crate::security::windows_unsandboxed::inspected_outcome(
+                    session.services.model_client().live_level(),
+                ),
+            );
+            return Err(FunctionCallError::RespondToModel(refusal));
+        }
         if !args.chars.is_empty() && !is_interrupt(&args.chars) {
             typed_link_check(&session, &turn, &args).await?;
         }

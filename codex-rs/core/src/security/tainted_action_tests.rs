@@ -13,6 +13,9 @@ mod issue_1309_line_writes;
 #[path = "issue_1704_code_tables_tests.rs"]
 mod issue_1704_code_tables;
 
+#[path = "issue_1901_disguised_stat_load_tests.rs"]
+mod issue_1901_disguised_stat_load;
+
 #[path = "issue_1276_to_1620_tests.rs"]
 mod issue_1276_to_1620;
 
@@ -1077,6 +1080,10 @@ async fn pf_30_s03_orchestrator_rechecks_after_the_prompt() {
                 .features
                 .enable(codex_features::Feature::SourceEnvelopes)
                 .expect("source envelopes");
+            // #1976: a Windows machine with its sandbox set up (the probe
+            // runs nothing), so Moderate does not refuse the run up front.
+            config.permissions.windows_sandbox_mode =
+                Some(codex_config::types::WindowsSandboxModeToml::Elevated);
         })
         .await
         .expect("session");

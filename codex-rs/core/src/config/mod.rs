@@ -4252,6 +4252,13 @@ impl Config {
             Some(WindowsSandboxModeToml::Unelevated) => WindowsSandboxLevel::RestrictedToken,
             None => WindowsSandboxLevel::Disabled,
         };
+        // #1976 (D491): say at start why agent commands and file tools will
+        // be refused.
+        if crate::security::windows_unsandboxed::applies(security_level, windows_sandbox_level) {
+            startup_warnings.push(crate::security::windows_unsandboxed::startup_notice(
+                security_level,
+            ));
+        }
         let memories_config: MemoriesConfig = cfg.memories.clone().unwrap_or_default().into();
         let memories_root = memory_root(&codex_home);
 
@@ -5947,3 +5954,7 @@ mod config_loader_tests;
 #[cfg(test)]
 #[path = "project_security_startup_tests.rs"]
 mod project_security_startup_tests;
+
+#[cfg(test)]
+#[path = "windows_unsandboxed_startup_tests.rs"]
+mod windows_unsandboxed_startup_tests;

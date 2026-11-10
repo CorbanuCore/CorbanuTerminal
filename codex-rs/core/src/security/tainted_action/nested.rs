@@ -355,7 +355,11 @@ impl Classifier {
     fn walk(&self, commands: &[Command], folders: &mut Folders, level: usize, found: &mut Found) {
         // #1276: `for k;` loops met so far.
         let mut loops = launched_git::PositionalLoops::default();
-        for command in commands {
+        // D484 (b): `for f in *` loops met so far, and what `ls`/`find`
+        // feed each command.
+        let mut glob_loops = option_globs::GlobLoops::default();
+        let feeds = option_globs::feeds(commands);
+        for (position, command) in commands.iter().enumerate() {
             work::step();
             if found.scripts.len()
                 + found.seds.len()
@@ -401,9 +405,19 @@ impl Classifier {
             found.deferred |= unknown_folder::starts_loop(&texts);
             let command_at = indirect::command_word(&texts);
             // #1912: a glob that may match a file named as an option
-            // (`tar cf a.tar *` with `--checkpoint-action=exec=sh x`).
-            if let Some((index, name)) = &command_at
-                && option_globs::runs_option_glob(name, *index, &texts, &command.words)
+            // (`tar cf a.tar *` with `--checkpoint-action=exec=sh x`), or
+            // (D484) a loop variable or `xargs` input taken from one.
+            glob_loops.read(command);
+            let option_glob = command_at.as_ref().is_some_and(|(index, name)| {
+                option_globs::runs_option_glob(name, *index, &texts, &command.words, &glob_loops)
+            });
+            if option_glob
+                || option_globs::xargs_runs_option(
+                    &texts,
+                    &command.words,
+                    &glob_loops,
+                    feeds.get(position).copied().unwrap_or_default(),
+                )
             {
                 note_git(found, ProtectedActionKind::UnseenCode);
             }
@@ -1250,12 +1264,21 @@ impl Classifier {
             let mut lexer_split = false;
             let marks: Vec<rerun::GitWordMark> = words
                 .iter()
-                .map(|word| {
+                .enumerate()
+                .map(|(at, word)| {
                     // Other unseen words are `simple_command`'s, which knows
                     // the values the line sets (`r=origin; git fetch "$r"`),
                     // unless it may have miscounted (#1910: `git fetch
                     // --refmap='x y' e"$r"`).
-                    let seen = !(lexer_split && word.dynamic);
+                    // #1910, either of two conditions, never one gating the
+                    // other: past a word the word lexer may cut differently
+                    // (`lexer_split`), or right after quoted text, which it
+                    // may also drop (`-o '' e"$r"`), when the line holds text
+                    // it does not show (`lexed_unseen`: else it gave every
+                    // expansion a value from the assignments it read).
+                    let seen = !(word.dynamic
+                        && (lexer_split
+                            || (self.lexed_unseen && at > 0 && words[at - 1].quoted_before)));
                     let text = word.text.as_str();
                     lexer_split |= text.contains(char::is_whitespace)
                         || text.contains([',', '(', ')'])

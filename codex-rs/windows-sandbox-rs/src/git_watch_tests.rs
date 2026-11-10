@@ -26,6 +26,21 @@ pub(crate) fn with_before_read<T>(hook: impl Fn(&Path) + 'static, body: impl FnO
     result
 }
 
+thread_local! {
+    static BEFORE_REOPEN: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
+}
+
+/// #1909: called for a reparse point other than a link after its tag was
+/// checked, just before it is reopened to be read as itself (the hook knows
+/// which file it set up: since #1935 the reopen is reached from a handle).
+pub(crate) fn before_reopen() {
+    BEFORE_REOPEN.with(|hook| {
+        if let Some(hook) = hook.borrow().as_ref() {
+            hook();
+        }
+    });
+}
+
 /// Whether this process may make a symbolic link (Developer Mode or the
 /// privilege; CI runs as an administrator).
 #[cfg(windows)]
@@ -145,6 +160,146 @@ fn file_print_of_an_unserved_reparse_point_differs_every_time() {
         (first == second, first.starts_with("truncated at")),
         (false, true),
         "{first}"
+    );
+}
+
+/// Makes the file `path`, a reparse point tagged `tag`, a symbolic link to
+/// the NT path `target` in place (same file; needs the privilege), as a
+/// process a command left running could.
+#[cfg(windows)]
+fn retag_as_link(path: &Path, tag: u32, target: &str) {
+    use std::os::windows::ffi::OsStrExt as _;
+    use std::os::windows::fs::OpenOptionsExt as _;
+    use std::os::windows::io::AsRawHandle as _;
+    const FSCTL_SET_REPARSE_POINT: u32 = 0x0009_00A4;
+    const FSCTL_DELETE_REPARSE_POINT: u32 = 0x0009_00AC;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const TAG_SYMLINK: u32 = 0xA000_000C;
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .expect("open");
+    // A link's own data must be empty.
+    file.set_len(0).expect("truncate");
+    let control = |code: u32, buffer: &[u8]| {
+        let mut returned = 0_u32;
+        // SAFETY: a valid handle and buffer.
+        let ok = unsafe {
+            windows_sys::Win32::System::IO::DeviceIoControl(
+                file.as_raw_handle() as _,
+                code,
+                buffer.as_ptr().cast(),
+                buffer.len() as u32,
+                std::ptr::null_mut(),
+                0,
+                &mut returned,
+                std::ptr::null_mut(),
+            )
+        };
+        assert!(ok != 0, "{code:#x}: {}", std::io::Error::last_os_error());
+    };
+    let mut header = [0_u8; 8];
+    header[0..4].copy_from_slice(&tag.to_le_bytes());
+    control(FSCTL_DELETE_REPARSE_POINT, &header);
+    // `REPARSE_DATA_BUFFER` for an absolute symbolic link: the substitute
+    // and print names are both `target`.
+    let name: Vec<u8> = std::ffi::OsStr::new(target)
+        .encode_wide()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    let len = name.len() as u16;
+    let mut buffer = Vec::new();
+    buffer.extend(TAG_SYMLINK.to_le_bytes());
+    buffer.extend((12 + 2 * len).to_le_bytes());
+    buffer.extend([0_u8; 2]);
+    for field in [0, len, len, len] {
+        buffer.extend(field.to_le_bytes());
+    }
+    buffer.extend(0_u32.to_le_bytes());
+    buffer.extend(&name);
+    buffer.extend(&name);
+    control(FSCTL_SET_REPARSE_POINT, &buffer);
+}
+
+/// #1909 (#1913 review): a reparse point other than a link that becomes a
+/// link after its tag was checked and before it is reopened is not
+/// followed: the link names a pipe this test serves, which never sees the
+/// open (Windows refuses to follow a link on a reopen from a handle).
+#[cfg(windows)]
+#[test]
+fn file_print_does_not_follow_a_link_tagged_before_the_reopen() {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Foundation::GetLastError;
+    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows_sys::Win32::System::Pipes::ConnectNamedPipe;
+    use windows_sys::Win32::System::Pipes::CreateNamedPipeW;
+    const TAG_HSM: u32 = 0xC000_0004;
+    const PIPE_ACCESS_DUPLEX: u32 = 3;
+    const PIPE_NOWAIT: u32 = 1;
+    const ERROR_PIPE_LISTENING: u32 = 536;
+    let dir = tempfile::tempdir().expect("tempdir");
+    if !symlinks_allowed(dir.path()) {
+        return;
+    }
+    let file = dir.path().join("config");
+    fs::write(&file, "x\n").expect("write");
+    if !set_reparse_tag(&file, TAG_HSM) {
+        return;
+    }
+    let pipe_name = format!("corbanu-1909-reopen-{}", std::process::id());
+    let wide: Vec<u16> = format!(r"\\.\pipe\{pipe_name}")
+        .encode_utf16()
+        .chain([0])
+        .collect();
+    // SAFETY: a valid name; the handle is closed below.
+    let pipe = unsafe {
+        CreateNamedPipeW(
+            wide.as_ptr(),
+            PIPE_ACCESS_DUPLEX,
+            PIPE_NOWAIT,
+            1,
+            512,
+            512,
+            0,
+            std::ptr::null(),
+        )
+    };
+    assert_ne!(pipe, INVALID_HANDLE_VALUE, "pipe");
+    let target = format!(r"\??\pipe\{pipe_name}");
+    let retagged = std::rc::Rc::new(std::cell::Cell::new(false));
+    let print = {
+        let retagged = std::rc::Rc::clone(&retagged);
+        let path = file.clone();
+        BEFORE_REOPEN.with(|slot| {
+            *slot.borrow_mut() = Some(Box::new(move || {
+                retag_as_link(&path, TAG_HSM, &target);
+                retagged.set(true);
+            }))
+        });
+        let print = file_print(&file);
+        BEFORE_REOPEN.with(|slot| *slot.borrow_mut() = None);
+        print
+    };
+    // SAFETY: the pipe handle is open; non-blocking, so this only reports
+    // whether a client ever opened it.
+    let never_opened = unsafe {
+        let connected = ConnectNamedPipe(pipe, std::ptr::null_mut()) != 0;
+        let err = GetLastError();
+        CloseHandle(pipe);
+        !connected && err == ERROR_PIPE_LISTENING
+    };
+    let is_link = fs::symlink_metadata(&file).is_ok_and(|metadata| metadata.is_symlink());
+    assert_eq!(
+        (
+            retagged.get(),
+            is_link,
+            never_opened,
+            print.starts_with("truncated at")
+        ),
+        (true, true, true, true),
+        "{print}"
     );
 }
 
