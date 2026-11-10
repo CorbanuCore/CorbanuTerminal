@@ -82,6 +82,10 @@
 /codex-rs/http-client/src/route_aware_client_pool* @corbanu-security
 /codex-rs/http-client/src/client_builder* @corbanu-security
 /codex-rs/exec-server/src/client/rpc_http_client* @corbanu-security
+# The route builder decides proxy exemptions and builds from the filtered
+# builder; the executor handler passes the request's address policy on.
+/codex-rs/http-client/src/outbound_proxy* @corbanu-security
+/codex-rs/exec-server/src/server/handler* @corbanu-security
 # Security levels, policy, audit and untrusted-content boundaries.
 /codex-rs/core/src/security/ @corbanu-security
 /codex-rs/security-level/ @corbanu-security
