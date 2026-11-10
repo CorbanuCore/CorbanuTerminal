@@ -1560,6 +1560,13 @@ pub(crate) fn protect_file_tool_context(
     turn: &crate::session::turn_context::TurnContext,
     mut context: codex_file_system::FileSystemSandboxContext,
 ) -> codex_file_system::FileSystemSandboxContext {
+    // #1976 (D491): under the live level, not only the configured one.
+    if let Some(refusal) = crate::security::windows_unsandboxed::session_file_refusal(
+        session,
+        context.windows_sandbox_level,
+    ) {
+        context.unsandboxed_refusal = Some(refusal);
+    }
     let Some(state) = session
         .services
         .model_client()

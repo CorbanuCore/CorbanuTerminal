@@ -4252,6 +4252,13 @@ impl Config {
             Some(WindowsSandboxModeToml::Unelevated) => WindowsSandboxLevel::RestrictedToken,
             None => WindowsSandboxLevel::Disabled,
         };
+        // #1976 (D491): say at start why agent commands and file tools will
+        // be refused.
+        if crate::security::windows_unsandboxed::applies(security_level, windows_sandbox_level) {
+            startup_warnings.push(crate::security::windows_unsandboxed::startup_notice(
+                security_level,
+            ));
+        }
         let memories_config: MemoriesConfig = cfg.memories.clone().unwrap_or_default().into();
         let memories_root = memory_root(&codex_home);
 
@@ -5227,6 +5234,17 @@ impl Config {
             profile_workspace_roots,
         )
         .map_err(std::io::Error::from)?;
+        // D424 (#1775): possibly planted `.git` entries in the folders
+        // Windows sandbox commands may write to, and below `cwd`.
+        for warning in crate::windows_sandbox::planted_git_startup_warnings(
+            &effective_file_system_sandbox_policy,
+            &workspace_roots,
+            resolved_cwd.as_path(),
+        ) {
+            if !startup_warnings.contains(&warning) {
+                startup_warnings.push(warning);
+            }
+        }
         let otel = otel::resolve_config(cfg.otel.unwrap_or_default(), &mut startup_warnings);
         let config = Self {
             #[cfg(not(feature = "developer-accounting"))]
@@ -5936,3 +5954,7 @@ mod config_loader_tests;
 #[cfg(test)]
 #[path = "project_security_startup_tests.rs"]
 mod project_security_startup_tests;
+
+#[cfg(test)]
+#[path = "windows_unsandboxed_startup_tests.rs"]
+mod windows_unsandboxed_startup_tests;

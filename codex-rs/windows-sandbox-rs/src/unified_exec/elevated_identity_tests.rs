@@ -20,7 +20,7 @@ const SETUP_FILES: [(&str, &str); 2] = [
 ];
 
 /// A codex home for an elevated-backend test, or `None` to skip it.
-pub(in crate::unified_exec::tests) fn elevated_home(name: &str) -> Option<TempDir> {
+pub(in crate::unified_exec::tests) fn elevated_home(name: &str) -> Option<SandboxHome> {
     // Bazel gives unit tests no staged sandbox helpers (#691).
     if option_env!("BAZEL_PACKAGE").is_some() {
         return None;
@@ -96,6 +96,16 @@ async fn try_spawn_elevated(
     for (key, value) in env {
         env_map.insert((*key).to_string(), value.clone());
     }
+    spawn_elevated_with_env_map(root, codex_home, argv, env_map, tty).await
+}
+
+async fn spawn_elevated_with_env_map(
+    root: &Path,
+    codex_home: &Path,
+    argv: Vec<String>,
+    env_map: HashMap<String, String>,
+    tty: bool,
+) -> anyhow::Result<codex_utils_pty::SpawnedProcess> {
     spawn_windows_sandbox_session_elevated_for_permission_profile(
         &PermissionProfile::workspace_write(),
         workspace_roots_for(root).as_slice(),
@@ -130,6 +140,26 @@ pub(in crate::unified_exec::tests) async fn run_elevated(
     tty: bool,
 ) -> (String, i32) {
     let spawned = spawn_elevated(root, codex_home, argv, env, tty).await;
+    let (stdout, exit_code) =
+        collect_stdout_and_exit(spawned, codex_home, Duration::from_secs(/*secs*/ 120)).await;
+    (String::from_utf8_lossy(&stdout).into_owned(), exit_code)
+}
+
+/// [`run_elevated`] with the command's whole environment given.
+pub(in crate::unified_exec::tests) async fn run_elevated_with_env_map(
+    root: &Path,
+    codex_home: &Path,
+    argv: Vec<String>,
+    env_map: HashMap<String, String>,
+) -> (String, i32) {
+    let spawned = spawn_elevated_with_env_map(root, codex_home, argv, env_map, /*tty*/ false)
+        .await
+        .unwrap_or_else(|err| {
+            panic!(
+                "spawn elevated command: {err:#}\n{}",
+                sandbox_log(codex_home)
+            )
+        });
     let (stdout, exit_code) =
         collect_stdout_and_exit(spawned, codex_home, Duration::from_secs(/*secs*/ 120)).await;
     (String::from_utf8_lossy(&stdout).into_owned(), exit_code)
@@ -799,6 +829,14 @@ fn sec_win_1648_elevated_tools_work_with_command_identity() {
     );
 }
 
+/// D429 (#1803): what commands of either backend may read of a legacy
+/// command.
+#[path = "d429_read_tests.rs"]
+mod d429;
+
+#[path = "d377_temp_tests.rs"]
+mod d377;
+
 /// #1758: a configured read-only `.git\hooks` in a workspace with no `.git`.
 /// The setup helper makes `.git\hooks`, and `.git` on the way, before the
 /// first command starts; that command can't write `.git` (a `config` there
@@ -991,8 +1029,8 @@ fn sec_win_1780_elevated_read_only_path_spelled_apart_from_cwd_stays_read_only()
 }
 
 /// #1819: an elevated command starts while a legacy command runs. The legacy
-/// session labels its writable roots (here `%TEMP%`, which holds this codex
-/// home) Low; a runner copied below them inherited that label and so started
+/// session labels its writable roots (here its temp folder, which holds this
+/// codex home) Low; a runner copied below them inherited that label and so started
 /// at Low integrity, where it may not open the parent's pipe for writing.
 #[test]
 fn sec_win_1819_elevated_command_starts_while_a_legacy_command_runs() {
@@ -1023,9 +1061,14 @@ fn sec_win_1819_elevated_command_starts_while_a_legacy_command_runs() {
     ));
     record_setup(codex_home.path());
     let bin_dir = crate::sandbox_bin_dir(codex_home.path());
-    let (home_low, during, bin_low) = runtime.block_on(with_holder(
+    // The legacy command's temp folder holds this codex home, as the real
+    // `%TEMP%` holds every test's (and may hold a user's), without its
+    // grant landing on the real one (#1890).
+    let legacy_temp = codex_home.path().parent().expect("home folder");
+    let (home_low, during, bin_low) = runtime.block_on(with_holder_in(
         holder_root.path(),
         legacy_home.path(),
+        legacy_temp,
         async |_holder_pid| {
             // SAFETY: reads labels only.
             let home_low = unsafe { crate::integrity::effective_label_is_low(codex_home.path()) };
@@ -1084,3 +1127,7 @@ fn sec_win_1819_elevated_command_starts_while_a_legacy_command_runs() {
         sandbox_log(codex_home.path())
     );
 }
+
+/// D425 (#1846): the elevated sandbox keeps planted-folder records.
+#[path = "elevated_planted_tests.rs"]
+mod d425;

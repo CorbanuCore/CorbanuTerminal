@@ -1,0 +1,37 @@
+# Integration tests (tests/*.rs) that fail on native Windows, excluded from the
+# non-blocking windows-integration-tests.yml workflow (#1856). Each one failed
+# both nextest attempts on windows-2022 in at least one run (scratch runs
+# 42626867876 and 42634961756, PR #1970 run 42637232129) and still runs on
+# Linux. The git_enrichment tests are intermittent: concurrent_turns passed in
+# 42626867876 and failed in the other two; startup_prewarm failed in
+# 42626867876 and passed in 42634961756.
+# Format: <cargo package> <exact nextest test name> #<issue>
+# Remove a line once its test passes on Windows; a line naming a test that no
+# longer exists fails .github/scripts/test_windows_integration_known_failures.py.
+
+codex-core suite::client::amazon_bedrock_proxy_uses_command_auth_and_custom_headers #1968
+codex-core suite::client::provider_auth_command_refreshes_after_401 #1968
+codex-core suite::client::provider_auth_command_supplies_bearer_token #1968
+codex-core suite::git_enrichment::concurrent_turns_keep_distinct_worktree_and_repository_metadata #1968
+codex-core suite::git_enrichment::startup_prewarm_skips_git_enrichment_and_user_turn_observes_fresh_state #1968
+codex-core suite::windows_sandbox::windows_elevated_enforces_deny_read_and_protects_setup_marker #1968
+
+codex-app-server suite::v2::named_session_account_backend::a_session_started_on_a_named_account_never_sends_the_default_login #1969
+codex-app-server suite::v2::named_session_account_backend::a_thread_the_user_left_does_not_count #1969
+codex-app-server suite::v2::named_session_account_backend::an_account_enrolled_while_the_server_runs_holds_after_its_thread #1969
+codex-app-server suite::v2::named_session_account_backend::backend_requests_follow_a_thread_started_on_a_named_account #1969
+codex-app-server suite::v2::named_session_account_backend::sessions_on_different_accounts_send_neither_login #1969
+codex-app-server suite::v2::provider_account_inheritance::an_explicit_fork_account_beats_the_source_account #1969
+codex-app-server suite::v2::provider_account_inheritance::client_started_worker_inherits_the_parent_account #1969
+codex-app-server suite::v2::provider_account_inheritance::fork_of_a_loaded_thread_runs_on_its_account #1969
+codex-app-server suite::v2::provider_account_inheritance::fork_of_a_stored_thread_runs_on_its_recorded_account #1969
+codex-app-server suite::v2::provider_account_inheritance::fork_of_an_earlier_turn_runs_on_the_source_current_account #1969
+codex-app-server suite::v2::provider_account_inheritance::the_forks_own_config_decides_whether_its_recorded_account_applies #1969
+codex-app-server suite::v2::thread_resume::thread_resume_preserves_persisted_permissions_over_broader_current_defaults #1969
+codex-app-server suite::v2::thread_settings_update::thread_settings_f05_pending_accept_runs_once_and_next_turn_is_full #1969
+codex-app-server suite::v2::thread_settings_update::thread_settings_f05_pending_decline_is_not_approval_or_replay #1969
+codex-app-server suite::v2::thread_settings_update::thread_settings_f06_f09_inflight_full_to_restricted_keeps_old_boundary #1969
+codex-app-server suite::v2::thread_settings_update::thread_settings_f06_f09_inflight_restricted_to_full_keeps_old_boundary #1969
+codex-app-server suite::v2::thread_settings_update::thread_settings_f07_rapid_conflicts_end_full #1969
+codex-app-server suite::v2::thread_settings_update::thread_settings_f07_rapid_conflicts_end_restricted #1969
+codex-app-server suite::v2::thread_settings_update::thread_settings_f10_restart_effective_full_reports_probe_authority #1969

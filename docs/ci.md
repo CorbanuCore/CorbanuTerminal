@@ -1,9 +1,16 @@
 # CI Coverage
 
-Corbanu Terminal CI currently runs only checks backed by available GitHub-hosted Linux
-x64 runners. This is intentional: prior Mac, Windows, ARM, and self-hosted
-runner jobs were failing before checkout with no executed steps, which created
-red status noise without testing the code.
+Corbanu Terminal CI runs only on GitHub-hosted runners: Linux x64 for most
+jobs, plus the hosted Windows and macOS jobs listed below. This is intentional:
+prior self-hosted (and some Mac, Windows and ARM) runner jobs were failing
+before checkout with no executed steps, which created red status noise without
+testing the code.
+
+Which Rust tests a PR runs: the tests of the crates it changes, on Linux
+(below, #1972); codex-core's security suites on Linux and macOS; native
+Windows tests for some crates. The whole Linux suite runs only postmerge
+(`rust-ci-full`) and in the nightly Bazel job, so a PR that breaks a crate it
+doesn't change (through a dependency) shows up on `main`.
 
 ## Active Push/PR Coverage
 
@@ -28,9 +35,20 @@ red status noise without testing the code.
   (`rust-ci / Windows native tests / Bazel test (changed crates)`): `tui`,
   `core`, `state` and `login` (#636); `windows-sandbox-rs`, `network-proxy`,
   `process-hardening` and `sandboxing`, whose Windows tests use one another
-  (#1813); `exec-server` (#1813). It runs the nightly native Windows Bazel
-  tests (`test-windows-native-main`), limited to the changed groups' test
-  targets (`--build_tests_only`). Other PRs skip it; a change to its workflow
+  (#1813); `exec-server` (#1813); `utils/pty` and `app-server` (#1839). It
+  runs the nightly native Windows Bazel tests (`test-windows-native-main`),
+  limited to the changed groups' test targets (`--build_tests_only`). As in
+  nightly, a crate's integration tests (`tests/*.rs`) run through their
+  `<name>-test-windows-cross` targets; the plain `<name>-test` twins show as
+  `SKIPPED` (incompatible with the gnullvm platform) but test the same files.
+  The exceptions are codex-core, codex-app-server, code-mode-host and
+  code-mode-runtime: their targets depend on codex-code-mode-host / V8, which needs a
+  target-platform Python that Bazel lacks there, so no Bazel job runs them on
+  Windows (#1856). The `app-server` group therefore runs app-server's unit-test
+  targets only; core's and app-server's integration tests run in the
+  non-blocking Cargo job below. code-mode-host and code-mode-runtime run no
+  tests on Windows at all, unit tests included.
+  Other PRs skip it; a change to its workflow
   (`rust-ci-windows-native-tests.yml`) runs every group, but changes to
   `.bazelrc`, other Bazel files or the crates these depend on don't (nightly
   covers those). So a `windows-sandbox-rs` change doesn't run core's Windows
@@ -38,12 +56,28 @@ red status noise without testing the code.
   Bazel repository cache that nightly saves on `main` and saves nothing. With
   no build cache it compiles cold: about 43 minutes for the #636 group, about
   as long as the Windows argument comment lint that already runs on PRs
-  (90-minute timeout).
-  Bazel gives the sharded core and tui unit tests its usual three attempts.
+  (90-minute timeout); every group together took about 51 minutes on #1852
+  (37 minutes before `utils/pty` and `app-server` were added).
+  Bazel gives the sharded core, tui and app-server unit tests its usual three
+  attempts.
   This job and the nightly one also give `//codex-rs/login:login-unit-tests`
   one re-run (`--flaky_test_attempts`) for the intermittent #691 test. If that
   test fails both attempts again, add it to the skip list in `.bazelrc`'s
   `windows-native-tests` config.
+- Windows integration tests for codex-core and codex-app-server
+  (`windows-integration-tests / codex-core` and `... / codex-app-server`,
+  #1856), on PRs that change one of those crates; a change to the workflow
+  (`windows-integration-tests.yml`), its known-failure list or script, or
+  `codex-rs/.config/nextest.toml` runs both. They run
+  `cargo nextest run -p <crate> --test '*'` on windows-2022 (msvc). The first
+  native runs found 13 codex-core and 19 codex-app-server failures (#1967,
+  #1968, #1969); they are listed in
+  `.github/windows-integration-known-failures.txt`, excluded, and named in the
+  job summary, so any other failure turns the job red. It is a separate
+  workflow, not part of `CI required` (which neither waits for it nor fails
+  with it), until those are fixed. It has no compile cache: about 22 minutes to
+  build, then about 5 (core) or 13 (app-server) minutes of tests (60-minute
+  timeout).
 - Argument comment lint on changed crates
   (`rust-ci / Argument comment lint - changed crates`, #636): runs the
   `/*param*/` lint, test code included, on every `codex-rs` crate whose `.rs`
@@ -54,7 +88,32 @@ red status noise without testing the code.
   `tools/argument-comment-lint/run.py -p <crate> -- --ignore-rust-version`.
   The Windows Bazel lint below skips test targets, and the full lints run
   nightly.
-- Rust nextest on Linux x64.
+- Tests of the changed crates on Linux
+  (`rust-ci / Changed crate tests / cargo nextest (changed crates)`, #1972):
+  `cargo nextest run -p <crate>...` (unit and integration tests) for every
+  `codex-rs` crate under which the PR changes any file
+  (`.github/scripts/changed_crate_test_packages.py`), including crates Cargo
+  makes members only because a member depends on them by path, such as
+  `codex-windows-sandbox` (#2027). It does not add the
+  crates that depend on them, and a `Cargo.lock`-only change runs nothing. It
+  runs codex-core's remote-aware tests locally, without postmerge's Docker
+  remote environment. It first builds the helper binaries some suites
+  start from other crates (`codex`, the code-mode host, the Linux sandbox, the
+  rmcp-client test servers, the wallet daemon) and installs the packaged
+  ripgrep. A change to the job itself, `rust-ci.yml`, the workspace
+  `Cargo.toml`, the toolchain or nextest config runs `codex-rmcp-client`'s
+  tests. It uses postmerge's
+  `ci-test` profile and restores its sccache (saves nothing). Before this no
+  Linux or macOS PR job ran most crates' tests: #1963 went green while
+  breaking two rmcp-client tests. Part of `CI results (required)` whenever it
+  runs; 85-minute timeout. Measured on the #1972 trials: about 15 minutes for
+  rmcp-client, 24 for codex-core and 46 for every crate at once (an upstream
+  sync), against the roughly 35 minutes `CI required` already takes.
+- Core security tests (`rust-ci / Core security tests — ubuntu-24.04` and
+  `— macos-15`, #512, #553, #902): codex-core's `security::` unit tests and
+  selected integration suites on Linux and macOS, on every `codex-rs` change.
+- Full Rust nextest suite on Linux x64: postmerge only (`postmerge-ci` →
+  `rust-ci-full`), not on PRs.
 - SDK checks on hosted Linux x64.
 - V8 canary coverage on hosted Linux x64 only.
 
@@ -111,8 +170,8 @@ See [Rust toolchain bump](rust-toolchain-bump.md) for what to update and when.
 
 ## Disabled Until Runners Exist
 
-- macOS Rust and Bazel checks outside the manual release builder.
-- Windows Rust and Bazel checks.
+- macOS Bazel checks, and macOS Rust checks other than the core security tests,
+  outside the manual release builder.
 - Linux ARM64 Rust, Bazel, and V8 push/PR checks outside the manual release
   builder.
 - Self-hosted runner jobs for unavailable Linux, macOS, Windows, and ARM64
