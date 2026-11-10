@@ -2261,7 +2261,7 @@ impl Session {
             let session_grants = {
                 let agent_control = Arc::clone(&agent_control);
                 crate::state::SessionGrantStore::new(move || {
-                    agent_control.effective_security_policy().authority_marker()
+                    crate::state::authority_marker_of(agent_control.as_ref())
                 })
             };
             let services = SessionServices {

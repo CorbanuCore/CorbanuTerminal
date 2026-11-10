@@ -132,9 +132,7 @@ impl SessionServices {
     /// The policy epoch and revocation generation "for session" approvals
     /// are bound to (PF-23-S03).
     pub(crate) fn authority_marker(&self) -> Option<(u64, u64)> {
-        self.agent_control
-            .effective_security_policy()
-            .authority_marker()
+        authority_marker_of(self.agent_control.as_ref())
     }
 
     /// #945: whether a security transition was committed since `shown_under`,
@@ -182,4 +180,13 @@ impl SessionServices {
         self.session_grants
             .record(environment_id, permissions, granted_under)
     }
+}
+
+/// The policy epoch and revocation generation (PF-23-S03) in force for `agent_control`: its
+/// local backend's live security policy. Another backend has no Corbanu policy tree, which
+/// counts as one that was never set up (`None`: no transition since).
+pub(crate) fn authority_marker_of(agent_control: &dyn AgentControl) -> Option<(u64, u64)> {
+    agent_control
+        .local()
+        .and_then(|local| local.effective_security_policy().authority_marker())
 }

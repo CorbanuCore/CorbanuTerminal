@@ -171,6 +171,7 @@ pub(super) async fn create_spawn(
                 agent_path: Some(task_name.clone()),
                 agent_nickname: child.thread.session_source.get_nickname(),
                 agent_role: child.thread.session_source.get_agent_role(),
+                ..Default::default()
             },
             status,
         },

@@ -38,23 +38,6 @@ struct ActiveAgents {
     nickname_reset_count: usize,
 }
 
-<<<<<<< HEAD
-#[derive(Clone, Debug, Default)]
-pub(crate) struct AgentMetadata {
-    pub(crate) agent_id: Option<ThreadId>,
-    pub(crate) agent_path: Option<AgentPath>,
-    pub(crate) agent_nickname: Option<String>,
-    pub(crate) agent_role: Option<String>,
-    pub(crate) last_task_message: Option<String>,
-    pub(crate) last_result_message: Option<String>,
-||||||| 413492cd6c
-#[derive(Clone, Debug, Default)]
-pub(crate) struct AgentMetadata {
-    pub(crate) agent_id: Option<ThreadId>,
-    pub(crate) agent_path: Option<AgentPath>,
-    pub(crate) agent_nickname: Option<String>,
-    pub(crate) agent_role: Option<String>,
-=======
 /// Thread defaults and executor bindings retained while a child's runtime is unloaded.
 #[derive(Clone)]
 pub(crate) struct EvictedEnvironments {
@@ -74,7 +57,6 @@ impl RegisteredAgent {
             evicted_environments: None,
         }
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn format_agent_nickname(name: &str, nickname_reset_count: usize) -> String {
@@ -281,7 +263,10 @@ impl AgentRegistry {
             .active_agents
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let path = active_agents.thread_paths.get(&thread_id).cloned();
+        let path = active_agents
+            .thread_paths
+            .get(&thread_id)
+            .map(|agent| agent.path.clone());
         if let Some(metadata) = path.and_then(|path| active_agents.agent_tree.get_mut(&path)) {
             metadata.last_task_message = Some(message);
         }
@@ -292,7 +277,10 @@ impl AgentRegistry {
             .active_agents
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let path = active_agents.thread_paths.get(&thread_id).cloned();
+        let path = active_agents
+            .thread_paths
+            .get(&thread_id)
+            .map(|agent| agent.path.clone());
         if let Some(metadata) = path.and_then(|path| active_agents.agent_tree.get_mut(&path)) {
             metadata.last_task_message = None;
         }
@@ -303,7 +291,10 @@ impl AgentRegistry {
             .active_agents
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let path = active_agents.thread_paths.get(&thread_id).cloned();
+        let path = active_agents
+            .thread_paths
+            .get(&thread_id)
+            .map(|agent| agent.path.clone());
         if let Some(metadata) = path.and_then(|path| active_agents.agent_tree.get_mut(&path)) {
             metadata.last_result_message = Some(message);
         }
@@ -314,7 +305,10 @@ impl AgentRegistry {
             .active_agents
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let path = active_agents.thread_paths.get(&thread_id).cloned();
+        let path = active_agents
+            .thread_paths
+            .get(&thread_id)
+            .map(|agent| agent.path.clone());
         if let Some(metadata) = path.and_then(|path| active_agents.agent_tree.get_mut(&path)) {
             metadata.last_result_message = None;
         }
@@ -375,11 +369,19 @@ impl AgentRegistry {
         if let Some(agent_nickname) = agent_metadata.agent_nickname.clone() {
             active_agents.used_agent_nicknames.insert(agent_nickname);
         }
-        if let Some(previous_key) = active_agents.thread_paths.insert(thread_id, key.clone())
-            && previous_key != key
-        {
-            active_agents.agent_tree.remove(previous_key.as_str());
+        // Re-registering a known thread at the same path keeps upstream's saved
+        // eviction data, which the reload path still needs until the thread is pinned.
+        let mut registered = RegisteredAgent::new(key.clone());
+        if let Some(previous_agent) = active_agents.thread_paths.remove(&thread_id) {
+            if previous_agent.path == key {
+                registered.evicted_environments = previous_agent.evicted_environments;
+            } else {
+                active_agents
+                    .agent_tree
+                    .remove(previous_agent.path.as_str());
+            }
         }
+        active_agents.thread_paths.insert(thread_id, registered);
         if let Some(previous_metadata) = active_agents.agent_tree.insert(key, agent_metadata)
             && let Some(previous_thread_id) = previous_metadata.agent_id
             && previous_thread_id != thread_id

@@ -122,7 +122,10 @@ impl From<codex_http_client::HttpError> for RequestError {
             | codex_http_client::HttpError::Build(_)
             | codex_http_client::HttpError::UnsupportedRedirectScheme(_)
             | codex_http_client::HttpError::TooManyRedirects
-            | codex_http_client::HttpError::Timeout) => Self::Other(error.into()),
+            | codex_http_client::HttpError::Timeout
+            // D487: a refused destination address stays an error; it is not a
+            // connect/timeout failure, so the system-proxy retry below skips it.
+            | codex_http_client::HttpError::DisallowedAddress(_)) => Self::Other(error.into()),
         }
     }
 }
