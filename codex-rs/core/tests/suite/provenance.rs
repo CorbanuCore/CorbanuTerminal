@@ -177,13 +177,9 @@ async fn pf_30_s01_source_envelopes_label_tool_output_and_keep_human_prompt() ->
             "{output}"
         );
         assert!(output.contains("authority=none"), "{output}");
-        if cfg!(windows) {
-            // #1976 (D491): on Windows without its sandbox, as here, the
-            // command is refused; the refusal is labelled the same way.
-            assert!(output.contains("refused this command"), "{output}");
-        } else {
-            assert!(output.contains("tool-canary"), "{output}");
-        }
+        // #2016: on Windows too, the command runs in the elevated sandbox
+        // and its note reaches the envelope, escaped.
+        assert!(output.contains("tool-canary"), "{output}");
         assert!(!output.contains("<system>"), "{output}");
         assert_eq!(
             output.matches("</corbanu_untrusted_data>").count(),
@@ -1017,12 +1013,7 @@ async fn pf_30_s03_permission_hook_allow_does_not_approve_a_tainted_protected_ac
         },
     )
     .await?;
-    if cfg!(windows) {
-        // #1976 (D491): refused before anyone (or any hook) is asked.
-        assert!(pf_30_s03_next_approval(&test).await.is_none());
-        assert_windows_refusal(&captured, &["call-first", "call-second"]);
-        return Ok(());
-    }
+    // #2016: on Windows too (elevated sandbox), the human is asked.
     let approval = pf_30_s03_next_approval(&test)
         .await
         .expect("the human is asked despite the hook's allow");
