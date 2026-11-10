@@ -89,23 +89,18 @@ use codex_mcp::McpPluginAttribution;
 use codex_mcp::McpProtocolMode;
 use codex_mcp::McpServerRegistration;
 use codex_mcp::ResolvedMcpCatalog;
-<<<<<<< HEAD
 use codex_memories_read::memory_root;
+use codex_model_provider::ChatgptBaseUrl;
+use codex_model_provider::DEFAULT_CHATGPT_BASE_URL;
+use codex_model_provider::ProviderCapabilities;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::DEFAULT_MODEL_PROVIDER_ID;
-use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
-||||||| 413492cd6c
-use codex_memories_read::memory_root;
-=======
-use codex_model_provider::ChatgptBaseUrl;
-use codex_model_provider::DEFAULT_CHATGPT_BASE_URL;
-use codex_model_provider::ProviderCapabilities;
 use codex_model_provider_info::GCP_PROVIDER_ID;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
 use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
@@ -183,12 +178,8 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::ErrorKind;
-<<<<<<< HEAD
 use std::num::NonZeroU64;
-||||||| 413492cd6c
-=======
 use std::num::NonZeroUsize;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -207,13 +198,9 @@ use toml_edit::DocumentMut;
 mod auth_keyring;
 pub mod edit;
 mod managed_features;
-<<<<<<< HEAD
-mod network_proxy_credential;
-||||||| 413492cd6c
-=======
 mod metrics;
 mod network_config;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+mod network_proxy_credential;
 mod network_proxy_spec;
 mod otel;
 mod permission_path;
@@ -326,117 +313,7 @@ pub(crate) const DEFAULT_MULTI_AGENT_V2_MAX_CONCURRENT_THREADS_PER_SESSION: usiz
 pub(crate) const DEFAULT_MULTI_AGENT_V2_MIN_WAIT_TIMEOUT_MS: i64 = 10_000;
 pub(crate) const DEFAULT_MULTI_AGENT_V2_MAX_WAIT_TIMEOUT_MS: i64 = 3600 * 1000;
 pub(crate) const DEFAULT_MULTI_AGENT_V2_DEFAULT_WAIT_TIMEOUT_MS: i64 = 30_000;
-<<<<<<< HEAD
-const DEFAULT_MULTI_AGENT_V2_ROOT_AGENT_USAGE_HINT_TEXT: &str = r#"You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.
-
-At the start of your turn, you are the active agent.
-You can spawn sub-agents to handle subtasks, and those sub-agents can spawn their own sub-agents.
-All agents in the team, including the agents that you can assign tasks to, are equally intelligent and capable, and have access to the same set of tools.
-
-You can use `spawn_agent` to create a new agent, `followup_task` to give an existing agent a new task and trigger a turn, and `send_message` to pass a message to a running agent without triggering a turn.
-Child agents can also spawn their own sub-agents.
-You can decide how much context you want to propagate to your sub-agents with the `fork_turns` parameter.
-
-You will receive messages in the analysis channel in the form:
-```
-Message Type: MESSAGE | FINAL_ANSWER
-Task name: <recipient>
-Sender: <author>
-Payload:
-<payload text>
-```
-They may be addressed as to=/root
-"#;
-const DEFAULT_MULTI_AGENT_V2_SUBAGENT_USAGE_HINT_TEXT: &str = r#"You are an agent in a team of agents collaborating to complete a task.
-
-You can spawn sub-agents to handle subtasks, and those sub-agents can spawn their own sub-agents. All agents in the team, including the agents that you can assign tasks to, are equally intelligent and capable, and have access to the same set of tools.
-
-You can use `spawn_agent` to create a new agent, `followup_task` to give an existing agent a new task and trigger a turn, and `send_message` to pass a message to a running agent.
-Child agents can also spawn their own sub-agents.
-
-When you provide a response in the final channel, that content is immediately delivered back to your parent agent.
-
-You will receive messages in the analysis channel in the form:
-```
-Message Type: NEW_TASK | MESSAGE | FINAL_ANSWER
-Task name: <recipient>
-Sender: <author>
-Payload:
-<payload text>
-```
-You may also see them addressed as to=/root/..., which indicates your identity is /root/...
-"#;
-const DEFAULT_MULTI_AGENT_V2_MODEL_OVERRIDE_USAGE_HINT_TEXT: &str = "Full-history forks (`fork_turns` omitted or `\"all\"`) inherit the parent model and reasoning effort and do not accept overrides. Only set `model` or `reasoning_effort` when explicitly requested by the user, applicable `AGENTS.md` instructions, or skill instructions; when doing so, set `fork_turns` to `\"none\"` or a positive integer string.";
 pub(crate) const DEFAULT_MULTI_AGENT_V2_TOOL_NAMESPACE: &str = "collaboration";
-const DEFAULT_MULTI_AGENT_V2_SHARED_USAGE_HINT_TEXT: &str = r#"Note that collaboration tools cannot be called from inside `functions.exec`. Call `spawn_agent`, `send_message`, `followup_task`, `wait_agent`, `interrupt_agent`, and `list_agents` only as direct tool calls using the recipient shown in their tool definitions, such as `to=functions.collaboration.spawn_agent`, since they are intentionally absent from the `functions.exec` `tools.*` namespace. Available tools in `functions.exec` are explicitly described with a `tools` namespace in the developer message.
-
-All agents share the same directory. In detail:
-- All agents have access to the same container and filesystem as you.
-- All agents use the same current working directory.
-- As a result, edits made by one agent are immediately visible to all other agents.
-"#;
-fn default_multi_agent_v2_usage_hint_text(usage_hint_text: &str, max_concurrency: usize) -> String {
-    format!(
-        "{usage_hint_text}\n{DEFAULT_MULTI_AGENT_V2_SHARED_USAGE_HINT_TEXT}\nThere are {max_concurrency} available concurrency slots, meaning that up to {max_concurrency} agents can be active at once, including you."
-    )
-}
-||||||| 413492cd6c
-const DEFAULT_MULTI_AGENT_V2_ROOT_AGENT_USAGE_HINT_TEXT: &str = r#"You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.
-
-At the start of your turn, you are the active agent.
-You can spawn sub-agents to handle subtasks, and those sub-agents can spawn their own sub-agents.
-All agents in the team, including the agents that you can assign tasks to, are equally intelligent and capable, and have access to the same set of tools.
-
-You can use `spawn_agent` to create a new agent, `followup_task` to give an existing agent a new task and trigger a turn, and `send_message` to pass a message to a running agent without triggering a turn.
-Child agents can also spawn their own sub-agents.
-You can decide how much context you want to propagate to your sub-agents with the `fork_turns` parameter.
-
-You will receive messages in the analysis channel in the form:
-```
-Message Type: MESSAGE | FINAL_ANSWER
-Task name: <recipient>
-Sender: <author>
-Payload:
-<payload text>
-```
-They may be addressed as to=/root
-"#;
-const DEFAULT_MULTI_AGENT_V2_SUBAGENT_USAGE_HINT_TEXT: &str = r#"You are an agent in a team of agents collaborating to complete a task.
-
-You can spawn sub-agents to handle subtasks, and those sub-agents can spawn their own sub-agents. All agents in the team, including the agents that you can assign tasks to, are equally intelligent and capable, and have access to the same set of tools.
-
-You can use `spawn_agent` to create a new agent, `followup_task` to give an existing agent a new task and trigger a turn, and `send_message` to pass a message to a running agent.
-Child agents can also spawn their own sub-agents.
-
-When you provide a response in the final channel, that content is immediately delivered back to your parent agent.
-
-You will receive messages in the analysis channel in the form:
-```
-Message Type: NEW_TASK | MESSAGE | FINAL_ANSWER
-Task name: <recipient>
-Sender: <author>
-Payload:
-<payload text>
-```
-You may also see them addressed as to=/root/..., which indicates your identity is /root/...
-"#;
-const DEFAULT_MULTI_AGENT_V2_MODEL_OVERRIDE_USAGE_HINT_TEXT: &str = "Full-history forks (`fork_turns` omitted or `\"all\"`) inherit the parent model and reasoning effort and do not accept overrides. Only set `model` or `reasoning_effort` when explicitly requested by the user, applicable `AGENTS.md` instructions, or skill instructions; when doing so, set `fork_turns` to `\"none\"` or a positive integer string.";
-const DEFAULT_MULTI_AGENT_V2_TOOL_NAMESPACE: &str = "collaboration";
-const DEFAULT_MULTI_AGENT_V2_SHARED_USAGE_HINT_TEXT: &str = r#"Note that collaboration tools cannot be called from inside `functions.exec`. Call `spawn_agent`, `send_message`, `followup_task`, `wait_agent`, `interrupt_agent`, and `list_agents` only as direct tool calls using the recipient shown in their tool definitions, such as `to=functions.collaboration.spawn_agent`, since they are intentionally absent from the `functions.exec` `tools.*` namespace. Available tools in `functions.exec` are explicitly described with a `tools` namespace in the developer message.
-
-All agents share the same directory. In detail:
-- All agents have access to the same container and filesystem as you.
-- All agents use the same current working directory.
-- As a result, edits made by one agent are immediately visible to all other agents.
-"#;
-fn default_multi_agent_v2_usage_hint_text(usage_hint_text: &str, max_concurrency: usize) -> String {
-    format!(
-        "{usage_hint_text}\n{DEFAULT_MULTI_AGENT_V2_SHARED_USAGE_HINT_TEXT}\nThere are {max_concurrency} available concurrency slots, meaning that up to {max_concurrency} agents can be active at once, including you."
-    )
-}
-=======
-const DEFAULT_MULTI_AGENT_V2_TOOL_NAMESPACE: &str = "collaboration";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 pub(crate) const HARD_MIN_MULTI_AGENT_V2_TIMEOUT_MS: i64 = 0;
 pub(crate) const HARD_MAX_MULTI_AGENT_V2_TIMEOUT_MS: i64 =
@@ -917,15 +794,11 @@ pub enum AccountingMode {
 /// Application configuration loaded from disk and merged with overrides.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
-<<<<<<< HEAD
     pub accounting: AccountingMode,
-||||||| 413492cd6c
-=======
     /// App-server-owned destination policy; other runtimes remain unmanaged.
     pub application_network_policy: codex_http_client::NetworkPolicy,
     /// Auth bootstrap routing installed by the app-server configuration owner.
     pub application_auth_route_config: Option<AuthRouteConfig>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     /// Provenance for how this [`Config`] was derived (merged layers + enforced
     /// requirements).
     pub config_layer_stack: ConfigLayerStack,
@@ -1837,10 +1710,6 @@ impl AuthManagerConfig for Config {
         Config::auth_route_config(self)
     }
 
-    fn forced_login_method(&self) -> Option<ForcedLoginMethod> {
-        self.forced_login_method
-    }
-
     fn configured_forced_login_method(&self) -> Option<ForcedLoginMethod> {
         self.configured_forced_login_method
     }
@@ -1989,7 +1858,6 @@ impl ConfigBuilder {
     }
 }
 
-<<<<<<< HEAD
 pub fn gpu_runtime_model_provider(
     record: codex_state::GpuRuntimeProvider,
     codex_home: &AbsolutePathBuf,
@@ -2021,8 +1889,10 @@ pub fn gpu_runtime_model_provider(
     provider.auth = Some(ModelProviderAuthInfo {
         command: current_corbanu_auth_helper(),
         args: vec![
-            codex_login::auth::GPU_ENDPOINT_TOKEN_HELPER_SUBCOMMAND.to_string(),
-            record.rental_id,
+            codex_login::auth::GPU_ENDPOINT_TOKEN_HELPER_SUBCOMMAND
+                .to_string()
+                .into(),
+            record.rental_id.into(),
         ],
         // Vault access may briefly serialize with the rental controller in another process.
         // Leave enough startup time for that lock handoff instead of rejecting a healthy
@@ -2121,8 +1991,10 @@ pub async fn load_gpu_runtime_model_provider_records(
         Err(error) => {
             tracing::warn!(%error, "failed to read GPU runtime provider overlay");
             Vec::new()
-||||||| 413492cd6c
-=======
+        }
+    }
+}
+
 async fn config_toml_from_layers(layers: &ConfigLayerStack) -> std::io::Result<ConfigToml> {
     // The loader resolves paths relative to each layer's file before deserialization.
     match ConfigToml::try_from(layers.effective_config()) {
@@ -2141,7 +2013,6 @@ async fn config_toml_from_layers(layers: &ConfigLayerStack) -> std::io::Result<C
                 ));
             }
             Err(std::io::Error::new(std::io::ErrorKind::InvalidData, err))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 }
@@ -2151,7 +2022,6 @@ impl Config {
         &self.sqlite
     }
 
-<<<<<<< HEAD
     pub fn validate_multi_agent_v2_config(&self) -> std::io::Result<()> {
         if self.multi_agent_v2.max_subagent_model_requests_per_turn < 2 {
             return Err(std::io::Error::new(
@@ -2160,8 +2030,8 @@ impl Config {
             ));
         }
         Ok(())
-||||||| 413492cd6c
-=======
+    }
+
     /// Returns `log_dir` when explicitly set by configuration or managed requirements.
     pub fn configured_log_dir(&self) -> Option<&Path> {
         let configured = self
@@ -2185,7 +2055,6 @@ impl Config {
         self.guardian_policy_config
             .as_deref()
             .unwrap_or(model_messages.auto_review().policy)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) fn multi_agent_version_override(&self) -> Option<MultiAgentVersion> {
@@ -2330,6 +2199,7 @@ impl Config {
             forced_login_method: self.configured_forced_login_method,
             forced_chatgpt_workspace_id: self.forced_chatgpt_workspace_id.clone(),
             chatgpt_base_url: Some(self.chatgpt_base_url.clone()),
+            managed_auth_policy: self.config_layer_stack.requirements().managed_auth_policy(),
             auth_route_config: self.auth_route_config(),
         }
     }
@@ -2662,22 +2532,23 @@ impl Config {
         .with_cloud_config_binding(refreshed_layers.cloud_config_binding().cloned())
         .with_applied_config_server(refreshed_layers.applied_config_server().cloned())
         .with_user_and_project_exec_policy_rules_ignored(
-<<<<<<< HEAD
-            refreshed_config
-                .config_layer_stack
-                .ignore_user_and_project_exec_policy_rules(),
-        );
-        let cfg: ConfigToml = config_layer_stack
-            .effective_config()
-            .try_into()
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
-        let default_zsh_path = refreshed_config
-            .zsh_path
-            .clone()
-            .map(AbsolutePathBuf::try_from)
-            .transpose()?;
+            refreshed_layers.ignore_user_and_project_exec_policy_rules(),
+        ))
+    }
 
-        let config = Self::load_config_with_layer_stack(
+    /// Rebuilds this live thread's config over `refreshed_config`'s layers (see
+    /// [`Self::rebuild_with_session_layers`]), keeping its runtime selections and the
+    /// developer accounting choice.
+    pub async fn rebuild_preserving_session_layers(
+        &self,
+        refreshed_config: &Config,
+    ) -> std::io::Result<Self> {
+        let config_layer_stack = Self::layer_stack_preserving_session(
+            &self.config_layer_stack,
+            &refreshed_config.config_layer_stack,
+        )?;
+        let cfg = config_toml_from_layers(&config_layer_stack).await?;
+        let mut config = Self::load_config_with_layer_stack(
             LOCAL_FS.as_ref(),
             cfg,
             ConfigOverrides {
@@ -2688,7 +2559,6 @@ impl Config {
                 model: self.model.clone(),
                 model_provider: Some(self.model_provider_id.clone()),
                 codex_self_exe: self.codex_self_exe.clone(),
-                default_zsh_path,
                 ..Default::default()
             },
             refreshed_config.codex_home.clone(),
@@ -2697,40 +2567,8 @@ impl Config {
         .await?;
         // Preserve the developer opt-in and explicit OFF through refresh.
         // Provider-aware collection rebinds identity and endpoint at each turn.
-        let mut config = config;
         config.accounting.clone_from(&self.accounting);
         Ok(config)
-||||||| 413492cd6c
-            refreshed_config
-                .config_layer_stack
-                .ignore_user_and_project_exec_policy_rules(),
-        );
-        let cfg: ConfigToml = config_layer_stack
-            .effective_config()
-            .try_into()
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
-        let default_zsh_path = refreshed_config
-            .zsh_path
-            .clone()
-            .map(AbsolutePathBuf::try_from)
-            .transpose()?;
-
-        Self::load_config_with_layer_stack(
-            LOCAL_FS.as_ref(),
-            cfg,
-            ConfigOverrides {
-                cwd: Some(self.cwd.to_path_buf()),
-                default_zsh_path,
-                ..Default::default()
-            },
-            refreshed_config.codex_home.clone(),
-            config_layer_stack,
-        )
-        .await
-=======
-            refreshed_layers.ignore_user_and_project_exec_policy_rules(),
-        ))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// This is the preferred way to create an instance of [Config].
@@ -3609,77 +3447,6 @@ fn resolve_permission_config_syntax(
     })
 }
 
-<<<<<<< HEAD
-fn apply_managed_filesystem_constraints(
-    file_system_sandbox_policy: &mut FileSystemSandboxPolicy,
-    filesystem_constraints: &codex_config::FilesystemConstraints,
-) {
-    for deny_read in &filesystem_constraints.deny_read {
-        let deny_entry = if deny_read.contains_glob() {
-            codex_protocol::permissions::FileSystemSandboxEntry {
-                path: codex_protocol::permissions::FileSystemPath::GlobPattern {
-                    scan: None,
-                    pattern: deny_read.as_str().to_string(),
-                },
-                access: codex_protocol::permissions::FileSystemAccessMode::Deny,
-                missing_path_behavior: None,
-            }
-        } else {
-            let Ok(path) = AbsolutePathBuf::try_from(deny_read.as_str()) else {
-                continue;
-            };
-            codex_protocol::permissions::FileSystemSandboxEntry {
-                path: codex_protocol::permissions::FileSystemPath::Path { path },
-                access: codex_protocol::permissions::FileSystemAccessMode::Deny,
-                missing_path_behavior: None,
-            }
-        };
-        if !file_system_sandbox_policy
-            .entries
-            .iter()
-            .any(|existing| existing == &deny_entry)
-        {
-            file_system_sandbox_policy.entries.push(deny_entry);
-        }
-    }
-}
-
-||||||| 413492cd6c
-fn apply_managed_filesystem_constraints(
-    file_system_sandbox_policy: &mut FileSystemSandboxPolicy,
-    filesystem_constraints: &codex_config::FilesystemConstraints,
-) {
-    for deny_read in &filesystem_constraints.deny_read {
-        let deny_entry = if deny_read.contains_glob() {
-            codex_protocol::permissions::FileSystemSandboxEntry {
-                path: codex_protocol::permissions::FileSystemPath::GlobPattern {
-                    pattern: deny_read.as_str().to_string(),
-                },
-                access: codex_protocol::permissions::FileSystemAccessMode::Deny,
-                missing_path_behavior: None,
-            }
-        } else {
-            let Ok(path) = AbsolutePathBuf::try_from(deny_read.as_str()) else {
-                continue;
-            };
-            codex_protocol::permissions::FileSystemSandboxEntry {
-                path: codex_protocol::permissions::FileSystemPath::Path { path },
-                access: codex_protocol::permissions::FileSystemAccessMode::Deny,
-                missing_path_behavior: None,
-            }
-        };
-        if !file_system_sandbox_policy
-            .entries
-            .iter()
-            .any(|existing| existing == &deny_entry)
-        {
-            file_system_sandbox_policy.entries.push(deny_entry);
-        }
-    }
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 /// Optional overrides for user configuration (e.g., from CLI flags).
 #[derive(Default, Debug, Clone)]
 pub struct ConfigOverrides {
@@ -4455,7 +4222,6 @@ impl Config {
             config_layer_stack.requirements(),
             &mut startup_warnings,
         );
-<<<<<<< HEAD
         let security_settings = cfg.security.clone().unwrap_or_default();
         security_settings.validate().map_err(|err| {
             std::io::Error::new(
@@ -4475,9 +4241,6 @@ impl Config {
         }
         let security_level = recovery.level;
 
-||||||| 413492cd6c
-
-=======
         // Packaged defaults supply a URL even when no override was configured.
         let chatgpt_base_url_is_explicit =
             config_layer_stack.requirements().chatgpt_base_url.is_some()
@@ -4487,7 +4250,6 @@ impl Config {
                     .map_or(cfg.chatgpt_base_url.is_some(), |layer| {
                         !matches!(layer.name, ConfigLayerSource::PackagedDefaults { .. })
                     });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         // Destructure every field to ensure ConfigRequirements additions are
         // either applied above or handled while constructing the final Config.
         let ConfigRequirements {
@@ -4636,7 +4398,6 @@ impl Config {
             feature_requirements,
             &mut startup_warnings,
         )?;
-<<<<<<< HEAD
         let broker_model_auth_origin = {
             use crate::model_broker_auth::BrokerModelAuthOrigin;
             if !features.enabled(Feature::BrokerModelAuth) {
@@ -4699,8 +4460,6 @@ impl Config {
                 );
             }
         }
-||||||| 413492cd6c
-=======
         if let Some(FeatureToml::Config(guardian)) = cfg
             .features
             .as_ref()
@@ -4717,7 +4476,6 @@ impl Config {
             &cfg.mcp_servers,
             features.enabled(Feature::UseXaa),
         )?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let non_prefixed_mcp_tool_servers = if features.enabled(Feature::NonPrefixedMcpToolNames) {
             cfg.features
                 .as_ref()
@@ -4749,6 +4507,14 @@ impl Config {
             &mut constrained_windows_sandbox_mode,
             &mut startup_warnings,
         )?;
+        // #1976 (D491): say at start why agent commands and file tools will
+        // be refused. MXC reports no restricted-token/elevated level, so it
+        // counts as unsandboxed here until S3b qualifies it.
+        if crate::security::windows_unsandboxed::applies(security_level, windows_sandbox_level) {
+            startup_warnings.push(crate::security::windows_unsandboxed::startup_notice(
+                security_level,
+            ));
+        }
         let resolved_cwd = AbsolutePathBuf::try_from(normalize_for_native_workdir({
             use std::env;
 
@@ -5080,11 +4846,20 @@ impl Config {
                 active_permission_profile = None;
                 profile_workspace_roots.clear();
             }
-<<<<<<< HEAD
-            configured_network_proxy_config.enabled = true;
-            apply_security_network_features(&mut configured_network_proxy_config, &features);
+        }
+        let mut prepared_network = PreparedNetworkConfig::from_inputs(NetworkConfigInputs {
+            configured_proxy: configured_network_proxy_config,
+            feature_enabled: enable_network_proxy,
+            features: cfg.features.as_ref(),
+            candidate_permission_profile: &permission_profile,
+            credential_broker_base_url: cfg.openai_base_url.as_deref(),
+        });
+        // PF-33 / PF-27-S02: Corbanu's network security settings apply to the
+        // proxy the feature enabled, after its feature config.
+        if enable_network_proxy && permission_profile.network_sandbox_policy().is_enabled() {
+            apply_security_network_features(&mut prepared_network.configured_proxy, &features);
             apply_secretless_launch_network_config(
-                &mut configured_network_proxy_config,
+                &mut prepared_network.configured_proxy,
                 secretless_agent_launch,
                 &cfg.shell_environment_policy.clone().into(),
                 &cfg.model_providers
@@ -5093,23 +4868,12 @@ impl Config {
                     .collect::<Vec<_>>(),
                 &codex_home,
             );
-||||||| 413492cd6c
-            configured_network_proxy_config.enabled = true;
-=======
         }
-        let prepared_network = PreparedNetworkConfig::from_inputs(NetworkConfigInputs {
-            configured_proxy: configured_network_proxy_config,
-            feature_enabled: enable_network_proxy,
-            features: cfg.features.as_ref(),
-            candidate_permission_profile: &permission_profile,
-            credential_broker_base_url: cfg.openai_base_url.as_deref(),
-        });
         if cfg.approval_policy == Some(AskForApproval::UnlessTrusted) {
             return Err(std::io::Error::new(
                 ErrorKind::InvalidData,
                 UnsupportedUntrustedApprovalPolicyError,
             ));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         let approval_policy_was_explicit =
             approval_policy_override.is_some() || cfg.approval_policy.is_some();
@@ -5190,7 +4954,6 @@ impl Config {
             .clone()
             .filter(|value| !value.is_empty());
 
-<<<<<<< HEAD
         let sqlite_home = cfg
             .sqlite_home
             .as_ref()
@@ -5202,17 +4965,7 @@ impl Config {
             .unwrap_or_else(|| codex_home.to_path_buf());
         // #651: an armed launch contract protects a separate database folder.
         crate::security::launch_contract::protect_database_folder(&sqlite_home);
-||||||| 413492cd6c
-        let model_providers =
-            merge_configured_model_providers(built_in_model_providers(openai_base_url), cfg.model_providers)
-                .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
-=======
-        let mut model_providers =
-            merge_configured_model_providers(built_in_model_providers(openai_base_url), cfg.model_providers)
-                .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
-<<<<<<< HEAD
         let mut built_in_model_providers = built_in_model_providers(openai_base_url);
         if let Some(command) = codex_self_exe
             .clone()
@@ -5242,21 +4995,21 @@ impl Config {
             &mut startup_warnings,
         )?;
 
-        let provider_came_from_override = model_provider.is_some();
-        let model_came_from_override = model.is_some();
-        let requested_provider_was_explicit =
-            model_provider.is_some() || cfg.model_provider.is_some();
-        let requested_model_provider_id = model_provider
-||||||| 413492cd6c
-        let model_provider_id = model_provider
-=======
         if let Some(provider) = model_providers.get_mut(GCP_PROVIDER_ID) {
             apply_default_gcp_auth(provider, &resolved_cwd);
         }
 
-        let model_provider_id = config_layer_stack.required_model_provider().map(str::to_string)
+        // A provider required by managed requirements counts as explicit.
+        let required_model_provider = config_layer_stack
+            .required_model_provider()
+            .map(str::to_string);
+        let provider_came_from_override = model_provider.is_some();
+        let model_came_from_override = model.is_some();
+        let requested_provider_was_explicit = required_model_provider.is_some()
+            || model_provider.is_some()
+            || cfg.model_provider.is_some();
+        let requested_model_provider_id = required_model_provider
             .or(model_provider)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             .or(cfg.model_provider)
             .unwrap_or_else(|| DEFAULT_MODEL_PROVIDER_ID.to_string());
         let requested_model_provider_id =
@@ -5329,7 +5082,6 @@ impl Config {
             })?
             .clone();
 
-<<<<<<< HEAD
         let requested_model_for_pair_validation = model.clone().or_else(|| cfg.model.clone());
         let retired_pin = requested_model_for_pair_validation
             .as_deref()
@@ -5459,13 +5211,6 @@ impl Config {
             shell_environment_policy.use_profile = false;
             allow_login_shell = false;
         }
-||||||| 413492cd6c
-        let shell_environment_policy = cfg.shell_environment_policy.into();
-        let allow_login_shell = cfg.allow_login_shell.unwrap_or(true);
-=======
-        let shell_environment_policy = ShellEnvironmentPolicy::from(cfg.shell_environment_policy);
-        let allow_login_shell = cfg.allow_login_shell.unwrap_or(true);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         let history = cfg.history.unwrap_or_default();
 
@@ -6055,8 +5800,7 @@ impl Config {
             }
         }
         let otel = otel::resolve_config(cfg.otel.unwrap_or_default(), &mut startup_warnings);
-<<<<<<< HEAD
-        let config = Self {
+        let mut config = Self {
             #[cfg(not(feature = "developer-accounting"))]
             accounting: AccountingMode::Disabled,
             #[cfg(feature = "developer-accounting")]
@@ -6064,13 +5808,8 @@ impl Config {
                 &model_provider_id,
                 &model_provider,
             ),
-||||||| 413492cd6c
-        let config = Self {
-=======
-        let mut config = Self {
             plugins: cfg.plugins,
             prefer_mxc,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             model,
             daybreak_enabled: cfg.daybreak.unwrap_or(false),
             service_tier,
@@ -6209,11 +5948,6 @@ impl Config {
                 .or(show_raw_agent_reasoning)
                 .unwrap_or(false),
             guardian_policy_config,
-<<<<<<< HEAD
-            model_reasoning_effort,
-||||||| 413492cd6c
-            model_reasoning_effort: cfg.model_reasoning_effort,
-=======
             guardian_extra_policy,
             guardian_policy_template,
             guardian_transcript_mode,
@@ -6231,8 +5965,7 @@ impl Config {
                 .as_ref()
                 .and_then(|auto_review| auto_review.circuit_break_action)
                 .unwrap_or_default(),
-            model_reasoning_effort: cfg.model_reasoning_effort,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            model_reasoning_effort,
             plan_mode_reasoning_effort: cfg.plan_mode_reasoning_effort,
             model_reasoning_summary: cfg.model_reasoning_summary,
             model_supports_reasoning_summaries: cfg.model_supports_reasoning_summaries,
@@ -6319,25 +6052,19 @@ impl Config {
                 .map(|t| t.notification_settings.clone())
                 .unwrap_or_default(),
             animations: cfg.tui.as_ref().map(|t| t.animations).unwrap_or(true),
-<<<<<<< HEAD
+            tui_effects: cfg.tui.as_ref().map(|t| t.effects).unwrap_or_default(),
+            tui_rendering: cfg.tui.as_ref().map(|t| t.rendering).unwrap_or_default(),
             show_tooltips: cfg
                 .tui
                 .as_ref()
                 .map(|t| t.show_tooltips)
                 .unwrap_or(false),
-||||||| 413492cd6c
-            show_tooltips: cfg.tui.as_ref().map(|t| t.show_tooltips).unwrap_or(true),
-=======
-            tui_effects: cfg.tui.as_ref().map(|t| t.effects).unwrap_or_default(),
-            tui_rendering: cfg.tui.as_ref().map(|t| t.rendering).unwrap_or_default(),
-            show_tooltips: cfg.tui.as_ref().map(|t| t.show_tooltips).unwrap_or(true),
             tui_show_server_version_notice: cfg
                 .tui
                 .as_ref()
                 .map(|t| t.show_server_version_notice)
                 .unwrap_or(true),
             tui_auto_recap: cfg.tui.as_ref().map(|t| t.auto_recap).unwrap_or(/*default*/ true),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             model_availability_nux: cfg
                 .tui
                 .as_ref()
@@ -6412,15 +6139,11 @@ impl Config {
                 .unwrap_or_default(),
             otel,
         };
-<<<<<<< HEAD
         config.validate_non_prefixed_mcp_server_names()?;
-||||||| 413492cd6c
-=======
         if let Some(message) = config.credential_masking_warning(config.permissions.permission_profile()) {
             tracing::warn!("{message}");
             config.startup_warnings.push(message.to_string());
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         Ok(config)
         })
         .await
@@ -6540,52 +6263,7 @@ impl Config {
             network_proxy_config_for_profile_selection(
                 permissions.as_ref(),
                 active_permission_profile.id.as_str(),
-<<<<<<< HEAD
-            )?;
-            if self.features.enabled(Feature::NetworkProxy)
-                && permission_profile.network_sandbox_policy().is_enabled()
-            {
-                if let Some(network_proxy) = network_proxy_toml_config(cfg.features.as_ref()) {
-                    apply_network_proxy_feature_config(
-                        &mut configured_network_proxy_config,
-                        network_proxy,
-                    );
-                }
-                configured_network_proxy_config.enabled = true;
-                apply_security_network_features(
-                    &mut configured_network_proxy_config,
-                    &self.features,
-                );
-                apply_secretless_launch_network_config(
-                    &mut configured_network_proxy_config,
-                    self.features.enabled(Feature::SecretlessAgentLaunch),
-                    &self.permissions.shell_environment_policy,
-                    &self
-                        .model_providers
-                        .values()
-                        .filter_map(|provider| provider.env_key.clone())
-                        .collect::<Vec<_>>(),
-                    &self.codex_home,
-                );
-            }
-            configured_network_proxy_config
-||||||| 413492cd6c
-            )?;
-            if self.features.enabled(Feature::NetworkProxy)
-                && permission_profile.network_sandbox_policy().is_enabled()
-            {
-                if let Some(network_proxy) = network_proxy_toml_config(cfg.features.as_ref()) {
-                    apply_network_proxy_feature_config(
-                        &mut configured_network_proxy_config,
-                        network_proxy,
-                    );
-                }
-                configured_network_proxy_config.enabled = true;
-            }
-            configured_network_proxy_config
-=======
             )?
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         } else {
             NetworkProxyConfig::default()
         };
@@ -6902,7 +6580,7 @@ fn explicit_feature_setting(
     feature: Feature,
 ) -> Option<bool> {
     let is_feature = |key: &str| codex_features::feature_for_key(key) == Some(feature);
-    let layers = stack.layers_high_to_low();
+    let layers: Vec<_> = stack.layers_high_to_low().collect();
     if layers.is_empty() {
         return features?
             .entries()
@@ -6964,3 +6642,7 @@ mod config_loader_tests;
 #[cfg(test)]
 #[path = "project_security_startup_tests.rs"]
 mod project_security_startup_tests;
+
+#[cfg(test)]
+#[path = "windows_unsandboxed_startup_tests.rs"]
+mod windows_unsandboxed_startup_tests;

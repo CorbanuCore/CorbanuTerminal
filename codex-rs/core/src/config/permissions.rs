@@ -590,16 +590,10 @@ fn compile_filesystem_permission(
                     // exact-path parser so existing path semantics stay intact.
                     let entry = FileSystemSandboxEntry {
                         path: FileSystemPath::GlobPattern {
-<<<<<<< HEAD
                             scan: None,
-                            pattern: compile_scoped_filesystem_pattern(path, subpath, *access)?,
-||||||| 413492cd6c
-                            pattern: compile_scoped_filesystem_pattern(path, subpath, *access)?,
-=======
                             pattern: compile_scoped_filesystem_pattern(
                                 path, subpath, *access, context,
                             )?,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                         },
                         access: *access,
                         missing_path_behavior: None,
@@ -640,16 +634,10 @@ fn compile_filesystem_access_path(
         // becoming policy patterns; relative project-root glob syntax is
         // handled by `compile_scoped_filesystem_pattern`.
         return Ok(FileSystemPath::GlobPattern {
-<<<<<<< HEAD
             scan: None,
-            pattern: parse_absolute_path(path)?.to_string_lossy().into_owned(),
-||||||| 413492cd6c
-            pattern: parse_absolute_path(path)?.to_string_lossy().into_owned(),
-=======
             pattern: permission_path::absolute_path(path, context)?
                 .to_config_path_string(context.convention())
                 .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         });
     }
 

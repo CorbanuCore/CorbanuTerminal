@@ -58,15 +58,13 @@ impl StartedNetworkProxy {
         self.proxy.clone()
     }
 
-<<<<<<< HEAD
     /// PF-23-S03: see [`NetworkProxy::revoke_brokered_credentials`].
     pub(crate) fn revoke_brokered_credentials(&self) -> bool {
         self.proxy.revoke_brokered_credentials()
-||||||| 413492cd6c
-=======
+    }
+
     pub(crate) fn network_policy_decider(&self) -> Option<Arc<dyn NetworkPolicyDecider>> {
         self.network_policy_decider.as_ref().map(Arc::clone)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
@@ -135,13 +133,8 @@ impl NetworkProxySpec {
 
     #[cfg(any(target_os = "windows", test))]
     pub(crate) fn allow_local_binding(&self) -> bool {
-<<<<<<< HEAD
         // PF-33-S02: the destination guard leaves the sandbox only the proxy ports.
-        self.config.allow_local_binding && !self.config.url_destination_policy
-||||||| 413492cd6c
-        self.config.allow_local_binding
-=======
-        self.config.allow_local_binding()
+        self.config.allow_local_binding() && !self.config.url_destination_policy
     }
 
     /// Returns the firewall settings and listener identities used by the Windows provisioning service.
@@ -175,14 +168,14 @@ impl NetworkProxySpec {
         Ok((
             codex_windows_sandbox::WindowsSandboxProvisioningSettings {
                 proxy_ports,
-                allow_local_binding: self.config.allow_local_binding(),
+                // PF-33-S02: same guard as `allow_local_binding` above.
+                allow_local_binding: self.allow_local_binding(),
             },
             codex_windows_sandbox::WindowsSandboxProxyListeners {
                 http_ports: vec![http_port],
                 socks_ports: socks_port.into_iter().collect(),
             },
         ))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub fn from_config_and_constraints(
@@ -401,13 +394,7 @@ impl NetworkProxySpec {
             })
     }
 
-<<<<<<< HEAD
-    pub(super) fn build_state_with_audit_metadata(
-||||||| 413492cd6c
-    fn build_state_with_audit_metadata(
-=======
     pub(crate) fn build_state_with_audit_metadata(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         &self,
         audit_metadata: NetworkProxyAuditMetadata,
         executor_os: Platform,
