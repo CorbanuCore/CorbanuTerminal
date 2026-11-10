@@ -95,24 +95,14 @@ pub(crate) async fn record_completed_response_item_with_finalized_facts(
     item: &ResponseItem,
     finalized_facts: Option<&FinalizedTurnItemFacts>,
 ) {
-<<<<<<< HEAD
+    let turn_context = &step_context.turn;
     // Check before recording (#1536): a turn killed in between would skip it.
     mark_thread_memory_mode_polluted_if_external_context(sess, turn_context, item).await;
     sess.record_conversation_items_from(
         turn_context,
-        std::slice::from_ref(item),
-        Some(crate::security::ingress::MessageOrigin::Model),
-    )
-    .await;
-||||||| 413492cd6c
-    sess.record_conversation_items(turn_context, std::slice::from_ref(item))
-        .await;
-=======
-    let turn_context = &step_context.turn;
-    sess.record_conversation_items(
-        turn_context,
         &step_context.settings.model_info,
         std::slice::from_ref(item),
+        Some(crate::security::ingress::MessageOrigin::Model),
     )
     .await;
     if turn_context.config.otel.agent_response_logging_enabled() {
@@ -131,7 +121,6 @@ pub(crate) async fn record_completed_response_item_with_finalized_facts(
                 },
             );
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let defers_mailbox_delivery = finalized_facts.map_or_else(
         || {
             completed_item_defers_mailbox_delivery_to_next_turn(
@@ -146,11 +135,6 @@ pub(crate) async fn record_completed_response_item_with_finalized_facts(
             .defer_mailbox_delivery_to_next_turn(&sess.active_turn, &turn_context.sub_id)
             .await;
     }
-<<<<<<< HEAD
-||||||| 413492cd6c
-    mark_thread_memory_mode_polluted_if_external_context(sess, turn_context, item).await;
-=======
-    mark_thread_memory_mode_polluted_if_external_context(sess, turn_context, item).await;
     let memory_usage_db = match sess.services.state_db.as_ref() {
         Some(db) => db
             .memories_for_version(turn_context.config.memories.version)
@@ -158,7 +142,6 @@ pub(crate) async fn record_completed_response_item_with_finalized_facts(
             .ok(),
         None => None,
     };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let has_memory_citation = if let Some(memory_citation) =
         finalized_facts.and_then(|facts| facts.memory_citation.as_ref())
     {
@@ -428,11 +411,14 @@ pub(crate) async fn handle_output_item_done(
             output.last_agent_message = finalized_facts.and_then(|facts| facts.last_agent_message);
         }
         // The tool request should be answered directly (or was denied); push that response into the transcript.
-<<<<<<< HEAD
         Err(
             FunctionCallError::RespondToModel(message)
             | FunctionCallError::MalformedToolCall { message, .. },
         ) => {
+            ctx.sess
+                .services
+                .executed_tool_calls
+                .observe_non_dispatched_call(&item);
             // Pair the error output with the originating call id so chat-completions
             // providers accept the follow-up request's tool message.
             let call_id = match &item {
@@ -440,15 +426,6 @@ pub(crate) async fn handle_output_item_done(
                 | ResponseItem::CustomToolCall { call_id, .. } => call_id.clone(),
                 _ => String::new(),
             };
-||||||| 413492cd6c
-        Err(FunctionCallError::RespondToModel(message)) => {
-=======
-        Err(FunctionCallError::RespondToModel(message)) => {
-            ctx.sess
-                .services
-                .executed_tool_calls
-                .observe_non_dispatched_call(&item);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             let response = ResponseInputItem::FunctionCallOutput {
                 call_id,
                 output: FunctionCallOutputPayload {

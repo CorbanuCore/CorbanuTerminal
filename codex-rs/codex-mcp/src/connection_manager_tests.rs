@@ -1990,6 +1990,7 @@ fn test_normalize_tools_respects_responses_api_name_length_boundaries() {
             vec![create_test_tool("codex_apps", &tool_name)],
             /*prefix_mcp_tool_names*/ true,
             &[],
+            /*multi_agent_v2_tool_namespace*/ None,
         );
         let model_name = model_tools[0].canonical_tool_name();
 
@@ -5384,7 +5385,7 @@ async fn pending_http_startup_manager() -> (
             ready_selected_capability_roots: Vec::new(),
             mcp_servers: HashMap::from([(
                 "pending".to_string(),
-                EffectiveMcpServer::configured(config),
+                EffectiveMcpServer::from_host_config(config),
             )]),
             submit_id: "startup-test".to_string(),
             tx_event: Some(tx_event),

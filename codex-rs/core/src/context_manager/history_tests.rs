@@ -756,14 +756,8 @@ fn reference_context_item() -> TurnContextItem {
         realtime_active: Some(false),
         cyber_access_program: None,
         effort: None,
-<<<<<<< HEAD
         security_level: None,
-        summary: codex_protocol::config_types::ReasoningSummary::Auto,
-||||||| 413492cd6c
-        summary: codex_protocol::config_types::ReasoningSummary::Auto,
-=======
         summary: Some(codex_protocol::config_types::ReasoningSummary::Auto),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
@@ -839,38 +833,6 @@ fn filters_non_api_messages() {
     let a = assistant_msg("hello");
     h.record_items([&u, &a], policy);
 
-<<<<<<< HEAD
-    let items = h.raw_items();
-    assert_eq!(
-        items,
-        vec![
-            ResponseItem::Reasoning {
-                id: None,
-                summary: vec![ReasoningItemReasoningSummary::SummaryText {
-                    text: "summary".to_string(),
-                }],
-                content: Some(vec![ReasoningItemContent::ReasoningText {
-                    text: "thinking...".to_string(),
-                }]),
-                encrypted_content: None,
-                anthropic_content_block: None,
-                internal_chat_message_metadata_passthrough: None,
-||||||| 413492cd6c
-    let items = h.raw_items();
-    assert_eq!(
-        items,
-        vec![
-            ResponseItem::Reasoning {
-                id: None,
-                summary: vec![ReasoningItemReasoningSummary::SummaryText {
-                    text: "summary".to_string(),
-                }],
-                content: Some(vec![ReasoningItemContent::ReasoningText {
-                    text: "thinking...".to_string(),
-                }]),
-                encrypted_content: None,
-                internal_chat_message_metadata_passthrough: None,
-=======
     assert_eq!(raw_items(&h), vec![reasoning, u, a]);
 }
 
@@ -899,7 +861,6 @@ fn retains_only_harness_authored_configuration_updates() {
                     client_authored: true,
                     ..Default::default()
                 }),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             },
             ResponseItemEnvelope {
                 item: ResponseItem::Message {
@@ -3109,7 +3070,7 @@ fn normalize_removes_orphan_function_call_output_in_debug() {
     }];
     let mut h = create_history_with_items(items);
     h.normalize_history(&default_input_modalities());
-    assert_eq!(h.raw_items(), vec![]);
+    assert_eq!(raw_items(&h), vec![]);
 }
 
 #[cfg(debug_assertions)]
@@ -3124,7 +3085,7 @@ fn normalize_removes_orphan_custom_tool_call_output_in_debug() {
     }];
     let mut h = create_history_with_items(items);
     h.normalize_history(&default_input_modalities());
-    assert_eq!(h.raw_items(), vec![]);
+    assert_eq!(raw_items(&h), vec![]);
 }
 
 #[cfg(not(debug_assertions))]
@@ -3158,7 +3119,7 @@ fn normalize_removes_orphan_client_tool_search_output_in_debug() {
     }];
     let mut h = create_history_with_items(items);
     h.normalize_history(&default_input_modalities());
-    assert_eq!(h.raw_items(), vec![]);
+    assert_eq!(raw_items(&h), vec![]);
 }
 
 #[test]

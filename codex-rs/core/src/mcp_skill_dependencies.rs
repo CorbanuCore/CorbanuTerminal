@@ -8,13 +8,9 @@ use codex_config::McpServerTransportConfig;
 use codex_config::load_global_mcp_servers;
 use codex_login::default_client::is_first_party_originator;
 use codex_login::default_client::originator;
-<<<<<<< HEAD
+use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::WarningEvent;
-||||||| 413492cd6c
-=======
-use codex_protocol::protocol::AskForApproval;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::request_user_input::RequestUserInputArgs;
 use codex_protocol::request_user_input::RequestUserInputQuestion;
 use codex_protocol::request_user_input::RequestUserInputQuestionOption;
@@ -143,7 +139,6 @@ async fn maybe_install_mcp_dependencies(
         if servers.contains_key(&name) {
             continue;
         }
-<<<<<<< HEAD
         if let Some(clash) = config.non_prefixed_mcp_server_name_clash(&name) {
             let message = clash.skill_dependency_message();
             warn!("{message}");
@@ -153,15 +148,6 @@ async fn maybe_install_mcp_dependencies(
         }
         servers.insert(name.clone(), server_config.clone());
         added.push((name, server_config));
-        updated = true;
-||||||| 413492cd6c
-        servers.insert(name.clone(), config.clone());
-        added.push((name, config));
-        updated = true;
-=======
-        servers.insert(name.clone(), config.clone());
-        added.push((name, config));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     if added.is_empty() {

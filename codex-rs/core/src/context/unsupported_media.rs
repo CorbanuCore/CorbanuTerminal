@@ -14,12 +14,12 @@ impl UnsupportedMedia {
     pub(crate) const AUDIO_KIND: &str = "audio.unsupported";
 
     pub(crate) const IMAGE: Self = Self {
-        text: "image content omitted because you do not support image input",
+        text: crate::context_manager::IMAGE_CONTENT_OMITTED_PLACEHOLDER,
         content_kind: Self::IMAGE_KIND,
     };
 
     pub(crate) const AUDIO: Self = Self {
-        text: "audio content omitted because you do not support audio input",
+        text: crate::context_manager::AUDIO_CONTENT_OMITTED_PLACEHOLDER,
         content_kind: Self::AUDIO_KIND,
     };
 }

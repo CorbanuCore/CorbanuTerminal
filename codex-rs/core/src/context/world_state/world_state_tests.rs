@@ -221,15 +221,17 @@ fn extension_owned_section_uses_its_snapshot_and_renderer() {
 }
 
 #[test]
-<<<<<<< HEAD
 fn rendered_developer_sections_record_their_section_ids() {
     let catalog = |id: &'static str, body: &'static str| {
-        WorldStateSectionContribution::new(id, json!({}), move |_| {
-            Some(RenderedWorldStateFragment::new(
-                "developer",
-                ("<catalog>", "</catalog>"),
-                body,
-            ))
+        WorldStateSectionContribution::new(id, move |_| {
+            (
+                Some(json!({})),
+                Some(RenderedWorldStateFragment::new(
+                    "developer",
+                    ("<catalog>", "</catalog>"),
+                    input_text(body.to_string()),
+                )),
+            )
         })
     };
     let mut world_state = WorldState::default();
@@ -237,27 +239,27 @@ fn rendered_developer_sections_record_their_section_ids() {
     world_state.add_extension_section(catalog("host_catalog", "host"));
 
     let items =
-        crate::context_manager::updates::merge_contextual_fragments(world_state.render_full());
+        crate::context_manager::updates::merge_world_state_updates(world_state.render_full().1);
 
+    assert_eq!(items.len(), 1);
+    let ResponseItem::Message { role, content, .. } = &items[0] else {
+        panic!("expected one developer message, got {items:?}");
+    };
+    assert_eq!(role, "developer");
     assert_eq!(
-        items,
-        vec![codex_context_fragments::context_message(
-            "developer",
-            [
-                (
-                    "<catalog>executor</catalog>".to_string(),
-                    Some("executor_catalog"),
-                ),
-                ("<catalog>host</catalog>".to_string(), Some("host_catalog")),
-            ],
-        )]
+        content,
+        &vec![
+            input_text("<catalog>executor</catalog>".to_string()),
+            input_text("<catalog>host</catalog>".to_string()),
+        ]
     );
     assert_eq!(
         [0, 1].map(|index| items[0].context_fragment_source(index)),
         [Some("executor_catalog"), Some("host_catalog")]
     );
-||||||| 413492cd6c
-=======
+}
+
+#[test]
 fn extension_owned_section_preserves_typed_content_and_attribution() {
     let image = ContentItem::InputImage {
         image: codex_protocol::models::ImageReference::File {
@@ -309,7 +311,6 @@ fn extension_owned_section_preserves_typed_content_and_attribution() {
             )]
         );
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[test]

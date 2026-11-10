@@ -115,22 +115,11 @@ pub(crate) async fn list_tool_suggest_discoverable_tools_with_auth(
 pub async fn list_cached_accessible_connectors_from_mcp_tools(
     config: &Config,
 ) -> Option<Vec<AppInfo>> {
-<<<<<<< HEAD
     let auth = AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false)
         .await
+        .ok()?
         .session_auth()
         .await;
-||||||| 413492cd6c
-    let auth_manager =
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await;
-    let auth = auth_manager.auth().await;
-=======
-    let auth_manager =
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false)
-            .await
-            .ok()?;
-    let auth = auth_manager.auth().await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     if !config
         .features
         .apps_enabled_for_auth(auth.as_ref().is_some_and(CodexAuth::uses_codex_backend))
@@ -220,21 +209,13 @@ pub async fn list_accessible_connectors_from_mcp_tools_with_mcp_manager(
 ) -> anyhow::Result<AccessibleConnectorsStatus> {
     // #658: the sign-in the process's user sessions run on.
     let auth_manager =
-<<<<<<< HEAD
         AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false)
-            .await
+            .await?
             .for_session();
     let auth = match &auth_manager {
         Some(auth_manager) => auth_manager.auth().await,
         None => None,
     };
-||||||| 413492cd6c
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await;
-    let auth = auth_manager.auth().await;
-=======
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await?;
-    let auth = auth_manager.auth().await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     if !config
         .features
         .apps_enabled_for_auth(auth.as_ref().is_some_and(CodexAuth::uses_codex_backend))
@@ -453,24 +434,12 @@ async fn cached_directory_connectors_for_tool_suggest_with_auth(
     let auth = if let Some(auth) = auth {
         Some(auth)
     } else {
-<<<<<<< HEAD
-        loaded_auth =
-            AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false)
-                .await
-                .session_auth()
-                .await;
-||||||| 413492cd6c
-        let auth_manager =
-            AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await;
-        loaded_auth = auth_manager.auth().await;
-=======
         let Ok(auth_manager) =
             AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await
         else {
             return Arc::default();
         };
-        loaded_auth = auth_manager.auth().await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        loaded_auth = auth_manager.session_auth().await;
         loaded_auth.as_ref()
     };
     let Some(auth) = auth.filter(|auth| auth.uses_codex_backend()) else {

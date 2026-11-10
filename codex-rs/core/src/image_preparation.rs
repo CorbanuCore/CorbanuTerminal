@@ -38,28 +38,15 @@ const UNSUPPORTED_LOW_DETAIL_PLACEHOLDER: &str = "image content omitted because 
 const REMOTE_IMAGE_URL_PLACEHOLDER: &str =
     "image content omitted because remote image URLs are not supported";
 
-<<<<<<< HEAD
 /// Anthropic rejects images over 2000 px on either side in requests carrying
 /// more than 20 images, which long agent sessions routinely do. Anthropic
 /// downsamples anything over 1568 px anyway, so this costs no detail.
-const HIGH_DETAIL_LIMITS: PromptImageResizeLimits = PromptImageResizeLimits {
-    max_dimension: 2_000,
-    max_patches: 2_500,
-};
-const ORIGINAL_DETAIL_LIMITS: PromptImageResizeLimits = PromptImageResizeLimits {
-    max_dimension: 6000,
-    max_patches: 10_000,
-};
-||||||| 413492cd6c
-const HIGH_DETAIL_LIMITS: PromptImageResizeLimits = PromptImageResizeLimits {
-    max_dimension: 2048,
-    max_patches: 2_500,
-};
-const ORIGINAL_DETAIL_LIMITS: PromptImageResizeLimits = PromptImageResizeLimits {
-    max_dimension: 6000,
-    max_patches: 10_000,
-};
-=======
+const HIGH_DETAIL_MODE: PromptImageMode =
+    PromptImageMode::ResizeWithLimits(codex_utils_image::PromptImageResizeLimits {
+        max_dimension: 2_000,
+        max_patches: 2_500,
+    });
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ImagePreparationMode {
     DetailBased,
@@ -120,7 +107,6 @@ impl PreparedInlineImage {
     }
 }
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ImagePreparationError {
     #[error("remote image URLs are not supported")]
@@ -432,7 +418,7 @@ pub(crate) fn resize_image(
         ),
         ImagePreparationMode::DetailBased => match detail {
             None | Some(ImageDetail::Auto | ImageDetail::High) => {
-                (ImageDetailSetting::High, PromptImageMode::HIGH_DETAIL)
+                (ImageDetailSetting::High, HIGH_DETAIL_MODE)
             }
             Some(ImageDetail::Original) => (
                 ImageDetailSetting::Original,

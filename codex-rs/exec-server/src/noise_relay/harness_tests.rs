@@ -637,12 +637,19 @@ impl futures::Stream for ControlledWebSocket {
 }
 
 #[derive(Clone, Default)]
-struct SafeEvents(Arc<std::sync::Mutex<Vec<std::collections::BTreeMap<String, String>>>>);
+struct SafeEvents(
+    Arc<std::sync::Mutex<Vec<std::collections::BTreeMap<String, String>>>>,
+    Arc<std::sync::OnceLock<tracing::dispatcher::WeakDispatch>>,
+);
 
 impl<S> tracing_subscriber::Layer<S> for SafeEvents
 where
     S: tracing::Subscriber + for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
 {
+    fn on_register_dispatch(&self, dispatch: &tracing::Dispatch) {
+        let _ = self.1.set(dispatch.downgrade());
+    }
+
     fn on_event(
         &self,
         event: &tracing::Event<'_>,
@@ -660,13 +667,22 @@ where
         }
         let mut fields = Fields::default();
         event.record(&mut fields);
-        // Match CCA's live JSON lookup: inspecting OtelData must not materialize
-        // the context and accidentally hide a missing producer initialization.
+        // tracing-opentelemetry 0.34 made `OtelData` private, so this reads the
+        // span's context through the public `get_otel_context`. That call starts a
+        // still-lazy span itself, so unlike the 0.32 `OtelData` lookup it cannot
+        // detect a missing producer-side initialization. The registered dispatch is
+        // used because `get_default` yields no subscriber inside a callback.
+        let dispatch = self
+            .1
+            .get()
+            .and_then(tracing::dispatcher::WeakDispatch::upgrade);
         if let Some(trace_id) = context.event_scope(event).and_then(|mut scope| {
             scope.find_map(|span| {
-                span.extensions()
-                    .get::<tracing_opentelemetry::OtelData>()?
-                    .trace_id()
+                use opentelemetry::trace::TraceContextExt as _;
+                let otel_context =
+                    tracing_opentelemetry::get_otel_context(&span.id(), dispatch.as_ref()?)?;
+                let span_context = otel_context.span().span_context().clone();
+                span_context.is_valid().then(|| span_context.trace_id())
             })
         }) {
             fields.0.insert("trace_id".to_owned(), trace_id.to_string());

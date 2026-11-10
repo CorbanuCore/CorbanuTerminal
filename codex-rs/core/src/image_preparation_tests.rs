@@ -159,29 +159,6 @@ async fn preparation_preserves_small_image_bytes_and_replaces_remote_urls() {
     );
 }
 
-<<<<<<< HEAD
-#[test]
-fn detail_policies_apply_the_expected_budgets() {
-    for (detail, input_dimensions, expected_dimensions) in [
-        (Some(ImageDetail::High), (2048, 2048), (1600, 1600)),
-        // A wide screenshot fits the patch budget but must stay within the
-        // 2000 px Anthropic applies to requests with more than 20 images.
-        (Some(ImageDetail::High), (2400, 1000), (2000, 833)),
-        (None, (2048, 1000), (2000, 977)),
-        (Some(ImageDetail::Original), (6401, 100), (6000, 94)),
-        (Some(ImageDetail::Original), (3201, 3201), (3200, 3200)),
-        (Some(ImageDetail::Auto), (2048, 2048), (1600, 1600)),
-        (None, (2048, 2048), (1600, 1600)),
-||||||| 413492cd6c
-#[test]
-fn detail_policies_apply_the_expected_budgets() {
-    for (detail, input_dimensions, expected_dimensions) in [
-        (Some(ImageDetail::High), (2048, 2048), (1600, 1600)),
-        (Some(ImageDetail::Original), (6401, 100), (6000, 94)),
-        (Some(ImageDetail::Original), (3201, 3201), (3200, 3200)),
-        (Some(ImageDetail::Auto), (2048, 2048), (1600, 1600)),
-        (None, (2048, 2048), (1600, 1600)),
-=======
 #[tokio::test(flavor = "multi_thread")]
 async fn detail_policies_apply_the_expected_budgets() {
     for (detail, effective_detail, input_dimensions, expected_dimensions) in [
@@ -210,7 +187,15 @@ async fn detail_policies_apply_the_expected_budgets() {
             (1600, 1600),
         ),
         (None, ImageDetailSetting::High, (2048, 2048), (1600, 1600)),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        // A wide screenshot fits the patch budget but must stay within the
+        // 2000 px Anthropic applies to requests with more than 20 images.
+        (
+            Some(ImageDetail::High),
+            ImageDetailSetting::High,
+            (2400, 1000),
+            (2000, 833),
+        ),
+        (None, ImageDetailSetting::High, (2048, 1000), (2000, 977)),
     ] {
         let (image_url, _) = png_data_url(input_dimensions.0, input_dimensions.1);
         let mut items = vec![ResponseItem::Message {

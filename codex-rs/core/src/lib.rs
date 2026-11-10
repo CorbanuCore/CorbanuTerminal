@@ -64,13 +64,9 @@ pub use codex_thread::GuardianRootSnapshot;
 pub use codex_thread::ThreadConfigSnapshot;
 pub use guardian::ScoreAuthorization as GuardianScoreAuthorization;
 pub use session::turn_context::TurnContext;
-<<<<<<< HEAD
 mod accounting;
 pub mod accounting_extensions;
-||||||| 413492cd6c
-=======
 pub use thread_startup_metadata::ThreadStartupMetadata;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod agent;
 pub use agent::api::AgentConfigUpdate;
 pub use agent::api::AgentControl;
@@ -112,14 +108,10 @@ mod exec_policy;
 #[cfg(test)]
 mod git_info_tests;
 mod guardian;
-<<<<<<< HEAD
 pub mod home_access;
-||||||| 413492cd6c
-=======
 pub mod guardian_review;
 mod hook_environment_executor;
 mod hook_mcp_executor;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod hook_runtime;
 mod image_preparation;
 mod installation_id;

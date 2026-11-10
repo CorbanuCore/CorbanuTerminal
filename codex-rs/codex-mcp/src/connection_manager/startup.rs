@@ -121,6 +121,10 @@ pub(super) fn mcp_init_error_display(
             Some(McpStartupFailureReason::ReauthenticationRequired) => {
                 "requires OAuth reauthentication"
             }
+            // The startup caller shows its /providers hint for this reason instead.
+            Some(McpStartupFailureReason::OpenAiAccountReauthenticationRequired) => {
+                "requires OpenAI account reauthentication"
+            }
             None => "is not logged in",
         };
         format!("The {server_name} MCP server {auth_status}. {recovery_hint}")

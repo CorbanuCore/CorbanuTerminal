@@ -357,21 +357,9 @@ impl Session {
                 )
             }),
         );
-<<<<<<< HEAD
-        let codex_apps_auth_manager =
-            codex_mcp::host_owned_codex_apps_enabled(&mcp_config, auth.as_ref())
-                .then(|| self.services.auth_manager());
-
-||||||| 413492cd6c
-        let codex_apps_auth_manager =
-            codex_mcp::host_owned_codex_apps_enabled(&mcp_config, auth.as_ref())
-                .then(|| Arc::clone(&self.services.auth_manager));
-
-=======
         let mcp_config = Arc::new(config);
         let runtime_context =
             self.mcp_runtime_context(&desired.environments, &desired.local_process_cwd);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         McpRuntimeInput {
             network_policy_metadata: None,
             startup_policy: if matches!(desired.session_source, SessionSource::SubAgent(_)) {
@@ -392,7 +380,7 @@ impl Session {
             codex_apps_tools_cache_key: connector_runtime_context_key(auth.as_ref()),
             client_mcp_extensions: self.services.client_mcp_extensions.for_mcp_servers(),
             auth,
-            auth_manager: Some(Arc::clone(&self.services.auth_manager)),
+            auth_manager: Some(self.services.auth_manager()),
             elicitation_reviewer,
             elicitation_lifecycle: Some(self.mcp_elicitation_lifecycle()),
         }
