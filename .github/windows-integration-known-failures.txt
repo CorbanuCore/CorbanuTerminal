@@ -9,12 +9,6 @@
 # Remove a line once its test passes on Windows; a line naming a test that no
 # longer exists fails .github/scripts/test_windows_integration_known_failures.py.
 
-# #2035 (PR #2026's run 42746159401, base ddfa14163b): two #1967 tests still
-# refused without the sandbox since #2003, and two broken on main by #2007 + #2017.
-codex-core suite::provenance::pf_30_s01_source_envelopes_label_tool_output_and_keep_human_prompt #2035
-codex-core suite::provenance::pf_30_s03_a_tricked_child_agent_cannot_reach_the_vault #2035
-codex-core suite::provenance::pf_30_s03_permission_hook_allow_does_not_approve_a_tainted_protected_action #2035
-codex-core suite::provenance::pf_30_s03_vault_command_after_untrusted_content_needs_the_human #2035
 codex-core suite::client::amazon_bedrock_proxy_uses_command_auth_and_custom_headers #1968
 codex-core suite::client::provider_auth_command_refreshes_after_401 #1968
 codex-core suite::client::provider_auth_command_supplies_bearer_token #1968

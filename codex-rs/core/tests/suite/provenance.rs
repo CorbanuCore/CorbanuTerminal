@@ -700,11 +700,18 @@ async fn pf_30_s03_vault_command_after_untrusted_content_needs_the_human() -> an
         "this security test runs host shell commands; Wine-exec routes them to a Windows executor with a non-native cwd"
     );
     let level = SecurityLevel::Moderate;
-    let (test, captured) = pf_30_s03_two_call_turn(
+    // On Windows, the elevated sandbox Moderate needs there (#783): without
+    // it Windows refuses the command for that first, before the vault rule
+    // is reached (#2003, #2035).
+    let (test, captured) = pf_30_s03_two_call_turn_with(
         level,
         AskForApproval::OnRequest,
         PF_30_S03_INJECTED,
         PF_30_S03_VAULT,
+        |config| {
+            core_test_support::use_elevated_windows_sandbox(config);
+        },
+        |_| {},
     )
     .await?;
     let approval = pf_30_s03_next_approval(&test)
@@ -1312,6 +1319,10 @@ async fn pf_30_s03_a_tricked_child_agent_cannot_reach_the_vault() -> anyhow::Res
             // Approvals on: with them off, D320 refuses the agent launch and
             // there is no child to trick.
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
+            // #2035: on Windows, the elevated sandbox Moderate needs there
+            // (#783); without it Windows refuses the child's command before
+            // the vault rule is reached (#2003).
+            core_test_support::use_elevated_windows_sandbox(config);
             for feature in [
                 Feature::SourceEnvelopes,
                 Feature::Collab,

@@ -345,6 +345,7 @@ class WindowsSandboxNextestGroupTest(unittest.TestCase):
                 "pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write",
                 "pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory",
                 "pf_30_s01_source_envelopes_label_tool_output_and_keep_human_prompt",
+                "pf_30_s03_a_tricked_child_agent_cannot_reach_the_vault",
                 "pf_30_s03_permission_hook_allow_does_not_approve_a_tainted_protected_action",
                 "pf_30_s03_recalled_memory_gates_a_first_protected_action",
                 "pf_30_s03_vault_command_after_untrusted_content_needs_the_human",
