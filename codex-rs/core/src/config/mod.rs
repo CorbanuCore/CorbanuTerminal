@@ -3009,6 +3009,40 @@ pub struct AgentRoleConfig {
     pub config_file: Option<PathBuf>,
     /// Candidate nicknames for agents spawned with this role.
     pub nickname_candidates: Option<Vec<String>>,
+    /// Where `config_file` was declared. A project's role file gets the same
+    /// denylist as the project's own config (D512, #1997).
+    pub source: AgentRoleSource,
+}
+
+/// The kind of config that declared an agent role's config file.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum AgentRoleSource {
+    /// Shipped with Corbanu.
+    BuiltIn,
+    /// The person's own config (user config, `~/.codex/agents/`) or launch
+    /// flags.
+    User,
+    /// System, MDM or enterprise-managed config.
+    Managed,
+    /// A trusted project's `.codex` folder: repository contents, so the
+    /// project-config denylist applies. The default, so a role whose origin
+    /// was not recorded gets the denylist.
+    #[default]
+    Project,
+}
+
+impl AgentRoleSource {
+    pub(crate) fn from_layer(source: &ConfigLayerSource) -> Self {
+        match source {
+            ConfigLayerSource::Project { .. } => Self::Project,
+            ConfigLayerSource::User { .. } | ConfigLayerSource::SessionFlags => Self::User,
+            ConfigLayerSource::Mdm { .. }
+            | ConfigLayerSource::System { .. }
+            | ConfigLayerSource::EnterpriseManaged { .. }
+            | ConfigLayerSource::LegacyManagedConfigTomlFromFile { .. }
+            | ConfigLayerSource::LegacyManagedConfigTomlFromMdm => Self::Managed,
+        }
+    }
 }
 
 fn resolve_tool_suggest_config(
@@ -4252,6 +4286,13 @@ impl Config {
             Some(WindowsSandboxModeToml::Unelevated) => WindowsSandboxLevel::RestrictedToken,
             None => WindowsSandboxLevel::Disabled,
         };
+        // #1976 (D491): say at start why agent commands and file tools will
+        // be refused.
+        if crate::security::windows_unsandboxed::applies(security_level, windows_sandbox_level) {
+            startup_warnings.push(crate::security::windows_unsandboxed::startup_notice(
+                security_level,
+            ));
+        }
         let memories_config: MemoriesConfig = cfg.memories.clone().unwrap_or_default().into();
         let memories_root = memory_root(&codex_home);
 
@@ -5228,7 +5269,7 @@ impl Config {
         )
         .map_err(std::io::Error::from)?;
         // D424 (#1775): possibly planted `.git` entries in the folders
-        // non-admin sandbox commands may write to, and below `cwd`.
+        // Windows sandbox commands may write to, and below `cwd`.
         for warning in crate::windows_sandbox::planted_git_startup_warnings(
             &effective_file_system_sandbox_policy,
             &workspace_roots,
@@ -5947,3 +5988,7 @@ mod config_loader_tests;
 #[cfg(test)]
 #[path = "project_security_startup_tests.rs"]
 mod project_security_startup_tests;
+
+#[cfg(test)]
+#[path = "windows_unsandboxed_startup_tests.rs"]
+mod windows_unsandboxed_startup_tests;

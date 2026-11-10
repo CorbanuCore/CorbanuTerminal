@@ -228,6 +228,10 @@ create files there too.
 
 ## Commands run outside the sandbox
 
+On Windows without any Windows sandbox, Aggressive refuses every agent command
+and file tool access, with the steps to set the default sandbox up (#1976;
+see `docs/sandbox.md`).
+
 Under Moderate no agent command runs outside the sandbox, even when you
 approve it; Aggressive keeps every command in its sandbox too, once it applies
 after a restart. Before the restart, from when you confirm Aggressive in

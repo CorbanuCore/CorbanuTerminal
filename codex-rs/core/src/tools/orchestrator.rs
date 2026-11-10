@@ -277,6 +277,24 @@ impl ToolOrchestrator {
     where
         T: ToolRuntime<Rq, Out>,
     {
+        // #1976 (D491): under Moderate or Aggressive on Windows without the
+        // Windows sandbox, no agent command runs (read-only ones included),
+        // before anyone is asked; checked each round, so a level raised while
+        // a person was asked counts too.
+        if let Some(refusal) = crate::security::windows_unsandboxed::session_command_refusal(
+            &tool_ctx.session,
+            turn_ctx.windows_sandbox_level,
+        ) {
+            crate::security::inspection::record_refusal(
+                tool_ctx.session.thread_id(),
+                crate::security::windows_unsandboxed::INSPECTED,
+                crate::security::windows_unsandboxed::inspected_outcome(
+                    tool_ctx.session.services.model_client().live_level(),
+                ),
+            );
+            warn(tool_ctx, &refusal).await;
+            return Err(ToolError::Rejected(refusal));
+        }
         let otel = turn_ctx.session_telemetry.clone();
         let otel_tn = flat_tool_name(&tool_ctx.tool_name).into_owned();
         let otel_ci = &tool_ctx.call_id;
@@ -359,7 +377,11 @@ impl ToolOrchestrator {
         let mut persistence_note = None;
         // PF-30-S03: a protected action after untrusted content needs fresh,
         // exact human approval, whatever the requirement above would allow.
-        let post_taint = post_taint_action(tool, req, tool_ctx, &requirement).await;
+        let (post_taint, post_taint_hint) =
+            match post_taint_action(tool, req, tool_ctx, &requirement).await {
+                Some((action, hint)) => (Some(action), hint),
+                None => (None, None),
+            };
         // D27 (a), D48 (c): the taint generation at which the person was
         // warned, in the prompt they answer, that approving lets this run
         // create user namespaces (only a run whose prompt showed it may).
@@ -587,6 +609,7 @@ impl ToolOrchestrator {
                 retry_reason: Some(
                     [
                         Some(action.approval_reason()),
+                        post_taint_hint.map(str::to_string),
                         protected_read_note.clone(),
                         kept_read_note,
                         stays_sandboxed.map(str::to_string),
@@ -1880,7 +1903,10 @@ async fn post_taint_action<Rq, Out, T>(
     req: &Rq,
     tool_ctx: &ToolCtx,
     requirement: &ExecApprovalRequirement,
-) -> Option<crate::security::tainted_action::PostTaintAction>
+) -> Option<(
+    crate::security::tainted_action::PostTaintAction,
+    Option<&'static str>,
+)>
 where
     T: ToolRuntime<Rq, Out>,
 {
@@ -1903,7 +1929,7 @@ where
     };
     // An action the host cannot describe cannot be shown to be ordinary.
     let started = Instant::now();
-    let kind = match tool.approval_action(req, &ctx) {
+    let (kind, hint) = match tool.approval_action(req, &ctx) {
         Ok(action) => {
             // Classification may look at the filesystem: keep it off the
             // async workers and bounded in time; a stall fails closed.
@@ -1916,22 +1942,33 @@ where
             let classified = tokio::time::timeout(
                 POST_TAINT_CLASSIFY_TIMEOUT,
                 tokio::task::spawn_blocking(move || {
-                    if as_named {
+                    let kind = if as_named {
                         crate::security::tainted_action::classify_as_named(&action, &codex_home)
                     } else {
                         crate::security::tainted_action::classify(&action, &codex_home)
-                    }
+                    };
+                    // #1897 follow-up: a quieter form to suggest, if any.
+                    kind.map(|kind| {
+                        (
+                            kind,
+                            crate::security::tainted_action::approval_hint(&action, kind),
+                        )
+                    })
                 }),
             )
             .await;
             match classified {
-                Ok(Ok(kind)) => kind?,
-                Ok(Err(_)) | Err(_) => {
-                    crate::security::tainted_action::ProtectedActionKind::UnseenCode
-                }
+                Ok(Ok(found)) => found?,
+                Ok(Err(_)) | Err(_) => (
+                    crate::security::tainted_action::ProtectedActionKind::UnseenCode,
+                    None,
+                ),
             }
         }
-        Err(_) => crate::security::tainted_action::ProtectedActionKind::UnseenCode,
+        Err(_) => (
+            crate::security::tainted_action::ProtectedActionKind::UnseenCode,
+            None,
+        ),
     };
     tracing::info!(
         target: "codex_core::security::tainted_action",
@@ -1941,7 +1978,10 @@ where
         call_id = %tool_ctx.call_id,
         "post-taint protected action needs fresh human approval"
     );
-    Some(crate::security::tainted_action::PostTaintAction { kind, state })
+    Some((
+        crate::security::tainted_action::PostTaintAction { kind, state },
+        hint,
+    ))
 }
 
 /// #734: after a run in the non-admin Windows sandbox, tells the person
@@ -1995,10 +2035,11 @@ async fn warn_unlabelled_writable_roots<Rq, Out, T>(
     }
 }
 
-/// D424 (#1775): after a run in the non-admin Windows sandbox, tells the
-/// person right away about the folders recorded as possibly planted in the
-/// run's writable roots (a `.git` git would run hooks from, a `.codex` or
-/// `.agents`), rather than only at the next start. Display only.
+/// D424 (#1775): after a run in the Windows sandbox (non-admin, or D425
+/// (#1846) elevated), tells the person right away about the folders
+/// recorded as possibly planted in the run's writable roots (a `.git` git
+/// would run hooks from, a `.codex` or `.agents`), rather than only at the
+/// next start. Display only.
 async fn warn_planted_after_run<Rq, Out, T>(
     tool: &T,
     req: &Rq,
@@ -2008,10 +2049,17 @@ async fn warn_planted_after_run<Rq, Out, T>(
 ) where
     T: ToolRuntime<Rq, Out>,
 {
-    // Only non-admin sessions record them.
+    // Both Windows sandboxes record them (the elevated one since D425).
     if attempt.sandbox != SandboxType::WindowsRestrictedToken
-        || attempt.windows_sandbox_level != WindowsSandboxLevel::RestrictedToken
+        || attempt.windows_sandbox_level == WindowsSandboxLevel::Disabled
     {
+        return;
+    }
+    // Usually nothing was recorded: then the writable roots aren't needed.
+    if !crate::tools::writable_root_notices::planted_notice_pending(
+        tool_ctx.session.thread_id(),
+        mark,
+    ) {
         return;
     }
     let Ok(cwd) = attempt.sandbox_cwd.to_abs_path() else {

@@ -30,6 +30,7 @@ use crate::WrappedOAuthTokenResponse;
 use crate::oauth::compute_expires_at_millis;
 use crate::oauth_http_client::OAuthHttpClientAdapter;
 use crate::save_oauth_tokens;
+use crate::startup_error::auth_error_with_reason;
 use crate::utils::build_default_headers;
 use codex_config::types::AuthKeyringBackendKind;
 use codex_config::types::OAuthCredentialsStoreMode;
@@ -517,7 +518,11 @@ impl OauthLoginFlow {
             http_client,
         } = http_context;
         let default_headers = build_default_headers(http_headers, env_http_headers)?;
-        let oauth_http_client = Arc::new(OAuthHttpClientAdapter::new(http_client, default_headers));
+        let oauth_http_client = Arc::new(OAuthHttpClientAdapter::new(
+            http_client,
+            default_headers,
+            server_url,
+        ));
 
         let scope_refs: Vec<&str> = scopes.iter().map(String::as_str).collect();
         let oauth_state = start_authorization(
@@ -664,11 +669,16 @@ async fn start_authorization(
                     .with_scopes(scopes.iter().copied())
                     .with_client_name("Codex"),
             )
-            .await?;
+            .await
+            .map_err(auth_error_with_reason)?;
         return Ok(oauth_state);
     };
 
-    let metadata = auth_manager.resolve_metadata().await?.metadata;
+    let metadata = auth_manager
+        .resolve_metadata()
+        .await
+        .map_err(auth_error_with_reason)?
+        .metadata;
     auth_manager.set_metadata(metadata);
     auth_manager.configure_client(
         OAuthClientConfig::new(oauth_client_id, redirect_uri)
@@ -816,6 +826,7 @@ mod tests {
                     OutboundProxyPolicy::ReqwestDefault,
                 ))),
                 HeaderMap::new(),
+                &format!("{base_url}/mcp"),
             )),
             &[],
             "http://127.0.0.1/callback",
@@ -900,6 +911,7 @@ mod tests {
                         OutboundProxyPolicy::ReqwestDefault,
                     ))),
                     HeaderMap::new(),
+                    &format!("{issuer}/mcp"),
                 )),
                 &[],
                 "http://127.0.0.1/callback",

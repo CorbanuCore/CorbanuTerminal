@@ -818,6 +818,14 @@ impl CodexThread {
         self.session.thread_config_snapshot().await
     }
 
+    /// #2015: the config for an agent a client starts from this thread (a
+    /// detached review): this session's current effective settings,
+    /// including permission, approval, Windows sandbox and security-level
+    /// changes since it started, never weaker than this thread's.
+    pub async fn detached_agent_config(&self) -> crate::config::Config {
+        self.session.detached_agent_config().await
+    }
+
     /// PF-84-S06 (#658): whether a client is attached to this thread. A user
     /// thread nobody is attached to (one the user left, kept loaded for a
     /// while) does not count toward the account the process's own backend

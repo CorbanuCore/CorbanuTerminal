@@ -387,6 +387,15 @@ pub struct ThreadSettingsUpdateParams {
     /// Override the personality for subsequent turns.
     #[ts(optional = nullable)]
     pub personality: Option<Personality>,
+    /// Use the Windows sandbox that config now selects (for example after
+    /// `windowsSandbox/setupStart` and a config write) for subsequent turns.
+    /// The server reads the mode from its own config and the elevated
+    /// sandbox's setup state; mid-thread it only makes the sandbox stronger
+    /// (a weaker mode is rejected and applies from the next thread). No
+    /// effect on other platforms.
+    #[experimental("thread/settings/update.refreshWindowsSandbox")]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub refresh_windows_sandbox: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

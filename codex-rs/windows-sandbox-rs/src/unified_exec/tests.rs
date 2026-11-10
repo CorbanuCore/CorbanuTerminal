@@ -56,6 +56,24 @@ pub(crate) fn legacy_process_test_guard() -> MutexGuard<'static, ()> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+/// #1877 item 5: confirms the recorded `path` as a prompt drawn now shows
+/// it.
+pub(crate) fn confirm_shown(path: &Path) -> anyhow::Result<bool> {
+    let shown = crate::planted_stamps()?.get(path).copied();
+    crate::confirm_planted_project_metadata(path, shown)
+}
+
+/// Whether a test in this process holds `legacy_process_test_guard()`. The
+/// elevated setup checks it (#1827): it sets the sandbox users' passwords, so
+/// two tests running it at once make one's logons fail (1326). Under nextest,
+/// where each test has its own process, this is exact.
+pub(crate) fn legacy_process_test_guard_is_held() -> bool {
+    matches!(
+        LEGACY_PROCESS_TEST_LOCK.try_lock(),
+        Err(std::sync::TryLockError::WouldBlock)
+    )
+}
+
 fn current_thread_runtime() -> tokio::runtime::Runtime {
     Builder::new_current_thread()
         .enable_all()
@@ -80,12 +98,143 @@ fn sandbox_cwd() -> PathBuf {
         .to_path_buf()
 }
 
-fn sandbox_home(name: &str) -> TempDir {
+fn sandbox_home(name: &str) -> SandboxHome {
     let id = TEST_HOME_COUNTER.fetch_add(1, Ordering::Relaxed);
     let path = std::env::temp_dir().join(format!("codex-windows-sandbox-{name}-{id}"));
     let _ = fs::remove_dir_all(&path);
     fs::create_dir_all(&path).expect("create sandbox home");
-    tempfile::TempDir::new_in(&path).expect("create sandbox home tempdir")
+    SandboxHome {
+        home: tempfile::TempDir::new_in(&path).expect("create sandbox home tempdir"),
+        // Both: a legacy session grants each.
+        real_temps: ["TEMP", "TMP"]
+            .into_iter()
+            .filter_map(std::env::var_os)
+            .map(PathBuf::from)
+            .collect(),
+        checkout: sandbox_cwd(),
+    }
+}
+
+/// A test's Codex home (#1890). A legacy (non-admin) session grants its
+/// writable roots, `TEMP`/`TMP` among them, to capability SIDs recorded in
+/// the home, and the grants stay: one lasting entry per root for a user's
+/// one home. Each test's home is new, so a test whose session used the real
+/// temp folder left a new lasting entry there on every run, and everything
+/// made there later inherited them all (#1870). So the tests give their
+/// legacy sessions a temp folder of the home's own ([`session_temp_env`]),
+/// and dropping the home checks that the real one got no entry for its SIDs.
+/// The same goes for the checkout's `codex-rs` folder ([`sandbox_cwd`]) as a
+/// workspace (#1906): tests use a folder of their own
+/// ([`user_owned_test_root`]), and the drop checks the checkout too.
+pub(crate) struct SandboxHome {
+    home: TempDir,
+    real_temps: Vec<PathBuf>,
+    checkout: PathBuf,
+}
+
+impl std::ops::Deref for SandboxHome {
+    type Target = TempDir;
+
+    fn deref(&self) -> &TempDir {
+        &self.home
+    }
+}
+
+impl Drop for SandboxHome {
+    fn drop(&mut self) {
+        let granted: Vec<(&PathBuf, Vec<String>)> = self
+            .real_temps
+            .iter()
+            .map(|temp| (temp, real_temp_grants(self.home.path(), temp)))
+            .filter(|(_, sids)| !sids.is_empty())
+            .collect();
+        let checkout = real_temp_grants(self.home.path(), &self.checkout);
+        let _ = fs::remove_dir_all(session_temp_dir(self.home.path()));
+        if std::thread::panicking() {
+            return;
+        }
+        if !granted.is_empty() {
+            panic!(
+                "a legacy session granted the real temp folder to this test's SIDs for good \
+                 (#1890): {granted:?}; give it `session_temp_env(codex_home)`"
+            );
+        }
+        if !checkout.is_empty() {
+            panic!(
+                "a legacy session granted the checkout {} to this test's SIDs for good \
+                 (#1906): {checkout:?}; give it a workspace of its own (`user_owned_test_root()`)",
+                self.checkout.display()
+            );
+        }
+    }
+}
+
+/// The capability SIDs recorded in `codex_home` that may write `real_temp`.
+fn real_temp_grants(codex_home: &Path, real_temp: &Path) -> Vec<String> {
+    let Ok(text) = fs::read_to_string(crate::cap::cap_sid_file(codex_home)) else {
+        return Vec::new();
+    };
+    let Ok(caps) = serde_json::from_str::<crate::cap::CapSids>(&text) else {
+        return Vec::new();
+    };
+    [caps.workspace, caps.readonly]
+        .into_iter()
+        .chain(caps.workspace_by_cwd.into_values())
+        .chain(caps.writable_root_by_path.into_values())
+        .filter(|sid| {
+            crate::token::LocalSid::from_string(sid).is_ok_and(|psid| {
+                crate::acl::path_mask_allows(
+                    real_temp,
+                    &[psid.as_ptr()],
+                    windows_sys::Win32::Storage::FileSystem::FILE_WRITE_DATA,
+                    /*require_all_bits*/ true,
+                )
+                .unwrap_or(false)
+            })
+        })
+        .collect()
+}
+
+/// The temp folder of the test home `codex_home` (from [`sandbox_home`]):
+/// beside it, not in it, and removed with it.
+fn session_temp_dir(codex_home: &Path) -> PathBuf {
+    let mut name = codex_home.file_name().expect("home name").to_os_string();
+    name.push("-temp");
+    codex_home.with_file_name(name)
+}
+
+/// [`session_temp_dir`], made if missing.
+fn session_temp(codex_home: &Path) -> PathBuf {
+    let temp = session_temp_dir(codex_home);
+    fs::create_dir_all(&temp).expect("create session temp folder");
+    temp
+}
+
+/// `TEMP` and `TMP` for a legacy session of the test home `codex_home`: its
+/// own temp folder, not the real one (#1890).
+pub(crate) fn session_temp_env(codex_home: &Path) -> HashMap<String, String> {
+    with_session_temp(codex_home, HashMap::new())
+}
+
+/// `env_map` with `TEMP` and `TMP` (in any spelling) replaced by the test
+/// home's own temp folder (#1890).
+pub(crate) fn with_session_temp(
+    codex_home: &Path,
+    env_map: HashMap<String, String>,
+) -> HashMap<String, String> {
+    with_temp(env_map, &session_temp(codex_home))
+}
+
+/// `env_map` with `TEMP` and `TMP` (in any spelling) replaced by `temp`.
+pub(crate) fn with_temp(
+    mut env_map: HashMap<String, String>,
+    temp: &Path,
+) -> HashMap<String, String> {
+    let temp = temp.to_string_lossy().into_owned();
+    env_map.retain(|key, _| !["TEMP", "TMP"].iter().any(|k| key.eq_ignore_ascii_case(k)));
+    env_map.insert("TEMP".to_string(), temp.clone());
+    env_map.insert("TMP".to_string(), temp);
+    env_map
 }
 
 fn system32_exe(name: &str) -> PathBuf {
@@ -247,6 +396,18 @@ fn wait_for_frame_count(frames_path: &Path, expected_frames: usize) -> Vec<Messa
     }
 }
 
+// #1931: budgets for the short cmd commands and scripts the legacy tests below
+// run. They only bound a hung command. On a loaded Windows runner one such
+// script ran past a 5 s timeout, was killed (exit code 1) and failed its test
+// although every protection held. The tests still require exit code 0, so each
+// script must reach its last line.
+
+/// Session timeout for a legacy test command (#1931).
+const LEGACY_COMMAND_TIMEOUT_MS: u64 = 60_000;
+/// How long a legacy test waits for that command's exit; longer than the
+/// timeout, so a hung command is reported as killed (exit code 1).
+const LEGACY_COMMAND_WAIT: Duration = Duration::from_secs(/*secs*/ 90);
+
 async fn collect_stdout_and_exit(
     spawned: codex_utils_pty::SpawnedProcess,
     codex_home: &Path,
@@ -286,7 +447,10 @@ fn legacy_non_tty_cmd_emits_output() {
     let _guard = legacy_process_test_guard();
     let runtime = current_thread_runtime();
     runtime.block_on(async move {
-        let cwd = sandbox_cwd();
+        // #1906: a folder of its own, not the checkout: a legacy session's
+        // grant on its workspace lasts.
+        let workspace = user_owned_test_root();
+        let cwd = workspace.path().to_path_buf();
         let codex_home = sandbox_home("legacy-non-tty-cmd");
         println!("cmd codex_home={}", codex_home.path().display());
         let permission_profile = PermissionProfile::workspace_write();
@@ -300,8 +464,8 @@ fn legacy_non_tty_cmd_emits_output() {
                 "echo LEGACY-NONTTY-CMD".to_string(),
             ],
             cwd.as_path(),
-            HashMap::new(),
-            Some(5_000),
+            session_temp_env(codex_home.path()),
+            /*timeout_ms*/ Some(LEGACY_COMMAND_TIMEOUT_MS),
             &[],
             &[],
             /*tty*/ false,
@@ -312,7 +476,7 @@ fn legacy_non_tty_cmd_emits_output() {
         .expect("spawn legacy non-tty cmd session");
         println!("cmd spawn returned");
         let (stdout, exit_code) =
-            collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(10)).await;
+            collect_stdout_and_exit(spawned, codex_home.path(), LEGACY_COMMAND_WAIT).await;
         println!("cmd collect returned exit_code={exit_code}");
         let stdout = String::from_utf8_lossy(&stdout);
         assert_eq!(exit_code, 0, "stdout={stdout:?}");
@@ -325,7 +489,10 @@ fn elevated_non_tty_cmd_forwards_env_output_and_exit() {
     let _guard = legacy_process_test_guard();
     let runtime = current_thread_runtime();
     runtime.block_on(async move {
-        let cwd = sandbox_cwd();
+        // #1906: a folder of its own, not the checkout: a legacy session's
+        // grant on its workspace lasts.
+        let workspace = user_owned_test_root();
+        let cwd = workspace.path().to_path_buf();
         let codex_home = sandbox_home("elevated-non-tty-cmd");
         let permission_profile = PermissionProfile::workspace_write();
         let env_map = HashMap::from([(
@@ -371,7 +538,10 @@ fn legacy_non_tty_cmd_rejects_deny_read_overrides() {
     let _guard = legacy_process_test_guard();
     let runtime = current_thread_runtime();
     runtime.block_on(async move {
-        let cwd = sandbox_cwd();
+        // #1906: a folder of its own, not the checkout: a legacy session's
+        // grant on its workspace lasts.
+        let workspace = user_owned_test_root();
+        let cwd = workspace.path().to_path_buf();
         let codex_home = sandbox_home("legacy-non-tty-deny-read");
         let secret_path =
             AbsolutePathBuf::from_absolute_path(cwd.join("legacy-non-tty-deny-read-secret.env"))
@@ -387,7 +557,7 @@ fn legacy_non_tty_cmd_rejects_deny_read_overrides() {
                 "echo deny-read".to_string(),
             ],
             cwd.as_path(),
-            HashMap::new(),
+            session_temp_env(codex_home.path()),
             Some(5_000),
             std::slice::from_ref(&secret_path),
             &[],
@@ -413,7 +583,10 @@ fn legacy_non_tty_powershell_interrupt_terminates_process() {
     let _guard = legacy_process_test_guard();
     let runtime = current_thread_runtime();
     runtime.block_on(async move {
-        let cwd = sandbox_cwd();
+        // #1906: a folder of its own, not the checkout: a legacy session's
+        // grant on its workspace lasts.
+        let workspace = user_owned_test_root();
+        let cwd = workspace.path().to_path_buf();
         let codex_home = sandbox_home("legacy-non-tty-pwsh");
         println!("pwsh codex_home={}", codex_home.path().display());
         let permission_profile = PermissionProfile::workspace_write();
@@ -428,7 +601,7 @@ fn legacy_non_tty_powershell_interrupt_terminates_process() {
                 "Write-Output LEGACY-NONTTY-DIRECT; [System.Threading.ManualResetEvent]::new($false).WaitOne()".to_string(),
             ],
             cwd.as_path(),
-            HashMap::new(),
+            session_temp_env(codex_home.path()),
             /*timeout_ms*/ None,
             &[],
             &[],
@@ -624,18 +797,31 @@ fn runner_resizer_sends_resize_frame() {
     });
 }
 
-#[test]
-fn legacy_capture_emits_output_and_preserves_descendant_after_normal_exit() {
+/// #1826, #1861: a legacy capture or session returns once the command exits
+/// while a descendant it left running holds the output pipes, and leaves that
+/// descendant running. `run` runs the argv it is given in the legacy sandbox
+/// with the cwd and codex home it is given, returning the command's stdout
+/// and exit code.
+fn check_legacy_command_returns_while_descendant_runs(
+    label: &str,
+    run: impl FnOnce(&Path, &Path, Vec<String>) -> (String, i32),
+) {
     let Some(pwsh) = pwsh_path() else {
         return;
     };
     let _guard = legacy_process_test_guard();
-    let cwd = sandbox_cwd();
-    let codex_home = sandbox_home("legacy-capture-pwsh");
-    println!("capture pwsh codex_home={}", codex_home.path().display());
-    let ready_marker = codex_home.path().join("descendant-started");
-    let release_marker = codex_home.path().join("release-descendant");
-    let survival_marker = codex_home.path().join("descendant-survived");
+    // #1906: a folder of its own, not the checkout: a legacy session's
+    // grant on its workspace lasts.
+    let workspace = user_owned_test_root();
+    let cwd = workspace.path().to_path_buf();
+    let codex_home = sandbox_home(&format!("legacy-{}-pwsh", label.replace(' ', "-")));
+    // What the sandboxed commands write goes in the folder they may write
+    // (#1890): the home is not one.
+    let scratch = session_temp(codex_home.path());
+    println!("{label} pwsh codex_home={}", codex_home.path().display());
+    let ready_marker = scratch.join("descendant-started");
+    let release_marker = scratch.join("release-descendant");
+    let survival_marker = scratch.join("descendant-survived");
     let descendant_command = format!(
         "$deadline=(Get-Date).AddSeconds(30); Set-Content -LiteralPath '{}' -Value $PID; while (-not (Test-Path -LiteralPath '{}')) {{ if ((Get-Date) -ge $deadline) {{ exit 3 }}; Start-Sleep -Milliseconds 25 }}; Set-Content -LiteralPath '{}' -Value survived",
         powershell_literal(&ready_marker),
@@ -648,59 +834,52 @@ fn legacy_capture_emits_output_and_preserves_descendant_after_normal_exit() {
     );
     let parent_command = format!(
         "Write-Output LEGACY-CAPTURE-DIRECT; {}",
-        start_powershell_child(&pwsh, codex_home.path(), &descendant_command, &parent_tail,),
+        start_powershell_child(&pwsh, &scratch, &descendant_command, &parent_tail),
     );
-    let permission_profile = PermissionProfile::workspace_write();
-    let result = run_windows_sandbox_capture(
-        &permission_profile,
-        workspace_roots_for(cwd.as_path()).as_slice(),
-        codex_home.path(),
-        vec![
-            pwsh.display().to_string(),
-            "-NoProfile".to_string(),
-            "-Command".to_string(),
-            parent_command,
-        ],
-        cwd.as_path(),
-        HashMap::new(),
-        Some(10_000),
-        /*cancellation*/ None,
-        /*use_private_desktop*/ true,
-    )
-    .expect("run legacy capture powershell");
-    let descendant_pid = fs::read_to_string(&ready_marker)
-        .expect("read descendant pid")
-        .trim()
-        .parse()
-        .expect("parse descendant pid");
-    let descendant_process = open_process_for_wait(descendant_pid);
-    fs::write(&release_marker, "release").expect("release descendant after root exit");
-    let descendant_process = descendant_process.expect("open descendant after normal capture exit");
-
-    println!("capture pwsh exit_code={}", result.exit_code);
-    println!("capture pwsh timed_out={}", result.timed_out);
-    let stdout = String::from_utf8_lossy(&result.stdout);
-    let stderr = String::from_utf8_lossy(&result.stderr);
-    println!("capture pwsh stderr={stderr:?}");
-    assert_eq!(result.exit_code, 0, "stdout={stdout:?} stderr={stderr:?}");
+    let argv = vec![
+        pwsh.display().to_string(),
+        "-NoProfile".to_string(),
+        "-Command".to_string(),
+        parent_command,
+    ];
+    let started = Instant::now();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run(cwd.as_path(), codex_home.path(), argv)
+    }));
+    let took = started.elapsed();
+    // Opened before the release so its exit can be awaited; `None` if it has
+    // already exited (it gives up after its own deadline).
+    let descendant_process = fs::read_to_string(&ready_marker)
+        .ok()
+        .and_then(|pid| pid.trim().parse().ok())
+        .and_then(|pid| open_process_for_wait(pid).ok());
+    // Released before any check, so the descendant never outlives the test
+    // by more than its own deadline.
+    let release = fs::write(&release_marker, "release");
+    let (stdout, exit_code) = match result {
+        Ok(output) => output,
+        Err(panic) => std::panic::resume_unwind(panic),
+    };
+    release.expect("release descendant after root exit");
+    println!("{label} pwsh returned after {took:?}");
+    println!("{label} pwsh exit_code={exit_code}");
+    assert_eq!(exit_code, 0, "stdout={stdout:?}");
     assert!(
         stdout.contains("LEGACY-CAPTURE-DIRECT"),
         "stdout={stdout:?}"
     );
     assert!(
         wait_for_path(&survival_marker, Duration::from_secs(10)),
-        "sandbox descendant did not survive normal capture exit"
+        "the {label} descendant did not survive the command's exit; \
+         the command returned after {took:?}"
     );
+    let descendant_process = descendant_process.expect("open descendant after normal legacy exit");
     wait_for_process_exit(&descendant_process, Duration::from_secs(10))
         .expect("sandbox descendant did not exit after release");
-    // #1826: the capture now returns while the descendant runs, so the
-    // session's labels (#158) are put back on a thread of the capture's once
+    // #1826: the command now returns while the descendant runs, so the
+    // session's labels (#158) are put back on a thread of the backend's once
     // it exits. Wait for that before the test (and maybe its process) ends.
-    let temp_roots = ["TEMP", "TMP"]
-        .into_iter()
-        .filter_map(std::env::var_os)
-        .map(PathBuf::from);
-    for root in temp_roots.chain([cwd]) {
+    for root in [session_temp_dir(codex_home.path()), cwd] {
         let deadline = Instant::now() + Duration::from_secs(15);
         // SAFETY: an existing folder.
         while !matches!(
@@ -717,6 +896,212 @@ fn legacy_capture_emits_output_and_preserves_descendant_after_normal_exit() {
     }
     // The release goes on (the recorded denies) after the labels.
     crate::integrity_leases::wait_for_release_in_progress().expect("wait for the release");
+}
+
+#[test]
+fn legacy_capture_emits_output_and_preserves_descendant_after_normal_exit() {
+    check_legacy_command_returns_while_descendant_runs("capture", |cwd, codex_home, argv| {
+        let permission_profile = PermissionProfile::workspace_write();
+        let result = run_windows_sandbox_capture(
+            &permission_profile,
+            workspace_roots_for(cwd).as_slice(),
+            codex_home,
+            argv,
+            cwd,
+            session_temp_env(codex_home),
+            Some(10_000),
+            /*cancellation*/ None,
+            /*use_private_desktop*/ true,
+        )
+        .expect("run legacy capture powershell");
+        println!("capture pwsh timed_out={}", result.timed_out);
+        println!(
+            "capture pwsh stderr={:?}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        (
+            String::from_utf8_lossy(&result.stdout).into_owned(),
+            result.exit_code,
+        )
+    });
+}
+
+/// #1861: the same for a legacy unified exec session (pipes, not a ConPTY),
+/// whose exit is reported once its output readers finish.
+#[test]
+fn legacy_session_exits_and_preserves_descendant_after_normal_exit() {
+    check_legacy_command_returns_while_descendant_runs(
+        "legacy session",
+        |cwd, codex_home, argv| {
+            current_thread_runtime().block_on(async {
+                let permission_profile = PermissionProfile::workspace_write();
+                let spawned = spawn_windows_sandbox_session_legacy(
+                    &permission_profile,
+                    workspace_roots_for(cwd).as_slice(),
+                    codex_home,
+                    argv,
+                    cwd,
+                    session_temp_env(codex_home),
+                    Some(10_000),
+                    &[],
+                    &[],
+                    /*tty*/ false,
+                    /*stdin_open*/ false,
+                    /*use_private_desktop*/ true,
+                )
+                .await
+                .expect("spawn legacy session powershell");
+                // Longer than the descendant's own deadline, so the old wait
+                // shows as a late return rather than a timeout.
+                let (stdout, exit_code) =
+                    collect_stdout_and_exit(spawned, codex_home, Duration::from_secs(60)).await;
+                (String::from_utf8_lossy(&stdout).into_owned(), exit_code)
+            })
+        },
+    );
+}
+
+/// #1830: the elevated runner, like the legacy capture (#1826), returns once
+/// the command exits while a descendant it left running holds the output
+/// pipes, and leaves that descendant running. `run` runs the argv it is given
+/// in the elevated sandbox on the root it is given, returning the command's
+/// stdout and exit code.
+fn check_elevated_command_returns_while_descendant_runs(
+    backend: &str,
+    run: impl FnOnce(&Path, &Path, Vec<String>) -> (String, i32),
+) {
+    let Some(pwsh) = pwsh_path() else {
+        return;
+    };
+    let Some(codex_home) =
+        command_identity::elevated::elevated_home(&format!("elevated-{backend}-pwsh"))
+    else {
+        return;
+    };
+    let _guard = legacy_process_test_guard();
+    // The sandbox account may write here, not in its codex home.
+    let root = user_owned_test_root();
+    let ready_marker = root.path().join("descendant-started");
+    let release_marker = root.path().join("release-descendant");
+    let survival_marker = root.path().join("descendant-survived");
+    let descendant_command = format!(
+        "$deadline=(Get-Date).AddSeconds(30); Set-Content -LiteralPath '{}' -Value $PID; while (-not (Test-Path -LiteralPath '{}')) {{ if ((Get-Date) -ge $deadline) {{ exit 3 }}; Start-Sleep -Milliseconds 25 }}; Set-Content -LiteralPath '{}' -Value survived",
+        powershell_literal(&ready_marker),
+        powershell_literal(&release_marker),
+        powershell_literal(&survival_marker),
+    );
+    let parent_tail = format!(
+        "while (-not (Test-Path -LiteralPath '{}')) {{ Start-Sleep -Milliseconds 25 }}",
+        powershell_literal(&ready_marker),
+    );
+    let parent_command = format!(
+        "Write-Output ELEVATED-CAPTURE-DIRECT; {}",
+        start_powershell_child(&pwsh, root.path(), &descendant_command, &parent_tail),
+    );
+    let argv = vec![
+        pwsh.display().to_string(),
+        "-NoProfile".to_string(),
+        "-Command".to_string(),
+        parent_command,
+    ];
+    let started = Instant::now();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run(root.path(), codex_home.path(), argv)
+    }));
+    let took = started.elapsed();
+    // Released before any check, so the descendant never outlives the test
+    // by more than its own deadline.
+    let release = fs::write(&release_marker, "release");
+    let (stdout, exit_code) = match result {
+        Ok(output) => output,
+        Err(panic) => std::panic::resume_unwind(panic),
+    };
+    release.expect("release descendant after root exit");
+    println!("elevated {backend} pwsh returned after {took:?}");
+    println!("elevated {backend} pwsh exit_code={exit_code}");
+    let survived = wait_for_path(&survival_marker, Duration::from_secs(10));
+    // The root is in the repository: remove it once the descendant has let
+    // go of its files (its redirected output), which it may hold a moment
+    // after writing the marker.
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while let Err(err) = fs::remove_dir_all(root.path()) {
+        assert!(
+            Instant::now() < deadline,
+            "remove {}: {err}",
+            root.path().display()
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert_eq!(
+        exit_code,
+        0,
+        "stdout={stdout:?}\n{}",
+        sandbox_log(codex_home.path())
+    );
+    assert!(
+        stdout.contains("ELEVATED-CAPTURE-DIRECT"),
+        "stdout={stdout:?}"
+    );
+    assert!(
+        survived,
+        "#1830: the elevated {backend} descendant did not survive the command's exit; \
+         the command returned after {took:?}"
+    );
+}
+
+#[test]
+fn elevated_capture_emits_output_and_preserves_descendant_after_normal_exit() {
+    check_elevated_command_returns_while_descendant_runs("capture", |root, codex_home, argv| {
+        let permission_profile = PermissionProfile::workspace_write();
+        let workspace_roots = workspace_roots_for(root);
+        let result = crate::run_windows_sandbox_capture_for_permission_profile_elevated(
+            crate::ElevatedSandboxProfileCaptureRequest {
+                permission_profile: &permission_profile,
+                workspace_roots: workspace_roots.as_slice(),
+                codex_home,
+                command: argv,
+                cwd: root,
+                // Core passes its environment on; PowerShell needs it.
+                env_map: std::env::vars().collect(),
+                timeout_ms: Some(10_000),
+                cancellation: None,
+                use_private_desktop: true,
+                proxy_enforced: false,
+                network_proxy_restricting_sid: None,
+                read_roots_override: None,
+                read_roots_include_platform_defaults: true,
+                write_roots_override: None,
+                deny_read_override: &crate::DenyReadTargets::default(),
+                deny_write_paths_override: &[],
+            },
+        )
+        .unwrap_or_else(|err| {
+            panic!(
+                "run elevated capture powershell: {err:#}\n{}",
+                sandbox_log(codex_home)
+            )
+        });
+        println!("elevated capture pwsh timed_out={}", result.timed_out);
+        (
+            String::from_utf8_lossy(&result.stdout).into_owned(),
+            result.exit_code,
+        )
+    });
+}
+
+/// The same for an elevated unified exec session (pipes, not a ConPTY), which
+/// reports its exit when the runner sends it.
+#[test]
+fn elevated_session_exits_and_preserves_descendant_after_normal_exit() {
+    check_elevated_command_returns_while_descendant_runs("session", |root, codex_home, argv| {
+        current_thread_runtime().block_on(command_identity::elevated::run_elevated(
+            root,
+            codex_home,
+            argv,
+            &[],
+            /*tty*/ false,
+        ))
+    });
 }
 
 /// Observed state after a legacy workspace-write session tries to delete one
@@ -1016,7 +1401,7 @@ fn run_legacy_delete_fixture(
             ],
             workspace.as_path(),
             env_map,
-            /*timeout_ms*/ Some(5_000),
+            /*timeout_ms*/ Some(LEGACY_COMMAND_TIMEOUT_MS),
             &[],
             &[],
             /*tty*/ false,
@@ -1026,8 +1411,7 @@ fn run_legacy_delete_fixture(
         .await
         .expect("spawn legacy delete session");
         let (stdout, exit_code) =
-            collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(/*secs*/ 10))
-                .await;
+            collect_stdout_and_exit(spawned, codex_home.path(), LEGACY_COMMAND_WAIT).await;
         let stdout = String::from_utf8_lossy(&stdout);
         let canonical_workspace = dunce::canonicalize(&workspace).expect("canonical workspace");
         // SAFETY: reads the label of a folder this test made.
@@ -1141,8 +1525,8 @@ fn legacy_workspace_write_cannot_delete_or_replace_protected_git_dir() {
                 script.display().to_string(),
             ],
             workspace.as_path(),
-            env_map,
-            /*timeout_ms*/ Some(5_000),
+            with_session_temp(codex_home.path(), env_map),
+            /*timeout_ms*/ Some(LEGACY_COMMAND_TIMEOUT_MS),
             &[],
             &[],
             /*tty*/ false,
@@ -1152,8 +1536,7 @@ fn legacy_workspace_write_cannot_delete_or_replace_protected_git_dir() {
         .await
         .expect("spawn legacy replace-git session");
         let (stdout, exit_code) =
-            collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(/*secs*/ 10))
-                .await;
+            collect_stdout_and_exit(spawned, codex_home.path(), LEGACY_COMMAND_WAIT).await;
         let stdout = String::from_utf8_lossy(&stdout);
         let sandbox_outcome = (
             exit_code,
@@ -1245,8 +1628,8 @@ fn legacy_workspace_write_cannot_move_ancestor_of_nested_carve_out() {
                 script.display().to_string(),
             ],
             workspace.as_path(),
-            env_map,
-            /*timeout_ms*/ Some(5_000),
+            with_session_temp(codex_home.path(), env_map),
+            /*timeout_ms*/ Some(LEGACY_COMMAND_TIMEOUT_MS),
             &[],
             &carve_outs,
             /*tty*/ false,
@@ -1256,8 +1639,7 @@ fn legacy_workspace_write_cannot_move_ancestor_of_nested_carve_out() {
         .await
         .expect("spawn legacy move-ancestor session");
         let (stdout, exit_code) =
-            collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(/*secs*/ 10))
-                .await;
+            collect_stdout_and_exit(spawned, codex_home.path(), LEGACY_COMMAND_WAIT).await;
         let stdout = String::from_utf8_lossy(&stdout);
         let sandbox_outcome = (
             exit_code,
@@ -1391,7 +1773,7 @@ fn run_legacy_script(
             ],
             workspace,
             env_map,
-            /*timeout_ms*/ Some(5_000),
+            /*timeout_ms*/ Some(LEGACY_COMMAND_TIMEOUT_MS),
             &[],
             &[],
             /*tty*/ false,
@@ -1401,8 +1783,7 @@ fn run_legacy_script(
         .await
         .expect("spawn legacy session");
         let (_stdout, exit_code) =
-            collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(/*secs*/ 10))
-                .await;
+            collect_stdout_and_exit(spawned, codex_home.path(), LEGACY_COMMAND_WAIT).await;
         exit_code
     })
 }
@@ -1761,7 +2142,7 @@ fn legacy_command_cannot_break_away_from_its_job() {
                 "--test-threads=1".to_string(),
             ],
             test_root.path(),
-            env_map,
+            with_session_temp(codex_home.path(), env_map),
             /*timeout_ms*/ Some(60_000),
             &[],
             &[],
@@ -2224,8 +2605,8 @@ fn legacy_delete_child_denies_are_removed_after_the_session() {
                 script.display().to_string(),
             ],
             workspace.as_path(),
-            env_map,
-            /*timeout_ms*/ Some(5_000),
+            with_session_temp(codex_home.path(), env_map),
+            /*timeout_ms*/ Some(LEGACY_COMMAND_TIMEOUT_MS),
             &[],
             &carve_outs,
             /*tty*/ false,
@@ -2235,8 +2616,7 @@ fn legacy_delete_child_denies_are_removed_after_the_session() {
         .await
         .expect("spawn legacy session");
         let (stdout, exit_code) =
-            collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(/*secs*/ 10))
-                .await;
+            collect_stdout_and_exit(spawned, codex_home.path(), LEGACY_COMMAND_WAIT).await;
         let stdout = String::from_utf8_lossy(&stdout);
         let denies_left: Vec<(PathBuf, bool)> = [
             (workspace.clone(), false),
@@ -2425,7 +2805,7 @@ fn legacy_planted_project_metadata_survives_a_crash() {
     child.wait().expect("wait for the crash child");
     crate::repair_stale_integrity_labels().expect("repair");
     let crashed = planted();
-    let confirmed = crate::confirm_planted_project_metadata(&dot_codex).expect("confirm");
+    let confirmed = confirm_shown(&dot_codex).expect("confirm");
     let after_confirming = planted();
 
     assert_eq!(
@@ -2497,10 +2877,16 @@ fn legacy_capture_cancellation_terminates_descendants_without_timeout() {
         return;
     };
     let _guard = legacy_process_test_guard();
-    let cwd = sandbox_cwd();
+    // #1906: a folder of its own, not the checkout: a legacy session's
+    // grant on its workspace lasts.
+    let workspace = user_owned_test_root();
+    let cwd = workspace.path().to_path_buf();
     let codex_home = sandbox_home("legacy-capture-cancel");
-    let descendant_marker = codex_home.path().join("descendant-survived");
-    let ready_marker = codex_home.path().join("descendant-started");
+    // What the sandboxed commands write goes in the folder they may write
+    // (#1890): the home is not one.
+    let scratch = session_temp(codex_home.path());
+    let descendant_marker = scratch.join("descendant-survived");
+    let ready_marker = scratch.join("descendant-started");
     let descendant_command = format!(
         "Set-Content -LiteralPath '{}' -Value $PID; Start-Sleep -Seconds 1; Set-Content -LiteralPath '{}' -Value survived",
         powershell_literal(&ready_marker),
@@ -2508,7 +2894,7 @@ fn legacy_capture_cancellation_terminates_descendants_without_timeout() {
     );
     let parent_command = start_powershell_child(
         &pwsh,
-        codex_home.path(),
+        &scratch,
         &descendant_command,
         "Start-Sleep -Seconds 30",
     );
@@ -2544,7 +2930,7 @@ fn legacy_capture_cancellation_terminates_descendants_without_timeout() {
             parent_command,
         ],
         cwd.as_path(),
-        HashMap::new(),
+        session_temp_env(codex_home.path()),
         Some(30_000),
         /*cancellation*/ Some(cancellation),
         /*use_private_desktop*/ true,
@@ -2583,14 +2969,20 @@ async fn assert_legacy_tty_descendant_lifecycle(
     pwsh: &Path,
     lifecycle: LegacyTtyDescendantLifecycle,
 ) {
-    let cwd = sandbox_cwd();
+    // #1906: a folder of its own, not the checkout: a legacy session's
+    // grant on its workspace lasts.
+    let workspace = user_owned_test_root();
+    let cwd = workspace.path().to_path_buf();
     let codex_home = sandbox_home(match lifecycle {
         LegacyTtyDescendantLifecycle::Terminate => "legacy-tty-descendant-terminate",
         LegacyTtyDescendantLifecycle::Preserve => "legacy-tty-descendant-preserve",
     });
-    let ready_marker = codex_home.path().join("descendant-started");
-    let release_marker = codex_home.path().join("release-descendant");
-    let survival_marker = codex_home.path().join("descendant-survived");
+    // What the sandboxed commands write goes in the folder they may write
+    // (#1890): the home is not one.
+    let scratch = session_temp(codex_home.path());
+    let ready_marker = scratch.join("descendant-started");
+    let release_marker = scratch.join("release-descendant");
+    let survival_marker = scratch.join("descendant-survived");
     let child_tail = match lifecycle {
         LegacyTtyDescendantLifecycle::Terminate => "Start-Sleep -Seconds 30".to_string(),
         LegacyTtyDescendantLifecycle::Preserve => format!(
@@ -2610,8 +3002,7 @@ async fn assert_legacy_tty_descendant_lifecycle(
             powershell_literal(&ready_marker),
         ),
     };
-    let parent_command =
-        start_powershell_child(pwsh, codex_home.path(), &child_command, &parent_tail);
+    let parent_command = start_powershell_child(pwsh, &scratch, &child_command, &parent_tail);
     let permission_profile = PermissionProfile::workspace_write();
     let spawned = spawn_windows_sandbox_session_legacy(
         &permission_profile,
@@ -2624,7 +3015,7 @@ async fn assert_legacy_tty_descendant_lifecycle(
             parent_command,
         ],
         cwd.as_path(),
-        HashMap::new(),
+        session_temp_env(codex_home.path()),
         Some(30_000),
         &[],
         &[],
@@ -2699,7 +3090,10 @@ fn legacy_tty_powershell_emits_output_and_accepts_input() {
     let _guard = legacy_process_test_guard();
     let runtime = current_thread_runtime();
     runtime.block_on(async move {
-        let cwd = sandbox_cwd();
+        // #1906: a folder of its own, not the checkout: a legacy session's
+        // grant on its workspace lasts.
+        let workspace = user_owned_test_root();
+        let cwd = workspace.path().to_path_buf();
         let codex_home = sandbox_home("legacy-tty-pwsh");
         println!("tty pwsh codex_home={}", codex_home.path().display());
         let permission_profile = PermissionProfile::workspace_write();
@@ -2716,7 +3110,7 @@ fn legacy_tty_powershell_emits_output_and_accepts_input() {
                 "$PID; Write-Output ready".to_string(),
             ],
             cwd.as_path(),
-            HashMap::new(),
+            session_temp_env(codex_home.path()),
             Some(10_000),
             &[],
             &[],
@@ -2753,7 +3147,10 @@ fn legacy_tty_powershell_emits_output_and_accepts_input() {
 fn legacy_tty_cmd_emits_output_and_accepts_input() {
     let runtime = current_thread_runtime();
     runtime.block_on(async move {
-        let cwd = sandbox_cwd();
+        // #1906: a folder of its own, not the checkout: a legacy session's
+        // grant on its workspace lasts.
+        let workspace = user_owned_test_root();
+        let cwd = workspace.path().to_path_buf();
         let codex_home = sandbox_home("legacy-tty-cmd");
         println!("tty cmd codex_home={}", codex_home.path().display());
         let permission_profile = PermissionProfile::workspace_write();
@@ -2767,7 +3164,7 @@ fn legacy_tty_cmd_emits_output_and_accepts_input() {
                 "echo ready".to_string(),
             ],
             cwd.as_path(),
-            HashMap::new(),
+            session_temp_env(codex_home.path()),
             Some(10_000),
             &[],
             &[],
@@ -2804,7 +3201,10 @@ fn legacy_tty_cmd_emits_output_and_accepts_input() {
 fn legacy_tty_cmd_default_desktop_emits_output_and_accepts_input() {
     let runtime = current_thread_runtime();
     runtime.block_on(async move {
-        let cwd = sandbox_cwd();
+        // #1906: a folder of its own, not the checkout: a legacy session's
+        // grant on its workspace lasts.
+        let workspace = user_owned_test_root();
+        let cwd = workspace.path().to_path_buf();
         let codex_home = sandbox_home("legacy-tty-cmd-default-desktop");
         println!(
             "tty cmd default desktop codex_home={}",
@@ -2821,7 +3221,7 @@ fn legacy_tty_cmd_default_desktop_emits_output_and_accepts_input() {
                 "echo ready".to_string(),
             ],
             cwd.as_path(),
-            HashMap::new(),
+            session_temp_env(codex_home.path()),
             Some(10_000),
             &[],
             &[],
@@ -2893,7 +3293,10 @@ fn legacy_command_log_redacts_credentials() {
     let _guard = legacy_process_test_guard();
     let runtime = current_thread_runtime();
     runtime.block_on(async move {
-        let cwd = sandbox_cwd();
+        // #1906: a folder of its own, not the checkout: a legacy session's
+        // grant on its workspace lasts.
+        let workspace = user_owned_test_root();
+        let cwd = workspace.path().to_path_buf();
         let codex_home = sandbox_home("legacy-398-redact");
         let spawned = spawn_windows_sandbox_session_legacy(
             &PermissionProfile::workspace_write(),
@@ -2906,8 +3309,8 @@ fn legacy_command_log_redacts_credentials() {
                 credential_command_line(),
             ],
             cwd.as_path(),
-            HashMap::new(),
-            Some(5_000),
+            session_temp_env(codex_home.path()),
+            /*timeout_ms*/ Some(LEGACY_COMMAND_TIMEOUT_MS),
             &[],
             &[],
             /*tty*/ false,
@@ -2917,10 +3320,100 @@ fn legacy_command_log_redacts_credentials() {
         .await
         .expect("spawn legacy credential command");
         let (stdout, exit_code) =
-            collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(10)).await;
+            collect_stdout_and_exit(spawned, codex_home.path(), LEGACY_COMMAND_WAIT).await;
         let stdout = String::from_utf8_lossy(&stdout);
         assert_eq!(exit_code, 0, "stdout={stdout:?}");
         assert_sandbox_log_redacted(codex_home.path(), &stdout);
+    });
+}
+
+/// #1964: killing a legacy command at its time limit writes
+/// `timed out after N ms` to the sandbox log. A command that exits inside
+/// the limit does not.
+#[test]
+fn legacy_timeout_kill_logs_the_limit_and_a_normal_exit_does_not() {
+    let _guard = legacy_process_test_guard();
+    let runtime = current_thread_runtime();
+    runtime.block_on(async move {
+        // #1906: a folder of its own, not the checkout: a legacy session's
+        // grant on its workspace lasts.
+        let workspace = user_owned_test_root();
+        let cwd = workspace.path().to_path_buf();
+        let permission_profile = PermissionProfile::workspace_write();
+        let roots = workspace_roots_for(cwd.as_path());
+
+        let timeout_ms = 1_500u64;
+        let timed_out_home = sandbox_home("legacy-timeout-log");
+        let spawned = spawn_windows_sandbox_session_legacy(
+            &permission_profile,
+            roots.as_slice(),
+            timed_out_home.path(),
+            vec![
+                system32_exe("cmd.exe").display().to_string(),
+                "/d".to_string(),
+                "/c".to_string(),
+                "for /l %i in (0,0,1) do @rem".to_string(),
+            ],
+            cwd.as_path(),
+            session_temp_env(timed_out_home.path()),
+            Some(timeout_ms),
+            &[],
+            &[],
+            /*tty*/ false,
+            /*stdin_open*/ false,
+            /*use_private_desktop*/ true,
+        )
+        .await
+        .expect("spawn legacy command that exceeds its limit");
+        let (_stdout, exit_code) =
+            collect_stdout_and_exit(spawned, timed_out_home.path(), Duration::from_secs(30)).await;
+        let log = sandbox_log(timed_out_home.path());
+        assert_eq!(
+            exit_code, 1,
+            "the time limit kills the command with exit code 1:\n{log}"
+        );
+        let logged_limit_ms = u32::try_from(timeout_ms).expect("limit fits the wait");
+        assert!(
+            log.contains(&format!("timed out after {logged_limit_ms} ms")),
+            "sandbox log should record the limit that killed the command:\n{log}"
+        );
+
+        let normal_timeout_ms = 60_000u64;
+        let normal_home = sandbox_home("legacy-timeout-log-ok");
+        let spawned = spawn_windows_sandbox_session_legacy(
+            &permission_profile,
+            roots.as_slice(),
+            normal_home.path(),
+            vec![
+                system32_exe("cmd.exe").display().to_string(),
+                "/d".to_string(),
+                "/c".to_string(),
+                "echo LEGACY-TIMEOUT-LOG-OK".to_string(),
+            ],
+            cwd.as_path(),
+            session_temp_env(normal_home.path()),
+            Some(normal_timeout_ms),
+            &[],
+            &[],
+            /*tty*/ false,
+            /*stdin_open*/ false,
+            /*use_private_desktop*/ true,
+        )
+        .await
+        .expect("spawn legacy command that exits inside its limit");
+        let (stdout, exit_code) =
+            collect_stdout_and_exit(spawned, normal_home.path(), Duration::from_secs(90)).await;
+        let stdout = String::from_utf8_lossy(&stdout);
+        let log = sandbox_log(normal_home.path());
+        assert_eq!(exit_code, 0, "stdout={stdout:?}\n{log}");
+        assert!(
+            stdout.contains("LEGACY-TIMEOUT-LOG-OK"),
+            "stdout={stdout:?}\n{log}"
+        );
+        assert!(
+            !log.contains("timed out after"),
+            "a normal exit must not record a timeout:\n{log}"
+        );
     });
 }
 
@@ -2931,7 +3424,10 @@ fn elevated_command_log_redacts_credentials() {
     let _guard = legacy_process_test_guard();
     let runtime = current_thread_runtime();
     runtime.block_on(async move {
-        let cwd = sandbox_cwd();
+        // #1906: a folder of its own, not the checkout: a legacy session's
+        // grant on its workspace lasts.
+        let workspace = user_owned_test_root();
+        let cwd = workspace.path().to_path_buf();
         let codex_home = sandbox_home("elevated-398-redact");
         let spawned = spawn_windows_sandbox_session_elevated_for_permission_profile(
             &PermissionProfile::workspace_write(),
@@ -2972,7 +3468,10 @@ fn elevated_command_log_redacts_credentials() {
 #[test]
 fn legacy_capture_command_log_redacts_credentials() {
     let _guard = legacy_process_test_guard();
-    let cwd = sandbox_cwd();
+    // #1906: a folder of its own, not the checkout: a legacy session's
+    // grant on its workspace lasts.
+    let workspace = user_owned_test_root();
+    let cwd = workspace.path().to_path_buf();
     let codex_home = sandbox_home("capture-398-redact");
     let result = run_windows_sandbox_capture(
         &PermissionProfile::workspace_write(),
@@ -2985,7 +3484,7 @@ fn legacy_capture_command_log_redacts_credentials() {
             credential_command_line(),
         ],
         cwd.as_path(),
-        HashMap::new(),
+        session_temp_env(codex_home.path()),
         Some(10_000),
         /*cancellation*/ None,
         /*use_private_desktop*/ true,
@@ -3019,6 +3518,10 @@ mod token_boundary;
 #[path = "env_case_tests.rs"]
 mod env_case;
 
+/// #1909: a legacy spawn cancelled while a blocking step runs.
+#[path = "legacy_cancel_tests.rs"]
+mod legacy_cancel;
+
 /// D285: what the per-command ACL work costs on a large workspace.
 #[path = "acl_cost_tests.rs"]
 mod acl_cost;
@@ -3026,6 +3529,10 @@ mod acl_cost;
 /// D283 (#1541): nested `.codex`/`.agents` folders.
 #[path = "nested_metadata_tests.rs"]
 mod nested_metadata;
+
+/// D420/D421 (#1775): repositories below the top of the writable roots.
+#[path = "repo_watch_tests.rs"]
+mod repo_watch;
 
 /// D293 (#1542 items 1 and 2): links above explicit read-only paths.
 #[path = "carve_out_link_tests.rs"]

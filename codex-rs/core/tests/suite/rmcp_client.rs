@@ -353,6 +353,7 @@ fn insert_mcp_server(
             supports_parallel_tool_calls: options.supports_parallel_tool_calls,
             disabled_reason: None,
             startup_timeout_sec: Some(Duration::from_secs(10)),
+            discover_timeout_sec: None,
             tool_timeout_sec: options.tool_timeout_sec,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -3575,6 +3576,7 @@ async fn wait_for_remote_streamable_http_server(
             redirect_policy: HttpRedirectPolicy::Follow,
             request_id: "buffered-request".to_string(),
             stream_response: false,
+            address_policy: None,
         };
         match http_client.http_request(request).await {
             Ok(response) if response.status == StatusCode::OK.as_u16() => return Ok(()),

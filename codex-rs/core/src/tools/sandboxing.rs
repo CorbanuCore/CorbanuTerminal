@@ -737,6 +737,7 @@ impl<'a> SandboxAttempt<'a> {
                 windows_sandbox_private_desktop: self.windows_sandbox_private_desktop,
                 windows_sandbox_proxy_settings_mode: None,
                 use_legacy_landlock: self.use_legacy_landlock,
+                unsandboxed_refusal: None,
             });
             exec_request.exec_server_enforce_managed_network = self.enforce_managed_network;
         }

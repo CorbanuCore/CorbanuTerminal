@@ -1,9 +1,11 @@
 use super::AgentRoleConfig;
+use super::AgentRoleSource;
 use codex_config::ConfigLayerStack;
 use codex_config::ConfigLayerStackOrdering;
 use codex_config::config_toml::AgentRoleToml;
 use codex_config::config_toml::AgentsToml;
 use codex_config::config_toml::ConfigToml;
+use codex_config::loader::sanitize_project_config;
 use codex_exec_server::ExecutorFileSystem;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_absolute_path::AbsolutePathBufGuard;
@@ -34,6 +36,7 @@ pub(crate) async fn load_agent_roles(
     for layer in layers {
         let mut layer_roles: BTreeMap<String, AgentRoleConfig> = BTreeMap::new();
         let mut declared_role_files = BTreeSet::new();
+        let source = AgentRoleSource::from_layer(&layer.name);
         let config_folder = layer.config_folder();
         let agents_toml = match agents_toml_from_layer(&layer.config, config_folder.as_deref()) {
             Ok(agents_toml) => agents_toml,
@@ -44,14 +47,21 @@ pub(crate) async fn load_agent_roles(
         };
         if let Some(agents_toml) = agents_toml {
             for (declared_role_name, role_toml) in &agents_toml.roles {
-                let (role_name, role) =
-                    match read_declared_role(fs, declared_role_name, role_toml).await {
-                        Ok(role) => role,
-                        Err(err) => {
-                            push_agent_role_warning(startup_warnings, err);
-                            continue;
-                        }
-                    };
+                let (role_name, role) = match read_declared_role(
+                    fs,
+                    declared_role_name,
+                    role_toml,
+                    source,
+                    startup_warnings,
+                )
+                .await
+                {
+                    Ok(role) => role,
+                    Err(err) => {
+                        push_agent_role_warning(startup_warnings, err);
+                        continue;
+                    }
+                };
                 if let Some(config_file) = role.config_file.clone() {
                     declared_role_files.insert(config_file);
                 }
@@ -76,6 +86,7 @@ pub(crate) async fn load_agent_roles(
                 fs,
                 &config_folder.join("agents"),
                 &declared_role_files,
+                source,
                 startup_warnings,
             )
             .await?
@@ -128,7 +139,14 @@ async fn load_agent_roles_without_layers(
     let mut roles = BTreeMap::new();
     if let Some(agents_toml) = cfg.agents.as_ref() {
         for (declared_role_name, role_toml) in &agents_toml.roles {
-            let (role_name, role) = read_declared_role(fs, declared_role_name, role_toml).await?;
+            let (role_name, role) = read_declared_role(
+                fs,
+                declared_role_name,
+                role_toml,
+                AgentRoleSource::User,
+                &mut Vec::new(),
+            )
+            .await?;
             validate_required_agent_role_description(&role_name, role.description.as_deref())?;
 
             if roles.insert(role_name.clone(), role).is_some() {
@@ -147,13 +165,22 @@ async fn read_declared_role(
     fs: &dyn ExecutorFileSystem,
     declared_role_name: &str,
     role_toml: &AgentRoleToml,
+    source: AgentRoleSource,
+    startup_warnings: &mut Vec<String>,
 ) -> std::io::Result<(String, AgentRoleConfig)> {
     let mut role = agent_role_config_from_toml(fs, declared_role_name, role_toml).await?;
+    role.source = source;
     let mut role_name = declared_role_name.to_string();
     if let Some(config_file) = role.config_file.as_deref() {
         let config_file = AbsolutePathBuf::from_absolute_path(config_file)?;
         let parsed_file =
             read_resolved_agent_role_file(fs, &config_file, Some(declared_role_name)).await?;
+        warn_ignored_project_role_keys(
+            source,
+            config_file.as_path(),
+            &parsed_file.config,
+            startup_warnings,
+        );
         role_name = parsed_file.role_name;
         role.description = parsed_file.description.or(role.description);
         role.nickname_candidates = parsed_file.nickname_candidates.or(role.nickname_candidates);
@@ -162,9 +189,86 @@ async fn read_declared_role(
     Ok((role_name, role))
 }
 
+/// The `[agents]` keys that are settings rather than role declarations: the
+/// named fields of `AgentsToml`, including the `max_threads` alias.
+pub(crate) const AGENTS_SETTINGS_KEYS: &[&str] = &[
+    "enabled",
+    "max_concurrent_threads_per_session",
+    "max_threads",
+    "max_depth",
+    "default_subagent_model",
+    "default_subagent_reasoning_effort",
+    "job_max_runtime_seconds",
+    "interrupt_message",
+    "provider_allowlist",
+];
+
+/// Strips the project-config denylist, and any role declarations, from a role
+/// file's config layer when a project declared the role (D512, #1997),
+/// returning the removed keys. User, managed and built-in roles are unchanged.
+pub(crate) fn sanitize_role_config_layer(
+    source: AgentRoleSource,
+    config: &mut TomlValue,
+) -> Vec<String> {
+    match source {
+        AgentRoleSource::Project => {
+            let mut ignored_keys = sanitize_project_config(config);
+            // A child reloads its roles from this layer as launch-flag roles,
+            // so a project role must not declare roles of its own: they would
+            // reach a grandchild unsanitized. Every `agents` key that is not a
+            // setting declares a role (as a table, or as an array serde reads
+            // like one), so only the settings stay.
+            if let Some(agents) = config.get_mut("agents").and_then(TomlValue::as_table_mut) {
+                let roles = agents
+                    .keys()
+                    .filter(|key| !AGENTS_SETTINGS_KEYS.contains(&key.as_str()))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                for name in roles {
+                    agents.remove(&name);
+                    ignored_keys.push(format!("agents.{name}"));
+                }
+            }
+            ignored_keys
+        }
+        AgentRoleSource::BuiltIn | AgentRoleSource::User | AgentRoleSource::Managed => Vec::new(),
+    }
+}
+
+/// The warning for keys a project's role file sets that project config may
+/// not, worded like the project config warning.
+pub(crate) fn project_role_ignored_keys_warning(
+    role_file: &Path,
+    ignored_keys: &[String],
+) -> String {
+    format!(
+        "Ignored unsupported project-local config keys in agent role file {}: {}. \
+         A project's agent roles can't set what a project's config can't set; if you \
+         want these settings to apply, declare the role in your user-level config.",
+        role_file.display(),
+        ignored_keys.join(", "),
+    )
+}
+
+fn warn_ignored_project_role_keys(
+    source: AgentRoleSource,
+    role_file: &Path,
+    config: &TomlValue,
+    startup_warnings: &mut Vec<String>,
+) {
+    let ignored_keys = sanitize_role_config_layer(source, &mut config.clone());
+    if !ignored_keys.is_empty() {
+        startup_warnings.push(project_role_ignored_keys_warning(role_file, &ignored_keys));
+    }
+}
+
 fn merge_missing_role_fields(role: &mut AgentRoleConfig, fallback: &AgentRoleConfig) {
     role.description = role.description.clone().or(fallback.description.clone());
-    role.config_file = role.config_file.clone().or(fallback.config_file.clone());
+    // `source` describes where `config_file` was declared, so it moves with it.
+    if role.config_file.is_none() {
+        role.config_file.clone_from(&fallback.config_file);
+        role.source = fallback.source;
+    }
     role.nickname_candidates = role
         .nickname_candidates
         .clone()
@@ -212,6 +316,7 @@ async fn agent_role_config_from_toml(
         description,
         config_file: config_file.map(AbsolutePathBuf::into_path_buf),
         nickname_candidates,
+        source: AgentRoleSource::Project,
     })
 }
 
@@ -487,6 +592,7 @@ async fn discover_agent_roles_in_dir(
     fs: &dyn ExecutorFileSystem,
     agents_dir: &AbsolutePathBuf,
     declared_role_files: &BTreeSet<PathBuf>,
+    source: AgentRoleSource,
     startup_warnings: &mut Vec<String>,
 ) -> std::io::Result<BTreeMap<String, AgentRoleConfig>> {
     let mut roles = BTreeMap::new();
@@ -517,12 +623,19 @@ async fn discover_agent_roles_in_dir(
             );
             continue;
         }
+        warn_ignored_project_role_keys(
+            source,
+            agent_file.as_path(),
+            &parsed_file.config,
+            startup_warnings,
+        );
         roles.insert(
             role_name,
             AgentRoleConfig {
                 description: parsed_file.description,
                 config_file: Some(agent_file.to_path_buf()),
                 nickname_candidates: parsed_file.nickname_candidates,
+                source,
             },
         );
     }
