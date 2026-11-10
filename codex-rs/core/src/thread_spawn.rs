@@ -146,6 +146,7 @@ pub(crate) async fn prepare(
             version: SpawnConfigVersion::V2,
             full_history_fork: matches!(fork_mode, Some(SpawnAgentForkMode::FullHistory)),
             role_name,
+            model_provider: None,
             model: model.as_deref(),
             reasoning_effort,
         },
