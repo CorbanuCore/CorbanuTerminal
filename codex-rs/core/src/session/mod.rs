@@ -2537,8 +2537,8 @@ impl Session {
 
     /// Evaluates the caller's synchronous predicate against the current configuration
     /// and validated candidate under the same state lock used for publication.
-    /// This prevents a stale admission decision. Rejection has no settings or runtime
-    /// effects.
+    /// This prevents a stale admission decision. Rejection has no settings effects; the
+    /// GPU runtime-provider refresh below runs first either way.
     ///
     /// The predicate must be fast and side-effect-free. It must not block, acquire
     /// other locks, or call back into `Session`.
@@ -4639,13 +4639,13 @@ impl Session {
                         Some(turn_context.as_ref()),
                     )
                     .await;
-                self.record_granted_request_permissions_for_turn(
+                let recorded = self.record_granted_request_permissions_for_turn(
                     &response,
                     &environment.selection.environment_id,
                     turn_context,
                     shown_under,
                 );
-                return Ok(Some(response));
+                return Ok(Some(Self::as_recorded(recorded, response)));
             }
         }
 
@@ -4834,13 +4834,16 @@ impl Session {
                     }
                 };
                 let response = self.unless_stale_grant(response, entry.shown_under);
-                self.record_granted_request_permissions_for_turn(
+                let recorded = self.record_granted_request_permissions_for_turn(
                     &response,
                     &entry.environment.selection.environment_id,
                     &entry.turn_context,
                     entry.shown_under,
                 );
-                entry.tx_response.send(response).ok();
+                entry
+                    .tx_response
+                    .send(Self::as_recorded(recorded, response))
+                    .ok();
             }
             None => {
                 warn!("No pending request_permissions found for call_id: {call_id}");
@@ -4992,7 +4995,8 @@ impl Session {
         }
     }
 
-    /// Records a grant answered to a request shown under `granted_under`.
+    /// Records a grant answered to a request shown under `granted_under`;
+    /// whether it was recorded (nothing to record counts as recorded).
     /// D51 (#1001), D520 (a): it holds only while no security transition is
     /// committed (see [`crate::state::GrantedPermissions`]).
     pub(crate) fn record_granted_request_permissions_for_turn(
@@ -5001,24 +5005,40 @@ impl Session {
         environment_id: &str,
         turn_context: &TurnContext,
         granted_under: Option<(u64, u64)>,
-    ) {
+    ) -> bool {
         if response.permissions.is_empty() {
-            return;
+            return true;
         }
         let permissions: AdditionalPermissionProfile = response.permissions.clone().into();
         match response.scope {
-            PermissionGrantScope::Turn => {
-                turn_context.record_granted_permissions(
-                    environment_id,
-                    permissions,
-                    response.strict_auto_review,
-                    granted_under,
-                );
-            }
+            PermissionGrantScope::Turn => turn_context.record_granted_permissions(
+                environment_id,
+                permissions,
+                response.strict_auto_review,
+                granted_under,
+            ),
             PermissionGrantScope::Session => {
                 self.services
-                    .record_granted_permissions(environment_id, permissions, granted_under);
+                    .record_granted_permissions(environment_id, permissions, granted_under)
             }
+        }
+    }
+
+    /// The answer the model gets: nothing granted when the grant was not
+    /// recorded (a security transition committed in between, D51), so the
+    /// model is never told it holds a grant it does not have.
+    fn as_recorded(
+        recorded: bool,
+        response: RequestPermissionsResponse,
+    ) -> RequestPermissionsResponse {
+        if recorded {
+            return response;
+        }
+        warn!("request_permissions grant not recorded after a security transition");
+        RequestPermissionsResponse {
+            permissions: RequestPermissionProfile::default(),
+            scope: PermissionGrantScope::Turn,
+            strict_auto_review: false,
         }
     }
 
@@ -5104,7 +5124,17 @@ impl Session {
         let state = self.state.lock().await;
         let current = &state.session_configuration;
         let config = &current.original_config_do_not_use;
-        let workspace_roots = current.runtime_workspace_roots.clone();
+        // Both the primary environment's roots (what the turn runs with) and the runtime
+        // roots: a protected `.codex`/`.agents` under either is checked.
+        let mut workspace_roots =
+            crate::environment_selection::ThreadEnvironments::primary_workspace_roots_for(
+                &current.environments,
+            );
+        for root in &current.runtime_workspace_roots {
+            if !workspace_roots.contains(root) {
+                workspace_roots.push(root.clone());
+            }
+        }
         let mut configs = vec![GrantCheckConfig {
             cwd: cwd.unwrap_or(&config.cwd).clone(),
             workspace_roots: workspace_roots.clone(),

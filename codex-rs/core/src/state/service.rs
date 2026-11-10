@@ -131,8 +131,12 @@ impl SessionServices {
 
     /// The policy epoch and revocation generation "for session" approvals
     /// are bound to (PF-23-S03).
+    /// Another agent backend than Corbanu's local one has no policy tree to read
+    /// and counts as one never set up (`None`); the session grant store fails
+    /// closed there instead (S2c contract: every Corbanu session runs on the local
+    /// backend).
     pub(crate) fn authority_marker(&self) -> Option<(u64, u64)> {
-        authority_marker_of(self.agent_control.as_ref())
+        local_authority_marker(self.agent_control.as_ref()).flatten()
     }
 
     /// #945: whether a security transition was committed since `shown_under`,
@@ -183,10 +187,15 @@ impl SessionServices {
 }
 
 /// The policy epoch and revocation generation (PF-23-S03) in force for `agent_control`: its
-/// local backend's live security policy. Another backend has no Corbanu policy tree, which
-/// counts as one that was never set up (`None`: no transition since).
-pub(crate) fn authority_marker_of(agent_control: &dyn AgentControl) -> Option<(u64, u64)> {
-    agent_control
-        .local()
-        .and_then(|local| local.effective_security_policy().authority_marker())
+/// local backend's live security policy. `None` when the controller is not Corbanu's local
+/// backend, so there is no policy tree to read.
+pub(crate) fn local_authority_marker(
+    agent_control: &dyn AgentControl,
+) -> Option<crate::state::AuthorityMarker> {
+    Some(
+        agent_control
+            .local()?
+            .effective_security_policy()
+            .authority_marker(),
+    )
 }

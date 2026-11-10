@@ -694,11 +694,9 @@ impl TurnContext {
         &self,
         environment_id: &str,
     ) -> Option<AdditionalPermissionProfile> {
-        self.turn_grants.lock().ok().and_then(|mut grants| {
-            grants
-                .granted
-                .get(environment_id, self.session_grants.authority_marker())
-        })
+        let mut grants = self.turn_grants.lock().ok()?;
+        let current = self.session_grants.authority_marker()?;
+        grants.granted.get(environment_id, current)
     }
 
     /// Records a turn grant answered to a request shown under `granted_under`; whether it was
@@ -715,7 +713,9 @@ impl TurnContext {
             return false;
         };
         // Read under the lock: a later grant is never recorded under an earlier marker.
-        let current = self.session_grants.authority_marker();
+        let Some(current) = self.session_grants.authority_marker() else {
+            return false;
+        };
         let recorded = grants
             .granted
             .record(environment_id, permissions, granted_under, current);
@@ -726,9 +726,11 @@ impl TurnContext {
     }
 
     /// Whether strict auto-review is on under the policy in force: not after a security
-    /// transition (D51). A poisoned lock keeps it on.
+    /// transition (D51). A poisoned lock or an unreadable marker keeps it on.
     pub(crate) fn strict_auto_review_enabled(&self) -> bool {
-        let current = self.session_grants.authority_marker();
+        let Some(current) = self.session_grants.authority_marker() else {
+            return true;
+        };
         self.turn_grants.lock().map_or(true, |grants| {
             grants.strict_auto_review_under == Some(current)
         })
@@ -1206,11 +1208,20 @@ impl TurnContext {
                 contract.file_tool_permissions(&context.permissions, sandboxed, &cwd);
         }
         // #1976 (D491): refused where the host has no platform sandbox. D522 (a), provisional:
-        // upstream's MXC backend runs with the Windows sandbox level `Disabled`, so it counts as
-        // no sandbox here until S3b shows Corbanu's protections hold under it.
+        // upstream's MXC backend counts as no sandbox here until S3b shows Corbanu's
+        // protections hold under it, however it was selected (explicitly, at level `Disabled`,
+        // or by `prefer_mxc` at an elevated or restricted-token level).
+        let windows_sandbox_level = if matches!(
+            context.windows_sandbox_selection,
+            codex_file_system::WindowsSandboxSelection::Mxc
+        ) {
+            WindowsSandboxLevel::Disabled
+        } else {
+            self.windows_sandbox_level
+        };
         context.unsandboxed_refusal = crate::security::windows_unsandboxed::applies(
             self.config.security_level,
-            self.windows_sandbox_level,
+            windows_sandbox_level,
         )
         .then(|| crate::security::windows_unsandboxed::file_refusal(self.config.security_level));
         context
@@ -1294,10 +1305,11 @@ impl TurnContext {
     }
 }
 
-/// The execution authority a turn was admitted under: its approval policy, permission profile,
-/// approvals reviewer and Windows sandbox level. Input that arrives under other authority (a
-/// steer, agent mail) does not join the running turn; it waits for a turn admitted under the
-/// current one. Both sides are read from the session configuration the same way, so user-layer
+/// The execution authority a turn was admitted under: its approval policy, its permission
+/// profile with project roots expanded from the primary environment (so moving the working
+/// folder or workspace roots changes it, as on `main`), approvals reviewer, and Windows sandbox
+/// level and backend. Input that arrives under other authority (a steer, agent mail) does not
+/// join the running turn; it waits for a turn admitted under the current one. Both sides are read from the session configuration the same way, so user-layer
 /// reloads, model settings and config provenance cannot affect the comparison.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TurnAuthority {
@@ -1305,15 +1317,18 @@ pub(crate) struct TurnAuthority {
     permission_profile: PermissionProfile,
     approvals_reviewer: ApprovalsReviewer,
     windows_sandbox_level: WindowsSandboxLevel,
+    windows_sandbox_type: SandboxType,
 }
 
 impl TurnAuthority {
     pub(crate) fn of(configuration: &SessionConfiguration) -> Self {
         Self {
             approval_policy: configuration.step_settings.approval_policy.value(),
-            permission_profile: configuration.permission_profile(),
+            permission_profile: configuration
+                .effective_permission_profile(&configuration.environments),
             approvals_reviewer: configuration.step_settings.approvals_reviewer,
             windows_sandbox_level: configuration.windows_sandbox_level,
+            windows_sandbox_type: configuration.windows_sandbox_type,
         }
     }
 }

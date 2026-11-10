@@ -17,7 +17,7 @@ pub(crate) use granted_permissions::AuthorityMarker;
 pub(crate) use granted_permissions::GrantedPermissions;
 pub(crate) use granted_permissions::SessionGrantStore;
 pub(crate) use service::SessionServices;
-pub(crate) use service::authority_marker_of;
+pub(crate) use service::local_authority_marker;
 pub(crate) use session::ReasoningEffortPin;
 pub(crate) use session::SessionState;
 pub(crate) use turn::AcceptedUserInputResponse;

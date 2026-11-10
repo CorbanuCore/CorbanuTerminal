@@ -67,8 +67,9 @@ impl GrantedPermissions {
     }
 }
 
-/// Where a [`SessionGrantStore`] reads the policy marker in force.
-type AuthorityMarkerSource = Arc<dyn Fn() -> AuthorityMarker + Send + Sync>;
+/// Where a [`SessionGrantStore`] reads the policy marker in force; `None` when it cannot be
+/// read (no local agent backend), which grants nothing.
+type AuthorityMarkerSource = Arc<dyn Fn() -> Option<AuthorityMarker> + Send + Sync>;
 
 /// D520 (a), provisional: the session's "for session" grants. Upstream shares one bare map
 /// with every turn and captured step; this store checks the policy marker in force on every
@@ -82,7 +83,7 @@ pub(crate) struct SessionGrantStore {
 
 impl SessionGrantStore {
     pub(crate) fn new(
-        authority_marker: impl Fn() -> AuthorityMarker + Send + Sync + 'static,
+        authority_marker: impl Fn() -> Option<AuthorityMarker> + Send + Sync + 'static,
     ) -> Self {
         Self {
             grants: Arc::default(),
@@ -90,8 +91,8 @@ impl SessionGrantStore {
         }
     }
 
-    /// The policy marker in force.
-    pub(crate) fn authority_marker(&self) -> AuthorityMarker {
+    /// The policy marker in force; `None` when it cannot be read, which grants nothing.
+    pub(crate) fn authority_marker(&self) -> Option<AuthorityMarker> {
         (self.authority_marker)()
     }
 
@@ -107,14 +108,16 @@ impl SessionGrantStore {
             return false;
         };
         // Read under the lock: a later grant is never recorded under an earlier marker.
-        let current = self.authority_marker();
+        let Some(current) = self.authority_marker() else {
+            return false;
+        };
         grants.record(environment_id, permissions, granted_under, current)
     }
 
     /// The grants for `environment_id` still in force. A poisoned lock grants nothing.
     pub(crate) fn get(&self, environment_id: &str) -> Option<AdditionalPermissionProfile> {
         let mut grants = self.grants.lock().ok()?;
-        let current = self.authority_marker();
+        let current = self.authority_marker()?;
         grants.get(environment_id, current)
     }
 }
@@ -164,7 +167,7 @@ mod tests {
     fn d520_session_store_follows_the_live_policy_marker() {
         let marker = Arc::new(StdMutex::new(Some((1, 0))));
         let source = Arc::clone(&marker);
-        let store = SessionGrantStore::new(move || *source.lock().expect("marker"));
+        let store = SessionGrantStore::new(move || Some(*source.lock().expect("marker")));
         let shared = store.clone();
         assert!(store.record("local", network(), Some((1, 0))));
         assert_eq!(shared.get("local"), Some(network()), "shared with clones");
@@ -176,6 +179,13 @@ mod tests {
         // Answered before a transition, recorded after it: not kept.
         *marker.lock().expect("marker") = Some((3, 0));
         assert!(!store.record("local", network(), Some((1, 0))));
+        assert_eq!(store.get("local"), None);
+    }
+
+    #[test]
+    fn d520_session_store_grants_nothing_without_a_readable_marker() {
+        let store = SessionGrantStore::new(|| None);
+        assert!(!store.record("local", network(), /*granted_under*/ None));
         assert_eq!(store.get("local"), None);
     }
 }

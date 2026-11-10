@@ -322,7 +322,7 @@ impl SessionConfiguration {
 >>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
-    fn effective_permission_profile(
+    pub(super) fn effective_permission_profile(
         &self,
         environments: &[TurnEnvironmentSelection],
     ) -> PermissionProfile {
@@ -2261,7 +2261,7 @@ impl Session {
             let session_grants = {
                 let agent_control = Arc::clone(&agent_control);
                 crate::state::SessionGrantStore::new(move || {
-                    crate::state::authority_marker_of(agent_control.as_ref())
+                    crate::state::local_authority_marker(agent_control.as_ref())
                 })
             };
             let services = SessionServices {

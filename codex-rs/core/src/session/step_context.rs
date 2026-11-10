@@ -12,6 +12,7 @@ use crate::session::turn_context::TurnEnvironment;
 use crate::tools::router::ToolRouter;
 use codex_extension_api::ExtensionData;
 use codex_file_system::EnvironmentAccess;
+use codex_file_system::FileSystemEnvironmentAccessor;
 use codex_mcp::McpBinding;
 use codex_otel::SessionTelemetry;
 use codex_plugin::ExecutorPluginHookSource;
@@ -69,6 +70,10 @@ impl StepContext {
             .collect()
     }
 
+    /// File access in `environment` with the turn's grants, through Corbanu's file-tool
+    /// sandbox context (PF-27-S02 launch contract, D491 refusal where the host has no
+    /// platform sandbox). The grants are fenced by the policy marker (D51, D520 (a)); #245's
+    /// read-time strip of protected paths is not applied here (S3a, recorded in the ledger).
     pub(crate) fn fs_accessor<'a>(
         &self,
         environment: &'a TurnEnvironment,
@@ -76,7 +81,10 @@ impl StepContext {
         let grants = self
             .turn
             .granted_permissions(&environment.selection.environment_id);
-        environment.fs_accessor(grants)
+        FileSystemEnvironmentAccessor::new(
+            environment.environment.filesystem_ref(),
+            self.turn.file_system_sandbox_context(grants, environment),
+        )
     }
 
     /// Persist the context captured for this request, even after a live update.
