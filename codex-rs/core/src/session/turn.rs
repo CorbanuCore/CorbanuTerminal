@@ -4615,6 +4615,33 @@ async fn try_run_sampling_request(
                 end_turn,
                 finish_reason,
             } => {
+                response_completed = true;
+                request_token_usage = token_usage.clone();
+                sess.services
+                    .analytics_events_client
+                    .track_code_mode_tool_call(
+                        codex_analytics::CodeModeToolCallFact::SamplingResponseCompleted {
+                            thread_id: sess.thread_id.to_string(),
+                            turn_id: turn_context.sub_id.clone(),
+                            response_id: response_id.clone(),
+                            tool_call_ids: std::mem::take(&mut analytics_tool_call_ids),
+                        },
+                    );
+                if !pending_output_text.is_empty() {
+                    break Err(CodexErr::Stream(format!(
+                        "response completed with {} bytes of output text that could not be matched \
+                         to item `{}`",
+                        pending_output_text.len(),
+                        pending_output_text.item_id().unwrap_or("<missing>")
+                    )));
+                }
+                flush_assistant_text_segments_all(
+                    &sess,
+                    &turn_context,
+                    plan_mode_state.as_mut(),
+                    &mut assistant_message_stream_parsers,
+                )
+                .await;
                 if !response_id.is_empty() {
                     sess.send_event(
                         &turn_context,
@@ -4631,30 +4658,6 @@ async fn try_run_sampling_request(
                     .await;
                 }
                 sess.record_observed_response_completed(
-                flush_assistant_text_segments_all(
-                    &sess,
-                    &turn_context,
-                    plan_mode_state.as_mut(),
-                    &mut assistant_message_stream_parsers,
-                )
-                .await;
-                sess.record_observed_response_completed(
-                if !response_id.is_empty() {
-                    sess.send_event(
-                        &turn_context,
-                        EventMsg::ModelResponseCompleted(ModelResponseCompletedEvent {
-                            turn_id: turn_context.sub_id.clone(),
-                            response_id: response_id.clone(),
-                            model: turn_context.model_info.slug.clone(),
-                            model_provider_id: turn_context.config.model_provider_id.clone(),
-                            finish_reason: finish_reason
-                                .as_ref()
-                                .map(|reason| reason.as_str().to_string()),
-                        }),
-                    )
-                    .await;
-                }
-                sess.send_event(
                     &turn_context,
                     &response_id,
                     token_usage.as_ref(),
