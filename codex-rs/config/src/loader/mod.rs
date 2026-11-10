@@ -958,7 +958,12 @@ fn project_layer_entry(
     entry.with_hooks_config_folder_override(hooks_config_folder_override)
 }
 
-fn sanitize_project_config(config: &mut TomlValue) -> Vec<String> {
+/// Removes the settings a project's repository contents may not choose
+/// (`PROJECT_LOCAL_CONFIG_DENYLIST`, `features.respect_system_proxy`,
+/// `debug.config_lockfile`) and returns the dotted names of those it removed.
+/// Applied to a project's `.codex/config.toml` and to agent role files a
+/// project declares (D512, #1997).
+pub fn sanitize_project_config(config: &mut TomlValue) -> Vec<String> {
     let Some(table) = config.as_table_mut() else {
         return Vec::new();
     };

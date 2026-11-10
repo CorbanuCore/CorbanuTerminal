@@ -5,13 +5,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from argument_comment_lint_packages import workspace_packages
 from changed_crate_test_packages import CANARY_PACKAGE
 from changed_crate_test_packages import HELPER_BINARIES
 from changed_crate_test_packages import ROOT
 from changed_crate_test_packages import helper_build_args
 from changed_crate_test_packages import selected_packages
 from changed_crate_test_packages import tested_packages
-from changed_crate_test_packages import workspace_packages
 
 PACKAGES = {
     "codex-rs/core": "codex-core",
