@@ -83,9 +83,10 @@ const SYSTEM_CONFIG_TOML_FILE_UNIX: &str = "/etc/codex/config.toml";
 const DEFAULT_PROGRAM_DATA_DIR_WINDOWS: &str = r"C:\ProgramData";
 
 // Project-local config comes from repository contents, so it should not get to
-// choose where a user's credentials are sent or which local commands are run.
-// These settings are still supported from user, system, managed, and runtime
-// config layers.
+// choose where a user's credentials are sent, which local commands are run, or
+// where Corbanu keeps its state databases and logs (`sqlite_home`, `log_dir`:
+// D483, #1945). These settings are still supported from user, system, managed,
+// and runtime config layers.
 const PROJECT_LOCAL_CONFIG_DENYLIST: &[&str] = &[
     "openai_base_url",
     "openrouter_provider",
@@ -100,6 +101,8 @@ const PROJECT_LOCAL_CONFIG_DENYLIST: &[&str] = &[
     "experimental_realtime_webrtc_call_base_url",
     "experimental_realtime_ws_base_url",
     "otel",
+    "sqlite_home",
+    "log_dir",
 ];
 
 async fn first_layer_config_error_from_entries(layers: &[ConfigLayerEntry]) -> Option<ConfigError> {
@@ -1427,6 +1430,14 @@ fn sanitize_project_config(
                 ignored_keys.push(format!("tui.keymap.chat.{key}"));
             }
         }
+    }
+    // D483 (#1945): a config lock to replay (`load_path`) replaces the whole
+    // config, this denylist included, and `export_dir` chooses where Corbanu
+    // writes the effective config.
+    if let Some(debug) = table.get_mut("debug").and_then(TomlValue::as_table_mut)
+        && debug.remove("config_lockfile").is_some()
+    {
+        ignored_keys.push("debug.config_lockfile".to_string());
     }
 
     ignored_keys

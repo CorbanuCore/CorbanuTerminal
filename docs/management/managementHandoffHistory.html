@@ -15,7 +15,67 @@ th{background:#f5f5f7}.warn{background:#fff4e5;border-left:4px solid #f0a020;pad
 </head>
 <body>
 <h1>Corbanu Terminal — management handoff: older snapshots of sections 10–12</h1>
-<p><small>Moved verbatim from <code>docs/management/managementHandoff.html</code> by handoff-doc16, handoff-doc17 and handoff-doc18 (all 2026-11-07) and handoff-doc19, handoff-doc20 and handoff-doc21 (all 2026-11-08) to keep that file under the 512,000-byte blob-size policy. Historical only: these snapshots are superseded by the current sections 10–12 and the current update box in the handoff.</small></p>
+<p><small>Moved verbatim from <code>docs/management/managementHandoff.html</code> by handoff-doc16, handoff-doc17 and handoff-doc18 (all 2026-11-07) handoff-doc19, handoff-doc20 and handoff-doc21 (all 2026-11-08) and handoff-doc22 (2026-11-09) to keep that file under the 512,000-byte blob-size policy. Historical only: these snapshots are superseded by the current sections 10–12 and the current update box in the handoff.</small></p>
+<details><summary>Sections 10–12 at 2026-11-08 23:30Z (handoff-doc21; historical, superseded by the sections above)</summary>
+<h2>10. Current state</h2>
+<p><b>Running</b> at about 23:30Z on 2026-11-08, as tmux sessions on <code>$HOME/.corbanu-workers/tmux.sock</code> (7 including this one). States come from <code>todo.md</code>, briefs, logs, interim results and GitHub (checks counted at about 23:15Z), not final reports. The Windows PC is still off; Windows work uses native Windows CI. “Elevated” is the default Windows sandbox, “non-admin” is legacy.</p>
+<table><tr><th>Worker (tmux start, UTC)</th><th>Task</th><th>State at the snapshot</th></tr>
+<tr><td>win-377b (17:14Z)</td><td>Stricter-only D377 follow-ups (#1871): files sandbox accounts left in <code>%TEMP%</code> before the upgrade; locking the capability-SID file.</td><td>#1874 merged (lock). #1882 (head <code>bf23b904b4</code>) open: a 6th, test-only round was granted at 20:49Z with conditions; CI running (17 pending).</td></tr>
+<tr><td>flake-1875 (19:56Z)</td><td>Decision-free flakes: #1875, #1881, #1879, #905, #1865.</td><td>#1893 merged (#1875); #1865 closed as fixed by #1835; filed #1894. #1881 and #1879 open.</td></tr>
+<tr><td>contrib-k (20:12Z)</td><td>Watch citadelculture's #1837, #1831, #1864; acknowledge new contributors.</td><td>#1886 merged. #1831 (head <code>ffa4cb12d0</code>, mergeable): pre-gates on main merged in passed (0 quieter; 342,504 judgments; 4 expected new asks); awaiting the author's main merge. #1837 conflicts with main. #1864 has the Prettier fix pending.</td></tr>
+<tr><td>contrib-l (22:04Z)</td><td>0xzoz's #1888 and walkonwayvs's #1892.</td><td>#1892 merged. #1888: round 1 changes requested at 22:42Z; the author pushed <code>5ab543f5eb</code> at 22:50Z; CI running.</td></tr>
+<tr><td>win-1890 (23:05Z)</td><td>#1890: do real legacy sessions also leave permanent <code>%TEMP%</code> grants? Stricter-only fix; tests use a per-test <code>TEMP</code>.</td><td>Measuring on native Windows CI.</td></tr>
+<tr><td>contrib-m (23:22Z)</td><td>sendoeth's #1897 (#1876; including checking its claim that 2 of 4 forms run under git's default config) and walkonwayvs's #1899 (#1883 follow-up).</td><td>Both acknowledged; review starting.</td></tr>
+<tr><td>handoff-doc21 (23:10Z)</td><td>This refresh.</td><td>—</td></tr>
+</table>
+<p>Finished since doc20: ci-1839, handoff-doc20, contrib-g, win-377, win-398, flake-1854, contrib-h, contrib-j, win-1775i, win-1830, contrib-i, win-1861, win-1863, win-1877, flake-1873 and win-1846 (section 8.0o). <b>Queue</b> (not launched): QA of <code>8cb852fd53</code>; D446's network-folder refusal, D447's runtime guard and D452's memo once decided; D417 and D441 after #1800; S1b/S1d after 11-09 18:00Z if unclaimed; noise-n12.</p>
+<h3>Open items</h3>
+<table><tr><th>Item</th><th>State</th><th>Next</th></tr>
+<tr><td>Windows sign-off drafts</td><td><b>#1798</b> (<code>2c389703fd</code>) and <b>#1800</b> (<code>d9032e4a7e</code>) unchanged since doc20; both must take main's <code>sec_win_</code> test count (58) and resolve the release notes on rebase (win-377). <b>#1866</b> (D398, <code>5ddfc624cf</code>; green, APPROVE). <b>#1851</b> (D419, <code>0d275f32b6</code>): measured, not reviewed; its native Windows test job is red (win-1775i: only flake #1879).</td><td>The desktop test (D396/D416, plus Developer Mode for D448), then sign-off (D438, D445, D448). None merges without Travis.</td></tr>
+<tr><td>Windows follow-ups</td><td>#1871 (#1882), #1896 (D453–D455), #1890 (win-1890), #1877 (D452), #1876 (D447, #1897), #1856 (D443, #1864), network working folders (D446), #1838/#1560/#1803 (D433, D417, D441).</td><td>As decided.</td></tr>
+<tr><td>Outside PRs</td><td>citadelculture's <b>#1837</b> (round 4 waits on a main merge), <b>#1831</b> (re-sweep, merge review and merge granted after its main merge) and <b>#1864</b> (Prettier fix); 0xzoz's <b>#1888</b> (round 2 due). <b>sendoeth</b>'s #1897 and <b>walkonwayvs</b>'s #1899 (contrib-m). Unchanged: citadelculture's #135, #1380, #1055 and drafts; goodalexander's #88 and #28.</td><td>Reviews; Task Node notes on each merge or close.</td></tr>
+<tr><td>Main postmerge</td><td>postmerge-ci green from <code>718d4ccf73</code> (#1859) through <code>8b2b2f8187</code> (#1891). blocking-ci failed once on <code>ee7a6b49ff</code> (blob size, fixed by #1886); its other non-green runs were cancelled by later pushes. Runs for <code>faf00c3a09</code>, <code>97395d3cf6</code>, <code>4c4246399f</code> and <code>f6e24b16d4</code> in progress.</td><td>Install the newest fully green main (it would add #1878–#1895).</td></tr>
+<tr><td>Nightly</td><td>The 11-08 scheduled nightly-ci on <code>45d9a8e54f</code> passed (run 42497873913).</td><td>Check the 11-09 run; #1610 still needs three green Windows nightlies.</td></tr>
+<tr><td>Upstream sync</td><td>Unchanged: sync head <code>d28288dd42</code>, 1,718 ledger rows. S1b and S1d held for contributors until 11-09 18:00Z.</td><td>Then assign them if unclaimed; main merge #1 and the S1 exit (#1628).</td></tr>
+<tr><td>Bugs and follow-ups</td><td>#1661, #1704, #1779, #1808 (#1837), #1821 (#1831), #1842, #1845 (items 2–3; #1888), #1879, #1881, #1894; win-1863's <code>file:///share/x</code> storage note and flake-1873's #1878 check gap (no issues yet).</td><td>Contributor PRs first.</td></tr>
+<tr><td>Mac</td><td>Data volume 21 GiB free (was 29; Backblaze <code>bzdata</code> staging, about 52 GB, likely; not ours). Alert below 10 GiB.</td><td>Watch it; build dirs stay on CorbanuDrive or glitch.</td></tr>
+<tr><td>Carried</td><td>noise-n12 not relaunched (unpushed work in <code>worktrees/noise-n1</code>/<code>noise-n2</code>); accepted, not started: D417, D380–D385 (S3b), D235, D238, D245 (a), D260, D294, D270–D272, D302, D326, D337's and D347's later PRs, D348's pre-sync release; #368's dates; #1280 and tasknode#347 (D237).</td><td>As slots free; D260, D294, D302 when the PC is back.</td></tr>
+</table>
+<p><b>Raw results vs owner acceptance:</b> no owner decision was logged in this stretch; Travis's 08:33Z acceptance covers what to build, not results. Merged PRs carry their own fail-before evidence, reviews and CI. <b>#1798, #1800 and #1866 have green CI and APPROVE verdicts, but no owner sign-off</b> (and #1798/#1800 no desktop test); <b>#1851 is measured but unreviewed</b> (native Windows job red on flake #1879). All four stay drafts. The S10 raw record is unchanged (ACC-11 and ACC-14 blocked; 32/0/5 raw, 35/0/2 owner-accepted under D207/D208); the PF-84 Windows gate has no result. Workers' Windows numbers are measurements on hosted Windows CI with no real desktop. Worker recommendations for D431–D455 are not owner acceptance.</p>
+<p><b>Evidence:</b> worker reports and reviewer outputs in <code>$HOME/.corbanu-workers/</code> and <code>.codex-work/&lt;worker&gt;/</code>; requests and grants in <code>$W</code>; decision log <code>$W/todo.md</code>; sync plan in <code>docs/management/upstreamSyncPlan.md</code> and on #1532.</p>
+
+<h2>11. Decisions and remaining external actions</h2>
+<p><b>Pending numbered decisions (25):</b> D431–D455, each in section 9; none was in the 08:33Z acceptance. Recommended:</p>
+<ul>
+<li><b>Process:</b> D431 per-entry release-note fragments instead of one <code>RELEASE_NOTES</code> file (conflicts cost about 2 h of CI twice): yes.</li>
+<li><b>Windows memory reads:</b> D432 accept #1843's SYNCHRONIZE-only (narrower than D429; the query-limited bits alias resume/suspend): accept. D433 document #1838 next to #1560, point multi-project users at elevated, revisit the token design with #1560: yes. D441 narrow elevated commands' thread-resume (<code>0x1000</code>) like D432, after #1800: yes.</li>
+<li><b>#1798:</b> D438 merge it after or with #1800 (its scan record is tamperable until #1800): yes. D439 if setup is declined after a version change, keep running with the existing denies plus a warning: keep. D440 accept one approval prompt for every existing user after upgrade (plus a sandbox password reset; managed installs re-run setup), said in the release note: yes.</li>
+<li><b>#1800 (D392 (b)):</b> D442 accept the documented limits (standard users keep #1721/#1560/#1803 until #1847; no auto-retry on admin promote/demote, manual steps in D418's uninstall docs; an admin approving another account's prompt on their own desktop grants it the runner): accept.</li>
+<li><b>Classifier:</b> D434 accept sec-1704z's readings (whole action = “same line”; earlier same-session loads not seen, release-noted; bash <code>enable</code> keeps checks; arithmetic <code>stat</code> unchanged): yes. D447 (#1876) a run-time guard, <code>protocol.ext.allow=never</code> for commands after untrusted content: yes.</li>
+<li><b>Agents and TUI:</b> D435 for a pending agent, send the interrupt but not the turn-starting notice: yes. D436 <code>/quit now</code> during startup still waits: leave.</li>
+<li><b>CI:</b> D437 accept ci-1795's test change (no test-support feature; route SID checked in a unit test): accept. D443 (#1856) say plainly that Windows integration tests don't run (a), then run them crate by crate starting with exec-server (b); (c) a BuildBuddy key: (a) then (b).</li>
+<li><b>Windows temp and working folders:</b> D444 accept and document #1857's limits: accept. D445 sign off #1866 (D398): approve. D446 network working folders: a follow-up that refuses them with a clear message.</li>
+<li><b>#1775/#1877 git watch:</b> D448 sign off #1851 (D419) after a Developer Mode check on the PC. D449 keep D421's fresh-clone exemption off the top-level <code>.git</code>: leave. D450 the per-command cost: accept (halved since). D451 keep the non-Unicode-folder flag: keep. D452 a per-item memo for #1877's remaining items: yes.</li>
+<li><b>Elevated planted-folder records (#1895):</b> D453 deny elevated writes to the records folder <code>%LOCALAPPDATA%\CorbanuTerminalSandbox</code> (stricter; changes elevated access rules): yes. D454 after #1800, the runner reports when leftover processes end: yes. D455 the elevated walk cost (about 40–75 ms at each end): accept.</li>
+</ul>
+<p>Repeat the pending ones in every check-in until answered.</p>
+<p><b>Owner actions:</b> <b>D318</b>: Travis creates the security-reviewer GitHub account (until then the sync CODEOWNERS block only requests review). <b>Real-desktop test (D396/D416)</b> on the Windows PC before #1798/#1800 leave draft: the interactive desktop (<code>WinSta0</code>) with #1800's runner account and per-command logons; #1798's denies and setup (one UAC prompt on upgrade, D440); a <b>standard account's</b> setup approved with an <b>admin password</b>, including that account setting <code>USERNAME</code> to the admin's name (it must get no runner account); and, for D448, <b>Developer Mode on</b> (normal users can make symbolic links) against #1851. Then sign off (or not) #1798, #1800, #1851 and #1866. When the PC is back: D302, D260, D294 and the PF-84 gate (#1080); flake-1873 suggests checking <code>icacls %TEMP%</code> there for piled-up test grants (#1890). D237 as before.</p>
+<p><b>Optional (Mac):</b> Travis's own <code>x-bookmark-backfill</code> node process (PID 86129) held about 11.8–11.9 GB RSS at about 15:05Z (doc20) and about 14.5 GB at about 23:15Z (<code>ps</code>). Not ours and we don't touch it; stopping it when it isn't needed frees memory for builds. Disk: 21 GiB free on the Mac's Data volume, probably Backblaze's <code>bzdata</code> staging (about 52 GB), not ours; the alert threshold is 10 GiB.</p>
+<p><b>Coordinator-owned follow-ups:</b> collect the six running workers; QA <code>8cb852fd53</code> and install the next fully green main; file win-1863's storage note and flake-1873's check gap if wanted; relaunch noise-n12; land D345/D349 on the sync branch; #368's dates; #1610; D215; #1401's exception review by 2027-01-31.</p>
+
+<h2>12. Resume sequence</h2>
+<ol>
+<li>Read the top box and the <code>todo.md</code> tail; check <code>tmux -S $HOME/.corbanu-workers/tmux.sock ls</code> and each running worker's log before launching anything.</li>
+<li>Run <code>$HOME/.corbanu-workers/contrib-ack.sh</code>; give every listed PR a warm first answer within the hour; keep #1837, #1831, #1864 (contrib-k), #1888 (contrib-l) and #1897/#1899 (contrib-m) moving.</li>
+<li>Ask D431–D455, D318's account and the desktop test (with Developer Mode for D448). Don't merge #1798, #1800, #1851 or #1866 without sign-off.</li>
+<li>Collect win-377b (#1882), flake-1875, contrib-k, contrib-l, win-1890 and contrib-m.</li>
+<li>Check main postmerge for <code>faf00c3a09</code>, <code>97395d3cf6</code>, <code>4c4246399f</code> and <code>f6e24b16d4</code> and the 11-09 nightly (INFRA RERUN RULE for infra-only failures).</li>
+<li>Rebuild from the newest fully green main; sign with <code>--identifier com.corbanu.corbanu</code>; check <code>codesign -dv</code> and a fresh <code>corbanu exec</code> sign-in; then code-blind QA.</li>
+<li>After 11-09 18:00Z, assign S1b/S1d if unclaimed; land D345/D349; main merge #1 and the S1 exit (#1628).</li>
+<li>Merge guards must abort, one merge per command; check main and open PRs before a coordinator fix; take times from <code>date -u</code>. One live <code>&lt;name&gt;.grant.md</code> per request; build dirs on CorbanuDrive or glitch; no <code>git stash</code>, no <code>pkill</code>; the WINDOWS SKIP RULE, CLAIM COMMENT RULE, D328's one-week rule, GLITCH TEST TIP, INFRA RERUN RULE; watch big test files against the blob limit; warm contributor and Task Node notes.</li>
+</ol>
+</details>
+
 <details><summary>Sections 10–12 at 2026-11-08 15:30Z (handoff-doc20; historical, superseded by the sections above)</summary>
 <h2>10. Current state</h2>
 <p><b>Running</b> at about 15:10Z on 2026-11-08, as tmux sessions on <code>$HOME/.corbanu-workers/tmux.sock</code> (7 including this one). States come from <code>todo.md</code>, briefs, logs, interim results and GitHub (checks counted at about 15:05Z), not final reports. The Windows PC is still off; Windows work uses native Windows CI. “Elevated” is the default Windows sandbox, “non-admin” is legacy. Travis's overnight window is 09:30–17:30Z.</p>
@@ -776,8 +836,24 @@ bump by D101.</li>
 
 </details>
 <h2>Older install entries from section 7 of the handoff</h2>
-<p><small>Moved verbatim by handoff-doc21 (2026-11-08). Historical only: superseded by the current install in section 7.</small></p>
+<p><small>Moved verbatim by handoff-doc21 (2026-11-08) and handoff-doc22 (2026-11-09). Historical only: superseded by the current install in section 7.</small></p>
 <ul>
+<li>Install at 11-08 09:10Z (superseded): main <code>01f15b0348</code>, the merge of #1824 (#1819 follow-up), postmerge green (run 42461620571); installed 09:10Z per <code>todo.md</code> after #1815's postmerge rerun went green (09:03Z), signed with <code>--identifier com.corbanu.corbanu</code>, smoke OK, Rust 1.99.1, developer-accounting marker on, same Developer ID.
+sha256 begins <code>8183ee9ccbbb5886</code>. <code>INSTALL.json</code>: <code>built_at</code> 09:10:00Z, <code>commit</code> <code>01f15b0348</code>, <code>previous_binary</code> <code>e8dcdf6e2a</code>, both <code>sha256</code> and <code>corbanu_sha256</code> equal the binary's; <code>codesign -dv</code> shows <code>Identifier=com.corbanu.corbanu</code>.
+It adds, since <code>e8dcdf6e2a</code> (from <code>git log --first-parent</code>): #1806, #1802, #1809, #1811, #1816, #1818, #1822, #1815, #1820 and #1824. <code>INSTALL.json</code>'s <code>what_is_new</code> also names #1814 and #1823, which merged after this commit and are <b>not</b> in it.
+Kept next to the real binary: <code>corbanu.prev-e8dcdf6e2a</code>, <code>corbanu.prev-006da06a34</code> and <code>corbanu.prev-ab1d235550</code>; <code>prev-1c85bc2acd</code> moved to <code>old-binaries/</code>. No code-blind QA of this build.</li>
+<li>Install at 11-08 03:31Z (superseded): main <code>e8dcdf6e2a</code>, the merge of #1799 (docs for #1797), postmerge green (run 42436274971); installed 03:31Z per <code>todo.md</code> (signed with <code>--identifier com.corbanu.corbanu</code>, smoke OK), Rust 1.99.1, developer-accounting marker on, signed with the same Developer ID,
+sha256 begins <code>eda7454acf9b5d68</code>. <code>INSTALL.json</code> matches the binary: <code>built_at</code> 03:31:00Z, <code>commit</code> <code>e8dcdf6e2a</code>, <code>previous_binary</code> <code>006da06a34</code>, and both <code>sha256</code> and <code>corbanu_sha256</code> equal the binary's; <code>codesign -dv</code> shows <code>Identifier=com.corbanu.corbanu</code>.
+It adds, since <code>006da06a34</code>: #1789, #1783, #1792 and #1799 (from <code>git log --first-parent</code>). qa-1108b's code-blind QA of it: <b>3/3 PASS</b> (#1783's hidden writer options ask under Moderate after untrusted content; smoke; signing identity and three fresh <code>corbanu exec</code> sign-ins with no keyring error). It found no over-asking on common macOS commands (input to D410), and a 401 from the real home's <code>zai</code> provider, which still holds the pre-rotation key (D412).
+Kept next to the real binary: <code>corbanu.prev-006da06a34</code>, <code>corbanu.prev-ab1d235550</code> and <code>corbanu.prev-1c85bc2acd</code>; <code>prev-da0e2e2ccf</code> moved to <code>old-binaries/</code>.
+<b>Not in it</b> (merged after #1799): #1806, #1802 and #1809. Next install: the newest main whose postmerge run is green in every real job (the runs for <code>dce1d1f643</code>, <code>3c73b234b4</code> and <code>c664f0ce9f</code> were still running at 05:10Z).</li>
+<li>Install at 11-08 00:25Z (superseded): main <code>006da06a34</code>, the merge of #1788 (postmerge green, smoke OK per <code>todo.md</code>; <code>prev-ab1d235550</code> kept). It added, since <code>ab1d235550</code>: #1753, #1747, #1764, #1736, #1737, #1760, #1762, #1719, #1761, #1769, #1768, #1767, #1771, #1782, #1785, #1777, #1784 and #1788. qa-1108a's code-blind QA of it: <b>4/4 PASS</b> (#1769's startup slash queue, #1768's agent prompts, #1767's sub-agent ownership, smoke), and it filed #1796 (D404).</li>
+<li>Install at 11-07 20:01Z (superseded): main <code>ab1d235550</code>, the merge of #1759 (release notes for #1750 and #1738), postmerge green (run 42404562788); installed 20:01Z per <code>todo.md</code> (signed, smoke OK), Rust 1.99.1, developer-accounting marker on, signed with the same Developer ID,
+sha256 begins <code>c37554b7e25ed2bf</code>. <code>INSTALL.json</code> matches the binary: <code>built_at</code> 20:01:56Z, <code>commit</code> <code>ab1d235550</code>, <code>previous_binary</code> <code>1c85bc2acd</code>, and both <code>sha256</code> and <code>corbanu_sha256</code> equal the binary's.
+It adds, since <code>1c85bc2acd</code>: #1703, #1725, #1723, #1739, #1728, #1741, #1717, #1740, #1745, #1731, #1746, #1698, #1751, #1744, #1750, #1738, #1754, #1755 and #1759 (from <code>git log --first-parent</code>; <code>INSTALL.json</code>'s <code>what_is_new</code> also names #1757, which is the issue #1764 fixed after this build).
+qa-1107c's code-blind QA of it: <b>5/5 PASS</b> (#1698's <code>eval</code>/<code>trap</code>/alias checks, #1744's refused sibling wait with D320's agent prompt, #1728, <code>exec --json</code> usage with sub-agents, smoke); one note: <code>alias ll='ls -la'; ll</code> in one line asks (over-cautious, probably older behaviour; not filed).
+Kept next to the real binary: <code>corbanu.prev-1c85bc2acd</code>, <code>corbanu.prev-da0e2e2ccf</code> and <code>corbanu.prev-5902638ad9</code>; <code>prev-d8773815b6</code> moved to <code>old-binaries/</code>.
+<b>Not in it</b> (merged after #1759): #1753, #1747, #1764, #1736, #1737, #1760, #1762, #1719, #1761, #1769, #1768 and #1767. Next install: the newest main whose postmerge run is green in every real job (<code>ec92d7332b</code>, #1761, is green; the runs for #1769, #1768 and #1767 were still running at 21:20Z).</li>
 <li>Install at 11-07 13:48Z (superseded): main <code>1c85bc2acd</code>, the merge of #1710 (the pf_30 test fix that turned main green again), postmerge green (run 42374740927); installed 13:48Z per <code>todo.md</code> (signed, verified, smoke OK), Rust 1.99.1, developer-accounting marker on, signed with the same Developer ID,
 sha256 begins <code>ad25f910677571d8</code>. <code>INSTALL.json</code> now matches the binary: <code>built_at</code> 13:48:22Z, <code>commit</code> <code>1c85bc2acd</code>, and both <code>sha256</code> and <code>corbanu_sha256</code> equal the binary's. qa-1107b's code-blind QA of it: 5/5 PASS (D320's agent prompt, #1575, #1680, #1662, smoke). Installs since #1657:
 <ul>
@@ -874,7 +950,23 @@ the installed build.</li>
 </ul></li>
 </ul>
 <h2>Older update boxes from the top of the handoff</h2>
-<p><small>Moved verbatim by handoff-doc18 (2026-11-07), handoff-doc19, handoff-doc20 and handoff-doc21 (all 2026-11-08).</small></p>
+<p><small>Moved verbatim by handoff-doc18 (2026-11-07), handoff-doc19, handoff-doc20 and handoff-doc21 (all 2026-11-08) and handoff-doc22 (2026-11-09).</small></p>
+<details><summary>Update 2026-11-08 ~15:30Z (handoff-doc20; historical, superseded by the box above)</summary>
+<div class="note"><b>Update 2026-11-08 ~15:30Z (handoff-doc20).</b> Sources: <code>$W/todo.md</code> from its 05:14Z line through its 15:00Z line (11-08), the worker results in <code>$HOME/.corbanu-workers/*.result.md</code> written since 05:10Z
+(ci-nightly, win-1803l, handoff-doc19, win-1810, contrib-d, win-1819, flake-1790, win-1819f, docs-rn2, win-1805, contrib-f, win-d429, flake-1825, sec-1704z, docs-1108, dec-agents, ci-1795, win-1798b, win-1800b, and the interim files of win-377, win-1775i and contrib-g),
+the running workers' briefs, logs and tmux sessions, <code>docs/management/upstreamSyncPlan.md</code>, the sync ledger on <code>sync/upstream-rust-v0.167.0</code>, and GitHub re-checked at about 15:10Z. Main is at <code>5747a31438</code> (#1794, 14:56Z).
+<ul>
+<li><b>20 PRs merged into main</b> after doc19's #1811 (05:59Z): 18 ours and 2 from outside contributors, both credited: <b>araupooo</b>'s #1781 (git runs under <code>submodule foreach</code>/<code>bisect run</code>, #1661; 14:42Z) and <b>darkmatter-sudo</b>'s #1794 (redirections, #1772; 14:56Z). None into the sync branch. Section 8.0n lists them by area.</li>
+<li><b>Owner acceptance at 08:33Z</b> (<code>todo.md</code>): Travis said “All recommendations accepted”, so <b>D377–D385, D387–D401 and D403–D430 are accepted as recommended</b>. D392 = (b) the runner privilege only where the user is already an admin, now, plus (d) a SYSTEM-service broker later (#1847); <b>D423: not now</b>; D429 as a sign-off-style PR with a probe gate, with or after the #1560 fix (D430); D412 done at 08:47Z. Section 9 records each with its status. This is acceptance of what to build, not of any result.</li>
+<li><b>Installed build:</b> main <b><code>01f15b0348</code></b> (#1824), installed 09:10Z (signed with <code>--identifier com.corbanu.corbanu</code>, postmerge green, smoke OK). No code-blind QA of it yet. Rebuild procedure and contents in section 7.</li>
+<li><b>GitHub incident:</b> from about 09:10Z GitHub reported “timeouts for unauthenticated users”. CI setup steps got HTTP 504s (the <code>dotslash</code> <code>releases/latest</code> lookup, tool and v8 prebuilt downloads) and failed many PR checks and two main postmerge runs with no code cause. New <b>INFRA RERUN RULE</b> (<code>wave2-common.md</code>, 13:20Z): a rerun of a job whose log shows only infra failures doesn't count against the one-rerun allowance; up to 5 infra-only reruns per job, checking the log each time; a failing test or build step follows the normal rule.</li>
+<li><b>Windows:</b> drafts <b>#1798</b> (now with D413–D415 and D418's uninstall docs; 37 green) and <b>#1800</b> (now with D392 (b); 38 green) wait for the <b>real-desktop test (D396/D416)</b>, which now also covers a standard account's setup approved with an admin password, including a <code>USERNAME</code> spoof attempt. Merged: #1843 (D429), #1848 (D424), #1807 (#1805), #1818 (#1810), #1822 and #1824 (#1819), #1829 and #1834. Open: #1838 and #1560. Running: win-398 (D398), win-377 (D377, #1857), win-1775i (drafts #1849–#1851), win-1830.</li>
+<li><b>Contributors:</b> <b>0xzoz</b>'s #1793 (round 8 test fix approved; needs main merged in after #1794), <b>citadelculture</b>'s #1837 (round 4; asked to split a test file over the blob limit) and #1831 (round 2 passes; stacked on #1793). <b>No maintainer comment yet:</b> <b>sendoeth</b>'s #1804 (since 03:19Z) and <b>white-guy-01</b>'s #1841 (since 09:58Z): SWEEP RULE, section 10.</li>
+<li><b>Still pending (12 plus two owner actions):</b> D431–D442 (D441 and D442 are win-1800b's), options and recommendations in sections 9 and 11; D318's action (the security-reviewer account); and the desktop test (D396/D416). No D443–D445 was in <code>todo.md</code> at this snapshot.</li>
+<li><b>Upstream sync:</b> unchanged since doc18 (sync head <code>d28288dd42</code>, 1,718 ledger rows). S1b and S1d stay held for contributors until 2026-11-09 18:00Z.</li>
+<li><b>Running</b> (section 10): contrib-g, win-1775i, win-377, win-398, ci-1839, win-1830 and this handoff-doc20.</li>
+</ul></div>
+</details>
 <details><summary>Update 2026-11-08 ~05:15Z (handoff-doc19; historical, superseded by the box above)</summary>
 <div class="note"><b>Update 2026-11-08 ~05:15Z (handoff-doc19).</b> Sources: <code>$W/todo.md</code> from its 21:50Z line (11-07) through its 05:10Z line (11-08), the worker results in <code>$HOME/.corbanu-workers/*.result.md</code> written since 21:30Z
 (win-1560m2, win-probe, handoff-doc18, docs-rn, win-1758, win-everyone, flake-1776, qa-1108a, win-1791m, sec-1704, win-harness, win-1780, docs-1797, qa-1108b, win-1791pr, win-aprime, contrib-e, ci-nightly, win-1803m, design-1775, win-1780b, docs-1775f, and contrib-d's interim file),
@@ -1080,5 +1172,210 @@ waiting on him until he answers</b>. He usually answers “all as recommended”
 the morning. In October that is 08:30Z–16:30Z. This update falls inside the window; Travis answered at 05:15Z and 08:20Z before it began, and is expected back at about 16:30Z. <b>Since US clocks moved to standard time (PST) the window is 09:30Z–17:30Z</b> (handoff-doc19, 2026-11-08).</div>
 
 </details>
+<h2>Older “what landed” sections from section 8 of the handoff</h2>
+<p><small>Moved verbatim by handoff-doc22 (2026-11-09). Historical record of what merged; still accurate as history.</small></p>
+<h3>8.0 What landed in wave 2 before #933 (2026-10-13/16)</h3>
+<p>166 PRs merged between 2026-10-13 04:26Z and 2026-10-16 12:04Z (55 by 10-13 18:37Z, 22 more by 10-14 05:19Z, 26 more by 14:08Z, 24 more by 10-15 07:09Z,
+23 more by 10-16 04:33Z, 6 of those from the outside contributor <code>citadelculture</code>, and 16 since). Every worker PR had all checks green, an
+independent Opus 5.5 High APPROVE on its exact head and <code>--match-head-commit</code>. Per worker (details and evidence in
+<code>$W/&lt;name&gt;.result.md</code>):</p>
+<table>
+<tr><th>Worker / owner</th><th>Merged PRs</th><th>Issues closed</th><th>Filed / left open</th></tr>
+<tr><td>coordinator (resume)</td><td>#612, #608, #617 (from hung wave-1 workers)</td><td>#578, #586, #594, #598</td><td>#619 (recorded by #617)</td></tr>
+<tr><td>land-prs</td><td>#627, #590, #601</td><td>(#603 decision 16 landed; #442 already closed)</td><td>#635 (glitch-only ETXTBSY flake)</td></tr>
+<tr><td>main-ci3</td><td>#634, #642, #647 (main postmerge green at <code>45bfa7d938</code>)</td><td>—</td><td>#636 (nightly red since 10-07)</td></tr>
+<tr><td>rel-tui</td><td>#638, #639, #640</td><td>#616, #624, #625</td><td>#641</td></tr>
+<tr><td>agg-fix1</td><td>#637</td><td>#620, #621, #622</td><td>—</td></tr>
+<tr><td>sec-follow</td><td>#643, #645, #648</td><td>#619, #611, #605</td><td>#649–#652</td></tr>
+<tr><td>agg-polish</td><td>#644, #655, #657; #662 left as DRAFT “needs security sign-off”</td><td>#584, #641, #613, #444 (already fixed)</td><td>#646, #660</td></tr>
+<tr><td>macct-acc7 (code-blind)</td><td>#663 (PF-84 S06 slice B + A10 + #555 re-acceptance record)</td><td>—</td><td>#654, #656, #658</td></tr>
+<tr><td>pf84-595</td><td>#659</td><td>#595</td><td>#673</td></tr>
+<tr><td>route-picker</td><td>#664 (<code>/model</code> connection choice; OpenAI-style default)</td><td>— (#653 left open)</td><td>#665</td></tr>
+<tr><td>agg-dec3</td><td>#661</td><td>#626, #623</td><td>—</td></tr>
+<tr><td>ks-codex</td><td>#680</td><td>#660</td><td>—</td></tr>
+<tr><td>sec-follow2</td><td>#666, #667, #671, #672</td><td>#649, #650, #652 (#651 open for items 6/7)</td><td>#674, #675</td></tr>
+<tr><td>rel-bugs</td><td>#685, #686, #687, #682, #681</td><td>#665, #547, #564, #530, #371</td><td>#688, #689</td></tr>
+<tr><td>pf84-fix7</td><td>#669, #668, #676</td><td>#654, #656, #658</td><td>—</td></tr>
+<tr><td>sbx-left</td><td>#697, #699, #702</td><td>#606 (#603, #607 open for decisions)</td><td>—</td></tr>
+<tr><td>tui-bugs</td><td>#698, #701, #703</td><td>#81; #125, #119, #121 (already fixed)</td><td>(#609, #588, #688 stay open for remaining items)</td></tr>
+<tr><td>housekeep</td><td>— (cleanup only: ~202 GiB freed on CorbanuDrive, ~134 GiB on glitch)</td><td>—</td><td>list of Aug/Sep worktrees for Travis (resolved: wt-salvage, 10-14)</td></tr>
+<tr><td>coordinator (main repairs)</td><td>#670, #684, #696 (Windows clippy after #645, #659, #681)</td><td>—</td><td>—</td></tr>
+<tr><td>ci-health</td><td>#677, #678, #679, #683, #690, #692, #693, #695, #704, #710, #711, #719 (real Linux sandbox bugs fixed in #690, #693)</td><td>#673 (reopened later), #347</td><td>#691, #694; closed draft #631</td></tr>
+<tr><td>misc2</td><td>#700, #707 (#157, replaces #273, <code>remote_env</code> back in rust-ci-full); #705 left open</td><td>#412, #157; #273 closed</td><td>#708, #709</td></tr>
+<tr><td colspan="4"><i>Since the previous update (18:46Z):</i></td></tr>
+<tr><td>handoff-doc</td><td>#706 (previous handoff update)</td><td>—</td><td>—</td></tr>
+<tr><td>misc3</td><td>#714 (#651 item 7: missing database folder protected), #715 (#609 item 4: API key vs ChatGPT sign-in in <code>/providers</code>/<code>/model</code>)</td><td>—</td><td>—</td></tr>
+<tr><td>triage-709</td><td>#712 (test only: #709 was a fixture bug, not an approval leak)</td><td>#709</td><td>#713</td></tr>
+<tr><td>remote-tests</td><td>#723 (#708 remote lane); #724 left open “needs security sign-off” (#721 + #713; merged 10-14 with sign-off)</td><td>#708</td><td>#721 (shell_command ran on the host in remote sessions), #722</td></tr>
+<tr><td>win158</td><td>#705 (#158 option b, Travis signed off: folders Low only while a session uses them, per-user refcount, crash repair)</td><td>— (#158 open for older items)</td><td>#733, #734</td></tr>
+<tr><td>pf84-close</td><td>#720 (PF-84 S06 slice B accepted, S06 archived, flag-removal prerequisites), #726 (#588 option A)</td><td>—</td><td>—</td></tr>
+<tr><td>agg-small</td><td>#725 (#646), #728 (#626 zsh-fork note), #727 (#660 Codex-pane notice), #729 (#651 item 6, macOS per-entry)</td><td>#646, #651</td><td>#732</td></tr>
+<tr><td>ci-pr-win</td><td>#730 (Windows clippy required on PRs); outside contributor's #629 merged</td><td>#717</td><td>throwaway proof PR #731 closed; #673 reopened</td></tr>
+<tr><td>housekeep2</td><td>— (cleanup only: ~31 GB freed, 18 worktrees, old integration builds)</td><td>—</td><td>list for Travis (resolved: decision 19, wt-salvage)</td></tr>
+<tr><td>reel-pf84</td><td>#735 (named-accounts reel 8:12 on the <code>demos</code> release; on Cloudflare since 10-14, #761)</td><td>—</td><td>—</td></tr>
+<tr><td>qual-aggr3 (code-blind)</td><td>#741 (third Aggressive run record: 51/6/7 of 64, not passed)</td><td>#653, #738</td><td>#736, #737, #739, #740</td></tr>
+<tr><td>agg-505</td><td>— (#662 finished and ready, head <code>8c9168a1a8</code>, APPROVE, checks green; merged 10-14 07:06Z with Travis's sign-off)</td><td>—</td><td>—</td></tr>
+<tr><td>flake-673</td><td>#742 (placeholder-registry lock; #615 was the same bug; #693 follow-ups removed)</td><td>#673, #615</td><td>#743, #744, #745</td></tr>
+<tr><td>reel-agg</td><td>#746 (Aggressive reel 9:58 on the <code>demos</code> release; on Cloudflare since 10-14, #761)</td><td>—</td><td>—</td></tr>
+<tr><td>(automatic)</td><td>—</td><td>#406 (20:44Z), #718 (postmerge tracker, opened and closed itself 02:56Z)</td><td>—</td></tr>
+<tr><td colspan="4"><i>Since the previous update (10-14 05:40Z):</i></td></tr>
+<tr><td>moderate-prep</td><td>#751 (Moderate readiness, <code>docs/plans/moderate-ships-readiness.md</code>)</td><td>—</td><td>#747, #748, #749, #750</td></tr>
+<tr><td>handoff-doc2</td><td>#754 (previous handoff update)</td><td>—</td><td>—</td></tr>
+<tr><td>agg-fix4</td><td>#752 (#736 boundary holds — wording only; #737 global config writers; #740)</td><td>#736, #737, #740</td><td>#758</td></tr>
+<tr><td>coordinator (sign-offs, 07:06Z)</td><td>#724 (#721, #713), #662 (#505 approvals at confirmation) — both with Travis's sign-off</td><td>#721, #713 (#505 still open)</td><td>—</td></tr>
+<tr><td>prices</td><td>#762 (<code>gpt-6.1-sol</code>, Sol promo boundary test, DeepSeek holiday-list check)</td><td>— (#368 open)</td><td>—</td></tr>
+<tr><td>reel-publish</td><td>#761 (Cloudflare watch links; both reels live)</td><td>—</td><td>—</td></tr>
+<tr><td>mod-748</td><td>#760 (Moderate refusals name the level)</td><td>#748</td><td>—</td></tr>
+<tr><td>kc-758</td><td>#770 (Aggressive always denies the macOS keychain services, incl. contained Claude panes; signed off)</td><td>#758</td><td>— (keychain slip, section 5)</td></tr>
+<tr><td>wt-salvage</td><td>— (all 7 Aug/Sep worktrees were already on main or obsolete; preserved as <code>wip/*-preserved</code> branches with closed drafts #773–#779, then removed)</td><td>—</td><td>—</td></tr>
+<tr><td>sbx-small2</td><td>#767 (#744 timeout 2→10 s), #768 (#743 option a), #769 (#691: Aggressive needs the Windows sandbox)</td><td>#743 (#744, #691 kept open)</td><td>#780</td></tr>
+<tr><td>mod-picker</td><td>#764 (#747 D3: Moderate never leaves the sandbox; D2 broker on), #781 (#750 picker, #749 inspector, D1/D4/D6)</td><td>#747, #749, #750</td><td>#766, #783</td></tr>
+<tr><td>docs-rules</td><td>#785 (<code>AGENTS.md</code>: review-budget extensions and keychain rule)</td><td>—</td><td>—</td></tr>
+<tr><td>acct-or</td><td>#784 (<code>/cost</code> prices OpenRouter from its reported charge, #368 item 1)</td><td>— (#368 open)</td><td>#786</td></tr>
+<tr><td>ci-pr2</td><td>#771 (PR argument-comment lint, restore-only PR caches, PR template), #782 (lint fix in a #769 test)</td><td>—</td><td>throwaway proof PR #772 closed</td></tr>
+<tr><td>qual-aggr4 (code-blind)</td><td>#788 (targeted re-run record: 12/1/7 of 20; overall 53/3/8 of 64, not passed)</td><td>—</td><td>#787, #789, #792</td></tr>
+<tr><td>pf60-s06</td><td>#793 (PF-60 follow-up plan activated, PF-84 plan closed, confirmed by Travis 10-14 ~22:58Z; S06 #400/#401); #790 closed unmerged</td><td>— (#400, #401 open until acceptance)</td><td>—</td></tr>
+<tr><td>nightly-fix</td><td>#753, #755 (product: Windows DB-open retry), #757, #759, #765 (issue_505 test: postmerge red since #662), #791; finished 10-15 03:50Z (see below)</td><td>—</td><td>#756, #796</td></tr>
+<tr><td>(automatic)</td><td>—</td><td>#763 (postmerge tracker: opened 07:53Z for #662's red run, closed itself 15:36Z)</td><td>—</td></tr>
+<tr><td colspan="4"><i>Since the previous update (10-14 16:56Z):</i></td></tr>
+<tr><td>handoff-doc3</td><td>#804 (previous handoff update)</td><td>—</td><td>—</td></tr>
+<tr><td>nightly-fix (cont.)</td><td>#795 (rustls 0.23.46, cargo-deny), #794, #800, #803, #805, #806 — 12 PRs in all; <b>nightly green end to end</b> (run 38646928235 on <code>df3d8c5d1c</code>, one Windows re-run)</td><td>— (#636 left open until the next scheduled nightly passes)</td><td>—</td></tr>
+<tr><td>agg-fix5</td><td>#797 (#787: keys typed before/within 1 s of a prompt never answer it; prompts queue), #798 (#789), #799 (#792), #801 (lint fix)</td><td>#787, #789, #792</td><td>#802</td></tr>
+<tr><td>qual-mod1 (first launch, prep only)</td><td>— (design frozen at <code>7ea9408ad1</code> on <code>qa/moderate-first-20261014</code>; no go file in 8 h; relaunched, section 10)</td><td>—</td><td>—</td></tr>
+<tr><td>sec-small3</td><td>#811 (#783: Moderate on Windows gated like Aggressive), #809 (#743 (b): Linux Claude Code starts in the pane sandbox with the pane's <code>TMPDIR</code>), #810 (#744 (a): log which check refused), #808 (#758 doc: managed proxy)</td><td>#783</td><td>— (#807 filed by the coordinator: #758 robustness follow-ups)</td></tr>
+<tr><td>perm-739</td><td>#813 (#739 option B, signed off: Permissive with protected launch never offers what it will refuse; commands stay in the sandbox); review r6 by coordinator grant</td><td>#739</td><td>#822</td></tr>
+<tr><td>qual-aggr5 (code-blind)</td><td>#819 (second targeted re-run record: overall 54/2/4 + 4 accepted of 64, not passed)</td><td>—</td><td>#816, #817, #818</td></tr>
+<tr><td>ci-cache</td><td>#815 (<code>cache-prune</code> workflow), #823 (macOS core-security cache saved once per push)</td><td>—</td><td>—</td></tr>
+<tr><td>pf60-next</td><td>#812 (S07: Moonshot route pricing, Vercel/Corbanu API reported charges, #786 rule), #821 (S08: #403 reopen warm-up label/notice/<code>skip_reopen_warmup</code>, #396), #825 (S09: verification paths)</td><td>— (#786, #396, #400–#403 open until acceptance)</td><td>#814, #820, #824</td></tr>
+<tr><td>mod-766</td><td>#827 (#766 option (a): nested <code>corbanu exec</code>/<code>review</code> under Moderate held to Moderate via a sandbox-blocked marker file; 9 review rounds)</td><td>#766</td><td>#826</td></tr>
+<tr><td>agg-fix6</td><td>#834 (#816: screen 07, review and picker describe what's enforced at confirmation), #835 (#817: the key guard only drops keys that arrive before/within 1 s of that prompt, never a deliberate later Enter)</td><td>#816, #817</td><td>—</td></tr>
+<tr><td>ci-win-tests</td><td>#828 (native Windows tests on PRs touching tui, core, state or login)</td><td>—</td><td>throwaway proof PRs #829–#833 closed</td></tr>
+<tr><td colspan="4"><i>Since the previous update (10-15 07:15Z; #836 and its addenda):</i></td></tr>
+<tr><td>handoff-doc4</td><td>#836 (previous handoff update, with the 20:50Z and 21:25Z addenda)</td><td>—</td><td>—</td></tr>
+<tr><td>qual-mod1 (code-blind)</td><td>#844 (first “Moderate ships” run record: 16 passed / 15 failed / 3 blocked of 34, not passed)</td><td>—</td><td>#837–#843, #845–#847</td></tr>
+<tr><td>main-ci4</td><td>#856 (code-mode yield-grace tests wait for the tool; a real remote-control disable/enable status race fixed); cargo-deny needed no main change (old PR heads predating #795; #844 got main merged in)</td><td>#848 (postmerge tracker, closed itself)</td><td>#857</td></tr>
+<tr><td>land-cc</td><td>citadelculture drafts #849 (#847), #853 (#814 part), #852 (#820), #850 (#845 part), #851 (#822), with clippy, lint, Windows-path and README fixes pushed to the contributor's branches; 1–2 review rounds each</td><td>#847, #820, #822</td><td>#858, #863, #865, #873 (#845 and #814 kept open)</td></tr>
+<tr><td>land-854</td><td>#854 (citadelculture: a “note:” instead of the WARNING when PATH aliases are denied — #843's macOS case)</td><td>—</td><td>— (#843 open for the Linux remainder, D4)</td></tr>
+<tr><td>pf60-moonshot</td><td>#859 (Moonshot leaves out zero cache counts; <code>/cost</code> had under-reported K3 and K2), #862 (real-request evidence, committed stand-in script); spend ~$0.048, rates unchanged</td><td>—</td><td>—</td></tr>
+<tr><td>mod-fix1</td><td>#869 (#838: Corbanu's security state and keys stay denied after a fresh approval under Moderate), #870 (#846 wording: <code>.env</code> denied only after the restart); #875 left as draft “needs security sign-off” (#837, D5)</td><td>#838, #846</td><td>#874</td></tr>
+<tr><td>qual-aggr6 (code-blind)</td><td>#868 (third targeted re-run record: 58 passed / 0 failed / 2 blocked + 4 accepted of 64; signed off by Travis 10-16, D10)</td><td>—</td><td>#867</td></tr>
+<tr><td>resil-616</td><td>#861 (exec waits out an unreadable home, helper exit 75, <code>home-access.log</code>); review round 6 by grant</td><td>— (#616 stays closed since 10-13; trigger still unknown)</td><td>#866, #872</td></tr>
+<tr><td>sec-826</td><td>#876 (Linux: agent commands under Moderate/Aggressive can't create user namespaces, incl. bubblewrap's PID 1; signed off 10-15 20:55Z)</td><td>#826</td><td>#891</td></tr>
+<tr><td>acct-824</td><td>#882 (a realtime WebSocket session is one ledger request, tokens/cost unknown; ledger format 6)</td><td>— (#824 reopened for WebRTC on an API key)</td><td>#889</td></tr>
+<tr><td>mod-fix2</td><td>#877 (#840 + MOD-28 revoke wording), #883 (#842), #881 (#839), #892 (#841; r6 and a merge-only re-review by grant)</td><td>#840, #842, #839</td><td>#878, #885</td></tr>
+<tr><td>flake-865</td><td>#887 (#865: the state short-wait pool keeps its connections; #866 hermetic test), #893 (core tests wait for the accounting writer)</td><td>#865, #866</td><td>#888</td></tr>
+<tr><td>vault-855</td><td>#879 (#855: a failed <code>/vault add</code> stores nothing, names the OS error, and never stores error text); #886 (no plaintext provider-key
+fallback) merged by the coordinator 10-16 11:05Z with Travis's D17</td><td>#855</td><td>#896</td></tr>
+<tr><td colspan="4"><i>Since the previous update (10-16 04:50Z; #894):</i></td></tr>
+<tr><td>handoff-doc5</td><td>#894 (previous handoff update)</td><td>—</td><td>—</td></tr>
+<tr><td>rel-858</td><td>#895 (private helpers skip the home preflight; a thread's unsaved-rollout entry is dropped when it ends; session-level test)</td><td>#858, #872</td><td>—</td></tr>
+<tr><td>flake-888</td><td>#897 (core test harness skips the developer's <code>~/.agents/skills</code>)</td><td>#888</td><td>#902</td></tr>
+<tr><td>fu-873</td><td>#900 (#873 items 2–5, 7: neutral “refused” wording, one detail line, unified-exec refusals end as refused; tests)</td><td>—</td><td>#901, #905</td></tr>
+<tr><td>small-878</td><td>#903 (#878: broker refusals per session, every kind counts), #904 (#857: a disable can't overwrite a racing enable)</td><td>#878, #857, #896 (same cause as #887)</td><td>#908</td></tr>
+<tr><td>pf60-s10 (code-blind)</td><td>#909 (PF-60-S10 record: 29 passed / 1 failed / 7 blocked of 37; accepted 11:10Z, D24)</td><td>—</td><td>#898, #912, #913</td></tr>
+<tr><td>ci-902</td><td>#906 (core test harness gives protected-path lookups a 20 s bound; cause was a 2 s cap under load on this Mac)</td><td>#902</td><td>#914</td></tr>
+<tr><td>perf-907</td><td>#911 (normalize policy entries once per lookup: ~4× faster; output byte-identical, equivalence test)</td><td>#907</td><td>#918</td></tr>
+<tr><td>flake-905</td><td>#916 (#905: core test ignores MCP startup reports, state tests reserve 4 Bazel cores; #901 popup snapshot)</td><td>#905, #901</td><td>—</td></tr>
+<tr><td>ci-macsec</td><td>#915 (the six #902 suites in the macOS core-security PR job; #914 asserted by try counts and <code>PRAGMA</code> readback)</td><td>#914</td><td>—</td></tr>
+<tr><td>acct-898</td><td>#917 (<code>/review</code> requests shown under the conversation as <code>code-review:</code> and counted)</td><td>#898</td><td>—</td></tr>
+<tr><td>sec-885</td><td>— (#899 open: 6 rounds, each fix stricter; round 7 by grant 2 with sec-885b)</td><td>—</td><td>—</td></tr>
+<tr><td>coordinator (decisions, 11:07Z)</td><td>#886 (D17); closed unmerged: #875 (D5 (c)), #890 (D23)</td><td>#855</td><td>#919 (D20)</td></tr>
+</table>
+
+<h3>8.0a What landed since #933 (2026-10-16 12:30Z – 2026-10-20 12:05Z), by area</h3>
+<p><b>79 PRs merged</b> after #933's snapshot (plus #933 itself), from #924 (10-16 12:36Z) to #1088 (10-20 12:05Z); none between 10-16 13:50Z and 10-19 18:36Z (the 429 stop). Every worker PR had all checks green, an independent Opus 5.5 High APPROVE on its exact head (or the owner's sign-off in place of a further round, as for #986 under D57 (b)) and <code>--match-head-commit</code>. Outside contributors' PRs (citadelculture, bradsbots, meechmeechmeech, sendoeth, swiffle) were landed by land-cc5, land-cc6 and land-ext1 after an independent review each; the column names the worker that landed or wrote each one. Details in each worker's <code>$HOME/.corbanu-workers/&lt;name&gt;.result.md</code>.</p>
+<table>
+<tr><th>PR</th><th>What it does</th><th>Worker</th></tr>
+<tr><td colspan="3"><b>Security: Linux sandbox and user namespaces</b></td></tr>
+<tr><td>#925</td><td>contained Claude panes get #876's user-namespace block; a denied namespace names the rule (#891, D12)</td><td>sec-891</td></tr>
+<tr><td>#953</td><td>retry the bwrap probe on ETXTBSY (#635; bradsbots)</td><td>land-ext1</td></tr>
+<tr><td>#975</td><td>under Moderate a person may allow user namespaces for one approved command, after a warning (D27 (a), signed off)</td><td>sec-891</td></tr>
+<tr><td>#980</td><td>a supervisor stops the whole sandbox when the helper, its parent or bubblewrap dies (#935, D35 A, signed off)</td><td>sec-935</td></tr>
+<tr><td>#1014</td><td>commands run without bubblewrap can't outlive the helper either (#1006, D47 B)</td><td>sec-1006</td></tr>
+<tr><td>#1024</td><td>after untrusted content, that allowance only for a known tool's approved command (D48 (c), signed off)</td><td>sec-d48</td></tr>
+<tr><td>#1025</td><td>remove a killed run's placeholders from a record kept in the Corbanu home (#348, D55); record folder read-only at every level (D69, signed off)</td><td>sec-348</td></tr>
+<tr><td>#1050</td><td>#348 follow-up: review minors (pending uses, folder override, fresh mount check)</td><td>sec-348</td></tr>
+<tr><td>#1062</td><td>hold another run's placeholder folder instead of filling it (#745); keep replaced placeholders (#607 items 4-5)</td><td>sec-745</td></tr>
+<tr><td colspan="3"><b>Security: post-taint command classifier</b></td></tr>
+<tr><td>#899</td><td>fail closed on sed e, nested shell scripts and sed-written scripts (#885; r8 under the coordinator's bar)</td><td>sec-885b</td></tr>
+<tr><td>#986</td><td>arithmetic on variables filled from command output or read is UnseenCode (#937, D33 B; merged on D57 (b))</td><td>sec-937, sec-937b, sec-937c</td></tr>
+<tr><td>#1060</td><td>nesting-depth limit for substitutions; deeper input asks (#1020)</td><td>sec-937c</td></tr>
+<tr><td colspan="3"><b>Security: approvals across a security transition</b></td></tr>
+<tr><td>#962</td><td>no lasting MCP approval offered that a fresh post-taint approval overrides (#942 option (a); meechmeechmeech)</td><td>land-ext1</td></tr>
+<tr><td>#996</td><td>network host approvals answered after a transition are for a stale prompt and store nothing (#945, D37 A, signed off)</td><td>sec-945</td></tr>
+<tr><td>#1019</td><td>command and patch approvals answered after a transition are asked again (#1001, D50)</td><td>sec-1001</td></tr>
+<tr><td>#1021</td><td>the same for MCP approvals; unoffered lasting answers allow once (D50, #1011)</td><td>sec-1001</td></tr>
+<tr><td>#1026</td><td>permission grants end at a security transition (D51)</td><td>sec-1001</td></tr>
+<tr><td>#1033</td><td>under Aggressive, network allow rules saved outside it are suspended (D52)</td><td>sec-1001</td></tr>
+<tr><td>#1042</td><td>under Aggressive, MCP “always approve” saved outside it is suspended (D52)</td><td>sec-1001</td></tr>
+<tr><td>#1053</td><td>a stale run carrying permissions is refused, not decided again (D51 follow-up)</td><td>sec-1001</td></tr>
+<tr><td>#1071</td><td>a tool handler's grants are checked for a transition from when it read them (#1057 part 1)</td><td>sec-1057</td></tr>
+<tr><td>#1075</td><td>say when “always allow” for an MCP server lasts only the session under Aggressive</td><td>sec-1057</td></tr>
+<tr><td colspan="3"><b>Security: levels, windows, .git and wording</b></td></tr>
+<tr><td>#921</td><td>read-only filesystem PATH-alias failures get the note, not the WARNING (#843, D4)</td><td>dec-fix</td></tr>
+<tr><td>#922</td><td>name the project file when an unversioned [security] table stops startup (#845, D1)</td><td>dec-fix</td></tr>
+<tr><td>#926</td><td>Moderate: post-command .git check for planted links and rebase exec steps (#874, #837, D6; D27/D48 interaction fixed)</td><td>git-postcheck, gpc-finish, gpc-finish2</td></tr>
+<tr><td>#948</td><td>the inspector attributes ignored project security (#939; citadelculture)</td><td>land-cc5</td></tr>
+<tr><td>#949</td><td>approvals-off refusals name the security level (#941, D38; citadelculture)</td><td>land-cc5</td></tr>
+<tr><td>#972</td><td>Aggressive confirmed in one window reaches the other windows on the same home (#919, D20)</td><td>agg-919</td></tr>
+<tr><td>#999</td><td>Aggressive confirmed without a live policy: this process's other sessions take approval for every command (#978)</td><td>agg-978</td></tr>
+<tr><td>#1044</td><td>/security: a window whose session hasn't started takes Aggressive's Core level and approvals; #1015 display edge cases</td><td>small-fix4</td></tr>
+<tr><td>#1066</td><td>the TUI keeps the /side refusal (and any first history line) visible above a top viewport (#1039)</td><td>small-fix5</td></tr>
+<tr><td>#1083</td><td>git_postcheck: a command's own workdir is watched and held too (#943 item 11)</td><td>gpc-finish2</td></tr>
+<tr><td colspan="3"><b>Credentials and vault</b></td></tr>
+<tr><td>#960</td><td>vault: corrupt_encrypted_state_fails_closed made deterministic (#349; sendoeth)</td><td>land-ext1</td></tr>
+<tr><td>#1017</td><td>credential broker (Windows): sweep each heap's whole memory for stale key copies (#974; remaining race accepted, D56)</td><td>small-fix3</td></tr>
+<tr><td colspan="3"><b>PF-84 named accounts</b></td></tr>
+<tr><td>#1067</td><td>refuse a model-started spawn on a connection with no credential of its own (#689)</td><td>pf84-ga</td></tr>
+<tr><td>#1069</td><td>run the named-account admission test on Windows; the canary scan skips held lock files (#694)</td><td>pf84-ga</td></tr>
+<tr><td>#1076</td><td>a fork's own config decides whether its source's recorded account applies (#588)</td><td>pf84-ga</td></tr>
+<tr><td>#1081</td><td>docs: flag-removal prerequisite status; #426 end-to-end re-verification test</td><td>pf84-ga</td></tr>
+<tr><td colspan="3"><b>PF-60 developer accounting and /cost</b></td></tr>
+<tr><td>#924</td><td>don't group an ambient-key realtime session under a named account (#889 item 1, D15)</td><td>dec-fix</td></tr>
+<tr><td>#952</td><td>the token lower bound counts reported input (#352; bradsbots)</td><td>land-ext1</td></tr>
+<tr><td>#955</td><td>observe the WebRTC sideband end on a creation attempt (#889; citadelculture)</td><td>land-cc5</td></tr>
+<tr><td>#957</td><td>/cost explains billed warm-up conversations without saved turns (#912; citadelculture)</td><td>land-cc5</td></tr>
+<tr><td>#961</td><td>/cost keeps recorded totals through the ledger checkpoint (citadelculture)</td><td>land-cc6</td></tr>
+<tr><td>#969</td><td>clearer accounting clock and retention diagnostics (citadelculture)</td><td>land-cc6</td></tr>
+<tr><td>#1007</td><td>document the throttle step's real busy wait (#905, D30)</td><td>small-fix3</td></tr>
+<tr><td>#1008</td><td>/cost names Codex Auto Review as unpriced on the OpenAI route (#913, D31 (c))</td><td>small-fix3</td></tr>
+<tr><td>#1040</td><td>/cost names the ledger checkpoint in an incomplete range's overview; “as of this read” (#1009)</td><td>small-fix4</td></tr>
+<tr><td colspan="3"><b>QA records and harnesses</b></td></tr>
+<tr><td>#930</td><td>Tart evaluation for code-blind macOS runs (#864; adopted, D34)</td><td>tart-eval</td></tr>
+<tr><td>#971</td><td>Moderate targeted re-run 2026-10-16 (17 re-run: 12 passed / 2 failed / 3 blocked)</td><td>qual-mod2, qual-mod3</td></tr>
+<tr><td>#1037</td><td>Moderate second targeted re-run (MOD-15 passed, MOD-28 accepted; 34 cases: 30 passed, 4 accepted); signed off, D61</td><td>qual-mod3</td></tr>
+<tr><td>#1046</td><td>PF-60 follow-up live run on Tart (D25, D3, D16; 25 cases: 18 passed / 2 failed / 5 blocked); follow-ups plan completed</td><td>acc-tart1</td></tr>
+<tr><td>#1059</td><td>the realtime harness starts its thread on the cheap route model (#1045, D65)</td><td>small-fix5</td></tr>
+<tr><td>#1078</td><td>Moderate local-model re-run of MOD-09/MOD-21 (#1052): MOD-21 passed, MOD-09 failed item 7</td><td>qwen-1052</td></tr>
+<tr><td colspan="3"><b>Providers, tools, remote control and other product fixes</b></td></tr>
+<tr><td>#860</td><td>replay V1 agent history under offered compatibility aliases (citadelculture)</td><td>land-cc6</td></tr>
+<tr><td>#871</td><td>match native collaboration to the real source provider (citadelculture)</td><td>land-cc6</td></tr>
+<tr><td>#920</td><td>release note: new refused command status in the app-server protocol (#851, D2)</td><td>dec-fix</td></tr>
+<tr><td>#934</td><td>remote control: serialize ephemeral enable with disable (#908)</td><td>rc-908</td></tr>
+<tr><td>#936</td><td>utils-pty: terminate() stops the PTY reader, so an escaped terminal holder can't hang shutdown (#780)</td><td>flake-ci3</td></tr>
+<tr><td>#954</td><td>MCP: release OAuth coordination locks at guard drop (citadelculture)</td><td>land-cc5</td></tr>
+<tr><td>#968</td><td>ZIP consumers on zip 9.0.5 (RUSTSEC-2026-0367..0369), extraction guards kept (citadelculture; D46)</td><td>land-cc5</td></tr>
+<tr><td colspan="3"><b>Reliability, locks, tests and CI</b></td></tr>
+<tr><td>#884</td><td>seed the legacy cooldown migration test durably (citadelculture)</td><td>land-cc6</td></tr>
+<tr><td>#923</td><td>the Linux core-security PR job also runs the #902 Aggressive/Moderate suites</td><td>flake-ci3</td></tr>
+<tr><td>#927</td><td>state: unlock the DB init lock explicitly on drop (#756)</td><td>flake-ci3</td></tr>
+<tr><td>#938</td><td>app-server tests wait for the barrier's marker line, not just the file (#796)</td><td>flake-ci3</td></tr>
+<tr><td>#944</td><td>fix the #842/#507 watcher test race (#931)</td><td>flake-931</td></tr>
+<tr><td>#946</td><td>pf_23_s01: the guard catches a thrown first cell command (bradsbots)</td><td>land-ext1</td></tr>
+<tr><td>#947</td><td>carry unreleased notes into the release checklist (#940; citadelculture)</td><td>land-cc5</td></tr>
+<tr><td>#950</td><td>history: release operation locks while duplicate descriptors remain open (citadelculture)</td><td>land-cc6</td></tr>
+<tr><td>#958</td><td>SDK: bound the turn-failure stream in the ThreadRunError test (swiffle)</td><td>land-ext1</td></tr>
+<tr><td>#959</td><td>state: unlock the accounting claim and lease on drop (#928; bradsbots)</td><td>land-ext1</td></tr>
+<tr><td>#963</td><td>thread-store: unlock the coordination lock on drop (#928; bradsbots)</td><td>land-ext1</td></tr>
+<tr><td>#964</td><td>core: let the SIGTERM cleanup test's trap run at once (bradsbots)</td><td>land-ext1</td></tr>
+<tr><td>#965</td><td>core: keep the release in the terminate test (#349; bradsbots)</td><td>land-ext1</td></tr>
+<tr><td>#976</td><td>the exec-server resume test names the awaited response in its timeouts (#796 A)</td><td>flake-ci3</td></tr>
+<tr><td>#985</td><td>cargo-deny: ignore the zbus 4 unmaintained advisories (RUSTSEC-2026-0370..0372)</td><td>land-cc5</td></tr>
+<tr><td>#1010</td><td>core-plugins: skip ~/.agents/skills in the remote identity snapshot test (#981)</td><td>land-cc6</td></tr>
+<tr><td>#1051</td><td>fix the flaky agent reload test racing the child's initial turn (postmerge 468cf46337)</td><td>main-ci5</td></tr>
+<tr><td>#1068</td><td>make the #945 stale-prompt waiter test deterministic (#1054)</td><td>small-fix5</td></tr>
+<tr><td>#1088</td><td>cargo-deny: record RUSTSEC-2026-0374 (basic-toml unmaintained, compile-time only via age/i18n)</td><td>ci-1002</td></tr>
+</table>
+<p>Closed unmerged in the same window, each with a written explanation (DECLINE RULE): #956 (declined as written; #348 fixed by #1025), #966 (a triage record), #967 (Dependabot Rust 1.99.1; done deliberately in #1027), #880 (superseded by #895).</p>
 </body>
 </html>

@@ -14,6 +14,7 @@ pub(crate) mod confidentiality;
 pub mod confirmed_approvals;
 pub(crate) mod disclosure_gate;
 mod effective_policy;
+pub(crate) mod git_ext_guard;
 pub(crate) mod git_postcheck;
 pub mod grant_offer;
 pub(crate) mod ingress;
@@ -37,6 +38,7 @@ pub(crate) mod taint;
 pub(crate) mod tainted_action;
 pub(crate) mod ui_events;
 pub(crate) mod user_namespaces;
+pub(crate) mod windows_unsandboxed;
 
 pub(crate) use effective_policy::EffectivePolicyInitialization;
 pub(crate) use effective_policy::EffectivePolicyView;

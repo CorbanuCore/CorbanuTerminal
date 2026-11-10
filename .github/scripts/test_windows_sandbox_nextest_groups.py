@@ -341,9 +341,14 @@ class WindowsSandboxNextestGroupTest(unittest.TestCase):
         self.assertEqual(
             sorted(core_elevated_tests()),
             [
+                "issue_1139_moderate_git_folder_writes_name_the_level",
                 "pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write",
                 "pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory",
+                "pf_30_s03_recalled_memory_gates_a_first_protected_action",
+                "pf_30_s03_vault_command_after_untrusted_content_needs_the_human",
+                "sec_439_no_network_names_the_level_only_under_aggressive",
                 "sec_win_1863_command_exec_localhost_unc_cwd_fails_closed",
+                "sec_win_d398_command_exec_non_canonical_cwd",
                 "windows_elevated_does_not_create_missing_workspace_metadata",
                 "windows_elevated_enforces_deny_read_and_protects_setup_marker",
             ],

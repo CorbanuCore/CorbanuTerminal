@@ -102,6 +102,7 @@ use crate::oauth_refresh_mode::McpOAuthRefreshMode;
 use crate::ordered_byte_transport::OrderedByteTransport;
 use crate::protocol_mode::McpProtocolMode;
 use crate::request_cancellation::RequestCancellation;
+use crate::startup_error::auth_error_with_reason;
 use crate::startup_error::is_authentication_required_error;
 use crate::stdio_server_launcher::StdioProcessSlot;
 use crate::stdio_server_launcher::StdioServerCommand;
@@ -2002,6 +2003,7 @@ async fn create_oauth_transport_and_runtime(
     let metadata = manager
         .resolve_metadata()
         .await
+        .map_err(auth_error_with_reason)
         .context("failed to resolve OAuth metadata before using stored credentials")?
         .metadata;
     let use_stored_access_token_only =

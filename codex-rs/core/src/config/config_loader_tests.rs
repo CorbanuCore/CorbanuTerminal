@@ -4164,6 +4164,188 @@ wire_api = "responses"
     Ok(())
 }
 
+/// D483 (#1945): a trusted project's `.codex/config.toml` must not choose
+/// where Corbanu opens its state databases (`sqlite_home`) or writes its logs
+/// (`log_dir`). Returns the built config and the project's `.codex` folder.
+async fn config_with_project_state_locations(
+    tmp: &Path,
+    user_locations: Option<(&Path, &Path)>,
+) -> std::io::Result<(crate::config::Config, std::path::PathBuf)> {
+    let project_root = tmp.join("project");
+    let dot_codex = project_root.join(".codex");
+    tokio::fs::create_dir_all(&dot_codex).await?;
+    tokio::fs::write(
+        dot_codex.join(CONFIG_TOML_FILE),
+        r#"
+model = "project-model"
+sqlite_home = "../state"
+log_dir = "../logs"
+"#,
+    )
+    .await?;
+
+    let codex_home = tmp.join("home");
+    tokio::fs::create_dir_all(&codex_home).await?;
+    make_config_for_test(
+        &codex_home,
+        &project_root,
+        TrustLevel::Trusted,
+        /*project_root_markers*/ None,
+    )
+    .await?;
+    if let Some((sqlite_home, log_dir)) = user_locations {
+        let user_config = tokio::fs::read_to_string(codex_home.join(CONFIG_TOML_FILE)).await?;
+        let sqlite_home = TomlValue::String(sqlite_home.to_string_lossy().into_owned());
+        let log_dir = TomlValue::String(log_dir.to_string_lossy().into_owned());
+        tokio::fs::write(
+            codex_home.join(CONFIG_TOML_FILE),
+            format!("sqlite_home = {sqlite_home}\nlog_dir = {log_dir}\n{user_config}"),
+        )
+        .await?;
+    }
+
+    let config = ConfigBuilder::default()
+        .codex_home(codex_home)
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(project_root),
+            ..Default::default()
+        })
+        .build()
+        .await?;
+    Ok((config, dot_codex))
+}
+
+#[tokio::test]
+async fn project_config_cannot_set_sqlite_home_or_log_dir() -> std::io::Result<()> {
+    let tmp = tempdir()?;
+    let (config, dot_codex) =
+        config_with_project_state_locations(tmp.path(), /*user_locations*/ None).await?;
+    let codex_home = config.codex_home.to_path_buf();
+
+    // The rest of the project config still applies.
+    assert_eq!(config.model.as_deref(), Some("project-model"));
+    assert_eq!(config.log_dir, codex_home.join("log"));
+    // The project's values would resolve against its `.codex` folder.
+    assert_ne!(
+        config.sqlite.home(),
+        tmp.path().join("project").join("state")
+    );
+    if std::env::var_os(codex_state::SQLITE_HOME_ENV).is_none() {
+        assert_eq!(config.sqlite.home(), codex_home);
+    }
+    let expected_warning = format!(
+        concat!(
+            "Ignored unsupported project-local config keys in {}: sqlite_home, log_dir. ",
+            "If you want these settings to apply, manually set them in your ",
+            "user-level config.toml."
+        ),
+        dot_codex.join(CONFIG_TOML_FILE).display(),
+    );
+    assert!(
+        config.startup_warnings.contains(&expected_warning),
+        "expected {expected_warning:?} in {:?}",
+        config.startup_warnings
+    );
+    for key in ["sqlite_home", "log_dir"] {
+        assert!(
+            config
+                .config_layer_stack
+                .effective_config()
+                .get(key)
+                .is_none(),
+            "expected the project's {key} to be ignored"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn user_config_sqlite_home_and_log_dir_still_apply_next_to_a_project() -> std::io::Result<()>
+{
+    let tmp = tempdir()?;
+    let user_sqlite_home = tmp.path().join("user-state");
+    let user_log_dir = tmp.path().join("user-logs");
+    let (config, _dot_codex) = config_with_project_state_locations(
+        tmp.path(),
+        Some((user_sqlite_home.as_path(), user_log_dir.as_path())),
+    )
+    .await?;
+
+    assert_eq!(config.sqlite.home(), user_sqlite_home);
+    assert_eq!(config.log_dir, user_log_dir);
+    Ok(())
+}
+
+/// D483 (#1945): a config lock replaces the whole config, so a project must not
+/// name one to replay (that would set `sqlite_home` and `log_dir`, and every
+/// other key the project denylist removes) or choose where locks are written.
+#[tokio::test]
+async fn project_config_cannot_replay_a_config_lock() -> std::io::Result<()> {
+    let tmp = tempdir()?;
+    let lock_sqlite_home = tmp.path().join("lock-state");
+    let lock_log_dir = tmp.path().join("lock-logs");
+    let lock_path = tmp.path().join("planted.config.lock.toml");
+    tokio::fs::write(
+        &lock_path,
+        format!(
+            "version = {}\ncodex_version = \"older-version\"\n\n[config]\nsqlite_home = {}\nlog_dir = {}\n",
+            crate::config_lock::CONFIG_LOCK_VERSION,
+            TomlValue::String(lock_sqlite_home.to_string_lossy().into_owned()),
+            TomlValue::String(lock_log_dir.to_string_lossy().into_owned()),
+        ),
+    )
+    .await?;
+    let project_root = tmp.path().join("project");
+    let dot_codex = project_root.join(".codex");
+    tokio::fs::create_dir_all(&dot_codex).await?;
+    tokio::fs::write(
+        dot_codex.join(CONFIG_TOML_FILE),
+        format!(
+            "model = \"project-model\"\n\n[debug.config_lockfile]\nload_path = {}\nexport_dir = {}\nallow_codex_version_mismatch = true\n",
+            TomlValue::String(lock_path.to_string_lossy().into_owned()),
+            TomlValue::String(tmp.path().join("exported").to_string_lossy().into_owned()),
+        ),
+    )
+    .await?;
+    let codex_home = tmp.path().join("home");
+    tokio::fs::create_dir_all(&codex_home).await?;
+    make_config_for_test(
+        &codex_home,
+        &project_root,
+        TrustLevel::Trusted,
+        /*project_root_markers*/ None,
+    )
+    .await?;
+
+    let config = ConfigBuilder::default()
+        .codex_home(codex_home)
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(project_root),
+            ..Default::default()
+        })
+        .build()
+        .await?;
+
+    assert!(config.config_lock_toml.is_none(), "the lock was replayed");
+    assert_eq!(config.model.as_deref(), Some("project-model"));
+    assert_ne!(config.sqlite.home(), lock_sqlite_home);
+    assert_eq!(config.log_dir, config.codex_home.join("log").to_path_buf());
+    let expected_warning = format!(
+        concat!(
+            "Ignored unsupported project-local config keys in {}: debug.config_lockfile. ",
+            "If you want these settings to apply, manually set them in your ",
+            "user-level config.toml."
+        ),
+        dot_codex.join(CONFIG_TOML_FILE).display(),
+    );
+    assert!(
+        config.startup_warnings.contains(&expected_warning),
+        "expected {expected_warning:?} in {:?}",
+        config.startup_warnings
+    );
+    Ok(())
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn project_trust_does_not_match_configured_alias_for_canonical_cwd() -> std::io::Result<()> {

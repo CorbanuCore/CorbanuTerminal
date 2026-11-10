@@ -67,6 +67,9 @@ pub(crate) struct Session {
     /// transferring ownership of the private session's event receiver.
     pub(crate) parent_observer_event_tx: OnceLock<Sender<Event>>,
     pub(super) agent_status: watch::Sender<AgentStatus>,
+    /// Set when `spawn_agent` created this session and queued its first turn
+    /// (D435). A session reloaded later is a new one, so this stays false.
+    pub(crate) spawned_with_first_turn: std::sync::atomic::AtomicBool,
     pub(super) state: Mutex<SessionState>,
     /// Orders accepted settings commits and their persisted events with compaction checkpoints.
     /// Keep this separate from `state` so storage I/O does not block runtime state access.
@@ -2395,6 +2398,7 @@ impl Session {
                 tx_event: tx_event.clone(),
                 parent_observer_event_tx: OnceLock::new(),
                 agent_status,
+                spawned_with_first_turn: Default::default(),
                 state: Mutex::new(state),
                 thread_settings_persistence: Semaphore::new(/*permits*/ 1),
                 code_mode_message_tasks: CodeModeMessageTasks::default(),
