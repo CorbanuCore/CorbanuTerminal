@@ -50,13 +50,12 @@ red status noise without testing the code.
   one re-run (`--flaky_test_attempts`) for the intermittent #691 test. If that
   test fails both attempts again, add it to the skip list in `.bazelrc`'s
   `windows-native-tests` config.
-- Windows gnullvm cross shards (`Bazel test on windows-latest for
-  x86_64-pc-windows-gnullvm shard N/4`, `bazel.yml` `test-windows-shard`),
-  meant to run the `*-windows-cross` targets: their `bazel test shard` step
-  runs only with authenticated BuildBuddy execution. Without it every shard
-  skips that step and still reports success, with a notice and job summary
-  saying so. Together with the unit-test-only native lane above, no CI job
-  runs any crate's Bazel integration tests (`tests/*.rs`) on Windows (#1856).
+- Windows gnullvm cross shards
+  (`Bazel test on windows-latest for x86_64-pc-windows-gnullvm shard N/4`,
+  `bazel.yml` `test-windows-shard`), meant to run the `*-windows-cross`
+  targets: their `bazel test shard` step runs only with authenticated
+  BuildBuddy execution. Without it every shard skips that step and still
+  reports success, with a notice and job summary saying so.
 - Argument comment lint on changed crates
   (`rust-ci / Argument comment lint - changed crates`, #636): runs the
   `/*param*/` lint, test code included, on every `codex-rs` crate whose `.rs`
@@ -103,8 +102,7 @@ block merges. Without a BuildBuddy remote cache these cold Bazel jobs take two
 to five hours, so they no longer run on every PR and get the 360-minute
 hosted-runner maximum:
 
-- Bazel test (Linux gnu and musl, and native Windows unit tests for every
-  crate; its integration tests are skipped as incompatible there, #1856), clippy,
+- Bazel test (Linux gnu and musl, and native Windows for every crate), clippy,
   and release-build verification.
 - Argument comment lint on Linux and macOS (Windows still runs on PRs;
   `rust-ci-full.yml` does not repeat it).

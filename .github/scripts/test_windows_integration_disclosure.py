@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""#1856: the Windows gnullvm shard says plainly, when it skips, that Windows
-Bazel integration tests did not run, and docs/ci.md says no CI job runs them.
+"""#1856: the Windows gnullvm cross shard says plainly, when it skips, that its
+bazel test step did not run, and docs/ci.md documents the cross shards.
 Runs the detection step's own script with and without a key: its outputs (and
 so every later `if:` and the job outcome) are unchanged."""
 
@@ -38,6 +38,7 @@ def run_detect(key: str) -> tuple[str, str, str]:
             "BUILDBUDDY_API_KEY": key,
             "GITHUB_OUTPUT": str(output),
             "GITHUB_STEP_SUMMARY": str(summary),
+            "SHARD": "3",
         }
         done = subprocess.run(
             ["bash", "-c", detect_script()], env=env, check=True, capture_output=True, text=True
@@ -47,13 +48,16 @@ def run_detect(key: str) -> tuple[str, str, str]:
 
 
 class WindowsIntegrationDisclosureTest(unittest.TestCase):
-    def test_skipped_shard_discloses_integration_tests_did_not_run(self) -> None:
+    def test_skipped_shard_discloses_its_tests_did_not_run(self) -> None:
         output, summary, stdout = run_detect("")
         self.assertEqual(output, "enabled=false\n")
         for text in (summary, stdout):
-            self.assertIn("integration tests", text)
-            self.assertIn("did NOT run", text)
+            self.assertIn("Windows gnullvm cross shard 3/4", text)
+            self.assertIn("bazel test step did NOT run", text)
+            self.assertIn("BuildBuddy", text)
             self.assertIn("#1856", text)
+            # Only what this shard knows: no claim about other lanes' tests.
+            self.assertNotIn("unit tests only", text)
         self.assertIn("::notice::", stdout)
 
     def test_authenticated_shard_is_unchanged(self) -> None:
@@ -67,11 +71,12 @@ class WindowsIntegrationDisclosureTest(unittest.TestCase):
         self.assertIn(f"if: matrix.shard == 1 && {gate}", text)
         self.assertIn(f"if: always() && !cancelled() && {gate}", text)
 
-    def test_docs_say_no_ci_job_runs_windows_integration_tests(self) -> None:
+    def test_docs_document_the_cross_shards(self) -> None:
         docs = DOCS.read_text(encoding="utf-8")
-        self.assertIn("no CI job\n  runs any crate's Bazel integration tests (`tests/*.rs`) on Windows (#1856)", docs)
-        self.assertIn("native Windows unit tests for every", docs)
-        self.assertNotIn("native Windows for every crate", docs)
+        self.assertIn("(`Bazel test on windows-latest for x86_64-pc-windows-gnullvm shard N/4`,", docs)
+        self.assertIn("Without it every shard skips that step and still\n  reports success", docs)
+        # The nightly line is unchanged.
+        self.assertIn("native Windows for every crate", docs)
 
 
 if __name__ == "__main__":
