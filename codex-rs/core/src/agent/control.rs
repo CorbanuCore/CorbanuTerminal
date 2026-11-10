@@ -525,6 +525,27 @@ impl LocalAgentControl {
         Ok(())
     }
 
+    /// Corbanu (as main's `send_message`/`followup_task`): admit the message to the durable
+    /// mailbox even when every agent slot is busy; a follow-up's turn then waits for a slot
+    /// instead of the message being refused.
+    pub(crate) async fn send_inter_agent_communication_without_capacity_check(
+        &self,
+        agent_id: ThreadId,
+        communication: InterAgentCommunication,
+        agent_communication_context: AgentCommunicationContext,
+        start_options: TurnStartOptions,
+    ) -> CodexResult<String> {
+        let state = self.runtime.upgrade()?;
+        self.send_inter_agent_communication_after_capacity_check(
+            agent_id,
+            &state,
+            communication,
+            agent_communication_context,
+            start_options,
+        )
+        .await
+    }
+
     async fn send_inter_agent_communication_after_capacity_check(
         &self,
         agent_id: ThreadId,

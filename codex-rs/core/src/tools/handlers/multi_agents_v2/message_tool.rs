@@ -167,9 +167,10 @@ pub(super) async fn handle_message_string_tool(
         MessageDeliveryMode::QueueOnly => AgentCommunicationKind::Message,
         MessageDeliveryMode::TriggerTurn => AgentCommunicationKind::Followup,
     };
-    // The durable mailbox admits the message before the hand-off (#1999/#2033, D485).
+    // The durable mailbox admits the message before the hand-off (#1999/#2033, D485). As main,
+    // a follow-up is admitted even when every agent slot is busy; its turn waits for a slot.
     local_agent_control
-        .send_inter_agent_communication(
+        .send_inter_agent_communication_without_capacity_check(
             receiver_thread_id,
             communication,
             AgentCommunicationContext::new(kind, session.thread_id),
@@ -183,7 +184,7 @@ pub(super) async fn handle_message_string_tool(
             },
         )
         .await
-        .map_err(|err| collab_agent_error(receiver_thread_id, err))?;
+        .map_err(|err| collab_v2_agent_error(receiver_thread_id, err))?;
     local_agent_control.note_native_agent_dispatch(session.thread_id);
     emit_sub_agent_activity(
         &session,

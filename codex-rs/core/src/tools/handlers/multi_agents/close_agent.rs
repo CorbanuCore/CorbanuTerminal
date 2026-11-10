@@ -75,7 +75,8 @@ async fn handle_close_agent(
     let result = local_agent_control.close_agent(agent_id).await;
     let (status, receiver_agent) = match &result {
         Ok(snapshot) => (
-            snapshot.status().cloned().unwrap_or(AgentStatus::NotFound),
+            // Corbanu (as main): a registered agent that is not loaded reports `Unloaded`.
+            snapshot.status().cloned().unwrap_or(AgentStatus::Unloaded),
             snapshot.metadata().clone(),
         ),
         Err(_) => (previous_status, receiver_agent),

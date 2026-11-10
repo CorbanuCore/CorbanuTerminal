@@ -90,20 +90,15 @@ async fn handle_resume_agent(
 
     let result = async {
         let config = build_agent_resume_config(&turn).map_err(FunctionCallError::RespondToModel)?;
-        // #1074: an agent that must be started again is refused before it starts when its
-        // connection has no credential of its own (#689).
-        if matches!(
-            local_agent_control.get_status(receiver_thread_id).await,
-            AgentStatus::NotFound
-        ) && let Some(message) = resume_default_key_error(
+        // #1074: an agent that must be started again (not loaded, whatever its listed status) is
+        // refused before it starts when its connection has no credential of its own (#689).
+        let start_refusal = resume_default_key_error(
             &config,
             &config.model_provider_id,
             &config.model_provider,
             &turn.config.model_provider_id,
             turn.provider.info(),
-        ) {
-            return Err(FunctionCallError::RespondToModel(message));
-        }
+        );
         let source = thread_spawn_source(
             session.thread_id(),
             &turn.session_source,
@@ -113,9 +108,9 @@ async fn handle_resume_agent(
             Some(format!("resume:{receiver_thread_id}")),
         )?;
         local_agent_control
-            .resume_agent(config, receiver_thread_id, source)
+            .resume_agent(config, receiver_thread_id, source, start_refusal)
             .await
-            .map_err(|err| collab_agent_error(receiver_thread_id, err))
+            .map_err(|err| collab_v2_agent_error(receiver_thread_id, err))
     }
     .await;
     // #1144: open sub-agents that stayed closed are reported with why.
