@@ -142,7 +142,8 @@ async fn retries_a_native_tls_failure_after_another_request_caches_rustls() {
         .await
         .expect_err("native TLS handshake should fail");
     let rustls_client = pool
-        .rustls_client_for_route(&route)
+        .rustls_client_for_route(destination.as_str(), &route)
+        .await
         .expect("rustls fallback client should build");
     pool.rustls_clients
         .as_ref()
@@ -187,7 +188,8 @@ async fn does_not_retry_a_cached_rustls_tls_protocol_failure() {
     .with_tls_backend_fallback();
     let destination = reqwest::Url::parse(&url).expect("valid HTTPS URL");
     let rustls_client = pool
-        .rustls_client_for_route(&OutboundProxyRoute::Direct)
+        .rustls_client_for_route(destination.as_str(), &OutboundProxyRoute::Direct)
+        .await
         .expect("rustls fallback client should build");
     pool.rustls_clients
         .as_ref()

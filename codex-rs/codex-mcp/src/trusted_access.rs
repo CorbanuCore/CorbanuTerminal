@@ -229,6 +229,7 @@ impl TrustedAccessContext {
                 redirect_policy: HttpRedirectPolicy::Stop,
                 request_id: "trusted-access-status".to_string(),
                 stream_response: true,
+                address_policy: None,
             })
             .await
             .ok()?;

@@ -371,6 +371,40 @@ reaches one only if you list it there. A shell profile that exports a key
 itself (for example a login shell reading `~/.zprofile`) is outside this
 filter.
 
+<a id="mcp-oauth-addresses"></a>
+
+## MCP OAuth Address Policy
+
+OAuth sign-in for a Streamable HTTP MCP server (discovery, client
+registration, token and refresh requests, and every redirect they follow) may
+connect only to public addresses, unless the server's own URL is local:
+
+| MCP server `url`                                                               | OAuth requests may also reach                        |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| `localhost`, `*.localhost` or a loopback IP (`127.0.0.1`, `[::1]`)             | loopback addresses                                   |
+| a private IP (`10.x`, `172.16-31.x`, `192.168.x`, `100.64.0.0/10`, `fc00::/7`) | private addresses                                    |
+| any IP literal                                                                 | that one address                                     |
+| any other host name                                                            | public addresses only, whatever the name resolves to |
+
+Link-local and cloud metadata addresses (`169.254.169.254`, `fd00:ec2::254`,
+`fd20:ce::254`), metadata host names (`metadata.google.internal`), `0.0.0.0`,
+multicast and reserved addresses are refused, except an IP literal that is the
+server URL's own address. Host names are checked after DNS resolution and the
+request connects only to the checked address. With an HTTP proxy, the proxy
+resolves host names, so only IP literals and host names themselves are
+checked. A blocked request fails with `MCP OAuth request blocked: ...`.
+
+A server named by a host name that resolves to a loopback or private address
+(an intranet name, `host.docker.internal`, a `.local` name or an `/etc/hosts`
+alias) can't use OAuth: even discovery on its own host is refused, so such a
+server that doesn't use OAuth shows its auth status as unknown, with a
+warning at startup. Use the server's IP address in `url` where its certificate
+allows that. A server URL of `0.0.0.0` allows only `0.0.0.0` itself, so use
+`localhost` or `127.0.0.1` if its OAuth endpoints are on loopback. Corbanu
+does not send OAuth requests through a remote executor that predates this
+policy; sign-in fails with `MCP OAuth request not sent: ...` until the
+executor is updated.
+
 <a id="telegram"></a>
 
 ## Telegram Connector

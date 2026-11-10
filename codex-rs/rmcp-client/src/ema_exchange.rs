@@ -72,14 +72,18 @@ pub(crate) async fn exchange_id_jag<L: Send, R: Send>(
         request.idp_token_endpoint,
         /*has_configured_headers*/ false,
         StreamableHttpRedirectMode::Legacy,
-    )?;
+    )?
+    .with_address_policy_from(request.idp_issuer);
     let resource_http = OAuthHttpClientAdapter::new_with_redirect_mode(
         request.resource_http_client,
         build_default_headers(/*http_headers*/ None, /*env_http_headers*/ None)?,
         request.authorization_server_token_endpoint,
         /*has_configured_headers*/ false,
         StreamableHttpRedirectMode::Legacy,
-    )?;
+    )?
+    // The token endpoint comes from discovered metadata; `resource` matches the configured
+    // MCP server's origin (validate_ema_auth_resource).
+    .with_address_policy_from(request.resource);
     let refresh_token = RefreshToken::new(request.refresh_token);
     // Discovery has already verified each registration's authentication method. The SDK owns
     // token validation and the two exchanges; Codex retains routing and credential policy.

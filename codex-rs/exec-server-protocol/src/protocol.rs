@@ -19,6 +19,7 @@ use codex_utils_path_uri::PathUri;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::HttpAddressPolicy;
 use crate::JSONRPCErrorError;
 use crate::ProcessId;
 
@@ -197,6 +198,10 @@ pub struct EnvironmentCapabilities {
     /// Whether approved Linux root writes preserve devices and denied root-metadata symlink targets.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub linux_approved_root_write_preserves_restrictions: bool,
+    /// Whether `http/request` enforces `addressPolicy`. Clients must not send
+    /// a policy-bearing request to an executor without it.
+    #[serde(default)]
+    pub http_address_policy: bool,
 }
 
 impl EnvironmentCapabilities {
@@ -336,6 +341,7 @@ impl EnvironmentInfo {
                 windows_mxc,
                 linux_root_write_preserves_devices: cfg!(target_os = "linux"),
                 linux_approved_root_write_preserves_restrictions: cfg!(target_os = "linux"),
+                http_address_policy: true,
             },
         }
     }
@@ -1148,7 +1154,7 @@ pub struct HttpHeader {
 }
 
 /// Redirect behavior for an executor-side HTTP request.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum HttpRedirectPolicy {
     /// Follow redirects using the HTTP client's normal limits.
@@ -1195,6 +1201,10 @@ pub struct HttpRequestParams {
     /// Return after response headers and stream the response body as deltas.
     #[serde(default)]
     pub stream_response: bool,
+    /// Restricts which addresses the request, and each redirect hop, may
+    /// connect to. Omitted means no restriction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address_policy: Option<HttpAddressPolicy>,
 }
 
 /// HTTP response envelope returned from an executor `http/request` call.
@@ -1585,6 +1595,7 @@ mod tests {
                 windows_mxc: false,
                 linux_root_write_preserves_devices: false,
                 linux_approved_root_write_preserves_restrictions: false,
+                http_address_policy: false,
             }
         );
 
@@ -1661,6 +1672,7 @@ mod tests {
                     "fileWriteStreaming": false,
                     "shellSnapshotV2": false,
                     "windowsMxc": false,
+                    "httpAddressPolicy": false,
                 });
                 expected_wire
                     .as_object_mut()
@@ -1726,6 +1738,7 @@ mod tests {
                 "fileWriteStreaming": false,
                 "shellSnapshotV2": false,
                 "windowsMxc": false,
+                "httpAddressPolicy": false,
             },
         });
         let info: EnvironmentInfo = serde_json::from_value(expected.clone())

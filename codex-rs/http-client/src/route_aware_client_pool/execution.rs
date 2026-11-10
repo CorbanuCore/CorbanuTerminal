@@ -17,6 +17,7 @@ use crate::HttpResponse;
 use crate::OutboundProxyRoute;
 #[cfg(windows)]
 use crate::RouteFailureClass;
+use crate::address_filter::find_disallowed_address;
 #[cfg(windows)]
 use crate::client::TransportClient;
 use crate::client::apply_default_headers;
@@ -98,6 +99,7 @@ impl RouteAwareClientPool {
                 .http_client_factory
                 .network_policy()
                 .acquire(&current_url)?;
+            self.check_address(&current_url)?;
             let hop = async {
                 let (current_route, mut client, selected_tls_backend) = self
                     .client_for_url_with_resolver(current_url.as_str(), &resolve_route)
@@ -165,6 +167,15 @@ impl RouteAwareClientPool {
                 {
                     client.log_error_summary(&request_method, &request_url, error);
                 }
+                let result = match result {
+                    Err(RouteAwareRequestError::Request(error)) if self.has_address_filter() => {
+                        match find_disallowed_address(&error) {
+                            Some(disallowed) => Err(disallowed.into()),
+                            None => Err(error.into()),
+                        }
+                    }
+                    result => result,
+                };
                 let response = result?;
                 let next_request = if follows_redirects_manually && is_redirect(response.status()) {
                     redirect_url(&response).and_then(|next_url| {
@@ -263,7 +274,10 @@ impl RouteAwareClientPool {
         };
         let mut fallback_client = match candidate {
             Some(client) => client,
-            None => self.rustls_client_for_route(current_route)?,
+            None => {
+                self.rustls_client_for_route(current_url.as_str(), current_route)
+                    .await?
+            }
         };
         fallback_client.request_logging = self.client_builder.request_logging;
 
@@ -358,6 +372,11 @@ impl RouteAwareClientPool {
             .with_windows_proxy_pipe(pipe);
         if backend == SelectedTlsBackend::RustlsFallback {
             builder = builder.with_rustls_tls();
+        }
+        if let Some(filter) =
+            self.address_filter_for_resolved_route(route, /*system_proxy*/ None)
+        {
+            builder = builder.resolved_address_filter(filter);
         }
         builder
             .build_for_resolved_route(&self.http_client_factory, self.route_class, route)

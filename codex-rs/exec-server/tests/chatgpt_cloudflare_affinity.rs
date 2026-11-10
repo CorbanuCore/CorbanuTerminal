@@ -150,6 +150,7 @@ async fn execute_http_request(
                 redirect_policy: HttpRedirectPolicy::Follow,
                 request_id: request_id.to_string(),
                 stream_response: false,
+                address_policy: None,
             })?,
         )
         .await?;

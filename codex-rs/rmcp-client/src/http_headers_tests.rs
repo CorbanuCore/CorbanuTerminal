@@ -269,6 +269,7 @@ async fn connection_headers_are_cached_and_origin_bound() {
         redirect_policy: HttpRedirectPolicy::Follow,
         request_id: session.to_string(),
         stream_response: true,
+        address_policy: None,
     };
     let mut cross_request = request("cross-origin");
     cross_request.method = "GET".to_string();
@@ -384,6 +385,7 @@ async fn concurrent_rejected_posts_share_one_headers_refresh() {
             redirect_policy: HttpRedirectPolicy::Follow,
             request_id: request_id.to_string(),
             stream_response: true,
+            address_policy: None,
         };
 
         let (left, right) = tokio::join!(
@@ -470,6 +472,7 @@ async fn helper_refresh_preserves_oauth_challenges_and_retries_at_most_once() {
                 redirect_policy: HttpRedirectPolicy::Follow,
                 request_id: "oauth-challenge".to_string(),
                 stream_response: streamed,
+                address_policy: None,
             };
             let (response, body) = if streamed {
                 let (response, mut body) = client
@@ -535,6 +538,7 @@ async fn refresh_retry_rechecks_deadline_and_redirects() {
                 redirect_policy: HttpRedirectPolicy::Stop,
                 request_id: "mcp-request".to_string(),
                 stream_response: false,
+                address_policy: None,
             },
             |params| {
                 let mut requests = requests.lock().expect("requests lock");

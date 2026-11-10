@@ -29,6 +29,7 @@ fn request(url: impl Into<String>) -> HttpRequestParams {
         redirect_policy: HttpRedirectPolicy::Follow,
         request_id: "redirect-test".to_string(),
         stream_response: false,
+        address_policy: None,
     }
 }
 

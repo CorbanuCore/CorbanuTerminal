@@ -24,6 +24,7 @@ pub(crate) async fn warm_http_client(
             redirect_policy: codex_exec_server::HttpRedirectPolicy::Stop,
             request_id: "test-client-warmup".to_string(),
             stream_response: false,
+            address_policy: None,
         })
         .await?;
     Ok(())

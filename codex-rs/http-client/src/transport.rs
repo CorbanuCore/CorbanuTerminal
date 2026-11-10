@@ -240,7 +240,8 @@ impl ReqwestTransport {
             RouteAwareRequestError::Route(error) => TransportError::Build(error.to_string()),
             RouteAwareRequestError::Build(error) => TransportError::Build(error),
             error @ (RouteAwareRequestError::UnsupportedRedirectScheme(_)
-            | RouteAwareRequestError::TooManyRedirects) => {
+            | RouteAwareRequestError::TooManyRedirects
+            | RouteAwareRequestError::DisallowedAddress(_)) => {
                 TransportError::Network(error.to_string())
             }
         }
