@@ -129,7 +129,6 @@ use codex_protocol::protocol::W3cTraceContext;
 use codex_rollout_trace::InferenceTraceAttempt;
 use codex_rollout_trace::InferenceTraceContext;
 use codex_tools::ToolSpec;
-use codex_tools::create_tools_json_for_responses_api;
 use codex_tools::create_tools_json_for_responses_lite;
 use codex_tools::create_tools_raw_json_for_responses_api;
 use eventsource_stream::Event;
@@ -1002,6 +1001,7 @@ fn trace_stream_timing(label: &str, start: Instant) {
 fn response_event_name(event: &ResponseEvent) -> &'static str {
     match event {
         ResponseEvent::Created { .. } => "created",
+        ResponseEvent::GuardianAssessment(_) => "guardian_assessment",
         ResponseEvent::OutputItemDone(_) => "output_item_done",
         ResponseEvent::OutputItemAdded(_) => "output_item_added",
         ResponseEvent::ServerModel(_) => "server_model",
@@ -2377,7 +2377,8 @@ impl ModelClient {
                     Some(
                         ReasoningEffortConfig::XHigh
                         | ReasoningEffortConfig::Max
-                        | ReasoningEffortConfig::Ultra,
+                        | ReasoningEffortConfig::Ultra
+                        | ReasoningEffortConfig::Persistent,
                     ) => "max",
                     Some(ReasoningEffortConfig::Custom(value)) => match value.as_str() {
                         "low" | "light" | "minimum" | "min" => "low",
@@ -2928,7 +2929,8 @@ impl ModelClient {
             parallel_tool_calls: (!tools.is_empty() && prompt.parallel_tool_calls).then_some(true),
             prompt_cache_key: chat_cache_policy
                 .prompt_cache_key
-                .then(|| self.prompt_cache_key(responses_metadata)),
+                .then(|| self.prompt_cache_key(responses_metadata))
+                .flatten(),
             tools,
             response_format,
             emit_usage: uses_zai_reasoning.then_some(true),
@@ -3045,17 +3047,14 @@ impl ModelClient {
             tool_choice,
             stream: true,
             max_tokens: model_info.max_output_tokens.ok_or_else(|| {
-                CodexErr::InvalidRequest(if model_info.used_fallback_model_metadata {
-                    format!(
-                        "model `{}` is not in this provider's model catalog, so its maximum output length is unknown; choose another model with /model or change `model` in config.toml",
-                        model_info.slug
-                    )
-                } else {
-                    format!(
-                        "model `{}` has no catalogued maximum output token limit",
-                        model_info.slug
-                    )
-                })
+                // Upstream keeps a model's catalog origin on `CatalogModel`, not on the
+                // `ModelInfo` a request sees, so one message covers both cases.
+                CodexErr::InvalidRequest(format!(
+                    "model `{}` has no catalogued maximum output length (it may not be in this \
+                     provider's model catalog); choose another model with /model or change \
+                     `model` in config.toml",
+                    model_info.slug
+                ))
             })?,
             thinking,
             output_config,
@@ -3902,7 +3901,8 @@ impl ModelClientSession {
                 client_setup.api_auth.as_ref(),
                 client_setup.agent_identity_telemetry.clone(),
                 pending_retry,
-            );
+            )
+            .map_err(|error| self.client.state.provider.map_api_error(error))?;
             let (request_telemetry, sse_telemetry) = Self::build_streaming_telemetry(
                 session_telemetry,
                 request_auth_context,
@@ -4880,7 +4880,8 @@ impl ModelClientSession {
                 client_setup.api_auth.as_ref(),
                 client_setup.agent_identity_telemetry.clone(),
                 pending_retry,
-            );
+            )
+            .map_err(|error| self.client.state.provider.map_api_error(error))?;
             let (request_telemetry, sse_telemetry) = Self::build_streaming_telemetry(
                 session_telemetry,
                 request_auth_context,
@@ -6101,12 +6102,19 @@ fn append_chat_message_for_response_item(
             let arguments = json!({ "input": input }).to_string();
             push_chat_tool_call(messages, call_id, name, arguments);
         }
-        ResponseItem::FunctionCallOutput {
-            call_id, output, ..
-        }
-        | ResponseItem::CustomToolCallOutput {
-            call_id, output, ..
-        } => {
+        ResponseItem::FunctionCallOutput { .. } | ResponseItem::CustomToolCallOutput { .. } => {
+            let (call_id, output) = match item {
+                ResponseItem::FunctionCallOutput {
+                    call_id: Some(call_id),
+                    output,
+                    ..
+                }
+                | ResponseItem::CustomToolCallOutput {
+                    call_id, output, ..
+                } => (call_id, output),
+                // An output without a call id answers no replayable call.
+                _ => return,
+            };
             if skipped_tool_call_ids.contains(&call_id) {
                 debug!(
                     call_id = %call_id,
@@ -6192,13 +6200,13 @@ fn content_items_to_chat_content(content: &[ContentItem]) -> Option<ChatMessageC
     let parts = content
         .iter()
         .filter_map(|item| match item {
-            ContentItem::InputText { text } | ContentItem::OutputText { text }
+            ContentItem::InputText { text } | ContentItem::OutputText { text, .. }
                 if !text.trim().is_empty() =>
             {
                 Some(ChatContentPart::text(text.clone()))
             }
-            ContentItem::InputImage { image_url, detail } => {
-                Some(chat_image_part(image_url.clone(), *detail))
+            ContentItem::InputImage { image, detail } => {
+                inline_image_url(image).map(|url| chat_image_part(url.to_string(), *detail))
             }
             ContentItem::InputText { .. }
             | ContentItem::OutputText { .. }
@@ -6207,6 +6215,14 @@ fn content_items_to_chat_content(content: &[ContentItem]) -> Option<ChatMessageC
         .collect::<Vec<_>>();
 
     (!parts.is_empty()).then_some(ChatMessageContent::Parts(parts))
+}
+
+/// The URL of an inline image; uploaded files (a Responses file id) have none.
+fn inline_image_url(image: &codex_protocol::models::ImageReference) -> Option<&str> {
+    match image {
+        codex_protocol::models::ImageReference::Inline { image_url } => Some(image_url),
+        codex_protocol::models::ImageReference::File { .. } => None,
+    }
 }
 
 fn chat_tool_result_image_parts(
@@ -6220,9 +6236,9 @@ fn chat_tool_result_image_parts(
         .iter()
         .filter_map(|item| match item {
             codex_protocol::models::FunctionCallOutputContentItem::InputImage {
-                image_url,
+                image,
                 detail,
-            } => Some(chat_image_part(image_url.clone(), *detail)),
+            } => inline_image_url(image).map(|url| chat_image_part(url.to_string(), *detail)),
             codex_protocol::models::FunctionCallOutputContentItem::InputText { .. }
             | codex_protocol::models::FunctionCallOutputContentItem::EncryptedContent { .. }
             | codex_protocol::models::FunctionCallOutputContentItem::InputAudio { .. } => None,
@@ -6234,7 +6250,7 @@ fn content_items_to_chat_text(content: &[ContentItem]) -> Option<String> {
     let parts = content
         .iter()
         .filter_map(|item| match item {
-            ContentItem::InputText { text } | ContentItem::OutputText { text } => {
+            ContentItem::InputText { text } | ContentItem::OutputText { text, .. } => {
                 (!text.trim().is_empty()).then_some(text.as_str())
             }
             ContentItem::InputImage { .. } | ContentItem::InputAudio { .. } => None,
@@ -6288,9 +6304,9 @@ fn anthropic_tool_result_content(
                         }))
                     }
                     codex_protocol::models::FunctionCallOutputContentItem::InputImage {
-                        image_url,
+                        image,
                         ..
-                    } => Some(anthropic_image_block(image_url)),
+                    } => inline_image_url(image).map(anthropic_image_block),
                     codex_protocol::models::FunctionCallOutputContentItem::EncryptedContent {
                         ..
                     }
@@ -6340,6 +6356,8 @@ fn adapt_plaintext_collaboration_messages_for_responses(input: &mut [ResponseIte
                 ..
             } => plaintext_collaboration_message(author, recipient, content).map(|text| {
                 ResponseItem::Message {
+                    encrypted_content: None,
+                    status: None,
                     id: None,
                     role: "user".to_string(),
                     content: vec![ContentItem::InputText { text }],
@@ -6369,7 +6387,7 @@ fn append_anthropic_message_for_response_item(
             };
             for item in content {
                 let block = match item {
-                    ContentItem::InputText { text } | ContentItem::OutputText { text }
+                    ContentItem::InputText { text } | ContentItem::OutputText { text, .. }
                         if !text.trim().is_empty() =>
                     {
                         json!({
@@ -6377,7 +6395,11 @@ fn append_anthropic_message_for_response_item(
                             "text": text,
                         })
                     }
-                    ContentItem::InputImage { image_url, .. } => anthropic_image_block(&image_url),
+                    // Only inline images reach these providers; an uploaded file id does not.
+                    ContentItem::InputImage { image, .. } => match inline_image_url(image) {
+                        Some(url) => anthropic_image_block(url),
+                        None => continue,
+                    },
                     ContentItem::InputText { .. }
                     | ContentItem::OutputText { .. }
                     | ContentItem::InputAudio { .. } => continue,
@@ -6445,12 +6467,19 @@ fn append_anthropic_message_for_response_item(
                 }),
             );
         }
-        ResponseItem::FunctionCallOutput {
-            call_id, output, ..
-        }
-        | ResponseItem::CustomToolCallOutput {
-            call_id, output, ..
-        } => {
+        ResponseItem::FunctionCallOutput { .. } | ResponseItem::CustomToolCallOutput { .. } => {
+            let (call_id, output) = match item {
+                ResponseItem::FunctionCallOutput {
+                    call_id: Some(call_id),
+                    output,
+                    ..
+                }
+                | ResponseItem::CustomToolCallOutput {
+                    call_id, output, ..
+                } => (call_id, output),
+                // An output without a call id answers no replayable call.
+                _ => return,
+            };
             if skipped_tool_call_ids.contains(&call_id) {
                 debug!(
                     call_id = %call_id,
