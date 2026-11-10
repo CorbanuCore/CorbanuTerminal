@@ -585,7 +585,6 @@ async fn apply_user_role_refuses_stricter_permissions_it_cannot_apply() {
         "[sandbox_workspace_write]\nexclude_slash_tmp = true",
         "[shell_environment_policy]\ninherit = \"none\"",
         "profile = \"strict\"",
-        "[sandbox_workspace_write]\nwritable_roots = []",
     ] {
         let (home, mut config) = test_config_with_cli_overrides(vec![
             (
@@ -665,6 +664,54 @@ fn with_requirements(
 }
 
 #[tokio::test]
+async fn apply_user_role_refuses_writable_roots_that_drop_the_parents() {
+    let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    let parent_root = home
+        .path()
+        .join("parent-root")
+        .to_string_lossy()
+        .into_owned();
+    with_parent_root(&mut config, &parent_root);
+    let parent = config.clone();
+
+    let err = apply_provider_role(
+        &home,
+        &mut config,
+        "developer_instructions = \"Work\"\n\n[sandbox_workspace_write]\nwritable_roots = []\n",
+    )
+    .await
+    .expect_err("a narrower writable_roots should be refused");
+
+    assert!(err.contains("writable_roots"), "{err}");
+    assert_eq!(config, parent);
+}
+
+/// Records `root` as the parent's configured writable root, as its config layers would.
+fn with_parent_root(config: &mut Config, root: &str) {
+    let mut layers: Vec<_> = config
+        .config_layer_stack
+        .all_layers_low_to_high()
+        .cloned()
+        .collect();
+    let layer = ConfigLayerEntry::new(
+        ConfigLayerSource::SessionFlags,
+        toml::from_str(&format!(
+            "[sandbox_workspace_write]\nwritable_roots = [{}]\n",
+            TomlValue::String(root.to_string())
+        ))
+        .expect("layer"),
+    );
+    let index = layers.partition_point(|existing| existing.name <= layer.name);
+    layers.insert(index, layer);
+    config.config_layer_stack = codex_config::ConfigLayerStack::new(
+        layers,
+        config.config_layer_stack.requirements().clone(),
+        config.config_layer_stack.requirements_toml().clone(),
+    )
+    .expect("layers");
+}
+
+#[tokio::test]
 async fn apply_user_role_provider_choice_is_bounded() {
     // D526 (a), provisional: a role's provider choice can't leave what the parent has
     // configured or what managed requirements pin, and needs a model.
@@ -673,7 +720,12 @@ async fn apply_user_role_provider_choice_is_bounded() {
         base_url: Some("http://127.0.0.1:9/v1".to_string()),
         ..Default::default()
     };
-    let cases: [(&str, fn(&mut Config), &str); 4] = [
+    let cases: [(&str, fn(&mut Config), &str); 5] = [
+        (
+            "model = \"m\"\nmodel_provider = \"amazon-bedrock\"\n\n[model_providers.amazon-bedrock]\nname = \"role bedrock\"\n",
+            |_| {},
+            "whose settings a role can't change",
+        ),
         (
             "model = \"m\"\nmodel_provider = \"nowhere\"\n",
             |_| {},
@@ -783,6 +835,14 @@ async fn apply_user_role_windows_sandbox_only_tightens_by_refusing() {
         .await;
         assert_eq!(result.is_err(), refused, "{role}: {result:?}");
     }
+    let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    let result = apply_provider_role(
+        &home,
+        &mut config,
+        "developer_instructions = \"Work\"\n\n[windows]\nallow_mxc = false\n",
+    )
+    .await;
+    assert!(result.is_err_and(|err| err.contains("allow_mxc")));
 }
 
 #[tokio::test]
