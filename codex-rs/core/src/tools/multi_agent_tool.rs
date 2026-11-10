@@ -117,6 +117,14 @@ impl ToolExecutor<ToolInvocation> for MultiAgentV2ToolOverrides {
 }
 
 impl CoreToolRuntime for MultiAgentV2ToolOverrides {
+    fn tool_origin(&self) -> crate::security::protected_surface::ToolOrigin {
+        self.handler.tool_origin()
+    }
+
+    fn repeated_identical_calls_are_polling(&self) -> bool {
+        self.handler.repeated_identical_calls_are_polling()
+    }
+
     fn wait_until_ready<'a>(&'a self, session: &'a Arc<Session>) -> Option<BoxFuture<'a, ()>> {
         self.handler.wait_until_ready(session)
     }

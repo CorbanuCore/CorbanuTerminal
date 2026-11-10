@@ -200,7 +200,8 @@ impl<'a> ParsedExecCommand<'a> {
         })
     }
 
-    pub(crate) fn prepare(
+    /// #245: reads the session's usable grants, so this is async.
+    pub(crate) async fn prepare(
         self,
         lifetime: ExecCommandLifetime,
     ) -> Result<PreparedExecCommand, FunctionCallError> {
@@ -259,12 +260,13 @@ impl<'a> ParsedExecCommand<'a> {
             turn_environment.sandbox_context(/*additional_permissions*/ None);
         let permission_context = file_system_sandbox_policy_context_for_cwd(&sandbox_context, &cwd);
         let mut permissions = apply_granted_turn_permissions(
-            step,
+            session,
             turn_environment,
             &cwd,
             sandbox_permissions,
             requested_additional_permissions.clone(),
-        );
+        )
+        .await;
         let additional_permissions_allowed = exec_permission_approvals_enabled
             || (session.features().enabled(Feature::RequestPermissionsTool)
                 && permissions.permissions_preapproved);

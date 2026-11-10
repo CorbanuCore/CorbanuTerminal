@@ -13,6 +13,8 @@ use crate::tools::handlers::parse_arguments_for_tool;
 use crate::tools::handlers::resolve_tool_environment;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::ToolExecutor;
+use codex_exec_server::ReadFileOptions;
+use codex_protocol::openai_models::ModelInfo;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiTool;
 use codex_tools::ToolName;
@@ -96,14 +98,14 @@ fn model_edit_profile_tag(turn_context: &TurnContext) -> &'static str {
         return "meta";
     }
 
-    let slug = turn_context.model_info.slug.to_ascii_lowercase();
+    let slug = turn_context.model_info().slug.to_ascii_lowercase();
     if slug.contains("glm") {
         return "glm";
     }
     if slug.contains("zai-org") {
         return "zai_org";
     }
-    if turn_context.model_info.apply_patch_tool_type.is_some() {
+    if turn_context.model_info().apply_patch_tool_type.is_some() {
         return "codex_patch";
     }
     "other"
@@ -118,12 +120,20 @@ pub(crate) fn structured_edit_protocol_enabled(turn_context: &TurnContext) -> bo
 }
 
 pub(crate) fn native_structured_edit_protocol_enabled(turn_context: &TurnContext) -> bool {
+    native_structured_edit_protocol_enabled_for(turn_context, turn_context.model_info())
+}
+
+/// [`native_structured_edit_protocol_enabled`] for the model a step plans tools for.
+pub(crate) fn native_structured_edit_protocol_enabled_for(
+    turn_context: &TurnContext,
+    model_info: &ModelInfo,
+) -> bool {
     let provider = turn_context.provider.info();
     if provider.is_zai() || provider.is_ambient() || provider.is_meta() {
         return true;
     }
 
-    let slug = turn_context.model_info.slug.to_ascii_lowercase();
+    let slug = model_info.slug.to_ascii_lowercase();
     slug.contains("glm") || slug.contains("zai-org")
 }
 
@@ -131,7 +141,23 @@ pub(crate) fn reject_source_write_heredoc_when_structured_edit_enabled(
     turn_context: &TurnContext,
     command: &str,
 ) -> Result<(), FunctionCallError> {
-    if structured_edit_protocol_enabled(turn_context) && is_python_heredoc_source_write(command) {
+    reject_source_write_heredoc_when_structured_edit_enabled_for(
+        turn_context,
+        turn_context.model_info(),
+        command,
+    )
+}
+
+/// [`reject_source_write_heredoc_when_structured_edit_enabled`] for the model of the
+/// step that offered the shell tool, so it matches that step's edit tools.
+pub(crate) fn reject_source_write_heredoc_when_structured_edit_enabled_for(
+    turn_context: &TurnContext,
+    model_info: &ModelInfo,
+    command: &str,
+) -> Result<(), FunctionCallError> {
+    let enabled = turn_context.structured_edit_fallback_enabled()
+        || native_structured_edit_protocol_enabled_for(turn_context, model_info);
+    if enabled && is_python_heredoc_source_write(command) {
         emit_model_edit_compat_metric(
             turn_context,
             "shell_heredoc",
@@ -210,7 +236,10 @@ impl ToolExecutor<ToolInvocation> for StructuredEditHandler {
         create_structured_edit_tool(self.multi_environment)
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle<'a>(&'a self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'a>
+    where
+        ToolInvocation: 'a,
+    {
         Box::pin(handle_structured_edit(invocation, self.multi_environment))
     }
 }
@@ -226,7 +255,10 @@ impl ToolExecutor<ToolInvocation> for StructuredWriteHandler {
         create_structured_write_tool(self.multi_environment)
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle<'a>(&'a self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'a>
+    where
+        ToolInvocation: 'a,
+    {
         Box::pin(handle_structured_write(invocation, self.multi_environment))
     }
 }
@@ -344,6 +376,8 @@ async fn handle_structured_edit(
     let ToolInvocation {
         session,
         turn,
+        step_context,
+        cancellation_token,
         tracker,
         call_id,
         payload,
@@ -381,13 +415,9 @@ async fn handle_structured_edit(
         ));
     }
 
-    let Some(turn_environment) =
-        resolve_tool_environment(&turn.environments, args.environment_id.as_deref())?.cloned()
-    else {
-        return Err(FunctionCallError::RespondToModel(
-            "structured_edit is unavailable in this session".to_string(),
-        ));
-    };
+    let turn_environment =
+        resolve_tool_environment(&step_context.environments, args.environment_id.as_deref())?
+            .clone();
     let fs = turn_environment.environment.get_filesystem();
     let sandbox = crate::security::protected_surface::protect_file_tool_context(
         &session,
@@ -399,7 +429,7 @@ async fn handle_structured_edit(
         .join(&args.path)
         .map_err(|err| FunctionCallError::RespondToModel(format!("invalid path: {err}")))?;
     let current = fs
-        .read_file_text(&path_uri, Some(&sandbox))
+        .read_file_text(&path_uri, ReadFileOptions::default(), Some(&sandbox))
         .await
         .map_err(|err| {
             emit_model_edit_compat_metric(
@@ -459,7 +489,8 @@ async fn handle_structured_edit(
     let patch = build_update_patch(&args.path, &current, &next);
     let result = run_generated_patch(GeneratedPatchInvocation {
         session,
-        turn: turn.clone(),
+        step_context,
+        cancellation_token,
         tracker,
         call_id,
         tool_name: STRUCTURED_EDIT_TOOL_NAME,
@@ -487,6 +518,8 @@ async fn handle_structured_write(
     let ToolInvocation {
         session,
         turn,
+        step_context,
+        cancellation_token,
         tracker,
         call_id,
         payload,
@@ -514,13 +547,9 @@ async fn handle_structured_write(
         )));
     }
 
-    let Some(turn_environment) =
-        resolve_tool_environment(&turn.environments, args.environment_id.as_deref())?.cloned()
-    else {
-        return Err(FunctionCallError::RespondToModel(
-            "structured_write is unavailable in this session".to_string(),
-        ));
-    };
+    let turn_environment =
+        resolve_tool_environment(&step_context.environments, args.environment_id.as_deref())?
+            .clone();
     let fs = turn_environment.environment.get_filesystem();
     let sandbox = crate::security::protected_surface::protect_file_tool_context(
         &session,
@@ -531,7 +560,9 @@ async fn handle_structured_write(
         .cwd()
         .join(&args.path)
         .map_err(|err| FunctionCallError::RespondToModel(format!("invalid path: {err}")))?;
-    let current = fs.read_file_text(&path_uri, Some(&sandbox)).await;
+    let current = fs
+        .read_file_text(&path_uri, ReadFileOptions::default(), Some(&sandbox))
+        .await;
     let patch = match (args.mode, current) {
         (StructuredWriteMode::CreateOnly, Ok(_)) => {
             emit_model_edit_compat_metric(
@@ -596,7 +627,8 @@ async fn handle_structured_write(
     };
     let result = run_generated_patch(GeneratedPatchInvocation {
         session,
-        turn: turn.clone(),
+        step_context,
+        cancellation_token,
         tracker,
         call_id,
         tool_name: STRUCTURED_WRITE_TOOL_NAME,
@@ -619,7 +651,8 @@ async fn handle_structured_write(
 
 struct GeneratedPatchInvocation<'a> {
     session: std::sync::Arc<crate::session::session::Session>,
-    turn: std::sync::Arc<crate::session::turn_context::TurnContext>,
+    step_context: std::sync::Arc<crate::session::step_context::StepContext>,
+    cancellation_token: tokio_util::sync::CancellationToken,
     tracker: crate::tools::context::SharedTurnDiffTracker,
     call_id: String,
     tool_name: &'a str,
@@ -639,7 +672,8 @@ async fn run_generated_patch(
         fs.as_ref(),
         invocation.turn_environment,
         invocation.session,
-        invocation.turn,
+        invocation.step_context,
+        invocation.cancellation_token,
         Some(&invocation.tracker),
         &invocation.call_id,
         invocation.tool_name,
