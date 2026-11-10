@@ -61,7 +61,7 @@ use crate::tools::handlers::multi_agents_v2::PlaintextSpawnAgentHandler;
 use crate::tools::handlers::multi_agents_v2::SendMessageHandler as SendMessageHandlerV2;
 use crate::tools::handlers::multi_agents_v2::SpawnAgentHandler as SpawnAgentHandlerV2;
 use crate::tools::handlers::multi_agents_v2::WaitAgentHandler as WaitAgentHandlerV2;
-use crate::tools::handlers::native_structured_edit_protocol_enabled;
+use crate::tools::handlers::native_structured_edit_protocol_enabled_for;
 use crate::tools::handlers::tool_search_spec::ToolSearchSourceListing;
 use crate::tools::handlers::view_image_spec::ViewImageToolOptions;
 use crate::tools::hosted_spec::WebSearchToolOptions;
@@ -186,7 +186,7 @@ pub(crate) fn build_tool_router(
         &turn_context.config,
         apps_enabled,
         &mcp.config().mcp_server_catalog,
-        model_info.supports_search_tool,
+        search_tool_enabled(turn_context, model_info),
         session.services.mcp_manager.shared_definitions(),
         &mut registry,
     );
@@ -296,7 +296,7 @@ fn apply_mcp_tool_exposure_policy(
             exposures = exposures.difference(ToolExposures::DEFERRED | ToolExposures::CODE_MODE);
         }
 
-        exposures = if model_info.supports_search_tool
+        exposures = if search_tool_enabled(turn_context, model_info)
             && exposures.contains(ToolExposures::DEFERRED)
             && (effective_tool_mode(turn_context, model_info) != ToolMode::CodeModeOnly
                 || exposures.contains(ToolExposures::CODE_MODE))
@@ -423,7 +423,7 @@ pub(crate) fn finalize_tool_router(
         }
     }
     let tool_search_name = ToolName::plain(TOOL_SEARCH_TOOL_NAME);
-    let search_exposure = if model_info.supports_search_tool
+    let search_exposure = if search_tool_enabled(turn_context, model_info)
         && registry.tool_policy.allows(&tool_search_name)
         && registry.entries().any(|tool| {
             tool.runtime.tool_name() != tool_search_name
@@ -588,11 +588,9 @@ pub(crate) fn finalize_tool_router(
         tool_namespaces_info,
         &child_management_tools,
     )
-    .with_flat_tool_names(
-        flat_tool_names.with_multi_agent_v2_namespace(
-            turn_context.config.multi_agent_v2.tool_namespace.clone(),
-        ),
-    )
+    .with_flat_tool_names(flat_tool_names.with_multi_agent_v2_namespace(
+        multi_agent_v2_tool_namespace(turn_context).map(str::to_owned),
+    ))
     .with_omitted_tools(omitted_tools))
 }
 
@@ -922,6 +920,20 @@ fn namespace_tools_enabled(turn_context: &TurnContext) -> bool {
     turn_context.provider.capabilities().namespace_tools
 }
 
+/// Tool search needs namespace tools: wires without them drop the `tool_search`
+/// spec, so deferred tools would be unreachable there.
+pub(crate) fn search_tool_enabled(turn_context: &TurnContext, model_info: &ModelInfo) -> bool {
+    model_info.supports_search_tool && namespace_tools_enabled(turn_context)
+}
+
+/// The V2 multi-agent namespace, only where the wire carries namespaces (main
+/// and the base kept these tools plain on Chat Completions/Anthropic wires).
+fn multi_agent_v2_tool_namespace(turn_context: &TurnContext) -> Option<&str> {
+    namespace_tools_enabled(turn_context)
+        .then_some(turn_context.config.multi_agent_v2.tool_namespace.as_deref())
+        .flatten()
+}
+
 fn multi_agent_v2_enabled(turn_context: &TurnContext) -> bool {
     turn_context.multi_agent_version == MultiAgentVersion::V2
 }
@@ -956,7 +968,7 @@ fn required_child_management_tool_names(
             &["send_input", "wait_agent", "resume_agent", "close_agent"],
         ),
         MultiAgentVersion::V2 => (
-            turn_context.config.multi_agent_v2.tool_namespace.as_deref(),
+            multi_agent_v2_tool_namespace(turn_context),
             if turn_context.config.multi_agent_v2.disable_direct_message {
                 &["interrupt_agent", "list_agents"]
             } else {
@@ -1230,7 +1242,7 @@ fn register_code_mode_executors(
     let mut exec_prompt_tool_specs = Vec::new();
     let mut deferred_exec_prompt_tool_specs = Vec::new();
     let mut included_deferred_mcp_output_schema = false;
-    let deferred_tools_guidance_enabled = model_info.supports_search_tool;
+    let deferred_tools_guidance_enabled = search_tool_enabled(turn_context, model_info);
     for (name, spec, tool) in code_mode_tools(turn_context, model_info, registry) {
         code_mode_tool_names.insert(name, tool.runtime.tool_name());
         let exposure = tool.exposure;
@@ -1405,7 +1417,9 @@ fn add_core_tool_sources(context: &CoreToolPlanContext<'_>, registry: &mut ToolR
 }
 
 fn standalone_web_search_enabled(turn_context: &TurnContext, model_info: &ModelInfo) -> bool {
-    turn_context.provider.capabilities().web_search
+    // `web.run` is namespaced; wires without namespaces keep their hosted search.
+    namespace_tools_enabled(turn_context)
+        && turn_context.provider.capabilities().web_search
         && (model_info.use_responses_lite
             || turn_context
                 .config
@@ -1632,7 +1646,7 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
     if environment_mode.has_environment() && edit_tools_allowed_by_permission_profile(turn_context)
     {
         let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
-        if native_structured_edit_protocol_enabled(turn_context) {
+        if native_structured_edit_protocol_enabled_for(turn_context, context.model_info) {
             registry.add(StructuredEditHandler::new(include_environment_id));
             registry.add(StructuredWriteHandler::new(include_environment_id));
         } else if context.model_info.apply_patch_tool_type.is_some() {
@@ -1674,10 +1688,10 @@ fn edit_tools_allowed_by_permission_profile(turn_context: &TurnContext) -> bool 
         FileSystemSandboxKind::Restricted => {
             #[allow(deprecated)]
             let cwd = turn_context.cwd.as_path();
-            // A writable cwd is one of the writable roots.
-            !file_system_policy
-                .get_writable_roots_with_cwd(cwd)
-                .is_empty()
+            file_system_policy.can_write_local_path_with_cwd(cwd, cwd)
+                || !file_system_policy
+                    .get_writable_roots_with_cwd(cwd)
+                    .is_empty()
         }
     }
 }
@@ -1695,7 +1709,7 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
             } else {
                 ToolExposure::Direct
             };
-            let tool_namespace = turn_context.config.multi_agent_v2.tool_namespace.as_deref();
+            let tool_namespace = multi_agent_v2_tool_namespace(turn_context);
             let native_review = if turn_context
                 .config
                 .features
@@ -1809,21 +1823,24 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                     exposure,
                     native_review,
                 );
-                registry.register_trusted_with_native_review(
-                    Arc::new(PlaintextSendMessageHandler),
-                    exposure,
-                    native_review,
-                );
-                registry.register_trusted_with_native_review(
-                    Arc::new(PlaintextFollowupTaskHandler),
-                    exposure,
-                    native_review,
-                );
+                // Like the native message tools, only while direct messages are allowed.
+                if !turn_context.config.multi_agent_v2.disable_direct_message {
+                    registry.register_trusted_with_native_review(
+                        Arc::new(PlaintextSendMessageHandler),
+                        exposure,
+                        native_review,
+                    );
+                    registry.register_trusted_with_native_review(
+                        Arc::new(PlaintextFollowupTaskHandler),
+                        exposure,
+                        native_review,
+                    );
+                }
             }
         } else {
             let agent_type_description =
                 agent_type_description(turn_context, context.default_agent_type_description);
-            let exposure = if context.model_info.supports_search_tool {
+            let exposure = if search_tool_enabled(turn_context, context.model_info) {
                 ToolExposure::Deferred
             } else {
                 ToolExposure::Direct
@@ -2029,8 +2046,11 @@ fn spawn_agent_inherited_runtime(
         .then(|| SpawnAgentRuntime {
             model_provider,
             model: model_info.slug.clone(),
+            // The turn's effort belongs to its first step's model; another step model
+            // starts from that model's default.
             reasoning_effort: turn_context
                 .reasoning_effort()
+                .filter(|_| turn_context.model_info().slug == model_info.slug)
                 .cloned()
                 .or_else(|| model_info.default_reasoning_level.clone()),
             service_tier: turn_context.config.service_tier.clone(),
