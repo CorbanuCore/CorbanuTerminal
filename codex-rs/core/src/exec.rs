@@ -386,17 +386,18 @@ pub async fn build_exec_request(
         enforce_managed_network,
     );
     tracing::debug!("Sandbox type: {sandbox_type:?}");
+    // #1863: a `\\localhost` folder is refused at every level, as on main.
+    for folder in [&cwd, sandbox_cwd] {
+        refuse_localhost_unc_folder(folder)?;
+    }
     // D446 before any override resolution, so a network working folder gets
     // its own refusal rather than a path error from the resolver.
-    // `attach_windows_sandbox_filesystem_overrides` checks it again. Each
-    // folder first goes through the path conversion the launch uses, so a
-    // `\\localhost` folder still gets #1863's refusal.
+    // `attach_windows_sandbox_filesystem_overrides` checks it again.
     if sandbox_type == SandboxType::WindowsRestrictedToken
         && !windows_sandbox_uses_elevated_backend(windows_sandbox_level, enforce_managed_network)
     {
-        for folder in [&cwd, sandbox_cwd] {
-            let folder = PathUri::from_abs_path(folder).to_abs_path()?;
-            codex_sandboxing::refuse_network_working_folder(folder.as_path())
+        for folder in [cwd.as_path(), sandbox_cwd.as_path()] {
+            codex_sandboxing::refuse_network_working_folder(folder)
                 .map_err(CodexErr::UnsupportedOperation)?;
         }
     }
@@ -476,6 +477,32 @@ pub async fn build_exec_request(
         crate::security::launch_contract::active(),
     )?;
     Ok(exec_req)
+}
+
+/// #1863: main refused a `\\localhost` working folder for command/exec at
+/// every sandbox level, because its path URI lost `localhost`. Upstream's
+/// path URIs now keep such a folder, so command/exec refuses it here, with
+/// the same message. Covers `\\localhost\`, `\\?\UNC\localhost\` and
+/// `\\.\UNC\localhost\`, in any letter case.
+fn refuse_localhost_unc_folder(folder: &AbsolutePathBuf) -> Result<()> {
+    if !cfg!(windows) {
+        return Ok(());
+    }
+    let path = folder.as_path().to_string_lossy().to_ascii_lowercase();
+    let server_and_rest = [r"\\?\unc\", r"\\.\unc\", r"\\"]
+        .into_iter()
+        .find_map(|prefix| path.strip_prefix(prefix));
+    let is_localhost =
+        server_and_rest.is_some_and(|rest| rest.split(['\\', '/']).next() == Some("localhost"));
+    if !is_localhost {
+        return Ok(());
+    }
+    Err(CodexErr::Io(io::Error::new(
+        io::ErrorKind::InvalidInput,
+        codex_utils_path_uri::PathUriParseError::LocalhostUncPath {
+            path: folder.as_path().display().to_string(),
+        },
+    )))
 }
 
 /// Resolves the Windows sandbox's filesystem overrides (deny-read and
