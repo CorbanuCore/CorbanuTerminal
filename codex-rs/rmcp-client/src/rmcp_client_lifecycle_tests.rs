@@ -474,6 +474,8 @@ enum ExecutorHang {
     Terminate,
     /// Starting the second server process.
     Restart,
+    /// None: every executor call completes.
+    Nothing,
 }
 
 /// A remote stdio server process that never answers `server/discover`.
@@ -565,35 +567,8 @@ struct RemoteStart {
 /// Starts an opted-in remote stdio server whose discover goes unanswered, so the client
 /// falls back and restarts it through an executor that hangs on `hang`.
 async fn start_remote_with_hanging_executor(hang: ExecutorHang) -> RemoteStart {
-    let backend = Arc::new(HangingExecBackend {
-        hang,
-        starts: AtomicUsize::new(0),
-    });
-    let env = HashMap::from([(
-        OsString::from("CODEX_MCP_PROTOCOL_VERSION"),
-        OsString::from("2026-07-28"),
-    )]);
-    let client = RmcpClient::new_stdio_client_with_protocol_mode(
-        OsString::from("remote-mcp-server"),
-        Vec::new(),
-        Some(env),
-        &[],
-        // Match the executor stdio integration tests: an absolute cwd with no trailing
-        // separator on every platform.
-        Some(
-            std::env::current_dir()
-                .expect("current dir")
-                .to_string_lossy()
-                .into_owned(),
-        ),
-        Arc::new(ExecutorStdioServerLauncher::new(
-            Arc::clone(&backend) as Arc<dyn ExecBackend>
-        )),
-        McpProtocolMode::V20260728,
-    )
-    .await
-    .expect("remote stdio client")
-    .with_discover_timeout(Some(REMOTE_DISCOVER_WAIT));
+    let backend = hanging_exec_backend(hang);
+    let client = opted_in_remote_client(&backend).await;
 
     let started_at = tokio::time::Instant::now();
     let result = tokio::time::timeout(
@@ -612,6 +587,42 @@ async fn start_remote_with_hanging_executor(hang: ExecutorHang) -> RemoteStart {
         elapsed,
         executor_starts: backend.starts.load(Ordering::Acquire),
     }
+}
+
+fn hanging_exec_backend(hang: ExecutorHang) -> Arc<HangingExecBackend> {
+    Arc::new(HangingExecBackend {
+        hang,
+        starts: AtomicUsize::new(0),
+    })
+}
+
+/// An opted-in remote stdio client on `backend` that waits `REMOTE_DISCOVER_WAIT` for discover.
+async fn opted_in_remote_client(backend: &Arc<HangingExecBackend>) -> RmcpClient {
+    let env = HashMap::from([(
+        OsString::from("CODEX_MCP_PROTOCOL_VERSION"),
+        OsString::from("2026-07-28"),
+    )]);
+    RmcpClient::new_stdio_client_with_protocol_mode(
+        OsString::from("remote-mcp-server"),
+        Vec::new(),
+        Some(env),
+        &[],
+        // Match the executor stdio integration tests: an absolute cwd with no trailing
+        // separator on every platform.
+        Some(
+            std::env::current_dir()
+                .expect("current dir")
+                .to_string_lossy()
+                .into_owned(),
+        ),
+        Arc::new(ExecutorStdioServerLauncher::new(
+            Arc::clone(backend) as Arc<dyn ExecBackend>
+        )),
+        McpProtocolMode::V20260728,
+    )
+    .await
+    .expect("remote stdio client")
+    .with_discover_timeout(Some(REMOTE_DISCOVER_WAIT))
 }
 
 fn assert_fallback_timed_out(started: &RemoteStart) {
@@ -650,4 +661,35 @@ async fn remote_fallback_times_out_when_the_executor_never_starts_the_second_ser
 
     assert_fallback_timed_out(&started);
     assert_eq!(started.executor_starts, 2);
+}
+
+// #1978's shutdown race on the remote path: the executor launcher checks the client's process
+// slot, as the local launcher does, so a `shutdown()` during the discover wait keeps the
+// fallback from starting a second server.
+#[tokio::test(start_paused = true)]
+async fn remote_shutdown_during_the_discover_wait_starts_no_fallback_server() {
+    let backend = hanging_exec_backend(ExecutorHang::Nothing);
+    let client = Arc::new(opted_in_remote_client(&backend).await);
+    let initializing = tokio::spawn({
+        let client = Arc::clone(&client);
+        async move {
+            initialize(
+                &client,
+                default_init_params().with_protocol_version(ProtocolVersion::V_2025_06_18),
+            )
+            .await
+        }
+    });
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    client.shutdown().await;
+
+    let error = initializing
+        .await
+        .expect("initialize task")
+        .expect_err("initialize must fail once the client is shut down");
+    assert!(
+        format!("{error:#}").contains("MCP client is shut down"),
+        "unexpected error: {error:#}"
+    );
+    assert_eq!(backend.starts.load(Ordering::Acquire), 1);
 }
