@@ -19,16 +19,8 @@ fn approval_resolution_rejects_denied_network_policy_amendment() {
     };
 
     assert!(matches!(
-<<<<<<< HEAD
-        resolution.into_tool_result(),
-        Err(ToolError::Declined(rejection)) if rejection == "rejected by user"
-||||||| 413492cd6c
-        resolution.into_tool_result(),
-        Err(ToolError::Rejected(rejection)) if rejection == "rejected by user"
-=======
         resolution.into_tool_result(&model_info_from_slug("acting-model")),
-        Err(ToolError::Rejected(rejection)) if rejection == "rejected by user"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        Err(ToolError::Declined(rejection)) if rejection == "rejected by user"
     ));
 }
 
@@ -84,7 +76,7 @@ fn approval_resolution_uses_acting_model_timeout_instructions() {
 
         assert!(matches!(
             resolution.into_tool_result(&model),
-            Err(ToolError::Rejected(rejection)) if rejection == timeout_instructions
+            Err(ToolError::Declined(rejection)) if rejection == timeout_instructions
         ));
     }
 }
@@ -163,7 +155,8 @@ async fn non_utf8_cwd_preserves_approval_routing(
         proposed_execpolicy_amendment: None,
     };
     let prompt = session.request_user_approval(&action, &context);
-    let approval = session.request_reviewer_approval(&action, &context, prompt);
+    let approval =
+        session.request_reviewer_approval(&action, &context, prompt, /*human_only*/ false);
     tokio::pin!(approval);
     let expected = if reviewer == ApprovalsReviewer::User {
         tokio::select! {
@@ -236,7 +229,12 @@ async fn explicit_mcp_reviewer_override_takes_precedence_over_action_context() {
 
     let prompt = session.request_user_approval(&action, &context);
     tokio::select! {
-        resolution = session.request_reviewer_approval(&action, &context, prompt) => {
+        resolution = session.request_reviewer_approval(
+            &action,
+            &context,
+            prompt,
+            /*human_only*/ false,
+        ) => {
             panic!("expected a user approval request, got {resolution:?}");
         }
         event = events.recv() => {
@@ -314,7 +312,6 @@ fn network_hook_cwd_overrides_only_local_commands() {
 /// #437: what the inspector lists for each refused approval.
 #[test]
 fn sec_437_refused_approvals_are_described_for_the_inspector() {
-    let resolution = |decision, source| ApprovalResolution { decision, source };
     for (decision, source, expected) in [
         (
             ReviewDecision::Abort,
@@ -342,7 +339,7 @@ fn sec_437_refused_approvals_are_described_for_the_inspector() {
             None,
         ),
     ] {
-        assert_eq!(decline_outcome(&resolution(decision, source)), expected);
+        assert_eq!(decline_outcome(&decision, source), expected);
     }
     assert_eq!(approval_kind("exec_command"), "command approval");
     assert_eq!(approval_kind("apply_patch"), "file edit approval");
@@ -397,4 +394,126 @@ async fn issue_513_a_remembered_approval_is_not_a_person_asked_now() {
         asking_person(|| async { ReviewDecision::Approved }).await,
         (ReviewDecision::Approved, false)
     );
+}
+
+/// A command approval context for the person (no automatic reviewer).
+fn exec_approval(
+    turn: &crate::session::turn_context::TurnContext,
+    call_id: &str,
+    reviewer: ApprovalsReviewer,
+) -> (ApprovalAction, ApprovalContext) {
+    let mut review_context = GuardianReviewContext::from(turn);
+    review_context.approval_policy = AskForApproval::OnRequest;
+    review_context.approvals_reviewer = reviewer;
+    let context = ApprovalContext {
+        exec_requirement: None,
+        review_context,
+        cancellation_token: None,
+        call_id: call_id.to_string(),
+        tool_name: ToolName::plain("exec_command"),
+        strict_auto_review: false,
+        approval_reason: None,
+        retry_reason: None,
+        network_approval_context: None,
+    };
+    let action = ApprovalAction::ExecCommand {
+        id: call_id.to_string(),
+        environment_id: codex_exec_server::LOCAL_ENVIRONMENT_ID.to_string(),
+        command: vec!["npm".to_string(), "publish".to_string()],
+        hook_command: "npm publish".to_string(),
+        #[allow(deprecated)]
+        cwd: PathUri::from_abs_path(&turn.cwd),
+        sandbox_permissions: SandboxPermissions::UseDefault,
+        additional_permissions: None,
+        justification: None,
+        tty: false,
+        proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(vec![
+            "npm".to_string(),
+            "publish".to_string(),
+        ])),
+    };
+    (action, context)
+}
+
+/// Issue #513 and PF-30-S03 on upstream's approval flow: a "don't ask again"
+/// answer is remembered, and a later approval it answers is
+/// `Remembered`, not a person asked now. With fresh human authority the
+/// person is asked again (no cache, no "don't ask again" rule offered), the
+/// automatic reviewer is skipped, and "for session" counts for this call
+/// only.
+#[tokio::test]
+async fn sec_513_fresh_human_authority_and_remembered_answers() -> anyhow::Result<()> {
+    use anyhow::Context;
+    let (session, turn, events) = make_session_and_context_with_rx().await;
+    *session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
+
+    // A person answers "for session": asked now.
+    let (action, context) = exec_approval(&turn, "sec-513-first", ApprovalsReviewer::User);
+    let prompt = session.request_user_approval(&action, &context);
+    let approval =
+        session.request_reviewer_approval(&action, &context, prompt, /*human_only*/ false);
+    tokio::pin!(approval);
+    tokio::select! {
+        resolution = &mut approval => panic!("expected a prompt, got {resolution:?}"),
+        event = events.recv() => {
+            let codex_protocol::protocol::EventMsg::ExecApprovalRequest(request) =
+                event.context("receive prompt")?.msg
+            else {
+                panic!("expected a command approval prompt");
+            };
+            assert!(request.proposed_execpolicy_amendment.is_some());
+            session
+                .notify_approval(&request.call_id, ReviewDecision::ApprovedForSession)
+                .await;
+        }
+    }
+    let first = approval.await;
+    assert_eq!(first.source, ApprovalResolutionSource::User);
+    assert_eq!(first.decision, ReviewDecision::ApprovedForSession);
+
+    // The same command again: answered from the cache, nobody asked.
+    let (action, context) = exec_approval(&turn, "sec-513-again", ApprovalsReviewer::User);
+    let prompt = session.request_user_approval(&action, &context);
+    let again = session
+        .request_reviewer_approval(&action, &context, prompt, /*human_only*/ false)
+        .await;
+    assert_eq!(again.source, ApprovalResolutionSource::Remembered);
+    assert_eq!(again.decision, ReviewDecision::ApprovedForSession);
+    assert!(
+        events.try_recv().is_err(),
+        "no prompt for a remembered answer"
+    );
+
+    // Fresh human authority, with the automatic reviewer configured: the
+    // person is asked anyway, without the rule offer, and "for session"
+    // becomes this call only.
+    let (action, context) = exec_approval(&turn, "sec-513-fresh", ApprovalsReviewer::AutoReview);
+    let approval = session.request_approval_with_authority(
+        &action,
+        &context,
+        session.request_user_approval_with_authority(
+            &action, &context, /*fresh_human_authority*/ true,
+        ),
+        /*fresh_human_authority*/ true,
+    );
+    tokio::pin!(approval);
+    tokio::select! {
+        result = &mut approval => panic!("expected a prompt, got {:?}", result.result),
+        event = events.recv() => {
+            let codex_protocol::protocol::EventMsg::ExecApprovalRequest(request) =
+                event.context("receive fresh prompt")?.msg
+            else {
+                panic!("expected a command approval prompt");
+            };
+            assert_eq!(request.proposed_execpolicy_amendment, None);
+            session
+                .notify_approval(&request.call_id, ReviewDecision::ApprovedForSession)
+                .await;
+        }
+    }
+    let fresh = approval.await;
+    assert_eq!(fresh.source, Some(ApprovalResolutionSource::User));
+    assert_eq!(fresh.decision, Some(ReviewDecision::Approved));
+    assert!(matches!(fresh.result, Ok(ReviewDecision::Approved)));
+    Ok(())
 }

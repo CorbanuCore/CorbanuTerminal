@@ -1,4 +1,5 @@
 //! Source-informed Issue822 regressions. No command or model request is executed.
+//! Commands are `exec_command` (unified exec): upstream removed the shell tools.
 use super::*;
 use crate::session::tests::make_session_and_context_with_dynamic_tools_and_rx;
 use crate::tools::events::ToolEmitter;
@@ -9,33 +10,20 @@ use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ExecCommandSource;
 use std::time::Duration;
 
-async fn assert_command_status(
-    out: Result<ExecToolCallOutput, ToolError>,
-    expected: &str,
-    unified: bool,
-) {
+async fn assert_command_status(out: Result<ExecToolCallOutput, ToolError>, expected: &str) {
     let denied = out.is_err();
     let (session, turn, events) =
         make_session_and_context_with_dynamic_tools_and_rx(Vec::new()).await;
     let cwd = tempfile::tempdir().expect("synthetic workspace");
     let cwd = AbsolutePathBuf::try_from(cwd.path()).expect("absolute workspace");
     let command = vec!["echo".to_string(), "synthetic-only".to_string()];
-    let emitter = if unified {
-        ToolEmitter::unified_exec(
-            &command,
-            PathUri::from_abs_path(&cwd),
-            ExecCommandSource::UnifiedExecStartup,
-            /*process_id*/ None,
-            /*plugin_attribution*/ None,
-        )
-    } else {
-        ToolEmitter::shell(
-            command,
-            cwd,
-            ExecCommandSource::Agent,
-            /*plugin_attribution*/ None,
-        )
-    };
+    let emitter = ToolEmitter::unified_exec(
+        &command,
+        PathUri::from_abs_path(&cwd),
+        ExecCommandSource::UnifiedExecStartup,
+        /*process_id*/ None,
+        /*plugin_attribution*/ None,
+    );
     let result = emitter
         .finish(
             ToolEventCtx::new(
@@ -75,29 +63,37 @@ async fn assert_command_status(
 #[tokio::test]
 async fn issue822_policy_refusal_is_not_an_approval_decline() {
     // Exact error returned before approval by ToolOrchestrator's protected-launch gate.
-    for unified in [false, true] {
-        assert_command_status(
-            Err(ToolError::Rejected(
-                crate::security::protected_additional::PROTECTED_LAUNCH_NO_ESCALATION.to_string(),
-            )),
-            "refused",
-            unified,
-        )
-        .await;
+    assert_command_status(
+        Err(ToolError::Rejected(
+            crate::security::protected_additional::PROTECTED_LAUNCH_NO_ESCALATION.to_string(),
+        )),
+        "refused",
+    )
+    .await;
+}
+
+fn resolved(
+    decision: ReviewDecision,
+    source: ApprovalResolutionSource,
+) -> Result<ReviewDecision, ToolError> {
+    ApprovalResolution {
+        decision,
+        source,
+        cancellation_reason: None,
     }
+    .into_tool_result(&codex_models_manager::model_info::model_info_from_slug(
+        "acting-model",
+    ))
 }
 
 #[tokio::test]
 async fn issue822_actual_user_decline_keeps_declined_status() {
-    for unified in [false, true] {
-        let error = ApprovalResolution {
-            decision: ReviewDecision::denied("synthetic user refusal"),
-            source: ApprovalResolutionSource::User,
-        }
-        .into_tool_result()
-        .expect_err("human declined");
-        assert_command_status(Err(error), "declined", unified).await;
-    }
+    let error = resolved(
+        ReviewDecision::denied("synthetic user refusal"),
+        ApprovalResolutionSource::User,
+    )
+    .expect_err("human declined");
+    assert_command_status(Err(error), "declined").await;
 }
 
 #[tokio::test]
@@ -107,48 +103,40 @@ async fn issue822_other_approval_resolutions_stay_denied() {
         ApprovalResolutionSource::Guardian,
         ApprovalResolutionSource::Remembered,
     ] {
-        let error = ApprovalResolution {
-            decision: ReviewDecision::denied("synthetic approval refusal"),
-            source,
-        }
-        .into_tool_result()
-        .expect_err("approval denied");
-        assert_command_status(Err(error), "declined", /*unified*/ false).await;
+        let error = resolved(ReviewDecision::denied("synthetic approval refusal"), source)
+            .expect_err("approval denied");
+        assert_command_status(Err(error), "declined").await;
     }
 }
 
-/// #873: an approval that timed out or was aborted was still an approval
-/// request, so the command reads as declined, never as refused by policy.
+/// #873: an approval that timed out was still an approval request, so the
+/// command reads as declined, never as refused by policy. An aborted one
+/// ends the turn (upstream rust-v0.167.0).
 #[tokio::test]
-async fn issue873_timed_out_and_aborted_approvals_stay_declined() {
-    for decision in [ReviewDecision::TimedOut, ReviewDecision::Abort] {
-        for unified in [false, true] {
-            let error = ApprovalResolution {
-                decision: decision.clone(),
-                source: ApprovalResolutionSource::Guardian,
-            }
-            .into_tool_result()
-            .expect_err("no permission to proceed");
-            assert!(matches!(error, ToolError::Declined(_)), "{error:?}");
-            assert_command_status(Err(error), "declined", unified).await;
-        }
-    }
+async fn issue873_timed_out_approvals_stay_declined_and_aborted_ones_end_the_turn() {
+    let error = resolved(ReviewDecision::TimedOut, ApprovalResolutionSource::Guardian)
+        .expect_err("no permission to proceed");
+    assert!(matches!(error, ToolError::Declined(_)), "{error:?}");
+    assert_command_status(Err(error), "declined").await;
+    let error = resolved(ReviewDecision::Abort, ApprovalResolutionSource::User)
+        .expect_err("no permission to proceed");
+    assert!(
+        matches!(&error, ToolError::Codex(CodexErr::TurnAborted)),
+        "{error:?}"
+    );
 }
 
 #[tokio::test]
 async fn issue822_exit_success_and_failure_controls() {
-    for unified in [false, true] {
-        for (exit_code, status) in [(0, "completed"), (7, "failed")] {
-            assert_command_status(
-                Ok(ExecToolCallOutput {
-                    exit_code,
-                    ..Default::default()
-                }),
-                status,
-                unified,
-            )
-            .await;
-        }
+    for (exit_code, status) in [(0, "completed"), (7, "failed")] {
+        assert_command_status(
+            Ok(ExecToolCallOutput {
+                exit_code,
+                ..Default::default()
+            }),
+            status,
+        )
+        .await;
     }
 }
 
@@ -171,28 +159,19 @@ async fn issue941_actual_approvals_off_reason_survives_command_events() {
         },
     };
     let reason = action.approvals_off_rejection();
-    for unified in [false, true] {
+    {
         let (session, turn, events) =
             make_session_and_context_with_dynamic_tools_and_rx(Vec::new()).await;
         let workspace = tempfile::tempdir().expect("synthetic workspace");
         let cwd = AbsolutePathBuf::try_from(workspace.path()).expect("absolute workspace");
         let command = vec!["echo".to_string(), "synthetic-not-executed".to_string()];
-        let emitter = if unified {
-            ToolEmitter::unified_exec(
-                &command,
-                PathUri::from_abs_path(&cwd),
-                ExecCommandSource::UnifiedExecStartup,
-                /*process_id*/ None,
-                /*plugin_attribution*/ None,
-            )
-        } else {
-            ToolEmitter::shell(
-                command,
-                cwd,
-                ExecCommandSource::Agent,
-                /*plugin_attribution*/ None,
-            )
-        };
+        let emitter = ToolEmitter::unified_exec(
+            &command,
+            PathUri::from_abs_path(&cwd),
+            ExecCommandSource::UnifiedExecStartup,
+            /*process_id*/ None,
+            /*plugin_attribution*/ None,
+        );
         let result = emitter
             .finish(
                 ToolEventCtx::new(
