@@ -2549,15 +2549,15 @@ impl Classifier {
         // its command word, so every check on it is kept). A chroot whose
         // command cannot be judged (another root, an unseen root, or none)
         // asks.
-        let chroot_lines = indirect::chroot_commands(words)
+        let chroot_lines = indirect::chroot_commands(simple, words, /*from*/ 0)
             .into_iter()
-            .chain(operands.into_iter().flat_map(|from| {
-                indirect::chroot_commands(&words[from..])
+            .chain(
+                operands
                     .into_iter()
-                    .map(move |start| from + start)
-            }))
+                    .flat_map(|from| indirect::chroot_commands(simple, words, from)),
+            )
             .collect::<Vec<_>>();
-        for start in chroot_lines {
+        for (start, skip_chdir) in chroot_lines {
             work::step();
             let (run, run_unseen) = (&words[start..], unseen.get(start..).unwrap_or_default());
             // The line-level unseen-code checks, on the chroot's command:
@@ -2575,10 +2575,17 @@ impl Classifier {
             {
                 self.note(ProtectedActionKind::UnseenCode);
             }
+            // chroot runs the command in `/` of the new root unless
+            // `--skip-chdir` (`chroot / cp x home/u/.zshrc` writes
+            // `/home/u/.zshrc`); it is judged there, and in the current
+            // folder too.
+            if !skip_chdir {
+                self.command(run, "/", depth + 1);
+            }
             self.command(run, &folders.cwd, depth + 1);
         }
-        if indirect::chroot_runs_unjudged(words)
-            || operands.is_some_and(|from| indirect::chroot_runs_unjudged(&words[from..]))
+        if indirect::chroot_runs_unjudged(simple, words, /*from*/ 0)
+            || operands.is_some_and(|from| indirect::chroot_runs_unjudged(simple, words, from))
             || indirect::redirect_hides_command(simple, words, /*from*/ 0)
             || indirect::sudo_runs_helper(simple, words, /*from*/ 0)
             || operands.is_some_and(|from| {

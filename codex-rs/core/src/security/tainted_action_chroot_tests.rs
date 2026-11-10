@@ -81,8 +81,42 @@ fn issue1808_chroot_judges_its_command() {
         "chroot / env --help git config pager.log marker",
         "sudo chroot / command -V git config pager.log marker",
     ];
+    // Review round 4: quiet on main, ask now. A redirection after the root
+    // leaves chroot no command (it runs the root's shell, which may read the
+    // redirected file); its command runs in `/` unless `--skip-chdir`; an
+    // option this reading does not know.
+    let round4 = [
+        "chroot / <x",
+        "sudo chroot / <x 2>/dev/null",
+        "chroot / >out",
+        "chroot / 2>&1",
+        "chroot / cp x home/fixture/.zshrc",
+        "chroot --group / ls",
+        "chroot -u / ls",
+    ];
     let mut wrong = Vec::new();
     for shell in ["/bin/bash", "/bin/zsh"] {
+        for command in round4 {
+            if kind(&[shell, "-lc", command]).is_none() {
+                wrong.push(format!("round 4 asks {shell}: {command}"));
+            }
+        }
+        // Controls: the same write without chroot asks; with `--skip-chdir`
+        // the relative path stays under the current folder.
+        if kind(&[shell, "-lc", "cp x /home/fixture/.zshrc"]).is_none() {
+            wrong.push(format!("control asks {shell}: cp x /home/fixture/.zshrc"));
+        }
+        if kind(&[
+            shell,
+            "-lc",
+            "chroot --skip-chdir / cp x home/fixture/.zshrc",
+        ])
+        .is_some()
+        {
+            wrong.push(format!(
+                "control quiet {shell}: chroot --skip-chdir / cp x home/fixture/.zshrc"
+            ));
+        }
         for command in still_ask {
             if kind(&[shell, "-lc", command]).is_none() {
                 wrong.push(format!("still asks {shell}: {command}"));
@@ -106,12 +140,24 @@ fn issue1808_chroot_judges_its_command() {
 /// option runs.
 #[test]
 fn issue1808_chroot_reading_is_linear() {
-    for (label, unit) in [
-        ("chained chroots", "chroot / "),
-        ("option runs", "--userspec a:b --groups g --skip-chdir "),
+    // Review round 4: these nest (`chroot / chroot / … true`, and through
+    // `eval`), and option runs.
+    for (label, unit, tail) in [
+        ("nested chroots", "chroot / ", "true"),
+        ("nested through eval", "eval chroot / ", "true"),
+        (
+            "option runs",
+            "--userspec a --groups g --skip-chdir ",
+            "/ true",
+        ),
     ] {
         work::assert_linear(label, |scale| {
-            let _ = script(&format!("chroot {}/ true", unit.repeat(100 * scale)));
+            let line = if label == "option runs" {
+                format!("chroot {}{tail}", unit.repeat(100 * scale))
+            } else {
+                format!("{}{tail}", unit.repeat(100 * scale))
+            };
+            let _ = script(&line);
         });
     }
 }
