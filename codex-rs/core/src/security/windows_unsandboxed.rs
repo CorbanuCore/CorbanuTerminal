@@ -136,7 +136,11 @@ fn started_unsandboxed_refusal(level: SecurityLevel) -> String {
 /// Windows client sending work to a remote Linux machine (#2049).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RemoteGap {
-    WindowsWithoutSandbox,
+    /// This computer asks the remote Windows machine for no Windows sandbox
+    /// (no `[windows] sandbox` setting here); the machine uses that setting.
+    WindowsSandboxNotSelected,
+    /// The default sandbox is asked for but not set up on that machine.
+    WindowsSandboxNotSetUp,
     Unreported,
 }
 
@@ -146,6 +150,14 @@ const REMOTE_STEPS: &str = "To set it up, run Corbanu Terminal on that machine, 
      \"Set up default sandbox\" (it needs Administrator permission there), using the same \
      Corbanu home as its exec-server; then set `sandbox = \"elevated\"` under `[windows]` in \
      config.toml on this computer and start a new session with /new.";
+
+/// How to ask a remote Windows machine for its sandbox.
+const REMOTE_SELECT_STEPS: &str = "Set `sandbox = \"elevated\"` under `[windows]` in \
+     config.toml on this computer and start a new session with /new. The default sandbox must \
+     also be set up on that machine: if it isn't yet, run Corbanu Terminal there, open \
+     /permissions, choose a mode that uses the sandbox (such as \"Ask for approval\") and pick \
+     \"Set up default sandbox\" (it needs Administrator permission there), using the same \
+     Corbanu home as its exec-server.";
 
 /// How to get a report from an executor that gives none.
 const UNREPORTED_STEPS: &str = "Update Corbanu Terminal on that machine to this version so its \
@@ -170,7 +182,10 @@ pub(crate) async fn remote_gap(
         Ok(info) => match info.host_sandbox_verdict(windows_sandbox_level) {
             codex_exec_server::HostSandboxVerdict::Confined => None,
             codex_exec_server::HostSandboxVerdict::WindowsWithoutSandbox => {
-                Some(RemoteGap::WindowsWithoutSandbox)
+                Some(match windows_sandbox_level {
+                    WindowsSandboxLevel::Disabled => RemoteGap::WindowsSandboxNotSelected,
+                    _ => RemoteGap::WindowsSandboxNotSetUp,
+                })
             }
             codex_exec_server::HostSandboxVerdict::Unreported => Some(RemoteGap::Unreported),
         },
@@ -183,10 +198,17 @@ pub(crate) async fn remote_gap(
 
 fn remote_reason(environment_id: &str, gap: RemoteGap) -> (String, &'static str) {
     match gap {
-        RemoteGap::WindowsWithoutSandbox => (
+        RemoteGap::WindowsSandboxNotSelected => (
             format!(
-                "the default Windows sandbox, which is not set up for this session on the \
-                 remote Windows machine of environment `{environment_id}`"
+                "a Windows sandbox, and this computer asks the remote Windows machine of \
+                 environment `{environment_id}` for none (no `[windows] sandbox` setting here)"
+            ),
+            REMOTE_SELECT_STEPS,
+        ),
+        RemoteGap::WindowsSandboxNotSetUp => (
+            format!(
+                "the default Windows sandbox, which is not set up on the remote Windows machine \
+                 of environment `{environment_id}`"
             ),
             REMOTE_STEPS,
         ),
@@ -287,11 +309,13 @@ pub(crate) fn environment_file_refusal(
     windows_sandbox_level: WindowsSandboxLevel,
     environment: &crate::session::turn_context::TurnEnvironment,
 ) -> Option<String> {
-    if environment.environment.is_remote() {
-        return (level != SecurityLevel::Permissive)
-            .then(|| remote_file_refusal(level, &environment.environment_id));
+    // A Windows client without its own sandbox keeps #1976's refusal and
+    // wording for every environment (#2049).
+    if applies(level, windows_sandbox_level) {
+        return Some(file_refusal(level));
     }
-    applies(level, windows_sandbox_level).then(|| file_refusal(level))
+    (environment.environment.is_remote() && level != SecurityLevel::Permissive)
+        .then(|| remote_file_refusal(level, &environment.environment_id))
 }
 
 /// What the inspector lists for a refused command or file access.

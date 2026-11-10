@@ -312,18 +312,21 @@ async fn build_uploaded_argument_value(
 
 /// The upload's size and bytes, read through `read_sandbox` when it runs.
 /// #1976 (D491): on this host the read below would run outside any sandbox,
-/// so its refusal ends the upload here. #2050: a remote executor's file
-/// system judges the refusal against the executor's own report
-/// (`RemoteFileSystem`): it refuses there, or reads inside that executor's
-/// sandbox (a remote Linux or macOS machine).
+/// so its refusal ends the upload here, and so does a Windows client's own
+/// missing sandbox for every environment, as before (#2049). #2050:
+/// otherwise a remote executor's file system judges the refusal against the
+/// executor's own report (`RemoteFileSystem`): it refuses there, or reads
+/// inside that executor's sandbox (a remote Linux or macOS machine).
 fn refused_here<'a>(
     environment: &crate::session::turn_context::TurnEnvironment,
     read_sandbox: Option<&'a FileSystemSandboxContext>,
 ) -> Option<&'a String> {
-    if environment.environment.is_remote() {
-        return None;
-    }
-    read_sandbox.and_then(|sandbox| sandbox.unsandboxed_refusal.as_ref())
+    let sandbox = read_sandbox?;
+    let refusal = sandbox.unsandboxed_refusal.as_ref()?;
+    let client_without_sandbox = cfg!(windows)
+        && sandbox.windows_sandbox_level
+            == codex_protocol::config_types::WindowsSandboxLevel::Disabled;
+    (!environment.environment.is_remote() || client_without_sandbox).then_some(refusal)
 }
 
 async fn read_upload_contents(
@@ -424,13 +427,25 @@ mod tests {
             codex_protocol::models::PermissionProfile::Disabled,
         );
         sandbox.unsandboxed_refusal = Some("refused".to_string());
+        let refused = Some(&"refused".to_string());
         let local = environment(None);
         let remote = environment(Some("ws://127.0.0.1:9".to_string()));
-        assert_eq!(
-            refused_here(&local, Some(&sandbox)),
-            Some(&"refused".to_string())
-        );
-        assert_eq!(refused_here(&remote, Some(&sandbox)), None);
+        for level in [
+            codex_protocol::config_types::WindowsSandboxLevel::Disabled,
+            codex_protocol::config_types::WindowsSandboxLevel::Elevated,
+        ] {
+            sandbox.windows_sandbox_level = level;
+            assert_eq!(refused_here(&local, Some(&sandbox)), refused);
+            // A Windows client without its own sandbox still refuses here
+            // for a remote environment (#2049); otherwise the executor's
+            // report decides.
+            let client_without_sandbox = cfg!(windows)
+                && level == codex_protocol::config_types::WindowsSandboxLevel::Disabled;
+            assert_eq!(
+                refused_here(&remote, Some(&sandbox)),
+                refused.filter(|_| client_without_sandbox)
+            );
+        }
         assert_eq!(refused_here(&local, None), None);
     }
 

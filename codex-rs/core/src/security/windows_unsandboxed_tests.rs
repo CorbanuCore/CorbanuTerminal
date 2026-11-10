@@ -183,17 +183,17 @@ async fn issue_2050_a_remote_gap_follows_the_executor_report() {
         (
             Some(windows_info(false)),
             Disabled,
-            Some(RemoteGap::WindowsWithoutSandbox),
+            Some(RemoteGap::WindowsSandboxNotSelected),
         ),
         (
             Some(windows_info(true)),
             Disabled,
-            Some(RemoteGap::WindowsWithoutSandbox),
+            Some(RemoteGap::WindowsSandboxNotSelected),
         ),
         (
             Some(windows_info(false)),
             Elevated,
-            Some(RemoteGap::WindowsWithoutSandbox),
+            Some(RemoteGap::WindowsSandboxNotSetUp),
         ),
         (Some(windows_info(true)), Elevated, None),
         (Some(windows_info(false)), RestrictedToken, None),
@@ -241,11 +241,19 @@ fn issue_2050_remote_refusals_name_the_level_environment_and_steps() {
     ] {
         for (text, start) in [
             (
-                remote_command_refusal(level, "far", RemoteGap::WindowsWithoutSandbox),
+                remote_command_refusal(level, "far", RemoteGap::WindowsSandboxNotSetUp),
                 "refused this command",
             ),
             (
-                remote_typing_refusal(level, "far", RemoteGap::WindowsWithoutSandbox),
+                remote_command_refusal(level, "far", RemoteGap::WindowsSandboxNotSelected),
+                "refused this command",
+            ),
+            (
+                remote_typing_refusal(level, "far", RemoteGap::WindowsSandboxNotSetUp),
+                "refused typing into this command",
+            ),
+            (
+                remote_typing_refusal(level, "far", RemoteGap::WindowsSandboxNotSelected),
                 "refused typing into this command",
             ),
             (
@@ -269,6 +277,12 @@ fn issue_2050_remote_refusals_name_the_level_environment_and_steps() {
                 assert!(text.contains(part), "{part}: {text}");
             }
         }
+        let not_selected =
+            remote_command_refusal(level, "far", RemoteGap::WindowsSandboxNotSelected);
+        assert!(
+            not_selected.contains("asks the remote Windows machine of environment `far` for none"),
+            "{not_selected}"
+        );
         let unreported = remote_command_refusal(level, "far", RemoteGap::Unreported);
         for part in [
             "environment `far` did not report one",
@@ -291,9 +305,15 @@ async fn issue_2050_file_refusal_follows_where_the_tool_runs() {
             WindowsSandboxLevel::RestrictedToken,
             WindowsSandboxLevel::Elevated,
         ] {
+            // A Windows client without its own sandbox keeps #1976's
+            // refusal for every environment (#2049).
             assert_eq!(
                 environment_file_refusal(level, sandbox, &remote),
-                Some(remote_file_refusal(level, "far"))
+                Some(if applies(level, sandbox) {
+                    file_refusal(level)
+                } else {
+                    remote_file_refusal(level, "far")
+                })
             );
             assert_eq!(
                 environment_file_refusal(level, sandbox, &local),
