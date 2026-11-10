@@ -925,7 +925,9 @@ impl Session {
         // Prepared before the admission lock: a refused input only leaves a
         // gap in the input order.
         let (acceptance_order, prepared_input) = match &*input {
-            SubmittedTurnInput::UserInput { .. } => (Some(self.reserve_user_input_order().await), None),
+            SubmittedTurnInput::UserInput { .. } => {
+                (Some(self.reserve_user_input_order().await), None)
+            }
             input => (
                 None,
                 Some(
@@ -950,7 +952,9 @@ impl Session {
         // the client.
         let mut state = self.state.lock().await;
         let authorized = match pending_update {
-            None => Self::authorization_matches(&state.session_configuration, &active_task.turn_context),
+            None => {
+                Self::authorization_matches(&state.session_configuration, &active_task.turn_context)
+            }
             Some(update) => self
                 .apply_session_settings(&state.session_configuration, update)
                 .is_ok_and(|next| Self::authorization_matches(&next, &active_task.turn_context)),

@@ -532,8 +532,9 @@ impl SessionConfiguration {
             config.model_provider = provider.clone();
             // Unchanged definitions keep the provider and its sign-in.
             if next_configuration.provider.info() != &provider {
-                next_configuration.provider =
-                    codex_model_provider::create_model_provider(provider, /*auth_manager*/ None);
+                next_configuration.provider = codex_model_provider::create_model_provider(
+                    provider, /*auth_manager*/ None,
+                );
             }
             next_configuration.original_config_do_not_use = Arc::new(config);
         }

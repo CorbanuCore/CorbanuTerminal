@@ -38,6 +38,7 @@ use crate::context::world_state::WorldStateSnapshot;
 use crate::context::world_state::WorldStateUpdate;
 use crate::context::world_state::WorldStateUpdateContent;
 use crate::context::world_state::split_prefix_updates;
+use crate::context_manager::updates::SourcedRenderedFragment;
 use crate::current_time::TimeProvider;
 use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::exec_policy::BANNED_PREFIX_SUGGESTIONS;
@@ -74,7 +75,6 @@ use codex_attachment_store::AttachmentStore;
 use codex_attachment_store::InlineAttachmentStore;
 use codex_connectors::connector_runtime_context_key;
 use codex_context_fragments::RenderedFragment;
-use crate::context_manager::updates::SourcedRenderedFragment;
 use codex_exec_server::Environment;
 use codex_exec_server::EnvironmentManager;
 use codex_execpolicy::prefix_rule_migration;
@@ -6367,7 +6367,10 @@ impl Session {
                     .as_deref()
                     .and_then(RecommendedPluginsInstructions::from_plugins)
             {
-                developer_sections.push((recommended_plugins.render_fragment(), /*source_id*/ None));
+                developer_sections.push((
+                    recommended_plugins.render_fragment(),
+                    /*source_id*/ None,
+                ));
             }
 
             if let Some(developer_message) = crate::context_manager::updates::build_sourced_message(
