@@ -585,6 +585,10 @@ pub struct TurnContext {
     pub(crate) cyber_access_program: Option<CyberAccessProgram>,
     /// The execution authority this turn was admitted under.
     pub(crate) authority: TurnAuthority,
+    /// D532 (a), provisional (owner decision pending): a live turn-settings or environment
+    /// update changed this running turn's execution authority after it was admitted. Input
+    /// arriving afterwards never joins this turn; it waits for the next one.
+    pub(crate) authority_changed_mid_turn: AtomicBool,
 }
 
 /// Selects which preparation is needed when building a turn context.
@@ -674,6 +678,9 @@ impl TurnContext {
             accounting_gap_warning_emitted: AtomicBool::new(false),
             cyber_access_program: None,
             authority: self.authority.clone(),
+            authority_changed_mid_turn: AtomicBool::new(
+                self.authority_changed_mid_turn.load(Ordering::Acquire),
+            ),
         }
     }
 
@@ -1186,6 +1193,9 @@ impl TurnContext {
             ),
             cyber_access_program: self.cyber_access_program,
             authority: self.authority.clone(),
+            authority_changed_mid_turn: AtomicBool::new(
+                self.authority_changed_mid_turn.load(Ordering::Acquire),
+            ),
         }
     }
 
@@ -1613,6 +1623,7 @@ impl Session {
             accounting_gap_warning_emitted: AtomicBool::new(false),
             cyber_access_program: None,
             authority: TurnAuthority::of(session_configuration),
+            authority_changed_mid_turn: AtomicBool::new(false),
         }
     }
 

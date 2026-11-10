@@ -400,6 +400,24 @@ impl InputQueue {
         !self.mailbox_pending_mails.lock().await.is_empty() || self.has_unread_controller_mail()
     }
 
+    /// D532 (a): agent mail waiting in the session queue may not join the running turn
+    /// `turn_id`, whose execution authority changed after it was admitted; it waits for the
+    /// next turn.
+    pub(crate) async fn defer_waiting_mail_for_turn(
+        &self,
+        turn_id: &str,
+        turn_state: &Arc<Mutex<TurnState>>,
+    ) {
+        // Only one turn runs at a time: mail deferred for another turn waited for one that has
+        // ended, so it now waits for this one's end too.
+        for mail in self.mailbox_pending_mails.lock().await.iter_mut() {
+            if mail.deferred_for_turn.as_deref() != Some(turn_id) {
+                mail.deferred_for_turn = Some(turn_id.to_string());
+                mail.deferred_turn_state = Some(Arc::downgrade(turn_state));
+            }
+        }
+    }
+
     pub(crate) async fn has_trigger_turn_mailbox_items(&self) -> bool {
         self.mailbox_pending_mails
             .lock()
@@ -846,6 +864,40 @@ impl TurnInputQueue {
     /// Whether the turn has input it may take; input deferred to re-admission is not counted.
     pub(crate) fn is_empty(&self) -> bool {
         self.items.is_empty()
+    }
+
+    /// D532 (a): moves admitted input the turn has not taken (user input and agent mail) to
+    /// input deferred to re-admission. Items the turn queued for itself (tool outputs,
+    /// response items) stay; so does context a client steered in as response items, which is
+    /// information only and grants the turn nothing, and a standalone function-call output a
+    /// client steered in (D532 (a), provisional: the owner decides with this case in view).
+    pub(crate) fn defer_admitted_items(
+        &mut self,
+        final_output_json_schema: Option<serde_json::Value>,
+    ) {
+        let (admitted, own): (Vec<_>, Vec<_>) = std::mem::take(&mut self.items)
+            .into_iter()
+            .partition(|input| {
+                matches!(
+                    input,
+                    TurnInput::UserInput { .. } | TurnInput::InterAgentCommunication(_)
+                )
+            });
+        self.items = own;
+        self.deferred.extend(
+            admitted
+                .into_iter()
+                .map(|input| (input, final_output_json_schema.clone())),
+        );
+    }
+
+    /// Input deferred to re-admission (follow-up input the running turn may not take).
+    pub(crate) fn defer_with_schema(
+        &mut self,
+        input: TurnInput,
+        final_output_json_schema: Option<serde_json::Value>,
+    ) {
+        self.deferred.push((input, final_output_json_schema));
     }
 
     /// Takes the input the turn may take, leaving input deferred to re-admission.
