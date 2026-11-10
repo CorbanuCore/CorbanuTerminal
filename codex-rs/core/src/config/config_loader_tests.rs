@@ -5071,7 +5071,6 @@ prefix_rules = []
 }
 
 #[tokio::test]
-<<<<<<< HEAD
 async fn home_dot_codex_is_not_a_project_layer_inside_a_repository() -> std::io::Result<()> {
     // A home directory that is itself a repository (dotfiles) holds the Codex
     // CLI's own `~/.codex`; it must not load as this program's project config.
@@ -5416,8 +5415,9 @@ async fn recorded_borrowed_account_is_refused_with_its_name() -> std::io::Result
     assert_eq!(error.to_string(), expected);
     assert_eq!(config.model_providers["zai-anthropic"].account, None);
     Ok(())
-||||||| 413492cd6c
-=======
+}
+
+#[tokio::test]
 async fn async_compaction_config() {
     use std::io::ErrorKind::InvalidInput;
 
@@ -5467,5 +5467,4 @@ async fn async_compaction_config() {
             .map_err(|error| error.kind());
         assert_eq!(actual, expected, "{settings}");
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

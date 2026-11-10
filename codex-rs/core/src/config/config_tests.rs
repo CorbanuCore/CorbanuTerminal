@@ -83,12 +83,8 @@ use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
 use codex_model_provider_info::WireApi;
 use codex_models_manager::bundled_models_response;
 use codex_network_proxy::NetworkMode;
-<<<<<<< HEAD
-use codex_protocol::config_types::ForcedLoginMethod;
-||||||| 413492cd6c
-=======
 use codex_prompts::ResolvedMessage;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_protocol::config_types::ForcedLoginMethod;
 use codex_protocol::config_types::ModelProviderAuthInfo;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::config_types::ServiceTier;
@@ -1413,7 +1409,6 @@ command = "print-token"
 }
 
 #[tokio::test]
-<<<<<<< HEAD
 async fn claude_plan_auth_uses_the_runtime_executable_without_path_lookup() {
     let codex_home = tempdir().expect("tempdir");
     let codex_self_exe = codex_home.path().join(if cfg!(windows) {
@@ -1504,10 +1499,6 @@ fn corbanu_auth_helper_uses_an_installed_sibling_cli() {
 }
 
 #[tokio::test]
-async fn load_config_rejects_unsupported_amazon_bedrock_overrides() {
-||||||| 413492cd6c
-async fn load_config_rejects_unsupported_amazon_bedrock_overrides() {
-=======
 async fn load_config_uses_resolved_cwd_for_default_gcp_auth() {
     let codex_home = tempdir().expect("tempdir");
     let workspace = tempdir().expect("tempdir");
@@ -1564,7 +1555,6 @@ async fn load_config_uses_resolved_cwd_for_default_gcp_auth() {
 
 #[tokio::test]
 async fn load_config_applies_gcp_transport_overrides() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let cfg = toml::from_str::<ConfigToml>(
         r#"
 model_provider = "gcp"
@@ -1624,13 +1614,7 @@ supports_websockets = true
     )
     .expect_err("Amazon Bedrock unsupported overrides should fail validation");
     assert!(err.to_string().contains(
-<<<<<<< HEAD
-        "model_providers.amazon-bedrock only supports changing `base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, and `billing`; other non-default provider fields are not supported"
-||||||| 413492cd6c
-        "model_providers.amazon-bedrock only supports changing `base_url`, `auth`, `http_headers`, `aws.profile`, and `aws.region`; other non-default provider fields are not supported"
-=======
-        "model_providers.amazon-bedrock only supports changing `base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, `aws.credential_export`, and `aws.auth_refresh`; other non-default provider fields are not supported"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        "model_providers.amazon-bedrock only supports changing `base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, `aws.credential_export`, `aws.auth_refresh`, and `billing`; other non-default provider fields are not supported"
     ));
 }
 
@@ -1695,19 +1679,13 @@ fn config_toml_deserializes_model_availability_nux() {
         Tui {
             notification_settings: TuiNotificationSettings::default(),
             animations: true,
-<<<<<<< HEAD
-            show_tooltips: false,
-||||||| 413492cd6c
-            show_tooltips: true,
-=======
             screen_reader_detection_done: None,
             effects: Default::default(),
             rendering: Default::default(),
-            show_tooltips: true,
+            show_tooltips: false,
             show_server_version_notice: true,
             auto_recap: true,
             disable_paste_burst: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             vim_mode_default: false,
             question_esc_back: true,
             raw_output_mode: false,
@@ -5064,19 +5042,13 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
         Tui {
             notification_settings: TuiNotificationSettings::default(),
             animations: true,
-<<<<<<< HEAD
-            show_tooltips: false,
-||||||| 413492cd6c
-            show_tooltips: true,
-=======
             screen_reader_detection_done: None,
             effects: Default::default(),
             rendering: Default::default(),
-            show_tooltips: true,
+            show_tooltips: false,
             show_server_version_notice: true,
             auto_recap: true,
             disable_paste_burst: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             vim_mode_default: false,
             question_esc_back: true,
             raw_output_mode: false,
@@ -13501,7 +13473,6 @@ subagent_developer_instructions = "  \t  "
 }
 
 #[tokio::test]
-<<<<<<< HEAD
 async fn multi_agent_v2_rejects_subagent_model_request_limit_below_two() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
@@ -13526,12 +13497,7 @@ max_subagent_model_requests_per_turn = 1
 }
 
 #[tokio::test]
-async fn multi_agent_v2_empty_usage_hint_overrides_clear_default_hints() -> std::io::Result<()> {
-||||||| 413492cd6c
-async fn multi_agent_v2_empty_usage_hint_overrides_clear_default_hints() -> std::io::Result<()> {
-=======
 async fn multi_agent_v2_empty_usage_hint_overrides_are_preserved() -> std::io::Result<()> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let codex_home = TempDir::new()?;
     std::fs::write(
         codex_home.path().join(CONFIG_TOML_FILE),
