@@ -140,19 +140,10 @@ async fn create_clean_git_repo(repo_name: &str) -> (TempDir, AbsolutePathBuf) {
 /// Awaits the spawned enrichment task itself instead of polling against a wall-clock budget:
 /// each git command it runs is already bounded by the git helpers' own timeout, and loaded
 /// Windows runners took longer than the old 2 s poll (#1241).
-async fn finish_git_enrichment(state: &TurnMetadataState) {
-    let task = state
-        .enrichment_task
-        .lock()
-        .expect("enrichment task lock")
-        .take()
-        .expect("git enrichment should have been spawned");
-    task.await.expect("git enrichment task should finish");
-}
-
 async fn wait_for_git_enrichment(state: &TurnMetadataState) -> Value {
-<<<<<<< HEAD
-    finish_git_enrichment(state).await;
+    // Corbanu: await the enrichment itself rather than a wall-clock timeout,
+    // which flaked on loaded CI runners.
+    state.wait_for_git_enrichment().await;
     let header = test_turn_metadata_header(state);
     let json: Value = serde_json::from_str(&header).expect("json");
     assert!(
@@ -162,29 +153,6 @@ async fn wait_for_git_enrichment(state: &TurnMetadataState) -> Value {
         "git enrichment should complete with workspace metadata: {json}"
     );
     json
-||||||| 413492cd6c
-    tokio::time::timeout(Duration::from_secs(2), async {
-        loop {
-            let header = test_turn_metadata_header(state);
-            let json: Value = serde_json::from_str(&header).expect("json");
-            if json
-                .get("workspaces")
-                .and_then(Value::as_object)
-                .is_some_and(|workspaces| !workspaces.is_empty())
-            {
-                return json;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("git enrichment should complete")
-=======
-    tokio::time::timeout(Duration::from_secs(2), state.wait_for_git_enrichment())
-        .await
-        .expect("git enrichment should complete");
-    serde_json::from_str(&test_turn_metadata_header(state)).expect("json")
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]
@@ -1527,13 +1495,7 @@ async fn turn_metadata_state_git_enrichment_cancellation_is_retryable_and_errors
         "ref: refs/heads/main\n",
     )
     .expect("invalid git HEAD");
-<<<<<<< HEAD
-    let invalid_state = TurnMetadataState::new(
-||||||| 413492cd6c
-    let invalid_state = TurnMetadataState::new(
-=======
     let invalid_state = Arc::new(TurnMetadataState::new(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         "session-a".to_string(),
         "thread-a".to_string(),
         /*forked_from_thread_id*/ None,
@@ -1545,40 +1507,10 @@ async fn turn_metadata_state_git_enrichment_cancellation_is_retryable_and_errors
         &permission_profile,
         WindowsSandboxLevel::Disabled,
         /*enforce_managed_network*/ false,
-<<<<<<< HEAD
-    );
-    invalid_state.spawn_git_enrichment_task();
-    finish_git_enrichment(&invalid_state).await;
-||||||| 413492cd6c
-    );
-    invalid_state.spawn_git_enrichment_task();
-    tokio::time::timeout(Duration::from_secs(2), async {
-        loop {
-            if invalid_state
-                .enrichment_task
-                .lock()
-                .expect("enrichment task lock")
-                .as_ref()
-                .is_some_and(tokio::task::JoinHandle::is_finished)
-            {
-                return;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("failed git enrichment should complete");
-=======
         /*auto_review_enabled*/ false,
         &model_info_from_slug("gpt-5.4"),
     ));
     invalid_state.spawn_git_enrichment_task(Arc::default());
-    tokio::time::timeout(
-        Duration::from_secs(2),
-        invalid_state.wait_for_git_enrichment(),
-    )
-    .await
-    .expect("failed git enrichment should complete");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    invalid_state.wait_for_git_enrichment().await;
     assert!(invalid_state.current_workspaces().is_empty());
 }
