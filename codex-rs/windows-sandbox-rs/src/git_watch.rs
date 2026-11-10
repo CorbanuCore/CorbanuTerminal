@@ -3,7 +3,7 @@
 //! makes there can be told apart from git's own bookkeeping.
 //!
 //! Git reads a repository's config and runs its hooks with the person's
-//! full rights whenever they (or an editor) run git there. [`fingerprint`]
+//! full rights whenever they (or an editor) run git there. [`fingerprint_with`]
 //! records, by content, the small files git reads programs from (`config`,
 //! `config.worktree`, `commondir`, `gitdir`, `hooks\*`, rebase and sequencer
 //! steps, the legacy `remotes`/`branches` definitions), whether the files
@@ -79,7 +79,8 @@ fn valid_head(head: &Path) -> bool {
     if metadata.file_type().is_symlink() {
         return true;
     }
-    let Ok(bytes) = std::fs::read(head) else {
+    // Read without following (#1909): one swapped in since is a link.
+    let Some(bytes) = read_unfollowed(head) else {
         return true;
     };
     if let Some(rest) = bytes.strip_prefix(b"ref:") {
@@ -107,41 +108,76 @@ fn resolve(base: &Path, target: &str) -> PathBuf {
     }
 }
 
+/// [`fingerprint_with`] for one repository on its own.
+#[cfg(test)]
+pub(crate) fn fingerprint(entry: &Path, roots: &[PathBuf]) -> Prints {
+    fingerprint_with(entry, roots, &FolderPrints::default())
+}
+
+/// #1909: what [`fingerprint_with`] records for each git folder on its own
+/// (a fresh look, prefix `""`), each folder looked at once for all the
+/// repositories of one snapshot: a `repo` client's work trees name, in
+/// their `.git` files, the very git folders it also finds as bare
+/// repositories, which used to be looked through twice.
+#[derive(Default)]
+pub(crate) struct FolderPrints(
+    std::sync::Mutex<
+        std::collections::HashMap<PathBuf, std::sync::Arc<std::sync::OnceLock<Prints>>>,
+    >,
+);
+
+impl FolderPrints {
+    /// The prints of the git folder `dir` under `prefix`, into `prints`.
+    fn insert(&self, dir: &Path, prefix: &str, roots: &[PathBuf], prints: &mut Prints) {
+        // By spelling, `.` and `..` resolved as Windows resolves them (no
+        // look at the disk): two entries that name a folder alike share its
+        // look; spelled apart, it is looked at twice, as before.
+        let key = normalize(dir);
+        let cell = std::sync::Arc::clone(
+            self.0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .entry(key)
+                .or_default(),
+        );
+        let own = cell.get_or_init(|| {
+            let mut own = Prints::new();
+            git_folder(
+                dir,
+                "",
+                roots,
+                MAX_DEPTH,
+                /*follow_common*/ true,
+                &mut Walk::default(),
+                &mut own,
+            );
+            own
+        });
+        for (name, print) in own {
+            prints.insert(format!("{prefix}{name}"), print.clone());
+        }
+    }
+}
+
 /// What git would run from the repository at `entry`: a `.git` folder or a
 /// bare repository's folder (its git folder), or a `.git` file (its
 /// `gitdir:` line, and the folder it names). Folders named by a `gitdir:`
 /// line or `commondir` are only looked into when they lie in one of `roots`
 /// (canonical; elsewhere commands can't write). A link `entry` isn't
-/// followed (the caller counts it as changed every time).
-pub(crate) fn fingerprint(entry: &Path, roots: &[PathBuf]) -> Prints {
+/// followed (the caller counts it as changed every time). A git folder
+/// already looked at for this snapshot's `folders` isn't looked at again.
+pub(crate) fn fingerprint_with(entry: &Path, roots: &[PathBuf], folders: &FolderPrints) -> Prints {
     let mut prints = Prints::new();
-    let mut walk = Walk::default();
     match std::fs::symlink_metadata(entry) {
         Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
-            git_folder(
-                entry,
-                "",
-                roots,
-                MAX_DEPTH,
-                /*follow_common*/ true,
-                &mut walk,
-                &mut prints,
-            );
+            folders.insert(entry, "", roots, &mut prints);
         }
         Ok(metadata) if metadata.is_file() => {
             prints.insert(".git".to_string(), file_print(entry));
             if let Some(target) = gitdir_target(entry)
                 && in_roots(&target, roots)
             {
-                git_folder(
-                    &target,
-                    "gitdir/",
-                    roots,
-                    MAX_DEPTH,
-                    /*follow_common*/ true,
-                    &mut walk,
-                    &mut prints,
-                );
+                folders.insert(&target, "gitdir/", roots, &mut prints);
             }
         }
         Ok(_) => {
@@ -597,18 +633,140 @@ pub(crate) fn file_print(path: &Path) -> String {
     if metadata.is_dir() {
         return "dir".to_string();
     }
-    let mut text = content_print(path);
-    if link_count(path).is_none_or(|count| count > 1) {
+    unfollowed_print(path)
+}
+
+/// The content hash of the file at `path` itself (with ` hard link` when
+/// it has more than one name), or `unreadable`, also when it has become a
+/// link or a folder since the caller looked (#1909): a process a command
+/// left running can't steer the read through a link it swaps in. A
+/// reparse point other than a link that can't be read as itself differs
+/// every time, so a change to it is never missed.
+fn unfollowed_print(path: &Path) -> String {
+    #[cfg(test)]
+    tests::before_read(path);
+    let (file, links) = match open_unfollowed(path) {
+        Opened::File(file, links) => (file, links),
+        // Marked as before when the name has others (or can't be counted).
+        Opened::Refused if link_count(path).is_none_or(|count| count > 1) => {
+            return "unreadable hard link".to_string();
+        }
+        Opened::Refused => return "unreadable".to_string(),
+        Opened::Unsure => return truncated(),
+    };
+    let mut text = hash(file);
+    if links.is_none_or(|count| count > 1) {
         text.push_str(" hard link");
     }
     text
 }
 
-/// The SHA-256 of the file at `path` (followed), or `unreadable`.
-fn content_print(path: &Path) -> String {
-    let Ok(mut file) = std::fs::File::open(path) else {
+/// #1909: [`unfollowed_print`] of the entry `name`, at `path`, of the open
+/// folder `dir`, with nothing looked up by path: the file is opened (and its
+/// names counted) relative to `dir`. `allow` gets the open file's size and
+/// says whether to read it; if not, or if the file holds more than that
+/// size by the time it is read (it grew), it differs every time.
+#[cfg(windows)]
+pub(crate) fn unfollowed_print_at(
+    dir: windows_sys::Win32::Foundation::HANDLE,
+    name: &[u16],
+    #[cfg_attr(not(test), allow(unused_variables))] path: &Path,
+    allow: impl FnOnce(u64) -> bool,
+) -> String {
+    #[cfg(test)]
+    tests::before_read(path);
+    let (file, links) = match crate::acl::open_unfollowed_at(dir, name) {
+        crate::acl::Unfollowed::File(file, links) => (file, links),
+        // Marked as before when the name has others (or can't be counted).
+        crate::acl::Unfollowed::Refused
+            if crate::acl::link_count_at(dir, name).is_none_or(|count| count > 1) =>
+        {
+            return "unreadable hard link".to_string();
+        }
+        crate::acl::Unfollowed::Refused => return "unreadable".to_string(),
+        crate::acl::Unfollowed::Unsure => return truncated(),
+    };
+    let Ok(size) = file.metadata().map(|metadata| metadata.len()) else {
         return "unreadable".to_string();
     };
+    if !allow(size) {
+        return truncated();
+    }
+    let Some(mut text) = hash_at_most(file, size) else {
+        return truncated();
+    };
+    if links > 1 {
+        text.push_str(" hard link");
+    }
+    text
+}
+
+/// [`hash`] of `file`, `None` when it holds more than `size` bytes.
+#[cfg(windows)]
+fn hash_at_most(file: std::fs::File, size: u64) -> Option<String> {
+    let mut limited = file.take(size.saturating_add(1));
+    let text = hash_read(&mut limited);
+    (limited.limit() > 0).then_some(text)
+}
+
+/// What [`open_unfollowed`] found.
+enum Opened {
+    /// The file itself, with how many names it has.
+    File(std::fs::File, Option<u64>),
+    /// A folder or a link, or unreadable.
+    Refused,
+    /// A reparse point other than a link that couldn't be read as itself.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    Unsure,
+}
+
+/// The file at `path` itself, not followed if it is a link.
+#[cfg(windows)]
+fn open_unfollowed(path: &Path) -> Opened {
+    match crate::acl::open_unfollowed(path) {
+        crate::acl::Unfollowed::File(file, links) => Opened::File(file, Some(u64::from(links))),
+        crate::acl::Unfollowed::Refused => Opened::Refused,
+        crate::acl::Unfollowed::Unsure => Opened::Unsure,
+    }
+}
+
+/// Elsewhere (tests only) a link is refused as it is found; the open
+/// itself follows.
+#[cfg(not(windows))]
+fn open_unfollowed(path: &Path) -> Opened {
+    let is_file = std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_file());
+    match std::fs::File::open(path) {
+        Ok(file) if is_file => Opened::File(file, link_count(path)),
+        _ => Opened::Refused,
+    }
+}
+
+/// The bytes of the file at `path` itself, `None` when it is a link or a
+/// folder or can't be read (#1909).
+fn read_unfollowed(path: &Path) -> Option<Vec<u8>> {
+    let Opened::File(mut file, _) = open_unfollowed(path) else {
+        return None;
+    };
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).ok()?;
+    Some(bytes)
+}
+
+/// The SHA-256 of the file at `path` (followed), or `unreadable`.
+fn content_print(path: &Path) -> String {
+    match std::fs::File::open(path) {
+        Ok(file) => hash(file),
+        Err(_) => "unreadable".to_string(),
+    }
+}
+
+/// The SHA-256 of what `file` holds, or `unreadable`.
+fn hash(mut file: std::fs::File) -> String {
+    hash_read(&mut file)
+}
+
+/// The SHA-256 of what `reader` gives, or `unreadable`.
+fn hash_read(file: &mut impl std::io::Read) -> String {
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 8192];
     loop {
@@ -689,7 +847,7 @@ pub(crate) fn is_plain(entry: &Path) -> bool {
     if !only_samples {
         return false;
     }
-    let Ok(config) = std::fs::read(entry.join("config")) else {
+    let Some(config) = read_unfollowed(&entry.join("config")) else {
         return false;
     };
     plain_config(&String::from_utf8_lossy(&config)) && no_links_inside(entry)
@@ -838,4 +996,4 @@ fn section_name(header: &str) -> Option<String> {
 
 #[cfg(test)]
 #[path = "git_watch_tests.rs"]
-mod tests;
+pub(crate) mod tests;

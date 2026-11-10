@@ -122,6 +122,10 @@ impl DesktopPolicy {
             )
         });
         let (read_roots, write_roots) = build_payload_roots(&request, &overrides, runtime);
+        // D453 (#1896 item 1): computed before `write_roots` moves into the
+        // plan; a write root holding the planted-folder records gets them denied.
+        let deny_write_paths =
+            build_payload_deny_write_paths(&request, overrides.deny_write_paths, &write_roots);
         Ok(Self {
             uses_write_capabilities: request
                 .permissions
@@ -149,7 +153,7 @@ impl DesktopPolicy {
             )?
             .into_iter()
             .collect(),
-            deny_write_paths: build_payload_deny_write_paths(&request, overrides.deny_write_paths)
+            deny_write_paths: deny_write_paths
                 .into_iter()
                 .map(|path| canonicalize_path(&path))
                 .collect(),
@@ -172,8 +176,18 @@ impl LaunchDesktop {
         security: &LegacySessionSecurity,
         logs_base_dir: Option<&Path>,
     ) -> Result<Self> {
+        Self::prepare_legacy_for_token(security.h_token, logs_base_dir)
+    }
+
+    /// [`Self::prepare_legacy`] for the session's restricted token alone, so
+    /// a spawn started off the async thread (#1909) needn't carry the
+    /// session's capability SIDs.
+    pub(crate) fn prepare_legacy_for_token(
+        h_token: windows_sys::Win32::Foundation::HANDLE,
+        logs_base_dir: Option<&Path>,
+    ) -> Result<Self> {
         let private_desktop = PrivateDesktop::create(
-            crate::integrity::token_is_low_integrity(security.h_token),
+            crate::integrity::token_is_low_integrity(h_token),
             logs_base_dir,
         )?;
         let startup_name = to_wide(format!("{}\\{}", launch_station(), private_desktop.name));

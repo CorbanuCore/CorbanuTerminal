@@ -398,6 +398,11 @@ pub struct FileSystemSandboxContext {
     pub windows_sandbox_proxy_settings_mode: Option<WindowsSandboxProxySettingsMode>,
     #[serde(default)]
     pub use_legacy_landlock: bool,
+    /// #1976 (D491): when set, an operation that would run without a
+    /// platform sandbox on the host is refused with this text instead (on
+    /// Windows without the Windows sandbox, under Moderate or Aggressive).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unsandboxed_refusal: Option<String>,
 }
 
 impl FileSystemSandboxContext {
@@ -432,6 +437,7 @@ impl FileSystemSandboxContext {
             windows_sandbox_selection: WindowsSandboxSelection::Disabled,
             windows_sandbox_proxy_settings_mode: None,
             use_legacy_landlock: false,
+            unsandboxed_refusal: None,
         }
     }
 
@@ -528,6 +534,9 @@ pub struct WireFileSystemSandboxContext {
     windows_sandbox_proxy_settings_mode: Option<WindowsSandboxProxySettingsMode>,
     #[serde(default)]
     use_legacy_landlock: bool,
+    /// #1976 (D491): see [`FileSystemSandboxContext::unsandboxed_refusal`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    unsandboxed_refusal: Option<String>,
 }
 
 /// New filesystem clients provide these paths independently of the legacy helper launch cwd.
@@ -552,6 +561,7 @@ impl From<FileSystemSandboxContext> for WireFileSystemSandboxContext {
             windows_sandbox_selection,
             windows_sandbox_proxy_settings_mode,
             use_legacy_landlock,
+            unsandboxed_refusal,
         } = sandbox;
         let permissions = ExecPermissionProfile::from(permissions);
         // Older filesystem clients sent cwd and roots only when permissions needed them; old
@@ -599,6 +609,7 @@ impl From<FileSystemSandboxContext> for WireFileSystemSandboxContext {
             windows_sandbox_selection,
             windows_sandbox_proxy_settings_mode,
             use_legacy_landlock,
+            unsandboxed_refusal,
         }
     }
 }
@@ -646,6 +657,7 @@ impl WireFileSystemSandboxContext {
             windows_sandbox_selection: self.windows_sandbox_selection,
             windows_sandbox_proxy_settings_mode: self.windows_sandbox_proxy_settings_mode,
             use_legacy_landlock: self.use_legacy_landlock,
+            unsandboxed_refusal: self.unsandboxed_refusal,
         }
     }
 }

@@ -451,11 +451,17 @@ fn take_back_old_grant(folder: &Path, codex_home: &Path) {
 }
 
 fn take_leftovers(folder: &Path, codex_home: &Path) {
-    let note = match crate::session_temp_leftovers::sandbox_account_sids().and_then(|accounts| {
-        crate::session_temp_leftovers::take_sandbox_leftovers(folder, &accounts)
-    }) {
+    // Without the accounts, still the code caches (D456).
+    let accounts = crate::session_temp_leftovers::sandbox_account_sids().unwrap_or_else(|err| {
+        log_note(
+            &format!("D377: could not list the sandbox's accounts: {err:#}"),
+            Some(&codex_home.join(".sandbox")),
+        );
+        Vec::new()
+    });
+    let note = match crate::session_temp_leftovers::take_sandbox_leftovers(folder, &accounts) {
         Ok(found) => format!(
-            "D377: in {}: looked at {}, sandbox-owned {}, taken for the user {}, not taken {} (renamed aside {}), unreadable {}, capped {}",
+            "D377: in {}: looked at {}, sandbox-owned {}, taken for the user {}, not taken {} (renamed aside {}), unreadable {}, capped {}, code caches {} (renamed aside {}, capped {})",
             folder.display(),
             found.scanned,
             found.sandbox_owned,
@@ -463,7 +469,10 @@ fn take_leftovers(folder: &Path, codex_home: &Path) {
             found.not_taken,
             found.set_aside,
             found.unreadable,
-            found.capped
+            found.capped,
+            found.code_caches,
+            found.code_caches_set_aside,
+            found.code_caches_capped
         ),
         Err(err) => format!(
             "D377: could not take the sandbox's leftovers in {}: {err:#}",

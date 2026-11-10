@@ -335,6 +335,9 @@ fn sec_win_d377_old_leftovers_in_temp_are_taken_for_the_user() {
     let open_to_all = temp.path().join("open-to-all.txt");
     // One whose owner keeps the user from taking it: set aside, not taken.
     let refused = temp.path().join("refused.txt");
+    // D456: Node's compile cache, which the user's own Node later runs code
+    // from.
+    let cache = temp.path().join("node-compile-cache");
     let user = crate::deny_read_sessions::current_user_sid().expect("user");
     let users = temp.path().join("other-program.txt");
     fs::write(&users, "other").expect("other program's file");
@@ -384,11 +387,13 @@ fn sec_win_d377_old_leftovers_in_temp_are_taken_for_the_user() {
              (echo made>\"{open_to_all}\") 2>nul && echo OPEN-MADE\r\n\
              (echo made>\"{refused}\") 2>nul && echo REFUSED-MADE\r\n\
              mkdir \"{dir}\" 2>nul && (echo made>\"{dir}\\inner.txt\") 2>nul && echo DIR-MADE\r\n\
+             mkdir \"{cache}\\v1\" 2>nul && (echo made>\"{cache}\\v1\\c.cache\") 2>nul && echo CACHE-MADE\r\n\
              \"{powershell}\" -NoProfile -ExecutionPolicy Bypass -File \"{keep}\" 2>&1\r\n",
             file = file.display(),
             dir = dir.display(),
             open_to_all = open_to_all.display(),
             refused = refused.display(),
+            cache = cache.display(),
             powershell = system32_exe("WindowsPowerShell\\v1.0\\powershell.exe").display(),
             keep = keep.display()
         ),
@@ -422,7 +427,14 @@ fn sec_win_d377_old_leftovers_in_temp_are_taken_for_the_user() {
         (String::from_utf8_lossy(&stdout).into_owned(), code)
     });
     println!("d377 leftovers made: exit={code} stdout={stdout:?}");
-    for done in ["FILE-MADE", "OPEN-MADE", "REFUSED-MADE", "DIR-MADE", "KEPT"] {
+    for done in [
+        "FILE-MADE",
+        "OPEN-MADE",
+        "REFUSED-MADE",
+        "DIR-MADE",
+        "CACHE-MADE",
+        "KEPT",
+    ] {
         assert!(stdout.contains(done), "{done}: {stdout}");
     }
     // What its owner may also do: a NULL DACL (everyone may do anything).
@@ -469,6 +481,27 @@ fn sec_win_d377_old_leftovers_in_temp_are_taken_for_the_user() {
     for line in log.lines().filter(|line| line.contains("D377")) {
         println!("d377 leftovers log: {line}");
     }
+    // D456: the code cache is renamed in place (not deleted), so the user's
+    // Node makes a new one.
+    let cache_aside: Vec<PathBuf> = fs::read_dir(temp.path())
+        .expect("list")
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name().is_some_and(|name| {
+                name.to_string_lossy()
+                    .starts_with("node-compile-cache.corbanu-sandbox-cache-")
+            })
+        })
+        .collect();
+    assert!(!cache.exists(), "{} was not renamed aside", cache.display());
+    assert_eq!(cache_aside.len(), 1, "{cache_aside:?}");
+    assert_eq!(
+        fs::read_to_string(cache_aside[0].join("v1\\c.cache"))
+            .expect("read")
+            .trim(),
+        "made"
+    );
     // The file whose owner kept the user from taking it is renamed in place,
     // not deleted. An administrator's process holding privileges that
     // override its DACL (all the `sec_win_` tests in one process do) takes it

@@ -163,9 +163,17 @@ impl FileSystemSandboxRunner {
             sandbox_context,
             /*has_managed_network_requirements*/ false,
         );
+        // #1976 (D491): never run the helper outside a sandbox when the
+        // context must not be served without one; other contexts get
+        // upstream's refusal (the helper never runs unsandboxed here).
         if sandbox == SandboxType::None {
             return Err(invalid_request(
-                "filesystem sandbox cannot be enforced on this executor".to_string(),
+                sandbox_context
+                    .unsandboxed_refusal
+                    .clone()
+                    .unwrap_or_else(|| {
+                        "filesystem sandbox cannot be enforced on this executor".to_string()
+                    }),
             ));
         }
         // Requests use absolute paths; the helper can start at the filesystem root even if
@@ -279,7 +287,7 @@ fn bind_windows_cwd_relative_deny_read_globs(
     // The Windows direct-spawn wrapper reevaluates the profile using the helper cwd.
     // Bind cwd-relative denials before moving the helper to the filesystem root.
     for entry in &mut file_system_policy.entries {
-        if let FileSystemPath::GlobPattern { pattern } = &mut entry.path
+        if let FileSystemPath::GlobPattern { pattern, .. } = &mut entry.path
             && entry.access == FileSystemAccessMode::Deny
             && PathConvention::Windows
                 .home_relative_suffix(pattern)
@@ -863,6 +871,7 @@ mod tests {
                 FileSystemSandboxEntry::new(
                     FileSystemPath::GlobPattern {
                         pattern: pattern.to_string(),
+                        scan: None,
                     },
                     FileSystemAccessMode::Deny,
                 )
@@ -876,7 +885,7 @@ mod tests {
             .entries
             .into_iter()
             .filter_map(|entry| match entry.path {
-                FileSystemPath::GlobPattern { pattern } => Some(pattern),
+                FileSystemPath::GlobPattern { pattern, .. } => Some(pattern),
                 FileSystemPath::Path { .. } | FileSystemPath::Special { .. } => None,
             })
             .collect::<Vec<_>>();

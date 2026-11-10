@@ -337,7 +337,8 @@ fn run_setup_refresh_inner(
         .permissions
         .validate_elevated_filesystem_policy(request.command_cwd)?;
     let (read_roots, write_roots) = build_payload_roots(&request, &overrides, runtime);
-    let deny_write_paths = build_payload_deny_write_paths(&request, overrides.deny_write_paths);
+    let deny_write_paths =
+        build_payload_deny_write_paths(&request, overrides.deny_write_paths, &write_roots);
     let offline_proxy_settings =
         offline_proxy_settings_for_request(&request, offline_proxy_settings_override);
     let payload = ElevationPayload {
@@ -1391,6 +1392,7 @@ pub(crate) fn build_payload_roots(
 pub(crate) fn build_payload_deny_write_paths(
     request: &SandboxSetupRequest<'_>,
     explicit_deny_write_paths: Option<Vec<PathBuf>>,
+    write_roots: &[PathBuf],
 ) -> Vec<PathBuf> {
     let env_map = env_with_session_temp(request);
     let allow_deny_paths: AllowDenyPaths =
@@ -1413,6 +1415,13 @@ pub(crate) fn build_payload_deny_write_paths(
     );
     made_on_the_way.extend(deny_write_paths);
     made_on_the_way.extend(allow_deny_paths.deny);
+    // D453 (#1896 item 1): the planted-folder records (D425), which a root
+    // holding `%LOCALAPPDATA%` would otherwise let the command edit, as the
+    // non-admin sandbox denies them.
+    made_on_the_way.extend(crate::integrity_leases::records_folder_inside(
+        write_roots,
+        &sandbox_dir(request.codex_home),
+    ));
     made_on_the_way
 }
 
@@ -2810,7 +2819,7 @@ mod tests {
         };
 
         let deny_write_paths =
-            super::build_payload_deny_write_paths(&request, Some(vec![explicit_deny.clone()]));
+            super::build_payload_deny_write_paths(&request, Some(vec![explicit_deny.clone()]), &[]);
 
         assert_eq!(
             [
@@ -2869,7 +2878,7 @@ mod tests {
         };
 
         let deny_write_paths =
-            super::build_payload_deny_write_paths(&request, Some(explicit.clone()));
+            super::build_payload_deny_write_paths(&request, Some(explicit.clone()), &[]);
         crate::session_temp::end_session_temp_in(&temp);
 
         let mut expected: HashSet<PathBuf> = explicit.into_iter().collect();

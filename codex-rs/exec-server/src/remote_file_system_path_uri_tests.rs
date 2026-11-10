@@ -270,6 +270,7 @@ async fn remote_file_system_preserves_only_cwd_dependent_policy_directories() {
         let permission_path = match pattern {
             Some(pattern) => FileSystemPath::GlobPattern {
                 pattern: pattern.to_string(),
+                scan: None,
             },
             None => FileSystemPath::Special {
                 value: FileSystemSpecialPath::project_roots(/*subpath*/ None),

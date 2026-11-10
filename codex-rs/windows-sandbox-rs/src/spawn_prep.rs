@@ -541,7 +541,7 @@ fn create_missing_carve_out(path: &Path, roots: &[PathBuf]) -> Result<()> {
 
 /// Whether `path` lies below one of `roots` and holds none of them (a planted
 /// `gitdir: .` must not relabel the workspace itself). All paths canonical.
-fn strictly_inside_a_root(path: &Path, roots: &[PathBuf]) -> bool {
+pub(crate) fn strictly_inside_a_root(path: &Path, roots: &[PathBuf]) -> bool {
     roots
         .iter()
         .any(|root| path != root.as_path() && path.starts_with(root))

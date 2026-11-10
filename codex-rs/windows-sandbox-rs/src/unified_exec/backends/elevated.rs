@@ -100,13 +100,28 @@ async fn spawn_runner_transport_task(
     request: RunnerTransportRequest,
     planted_watch: Option<IntegrityLease>,
 ) -> Result<(RunnerTransport, Option<IntegrityLease>)> {
+    start_runner_off_async_thread(
+        sandbox_creds,
+        request,
+        planted_watch,
+        spawn_runner_transport,
+    )
+    .await
+}
+
+/// [`spawn_runner_transport_task`] with the runner started by `spawn` and
+/// any `planted_watch` (#1909 item 6: tests).
+async fn start_runner_off_async_thread<T: Send + 'static, W: Send + 'static>(
+    sandbox_creds: SandboxCreds,
+    request: RunnerTransportRequest,
+    planted_watch: W,
+    spawn: fn(&Path, &Path, &SandboxCreds, Option<&Path>, SpawnRequest) -> Result<T>,
+) -> Result<(T, W)> {
     tokio::task::spawn_blocking(move || -> Result<_> {
         let transport = spawn_runner_transport_with_retry(
             sandbox_creds,
             &request,
-            |codex_home, cwd, sandbox_creds, log_dir, spawn_request| {
-                spawn_runner_transport(codex_home, cwd, sandbox_creds, log_dir, spawn_request)
-            },
+            spawn,
             refresh_logon_sandbox_creds,
         )?;
         Ok((transport, planted_watch))
