@@ -56,7 +56,8 @@ async fn issue_2000_windows_sandbox_only_gets_stronger_mid_session() {
 }
 
 /// #2000: what is started from the session's config afterwards (child
-/// agents, helper sessions) gets the raised Windows sandbox too.
+/// agents, also ones reloaded later from the session's own config, helper
+/// sessions) gets the raised Windows sandbox too.
 #[tokio::test]
 async fn issue_2000_a_raised_windows_sandbox_reaches_the_per_turn_config() {
     use crate::windows_sandbox::WindowsSandboxLevelExt;
@@ -77,5 +78,10 @@ async fn issue_2000_a_raised_windows_sandbox_reaches_the_per_turn_config() {
             .apply(&with_level(level))
             .expect("a stronger sandbox applies");
         assert_eq!(per_turn(&configuration), level);
+        // The session's own config, which agents reloaded later start from.
+        assert_eq!(
+            WindowsSandboxLevel::from_config(&configuration.original_config_do_not_use),
+            level
+        );
     }
 }

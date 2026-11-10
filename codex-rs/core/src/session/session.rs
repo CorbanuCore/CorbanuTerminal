@@ -408,6 +408,13 @@ impl SessionConfiguration {
                     requirement_source: codex_config::RequirementSource::Unknown,
                 });
             }
+            if windows_sandbox_level != next_configuration.windows_sandbox_level {
+                // What reads the session's config (agents reloaded later,
+                // the memory agent) gets the raised sandbox too.
+                let mut config = (*next_configuration.original_config_do_not_use).clone();
+                crate::windows_sandbox::raise_windows_sandbox(&mut config, windows_sandbox_level);
+                next_configuration.original_config_do_not_use = Arc::new(config);
+            }
             next_configuration.windows_sandbox_level = windows_sandbox_level;
         }
 
