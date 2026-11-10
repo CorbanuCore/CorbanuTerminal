@@ -64,6 +64,10 @@ codex-rs/apply-patch/
 codex-rs/tui/src/*approval_overlay*
 codex-rs/tui/src/*permission_popups*
 codex-rs/tui/src/*windows_sandbox*
+codex-rs/http-client/src/address_filter*
+codex-rs/exec-server-protocol/src/address_policy*
+codex-rs/exec-server/src/client/route_aware_http_client*
+codex-rs/rmcp-client/src/oauth_http_client*
 codex-rs/.cargo/audit.toml
 codex-rs/analytics/src/reducer.rs
 codex-rs/app-server-client/src/lib.rs
@@ -460,7 +464,6 @@ codex-rs/core/tests/suite/unified_exec_process_events.rs
 codex-rs/core/tests/suite/user_shell_cmd.rs
 codex-rs/core/tests/suite/windows_sandbox.rs
 codex-rs/deny.toml
-codex-rs/exec-server/src/client/route_aware_http_client.rs
 codex-rs/exec-server/tests/file_system_unix.rs
 codex-rs/exec/src/event_processor_with_human_output.rs
 codex-rs/exec/src/event_processor_with_jsonl_output.rs

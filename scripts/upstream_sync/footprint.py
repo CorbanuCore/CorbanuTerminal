@@ -103,6 +103,11 @@ NAMED = [
     "codex-rs/tui/src/*approval_overlay*",
     "codex-rs/tui/src/*permission_popups*",
     "codex-rs/tui/src/*windows_sandbox*",
+    # MCP OAuth resolved-address (SSRF) policy (D487, #2004/#2025); mirrors slices.SEC_ADJ.
+    "codex-rs/http-client/src/address_filter*",
+    "codex-rs/exec-server-protocol/src/address_policy*",
+    "codex-rs/exec-server/src/client/route_aware_http_client*",
+    "codex-rs/rmcp-client/src/oauth_http_client*",
 ]
 
 SEC_BRANCH = re.compile(

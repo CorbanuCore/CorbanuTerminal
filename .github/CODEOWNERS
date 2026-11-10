@@ -168,6 +168,10 @@
 /codex-rs/tui/src/**/*approval_overlay* @corbanu-security
 /codex-rs/tui/src/**/*permission_popups* @corbanu-security
 /codex-rs/tui/src/**/*windows_sandbox* @corbanu-security
+/codex-rs/http-client/src/address_filter* @corbanu-security
+/codex-rs/exec-server-protocol/src/address_policy* @corbanu-security
+/codex-rs/exec-server/src/client/route_aware_http_client* @corbanu-security
+/codex-rs/rmcp-client/src/oauth_http_client* @corbanu-security
 /codex-rs/Cargo.toml @corbanu-security
 /codex-rs/Cargo.lock @corbanu-security
 /codex-rs/deny.toml @corbanu-security
