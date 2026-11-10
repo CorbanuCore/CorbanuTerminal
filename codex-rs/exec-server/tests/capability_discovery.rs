@@ -352,6 +352,7 @@ async fn executor_legacy_filesystem_rejects_missing_cwd_for_dynamic_permissions(
         },
         FileSystemPath::GlobPattern {
             pattern: "secrets/**".to_string(),
+            scan: None,
         },
     ] {
         let policy = FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry::new(
@@ -438,6 +439,7 @@ async fn executor_legacy_filesystem_accepts_cwd_for_dynamic_permissions() -> any
         FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
                 pattern: "secret*".to_string(),
+                scan: None,
             },
             FileSystemAccessMode::Deny,
         ),
@@ -534,6 +536,7 @@ async fn executor_legacy_nested_policy_context_cwd_uses_available_fallbacks() ->
         FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
                 pattern: "secret*".to_string(),
+                scan: None,
             },
             FileSystemAccessMode::Deny,
         ),
@@ -670,6 +673,7 @@ async fn executor_legacy_exec_uses_process_cwd_for_relative_denials() -> anyhow:
         FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
                 pattern: "secret*".to_string(),
+                scan: None,
             },
             FileSystemAccessMode::Deny,
         ),

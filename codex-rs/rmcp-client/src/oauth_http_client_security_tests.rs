@@ -190,7 +190,15 @@ async fn oauth_metadata_fallback_preserves_terminal_failures() -> Result<()> {
             .resolve_metadata()
             .await
             .expect_err("discovery must fail closed");
-        assert!(error.to_string().contains(expected_error), "{error}");
+        // rmcp 3.9 keeps the failed request's cause in `source()`, not in `Display`.
+        let error_chain = std::iter::successors(
+            Some(&error as &(dyn std::error::Error + 'static)),
+            |error| error.source(),
+        )
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(": ");
+        assert!(error_chain.contains(expected_error), "{error_chain}");
         assert_eq!(
             authorization.received_requests().await.unwrap().len(),
             request_count

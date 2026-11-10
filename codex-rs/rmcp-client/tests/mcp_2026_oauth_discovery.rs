@@ -103,6 +103,15 @@ async fn assert_authorization_requests_exclude_resource_headers(
     Ok(())
 }
 
+/// rmcp 3.9 reports a failed discovery request as `DiscoveryRequestFailed` and keeps
+/// the reason in its `source`.
+fn discovery_request_failure(error: &anyhow::Error) -> Option<String> {
+    match error.downcast_ref::<AuthError>()? {
+        AuthError::DiscoveryRequestFailed { source, .. } => Some(source.to_string()),
+        _ => None,
+    }
+}
+
 fn assert_cross_origin_redirect_rejected(
     discovery: DiscoveryResult,
     redirect_target: &str,
@@ -111,12 +120,10 @@ fn assert_cross_origin_redirect_rejected(
         .err()
         .context("cross-origin OAuth metadata redirects must be rejected")?;
     assert!(
-        matches!(
-            error.downcast_ref::<AuthError>(),
-            Some(AuthError::MetadataError(reason))
-                if reason.contains("OAuth discovery redirect to non-same-origin URL rejected")
-                    && reason.contains(redirect_target)
-        ),
+        discovery_request_failure(&error).is_some_and(|reason| {
+            reason.contains("OAuth discovery redirect to non-same-origin URL rejected")
+                && reason.contains(redirect_target)
+        }),
         "expected the cross-origin redirect rejection for `{redirect_target}`: {error:#}",
     );
     Ok(())
@@ -240,11 +247,9 @@ async fn assert_legacy_oauth_without_starting_an_mcp_session(
                     .err()
                     .context("a mismatched issuer must not be accepted")?;
                 assert!(
-                    matches!(
-                        error.downcast_ref::<AuthError>(),
-                        Some(AuthError::MetadataError(reason))
-                            if reason.contains("issuer does not match authorization metadata origin")
-                    ),
+                    discovery_request_failure(&error).is_some_and(|reason| {
+                        reason.contains("issuer does not match authorization metadata origin")
+                    }),
                     "expected the original authorization-server issuer to remain bound: {error:#}",
                 );
             }
@@ -403,11 +408,8 @@ async fn legacy_oauth_discovery_rejects_authorization_metadata_redirect_cycles()
         .err()
         .context("OAuth metadata redirect cycles must be rejected")?;
     assert!(
-        matches!(
-            error.downcast_ref::<AuthError>(),
-            Some(AuthError::MetadataError(reason))
-                if reason.contains("OAuth discovery exceeded ") && reason.contains(" redirects")
-        ),
+        discovery_request_failure(&error)
+            .is_some_and(|reason| reason.contains(" exceeded ") && reason.contains(" redirects")),
         "expected the SDK to report its bounded OAuth discovery redirect limit: {error:#}",
     );
     authorization_server.verify().await;
