@@ -632,6 +632,12 @@ async fn apply_provider_role(
     config: &mut Config,
     role: &str,
 ) -> Result<(), String> {
+    register_user_role(home, config, role).await;
+    apply_role_to_config(config, Some("custom")).await
+}
+
+/// Registers a user role named `custom` whose file holds `role`.
+async fn register_user_role(home: &TempDir, config: &mut Config, role: &str) {
     let role_path = write_role_config(home, "provider-choice.toml", role).await;
     config.agent_roles.insert(
         "custom".to_string(),
@@ -642,7 +648,6 @@ async fn apply_provider_role(
             source: crate::config::AgentRoleSource::User,
         },
     );
-    apply_role_to_config(config, Some("custom")).await
 }
 
 fn with_requirements(
@@ -672,15 +677,17 @@ async fn apply_user_role_refuses_writable_roots_that_drop_the_parents() {
         .to_string_lossy()
         .into_owned();
     with_parent_root(&mut config, &parent_root);
-    let parent = config.clone();
-
-    let err = apply_provider_role(
+    register_user_role(
         &home,
         &mut config,
         "developer_instructions = \"Work\"\n\n[sandbox_workspace_write]\nwritable_roots = []\n",
     )
-    .await
-    .expect_err("a narrower writable_roots should be refused");
+    .await;
+    let parent = config.clone();
+
+    let err = apply_role_to_config(&mut config, Some("custom"))
+        .await
+        .expect_err("a narrower writable_roots should be refused");
 
     assert!(err.contains("writable_roots"), "{err}");
     assert_eq!(config, parent);
@@ -722,7 +729,7 @@ async fn apply_user_role_provider_choice_is_bounded() {
     };
     let cases: [(&str, fn(&mut Config), &str); 5] = [
         (
-            "model = \"m\"\nmodel_provider = \"amazon-bedrock\"\n\n[model_providers.amazon-bedrock]\nname = \"role bedrock\"\n",
+            "model = \"m\"\nmodel_provider = \"amazon-bedrock\"\n\n[model_providers.amazon-bedrock.aws]\nregion = \"us-west-2\"\n",
             |_| {},
             "whose settings a role can't change",
         ),
@@ -759,9 +766,10 @@ async fn apply_user_role_provider_choice_is_bounded() {
             .model_providers
             .insert("relay".to_string(), relay.clone());
         setup(&mut config);
+        register_user_role(&home, &mut config, role).await;
         let parent = config.clone();
 
-        let err = apply_provider_role(&home, &mut config, role)
+        let err = apply_role_to_config(&mut config, Some("custom"))
             .await
             .expect_err("the provider choice should be refused");
 
