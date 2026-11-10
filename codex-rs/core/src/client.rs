@@ -137,9 +137,9 @@ use futures::StreamExt;
 use http::HeaderMap as ApiHeaderMap;
 use http::HeaderValue;
 use http::StatusCode;
+use serde::Deserialize;
 use serde_json::Value;
 use serde_json::json;
-use serde::Deserialize;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::mpsc;
@@ -162,10 +162,10 @@ use crate::attestation::AttestationContext;
 use crate::attestation::AttestationProvider;
 use crate::attestation::X_OAI_ATTESTATION_HEADER;
 use crate::client_common::Prompt;
-use crate::config::Config;
 use crate::client_common::ResponseEvent;
 use crate::client_common::ResponseStream;
 use crate::client_common::retain_latest_contextual_developer_fragments;
+use crate::config::Config;
 use crate::context::BaseInstructionsFragment;
 use crate::context::ContextualUserFragment;
 use crate::cyber_access_program;
@@ -1770,10 +1770,8 @@ impl ModelClient {
         if self.state.provider.info() == provider_info {
             return self.clone();
         }
-        let provider = create_model_provider(
-            provider_info.clone(),
-            self.state.provider.auth_manager(),
-        );
+        let provider =
+            create_model_provider(provider_info.clone(), self.state.provider.auth_manager());
         self.with_provider(provider, /*config*/ None)
     }
 
@@ -1781,7 +1779,11 @@ impl ModelClient {
     /// context and prompt cache key, event sender, executed tool calls, request contributors,
     /// attestation, runtime auth, native ingress); the provider and its request settings come
     /// from `config`.
-    pub(crate) fn for_provider_switch(&self, provider: SharedModelProvider, config: &Config) -> Self {
+    pub(crate) fn for_provider_switch(
+        &self,
+        provider: SharedModelProvider,
+        config: &Config,
+    ) -> Self {
         self.with_provider(provider, Some(config))
     }
 
@@ -1807,7 +1809,8 @@ impl ModelClient {
                 auth_env_telemetry,
                 session_source: state.session_source.clone(),
                 originator: state.originator.clone(),
-                model_verbosity: config.map_or(state.model_verbosity, |config| config.model_verbosity),
+                model_verbosity: config
+                    .map_or(state.model_verbosity, |config| config.model_verbosity),
                 content_item_kinds_enabled: feature(
                     Feature::ContentItemKinds,
                     state.content_item_kinds_enabled,
@@ -1817,7 +1820,10 @@ impl ModelClient {
                     Feature::EnableRequestCompression,
                     state.enable_request_compression,
                 ),
-                include_timing_metrics: feature(Feature::RuntimeMetrics, state.include_timing_metrics),
+                include_timing_metrics: feature(
+                    Feature::RuntimeMetrics,
+                    state.include_timing_metrics,
+                ),
                 beta_features_header: state.beta_features_header.clone(),
                 concurrent_reasoning_summaries_enabled: feature(
                     Feature::ConcurrentReasoningSummaries,
@@ -1958,7 +1964,8 @@ impl ModelClient {
         // pairs that select its architecture, and a pin missing those would
         // refuse every call it was meant to record.
         let call_url = codex_api::realtime_call_url(&client_setup.api_provider, &session_config);
-        let call_route = codex_api::realtime_call_route(&client_setup.api_provider, &session_config);
+        let call_route =
+            codex_api::realtime_call_route(&client_setup.api_provider, &session_config);
         let sampling = match crate::accounting::responses::read(accounting)? {
             Some(deferred) => {
                 deferred
@@ -3721,7 +3728,10 @@ impl<'a> ResponsesHttpExecutor<'a> {
     }
 
     /// Records this executor's requests in `accounting` (D16).
-    pub(crate) fn with_accounting(mut self, accounting: &'a crate::accounting::responses::Slot) -> Self {
+    pub(crate) fn with_accounting(
+        mut self,
+        accounting: &'a crate::accounting::responses::Slot,
+    ) -> Self {
         self.accounting = Some(accounting);
         self
     }
@@ -3873,7 +3883,10 @@ impl ModelClientSession {
                 "anthropic_http_before_client_setup",
                 provider_request_started_at,
             );
-            let client_setup = self.client.current_client_setup(ClientRouting::ConfiguredProvider).await?;
+            let client_setup = self
+                .client
+                .current_client_setup(ClientRouting::ConfiguredProvider)
+                .await?;
             trace_stream_timing(
                 "anthropic_http_after_client_setup",
                 provider_request_started_at,
@@ -3900,8 +3913,9 @@ impl ModelClientSession {
                 self.client
                     .guarded_transport(ReqwestTransport::from_http_client(client))
             } else {
-                self.client
-                    .guarded_transport(client_setup.build_api_transport(ANTHROPIC_MESSAGES_ENDPOINT)?)
+                self.client.guarded_transport(
+                    client_setup.build_api_transport(ANTHROPIC_MESSAGES_ENDPOINT)?,
+                )
             };
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
@@ -4880,7 +4894,10 @@ impl ModelClientSession {
         loop {
             let provider_request_started_at = Instant::now();
             trace_stream_timing("chat_http_before_client_setup", provider_request_started_at);
-            let client_setup = self.client.current_client_setup(ClientRouting::ConfiguredProvider).await?;
+            let client_setup = self
+                .client
+                .current_client_setup(ClientRouting::ConfiguredProvider)
+                .await?;
             trace_stream_timing("chat_http_after_client_setup", provider_request_started_at);
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
@@ -6243,10 +6260,9 @@ fn chat_tool_result_image_parts(
     items
         .iter()
         .filter_map(|item| match item {
-            codex_protocol::models::FunctionCallOutputContentItem::InputImage {
-                image,
-                detail,
-            } => inline_image_url(image).map(|url| chat_image_part(url.to_string(), *detail)),
+            codex_protocol::models::FunctionCallOutputContentItem::InputImage { image, detail } => {
+                inline_image_url(image).map(|url| chat_image_part(url.to_string(), *detail))
+            }
             codex_protocol::models::FunctionCallOutputContentItem::InputText { .. }
             | codex_protocol::models::FunctionCallOutputContentItem::EncryptedContent { .. }
             | codex_protocol::models::FunctionCallOutputContentItem::InputAudio { .. } => None,
