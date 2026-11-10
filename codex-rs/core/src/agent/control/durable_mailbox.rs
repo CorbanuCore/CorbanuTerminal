@@ -221,6 +221,67 @@ impl LocalAgentControl {
         Ok(())
     }
 
+    /// A known recipient that is not loaded: admit the message as `Ready` through the
+    /// sender's handle on the shared state database, so the recipient's reload recovery
+    /// delivers it. Without a database the message is refused rather than held in memory.
+    pub(super) async fn admit_for_unloaded_recipient(
+        &self,
+        agent_id: ThreadId,
+        state_db: Option<codex_rollout::state_db::StateDbHandle>,
+        mut communication: InterAgentCommunication,
+    ) -> CodexResult<String> {
+        let message_id = communication.ensure_message_identity().to_string();
+        communication
+            .validate_mailbox_body()
+            .map_err(CodexErr::InvalidRequest)?;
+        if communication.kind.is_none() {
+            communication.kind = Some(if communication.trigger_turn {
+                AgentMessageKind::FollowUp
+            } else {
+                AgentMessageKind::Informational
+            });
+        }
+        let state_db = state_db.ok_or_else(|| {
+            CodexErr::UnsupportedOperation(format!(
+                "agent {agent_id} is not loaded and there is no durable mailbox to hold message \
+                 {message_id}"
+            ))
+        })?;
+        let admission = state_db
+            .admit_agent_message(
+                agent_id,
+                &communication,
+                crate::turn_timing::now_unix_timestamp_ms(),
+            )
+            .await
+            .map_err(|err| {
+                CodexErr::Fatal(format!("failed to admit agent message {message_id}: {err}"))
+            })?;
+        if matches!(
+            admission,
+            AgentMailboxAdmission::Inserted
+                | AgentMailboxAdmission::Existing(AgentMailboxPhase::Admitted)
+        ) {
+            let _ = state_db
+                .transition_agent_message(
+                    &message_id,
+                    AgentMailboxPhase::Admitted,
+                    AgentMailboxPhase::Ready,
+                    crate::turn_timing::now_unix_timestamp_ms(),
+                )
+                .await
+                .map_err(|err| {
+                    CodexErr::Fatal(format!("failed to ready agent message {message_id}: {err}"))
+                })?;
+        }
+        if let Some(last_task_message) = last_task_message_from_communication(&communication) {
+            self.runtime
+                .registry
+                .update_last_task_message(agent_id, last_task_message);
+        }
+        Ok(message_id)
+    }
+
     pub(crate) async fn send_persisted_inter_agent_communication(
         &self,
         agent_id: ThreadId,
@@ -298,6 +359,11 @@ impl LocalAgentControl {
                 ) => false,
             };
             if !ready_to_submit {
+                // Already admitted and handled (or owned by another sender): the delivery
+                // is settled.
+                if let Some(delivery) = message_delivery.as_ref() {
+                    delivery.consumed(agent_id);
+                }
                 return Ok(message_id);
             }
             let expected = match admission {
@@ -335,6 +401,11 @@ impl LocalAgentControl {
                     ))
                 })?
             {
+                // Already admitted and handled (or owned by another sender): the delivery
+                // is settled.
+                if let Some(delivery) = message_delivery.as_ref() {
+                    delivery.consumed(agent_id);
+                }
                 return Ok(message_id);
             }
             // #1058: mark the message Submitted before handing it over. A turn already running
@@ -366,6 +437,11 @@ impl LocalAgentControl {
                     "agent mailbox message left its submitting state to another owner; \
                      that owner delivers it"
                 );
+                // Already admitted and handled (or owned by another sender): the delivery
+                // is settled.
+                if let Some(delivery) = message_delivery.as_ref() {
+                    delivery.consumed(agent_id);
+                }
                 return Ok(message_id);
             }
         }

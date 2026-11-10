@@ -213,7 +213,7 @@ impl LocalAgentControl {
     /// and the stored revocations; Aggressive and the kill switch when it was
     /// unreadable).
     pub(crate) fn with_recovered_security_policy(
-        mut self,
+        self,
         recovery: crate::security::recovery::Recovery,
         root_thread_id: ThreadId,
         inherits_from_spawn_parent: bool,
@@ -391,11 +391,23 @@ impl LocalAgentControl {
         thread
             .ensure_execution_capacity_for_turn_start(self)
             .await?;
+        self.send_input_after_capacity_check(agent_id, sender, &state, input, start_options)
+            .await
+    }
+
+    /// `send_input` once capacity is settled: a newly spawned agent's first task was already
+    /// admitted by its spawn.
+    pub(super) async fn send_input_after_capacity_check(
+        &self,
+        agent_id: ThreadId,
+        sender: Option<ThreadId>,
+        state: &Arc<ThreadManagerState>,
+        input: Vec<UserInput>,
+        start_options: TurnStartOptions,
+    ) -> CodexResult<String> {
+        let thread = state.get_thread(agent_id).await?;
         // PF-30-S02: record the sender's standing on this exact input before submitting it.
-        Box::pin(register_agent_input_origin(
-            &state, agent_id, sender, &input,
-        ))
-        .await;
+        Box::pin(register_agent_input_origin(state, agent_id, sender, &input)).await;
         let result = match thread
             .start_or_steer_turn(TurnInputRequest::user_input(input).on_start(start_options))
             .await
@@ -413,7 +425,7 @@ impl LocalAgentControl {
             )),
             Err(err) => Err(err),
         };
-        self.handle_thread_request_result(agent_id, &state, result)
+        self.handle_thread_request_result(agent_id, state, result)
             .await
     }
 
@@ -529,9 +541,34 @@ impl LocalAgentControl {
         let log_content = crate::agent_communication::send_log_content(&communication);
         // Corbanu (#1058/#1435/#1452/#1545, #1999/#2033): every message goes through the
         // durable mailbox, which admits it before the hand-off and recovers it after a reload,
-        // so a message is never lost or delivered twice. Callers load the recipient first;
-        // upstream's in-memory queue for evicted recipients is not durable and takes no new
-        // mail.
+        // so a message is never lost or delivered twice. Upstream's in-memory queue for
+        // unloaded recipients is not durable and takes no new mail.
+        {
+            // A known recipient that is not loaded (an evicted V2 manager whose child just
+            // finished, say) has the message admitted to the durable mailbox; its reload
+            // recovers it. Holding the thread map keeps this atomic with publication of a
+            // reloaded session, whose recovery then runs after the admission.
+            let threads = state.threads.read().await;
+            if !threads.contains_key(&agent_id) {
+                self.runtime.ensure_agent_known(agent_id)?;
+                // Read the sender's database handle from the held map: taking the thread map
+                // again here could deadlock behind a queued writer.
+                let state_db = threads
+                    .get(&context.sender_thread_id)
+                    .and_then(|sender| sender.state_db());
+                let submission_id = self
+                    .admit_for_unloaded_recipient(agent_id, state_db, communication)
+                    .await?;
+                drop(threads);
+                crate::agent_communication::emit_agent_communication_send(
+                    &submission_id,
+                    &context,
+                    log_content.as_deref(),
+                    agent_id,
+                );
+                return Ok(submission_id);
+            }
+        }
         let submission_id = self
             .send_persisted_inter_agent_communication(
                 agent_id,
