@@ -1317,17 +1317,16 @@ impl Session {
                     // Nothing waits for the reply: a refusal is reported to the client by
                     // the submission itself.
                     let (reply, _) = tokio::sync::oneshot::channel();
-                    let mut request = TurnInputRequest::new(SubmittedTurnInput::UserInput {
-                        content,
-                        client_id,
-                    })
-                    .on_start(TurnStartOptions {
-                        final_output_json_schema,
-                        // Keeps a heartbeat's origin (`UserInputOrigin::from_turn_trigger`).
-                        turn_trigger: (metadata.origin == codex_history::UserInputOrigin::Heartbeat)
-                            .then(|| "automation_heartbeat_scheduled".to_string()),
-                        ..Default::default()
-                    });
+                    let mut request =
+                        TurnInputRequest::new(SubmittedTurnInput::UserInput { content, client_id })
+                            .on_start(TurnStartOptions {
+                                final_output_json_schema,
+                                // Keeps a heartbeat's origin (`UserInputOrigin::from_turn_trigger`).
+                                turn_trigger: (metadata.origin
+                                    == codex_history::UserInputOrigin::Heartbeat)
+                                    .then(|| "automation_heartbeat_scheduled".to_string()),
+                                ..Default::default()
+                            });
                     request.user_item_uuid = metadata.response_item_uuid;
                     Op::TurnInput {
                         request: Box::new(request),

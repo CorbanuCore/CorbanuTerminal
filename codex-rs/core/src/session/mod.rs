@@ -3667,9 +3667,7 @@ impl Session {
     /// update changed the execution authority of the turn running in `active_turn`. Input it
     /// has not taken yet, and input arriving later, waits for the next turn. Callers hold the
     /// `active_turn` lock, which every admission into the running turn also takes.
-    pub(super) async fn hold_input_after_authority_change(
-        active_turn: &crate::state::ActiveTurn,
-    ) {
+    pub(super) async fn hold_input_after_authority_change(active_turn: &crate::state::ActiveTurn) {
         let Some(task) = active_turn.task.as_ref() else {
             return;
         };
