@@ -77,6 +77,9 @@ pub(super) async fn run_remote_compact_v2_attempt(
 ) -> CodexResult<RemoteCompactV2Attempt> {
     let turn_context = &step_context.turn;
     let mut owned_client_session = None;
+    // Foreground attempts only; background compaction is off in Corbanu until
+    // it is recorded too (`async_compaction::enabled`).
+    let mut accounting = None;
     let (
         model_info,
         input_goal_ids,
@@ -129,8 +132,10 @@ pub(super) async fn run_remote_compact_v2_attempt(
             let trace_input_history = compaction_trace
                 .is_enabled()
                 .then(|| history.raw_items().cloned().collect());
+            // #578: items another provider produced are adapted for this one.
             let (mut input, metadata): (Vec<_>, Vec<_>) = history
-                .for_prompt_annotated(
+                .for_turn_prompt_annotated(
+                    turn_context,
                     &model_info.input_modalities,
                     sess.services.image_store.as_ref(),
                 )
@@ -142,23 +147,31 @@ pub(super) async fn run_remote_compact_v2_attempt(
                 .executed_tool_calls
                 .attach_to_compaction_prompt(&mut input);
             let client_session = client_session.unwrap_or_else(|| {
-                owned_client_session.insert(sess.services.model_client.new_session())
+                owned_client_session.insert(sess.services.new_model_client_session())
             });
-<<<<<<< HEAD
-    }
-
-    let trace_input_history = compaction_trace
-        .is_enabled()
-        .then(|| history.raw_items().to_vec());
-    let mut input = history.for_turn_prompt(turn_context);
-||||||| 413492cd6c
-    }
-
-    let trace_input_history = compaction_trace
-        .is_enabled()
-        .then(|| history.raw_items().to_vec());
-    let mut input = history.for_prompt(&turn_context.model_info.input_modalities);
-=======
+            // Attach for both shapes. A standalone compaction is where operator `/compact`
+            // lands on providers that support remote compaction; an inline auto-compaction
+            // borrows the turn's session, but its call sites sit outside the turn's own
+            // sampling scope, so those slots are empty and nothing in flight is displaced.
+            // Skipping the borrowed case - the first version of this - left every
+            // auto-compaction unrecorded. Best effort: a compaction that cannot be
+            // recorded must still run.
+            accounting = Some(
+                match crate::accounting::attach_turn(
+                    sess,
+                    turn_context.as_ref(),
+                    client_session,
+                    crate::accounting::compaction_turn_label(&turn_context.sub_id),
+                )
+                .await
+                {
+                    Ok(scopes) => Some(scopes),
+                    Err(error) => {
+                        tracing::warn!(%error, "accounting: remote compaction proceeding unrecorded");
+                        None
+                    }
+                },
+            );
             (
                 model_info,
                 input_goal_ids,
@@ -188,7 +201,6 @@ pub(super) async fn run_remote_compact_v2_attempt(
         && input
             .iter()
             .any(|item| matches!(item, ResponseItem::AdditionalTools { .. }));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let tool_router = &step_context.tool_router;
     input.push(ResponseItem::CompactionTrigger {});
     let prompt = Prompt {
@@ -202,13 +214,9 @@ pub(super) async fn run_remote_compact_v2_attempt(
         base_instructions,
         output_schema: None,
         output_schema_strict: true,
-<<<<<<< HEAD
+        cyber_access_program: turn_context.cyber_access_program,
         producer: Some(turn_context.output_producer()),
         flat_tool_names: tool_router.flat_tool_names().clone(),
-||||||| 413492cd6c
-=======
-        cyber_access_program: turn_context.cyber_access_program,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     let mut responses_metadata = match captured_window {
@@ -227,41 +235,6 @@ pub(super) async fn run_remote_compact_v2_attempt(
         "input": &prompt.input,
         "parallel_tool_calls": prompt.parallel_tool_calls,
     }));
-<<<<<<< HEAD
-    let mut owned_client_session = None;
-    let client_session = match client_session {
-        Some(client_session) => client_session,
-        None => owned_client_session.insert(sess.services.new_model_client_session()),
-    };
-    // Attach for both shapes. A standalone compaction is where operator `/compact`
-    // lands on providers that support remote compaction; an inline auto-compaction
-    // borrows the turn's session, but its call sites sit outside the turn's own
-    // sampling scope, so those slots are empty and nothing in flight is displaced.
-    // Skipping the borrowed case - the first version of this - left every
-    // auto-compaction unrecorded. Best effort: a compaction that cannot be
-    // recorded must still run.
-    let accounting = match crate::accounting::attach_turn(
-        sess,
-        turn_context.as_ref(),
-        client_session,
-        crate::accounting::compaction_turn_label(&turn_context.sub_id),
-    )
-    .await
-    {
-        Ok(scopes) => Some(scopes),
-        Err(error) => {
-            tracing::warn!(%error, "accounting: remote compaction proceeding unrecorded");
-            None
-        }
-    };
-||||||| 413492cd6c
-    let mut owned_client_session = None;
-    let client_session = match client_session {
-        Some(client_session) => client_session,
-        None => owned_client_session.insert(sess.services.model_client.new_session()),
-    };
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let compaction_output_result = run_remote_compaction_request_v2(
         sess,
         step_context,
@@ -270,7 +243,9 @@ pub(super) async fn run_remote_compact_v2_attempt(
         transport,
     )
     .await;
-    crate::accounting::warn_if_unrecorded(sess, turn_context, accounting.as_ref()).await;
+    if let Some(accounting) = &accounting {
+        crate::accounting::warn_if_unrecorded(sess, turn_context, accounting.as_ref()).await;
+    }
     trace_attempt.record_result(
         compaction_output_result
             .as_ref()
@@ -328,6 +303,8 @@ pub(crate) async fn capture_background_input(
         step_context.settings.model_info.usable_context_window(),
         &base_instructions,
     );
+    // #578: items another provider produced are adapted for this one.
+    snapshot.adapt_for_turn_provider(&step_context.turn);
     snapshot.normalize_history(&step_context.settings.model_info.input_modalities);
     let (mut input, metadata): (Vec<_>, Vec<_>) = snapshot
         .into_annotated_items()

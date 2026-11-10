@@ -12,6 +12,7 @@ use pretty_assertions::assert_eq;
 #[test_case::test_case(CompactionTrigger::Auto; "optional ready adoption")]
 #[test_case::test_case(CompactionTrigger::Manual; "manual ready reuse")]
 #[tokio::test]
+#[ignore = "Corbanu: background compaction is off until it is recorded by accounting (async_compaction.rs, owner decision pending)"]
 async fn cancelled_turn_skips_launch_but_preserves_existing_work(trigger: CompactionTrigger) {
     let phase = CompactionPhase::MidTurn;
     let server = responses::start_mock_server().await;
@@ -73,7 +74,7 @@ async fn cancelled_turn_skips_launch_but_preserves_existing_work(trigger: Compac
     let world_state = Arc::new(WorldState::default());
     let cancelled = CancellationToken::new();
     cancelled.cancel();
-    let auth = sess.services.model_client.auth_owner_generation();
+    let auth = sess.services.model_client().auth_owner_generation();
     maybe_start(
         &sess,
         &step,
@@ -125,7 +126,7 @@ async fn cancelled_turn_skips_launch_but_preserves_existing_work(trigger: Compac
     match trigger {
         CompactionTrigger::Auto => {
             let candidate = take_ready(&sess, &turn).await.expect("published candidate");
-            let mut client_session = sess.services.model_client.new_session();
+            let mut client_session = sess.services.model_client().new_session();
             assert!(
                 crate::compact_remote_v2::run_inline_remote_auto_compact_task(
                     Arc::clone(&sess),

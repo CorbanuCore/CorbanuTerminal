@@ -335,13 +335,8 @@ fn serializes_text_verbosity_when_set() {
     let input: Vec<ResponseItem> = vec![];
     let req = ResponsesApiRequest {
         model: "gpt-5.4".to_string(),
-<<<<<<< HEAD
         instructions: "i".to_string(),
         previous_response_id: None,
-||||||| 413492cd6c
-        instructions: "i".to_string(),
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         input,
         tools: Some(empty_tools().into()),
         tool_choice: "auto".to_string(),
@@ -358,16 +353,12 @@ fn serializes_text_verbosity_when_set() {
             format: None,
         }),
         client_metadata: None,
-<<<<<<< HEAD
         thinking_budget: None,
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
         provider_options: None,
-||||||| 413492cd6c
-=======
         access_programs: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     let v = serde_json::to_value(&req).expect("json");
@@ -398,13 +389,8 @@ fn serializes_text_schema_with_strict_format() {
 
     let req = ResponsesApiRequest {
         model: "gpt-5.4".to_string(),
-<<<<<<< HEAD
         instructions: "i".to_string(),
         previous_response_id: None,
-||||||| 413492cd6c
-        instructions: "i".to_string(),
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         input,
         tools: Some(empty_tools().into()),
         tool_choice: "auto".to_string(),
@@ -418,16 +404,12 @@ fn serializes_text_schema_with_strict_format() {
         service_tier: None,
         text: Some(text_controls),
         client_metadata: None,
-<<<<<<< HEAD
         thinking_budget: None,
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
         provider_options: None,
-||||||| 413492cd6c
-=======
         access_programs: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     let v = serde_json::to_value(&req).expect("json");
@@ -475,13 +457,8 @@ fn omits_text_when_not_set() {
     let input: Vec<ResponseItem> = vec![];
     let req = ResponsesApiRequest {
         model: "gpt-5.4".to_string(),
-<<<<<<< HEAD
         instructions: "i".to_string(),
         previous_response_id: None,
-||||||| 413492cd6c
-        instructions: "i".to_string(),
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         input,
         tools: Some(empty_tools().into()),
         tool_choice: "auto".to_string(),
@@ -495,16 +472,12 @@ fn omits_text_when_not_set() {
         service_tier: None,
         text: None,
         client_metadata: None,
-<<<<<<< HEAD
         thinking_budget: None,
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
         provider_options: None,
-||||||| 413492cd6c
-=======
         access_programs: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     let v = serde_json::to_value(&req).expect("json");
@@ -564,13 +537,8 @@ fn ambient_fast_request_serializes_plain_string_input() {
 fn serializes_flex_service_tier_when_set() {
     let req = ResponsesApiRequest {
         model: "gpt-5.4".to_string(),
-<<<<<<< HEAD
         instructions: "i".to_string(),
         previous_response_id: None,
-||||||| 413492cd6c
-        instructions: "i".to_string(),
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         input: vec![],
         tools: Some(empty_tools().into()),
         tool_choice: "auto".to_string(),
@@ -584,16 +552,12 @@ fn serializes_flex_service_tier_when_set() {
         service_tier: Some(ServiceTier::Flex.to_string()),
         text: None,
         client_metadata: None,
-<<<<<<< HEAD
         thinking_budget: None,
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
         provider_options: None,
-||||||| 413492cd6c
-=======
         access_programs: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     let v = serde_json::to_value(&req).expect("json");

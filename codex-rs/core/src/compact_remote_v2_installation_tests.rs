@@ -67,7 +67,7 @@ async fn prepared_prefix_rejection_respects_caller_intent(
     sess.replace_history(vec![original.clone()], /*reference_context_item*/ None)
         .await;
     let history = sess.clone_history().await;
-    let auth = sess.services.model_client.auth_owner_generation();
+    let auth = sess.services.model_client().auth_owner_generation();
     let mut candidate = BackgroundCompactionCandidate {
         prefix: CompactionPrefix {
             generation: history.history_version(),

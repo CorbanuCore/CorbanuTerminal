@@ -28,16 +28,10 @@ use crate::provider_throttle::record_auxiliary_outcome;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::responses_metadata::CompactionTurnMetadata;
 use crate::responses_retry::ResponsesStreamRequest;
-<<<<<<< HEAD
-use crate::responses_retry::ensure_gpu_runtime_provider_active;
-use crate::responses_retry::handle_retryable_response_stream_error;
-||||||| 413492cd6c
-use crate::responses_retry::handle_retryable_response_stream_error;
-=======
 use crate::responses_retry::ResponsesStreamRetryState;
+use crate::responses_retry::ensure_gpu_runtime_provider_active;
 use crate::responses_retry::handle_response_stream_error;
 use crate::session::RequestEffortUsage;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::session::session::Session;
 use crate::session::step_context::StepContext;
 use crate::session::turn_context::TurnContext;
@@ -287,258 +281,6 @@ async fn run_remote_compact_task_inner(
     }
 }
 
-<<<<<<< HEAD
-async fn run_remote_compact_task_inner_impl(
-    sess: &Arc<Session>,
-    step_context: &Arc<StepContext>,
-    fallback_step_context: Option<&Arc<StepContext>>,
-    mut client_session: Option<&mut ModelClientSession>,
-    initial_context_injection: InitialContextInjection,
-    compaction_metadata: CompactionTurnMetadata,
-    analytics_details: &mut CompactionAnalyticsDetails,
-) -> CodexResult<()> {
-    let turn_context = &step_context.turn;
-    let context_compaction_item = ContextCompactionItem::new();
-    let compaction_id = context_compaction_item.id.clone();
-    let compaction_trace = sess.services.rollout_thread_trace.compaction_trace_context(
-        turn_context.sub_id.as_str(),
-        compaction_id.as_str(),
-        turn_context.model_info.slug.as_str(),
-        turn_context.provider.info().name.as_str(),
-    );
-    let compaction_item = TurnItem::ContextCompaction(context_compaction_item);
-    sess.emit_turn_item_started(turn_context, &compaction_item)
-        .await;
-
-    let attempt = run_remote_compact_v2_attempt(
-        sess,
-        step_context,
-        client_session.as_deref_mut(),
-        &compaction_trace,
-        compaction_metadata,
-        analytics_details,
-    )
-    .await;
-    let (attempt, compaction_turn_context) = match attempt {
-        Ok(attempt) => (attempt, turn_context),
-        Err(error) => {
-            let Some(fallback_step_context) = fallback_step_context else {
-                return Err(error);
-            };
-            if !should_retry_with_current_model(&error) {
-                return Err(error);
-            }
-            let fallback_turn_context = &fallback_step_context.turn;
-            let fallback_compaction_trace =
-                sess.services.rollout_thread_trace.compaction_trace_context(
-                    fallback_turn_context.sub_id.as_str(),
-                    compaction_id.as_str(),
-                    fallback_turn_context.model_info.slug.as_str(),
-                    fallback_turn_context.provider.info().name.as_str(),
-                );
-            let fallback_result = run_remote_compact_v2_attempt(
-                sess,
-                fallback_step_context,
-                client_session,
-                &fallback_compaction_trace,
-                compaction_metadata,
-                analytics_details,
-            )
-            .await;
-            record_model_fallback(
-                &sess.services.session_telemetry,
-                turn_context.model_info.slug.as_str(),
-                fallback_turn_context.model_info.slug.as_str(),
-                compaction_metadata.reason(),
-                compaction_metadata.implementation(),
-                fallback_result.as_ref().err(),
-            );
-            match fallback_result {
-                Ok(attempt) => (attempt, fallback_turn_context),
-                Err(_) => return Err(error),
-            }
-        }
-    };
-    let RemoteCompactV2Attempt {
-        trace_input_history,
-        prompt_input,
-        mut compaction_output,
-        token_usage,
-        owned_client_session: _owned_client_session,
-    } = attempt;
-    // #578: its encrypted summary is sealed for this provider (and account).
-    compaction_output.set_producer(&compaction_turn_context.output_producer());
-    if let Some(token_usage) = token_usage {
-        sess.record_rollout_budget_usage(&token_usage)?;
-        analytics_details.active_context_tokens_before = Some(token_usage.input_tokens);
-        analytics_details.compaction_summary_tokens = Some(token_usage.output_tokens);
-        analytics_details.cached_input_tokens = Some(token_usage.cached_input_tokens);
-        analytics_details.cache_write_input_tokens = Some(token_usage.cache_write_input_tokens);
-    }
-    let (compacted_history, retained_images) =
-        build_v2_compacted_history(&prompt_input, compaction_output);
-    analytics_details.retained_image_count = Some(retained_images);
-    let (new_window_number, new_window_ids) = sess.advance_auto_compact_window().await;
-    let (new_history, world_state_baseline) =
-        process_compacted_history(sess.as_ref(), compacted_history, &initial_context_injection)
-            .await;
-
-    let reference_context_item = match initial_context_injection {
-        InitialContextInjection::DoNotInject => None,
-        InitialContextInjection::BeforeLastUserMessage { .. } => {
-            Some(compaction_turn_context.to_turn_context_item())
-        }
-    };
-    if let Some(trace_input_history) = trace_input_history.as_deref() {
-        compaction_trace.record_installed(&CompactionCheckpointTracePayload {
-            input_history: trace_input_history,
-            replacement_history: &new_history,
-        });
-    }
-    sess.replace_compacted_history(
-        new_history,
-        reference_context_item,
-        world_state_baseline,
-        CompactedHistoryMetadata {
-            message: String::new(),
-            window_number: new_window_number,
-            window_ids: new_window_ids,
-        },
-    )
-    .await;
-    sess.recompute_token_usage(compaction_turn_context).await;
-
-    sess.emit_turn_item_completed(compaction_turn_context, compaction_item)
-        .await;
-    Ok(())
-}
-
-||||||| 413492cd6c
-async fn run_remote_compact_task_inner_impl(
-    sess: &Arc<Session>,
-    step_context: &Arc<StepContext>,
-    fallback_step_context: Option<&Arc<StepContext>>,
-    mut client_session: Option<&mut ModelClientSession>,
-    initial_context_injection: InitialContextInjection,
-    compaction_metadata: CompactionTurnMetadata,
-    analytics_details: &mut CompactionAnalyticsDetails,
-) -> CodexResult<()> {
-    let turn_context = &step_context.turn;
-    let context_compaction_item = ContextCompactionItem::new();
-    let compaction_id = context_compaction_item.id.clone();
-    let compaction_trace = sess.services.rollout_thread_trace.compaction_trace_context(
-        turn_context.sub_id.as_str(),
-        compaction_id.as_str(),
-        turn_context.model_info.slug.as_str(),
-        turn_context.provider.info().name.as_str(),
-    );
-    let compaction_item = TurnItem::ContextCompaction(context_compaction_item);
-    sess.emit_turn_item_started(turn_context, &compaction_item)
-        .await;
-
-    let attempt = run_remote_compact_v2_attempt(
-        sess,
-        step_context,
-        client_session.as_deref_mut(),
-        &compaction_trace,
-        compaction_metadata,
-        analytics_details,
-    )
-    .await;
-    let (attempt, compaction_turn_context) = match attempt {
-        Ok(attempt) => (attempt, turn_context),
-        Err(error) => {
-            let Some(fallback_step_context) = fallback_step_context else {
-                return Err(error);
-            };
-            if !should_retry_with_current_model(&error) {
-                return Err(error);
-            }
-            let fallback_turn_context = &fallback_step_context.turn;
-            let fallback_compaction_trace =
-                sess.services.rollout_thread_trace.compaction_trace_context(
-                    fallback_turn_context.sub_id.as_str(),
-                    compaction_id.as_str(),
-                    fallback_turn_context.model_info.slug.as_str(),
-                    fallback_turn_context.provider.info().name.as_str(),
-                );
-            let fallback_result = run_remote_compact_v2_attempt(
-                sess,
-                fallback_step_context,
-                client_session,
-                &fallback_compaction_trace,
-                compaction_metadata,
-                analytics_details,
-            )
-            .await;
-            record_model_fallback(
-                &sess.services.session_telemetry,
-                turn_context.model_info.slug.as_str(),
-                fallback_turn_context.model_info.slug.as_str(),
-                compaction_metadata.reason(),
-                compaction_metadata.implementation(),
-                fallback_result.as_ref().err(),
-            );
-            match fallback_result {
-                Ok(attempt) => (attempt, fallback_turn_context),
-                Err(_) => return Err(error),
-            }
-        }
-    };
-    let RemoteCompactV2Attempt {
-        trace_input_history,
-        prompt_input,
-        compaction_output,
-        token_usage,
-        owned_client_session: _owned_client_session,
-    } = attempt;
-    if let Some(token_usage) = token_usage {
-        sess.record_rollout_budget_usage(&token_usage)?;
-        analytics_details.active_context_tokens_before = Some(token_usage.input_tokens);
-        analytics_details.compaction_summary_tokens = Some(token_usage.output_tokens);
-        analytics_details.cached_input_tokens = Some(token_usage.cached_input_tokens);
-        analytics_details.cache_write_input_tokens = Some(token_usage.cache_write_input_tokens);
-    }
-    let (compacted_history, retained_images) =
-        build_v2_compacted_history(&prompt_input, compaction_output);
-    analytics_details.retained_image_count = Some(retained_images);
-    let (new_window_number, new_window_ids) = sess.advance_auto_compact_window().await;
-    let (new_history, world_state_baseline) =
-        process_compacted_history(sess.as_ref(), compacted_history, &initial_context_injection)
-            .await;
-
-    let reference_context_item = match initial_context_injection {
-        InitialContextInjection::DoNotInject => None,
-        InitialContextInjection::BeforeLastUserMessage { .. } => {
-            Some(compaction_turn_context.to_turn_context_item())
-        }
-    };
-    if let Some(trace_input_history) = trace_input_history.as_deref() {
-        compaction_trace.record_installed(&CompactionCheckpointTracePayload {
-            input_history: trace_input_history,
-            replacement_history: &new_history,
-        });
-    }
-    sess.replace_compacted_history(
-        new_history,
-        reference_context_item,
-        world_state_baseline,
-        CompactedHistoryMetadata {
-            message: String::new(),
-            window_number: new_window_number,
-            window_ids: new_window_ids,
-        },
-    )
-    .await;
-    sess.recompute_token_usage(compaction_turn_context).await;
-
-    sess.emit_turn_item_completed(compaction_turn_context, compaction_item)
-        .await;
-    Ok(())
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 struct RemoteCompactionV2Output {
     compaction_output: ResponseItem,
     response_id: String,
@@ -563,7 +305,21 @@ async fn run_remote_compaction_request_v2(
             let trace = InferenceTraceContext::disabled();
             // Replay the routing token without letting this request change foreground routing.
             let turn_state = Arc::new(turn_state.map(OnceLock::from).unwrap_or_default());
-            let http_executor = ResponsesHttpExecutor::new(&sess.services.model_client);
+            // Corbanu: background compaction stays off (`async_compaction::enabled`)
+            // until it is recorded by accounting. Should it run, it still gets the
+            // same disclosure gate (PF-28-S01) and request throttle (#509) as the
+            // foreground request, which goes through `ModelClientSession`.
+            let gated_prompt = crate::security::disclosure_gate::gate_prompt(prompt);
+            let prompt = gated_prompt.as_ref().unwrap_or(prompt);
+            let admitted = AdmittedProviderRequest::admit_for_turn(
+                AuxiliaryRequest::Compaction,
+                sess,
+                turn_context,
+                prompt,
+            )
+            .await?;
+            let model_client = sess.services.model_client();
+            let http_executor = ResponsesHttpExecutor::new(&model_client);
             let stream = tokio::select! {
                 biased;
                 _ = cancellation.cancelled() => return Err(CodexErr::TurnAborted),
@@ -571,15 +327,22 @@ async fn run_remote_compaction_request_v2(
                     &turn_state, auth_owner_generation, /*event_sender*/ None, prompt, &settings.model_info, &step_context.session_telemetry, effort,
                     settings.reasoning_summary, settings.service_tier.clone(), responses_metadata,
                     &trace,
-                ) => stream?,
+                ) => stream,
             };
-            return collect_compaction_output(
-                sess,
-                turn_context,
-                stream,
-                CompactionRequestKind::Background(&cancellation),
-            )
-            .await;
+            let result = match stream {
+                Ok(stream) => {
+                    collect_compaction_output(
+                        sess,
+                        turn_context,
+                        stream,
+                        CompactionRequestKind::Background(&cancellation),
+                    )
+                    .await
+                }
+                Err(err) => Err(err),
+            };
+            record_auxiliary_outcome(admitted.as_ref(), &result).await;
+            return result;
         }
         CompactionRequestTransport::Foreground(client_session) => client_session,
     };
@@ -589,15 +352,9 @@ async fn run_remote_compaction_request_v2(
         .info()
         .stream_max_retries()
         .min(MAX_REMOTE_COMPACTION_V2_STREAM_RETRIES);
-<<<<<<< HEAD
-    let mut retries = 0;
+    let mut retry_state = ResponsesStreamRetryState::default();
     let mut unresolvable_item_retries = 0;
     let mut home_wait = crate::home_access::HomeWait::default();
-||||||| 413492cd6c
-    let mut retries = 0;
-=======
-    let mut retry_state = ResponsesStreamRetryState::default();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     loop {
         ensure_gpu_runtime_provider_active(sess, turn_context).await?;
         // #509: each attempt is a model request on the turn's key.
@@ -620,7 +377,7 @@ async fn run_remote_compaction_request_v2(
                 step_context.settings.service_tier.clone(),
                 responses_metadata,
                 &InferenceTraceContext::disabled(),
-                retries + 1,
+                retry_state.retries() + 1,
             )
             .await
         {
@@ -635,17 +392,10 @@ async fn run_remote_compaction_request_v2(
             }
             Err(err) => Err(err),
         };
-<<<<<<< HEAD
         record_auxiliary_outcome(admitted.as_ref(), &result).await;
         let attempt_elapsed = attempt_started_at.elapsed();
-
-||||||| 413492cd6c
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         match result {
             Ok(compaction_output) => return Ok(compaction_output),
-<<<<<<< HEAD
             // #578: the provider could not find an item this request referenced.
             Err(err)
                 if crate::session::turn::retry_without_unresolvable_item(
@@ -653,13 +403,7 @@ async fn run_remote_compaction_request_v2(
                     &err,
                     &mut unresolvable_item_retries,
                 ) => {}
-            Err(err) if !err.is_retryable() => return Err(err),
-||||||| 413492cd6c
-            Err(err) if !err.is_retryable() => return Err(err),
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             Err(err) => {
-<<<<<<< HEAD
                 // #616: wait out an unreadable home without using retries.
                 let Err(err) = crate::home_access::wait_if_home_unreadable(
                     &mut home_wait,
@@ -671,15 +415,8 @@ async fn run_remote_compaction_request_v2(
                 else {
                     continue;
                 };
-                handle_retryable_response_stream_error(
-                    &mut retries,
-||||||| 413492cd6c
-                handle_retryable_response_stream_error(
-                    &mut retries,
-=======
                 handle_response_stream_error(
                     &mut retry_state,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     max_retries,
                     err,
                     client_session,
@@ -1102,6 +839,49 @@ mod tests {
     use tokio::sync::mpsc;
     use tokio_util::sync::CancellationToken;
 
+    /// #509: each remote compaction v2 attempt respects the key's cooldown and
+    /// records its own 429.
+    #[tokio::test]
+    async fn remote_compaction_v2_respects_and_records_the_provider_request_throttle() {
+        use crate::provider_throttle::tests::RateLimitedSession;
+        use crate::provider_throttle::tests::assert_rate_limited_then_blocked;
+
+        let fixture = RateLimitedSession::start().await;
+        let metadata = fixture.metadata();
+        let RateLimitedSession {
+            server,
+            session,
+            turn_context,
+            home: _home,
+            cwd: _cwd,
+        } = fixture;
+        let step_context = StepContext::for_test(Arc::new(turn_context));
+        let mut client_session = session.services.model_client().new_session();
+        let prompt = Prompt {
+            input: vec![message("user", "compact this", /*phase*/ None)],
+            ..Default::default()
+        };
+        let mut attempt = async || match run_remote_compaction_request_v2(
+            &session,
+            &step_context,
+            &prompt,
+            &metadata,
+            CompactionRequestTransport::Foreground(&mut client_session),
+        )
+        .await
+        {
+            Ok(_) => panic!("the provider refuses every request"),
+            Err(error) => error,
+        };
+        let first = attempt().await;
+        let second = attempt().await;
+        assert_rate_limited_then_blocked(&first, &second);
+        assert_eq!(
+            server.received_requests().await.unwrap_or_default().len(),
+            1
+        );
+    }
+
     fn message(role: &str, text: &str, phase: Option<MessagePhase>) -> ResponseItem {
         ResponseItem::Message {
             status: None,
@@ -1162,38 +942,6 @@ mod tests {
             interrupt: None,
             consumer_dropped: CancellationToken::new(),
         }
-    }
-
-    /// #509: each remote compaction v2 attempt respects the key's cooldown and
-    /// records its own 429.
-    #[tokio::test]
-    async fn remote_compaction_v2_respects_and_records_the_provider_request_throttle() {
-        use crate::provider_throttle::tests::RateLimitedSession;
-        use crate::provider_throttle::tests::assert_rate_limited_then_blocked;
-
-        let fixture = RateLimitedSession::start().await;
-        let mut client_session = fixture.session.services.model_client().new_session();
-        let metadata = fixture.metadata();
-        let prompt = Prompt {
-            input: vec![message("user", "compact this", /*phase*/ None)],
-            ..Default::default()
-        };
-        let mut attempt = async || match run_remote_compaction_request_v2(
-            &fixture.session,
-            &fixture.turn_context,
-            &mut client_session,
-            &prompt,
-            &metadata,
-        )
-        .await
-        {
-            Ok(_) => panic!("the provider refuses every request"),
-            Err(error) => error,
-        };
-        let first = attempt().await;
-        let second = attempt().await;
-        assert_rate_limited_then_blocked(&first, &second);
-        assert_eq!(fixture.requests().await, 1);
     }
 
     #[test]

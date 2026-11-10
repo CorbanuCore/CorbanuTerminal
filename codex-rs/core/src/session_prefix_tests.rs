@@ -23,7 +23,6 @@ fn error_completion_message_stays_below_manual_review_threshold() {
 }
 
 #[test]
-<<<<<<< HEAD
 fn subagent_context_line_includes_management_fields() {
     let line = format_subagent_context_line(
         "orc_snaga",
@@ -38,8 +37,9 @@ fn subagent_context_line_includes_management_fields() {
         line,
         "- orc_snaga: Snaga (role=orc; status=done; task=wire animated website; result=created index.html and ran checks)"
     );
-||||||| 413492cd6c
-=======
+}
+
+#[test]
 fn guardian_interruption_message_stays_below_manual_review_threshold() {
     let message = format_guardian_interruption_message(
         AgentPath::root(),
@@ -49,5 +49,4 @@ fn guardian_interruption_message_stays_below_manual_review_threshold() {
 
     assert!(approx_token_count(&message) < COMPLETION_MESSAGE_MAX_TOKENS);
     assert!(message.contains(GUARDIAN_NEXT_ACTION));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

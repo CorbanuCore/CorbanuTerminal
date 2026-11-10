@@ -19,13 +19,7 @@ use codex_git_utils::GitSha;
 use codex_git_utils::SanitizedGitUrl;
 use codex_git_utils::collect_git_info;
 use codex_git_utils::get_git_repo_root;
-<<<<<<< HEAD
-use codex_git_utils::get_has_changes;
-||||||| 413492cd6c
-use codex_git_utils::get_has_changes;
-=======
 use codex_git_utils::get_has_changes_in_repo;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_git_utils::git_diff_to_remote;
 use codex_git_utils::recent_commits;
 use codex_git_utils::resolve_root_git_project_uri_for_trust;

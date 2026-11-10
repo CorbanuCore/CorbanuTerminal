@@ -9,12 +9,8 @@ use codex_protocol::items::HookPromptFragment;
 use codex_protocol::items::TurnItem;
 use codex_protocol::items::WebSearchItem;
 use codex_protocol::items::build_hook_prompt_message;
-<<<<<<< HEAD
 use codex_protocol::models::AgentMessageInputContent;
-||||||| 413492cd6c
-=======
 use codex_protocol::models::AudioReference;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
 use codex_protocol::models::ImageReference;

@@ -178,11 +178,13 @@ async fn build_and_install_compaction(
         trace_input_history,
         prompt_input,
         prompt_input_metadata,
-        compaction_output,
+        mut compaction_output,
         compaction_response_id,
         token_usage,
         owned_client_session: _owned_client_session,
     } = attempt;
+    // #578: its encrypted summary is sealed for this provider (and account).
+    compaction_output.set_producer(&compaction_turn_context.output_producer());
     if prefix.is_none()
         && let Some(token_usage) = token_usage.as_ref()
     {

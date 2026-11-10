@@ -670,6 +670,26 @@ impl ContextManager {
         input_modalities: &[InputModality],
         image_store: &dyn AttachmentStore,
     ) -> Vec<ResponseItem> {
+        self.adapt_for_turn_provider(turn_context);
+        self.for_prompt(input_modalities, image_store).await
+    }
+
+    /// [`Self::for_prompt_annotated`] for a request of `turn_context`'s
+    /// provider (#578), for consumers that keep item metadata (compaction).
+    pub(crate) async fn for_turn_prompt_annotated(
+        mut self,
+        turn_context: &TurnContext,
+        input_modalities: &[InputModality],
+        image_store: &dyn AttachmentStore,
+    ) -> Vec<ResponseItemEnvelope> {
+        self.adapt_for_turn_provider(turn_context);
+        self.for_prompt_annotated(input_modalities, image_store)
+            .await
+    }
+
+    /// Adapts items another provider produced for a request of
+    /// `turn_context`'s provider (#578, see [`super::provider_items`]).
+    pub(crate) fn adapt_for_turn_provider(&mut self, turn_context: &TurnContext) {
         let dropped_summary = super::provider_items::adapt_for_provider_by(
             Arc::make_mut(&mut self.items),
             |envelope| &envelope.item,
@@ -686,7 +706,6 @@ impl ContextManager {
                  provider; it cannot read it"
             );
         }
-        self.for_prompt(input_modalities, image_store).await
     }
 
     /// Iterates over raw response items without exposing their history envelopes.
