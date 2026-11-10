@@ -5,6 +5,7 @@
 
 use crate::agent::role::DEFAULT_ROLE_NAME;
 use crate::agent::role::apply_role_to_config;
+use crate::agent::role::apply_role_to_config_for_multi_agent_v2;
 use crate::config::Config;
 use crate::session::session::Session;
 use crate::session::step_context::StepContext;
@@ -63,15 +64,23 @@ pub(crate) async fn prepare_agent_spawn_config(
     if options.version == SpawnConfigVersion::V1 && options.full_history_fork {
         reject_full_fork_agent_type_override(options.role_name)?;
     }
-    apply_requested_spawn_agent_runtime_overrides(
-        session,
-        step_context,
-        &mut config,
-        options.model_provider,
-        options.model,
-        options.reasoning_effort,
-    )
-    .await?;
+    // Corbanu: an explicit provider is ignored on full-history forks (as main), so the parent's
+    // history only goes to a provider the parent already uses or a role selects.
+    let model_provider = options
+        .model_provider
+        .map(str::trim)
+        .filter(|provider| !provider.is_empty() && !options.full_history_fork);
+    if model_provider.is_none() {
+        apply_requested_spawn_agent_runtime_overrides(
+            session,
+            step_context,
+            &mut config,
+            /*requested_provider*/ None,
+            options.model,
+            options.reasoning_effort.clone(),
+        )
+        .await?;
+    }
     if !options.full_history_fork
         || (options.version == SpawnConfigVersion::V2 && options.role_name.is_some())
     {
@@ -84,6 +93,19 @@ pub(crate) async fn prepare_agent_spawn_config(
                 .developer_instructions
                 .clone_from(&turn.developer_instructions);
         }
+    }
+    // Corbanu (as main): an explicit runtime is applied after the role, so the role's
+    // instructions survive while the requested provider and model win.
+    if model_provider.is_some() {
+        apply_requested_spawn_agent_runtime_overrides(
+            session,
+            step_context,
+            &mut config,
+            model_provider,
+            options.model,
+            options.reasoning_effort,
+        )
+        .await?;
     }
     apply_spawn_agent_service_tier(session, &mut config).await?;
     apply_spawn_agent_runtime_overrides(&mut config, turn)?;
@@ -519,13 +541,17 @@ pub(crate) async fn apply_spawn_agent_service_tier(
 }
 
 async fn apply_spawn_agent_role(
-    _session: &Session,
+    session: &Session,
     config: &mut Config,
     role_name: Option<&str>,
 ) -> Result<(), String> {
     // Corbanu: the role's model and effort are validated with the final runtime in
     // `ensure_spawn_runtime_eligible`, against the child's own provider.
-    apply_role_to_config(config, role_name).await
+    if session.multi_agent_version() == Some(MultiAgentVersion::V2) {
+        apply_role_to_config_for_multi_agent_v2(config, role_name).await
+    } else {
+        apply_role_to_config(config, role_name).await
+    }
 }
 
 fn find_spawn_agent_model_name(

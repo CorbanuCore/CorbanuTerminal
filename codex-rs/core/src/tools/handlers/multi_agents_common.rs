@@ -25,6 +25,7 @@ use serde_json::Value as JsonValue;
 pub(crate) const MIN_WAIT_TIMEOUT_MS: i64 = DEFAULT_MULTI_AGENT_V2_MIN_WAIT_TIMEOUT_MS;
 pub(crate) const DEFAULT_WAIT_TIMEOUT_MS: i64 = 30_000;
 pub(crate) const MAX_WAIT_TIMEOUT_MS: i64 = HARD_MAX_MULTI_AGENT_V2_TIMEOUT_MS;
+
 pub(crate) fn function_arguments(payload: ToolPayload) -> Result<String, FunctionCallError> {
     match payload {
         ToolPayload::Function { arguments } => Ok(arguments),
@@ -205,6 +206,7 @@ pub(crate) fn parse_collab_input(
         }
     }
 }
+
 /// #1756 (as #1701 for `wait_agent`): agent tools act only on the caller's
 /// own agents, spawned by it or by its agents. A loaded thread the caller
 /// did not spawn is refused; an id that is not loaded is left to the tool
@@ -215,13 +217,15 @@ pub(crate) async fn ensure_own_agent(
     tool: &str,
     agent_id: ThreadId,
 ) -> Result<(), FunctionCallError> {
-    let foreign = match session.services.agent_control.local_or_unsupported() {
-        Ok(control) => control
-            .is_foreign_loaded_thread(session.thread_id, agent_id)
-            .await
-            .unwrap_or(true),
-        Err(_) => true,
+    let Ok(control) = session.services.agent_control.local_or_unsupported() else {
+        return Err(FunctionCallError::RespondToModel(format!(
+            "{tool} needs Corbanu's local agent backend to check that `{agent_id}` is this agent's own"
+        )));
     };
+    let foreign = control
+        .is_foreign_loaded_thread(session.thread_id, agent_id)
+        .await
+        .unwrap_or(true);
     if foreign {
         return Err(FunctionCallError::RespondToModel(format!(
             "{tool} can only target agents spawned by this agent or by its sub-agents; `{agent_id}` is not one of them"
