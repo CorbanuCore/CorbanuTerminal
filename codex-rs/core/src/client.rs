@@ -1875,10 +1875,7 @@ impl ModelClient {
             ),
             // Upstream's runtime authentication is validated for one first-party provider;
             // another provider gets none (it would need its own runtime owner).
-            runtime_auth: self
-                .runtime_auth
-                .clone()
-                .filter(|_| same_provider),
+            runtime_auth: self.runtime_auth.clone().filter(|_| same_provider),
         }
     }
 
