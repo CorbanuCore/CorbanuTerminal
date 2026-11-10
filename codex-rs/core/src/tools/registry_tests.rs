@@ -658,7 +658,6 @@ async fn write_stdin_does_not_expose_default_pre_tool_use_payload() {
     assert_eq!(write_stdin.pre_tool_use_payload(&invocation), None);
 }
 
-<<<<<<< HEAD
 #[tokio::test]
 async fn explicit_shell_command_budget_blocks_after_limit() -> anyhow::Result<()> {
     let (session, turn) = crate::session::tests::make_session_and_context().await;
@@ -713,8 +712,8 @@ async fn explicit_shell_command_budget_blocks_after_limit() -> anyhow::Result<()
         .await?;
 
     Ok(())
-||||||| 413492cd6c
-=======
+}
+
 #[test_case::test_case(TruncationPolicy::Tokens(1), 2; "token budget")]
 #[test_case::test_case(TruncationPolicy::Bytes(401), 121; "scale bytes before converting to tokens")]
 fn post_tool_use_feedback_output_preserves_fallback_token_limit_override(
@@ -761,7 +760,6 @@ fn post_tool_use_feedback_output_preserves_fallback_token_limit_override(
             }),
         }
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[test]

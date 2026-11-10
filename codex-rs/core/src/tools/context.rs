@@ -525,7 +525,7 @@ impl ToolOutput for ExecCommandToolOutput {
     fn result_identity(&self, _payload: &ToolPayload) -> JsonValue {
         serde_json::json!({
             "exit_code": self.exit_code,
-            "output": String::from_utf8_lossy(&self.raw_output),
+            "output": self.raw_output.text,
         })
     }
 }

@@ -220,15 +220,6 @@ impl CodeModeExecuteHandler {
             ..
         } = invocation;
 
-<<<<<<< HEAD
-        match exec_source(&tool_name, &payload) {
-            Some(source) => self
-                .execute(session, turn, call_id, source)
-||||||| 413492cd6c
-        match payload {
-            ToolPayload::Custom { input } if is_exec_tool_name(&tool_name) => self
-                .execute(session, turn, call_id, input)
-=======
         let mut telemetry = CodeModeToolCallGuard::new(
             &session,
             turn.sub_id.clone(),
@@ -237,33 +228,21 @@ impl CodeModeExecuteHandler {
             PUBLIC_TOOL_NAME,
             handler_span,
         );
-        let result = match payload {
-            ToolPayload::Custom { input } if is_exec_tool_name(&tool_name) => self
+        let result = match exec_source(&tool_name, &payload) {
+            Some(source) => self
                 .execute(
                     session,
                     step_context,
                     call_id,
                     originating_call,
-                    input,
+                    source,
                     &mut telemetry,
                 )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 .await
                 .map(boxed_tool_output),
-<<<<<<< HEAD
             None => Err(FunctionCallError::RespondToModel(
                 invalid_exec_payload_message(&payload),
             )),
-        }
-||||||| 413492cd6c
-            _ => Err(FunctionCallError::RespondToModel(format!(
-                "{PUBLIC_TOOL_NAME} expects raw JavaScript source text"
-            ))),
-        }
-=======
-            _ => Err(FunctionCallError::RespondToModel(format!(
-                "{PUBLIC_TOOL_NAME} expects raw JavaScript source text"
-            ))),
         };
         telemetry.finish(
             result
@@ -271,7 +250,6 @@ impl CodeModeExecuteHandler {
                 .is_ok_and(|output| output.success_for_logging()),
         );
         result
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 

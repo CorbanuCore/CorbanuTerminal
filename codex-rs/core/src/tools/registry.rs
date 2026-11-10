@@ -62,13 +62,12 @@ pub use codex_tools::ToolExposure;
 /// Implementers provide the shared `ToolExecutor` behavior plus optional
 /// core-owned metadata for hooks, telemetry, tool search, and argument diffs.
 pub(crate) trait CoreToolRuntime: ToolExecutor<ToolInvocation> {
-<<<<<<< HEAD
     /// Who provides this tool, for the PF-23-S01 protected-surface matrix.
     /// Tools from MCP servers, the client or extension crates override it.
     fn tool_origin(&self) -> crate::security::protected_surface::ToolOrigin {
         crate::security::protected_surface::ToolOrigin::Builtin
-||||||| 413492cd6c
-=======
+    }
+
     /// The handler observes its cancellation token and must finish before dispatch is aborted.
     fn finishes_on_cancellation(&self) -> bool {
         false
@@ -92,7 +91,6 @@ pub(crate) trait CoreToolRuntime: ToolExecutor<ToolInvocation> {
         _code_mode_input_schema_max_bytes: Option<usize>,
     ) -> Option<&[codex_code_mode::ToolDefinition]> {
         None
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Returns a readiness wait for this exact tool before taking the execution gate.
@@ -131,13 +129,6 @@ pub(crate) trait CoreToolRuntime: ToolExecutor<ToolInvocation> {
         )
     }
 
-<<<<<<< HEAD
-    /// Whether cancellation should let the handler finish teardown before the
-    /// host returns an aborted tool response.
-    fn waits_for_runtime_cancellation(&self) -> bool {
-        false
-    }
-
     /// Whether calling this tool repeatedly with identical arguments is normal
     /// use, as for polling a running process or waiting on agents. Such tools
     /// are exempt from the consecutive identical-call guard.
@@ -145,15 +136,6 @@ pub(crate) trait CoreToolRuntime: ToolExecutor<ToolInvocation> {
         false
     }
 
-||||||| 413492cd6c
-    /// Whether cancellation should let the handler finish teardown before the
-    /// host returns an aborted tool response.
-    fn waits_for_runtime_cancellation(&self) -> bool {
-        false
-    }
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     fn telemetry_tags(&self, _invocation: &ToolInvocation) -> ToolTelemetryTags {
         Vec::new()
     }
@@ -448,144 +430,10 @@ impl RegisteredTool {
             .unwrap_or_else(|| Arc::new(self.runtime.spec()))
     }
 
-<<<<<<< HEAD
-    fn spec(&self) -> ToolSpec {
-        self.handler.spec()
-    }
-
-    fn exposure(&self) -> ToolExposure {
-        self.exposure
-    }
-
-    fn supports_parallel_tool_calls(&self) -> bool {
-        self.exposure != ToolExposure::Hidden && self.handler.supports_parallel_tool_calls()
-    }
-
-    fn search_info(&self) -> Option<ToolSearchInfo> {
-        self.handler.search_info()
-    }
-
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
-        self.handler.handle(invocation)
-    }
-}
-
-impl CoreToolRuntime for ExposureOverride {
-    fn tool_origin(&self) -> crate::security::protected_surface::ToolOrigin {
-        self.handler.tool_origin()
-    }
-
-    fn repeated_identical_calls_are_polling(&self) -> bool {
-        self.handler.repeated_identical_calls_are_polling()
-    }
-
-    fn wait_until_ready<'a>(&'a self, session: &'a Arc<Session>) -> Option<BoxFuture<'a, ()>> {
-        self.handler.wait_until_ready(session)
-    }
-
-    fn matches_kind(&self, payload: &ToolPayload) -> bool {
-        self.handler.matches_kind(payload)
-    }
-
-    fn waits_for_runtime_cancellation(&self) -> bool {
-        self.handler.waits_for_runtime_cancellation()
-    }
-
-    fn pre_tool_use_payload(&self, invocation: &ToolInvocation) -> Option<PreToolUsePayload> {
-        self.handler.pre_tool_use_payload(invocation)
-    }
-
-    fn post_tool_use_payload(
-        &self,
-        invocation: &ToolInvocation,
-        result: &dyn ToolOutput,
-    ) -> Option<PostToolUsePayload> {
-        self.handler.post_tool_use_payload(invocation, result)
-    }
-
-    fn with_updated_hook_input(
-        &self,
-        invocation: ToolInvocation,
-        updated_input: Value,
-    ) -> Result<ToolInvocation, FunctionCallError> {
-        self.handler
-            .with_updated_hook_input(invocation, updated_input)
-    }
-
-    fn telemetry_tags(&self, invocation: &ToolInvocation) -> ToolTelemetryTags {
-        self.handler.telemetry_tags(invocation)
-    }
-
-    fn create_diff_consumer(&self) -> Option<Box<dyn ToolArgumentDiffConsumer>> {
-        self.handler.create_diff_consumer()
-||||||| 413492cd6c
-    fn spec(&self) -> ToolSpec {
-        self.handler.spec()
-    }
-
-    fn exposure(&self) -> ToolExposure {
-        self.exposure
-    }
-
-    fn supports_parallel_tool_calls(&self) -> bool {
-        self.exposure != ToolExposure::Hidden && self.handler.supports_parallel_tool_calls()
-    }
-
-    fn search_info(&self) -> Option<ToolSearchInfo> {
-        self.handler.search_info()
-    }
-
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
-        self.handler.handle(invocation)
-    }
-}
-
-impl CoreToolRuntime for ExposureOverride {
-    fn wait_until_ready<'a>(&'a self, session: &'a Arc<Session>) -> Option<BoxFuture<'a, ()>> {
-        self.handler.wait_until_ready(session)
-    }
-
-    fn matches_kind(&self, payload: &ToolPayload) -> bool {
-        self.handler.matches_kind(payload)
-    }
-
-    fn waits_for_runtime_cancellation(&self) -> bool {
-        self.handler.waits_for_runtime_cancellation()
-    }
-
-    fn pre_tool_use_payload(&self, invocation: &ToolInvocation) -> Option<PreToolUsePayload> {
-        self.handler.pre_tool_use_payload(invocation)
-    }
-
-    fn post_tool_use_payload(
-        &self,
-        invocation: &ToolInvocation,
-        result: &dyn ToolOutput,
-    ) -> Option<PostToolUsePayload> {
-        self.handler.post_tool_use_payload(invocation, result)
-    }
-
-    fn with_updated_hook_input(
-        &self,
-        invocation: ToolInvocation,
-        updated_input: Value,
-    ) -> Result<ToolInvocation, FunctionCallError> {
-        self.handler
-            .with_updated_hook_input(invocation, updated_input)
-    }
-
-    fn telemetry_tags(&self, invocation: &ToolInvocation) -> ToolTelemetryTags {
-        self.handler.telemetry_tags(invocation)
-    }
-
-    fn create_diff_consumer(&self) -> Option<Box<dyn ToolArgumentDiffConsumer>> {
-        self.handler.create_diff_consumer()
-=======
     /// Runtime caches describe the original spec, so cannot serve an overridden one.
     pub(crate) fn cached_runtime(&self) -> Option<&Arc<dyn CoreToolRuntime>> {
         (self.model_spec.is_none() && self.runtime.immutable_spec().is_some())
             .then_some(&self.runtime)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
@@ -894,7 +742,7 @@ impl ToolRegistry {
         &self,
         invocation: ToolInvocation,
     ) -> Result<AnyToolResult, FunctionCallError> {
-        self.dispatch_any_with_terminal_outcome(invocation, /*terminal_outcome_reached*/ None)
+        self.dispatch_any_with_state(invocation, /*call_state*/ None)
             .await
     }
 
@@ -998,147 +846,6 @@ impl ToolRegistry {
             return Err(err);
         }
 
-<<<<<<< HEAD
-        if is_explicit_shell_command_budget_tool(&tool_name) {
-            match invocation
-                .turn
-                .record_shell_command_against_explicit_budget()
-            {
-                Ok(Some((used, limit))) => {
-                    tracing::info!(
-                        tool = %tool_name_flat,
-                        used,
-                        limit,
-                        "explicit shell command budget usage recorded"
-                    );
-                }
-                Ok(None) => {}
-                Err(limit) => {
-                    let message = format!(
-                        "Shell command budget exhausted: this turn was explicitly limited to {limit} shell command(s). Do not run another shell command; use the information already gathered and produce the final answer."
-                    );
-                    let log_payload = invocation.payload.log_payload();
-                    otel.tool_result_with_tags(
-                        tool_name_flat.as_ref(),
-                        &call_id_owned,
-                        log_payload.as_ref(),
-                        Duration::ZERO,
-                        /*success*/ false,
-                        &message,
-                        &tool_result_tags,
-                        &extra_trace_fields,
-                    );
-                    let err = FunctionCallError::RespondToModel(message);
-                    dispatch_trace.record_failed(&err);
-                    return Err(err);
-                }
-            }
-        }
-
-        // PF-23-S01: after untrusted content, a route the security level has
-        // not classified (or a policy request an automatic reviewer would
-        // answer) needs the human.
-        if let Err(refusal) =
-            crate::security::protected_surface::check_dispatch(&invocation, tool.tool_origin())
-                .await
-        {
-            let err = FunctionCallError::RespondToModel(refusal);
-            dispatch_trace.record_failed(&err);
-            return Err(err);
-        }
-
-        notify_tool_start(&invocation).await;
-
-        if let Some(pre_tool_use_payload) = tool.pre_tool_use_payload(&invocation) {
-            match run_pre_tool_use_hooks(
-                &invocation.session,
-                &invocation.turn,
-                invocation.call_id.clone(),
-                &pre_tool_use_payload.tool_name,
-                &pre_tool_use_payload.tool_input,
-            )
-            .await
-            {
-                PreToolUseHookResult::Blocked(message) => {
-                    let err = FunctionCallError::RespondToModel(message);
-                    dispatch_trace.record_failed(&err);
-                    notify_tool_finish_if_unclaimed(
-                        &invocation,
-                        terminal_outcome_reached.as_deref(),
-                        ToolCallOutcome::Blocked,
-                    )
-                    .await;
-                    return Err(err);
-                }
-                PreToolUseHookResult::Continue {
-                    updated_input: Some(updated_input),
-                } => match tool.with_updated_hook_input(invocation.clone(), updated_input) {
-                    Ok(updated_invocation) => {
-                        invocation = updated_invocation;
-                    }
-                    Err(err) => {
-                        dispatch_trace.record_failed(&err);
-                        notify_tool_finish_if_unclaimed(
-                            &invocation,
-                            terminal_outcome_reached.as_deref(),
-                            ToolCallOutcome::Failed {
-                                handler_executed: false,
-                            },
-                        )
-                        .await;
-                        return Err(err);
-                    }
-                },
-                PreToolUseHookResult::Continue {
-                    updated_input: None,
-                } => {}
-||||||| 413492cd6c
-        notify_tool_start(&invocation).await;
-
-        if let Some(pre_tool_use_payload) = tool.pre_tool_use_payload(&invocation) {
-            match run_pre_tool_use_hooks(
-                &invocation.session,
-                &invocation.turn,
-                invocation.call_id.clone(),
-                &pre_tool_use_payload.tool_name,
-                &pre_tool_use_payload.tool_input,
-            )
-            .await
-            {
-                PreToolUseHookResult::Blocked(message) => {
-                    let err = FunctionCallError::RespondToModel(message);
-                    dispatch_trace.record_failed(&err);
-                    notify_tool_finish_if_unclaimed(
-                        &invocation,
-                        terminal_outcome_reached.as_deref(),
-                        ToolCallOutcome::Blocked,
-                    )
-                    .await;
-                    return Err(err);
-                }
-                PreToolUseHookResult::Continue {
-                    updated_input: Some(updated_input),
-                } => match tool.with_updated_hook_input(invocation.clone(), updated_input) {
-                    Ok(updated_invocation) => {
-                        invocation = updated_invocation;
-                    }
-                    Err(err) => {
-                        dispatch_trace.record_failed(&err);
-                        notify_tool_finish_if_unclaimed(
-                            &invocation,
-                            terminal_outcome_reached.as_deref(),
-                            ToolCallOutcome::Failed {
-                                handler_executed: false,
-                            },
-                        )
-                        .await;
-                        return Err(err);
-                    }
-                },
-                PreToolUseHookResult::Continue {
-                    updated_input: None,
-                } => {}
-=======
         let fail_before_execution = async |invocation: &ToolInvocation, err: FunctionCallError| {
             let log_payload = tool_log_payload(&invocation.payload, &invocation.source);
             otel.tool_result_with_tags(
@@ -1154,7 +861,6 @@ impl ToolRegistry {
             if tool.is_builtin_control_tool() {
                 let mut analytics = ControlToolCallGuard::new(invocation);
                 analytics.finish(ControlToolCallStatus::Failed);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
             dispatch_trace.record_failed(&err);
             notify_tool_finish_if_unclaimed(
@@ -1167,6 +873,40 @@ impl ToolRegistry {
             .await;
             err
         };
+        if is_explicit_shell_command_budget_tool(&tool_name) {
+            match invocation
+                .turn
+                .record_shell_command_against_explicit_budget()
+            {
+                Ok(Some((used, limit))) => {
+                    tracing::info!(
+                        tool = %tool_name,
+                        used,
+                        limit,
+                        "explicit shell command budget usage recorded"
+                    );
+                }
+                Ok(None) => {}
+                Err(limit) => {
+                    let err = FunctionCallError::RespondToModel(format!(
+                        "Shell command budget exhausted: this turn was explicitly limited to {limit} shell command(s). Do not run another shell command; use the information already gathered and produce the final answer."
+                    ));
+                    return Err(fail_before_execution(&invocation, err).await);
+                }
+            }
+        }
+
+        // PF-23-S01: after untrusted content, a route the security level has
+        // not classified (or a policy request an automatic reviewer would
+        // answer) needs the human.
+        if let Err(refusal) =
+            crate::security::protected_surface::check_dispatch(&invocation, tool.tool_origin())
+                .await
+        {
+            let err = FunctionCallError::RespondToModel(refusal);
+            return Err(fail_before_execution(&invocation, err).await);
+        }
+
         let environments = match tool.live_environment_resolver() {
             Some(resolve) => resolve(&invocation).await,
             None => tool.environments_for_input(&invocation),
@@ -1376,7 +1116,6 @@ async fn handle_any_tool(
 ) -> Result<AnyToolResult, FunctionCallError> {
     let call_id = invocation.call_id.clone();
     let payload = invocation.payload.clone();
-<<<<<<< HEAD
     // #878: a broker refusal of auth a tool resolves (web search, image
     // generation) is this session's.
     let output = crate::model_broker_auth::refusals::owned_by(
@@ -1384,12 +1123,6 @@ async fn handle_any_tool(
         tool.handle(invocation.clone()),
     )
     .await?;
-    if output.contains_external_context()
-||||||| 413492cd6c
-    let output = tool.handle(invocation.clone()).await?;
-    if output.contains_external_context()
-=======
-    let output = tool.handle(invocation.clone()).await?;
     let post_tool_use_payload =
         CoreToolRuntime::post_tool_use_payload(tool, &invocation, output.as_ref());
     let result = AnyToolResult {
@@ -1400,7 +1133,6 @@ async fn handle_any_tool(
     };
     super::user_messaging::capture_delivery(&result, call_state);
     if result.result.contains_external_context()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         && invocation.turn.config.memories.disable_on_external_context
     {
         state_db::mark_thread_memory_mode_polluted(
@@ -1464,27 +1196,12 @@ pub(crate) async fn apply_pre_tool_use(
 }
 
 fn function_hook_tool_name(invocation: &ToolInvocation) -> HookToolName {
-<<<<<<< HEAD
     if matches!(
         invocation.tool_name.name.as_str(),
         "spawn_agent" | "spawn_agent_v1"
-    ) && matches!(
-        invocation.tool_name.namespace.as_deref(),
-        None | Some(MULTI_AGENT_V1_NAMESPACE)
-    ) {
-||||||| 413492cd6c
-    if invocation.tool_name.name == "spawn_agent"
-        && matches!(
-            invocation.tool_name.namespace.as_deref(),
-            None | Some(MULTI_AGENT_V1_NAMESPACE)
-        )
+    ) && (invocation.tool_name.is_default_namespace()
+        || invocation.tool_name.namespace.as_deref() == Some(MULTI_AGENT_V1_NAMESPACE))
     {
-=======
-    if invocation.tool_name.name == "spawn_agent"
-        && (invocation.tool_name.is_default_namespace()
-            || invocation.tool_name.namespace.as_deref() == Some(MULTI_AGENT_V1_NAMESPACE))
-    {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         return HookToolName::spawn_agent();
     }
 
@@ -1507,7 +1224,7 @@ fn unsupported_tool_call_message(payload: &ToolPayload, tool_name: &ToolName) ->
 }
 
 fn is_explicit_shell_command_budget_tool(tool_name: &ToolName) -> bool {
-    tool_name.namespace.is_none()
+    tool_name.is_default_namespace()
         && matches!(tool_name.name.as_str(), "exec_command" | "shell_command")
 }
 #[cfg(test)]

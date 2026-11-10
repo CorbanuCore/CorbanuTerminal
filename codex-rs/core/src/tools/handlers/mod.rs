@@ -51,18 +51,12 @@ use codex_utils_path_uri::PathUri;
 use serde::Deserialize;
 use serde_json::Map;
 use serde_json::Value;
-<<<<<<< HEAD
 use serde_json::error::Category;
-use std::path::Path;
-||||||| 413492cd6c
-use std::path::Path;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::function_tool::FunctionCallError;
 use crate::sandboxing::SandboxPermissions;
-use crate::session::step_context::StepContext;
+use crate::session::session::Session;
 use crate::session::turn_context::TurnEnvironment;
 pub(crate) use crate::tools::code_mode::CodeModeExecuteHandler;
 pub(crate) use crate::tools::code_mode::CodeModeWaitHandler;
@@ -91,7 +85,7 @@ pub(crate) use structured_edit::StructuredEditHandler;
 pub(crate) use structured_edit::StructuredWriteHandler;
 pub(crate) use structured_edit::emit_model_edit_compat_metric;
 pub(crate) use structured_edit::emit_model_edit_fallback_activated_metric;
-pub(crate) use structured_edit::native_structured_edit_protocol_enabled;
+pub(crate) use structured_edit::native_structured_edit_protocol_enabled_for;
 pub(crate) use structured_edit::reject_source_write_heredoc_when_structured_edit_enabled;
 pub(crate) use structured_edit::validate_structured_write_arguments;
 pub use test_sync::TestSyncHandler;
@@ -128,7 +122,6 @@ where
     })
 }
 
-<<<<<<< HEAD
 const MALFORMED_TOOL_ARGUMENT_EXCERPT_CHARS: usize = 240;
 
 fn malformed_tool_call_error(
@@ -170,8 +163,8 @@ fn safe_argument_excerpt(arguments: &str) -> String {
         .chars()
         .take(MALFORMED_TOOL_ARGUMENT_EXCERPT_CHARS)
         .collect()
-||||||| 413492cd6c
-=======
+}
+
 fn resolve_sandbox_permissions(
     sandbox_permissions: Option<SandboxPermissions>,
     justification: Option<&str>,
@@ -183,7 +176,6 @@ fn resolve_sandbox_permissions(
     }
 
     Ok(sandbox_permissions.unwrap_or_default())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn updated_hook_command(updated_input: &Value) -> Result<&str, FunctionCallError> {
@@ -394,8 +386,8 @@ pub(super) fn implicit_granted_permissions(
     }
 }
 
-pub(super) fn apply_granted_turn_permissions(
-    step_context: &StepContext,
+pub(crate) async fn apply_granted_turn_permissions(
+    session: &Session,
     environment: &TurnEnvironment,
     cwd: &PathUri,
     sandbox_permissions: SandboxPermissions,
@@ -408,19 +400,22 @@ pub(super) fn apply_granted_turn_permissions(
             permissions_preapproved: false,
         };
     }
-    let granted_permissions = read_granted_permissions(session, environment_id).await;
+    let granted_permissions =
+        read_granted_permissions(session, &environment.selection.environment_id).await;
     with_granted_permissions(
         granted_permissions,
+        environment,
         cwd,
         sandbox_permissions,
         additional_permissions,
     )
 }
 
-<<<<<<< HEAD
 /// The session's and the turn's `request_permissions` grants for
-/// `environment_id`, merged.
-pub(super) async fn read_granted_permissions(
+/// `environment_id`, merged. #245: read through the session, which strips
+/// protected paths from a grant while the protected-path rules apply (D51/D520:
+/// none after a security transition).
+pub(crate) async fn read_granted_permissions(
     session: &Session,
     environment_id: &str,
 ) -> Option<AdditionalPermissionProfile> {
@@ -436,9 +431,10 @@ pub(super) async fn read_granted_permissions(
 /// caller that also derives something else from the grants reads them once,
 /// so whatever they shaped is carried: when there are grants, the result's
 /// `additional_permissions` is `Some`.
-pub(super) fn with_granted_permissions(
+pub(crate) fn with_granted_permissions(
     granted_permissions: Option<AdditionalPermissionProfile>,
-    cwd: &Path,
+    environment: &TurnEnvironment,
+    cwd: &PathUri,
     sandbox_permissions: SandboxPermissions,
     additional_permissions: Option<AdditionalPermissionProfile>,
 ) -> EffectiveAdditionalPermissions {
@@ -449,21 +445,11 @@ pub(super) fn with_granted_permissions(
             permissions_preapproved: false,
         };
     }
-||||||| 413492cd6c
-    let granted_session_permissions = session.granted_session_permissions(environment_id).await;
-    let granted_turn_permissions = session.granted_turn_permissions(environment_id).await;
-    let granted_permissions = merge_permission_profiles(
-        granted_session_permissions.as_ref(),
-        granted_turn_permissions.as_ref(),
-    );
-=======
-    let environment_id = &environment.selection.environment_id;
-    let granted_permissions = step_context.turn.granted_permissions(environment_id);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let effective_permissions = merge_permission_profiles(
         additional_permissions.as_ref(),
         granted_permissions.as_ref(),
     );
+    // Only resolves the grants' paths for the comparison below; it grants nothing.
     let sandbox_context = environment.sandbox_context(/*additional_permissions*/ None);
     let context = file_system_sandbox_policy_context_for_cwd(&sandbox_context, cwd);
     let preapproved_permissions = granted_permissions.as_ref().and_then(|granted| {
@@ -556,14 +542,7 @@ mod tests {
     use super::EffectiveAdditionalPermissions;
     use super::implicit_granted_permissions;
     use super::normalize_and_validate_additional_permissions;
-<<<<<<< HEAD
-    use super::permissions_are_preapproved;
-    use super::with_granted_permissions;
-||||||| 413492cd6c
-    use super::permissions_are_preapproved;
-=======
     use super::preapproved_permission_profile;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     use crate::sandboxing::SandboxPermissions;
     use codex_protocol::models::AdditionalPermissionProfile;
     use codex_protocol::models::FileSystemPermissions;
