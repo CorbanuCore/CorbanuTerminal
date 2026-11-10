@@ -1580,7 +1580,7 @@ mod tests {
         // Skip the live DNS lookup in the local/private-address check (#1883);
         // this test only covers CONNECT acceptance, so no connection is made.
         let state = Arc::new(network_proxy_state_for_policy(NetworkProxyConfig {
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             ..NetworkProxyConfig::default()
         }));
         let seen_environment_id = Arc::new(Mutex::new(None));
@@ -1624,7 +1624,7 @@ mod tests {
             mitm: true,
             // Skip the live DNS lookup in the local/private-address check (#1883);
             // this test only covers CONNECT acceptance, so no connection is made.
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             ..NetworkProxyConfig::default()
         };
         policy.set_allowed_domains(vec!["github.com".to_string()]);
@@ -1866,7 +1866,7 @@ mod tests {
             // api.github.com live with a 2s timeout, and a failed or slow lookup
             // blocks the host as blocked-by-allowlist before the MITM-required
             // check this test is about. allow_local_binding only gates that check.
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             mitm_hooks: vec![crate::mitm_hook::MitmHookConfig {
                 host: "api.github.com".to_string(),
                 matcher: crate::mitm_hook::MitmHookMatchConfig {
