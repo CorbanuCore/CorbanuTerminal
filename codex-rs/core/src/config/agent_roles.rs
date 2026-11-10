@@ -243,8 +243,8 @@ pub(crate) fn project_role_ignored_keys_warning(
 ) -> String {
     format!(
         "Ignored unsupported project-local config keys in agent role file {}: {}. \
-         A project's agent roles follow the project config rules; if you want these \
-         settings to apply, declare the role in your user-level config.",
+         A project's agent roles can't set what a project's config can't set; if you \
+         want these settings to apply, declare the role in your user-level config.",
         role_file.display(),
         ignored_keys.join(", "),
     )
