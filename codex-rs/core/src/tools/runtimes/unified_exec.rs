@@ -390,19 +390,24 @@ impl UnifiedExecRuntime<'_> {
             // A sandbox the executor applies (remote, or with a shell
             // snapshot) is not seen here; and D522 (a), provisional:
             // upstream's MXC backend counts as no sandbox. Neither counts as
-            // confined (fail closed).
+            // confined (fail closed). The policy check answers "denied" when
+            // it cannot be evaluated, so the folder the command runs in must
+            // read as readable first (fail closed).
             let confined = !prepared.turn_environment.environment.is_remote()
+                && !self.uses_executor_managed_process_sandbox(req)
                 && !matches!(
                     attempt.sandbox,
                     codex_sandboxing::SandboxType::None | codex_sandboxing::SandboxType::WindowsMxc
                 )
                 && cwd.is_some_and(|cwd| {
-                    markers.iter().all(|marker| {
-                        marker.as_ref().is_some_and(|marker| {
-                            !file_system_sandbox_policy
-                                .can_read_local_path_with_cwd(marker, cwd.as_path())
+                    file_system_sandbox_policy
+                        .can_read_local_path_with_cwd(cwd.as_path(), cwd.as_path())
+                        && markers.iter().all(|marker| {
+                            marker.as_ref().is_some_and(|marker| {
+                                !file_system_sandbox_policy
+                                    .can_read_local_path_with_cwd(marker, cwd.as_path())
+                            })
                         })
-                    })
                 });
             crate::security::protected_surface::confined::note_start(
                 ctx.session.thread_id(),

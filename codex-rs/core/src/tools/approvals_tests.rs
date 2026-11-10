@@ -570,3 +570,64 @@ async fn pf_30_s03_fresh_authority_ignores_patch_preapproval() -> anyhow::Result
     assert_eq!(fresh.await.decision, ReviewDecision::Approved);
     Ok(())
 }
+
+/// Issue #709: "approve for session" of a patch in one environment is not an
+/// approval of the same path in another; each environment asks on its own
+/// (ported from the runtime's `approval_keys` to `ApprovalAction::cache_keys`).
+#[tokio::test]
+async fn issue_709_session_approval_does_not_carry_across_environments() {
+    let (session, turn) = crate::session::tests::make_session_and_context().await;
+    #[allow(deprecated)]
+    let path = PathUri::from_abs_path(&turn.cwd.join("issue-709-approval-scope.txt"));
+    let keys_for = |environment_id: &str| {
+        ApprovalAction::ApplyPatch {
+            id: "issue-709".to_string(),
+            environment_id: environment_id.to_string(),
+            cwd: path.clone(),
+            files: vec![path.clone()],
+            patch: String::new(),
+            changes: Arc::new(HashMap::new()),
+            permissions_preapproved: false,
+        }
+        .cache_keys()
+    };
+    let ask = |keys, decision: ReviewDecision| {
+        let services = &session.services;
+        asking_person(move || {
+            with_cached_approval(
+                services,
+                "apply_patch",
+                keys,
+                /*fresh_human_authority*/ false,
+                move || async move { decision },
+            )
+        })
+    };
+    let denied = || ReviewDecision::denied("issue 709");
+
+    // A person approves the local patch for the session.
+    assert_eq!(
+        ask(keys_for("local"), ReviewDecision::ApprovedForSession).await,
+        (ReviewDecision::ApprovedForSession, true)
+    );
+    // The same path in the remote environment still asks the person.
+    assert_eq!(ask(keys_for("remote"), denied()).await, (denied(), true));
+    // The local approval is still remembered for the local environment.
+    assert_eq!(
+        ask(keys_for("local"), denied()).await,
+        (ReviewDecision::ApprovedForSession, false)
+    );
+    // A remote session approval covers the remote environment only.
+    assert_eq!(
+        ask(keys_for("remote"), ReviewDecision::ApprovedForSession).await,
+        (ReviewDecision::ApprovedForSession, true)
+    );
+    assert_eq!(
+        ask(keys_for("remote"), denied()).await,
+        (ReviewDecision::ApprovedForSession, false)
+    );
+    assert_eq!(
+        ask(keys_for("other-remote"), denied()).await,
+        (denied(), true)
+    );
+}
