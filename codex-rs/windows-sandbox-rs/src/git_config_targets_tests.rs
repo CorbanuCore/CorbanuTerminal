@@ -563,3 +563,304 @@ fn local_simplifies_only_rooted_drive_paths() {
         ]
     );
 }
+
+/// D517: `path` (on this machine) as a network path to the same file:
+/// `\\localhost\C$\...` on Windows (the loopback admin share), `//...`
+/// elsewhere (which POSIX may read as `/...`, and this crate counts as a
+/// network path).
+fn on_share(path: &Path) -> PathBuf {
+    let text = path.display().to_string();
+    if cfg!(windows) {
+        let (drive, rest) = text.split_once(':').expect("a drive letter");
+        PathBuf::from(format!(r"\\localhost\{drive}${rest}"))
+    } else {
+        PathBuf::from(format!("/{text}"))
+    }
+}
+
+/// D517: the configs on a share flagged as not read in time.
+fn unread(states: &[TargetState]) -> Vec<PathBuf> {
+    states
+        .iter()
+        .filter(|state| state.why == "git config on a network share not read in time")
+        .map(|state| state.path.clone())
+        .collect()
+}
+
+/// D517 (#1877 item 7(a)): a read from a share is waited on only until the
+/// deadline; while it still hangs, the next look doesn't start another for
+/// the same path; once it ends, the path is read again. A missing file
+/// isn't a failure; any other error is. Past the deadline a read still
+/// starts (so the next look finds it done or waiting) but isn't waited for.
+#[test]
+fn share_reads_wait_until_the_deadline_only() {
+    let soon = || Instant::now() + Duration::from_millis(200);
+    let path = Path::new("//server/share/.gitconfig");
+    let (release, hung) = std::sync::mpsc::channel::<()>();
+    let started = Instant::now();
+    let first = read_by(path, soon(), move || {
+        let _ = hung.recv();
+        Ok(b"late".to_vec())
+    });
+    let waited = started.elapsed();
+    let started = Instant::now();
+    let again = read_by(path, soon(), || Ok(b"x".to_vec()));
+    let refused_at_once = started.elapsed() < Duration::from_millis(100);
+    release.send(()).expect("release");
+    let mut after = Err(());
+    for _ in 0..100 {
+        after = read_by(path, soon(), || Ok(b"x".to_vec()));
+        if after.is_ok() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // `ERROR_FILE_NOT_FOUND` / `ENOENT`; `ERROR_BAD_NETPATH` / `EACCES`.
+    let missing = read_by(path, soon(), || Err(std::io::Error::from_raw_os_error(2)));
+    let unreachable = read_by(path, soon(), || {
+        Err(std::io::Error::from_raw_os_error(if cfg!(windows) {
+            53
+        } else {
+            13
+        }))
+    });
+    // Past the deadline the read still starts, but isn't waited for.
+    let other = Path::new("//server/share/.config/git/config");
+    let (finish, hung) = std::sync::mpsc::channel::<()>();
+    let past = read_by(other, Instant::now(), move || {
+        let _ = hung.recv();
+        Ok(b"late".to_vec())
+    });
+    let still_waiting = read_by(other, soon(), || Ok(b"x".to_vec()));
+    finish.send(()).expect("finish");
+    assert_eq!(
+        (
+            first,
+            waited >= Duration::from_millis(150) && waited < Duration::from_secs(2),
+            again,
+            refused_at_once,
+            after,
+            missing,
+            unreachable,
+            past,
+            still_waiting,
+        ),
+        (
+            Err(()),
+            true,
+            Err(()),
+            true,
+            Ok(Some(b"x".to_vec())),
+            Ok(None),
+            Err(()),
+            Err(()),
+            Err(()),
+        )
+    );
+}
+
+/// D517 (#1877 item 7(a)): global configs on a share that can't be reached
+/// count as changed after every look; a look waits about [`SHARE_TIMEOUT`]
+/// at most in all, and the next one not at all while those reads still
+/// hang. Windows: an unroutable server (a first read hangs for about 21 s,
+/// later ones fail at once; both count). Elsewhere: FIFOs no one writes, so
+/// opening them hangs.
+#[test]
+fn global_config_on_an_unreachable_share_counts_as_changed() {
+    let (_dir, base) = tempdir();
+    let roots = [base.join("work")];
+    fs::create_dir_all(&roots[0]).expect("work");
+    #[cfg(windows)]
+    let (globals, fifos) = (
+        vec![
+            PathBuf::from(r"\\10.255.255.1\share\.config\git\config"),
+            PathBuf::from(r"\\10.255.255.1\share\.gitconfig"),
+        ],
+        Vec::<PathBuf>::new(),
+    );
+    #[cfg(not(windows))]
+    let (globals, fifos) = {
+        let fifos = vec![base.join("hung-xdg-config"), base.join("hung.gitconfig")];
+        for fifo in &fifos {
+            let made = std::process::Command::new("mkfifo")
+                .arg(fifo)
+                .status()
+                .expect("mkfifo");
+            assert!(made.success(), "mkfifo");
+        }
+        (
+            fifos.iter().map(|fifo| on_share(fifo)).collect::<Vec<_>>(),
+            fifos,
+        )
+    };
+    let look = || {
+        let started = Instant::now();
+        let states = target_states_with(&[], &roots, &globals, &[]);
+        (states, started.elapsed())
+    };
+    let (first, first_took) = look();
+    let (second, second_took) = look();
+    let changed = target_changes(&first, second.clone());
+    for fifo in fifos {
+        // Let a hung read end (read and write, so this open never waits).
+        drop(fs::OpenOptions::new().read(true).write(true).open(fifo));
+    }
+    assert_eq!(
+        (
+            unread(&first),
+            unread(&second),
+            changed
+                .iter()
+                .map(|(path, _)| path.clone())
+                .collect::<Vec<_>>(),
+            first_took < SHARE_TIMEOUT + Duration::from_secs(1),
+            second_took < Duration::from_secs(1),
+        ),
+        (globals.clone(), globals.clone(), globals, true, true)
+    );
+}
+
+/// D517 (#1877 item 7(a)): a global config on a share that can be reached
+/// is read, and what it names is watched; the include paths it names on a
+/// share are never opened, while a local one is followed. A repository's
+/// own config on a share is still never read (only the global and system
+/// configs from the environment are).
+#[test]
+fn global_config_on_a_share_is_read_but_not_its_share_includes() {
+    let (_dir, base) = tempdir();
+    let work = base.join("work");
+    let share = base.join("share");
+    fs::create_dir_all(work.join("hooks")).expect("hooks");
+    fs::create_dir_all(&share).expect("share");
+    let slash = |path: &Path| path.display().to_string().replace('\\', "/");
+    fs::write(
+        share.join("inc.cfg"),
+        format!(
+            "[core]\n\tfsmonitor = {}\n",
+            slash(&work.join("from-share.exe"))
+        ),
+    )
+    .expect("share include");
+    fs::write(
+        base.join("local.cfg"),
+        format!(
+            "[core]\n\tfsmonitor = {}\n",
+            slash(&work.join("from-local.exe"))
+        ),
+    )
+    .expect("local include");
+    fs::write(
+        share.join(".gitconfig"),
+        format!(
+            "[core]\n\thooksPath = {}\n[include]\n\tpath = inc.cfg\n\tpath = {}\n\tpath = {}\n",
+            slash(&work.join("hooks")),
+            slash(&on_share(&share.join("inc.cfg"))),
+            slash(&base.join("local.cfg")),
+        ),
+    )
+    .expect("global");
+    // Outside the root, so a path a config names from `/` is not also
+    // read below it (`"$(git rev-parse --show-toplevel)/x.sh"`).
+    let repo = base.join("repo");
+    fs::create_dir_all(repo.join(".git")).expect("repo");
+    fs::write(
+        repo.join(".git").join("config"),
+        format!("[alias]\n\tx = !{}\n", slash(&work.join("own.sh"))),
+    )
+    .expect("own config");
+    let repos = [(on_share(&repo.join(".git")), Some(on_share(&repo)))];
+    let outside = [on_share(&share.join(".gitconfig"))];
+    let roots = [work.clone()];
+    let look = || target_states_with(&repos, &roots, &outside, &[]);
+    let first = look();
+    let unchanged = target_changes(&first, look());
+    fs::write(work.join("hooks").join("pre-commit"), "evil").expect("hook");
+    let changed = target_changes(&first, look());
+    let mut watched: Vec<(PathBuf, String)> = first
+        .iter()
+        .map(|state| (state.path.clone(), state.why.clone()))
+        .collect();
+    watched.sort();
+    assert_eq!(
+        (watched, unchanged, changed),
+        (
+            vec![
+                (work.join("from-local.exe"), "core.fsmonitor".to_string()),
+                (work.join("hooks"), "core.hooksPath".to_string()),
+                (work.join("hooks").join("_"), "core.hooksPath".to_string()),
+            ],
+            Vec::new(),
+            vec![(
+                work.join("hooks"),
+                vec!["core.hooksPath: pre-commit added".to_string()]
+            )],
+        )
+    );
+}
+
+/// D517: a global config on this machine is read as before (no thread, no
+/// flag), and so are the includes it names on this machine; one it names
+/// on a share is still never opened.
+#[test]
+fn local_global_config_reads_as_before() {
+    let (_dir, base) = tempdir();
+    let work = base.join("work");
+    fs::create_dir_all(work.join("hooks")).expect("hooks");
+    let slash = |path: &Path| path.display().to_string().replace('\\', "/");
+    fs::write(
+        base.join("local.cfg"),
+        format!(
+            "[core]\n\tfsmonitor = {}\n",
+            slash(&work.join("from-local.exe"))
+        ),
+    )
+    .expect("local include");
+    fs::write(
+        base.join("share.cfg"),
+        format!(
+            "[core]\n\tfsmonitor = {}\n",
+            slash(&work.join("from-share.exe"))
+        ),
+    )
+    .expect("share include");
+    let global = base.join(".gitconfig");
+    fs::write(
+        &global,
+        format!(
+            "[core]\n\thooksPath = {}\n[include]\n\tpath = local.cfg\n\tpath = {}\n",
+            slash(&work.join("hooks")),
+            slash(&on_share(&base.join("share.cfg"))),
+        ),
+    )
+    .expect("global");
+    let mut budget = ConfigBudget::default();
+    let (entries, files) = read_outside_configs(std::slice::from_ref(&global), &[], &mut budget);
+    let states = target_states_with(
+        &[],
+        std::slice::from_ref(&work),
+        std::slice::from_ref(&global),
+        &[],
+    );
+    let mut watched: Vec<PathBuf> = states.iter().map(|state| state.path.clone()).collect();
+    watched.sort();
+    assert_eq!(
+        (
+            entries.len(),
+            files,
+            budget.share_deadline.is_none(),
+            budget.unread,
+            watched,
+        ),
+        (
+            4,
+            vec![global.clone(), base.join("local.cfg")],
+            true,
+            Vec::<PathBuf>::new(),
+            vec![
+                work.join("from-local.exe"),
+                work.join("hooks"),
+                work.join("hooks").join("_"),
+            ],
+        )
+    );
+}

@@ -238,27 +238,32 @@ fn in_roots(path: &Path, roots: &[PathBuf]) -> bool {
 /// opening a share can send the person's credentials to it and opening a
 /// device can block.
 pub(crate) fn is_remote_or_device(path: &Path) -> bool {
-    const DEVICES: [&str; 8] = [
-        "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", "CLOCK$", "CONFIG$",
-    ];
     let text = path.as_os_str().to_string_lossy();
     let prefixed = ["\\\\", "//", "\\/", "/\\", "\\??\\", "/??/"]
         .iter()
         .any(|prefix| text.starts_with(prefix));
+    prefixed || has_device_name(path)
+}
+
+/// A component of `path` is a device name (`CON`, `NUL`, `COM1` ...).
+pub(crate) fn has_device_name(path: &Path) -> bool {
+    const DEVICES: [&str; 8] = [
+        "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", "CLOCK$", "CONFIG$",
+    ];
+    let text = path.as_os_str().to_string_lossy();
     // Split on both separators, as Windows does.
-    prefixed
-        || text.split(['\\', '/']).any(|name| {
-            let stem = name
-                .split('.')
-                .next()
-                .unwrap_or_default()
-                .trim_end_matches([' ', ':'])
-                .to_ascii_uppercase();
-            DEVICES.contains(&stem.as_str())
-                || ((stem.starts_with("COM") || stem.starts_with("LPT"))
-                    && stem.len() == 4
-                    && stem.as_bytes()[3].is_ascii_digit())
-        })
+    text.split(['\\', '/']).any(|name| {
+        let stem = name
+            .split('.')
+            .next()
+            .unwrap_or_default()
+            .trim_end_matches([' ', ':'])
+            .to_ascii_uppercase();
+        DEVICES.contains(&stem.as_str())
+            || ((stem.starts_with("COM") || stem.starts_with("LPT"))
+                && stem.len() == 4
+                && stem.as_bytes()[3].is_ascii_digit())
+    })
 }
 
 /// `path` with `.` and `..` resolved by name (as Windows resolves them), so

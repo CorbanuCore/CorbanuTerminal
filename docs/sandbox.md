@@ -198,7 +198,15 @@ itself on a network share or written with a `\\?\` prefix, the config of
 a repository whose git folder lies there isn't read and paths relative to
 that folder aren't recorded, and no warning says so; only a path a config
 names by drive letter, or through a link, is. A global or system
-git config that lies in such a folder is recorded too. A new, changed or
+git config that lies in such a folder is recorded too. The one exception
+is a global or system git config whose own path is on a network share or
+mapped network drive, such as `.gitconfig` in a home folder on a share
+(D517): it is read on a background thread, and each check waits at most
+about 2 seconds in all for such configs. One not read in time, or whose
+read fails, counts as changed after every command (it is flagged; the
+command isn't held up). The include paths such a config names are never
+opened on a share or mapped network drive, so settings in an included file
+there aren't checked; a config on this machine is read as before. A new, changed or
 removed file there is flagged like a changed repository, and so is one
 that appears where a config points (a new repository's `.githooks`, say).
 For Husky, the files named after git hooks in the folder above `_` count,

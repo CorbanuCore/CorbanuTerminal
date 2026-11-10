@@ -17,12 +17,21 @@
 //! folder above a `_` hooks folder count too, and so does the `_` folder
 //! below any hooks folder (Husky v5 to v8 hooks source `_\husky.sh`).
 //!
+//! D517 (#1877 item 7(a)): a global or system config on a network share
+//! (a home folder on a share, say) is read on a background thread that the
+//! look waits on for at most [`SHARE_TIMEOUT`] in all; one not read in time,
+//! or whose read fails, counts as changed after every session (flagged,
+//! never blocking). The include paths such a config names are never opened
+//! on a share, mapped network drives included.
+//!
 //! Plain `std::fs`, so it is tested on every platform; only the non-admin
 //! Windows sandbox uses it.
 
 use crate::git_watch::Prints;
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::Duration;
+use std::time::Instant;
 
 /// Include files followed this deep (git's own limit).
 const MAX_INCLUDE_DEPTH: usize = 10;
@@ -92,6 +101,9 @@ const MAX_CONFIG_TOTAL_BYTES: u64 = 16 << 20;
 const MAX_CONFIG_ENTRIES: usize = 100_000;
 const MAX_BASES: usize = 8;
 const MAX_TARGETS: usize = 4_096;
+/// D517: how long one look waits, in all, for the configs it reads from a
+/// network share.
+const SHARE_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// How much one look at the configs may still read, the files and bytes it
 /// read, and where it stopped (it reads nothing more after that).
@@ -102,6 +114,11 @@ pub(crate) struct ConfigBudget {
     entries: usize,
     /// The first config file past a limit.
     pub(crate) overflow: Option<PathBuf>,
+    /// D517: when the configs on a share must have been read by (set at the
+    /// first one).
+    share_deadline: Option<Instant>,
+    /// D517: the configs on a share not read in time, or whose read failed.
+    pub(crate) unread: Vec<PathBuf>,
 }
 
 impl ConfigBudget {
@@ -234,11 +251,46 @@ fn homes() -> Vec<PathBuf> {
     homes
 }
 
+/// Where a config path came from, which decides how it is opened.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Source {
+    /// This process's environment (a global or system config, from
+    /// [`outside_configs`]): one on a network share is read with a timeout
+    /// (D517).
+    Environment,
+    /// A config or `.git` file a command may have written: never opened on a
+    /// share or device.
+    Named,
+    /// D517: a config read from a share (or a file it includes) names it:
+    /// never opened on a share either, mapped network drives included.
+    NamedFromShare,
+}
+
 /// The entries of the configs at `paths` (and the files they include, each
 /// once), each with the file it came from; and the files read (includes
-/// too). Counts against `budget`.
+/// too). Counts against `budget`. Never opens a network or device path.
 pub(crate) fn read_configs(
     paths: &[PathBuf],
+    homes: &[PathBuf],
+    budget: &mut ConfigBudget,
+) -> (Vec<(Entry, PathBuf)>, Vec<PathBuf>) {
+    read_configs_from(paths, Source::Named, homes, budget)
+}
+
+/// [`read_configs`] for the global and system configs at `paths` (from
+/// [`outside_configs`]): one on a network share is read with a timeout, and
+/// counted in `budget.unread` when it isn't read in time (D517).
+pub(crate) fn read_outside_configs(
+    paths: &[PathBuf],
+    homes: &[PathBuf],
+    budget: &mut ConfigBudget,
+) -> (Vec<(Entry, PathBuf)>, Vec<PathBuf>) {
+    read_configs_from(paths, Source::Environment, homes, budget)
+}
+
+fn read_configs_from(
+    paths: &[PathBuf],
+    source: Source,
     homes: &[PathBuf],
     budget: &mut ConfigBudget,
 ) -> (Vec<(Entry, PathBuf)>, Vec<PathBuf>) {
@@ -249,6 +301,7 @@ pub(crate) fn read_configs(
     for path in paths {
         read_config(
             path,
+            source,
             homes,
             MAX_INCLUDE_DEPTH,
             budget,
@@ -377,10 +430,12 @@ fn in_roots(path: &Path, roots: &[PathBuf]) -> bool {
 /// Calls `each` with every entry of the config file at `path` and the file
 /// it came from, following `include.path` and `includeIf.*.path` (whatever
 /// the condition). Each file is read once per look; never a network or device path
-/// (a command may have written it); past `budget`'s limits it stops and
+/// (a command may have written it), except a global or system config on a
+/// share (D517, see [`Source`]); past `budget`'s limits it stops and
 /// records where.
 fn read_config(
     path: &Path,
+    source: Source,
     homes: &[PathBuf],
     depth: usize,
     budget: &mut ConfigBudget,
@@ -393,27 +448,67 @@ fn read_config(
         return;
     }
     let path = &local(path);
-    if crate::git_watch::is_remote_or_device(path) {
+    let network = || crate::local_drive::is_network_path(path);
+    let on_share =
+        source == Source::Environment && !crate::git_watch::has_device_name(path) && network();
+    let refused = !on_share
+        && (crate::git_watch::is_remote_or_device(path)
+            || (source == Source::NamedFromShare && network()));
+    if refused {
         return;
     }
     if !visited.insert(crate::git_watch::normalize(path)) {
         return;
     }
-    let Ok(file) = std::fs::File::open(path) else {
-        return;
-    };
     // Only files that exist count.
-    budget.files += 1;
-    if budget.files > MAX_CONFIG_FILES {
-        budget.over(path);
-        return;
-    }
+    let count = |budget: &mut ConfigBudget| {
+        budget.files += 1;
+        if budget.files > MAX_CONFIG_FILES {
+            budget.over(path);
+            return false;
+        }
+        true
+    };
     // #1877 item 6: no more than what is left of the total either.
     let limit = MAX_CONFIG_BYTES.min(MAX_CONFIG_TOTAL_BYTES.saturating_sub(budget.bytes));
-    let mut bytes = Vec::new();
-    if file.take(limit + 1).read_to_end(&mut bytes).is_err() {
-        return;
-    }
+    let bytes = if on_share {
+        let deadline = *budget
+            .share_deadline
+            .get_or_insert_with(|| Instant::now() + SHARE_TIMEOUT);
+        let owned = path.to_path_buf();
+        let read = read_by(path, deadline, move || {
+            let mut bytes = Vec::new();
+            std::fs::File::open(&owned)?
+                .take(limit + 1)
+                .read_to_end(&mut bytes)?;
+            Ok(bytes)
+        });
+        match read {
+            Ok(Some(bytes)) => {
+                if !count(budget) {
+                    return;
+                }
+                bytes
+            }
+            Ok(None) => return,
+            Err(()) => {
+                budget.unread.push(path.to_path_buf());
+                return;
+            }
+        }
+    } else {
+        let Ok(file) = std::fs::File::open(path) else {
+            return;
+        };
+        if !count(budget) {
+            return;
+        }
+        let mut bytes = Vec::new();
+        if file.take(limit + 1).read_to_end(&mut bytes).is_err() {
+            return;
+        }
+        bytes
+    };
     if bytes.len() as u64 > limit {
         budget.over(path);
         return;
@@ -431,8 +526,71 @@ fn read_config(
         if let Some(included) = included
             && depth > 0
         {
-            read_config(&included, homes, depth - 1, budget, visited, each);
+            let source = if on_share || source == Source::NamedFromShare {
+                Source::NamedFromShare
+            } else {
+                Source::Named
+            };
+            read_config(&included, source, homes, depth - 1, budget, visited, each);
         }
+    }
+}
+
+/// D517: runs `read` (of the config at `path` on a network share) on a
+/// background thread and waits for it until `deadline` (not at all once it
+/// has passed). `Ok(None)` when the file isn't there; `Err` when it isn't
+/// read by then, the read fails, or an earlier read of `path` is still
+/// waiting (a share that hangs holds one thread per path, not one per look).
+/// A read not waited for is left to finish on its own, so the next look
+/// doesn't wait for every hung path in turn.
+fn read_by(
+    path: &Path,
+    deadline: Instant,
+    read: impl FnOnce() -> std::io::Result<Vec<u8>> + Send + 'static,
+) -> Result<Option<Vec<u8>>, ()> {
+    static WAITING: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+    let waiting = || {
+        WAITING
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    };
+    let path = path.to_path_buf();
+    {
+        let mut waiting = waiting();
+        if waiting.contains(&path) {
+            return Err(());
+        }
+        waiting.push(path.clone());
+    }
+    let (send, receive) = std::sync::mpsc::channel();
+    let thread_path = path.clone();
+    let spawned = std::thread::Builder::new()
+        .name("git-config-share".to_string())
+        .spawn(move || {
+            let result = read();
+            waiting().retain(|other| *other != thread_path);
+            let _ = send.send(result);
+        });
+    if spawned.is_err() {
+        waiting().retain(|other| *other != path);
+        return Err(());
+    }
+    match receive.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+        Ok(Ok(bytes)) => Ok(Some(bytes)),
+        Ok(Err(err)) if is_absent(&err) => Ok(None),
+        _ => Err(()),
+    }
+}
+
+/// The file (or a folder above it) isn't there. On Windows only
+/// `ERROR_FILE_NOT_FOUND` and `ERROR_PATH_NOT_FOUND`: a share that can't be
+/// reached (`ERROR_BAD_NETPATH`, `ERROR_BAD_NET_NAME` ...) also reads as
+/// `NotFound`, and is a failure.
+fn is_absent(err: &std::io::Error) -> bool {
+    if cfg!(windows) {
+        matches!(err.raw_os_error(), Some(2 | 3))
+    } else {
+        err.kind() == std::io::ErrorKind::NotFound
     }
 }
 
@@ -850,7 +1008,7 @@ pub(crate) fn target_states_with(
 ) -> Vec<TargetState> {
     let mut budget = ConfigBudget::default();
     // Read once for all repositories.
-    let (outside, outside_files) = read_configs(outside_paths, homes, &mut budget);
+    let (outside, outside_files) = read_outside_configs(outside_paths, homes, &mut budget);
     let mut found: Vec<Target> = outside_files
         .into_iter()
         .map(|path| Target {
@@ -891,13 +1049,23 @@ pub(crate) fn target_states_with(
             why: target.why.clone(),
             kind: target.kind,
         });
-    // Past a limit, the configs count as changed after every session.
-    if let Some(at) = budget.overflow {
+    // Past a limit, or not read from a share in time (D517), the configs
+    // count as changed after every session.
+    let unread = budget
+        .unread
+        .into_iter()
+        .map(|at| (at, "git config on a network share not read in time"));
+    for (at, why) in budget
+        .overflow
+        .map(|at| (at, "git config too large to check"))
+        .into_iter()
+        .chain(unread)
+    {
         let mut prints = Prints::new();
         prints.insert(String::new(), crate::git_watch::truncated());
         states.push(TargetState {
             path: at,
-            why: "git config too large to check".to_string(),
+            why: why.to_string(),
             kind: TargetKind::File,
             prints,
         });
