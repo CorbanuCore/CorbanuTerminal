@@ -208,7 +208,7 @@ async fn issue_2000_raise_windows_sandbox_only_raises() {
         raise_windows_sandbox(&mut raised, target);
         assert_eq!(level(&raised), target);
     }
-    let mut elevated = starting.clone();
+    let mut elevated = starting;
     elevated.set_windows_elevated_sandbox_enabled(/*value*/ true);
     for lower in [
         WindowsSandboxLevel::Disabled,
