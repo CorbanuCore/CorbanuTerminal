@@ -332,17 +332,13 @@ impl LocalAgentControl {
         let (history_model, history_provider, history_reasoning_effort) =
             latest_runtime_from_model_context(&history.items);
         let stored_provider_id = if stored_model_provider.is_empty() {
-            history_provider.ok_or_else(|| {
-                CodexErr::InvalidRequest(format!(
-                    "cannot resume agent {thread_id}: its persisted runtime has no provider"
-                ))
-            })?
+            history_provider
         } else {
-            stored_model_provider
+            Some(stored_model_provider)
         };
-        let recorded_account =
-            recorded_account_from_model_context(&history.items, &stored_provider_id)
-                .map(str::to_owned);
+        let recorded_account = stored_provider_id.as_deref().and_then(|provider_id| {
+            recorded_account_from_model_context(&history.items, provider_id).map(str::to_owned)
+        });
         let initial_history = InitialHistory::Resumed(ResumedHistory {
             history_revision: history.revision,
             conversation_id: thread_id,
@@ -450,6 +446,11 @@ impl LocalAgentControl {
         config.service_tier = self.root_service_tier();
         // Corbanu (#1129, #1074): resume on the persisted runtime, back on the account it ran
         // on, or refuse; a connection without a credential of its own is refused before start.
+        let stored_provider_id = stored_provider_id.ok_or_else(|| {
+            CodexErr::InvalidRequest(format!(
+                "cannot resume agent {thread_id}: its persisted runtime has no provider"
+            ))
+        })?;
         let stored_model = stored_model.or(history_model).ok_or_else(|| {
             CodexErr::InvalidRequest(format!(
                 "cannot resume agent {thread_id}: its persisted runtime has no model"
@@ -672,7 +673,7 @@ impl LocalAgentControl {
                 if let Some(parent_thread_id) = owner_thread_id {
                     self.validate_loaded_v2_child(&reloaded_thread.thread, parent_thread_id)?;
                 }
-                let reloaded_thread_id = reloaded_thread.thread_id;
+                let control = self.clone();
                 let runtime = self.runtime.clone();
                 // Finish registration even if the sender is cancelled while acquiring its pin.
                 let residency_pin = tokio::spawn(async move {
@@ -693,14 +694,15 @@ impl LocalAgentControl {
                             .await;
                     }
                     state.notify_thread_created(reloaded_thread.thread_id);
-                    Ok::<_, CodexErr>(residency_pin)
+                    // Corbanu (#1545): requeue durable mailbox rows that the replaced session
+                    // never applied, now that the reloaded session can receive them. Inside
+                    // the task, with tree membership held, so a cancelled caller can't skip it.
+                    control
+                        .recover_inter_agent_communications(reloaded_thread.thread_id)
+                        .await?;
+                    Ok(residency_pin)
                 })
-                .await??;
-                // Corbanu (#1545): requeue durable mailbox rows that the replaced session never
-                // applied, now that the reloaded session can receive them.
-                self.recover_inter_agent_communications(reloaded_thread_id)
-                    .await?;
-                Ok(residency_pin)
+                .await?
             }
             Err(err) => {
                 if let Ok(thread) = state.get_thread(thread_id).await {
@@ -985,7 +987,8 @@ impl LocalAgentControl {
                 task_id,
                 configured_child_security_level,
             ) {
-                let _ = state.remove_thread(&new_thread.thread_id).await;
+                // The PendingSpawn guard tears the child down (shutdown, discarded history,
+                // closed edge).
                 return Err(CodexErr::Fatal(format!(
                     "failed to inherit effective security policy: {error}"
                 )));
