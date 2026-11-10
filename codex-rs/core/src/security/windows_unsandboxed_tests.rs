@@ -55,7 +55,7 @@ fn issue_1976_refusals_name_the_level_and_the_setup_steps() {
             for part in [
                 "Set up default sandbox",
                 "Administrator",
-                "/new",
+                "this session uses it from the next message",
                 "`[windows]`",
                 "switch to Permissive in /security",
             ] {
@@ -63,4 +63,53 @@ fn issue_1976_refusals_name_the_level_and_the_setup_steps() {
             }
         }
     }
+}
+
+/// #2000: once the session's Windows sandbox is set up, typing into a
+/// command started before it (so without it) stays refused under Moderate
+/// and Aggressive; commands started inside a sandbox, Permissive and other
+/// platforms are unchanged.
+#[test]
+fn issue_2000_typing_into_a_command_started_without_the_sandbox_stays_refused() {
+    use WindowsSandboxLevel::Disabled;
+    use WindowsSandboxLevel::Elevated;
+    use WindowsSandboxLevel::RestrictedToken;
+    for level in [SecurityLevel::Moderate, SecurityLevel::Aggressive] {
+        let name = name(level);
+        // Still no sandbox: the #1976 refusal, whatever the process.
+        let refusal = typing_refusal_on(/*windows*/ true, level, Disabled, Some(Disabled))
+            .expect("refused without a sandbox");
+        assert!(refusal.starts_with(&format!("Security level {name} refused this command")));
+        for now in [RestrictedToken, Elevated] {
+            let refusal = typing_refusal_on(/*windows*/ true, level, now, Some(Disabled))
+                .expect("a command started without the sandbox stays refused");
+            assert!(
+                refusal.starts_with(&format!(
+                    "Security level {name} refused typing into this command: it started \
+                     before the Windows sandbox was set up"
+                )),
+                "{refusal}"
+            );
+            for started in [Some(RestrictedToken), Some(Elevated), None] {
+                assert_eq!(
+                    typing_refusal_on(/*windows*/ true, level, now, started),
+                    None,
+                    "{now:?} {started:?}"
+                );
+            }
+            assert_eq!(
+                typing_refusal_on(/*windows*/ false, level, now, Some(Disabled)),
+                None
+            );
+        }
+    }
+    assert_eq!(
+        typing_refusal_on(
+            /*windows*/ true,
+            SecurityLevel::Permissive,
+            Elevated,
+            Some(Disabled)
+        ),
+        None
+    );
 }

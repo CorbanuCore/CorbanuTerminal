@@ -13,14 +13,14 @@
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_security_policy::SecurityLevel;
 
-/// How to set the default Windows sandbox up or leave the level. A session
-/// keeps the Windows sandbox it started with, so the setup applies from the
-/// next one.
+/// How to set the default Windows sandbox up or leave the level. Set up in
+/// the TUI, the sandbox applies to the running session from its next turn
+/// (#2000); a config.toml edit applies from the next session.
 const STEPS: &str = "To set it up, open /permissions, choose a mode that uses the sandbox (such \
-     as \"Ask for approval\"), pick \"Set up default sandbox\" (it needs Administrator \
-     permission) and start a new session with /new; or set `sandbox = \"elevated\"` under \
-     `[windows]` in config.toml. Or a person can switch to Permissive in /security (it applies \
-     after a restart).";
+     as \"Ask for approval\") and pick \"Set up default sandbox\" (it needs Administrator \
+     permission); this session uses it from the next message. Or set `sandbox = \"elevated\"` \
+     under `[windows]` in config.toml and start a new session with /new. Or a person can switch \
+     to Permissive in /security (it applies after a restart).";
 
 /// Whether `level` refuses agent commands and file tools here because no
 /// Windows sandbox is selected.
@@ -82,6 +82,48 @@ pub(crate) fn session_command_refusal(
 ) -> Option<String> {
     let level = session.services.model_client().live_level();
     applies(level, windows_sandbox_level).then(|| command_refusal(level))
+}
+
+/// The refusal of typing into a running command in `session`'s turn, if
+/// any. #2000: a command started before the session's Windows sandbox was
+/// set up (`started_with`) still runs without it, so typing into it stays
+/// refused.
+pub(crate) fn session_typing_refusal(
+    session: &crate::session::session::Session,
+    windows_sandbox_level: WindowsSandboxLevel,
+    started_with: Option<WindowsSandboxLevel>,
+) -> Option<String> {
+    typing_refusal_on(
+        cfg!(windows),
+        session.services.model_client().live_level(),
+        windows_sandbox_level,
+        started_with,
+    )
+}
+
+fn typing_refusal_on(
+    windows: bool,
+    level: SecurityLevel,
+    windows_sandbox_level: WindowsSandboxLevel,
+    started_with: Option<WindowsSandboxLevel>,
+) -> Option<String> {
+    if applies_on(windows, level, windows_sandbox_level) {
+        return Some(command_refusal(level));
+    }
+    (started_with == Some(WindowsSandboxLevel::Disabled)
+        && applies_on(windows, level, WindowsSandboxLevel::Disabled))
+    .then(|| started_unsandboxed_refusal(level))
+}
+
+/// The refusal of typing into a command that started before the Windows
+/// sandbox was set up.
+fn started_unsandboxed_refusal(level: SecurityLevel) -> String {
+    let level = name(level);
+    format!(
+        "Security level {level} refused typing into this command: it started before the \
+         Windows sandbox was set up, so it runs without it. Start the command again; new \
+         commands run inside the sandbox."
+    )
 }
 
 /// The refusal a file tool's sandbox context carries (see

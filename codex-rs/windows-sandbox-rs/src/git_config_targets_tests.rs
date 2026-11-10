@@ -443,7 +443,10 @@ fn remote_gitdirs_device_names_and_kinds() {
 /// #1877 item 7(b): a path a config writes with a `\\?\` drive-letter
 /// prefix (`\\?\C:\proj\.githooks`) is read as the plain path, so it is
 /// watched; a `\\?\UNC\` one is still never opened, and one with `..`
-/// (which `\\?\` takes literally) is still dropped.
+/// (which `\\?\` takes literally) is still dropped. Windows only (#2027):
+/// `\\?\` paths mean nothing elsewhere (`dunce::simplified` returns other
+/// platforms' paths unchanged), and this code only runs on Windows.
+#[cfg(windows)]
 #[test]
 fn verbatim_drive_paths_are_read_as_plain_ones() {
     let (_dir, base) = tempdir();
@@ -536,7 +539,8 @@ fn configs_too_large_together_count_every_time() {
 /// #1877 item 7(b): only a `\\?\` drive-letter path from the top of the
 /// drive is simplified; the volume itself (`\\?\C:`, which would become
 /// the relative `C:`), network paths and names `\\?\` takes literally stay
-/// as they are (and are never opened).
+/// as they are (and are never opened). Windows only, as above (#2027).
+#[cfg(windows)]
 #[test]
 fn local_simplifies_only_rooted_drive_paths() {
     let local = |path: &str| local(Path::new(path)).display().to_string();

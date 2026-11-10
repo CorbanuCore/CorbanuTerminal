@@ -9,12 +9,6 @@
 # Remove a line once its test passes on Windows; a line naming a test that no
 # longer exists fails .github/scripts/test_windows_integration_known_failures.py.
 
-codex-core suite::aggressive_refusals::sec_439_no_network_names_the_level_only_under_aggressive #1967
-codex-core suite::issue_1139::issue_1139_moderate_git_folder_writes_name_the_level #1967
-codex-core suite::pf_23_s01::pf_23_s01_protected_mcp_call_after_untrusted_content_needs_the_human #1967
-codex-core suite::provenance::pf_30_s03_a_tricked_child_agent_cannot_reach_the_vault #1967
-codex-core suite::provenance::pf_30_s03_recalled_memory_gates_a_first_protected_action #1967
-codex-core suite::provenance::pf_30_s03_vault_command_after_untrusted_content_needs_the_human #1967
 codex-core suite::client::amazon_bedrock_proxy_uses_command_auth_and_custom_headers #1968
 codex-core suite::client::provider_auth_command_refreshes_after_401 #1968
 codex-core suite::client::provider_auth_command_supplies_bearer_token #1968

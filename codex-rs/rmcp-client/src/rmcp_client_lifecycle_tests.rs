@@ -1,10 +1,25 @@
+use std::collections::HashMap;
+use std::ffi::OsString;
 use std::io;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+use codex_exec_server::ExecBackend;
+use codex_exec_server::ExecBackendFuture;
+use codex_exec_server::ExecParams;
+use codex_exec_server::ExecProcess;
+use codex_exec_server::ExecProcessEventReceiver;
+use codex_exec_server::ExecProcessFuture;
+use codex_exec_server::ProcessId;
+use codex_exec_server::ProcessSignal;
+use codex_exec_server::ReadResponse;
+use codex_exec_server::StartedExecProcess;
+use codex_exec_server::WriteResponse;
+use codex_exec_server::WriteStatus;
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use pretty_assertions::assert_eq;
@@ -19,10 +34,12 @@ use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
 use tokio::io::DuplexStream;
+use tokio::sync::watch;
 
 use super::ElicitationResponse;
 use super::RmcpClient;
 use crate::ElicitationAction;
+use crate::ExecutorStdioServerLauncher;
 use crate::in_process_transport::InProcessTransportFactory;
 use crate::protocol_mode::McpProtocolMode;
 
@@ -448,4 +465,189 @@ async fn shutdown_during_the_discover_wait_starts_no_fallback_server() {
         "unexpected error: {error:#}"
     );
     assert_eq!(factory.opened_connections(), 1);
+}
+
+/// Which executor call never completes during the legacy fallback restart.
+#[derive(Clone, Copy)]
+enum ExecutorHang {
+    /// Terminating the first server process.
+    Terminate,
+    /// Starting the second server process.
+    Restart,
+}
+
+/// A remote stdio server process that never answers `server/discover`.
+struct SilentExecProcess {
+    process_id: ProcessId,
+    terminate_hangs: bool,
+}
+
+impl ExecProcess for SilentExecProcess {
+    fn process_id(&self) -> &ProcessId {
+        &self.process_id
+    }
+
+    fn subscribe_wake(&self) -> watch::Receiver<u64> {
+        watch::channel(0).1
+    }
+
+    fn subscribe_events(&self) -> ExecProcessEventReceiver {
+        ExecProcessEventReceiver::empty()
+    }
+
+    fn read(
+        &self,
+        _after_seq: Option<u64>,
+        _max_bytes: Option<usize>,
+        _wait_ms: Option<u64>,
+    ) -> ExecProcessFuture<'_, ReadResponse> {
+        Box::pin(std::future::pending())
+    }
+
+    fn write(&self, _chunk: Vec<u8>) -> ExecProcessFuture<'_, WriteResponse> {
+        Box::pin(async {
+            Ok(WriteResponse {
+                status: WriteStatus::Accepted,
+            })
+        })
+    }
+
+    fn signal(&self, _signal: ProcessSignal) -> ExecProcessFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn terminate(&self) -> ExecProcessFuture<'_, ()> {
+        if self.terminate_hangs {
+            Box::pin(std::future::pending())
+        } else {
+            Box::pin(async { Ok(()) })
+        }
+    }
+}
+
+/// An executor whose terminate or second start never completes.
+struct HangingExecBackend {
+    hang: ExecutorHang,
+    starts: AtomicUsize,
+}
+
+impl ExecBackend for HangingExecBackend {
+    fn start(&self, params: ExecParams) -> ExecBackendFuture<'_> {
+        let earlier_starts = self.starts.fetch_add(1, Ordering::AcqRel);
+        if earlier_starts > 0 && matches!(self.hang, ExecutorHang::Restart) {
+            return Box::pin(std::future::pending());
+        }
+        let process: Arc<dyn ExecProcess> = Arc::new(SilentExecProcess {
+            process_id: params.process_id,
+            terminate_hangs: matches!(self.hang, ExecutorHang::Terminate),
+        });
+        Box::pin(async move {
+            Ok(StartedExecProcess {
+                process,
+                sandbox_type: None,
+            })
+        })
+    }
+}
+
+/// How long the remote tests wait for `server/discover` before falling back.
+const REMOTE_DISCOVER_WAIT: Duration = Duration::from_secs(5);
+
+/// Far past the discover wait plus the startup timeout; reaching it means startup hung.
+const HANG_DEADLINE: Duration = Duration::from_secs(3600);
+
+struct RemoteStart {
+    result: anyhow::Result<ServerPeerInfo>,
+    elapsed: Duration,
+    executor_starts: usize,
+}
+
+/// Starts an opted-in remote stdio server whose discover goes unanswered, so the client
+/// falls back and restarts it through an executor that hangs on `hang`.
+async fn start_remote_with_hanging_executor(hang: ExecutorHang) -> RemoteStart {
+    let backend = Arc::new(HangingExecBackend {
+        hang,
+        starts: AtomicUsize::new(0),
+    });
+    let env = HashMap::from([(
+        OsString::from("CODEX_MCP_PROTOCOL_VERSION"),
+        OsString::from("2026-07-28"),
+    )]);
+    let client = RmcpClient::new_stdio_client_with_protocol_mode(
+        OsString::from("remote-mcp-server"),
+        Vec::new(),
+        Some(env),
+        &[],
+        // Match the executor stdio integration tests: an absolute cwd with no trailing
+        // separator on every platform.
+        Some(
+            std::env::current_dir()
+                .expect("current dir")
+                .to_string_lossy()
+                .into_owned(),
+        ),
+        Arc::new(ExecutorStdioServerLauncher::new(
+            Arc::clone(&backend) as Arc<dyn ExecBackend>
+        )),
+        McpProtocolMode::V20260728,
+    )
+    .await
+    .expect("remote stdio client")
+    .with_discover_timeout(Some(REMOTE_DISCOVER_WAIT));
+
+    let started_at = tokio::time::Instant::now();
+    let result = tokio::time::timeout(
+        HANG_DEADLINE,
+        initialize(
+            &client,
+            default_init_params().with_protocol_version(ProtocolVersion::V_2025_06_18),
+        ),
+    )
+    .await
+    .expect("the remote legacy fallback restart must end within the startup timeout");
+    let elapsed = started_at.elapsed();
+    client.shutdown().await;
+    RemoteStart {
+        result,
+        elapsed,
+        executor_starts: backend.starts.load(Ordering::Acquire),
+    }
+}
+
+fn assert_fallback_timed_out(started: &RemoteStart) {
+    let Err(error) = &started.result else {
+        panic!("a hung restart must fail startup");
+    };
+    // The retry deadline leaves the fallback a hair under the startup timeout ("29.99…s").
+    let message = error.to_string();
+    assert!(
+        message.starts_with("timed out handshaking with MCP server after ")
+            && message.ends_with(" during the legacy initialize fallback"),
+        "unexpected error: {error:#}"
+    );
+    // The discover wait, then one startup timeout for the restart and `initialize`.
+    let expected = REMOTE_DISCOVER_WAIT + STARTUP_TIMEOUT;
+    assert!(
+        started.elapsed > expected - Duration::from_secs(1) && started.elapsed <= expected,
+        "startup gave up after {:?}, expected about {expected:?}",
+        started.elapsed
+    );
+}
+
+// #2019: on the remote executor the restart (terminate, then spawn) ran outside any
+// timeout, so an executor that never finished either step hung startup.
+#[tokio::test(start_paused = true)]
+async fn remote_fallback_times_out_when_the_executor_never_terminates_the_first_server() {
+    let started = start_remote_with_hanging_executor(ExecutorHang::Terminate).await;
+
+    assert_fallback_timed_out(&started);
+    assert_eq!(started.executor_starts, 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn remote_fallback_times_out_when_the_executor_never_starts_the_second_server() {
+    let started = start_remote_with_hanging_executor(ExecutorHang::Restart).await;
+
+    assert_fallback_timed_out(&started);
+    assert_eq!(started.executor_starts, 2);
 }

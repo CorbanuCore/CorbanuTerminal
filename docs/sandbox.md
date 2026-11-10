@@ -17,8 +17,14 @@ starts, so you can set the sandbox up or change the level:
 
 - In the TUI, open `/permissions`, choose a mode that uses the sandbox (such
   as "Ask for approval") and pick "Set up default sandbox" (it needs
-  Administrator permission). A session keeps the Windows sandbox it started
-  with, so start a new session with `/new` afterwards.
+  Administrator permission). The running session uses it from your next
+  message (#2000), child agents started after that included; there is no need
+  to start a new one. A turn that is still running finishes as it started,
+  and commands and child agents started before the setup (background
+  terminals, running agents) keep running without the sandbox: under Moderate
+  and Aggressive typing into such commands stays refused, so start them
+  again. If the session can't switch, the TUI says so
+  and the sandbox applies from `/new`.
 - Or set `[windows] sandbox = "elevated"` as below; it applies from the next
   session.
 - Or switch to Permissive in `/security` (it applies after a restart).
@@ -107,7 +113,10 @@ doesn't load its config, hooks or skills, warns you at startup, and asks in
 the TUI whether to load it (once the command, and anything it left running,
 has ended); a warning follows the command too (or a later command, if it
 left processes running). Check its
-contents before you choose to load it. Such folders
+contents before you choose to load it. Your choice covers what the prompt
+showed: if another command plants or changes it again while the prompt is
+on screen, loading it is refused and you're asked again (the same holds for
+the `.git` folders and repositories below). Such folders
 deeper in your workspace are covered too. One that is new, or was replaced,
 when the command ends is treated the same way. A read-only `.codex` or
 `.agents` folder your permission profile names that doesn't exist yet (or

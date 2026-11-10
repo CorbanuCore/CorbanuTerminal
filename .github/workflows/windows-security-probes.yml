@@ -329,7 +329,7 @@ jobs:
           export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
           export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
           check sandbox-env -p codex-windows-sandbox --lib env::tests:: -- --nocapture --test-threads=1 <<'EOF'
-          test result: ok. 6 passed
+          test result: ok. 8 passed
           EOF
           for backend in legacy elevated; do
             check "$backend" -p codex-windows-sandbox --lib -- --exact "unified_exec::tests::env_case::win_1805_${backend}_command_gets_one_path_and_start_process_runs" --nocapture --test-threads=1 <<EOF

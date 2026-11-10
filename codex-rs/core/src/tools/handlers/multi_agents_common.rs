@@ -264,6 +264,9 @@ pub(crate) fn apply_spawn_agent_runtime_overrides(
         .map_err(|err| {
             FunctionCallError::RespondToModel(format!("permission_profile is invalid: {err}"))
         })?;
+    // #2000: a role that rebuilt the config from the session's starting layers
+    // does not drop a Windows sandbox set up since; a role's stronger one stays.
+    crate::windows_sandbox::raise_windows_sandbox(config, turn.windows_sandbox_level);
     Ok(())
 }
 

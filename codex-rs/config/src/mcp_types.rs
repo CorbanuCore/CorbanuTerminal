@@ -194,8 +194,8 @@ pub struct McpServerConfig {
     /// A server that doesn't answer in time is stopped and started again with legacy
     /// `initialize`, which gets the startup timeout of its own, so a server that never
     /// answers `server/discover` can take up to about twice the startup timeout to start.
-    /// Defaults to, and is capped at, the startup timeout. Ignored for servers that haven't
-    /// opted in.
+    /// Defaults to, and is capped at, the startup timeout. Must be greater than 0; omit it for
+    /// the default. Ignored for servers that haven't opted in.
     #[serde(
         default,
         with = "option_duration_secs",
@@ -289,6 +289,9 @@ pub struct RawMcpServerConfig {
     pub startup_timeout_sec: Option<f64>,
     #[serde(default)]
     pub startup_timeout_ms: Option<u64>,
+    /// Seconds a stdio server that opted in to MCP 2026-07-28 may take to answer
+    /// `server/discover` before Corbanu falls back to legacy `initialize`. Must be greater
+    /// than 0; omit it to wait up to `startup_timeout_sec`.
     #[serde(default, with = "option_duration_secs")]
     #[schemars(with = "Option<f64>")]
     pub discover_timeout_sec: Option<Duration>,
@@ -382,6 +385,13 @@ impl TryFrom<RawMcpServerConfig> for McpServerConfig {
             throw_if_set("stdio", "oauth", oauth.as_ref())?;
             throw_if_set("stdio", "oauth_resource", oauth_resource.as_ref())?;
             throw_if_set("stdio", "auth", auth.as_ref())?;
+            // `0` would skip `server/discover` entirely, which reads as "no limit" (#2020).
+            if discover_timeout_sec == Some(Duration::ZERO) {
+                return Err(
+                    "discover_timeout_sec must be greater than 0; omit it to wait up to startup_timeout_sec"
+                        .to_string(),
+                );
+            }
             let env_vars = env_vars.unwrap_or_default();
             for env_var in &env_vars {
                 env_var.validate_source()?;
