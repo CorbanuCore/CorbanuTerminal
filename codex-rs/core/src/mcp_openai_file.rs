@@ -310,7 +310,6 @@ async fn build_uploaded_argument_value(
     Ok(JsonValue::Object(payload))
 }
 
-/// The upload's size and bytes, read through `read_sandbox` when it runs.
 /// #1976 (D491): on this host the read below would run outside any sandbox,
 /// so its refusal ends the upload here, and so does a Windows client's own
 /// missing sandbox for every environment, as before (#2049). #2050:
@@ -329,6 +328,7 @@ fn refused_here<'a>(
     (!environment.environment.is_remote() || client_without_sandbox).then_some(refusal)
 }
 
+/// The upload's size and bytes, read through `read_sandbox` when it runs.
 async fn read_upload_contents(
     fs: &dyn codex_exec_server::ExecutorFileSystem,
     path_uri: &codex_utils_path_uri::PathUri,
