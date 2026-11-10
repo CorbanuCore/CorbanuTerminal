@@ -133,7 +133,10 @@ fn cancelled_during(step: usize) -> Vec<(u32, u32)> {
             copies = reached_rx.recv() => copies.expect("the step was reached"),
         }
     });
-    let waiting: Vec<u32> = copies.iter().map(|copy| handle_count(*copy as HANDLE)).collect();
+    let waiting: Vec<u32> = copies
+        .iter()
+        .map(|copy| handle_count(*copy as HANDLE))
+        .collect();
     release_tx.send(()).expect("release");
     // Waits for the blocking step to return (its result is dropped).
     drop(runtime);

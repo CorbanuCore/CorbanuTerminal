@@ -664,7 +664,7 @@ fn legacy_non_tty_powershell_interrupt_terminates_process() {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            )
+        )
         .await
         .expect("spawn legacy non-tty powershell session");
         println!("pwsh spawn returned");

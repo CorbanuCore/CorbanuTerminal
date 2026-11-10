@@ -547,7 +547,6 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
         .map_err(|err| anyhow::anyhow!("legacy spawn preparation task failed: {err}"))??
     };
 
-
     let (writer_tx, writer_rx) = mpsc::channel::<Vec<u8>>(128);
     let (stdout_tx, stdout_rx) = broadcast::channel::<Vec<u8>>(256);
     let stderr_rx = if tty {

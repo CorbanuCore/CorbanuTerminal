@@ -168,9 +168,12 @@ impl FileSystemSandboxRunner {
         // upstream's refusal (the helper never runs unsandboxed here).
         if sandbox == SandboxType::None {
             return Err(invalid_request(
-                sandbox_context.unsandboxed_refusal.clone().unwrap_or_else(|| {
-                    "filesystem sandbox cannot be enforced on this executor".to_string()
-                }),
+                sandbox_context
+                    .unsandboxed_refusal
+                    .clone()
+                    .unwrap_or_else(|| {
+                        "filesystem sandbox cannot be enforced on this executor".to_string()
+                    }),
             ));
         }
         // Requests use absolute paths; the helper can start at the filesystem root even if
