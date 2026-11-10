@@ -54,7 +54,9 @@ use codex_otel::TURN_TOOL_CALL_METRIC;
 use codex_otel::TURN_UNIFIED_EXEC_RUNNING_PROCESSES_METRIC;
 use codex_otel::auth_storage::AuthStorageOriginator;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::protocol::CodexErrorInfo;
 use codex_protocol::protocol::ErrorEvent;
+use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::Op;
@@ -65,7 +67,9 @@ use codex_protocol::protocol::TurnCompleteEvent;
 use codex_protocol::protocol::TurnDiffEvent;
 use codex_protocol::protocol::WarningEvent;
 use codex_protocol::turn_input::TurnInput as SubmittedTurnInput;
+use codex_protocol::turn_input::NotSubmittedReason;
 use codex_protocol::turn_input::TurnInputMode;
+use codex_protocol::turn_input::TurnInputSubmission;
 use codex_protocol::turn_input::TurnInputRequest;
 use codex_protocol::turn_input::TurnStartOptions;
 use codex_thread_store::PersistContext;
@@ -1304,23 +1308,21 @@ impl Session {
     }
 
     async fn submit_follow_up_input(
-        &self,
+        self: &Arc<Self>,
         follow_up_input: Vec<(TurnInput, Option<serde_json::Value>)>,
     ) {
         for (input, final_output_json_schema) in follow_up_input {
-            let op = match input {
+            let submitted = match input.clone() {
                 TurnInput::UserInput {
                     content,
                     client_id,
                     metadata,
                 } => {
-                    // Nothing waits for the reply: a refusal is reported to the client by
-                    // the submission itself.
-                    let (reply, _) = tokio::sync::oneshot::channel();
+                    let (reply, reply_rx) = tokio::sync::oneshot::channel();
                     let mut request =
                         TurnInputRequest::new(SubmittedTurnInput::UserInput { content, client_id })
                             .on_start(TurnStartOptions {
-                                final_output_json_schema,
+                                final_output_json_schema: final_output_json_schema.clone(),
                                 // Keeps a heartbeat's origin (`UserInputOrigin::from_turn_trigger`).
                                 turn_trigger: (metadata.origin
                                     == codex_history::UserInputOrigin::Heartbeat)
@@ -1328,30 +1330,105 @@ impl Session {
                                 ..Default::default()
                             });
                     request.user_item_uuid = metadata.response_item_uuid;
-                    Op::TurnInput {
+                    let op = Op::TurnInput {
                         request: Box::new(request),
                         mode: TurnInputMode::StartOrSteer,
                         reply,
-                    }
+                    };
+                    self.submit_internal_follow_up(op).await.map(|()| {
+                        // The input left this turn's queue: a refusal must not lose it.
+                        let session = Arc::clone(self);
+                        tokio::spawn(async move {
+                            session
+                                .settle_follow_up_input(
+                                    reply_rx.await,
+                                    input,
+                                    final_output_json_schema,
+                                )
+                                .await;
+                        });
+                    })
                 }
                 TurnInput::InterAgentCommunication(communication) => {
+                    let delivery = communication.delivery.clone();
                     let mut communication = (*communication).clone();
                     communication.trigger_turn = true;
-                    Op::InterAgentCommunication {
+                    let op = Op::InterAgentCommunication {
                         communication,
                         start_options: TurnStartOptions {
                             final_output_json_schema,
                             ..Default::default()
                         },
-                    }
+                    };
+                    self.submit_internal_follow_up_with_delivery(op, delivery)
+                        .await
                 }
                 TurnInput::ResponseItem(_) | TurnInput::FunctionCallOutput(_) => continue,
             };
-            if let Err(err) = self.submit_internal_follow_up(op).await {
+            if let Err(err) = submitted {
                 warn!(%err, "failed to submit follow-up input after task finished");
-                continue;
             }
         }
+    }
+
+    /// Follow-up user input that admission did not take, typically because another turn is
+    /// running that it may not join (D529 (a): another authority, a non-steerable turn, another
+    /// output schema): it waits in that turn's deferred input and is admitted again when the
+    /// turn ends. Anything else is reported, as for client input.
+    async fn settle_follow_up_input(
+        &self,
+        reply: std::result::Result<CodexResult<TurnInputSubmission>, tokio::sync::oneshot::error::RecvError>,
+        input: TurnInput,
+        final_output_json_schema: Option<serde_json::Value>,
+    ) {
+        let reason = match reply {
+            Ok(Ok(TurnInputSubmission::Started { .. } | TurnInputSubmission::Steered { .. })) => {
+                return;
+            }
+            Ok(Ok(TurnInputSubmission::NotSubmitted { reason })) => reason,
+            Ok(Err(err)) => {
+                self.report_unsubmitted_follow_up(err.to_string()).await;
+                return;
+            }
+            // The session ended before admission answered.
+            Err(_) => return,
+        };
+        if matches!(
+            reason,
+            NotSubmittedReason::AuthorizationChanged
+                | NotSubmittedReason::ActiveTurnNotSteerable { .. }
+                | NotSubmittedReason::ActiveTurnOutputSchemaMismatch
+        ) {
+            let turn_state = self
+                .active_turn
+                .lock()
+                .await
+                .as_ref()
+                .map(|active_turn| Arc::clone(&active_turn.turn_state));
+            if let Some(turn_state) = turn_state {
+                self.input_queue
+                    .defer_input_for_turn_state(&turn_state, vec![input], final_output_json_schema)
+                    .await;
+                return;
+            }
+        }
+        self.report_unsubmitted_follow_up(format!("{reason:?}"))
+            .await;
+    }
+
+    async fn report_unsubmitted_follow_up(&self, reason: String) {
+        warn!(%reason, "follow-up input after a finished turn was not submitted");
+        self.send_event_raw(Event {
+            id: uuid::Uuid::new_v4().to_string(),
+            msg: EventMsg::Error(ErrorEvent {
+                misalignment: None,
+                message: format!(
+                    "A message sent while the previous turn was ending was not submitted ({reason}); please send it again."
+                ),
+                codex_error_info: Some(CodexErrorInfo::BadRequest),
+            }),
+        })
+        .await;
     }
 
     async fn submit_pending_work_wake(&self) {

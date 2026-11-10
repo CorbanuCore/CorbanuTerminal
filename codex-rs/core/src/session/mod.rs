@@ -3665,9 +3665,13 @@ impl Session {
 
     /// D532 (a), provisional (owner decision pending): a live turn-settings or environment
     /// update changed the execution authority of the turn running in `active_turn`. Input it
-    /// has not taken yet, and input arriving later, waits for the next turn. Callers hold the
-    /// `active_turn` lock, which every admission into the running turn also takes.
-    pub(super) async fn hold_input_after_authority_change(active_turn: &crate::state::ActiveTurn) {
+    /// has not taken yet (its own queue and agent mail waiting in the session's mailbox), and
+    /// input arriving later, waits for the next turn. Callers hold the `active_turn` and state
+    /// locks, which every admission into the running turn also takes, in that order.
+    pub(super) async fn hold_input_after_authority_change(
+        &self,
+        active_turn: &crate::state::ActiveTurn,
+    ) {
         let Some(task) = active_turn.task.as_ref() else {
             return;
         };
@@ -3679,7 +3683,10 @@ impl Session {
             .lock()
             .await
             .pending_input
-            .defer_items(task.turn_context.final_output_json_schema.clone());
+            .defer_admitted_items(task.turn_context.final_output_json_schema.clone());
+        self.input_queue
+            .defer_waiting_mail_for_turn(&task.turn_context.sub_id, &active_turn.turn_state)
+            .await;
     }
 
     /// #945: the policy marker the open approval prompt `approval_id` was
@@ -7194,6 +7201,17 @@ impl Session {
 
     /// Queues `op` as this session's own follow-up submission.
     pub(crate) async fn submit_internal_follow_up(&self, op: Op) -> CodexResult<()> {
+        self.submit_internal_follow_up_with_delivery(op, /*message_delivery*/ None)
+            .await
+    }
+
+    /// [`Self::submit_internal_follow_up`] for agent mail handed on with its delivery, so
+    /// delivery observers still see it consumed.
+    pub(crate) async fn submit_internal_follow_up_with_delivery(
+        &self,
+        op: Op,
+        message_delivery: Option<crate::agent_communication::MessageDelivery>,
+    ) -> CodexResult<()> {
         let sub = Submission {
             id: Uuid::now_v7().to_string(),
             op,
@@ -7202,7 +7220,7 @@ impl Session {
             parent_turn_id: None,
             root_turn_id: None,
             residency_guard: None,
-            message_delivery: None,
+            message_delivery,
         };
         self.tx_sub
             .send(sub)
