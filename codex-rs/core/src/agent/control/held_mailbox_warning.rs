@@ -1,4 +1,4 @@
-use super::AgentControl;
+use super::LocalAgentControl;
 use codex_protocol::ThreadId;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::protocol::Event;
@@ -6,7 +6,7 @@ use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::WarningEvent;
 
-impl AgentControl {
+impl LocalAgentControl {
     /// Shows a held child's warning on its live parent's client channel without
     /// starting a parent turn, changing agent status, or injecting model input.
     pub(crate) async fn warn_parent_of_held_mailbox(
@@ -18,7 +18,7 @@ impl AgentControl {
         let Some(parent_thread_id) = session_source.parent_thread_id() else {
             return Ok(());
         };
-        let state = self.upgrade()?;
+        let state = self.runtime.upgrade()?;
         let parent = state.get_thread(parent_thread_id).await?;
         let child = session_source
             .get_agent_path()

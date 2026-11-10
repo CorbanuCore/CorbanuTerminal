@@ -65,18 +65,20 @@ impl ThreadManagerState {
                 teardown.complete();
                 return Err(err);
             }
-            // Dispatch has stopped and the residency guard excludes senders. A tree
-            // shutdown deliberately discards its mailbox instead of retaining it.
-            let mail = thread
-                .session
-                .input_queue
-                .drain_mailbox()
-                .await
-                .into_iter()
-                .map(|mail| mail.communication)
-                .collect();
+            // Dispatch has stopped and the residency guard excludes senders.
+            // Corbanu (#1545, #1999/#2033): `is_unloadable` keeps a session with mail loaded,
+            // so this is normally empty. Anything left is a durable row handed to this
+            // incarnation, which reload recovery requeues; holding a second copy in memory
+            // would deliver it twice, so it is dropped here.
+            let mail = thread.session.input_queue.drain_mailbox().await;
+            if !mail.is_empty() {
+                tracing::warn!(
+                    %thread_id,
+                    count = mail.len(),
+                    "evicted agent still held mailbox items; reload recovery redelivers them"
+                );
+            }
             let runtime = &thread.session.services.local_agent_runtime;
-            let _ = runtime.mailboxes.enqueue(thread_id, /*id*/ None, mail);
             // Preserve configured bindings across eviction without retaining turn-only attachments.
             // Raw bindings keep the original pending owner configuration alive.
             let environments = EvictedEnvironments {
@@ -321,19 +323,28 @@ pub(super) fn is_v2_resident_session_source(session_source: &SessionSource) -> b
 }
 
 async fn is_unloadable(thread: &CodexThread) -> bool {
+    let status = thread.agent_status().await;
+    // Corbanu (D435): a `PendingInit` session that `spawn_agent` created with its first turn
+    // queued has not started that turn yet; evicting it would drop the task.
+    let pending_first_turn = matches!(status, AgentStatus::PendingInit)
+        && thread
+            .session
+            .spawned_with_first_turn
+            .load(std::sync::atomic::Ordering::Acquire);
     matches!(
-        thread.agent_status().await,
+        status,
         AgentStatus::PendingInit
             | AgentStatus::Completed(_)
             | AgentStatus::Errored(_)
             | AgentStatus::Interrupted
-    ) && thread.session.active_turn.lock().await.is_none()
+    ) && !pending_first_turn
+        && thread.session.active_turn.lock().await.is_none()
         && !thread.session.has_outstanding_durable_sleep()
-        && !thread
-            .session
-            .input_queue
-            .has_trigger_turn_mailbox_items()
-            .await
+        // Corbanu (#1545, #1999/#2033): a session holding any mailbox item stays loaded.
+        // Its items are durable rows handed to this session's incarnation; evicting it would
+        // move them to the in-memory queue while reload recovery requeues the same rows, so
+        // the message would be delivered twice.
+        && !thread.session.input_queue.has_pending_mailbox_items().await
 }
 
 #[cfg(test)]
