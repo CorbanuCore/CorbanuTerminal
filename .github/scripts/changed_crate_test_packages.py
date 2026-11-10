@@ -19,12 +19,14 @@ arguments for helper binaries the given packages' tests need.
 
 import argparse
 import sys
+import tomllib
 from pathlib import Path
 from pathlib import PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from argument_comment_lint_packages import ROOT  # noqa: E402
+from argument_comment_lint_packages import WORKSPACE  # noqa: E402
 from argument_comment_lint_packages import changed_files  # noqa: E402
 from argument_comment_lint_packages import workspace_packages  # noqa: E402
 
@@ -68,6 +70,24 @@ HELPER_BINARIES = {
 }
 
 
+def test_packages(root: Path) -> dict[str, str]:
+    """The workspace members plus the crates only `[workspace.dependencies]`
+    names by path, which Cargo makes members too (#2027: missing these, the
+    job never ran codex-windows-sandbox's tests, and #2011 broke two of them)."""
+    packages = workspace_packages(root)
+    manifest = tomllib.loads((root / WORKSPACE / "Cargo.toml").read_text())
+    for dependency in manifest["workspace"].get("dependencies", {}).values():
+        path = dependency.get("path") if isinstance(dependency, dict) else None
+        # Cargo adds only path dependencies inside the workspace.
+        if path is None or PurePosixPath(path).parts[0] == "..":
+            continue
+        directory = f"{WORKSPACE}/{PurePosixPath(path)}"
+        if directory not in packages:
+            crate = tomllib.loads((root / directory / "Cargo.toml").read_text())
+            packages[directory] = crate["package"]["name"]
+    return packages
+
+
 def selected_packages(files: list[str], packages: dict[str, str]) -> list[str]:
     selected = set()
     for path in files:
@@ -106,7 +126,7 @@ def main() -> None:
     if args.base is None or args.head is None:
         parser.error("base and head are required")
     selected = selected_packages(
-        changed_files(args.base, args.head), workspace_packages(ROOT)
+        changed_files(args.base, args.head), test_packages(ROOT)
     )
     for package in selected:
         print(package)

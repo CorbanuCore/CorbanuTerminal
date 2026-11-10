@@ -8,6 +8,7 @@ from changed_crate_test_packages import HELPER_BINARIES
 from changed_crate_test_packages import ROOT
 from changed_crate_test_packages import helper_build_args
 from changed_crate_test_packages import selected_packages
+from changed_crate_test_packages import test_packages
 from changed_crate_test_packages import workspace_packages
 
 PACKAGES = {
@@ -48,6 +49,20 @@ class ChangedCrateTestPackagesTest(unittest.TestCase):
         )
         self.assertEqual(packages["codex-rs/exec-server"], "codex-exec-server")
 
+    def test_path_dependency_members_are_packages(self) -> None:
+        # #2027: Cargo makes `[workspace.dependencies]` path crates members
+        # though `members` omits them; the job must see them too.
+        self.assertNotIn("codex-rs/windows-sandbox-rs", workspace_packages(ROOT))
+        packages = test_packages(ROOT)
+        self.assertEqual(
+            selected_packages(
+                ["codex-rs/windows-sandbox-rs/src/git_config_targets_tests.rs"],
+                packages,
+            ),
+            ["codex-windows-sandbox"],
+        )
+        self.assertLessEqual(workspace_packages(ROOT).items(), packages.items())
+
     def test_job_changes_select_the_canary(self) -> None:
         for path in (
             ".github/workflows/rust-ci-changed-crate-tests.yml",
@@ -76,7 +91,7 @@ class ChangedCrateTestPackagesTest(unittest.TestCase):
         )
 
     def test_named_packages_exist(self) -> None:
-        names = set(workspace_packages(ROOT).values())
+        names = set(test_packages(ROOT).values())
         named = {CANARY_PACKAGE} | set(HELPER_BINARIES)
         named |= {
             package for helpers in HELPER_BINARIES.values() for package, _ in helpers
