@@ -175,7 +175,8 @@ class ArgumentCommentLintPackagesTest(unittest.TestCase):
     def test_path_dependency_members_are_linted(self) -> None:
         # Cargo makes crates that members depend on by path members too,
         # though `members` omits them; the job lints them like the changed-
-        # crate test job tests them (#2027).
+        # crate test job tests them (#2027). (Upstream #42993 removed the
+        # codex-mcp-server crate, so main's mcp-server case is dropped here.)
         packages = cargo_packages(ROOT)
         members = workspace_packages(ROOT).values()
         for path, expected in (
@@ -186,10 +187,6 @@ class ArgumentCommentLintPackagesTest(unittest.TestCase):
             (
                 "codex-rs/app-server/tests/common/lib.rs",
                 ["app_test_support", "codex-app-server"],
-            ),
-            (
-                "codex-rs/mcp-server/tests/common/lib.rs",
-                ["codex-mcp-server", "mcp_test_support"],
             ),
         ):
             with self.subTest(path=path):
