@@ -123,7 +123,10 @@ impl AgentControl for LocalAgentControl {
                     } else {
                         None
                     };
-                    let submission_id = self.send_input(target, input, start_options).await?;
+                    // PF-30-S02: the caller is the sender whose standing the input carries.
+                    let submission_id = self
+                        .send_input(target, Some(caller), input, start_options)
+                        .await?;
                     (receiver.unwrap_or_default(), submission_id)
                 }
                 AgentInput::Message { message, mode } => {
@@ -145,13 +148,14 @@ impl AgentControl for LocalAgentControl {
                             "target agent is missing an agent_path".to_string(),
                         )
                     })?;
-                    // Cold-restored children still reload lazily on any message. Only
-                    // locally evicted recipients can retain mail without reloading.
-                    // Loaded recipients go straight to delivery, which rejects sends
-                    // racing an in-progress eviction when it acquires the residency pin.
+                    // Corbanu: any recipient that is not loaded reloads before delivery,
+                    // evicted ones included, because Corbanu's durable mailbox admits mail
+                    // through the recipient's session (upstream kept queue-only mail for
+                    // evicted recipients in memory, which a restart would lose). Loaded
+                    // recipients go straight to delivery, which rejects sends racing an
+                    // in-progress eviction when it acquires the residency pin.
                     let _residency_pin = if mode == MessageDeliveryMode::TriggerTurn
-                        || (self.runtime.upgrade()?.get_thread(target).await.is_err()
-                            && self.runtime.registry.evicted_environments(target).is_none())
+                        || self.runtime.upgrade()?.get_thread(target).await.is_err()
                     {
                         self.ensure_v2_agent_loaded(resume_config, target, /*parent*/ None)
                             .await?

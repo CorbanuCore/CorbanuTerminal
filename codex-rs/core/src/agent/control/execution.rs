@@ -150,7 +150,7 @@ impl AgentExecutionLimiter {
 /// guard, so it remains visible to capacity accounting. Mailbox wakeups and
 /// agent-authored work remain bounded here.
 pub(crate) fn op_starts_worker_turn(op: &Op) -> bool {
-    matches!(op, Op::InterAgentCommunication { communication } if communication.trigger_turn)
+    matches!(op, Op::InterAgentCommunication { communication, .. } if communication.trigger_turn)
         || matches!(op, Op::WakePendingWork)
 }
 

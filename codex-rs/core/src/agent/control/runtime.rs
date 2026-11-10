@@ -8,6 +8,8 @@ use crate::agent::api::AgentControl;
 use crate::agent::registry::AgentRegistry;
 use crate::config::RolloutBudgetConfig;
 use crate::rollout_budget::RolloutBudget;
+use crate::security::EffectivePolicyView;
+use crate::security::TrustedSecurityController;
 use crate::thread_manager::AgentTreeShutdownFailure;
 use crate::thread_manager::AgentTreeShutdownFailureReason;
 use crate::thread_manager::AgentTreeShutdownReport;
@@ -24,6 +26,7 @@ use codex_protocol::error::Result as CodexResult;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_rollout_trace::ThreadTraceContext;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -203,6 +206,17 @@ pub(crate) struct LocalAgentRuntime {
     pub(super) registry: Arc<AgentRegistry>,
     pub(super) residency: Arc<V2Residency>,
     pub(super) mailboxes: Arc<super::mailbox::Mailboxes>,
+    /// Corbanu: native terminal-result auto-processing policy, shared across the whole agent
+    /// tree and sourced from the manager so separately built handles share one loop-breaker.
+    /// This is lifecycle policy over Core turns, not a second mailbox or task queue.
+    pub(super) native_auto_loop_state_by_agent:
+        Arc<Mutex<HashMap<ThreadId, super::NativeAutoLoopState>>>,
+    /// Corbanu (PF-23-S03): read-only policy and child-inheritance capability shared by the
+    /// agent tree.
+    pub(super) security_policy: EffectivePolicyView,
+    /// Corbanu: the separate trusted mutation capability, set once when the tree's root is
+    /// bound and retained for the human TUI path. No model/tool-facing method exposes it.
+    pub(super) trusted_security_controller: Arc<OnceLock<TrustedSecurityController>>,
     /// Shared by every session in this tree, including private delegates.
     pub(crate) shutdown: CancellationToken,
     shutdown_state: Arc<AgentTreeShutdownState>,
@@ -214,8 +228,19 @@ impl LocalAgentRuntime {
         thread_id_generator: ThreadIdGenerator,
         rollout_budget: Option<RolloutBudgetConfig>,
     ) -> Self {
+        // Every control handle created by one ThreadManager must observe one lifecycle policy.
+        // App-server `/spawn` can legitimately materialize a new control handle while loading a
+        // persisted parent/child edge; sourcing the state from the manager prevents those handles
+        // from becoming independent loop-breaker islands.
+        let native_auto_loop_state_by_agent = manager
+            .upgrade()
+            .map(|state| Arc::clone(&state.native_auto_loop_state_by_agent))
+            .unwrap_or_default();
         let runtime = Self {
             manager,
+            native_auto_loop_state_by_agent,
+            security_policy: EffectivePolicyView::default(),
+            trusted_security_controller: Arc::default(),
             thread_id_generator,
             registry: Arc::default(),
             residency: Arc::default(),
