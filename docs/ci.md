@@ -1,9 +1,16 @@
 # CI Coverage
 
-Corbanu Terminal CI currently runs only checks backed by available GitHub-hosted Linux
-x64 runners. This is intentional: prior Mac, Windows, ARM, and self-hosted
-runner jobs were failing before checkout with no executed steps, which created
-red status noise without testing the code.
+Corbanu Terminal CI runs only on GitHub-hosted runners: Linux x64 for most
+jobs, plus the hosted Windows and macOS jobs listed below. This is intentional:
+prior self-hosted (and some Mac, Windows and ARM) runner jobs were failing
+before checkout with no executed steps, which created red status noise without
+testing the code.
+
+Which Rust tests a PR runs: the tests of the crates it changes, on Linux
+(below, #1972); codex-core's security suites on Linux and macOS; native
+Windows tests for some crates. The whole Linux suite runs only postmerge
+(`rust-ci-full`) and in the nightly Bazel job, so a PR that breaks a crate it
+doesn't change (through a dependency) shows up on `main`.
 
 ## Active Push/PR Coverage
 
@@ -81,7 +88,30 @@ red status noise without testing the code.
   `tools/argument-comment-lint/run.py -p <crate> -- --ignore-rust-version`.
   The Windows Bazel lint below skips test targets, and the full lints run
   nightly.
-- Rust nextest on Linux x64.
+- Tests of the changed crates on Linux
+  (`rust-ci / Changed crate tests / cargo nextest (changed crates)`, #1972):
+  `cargo nextest run -p <crate>...` (unit and integration tests) for every
+  `codex-rs` crate under which the PR changes any file
+  (`.github/scripts/changed_crate_test_packages.py`). It does not add the
+  crates that depend on them, and a `Cargo.lock`-only change runs nothing. It
+  runs codex-core's remote-aware tests locally, without postmerge's Docker
+  remote environment. It first builds the helper binaries some suites
+  start from other crates (`codex`, the code-mode host, the Linux sandbox, the
+  rmcp-client test servers, the wallet daemon) and installs the packaged
+  ripgrep. A change to the job itself, `rust-ci.yml`, the workspace
+  `Cargo.toml`, the toolchain or nextest config runs `codex-rmcp-client`'s
+  tests. It uses postmerge's
+  `ci-test` profile and restores its sccache (saves nothing). Before this no
+  Linux or macOS PR job ran most crates' tests: #1963 went green while
+  breaking two rmcp-client tests. Part of `CI results (required)` whenever it
+  runs; 85-minute timeout. Measured on the #1972 trials: about 15 minutes for
+  rmcp-client, 24 for codex-core and 46 for every crate at once (an upstream
+  sync), against the roughly 35 minutes `CI required` already takes.
+- Core security tests (`rust-ci / Core security tests — ubuntu-24.04` and
+  `— macos-15`, #512, #553, #902): codex-core's `security::` unit tests and
+  selected integration suites on Linux and macOS, on every `codex-rs` change.
+- Full Rust nextest suite on Linux x64: postmerge only (`postmerge-ci` →
+  `rust-ci-full`), not on PRs.
 - SDK checks on hosted Linux x64.
 - V8 canary coverage on hosted Linux x64 only.
 
@@ -138,8 +168,8 @@ See [Rust toolchain bump](rust-toolchain-bump.md) for what to update and when.
 
 ## Disabled Until Runners Exist
 
-- macOS Rust and Bazel checks outside the manual release builder.
-- Windows Rust and Bazel checks.
+- macOS Bazel checks, and macOS Rust checks other than the core security tests,
+  outside the manual release builder.
 - Linux ARM64 Rust, Bazel, and V8 push/PR checks outside the manual release
   builder.
 - Self-hosted runner jobs for unavailable Linux, macOS, Windows, and ARM64

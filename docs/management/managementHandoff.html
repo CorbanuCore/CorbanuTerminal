@@ -672,7 +672,7 @@ green and none pending. Never force-push. Never <code>rm -f</code> (use <code>rm
 are OK when the worker has finished, or for docs-only PRs whose author is idle.</li>
 <li><b>Code-owner approval (D318, 11-09)</b>: <code>main</code> requires a review from the code owner for paths owned by
 <code>@corbanu-security</code> in <code>.github/CODEOWNERS</code> (sandboxes, exec policy and approvals, filesystem permission policy and profiles, network proxy,
-security levels, credentials, dependency policy, CODEOWNERS itself); 0 approvals are required elsewhere; admins are not enforced. After the independent
+security levels, credentials, dependency policy, the security CI workflows, the scripts only they run, the required-checks gate (<code>blocking-ci.yml</code>, <code>check_ci_results.py</code>) and the <code>setup-ci</code>/<code>check-clean-worktree</code> actions, release signing (D465), CODEOWNERS itself); 0 approvals are required elsewhere; admins are not enforced. Gap: <code>rust-ci.yml</code> and <code>rust-ci-full.yml</code>, which call <code>rust-ci-core-security.yml</code>, are not owned (changed too often), so an edit there can drop that job; reviewers of CI PRs check for it. After the independent
 read-only Opus 5.5 High review returns <code>VERDICT: APPROVE</code> on the exact head, the worker (never the reviewer model) posts
 <code>gh pr review N --approve</code> as corbanu-security with
 <code>GH_TOKEN="$(corbanu vault auth-helper corbanu_security_pat 2&gt;/dev/null || cat ~/.corbanu-secrets/corbanu-security-github.pat)"</code>

@@ -97,6 +97,10 @@ pub(crate) fn session_file_refusal(
 /// What the inspector lists for a refused command or file access.
 pub(crate) const INSPECTED: &str = "an agent command or file tool without the Windows sandbox";
 
+/// What the inspector lists for refused typing into a running command.
+pub(crate) const INSPECTED_TYPING: &str =
+    "typing into a running command without the Windows sandbox";
+
 /// The inspector's outcome for `level`.
 pub(crate) fn inspected_outcome(level: SecurityLevel) -> &'static str {
     match level {
