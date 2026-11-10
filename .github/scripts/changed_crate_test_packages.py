@@ -18,18 +18,15 @@ arguments for helper binaries the given packages' tests need.
 """
 
 import argparse
-import os
 import sys
-import tomllib
 from pathlib import Path
 from pathlib import PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from argument_comment_lint_packages import ROOT  # noqa: E402
-from argument_comment_lint_packages import WORKSPACE  # noqa: E402
+from argument_comment_lint_packages import cargo_packages as tested_packages  # noqa: E402
 from argument_comment_lint_packages import changed_files  # noqa: E402
-from argument_comment_lint_packages import workspace_packages  # noqa: E402
 
 CANARY_PACKAGE = "codex-rmcp-client"
 # Editing any of these runs the canary's tests.
@@ -69,64 +66,6 @@ HELPER_BINARIES = {
         ("codex-wallet-daemon", "corbanu-walletd"),
     ),
 }
-
-
-DEPENDENCY_TABLES = ("dependencies", "dev-dependencies", "build-dependencies")
-
-
-def path_dependencies(table: dict, base: str, shared: dict[str, str]) -> list[str]:
-    """The directories (relative to the workspace) of the crates a manifest
-    in `base` depends on by path, directly or through `workspace = true` on a
-    `shared` (`[workspace.dependencies]`) path entry; target tables too."""
-    found = []
-    for name in DEPENDENCY_TABLES:
-        for key, dependency in table.get(name, {}).items():
-            if not isinstance(dependency, dict):
-                continue
-            if "path" in dependency:
-                found.append(os.path.normpath(os.path.join(base, dependency["path"])))
-            elif dependency.get("workspace") is True and key in shared:
-                found.append(shared[key])
-    for target in table.get("target", {}).values():
-        found.extend(path_dependencies(target, base, shared))
-    return found
-
-
-def tested_packages(root: Path) -> dict[str, str]:
-    """The workspace members plus the crates Cargo makes members because a
-    member depends on them by path (#2027: missing these, the job never ran
-    codex-windows-sandbox's tests, and #2011 broke two of them), and theirs in
-    turn, unless outside the workspace or excluded. An unused
-    `[workspace.dependencies]` path entry is not a member."""
-    packages = workspace_packages(root)
-    workspace = tomllib.loads((root / WORKSPACE / "Cargo.toml").read_text())[
-        "workspace"
-    ]
-    shared = {
-        key: os.path.normpath(dependency["path"])
-        for key, dependency in workspace.get("dependencies", {}).items()
-        if isinstance(dependency, dict) and "path" in dependency
-    }
-    excluded = [os.path.normpath(path) for path in workspace.get("exclude", [])]
-    pending = []
-    for directory in packages:
-        member = tomllib.loads((root / directory / "Cargo.toml").read_text())
-        base = os.path.relpath(directory, WORKSPACE)
-        pending.extend(path_dependencies(member, base, shared))
-    while pending:
-        crate = pending.pop()
-        # Outside the workspace, or the virtual root manifest itself.
-        if os.path.isabs(crate) or crate in (".", "..") or crate.startswith("../"):
-            continue
-        if any(crate == ex or crate.startswith(ex + "/") for ex in excluded):
-            continue
-        directory = f"{WORKSPACE}/{crate}"
-        if directory in packages:
-            continue
-        manifest = tomllib.loads((root / directory / "Cargo.toml").read_text())
-        packages[directory] = manifest["package"]["name"]
-        pending.extend(path_dependencies(manifest, crate, shared))
-    return packages
 
 
 def selected_packages(files: list[str], packages: dict[str, str]) -> list[str]:
