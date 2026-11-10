@@ -1428,8 +1428,6 @@ mod tests {
                         },
                         encrypted_function_args: None,
                         native_call: None,
-                        native_call: None,
-                        native_call: None,
                     },
                     cancellation_token.clone(),
                 )
@@ -1449,7 +1447,6 @@ mod tests {
                         arguments: "{\"cmd\":\"pwd\"}".to_string(),
                     },
                     encrypted_function_args: None,
-                    native_call: None,
                     native_call: None,
                 },
                 cancellation_token,

@@ -141,7 +141,23 @@ pub(crate) fn reject_source_write_heredoc_when_structured_edit_enabled(
     turn_context: &TurnContext,
     command: &str,
 ) -> Result<(), FunctionCallError> {
-    if structured_edit_protocol_enabled(turn_context) && is_python_heredoc_source_write(command) {
+    reject_source_write_heredoc_when_structured_edit_enabled_for(
+        turn_context,
+        turn_context.model_info(),
+        command,
+    )
+}
+
+/// [`reject_source_write_heredoc_when_structured_edit_enabled`] for the model of the
+/// step that offered the shell tool, so it matches that step's edit tools.
+pub(crate) fn reject_source_write_heredoc_when_structured_edit_enabled_for(
+    turn_context: &TurnContext,
+    model_info: &ModelInfo,
+    command: &str,
+) -> Result<(), FunctionCallError> {
+    let enabled = turn_context.structured_edit_fallback_enabled()
+        || native_structured_edit_protocol_enabled_for(turn_context, model_info);
+    if enabled && is_python_heredoc_source_write(command) {
         emit_model_edit_compat_metric(
             turn_context,
             "shell_heredoc",
