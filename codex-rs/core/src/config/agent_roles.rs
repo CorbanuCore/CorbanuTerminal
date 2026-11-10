@@ -56,12 +56,12 @@ pub(crate) async fn load_agent_roles(
                 )
                 .await
                 {
-                        Ok(role) => role,
-                        Err(err) => {
-                            push_agent_role_warning(startup_warnings, err);
-                            continue;
-                        }
-                    };
+                    Ok(role) => role,
+                    Err(err) => {
+                        push_agent_role_warning(startup_warnings, err);
+                        continue;
+                    }
+                };
                 if let Some(config_file) = role.config_file.clone() {
                     declared_role_files.insert(config_file);
                 }

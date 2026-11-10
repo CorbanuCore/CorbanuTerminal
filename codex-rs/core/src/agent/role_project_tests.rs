@@ -161,7 +161,13 @@ async fn user_role_file_still_sets_denylisted_keys_for_its_child() {
     assert_eq!(config.model_provider_id, "relay");
     let role_dir = role_file.parent().expect("role dir");
     assert_eq!(config.log_dir, role_dir.join("logs"));
-    assert_eq!(config.config_lock_export_dir.as_ref().map(AbsolutePathBuf::as_path), Some(role_dir.join("export").as_path()));
+    assert_eq!(
+        config
+            .config_lock_export_dir
+            .as_ref()
+            .map(AbsolutePathBuf::as_path),
+        Some(role_dir.join("export").as_path())
+    );
     assert!(role_warnings(&config).is_empty());
 }
 
