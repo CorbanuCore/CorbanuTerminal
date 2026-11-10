@@ -837,7 +837,7 @@ impl Session {
     /// (PF-30-S03) the person decides this exact action: no answer remembered
     /// from earlier, no stored grant, no "don't ask again" rule, and a "for
     /// session" answer counts for this one call only.
-    async fn request_user_approval_with_authority(
+    pub(super) async fn request_user_approval_with_authority(
         &self,
         action: &ApprovalAction,
         ctx: &ApprovalContext,

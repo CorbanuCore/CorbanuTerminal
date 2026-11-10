@@ -32,13 +32,7 @@ use codex_sandboxing::is_likely_executor_managed_sandbox_denied;
 use codex_sandboxing::policy_transforms::effective_permission_profile;
 use codex_sandboxing::record_filesystem_sandbox_violation;
 use codex_utils_path_uri::PathUri;
-<<<<<<< HEAD
-use futures::future::BoxFuture;
 use std::path::Path;
-||||||| 413492cd6c
-use futures::future::BoxFuture;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -98,14 +92,8 @@ impl ApplyPatchRuntime {
         req: &ApplyPatchRequest,
         attempt: &SandboxAttempt<'_>,
     ) -> Option<FileSystemSandboxContext> {
-<<<<<<< HEAD
         let contract = crate::security::launch_contract::active();
-        if attempt.sandbox == SandboxType::None && contract.is_none() {
-||||||| 413492cd6c
-        if attempt.sandbox == SandboxType::None {
-=======
-        if !attempt.sandbox_requested {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        if !attempt.sandbox_requested && contract.is_none() {
             return None;
         }
 
@@ -122,7 +110,9 @@ impl ApplyPatchRuntime {
                     &permissions,
                     // PF-27-S06: on Windows only the elevated sandbox can
                     // deny reads (patches never go through the proxy).
-                    attempt.sandbox != SandboxType::None
+                    // D522 (a), provisional: upstream's MXC backend counts
+                    // as no sandbox.
+                    !matches!(attempt.sandbox, SandboxType::None | SandboxType::WindowsMxc)
                         && (!cfg!(windows)
                             || (codex_sandboxing::windows_sandbox_uses_elevated_backend(
                                 attempt.windows_sandbox_level,
@@ -166,9 +156,6 @@ impl Sandboxable for ApplyPatchRuntime {
 }
 
 impl Approvable<ApplyPatchRequest> for ApplyPatchRuntime {
-<<<<<<< HEAD
-    type ApprovalKey = ApplyPatchApprovalKey;
-
     fn additional_permissions<'r>(
         &self,
         req: &'r ApplyPatchRequest,
@@ -176,126 +163,6 @@ impl Approvable<ApplyPatchRequest> for ApplyPatchRuntime {
         req.additional_permissions.as_ref()
     }
 
-    fn approval_keys(&self, req: &ApplyPatchRequest) -> Vec<Self::ApprovalKey> {
-        req.file_paths
-            .iter()
-            .cloned()
-            .map(|path| ApplyPatchApprovalKey {
-                environment_id: req.turn_environment.environment_id.clone(),
-                path,
-            })
-            .collect()
-    }
-
-    fn start_approval_async<'a>(
-        &'a mut self,
-        req: &'a ApplyPatchRequest,
-        ctx: ApprovalCtx<'a>,
-    ) -> BoxFuture<'a, ReviewDecision> {
-        let session = ctx.session;
-        let turn = ctx.turn;
-        let call_id = ctx.call_id.to_string();
-        let retry_reason = ctx.retry_reason.clone();
-        let approval_keys = self.approval_keys(req);
-        let changes = req.changes.clone();
-        let fresh = ctx.fresh_human_authority;
-        Box::pin(async move {
-            if req.permissions_preapproved && retry_reason.is_none() && !fresh {
-                return ReviewDecision::Approved;
-            }
-            if let Some(reason) = retry_reason {
-                crate::tools::sandboxing::note_person_asked();
-                let decision = session
-                    .request_patch_approval(
-                        turn,
-                        call_id,
-                        changes.clone(),
-                        Some(reason),
-                        /*grant_root*/ None,
-                    )
-                    .await;
-                return match decision {
-                    ReviewDecision::ApprovedForSession if fresh => ReviewDecision::Approved,
-                    decision => decision,
-                };
-            }
-
-            with_cached_approval(
-                &session.services,
-                "apply_patch",
-                approval_keys,
-                fresh,
-                || async move {
-                    session
-                        .request_patch_approval(
-                            turn, call_id, changes, /*reason*/ None, /*grant_root*/ None,
-                        )
-                        .await
-                },
-            )
-            .await
-        })
-    }
-
-||||||| 413492cd6c
-    type ApprovalKey = ApplyPatchApprovalKey;
-
-    fn approval_keys(&self, req: &ApplyPatchRequest) -> Vec<Self::ApprovalKey> {
-        req.file_paths
-            .iter()
-            .cloned()
-            .map(|path| ApplyPatchApprovalKey {
-                environment_id: req.turn_environment.environment_id.clone(),
-                path,
-            })
-            .collect()
-    }
-
-    fn start_approval_async<'a>(
-        &'a mut self,
-        req: &'a ApplyPatchRequest,
-        ctx: ApprovalCtx<'a>,
-    ) -> BoxFuture<'a, ReviewDecision> {
-        let session = ctx.session;
-        let turn = ctx.turn;
-        let call_id = ctx.call_id.to_string();
-        let retry_reason = ctx.retry_reason.clone();
-        let approval_keys = self.approval_keys(req);
-        let changes = req.changes.clone();
-        Box::pin(async move {
-            if req.permissions_preapproved && retry_reason.is_none() {
-                return ReviewDecision::Approved;
-            }
-            if let Some(reason) = retry_reason {
-                return session
-                    .request_patch_approval(
-                        turn,
-                        call_id,
-                        changes.clone(),
-                        Some(reason),
-                        /*grant_root*/ None,
-                    )
-                    .await;
-            }
-
-            with_cached_approval(
-                &session.services,
-                "apply_patch",
-                approval_keys,
-                || async move {
-                    session
-                        .request_patch_approval(
-                            turn, call_id, changes, /*reason*/ None, /*grant_root*/ None,
-                        )
-                        .await
-                },
-            )
-            .await
-        })
-    }
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     fn approval_action(
         &self,
         req: &ApplyPatchRequest,

@@ -273,8 +273,8 @@ fn d447_gitmodules_ext_url_does_not_run() {
     );
 }
 
-/// Through the shell tools (`shell_command` and the unified `exec_command`):
-/// a command run after untrusted content reads `protocol.ext.allow=never`
+/// Through the command tool (`exec_command`; upstream removed `shell_command`,
+/// sync-only edit D538 (a), provisional): a command run after untrusted content reads `protocol.ext.allow=never`
 /// though the repository allows `ext`; before untrusted content it reads the
 /// repository's value.
 #[tokio::test]
@@ -296,7 +296,7 @@ async fn d447_shell_command_after_untrusted_content_gets_the_entry() {
     let workdir = dir.path().to_string_lossy().to_string();
     let command = "git config --get protocol.ext.allow";
 
-    for tool in ["shell_command", "exec_command"] {
+    for tool in ["exec_command"] {
         for tainted in [false, true] {
             let (session, mut turn) = crate::session::tests::make_session_and_context().await;
             turn.approval_policy
@@ -335,35 +335,18 @@ async fn d447_shell_command_after_untrusted_content_gets_the_entry() {
                 tool_name: codex_tools::ToolName::plain(tool),
                 source: crate::tools::context::ToolCallSource::Direct,
                 payload: ToolPayload::Function {
-                    arguments: if tool == "shell_command" {
-                        serde_json::json!({
-                            "command": command,
-                            "login": false,
-                            "workdir": workdir,
-                            "timeout_ms": 30_000,
-                        })
-                    } else {
-                        serde_json::json!({
-                            "cmd": command,
-                            "login": false,
-                            "workdir": workdir,
-                            "yield_time_ms": 30_000,
-                        })
-                    }
+                    arguments: serde_json::json!({
+                        "cmd": command,
+                        "login": false,
+                        "workdir": workdir,
+                        "yield_time_ms": 30_000,
+                    })
                     .to_string(),
                 },
             };
-            let response = if tool == "shell_command" {
-                crate::tools::handlers::ShellCommandHandler::from(
-                    codex_tools::ShellCommandBackendConfig::Classic,
-                )
+            let response = crate::tools::handlers::ExecCommandHandler::default()
                 .handle(invocation)
-                .await
-            } else {
-                crate::tools::handlers::ExecCommandHandler::default()
-                    .handle(invocation)
-                    .await
-            };
+                .await;
             // #1976 (D491): on Windows without its sandbox (as here), Moderate
             // refuses the command before it runs.
             if cfg!(windows) {
