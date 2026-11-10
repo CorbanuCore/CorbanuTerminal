@@ -13,6 +13,7 @@ use chrono::DateTime;
 use chrono::Utc;
 use codex_http_client::HttpClientFactory;
 use codex_login::AuthManager;
+use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::Result as CoreResult;
@@ -581,14 +582,13 @@ impl ModelsManager for OpenAiModelsManager {
         self.auth_manager.as_deref()
     }
 
-<<<<<<< HEAD
     fn server_advertised_models(&self) -> Option<Vec<String>> {
         self.advertised
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
-||||||| 413492cd6c
-=======
+    }
+
     #[tracing::instrument(skip_all, fields(model = model))]
     fn get_model_info<'a>(
         &'a self,
@@ -617,7 +617,6 @@ impl ModelsManager for OpenAiModelsManager {
             };
             construct_model_info(model, remote, config)
         })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn list_collaboration_modes(&self) -> Vec<CollaborationModeMask> {
@@ -839,118 +838,64 @@ impl OpenAiModelsManager {
             || self.supports_api_key_discovery()
     }
 
-<<<<<<< HEAD
-    async fn get_etag(&self) -> Option<String> {
-        self.etag.read().await.clone()
-    }
-
-    /// Replace the cached remote models and rebuild the derived presets list.
-    async fn apply_remote_models(&self, models: Vec<ModelInfo>) {
-        *self
-            .advertised
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(
-            models
-                .iter()
-                .filter(|model| model.visibility != ModelVisibility::Hide)
-                .map(|model| model.slug.clone())
-                .collect(),
-        );
-        let mut existing_models = load_remote_models_from_file().unwrap_or_default();
-        for mut model in models {
-            if let Some(existing_index) = existing_models
-                .iter()
-                .position(|existing| existing.slug == model.slug)
-            {
-                let bundled = &existing_models[existing_index];
-                // A stale cache or discovery response must not resurrect options retired
-                // from the bundled picker. Keep their metadata for explicit selection and
-                // existing sessions; the server may still hide otherwise-visible models.
-                if bundled.visibility == ModelVisibility::Hide {
-                    model.visibility = ModelVisibility::Hide;
-                }
-                // Provider discovery owns availability and presentation. The bundled catalogue
-                // owns spend authorization, capability classification, and allowed effort. A
-                // remote payload must never authorize a route, change its billing, or broaden
-                // expensive reasoning modes.
-                if !bundled.supported_reasoning_levels.is_empty() {
-                    model.default_reasoning_level = bundled.default_reasoning_level.clone();
-                    model.supported_reasoning_levels = bundled.supported_reasoning_levels.clone();
-                }
-                // A cached or provider-supplied discovery record may predate required output-limit
-                // metadata. Preserve the bundled route capability when the overlay omits it so a
-                // stale models_cache.json cannot make a selectable model fail before its first
-                // request.
-                if model.max_output_tokens.is_none() {
-                    model.max_output_tokens = bundled.max_output_tokens;
-                }
-                model.orchestration = bundled.orchestration.clone();
-                model.chat_completions = bundled.chat_completions.clone();
-                existing_models[existing_index] = model;
-            } else {
-                existing_models.push(model);
-||||||| 413492cd6c
-    async fn get_etag(&self) -> Option<String> {
-        self.etag.read().await.clone()
-    }
-
-    /// Replace the cached remote models and rebuild the derived presets list.
-    async fn apply_remote_models(&self, models: Vec<ModelInfo>) {
-        // Use the remote models list as the source of truth if it contains at least one
-        // non-hidden model and the user is using ChatGPT auth.
-        let should_use_remote_models_only = !models.is_empty()
-            && models
-                .iter()
-                .any(|model| model.visibility == ModelVisibility::List)
-            && self.auth_manager.as_ref().is_some_and(|auth_manager| {
-                auth_manager
-                    .auth_mode()
-                    .is_some_and(AuthMode::has_chatgpt_account)
-            });
-        if should_use_remote_models_only {
-            *self.remote_models.write().await = models;
-            return;
-        }
-
-        let mut existing_models = load_remote_models_from_file().unwrap_or_default();
-        for model in models {
-            if let Some(existing_index) = existing_models
-                .iter()
-                .position(|existing| existing.slug == model.slug)
-            {
-                existing_models[existing_index] = model;
-            } else {
-                existing_models.push(model);
-=======
     /// Publish only while the request identity still matches, including after async storage.
+    ///
+    /// Corbanu keeps the bundled catalog (its provider catalog) beside the
+    /// provider's list for every login, and the bundled entry keeps owning
+    /// spend, capability and effort metadata for the slugs it names.
     async fn apply_remote_models(&self, entry: ModelsCacheEntry) -> bool {
         let mut current = self.remote_models.write().await;
         if entry.identity != self.endpoint_client.identity() {
             return false;
         }
+        *self
+            .advertised
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(
+            entry
+                .models
+                .iter()
+                .filter(|model| model.visibility != ModelVisibility::Hide)
+                .map(|model| model.slug.clone())
+                .collect(),
+        );
         let mut catalog = CatalogState::provider(entry);
         let entry = &mut catalog.entry;
-        let remote_only = entry
-            .models
-            .iter()
-            .any(|model| model.visibility == ModelVisibility::List)
-            && (self.supports_api_key_discovery()
-                || self.auth_manager.as_ref().is_some_and(|auth_manager| {
-                    auth_manager
-                        .auth_mode()
-                        .is_some_and(AuthMode::has_chatgpt_account)
-                }));
-        if !remote_only && let Some(mut models) = self.catalog_source.fallback_models() {
-            for model in std::mem::take(&mut entry.models) {
+        if let Some(mut models) = self.catalog_source.fallback_models() {
+            for mut model in std::mem::take(&mut entry.models) {
                 if let Some(index) = models
                     .iter()
                     .position(|existing| existing.slug == model.slug)
                 {
+                    let bundled = &models[index];
+                    // A stale cache or discovery response must not resurrect options retired
+                    // from the bundled picker. Keep their metadata for explicit selection and
+                    // existing sessions; the server may still hide otherwise-visible models.
+                    if bundled.visibility == ModelVisibility::Hide {
+                        model.visibility = ModelVisibility::Hide;
+                    }
+                    // Provider discovery owns availability and presentation. The bundled catalogue
+                    // owns spend authorization, capability classification, and allowed effort. A
+                    // remote payload must never authorize a route, change its billing, or broaden
+                    // expensive reasoning modes.
+                    if !bundled.supported_reasoning_levels.is_empty() {
+                        model.default_reasoning_level = bundled.default_reasoning_level.clone();
+                        model.supported_reasoning_levels =
+                            bundled.supported_reasoning_levels.clone();
+                    }
+                    // A cached or provider-supplied discovery record may predate required output-limit
+                    // metadata. Preserve the bundled route capability when the overlay omits it so a
+                    // stale models_cache.json cannot make a selectable model fail before its first
+                    // request.
+                    if model.max_output_tokens.is_none() {
+                        model.max_output_tokens = bundled.max_output_tokens;
+                    }
+                    model.orchestration = bundled.orchestration.clone();
+                    model.chat_completions = bundled.chat_completions.clone();
                     models[index] = model;
                 } else {
                     models.push(model);
                 }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
             entry.models = models;
         }
@@ -1161,7 +1106,6 @@ fn find_model_by_namespaced_suffix(model: &str, candidates: &[ModelInfo]) -> Opt
     find_model_by_longest_prefix(suffix, candidates)
 }
 
-<<<<<<< HEAD
 /// Resolve Corbanu API's provider-neutral public identities to the bundled
 /// catalog entries that own their execution metadata.
 ///
@@ -1178,15 +1122,16 @@ fn corbanu_catalog_source_model(model: &str) -> Option<&'static str> {
         "corbanu/deepseek-v4-pro" => Some("deepseek-v4-pro"),
         _ => None,
     }
-||||||| 413492cd6c
-=======
+}
+
 /// Selects owned model metadata without applying configuration overrides.
+/// Corbanu API's public slugs look up the bundled entry they alias.
 fn find_model_from_candidates(model: &str, candidates: &[ModelInfo]) -> Option<ModelInfo> {
+    let model = corbanu_catalog_source_model(model).unwrap_or(model);
     // First use the normal longest-prefix match. If that misses, allow a narrowly scoped
     // retry for namespaced slugs like `custom/gpt-5.3-codex`.
     find_model_by_longest_prefix(model, candidates)
         .or_else(|| find_model_by_namespaced_suffix(model, candidates))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub(crate) fn construct_model_info_from_candidates(
@@ -1194,40 +1139,6 @@ pub(crate) fn construct_model_info_from_candidates(
     candidates: &[ModelInfo],
     origin: ModelOrigin,
     config: &ModelsManagerConfig,
-<<<<<<< HEAD
-) -> ModelInfo {
-    // First use the normal longest-prefix match. If that misses, allow a narrowly scoped
-    // retry for namespaced slugs like `custom/gpt-5.3-codex`.
-    let catalog_model = corbanu_catalog_source_model(model).unwrap_or(model);
-    let remote = find_model_by_longest_prefix(catalog_model, candidates)
-        .or_else(|| find_model_by_namespaced_suffix(catalog_model, candidates));
-    let model_info = if let Some(remote) = remote {
-        ModelInfo {
-            slug: model.to_string(),
-            used_fallback_model_metadata: false,
-            ..remote
-        }
-    } else {
-        model_info::model_info_from_slug(model)
-    };
-    model_info::with_config_overrides(model_info, config)
-||||||| 413492cd6c
-) -> ModelInfo {
-    // First use the normal longest-prefix match. If that misses, allow a narrowly scoped
-    // retry for namespaced slugs like `custom/gpt-5.3-codex`.
-    let remote = find_model_by_longest_prefix(model, candidates)
-        .or_else(|| find_model_by_namespaced_suffix(model, candidates));
-    let model_info = if let Some(remote) = remote {
-        ModelInfo {
-            slug: model.to_string(),
-            used_fallback_model_metadata: false,
-            ..remote
-        }
-    } else {
-        model_info::model_info_from_slug(model)
-    };
-    model_info::with_config_overrides(model_info, config)
-=======
 ) -> CatalogModel {
     let remote = find_model_from_candidates(model, candidates).map(|model| CatalogModel {
         model: model.into(),
@@ -1243,13 +1154,17 @@ fn construct_model_info(
 ) -> CatalogModel {
     let mut resolved = remote.unwrap_or_else(|| CatalogModel {
         model: model_info::model_info_from_slug(model).into(),
-        origin: ModelOrigin::Synthetic,
+        // Corbanu's curated GPU models carry built-in metadata.
+        origin: if model_info::is_curated_gpu_model(model) {
+            ModelOrigin::Bundled
+        } else {
+            ModelOrigin::Synthetic
+        },
     });
     let mut metadata = Arc::unwrap_or_clone(resolved.model);
     metadata.slug = model.to_owned();
     resolved.model = model_info::with_config_overrides(metadata, config).into();
     resolved
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[cfg(test)]

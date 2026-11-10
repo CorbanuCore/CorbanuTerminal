@@ -16,6 +16,9 @@ pub async fn resolve_amazon_bedrock_region(
     auth_manager: Option<Arc<AuthManager>>,
 ) -> Result<String> {
     let provider = AmazonBedrockModelProvider::new(provider_info, auth_manager);
+    if let Some(account) = provider.named_account.as_ref() {
+        return account.region(&provider.aws).await;
+    }
     let managed_auth = provider.managed_auth();
     let factory = provider.http_client_factory.clone().with_network_policy(
         provider

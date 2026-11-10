@@ -2,15 +2,11 @@ mod account_check;
 mod amazon_bedrock;
 mod auth;
 mod bearer_auth_provider;
-<<<<<<< HEAD
-mod model_key_broker;
-||||||| 413492cd6c
-=======
 mod capabilities;
 mod chatgpt_base_url;
 mod combined_auth;
 mod gcp;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+mod model_key_broker;
 mod models_endpoint;
 mod models_identity;
 mod provider;
@@ -24,25 +20,17 @@ pub use workspace_routing::ResolvedResponsesProvider;
 pub use workspace_routing::ResponsesConnectionKey;
 pub use workspace_routing::WorkspaceRoutingContext;
 
-<<<<<<< HEAD
 pub use account_check::AccountRecovery;
 pub use account_check::selected_account_error;
 pub use account_check::selected_account_error_with_recovery;
 pub use amazon_bedrock::amazon_bedrock_model_presets;
-||||||| 413492cd6c
-=======
 pub use amazon_bedrock::is_amazon_bedrock_gov_cloud_region;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use amazon_bedrock::is_supported_amazon_bedrock_region;
 pub use amazon_bedrock::resolve_amazon_bedrock_region;
 pub use auth::AgentIdentitySessionFallback;
-<<<<<<< HEAD
 pub use auth::ProviderApiKey;
 pub use auth::ProviderApiKeyHeader;
-||||||| 413492cd6c
-=======
 pub use auth::ProviderAuthContext;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use auth::ProviderAuthScope;
 pub use auth::ResolvedProviderAuth;
 pub use auth::auth_provider_from_auth;

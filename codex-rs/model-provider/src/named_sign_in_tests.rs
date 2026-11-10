@@ -152,6 +152,10 @@ struct NamedSessionConfig {
 }
 
 impl codex_login::AuthManagerConfig for NamedSessionConfig {
+    fn managed_auth_policy(&self) -> codex_config::ManagedAuthPolicy {
+        codex_config::ManagedAuthPolicy::default()
+    }
+
     fn codex_home(&self) -> std::path::PathBuf {
         self.home.clone()
     }
@@ -208,7 +212,8 @@ async fn hidden_default_login_is_refused_not_sent_unauthenticated() {
         &NamedSessionConfig { home: home.clone() },
         /*enable_codex_api_key_env*/ false,
     )
-    .await;
+    .await
+    .expect("auth manager");
     let provider = create_model_provider(openai(/*account*/ None), Some(base));
     let Err(error) = provider.api_auth().await else {
         panic!("a hidden default login must not authorize a request");

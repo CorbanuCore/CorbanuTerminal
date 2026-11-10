@@ -2,8 +2,8 @@ load("//:defs.bzl", "codex_rust_crate")
 
 exports_files(
     [
-        "src/agent/builtins/glm_flash_work_pattern.md",
-        "src/agent/builtins/standard_base.md",
+        "assets/agent/builtins/glm_flash_work_pattern.md",
+        "assets/agent/builtins/standard_base.md",
     ],
     visibility = ["//codex-rs/models-manager:__pkg__"],
 )

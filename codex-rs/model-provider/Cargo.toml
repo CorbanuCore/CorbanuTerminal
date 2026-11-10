@@ -40,6 +40,7 @@ url = { workspace = true }
 
 [dev-dependencies]
 base64 = { workspace = true }
+codex-config = { workspace = true }
 codex-utils-cargo-bin = { workspace = true }
 codex-utils-redacted-string = { workspace = true }
 codex-utils-rustls-provider = { workspace = true }

@@ -32,6 +32,8 @@ fn named_provider(region: Option<&str>, source: ProfileSource) -> AmazonBedrockM
         ModelProviderInfo::create_amazon_bedrock_provider(Some(ModelProviderAwsAuthInfo {
             profile: Some("configured-profile-the-account-overrides".to_string()),
             region: region.map(str::to_string),
+            credential_export: None,
+            auth_refresh: None,
         }));
     info.account = Some(NamedProviderAccount {
         provider_id: "amazon-bedrock".to_string(),

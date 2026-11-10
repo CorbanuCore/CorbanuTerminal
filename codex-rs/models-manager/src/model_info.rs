@@ -16,21 +16,6 @@ use codex_utils_output_truncation::approx_bytes_for_tokens;
 use tracing::warn;
 
 pub const BASE_INSTRUCTIONS: &str = include_str!("../prompt.md");
-<<<<<<< HEAD
-const DEFAULT_PERSONALITY_HEADER: &str = "You are Codex, a coding agent based on GPT-5. You and the user share the same workspace and collaborate to achieve the user's goals.";
-const COMPAT_PERSONALITY_HEADER: &str = "You are Codex, a coding agent. You and the user share the same workspace and collaborate to achieve the user's goals.";
-const LOCAL_FRIENDLY_TEMPLATE: &str =
-    "You optimize for team morale and being a supportive teammate as much as code quality.";
-const LOCAL_PRAGMATIC_TEMPLATE: &str = "You are a deeply pragmatic, effective software engineer.";
-const PERSONALITY_PLACEHOLDER: &str = "{{ personality }}";
-||||||| 413492cd6c
-const DEFAULT_PERSONALITY_HEADER: &str = "You are Codex, a coding agent based on GPT-5. You and the user share the same workspace and collaborate to achieve the user's goals.";
-const LOCAL_FRIENDLY_TEMPLATE: &str =
-    "You optimize for team morale and being a supportive teammate as much as code quality.";
-const LOCAL_PRAGMATIC_TEMPLATE: &str = "You are a deeply pragmatic, effective software engineer.";
-const PERSONALITY_PLACEHOLDER: &str = "{{ personality }}";
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 const PERSONALITY_SECTION_HEADER: &str = "# Personality";
 
 pub fn with_config_overrides(mut model: ModelInfo, config: &ModelsManagerConfig) -> ModelInfo {
@@ -73,49 +58,6 @@ pub fn with_config_overrides(mut model: ModelInfo, config: &ModelsManagerConfig)
     }
 
     if let Some(base_instructions) = &config.base_instructions {
-<<<<<<< HEAD
-        model.base_instructions = base_instructions.clone();
-        clear_instruction_messages(&mut model);
-    } else {
-        if config.personality_enabled && config.personality == Some(Personality::None) {
-            model.base_instructions = strip_personality_section(model.base_instructions);
-            if let Some(instructions_template) = model
-                .model_messages
-                .as_mut()
-                .and_then(|messages| messages.instructions_template.as_mut())
-            {
-                *instructions_template =
-                    strip_personality_section(std::mem::take(instructions_template));
-            }
-        }
-        if !config.personality_enabled {
-            // Newer native catalogs carry the complete instructions in the
-            // template and leave the legacy base empty. Disabling personality
-            // must not discard the model's entire operating contract.
-            if model.base_instructions.is_empty() {
-                model.base_instructions = model.get_model_instructions(Some(Personality::None));
-            }
-            clear_instruction_messages(&mut model);
-        }
-||||||| 413492cd6c
-        model.base_instructions = base_instructions.clone();
-        clear_instruction_messages(&mut model);
-    } else {
-        if config.personality_enabled && config.personality == Some(Personality::None) {
-            model.base_instructions = strip_personality_section(model.base_instructions);
-            if let Some(instructions_template) = model
-                .model_messages
-                .as_mut()
-                .and_then(|messages| messages.instructions_template.as_mut())
-            {
-                *instructions_template =
-                    strip_personality_section(std::mem::take(instructions_template));
-            }
-        }
-        if !config.personality_enabled {
-            clear_instruction_messages(&mut model);
-        }
-=======
         let model_messages = model.model_messages.get_or_insert_default();
         model_messages.instructions_template = Some(base_instructions.clone());
     } else if config.personality == Some(Personality::None)
@@ -125,7 +67,6 @@ pub fn with_config_overrides(mut model: ModelInfo, config: &ModelsManagerConfig)
             .and_then(|messages| messages.instructions_template.as_mut())
     {
         *instructions_template = strip_personality_section(std::mem::take(instructions_template));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     model
@@ -170,26 +111,20 @@ fn is_h1_heading(line: &str) -> bool {
 /// Build a minimal fallback model descriptor for missing/unknown slugs.
 pub fn model_info_from_slug(slug: &str) -> ModelInfo {
     let is_deepseek_v4_flash = slug == "deepseek-ai/DeepSeek-V4-Flash-0731";
-    let curated_gpu_model = match slug {
-        "deepseek-ai/DeepSeek-V4-Flash-0731" => Some(("DeepSeek V4 Flash 0731", 384_000)),
-        "zai-org/GLM-5.2-FP8" => Some(("GLM 5.2 FP8", 131_072)),
-        _ => None,
-    };
+    let curated_gpu_model = curated_gpu_model(slug);
     if curated_gpu_model.is_none() {
         warn!("Unknown model {slug} is used. This will use fallback model metadata.");
     }
-    let (display_name, context_window, used_fallback_model_metadata) = curated_gpu_model
-        .map_or_else(
-            || (slug.to_string(), 272_000, true),
-            |(display_name, context_window)| (display_name.to_string(), context_window, false),
-        );
+    let (display_name, context_window) = curated_gpu_model.map_or_else(
+        || (slug.to_string(), 272_000),
+        |(display_name, context_window)| (display_name.to_string(), context_window),
+    );
     ModelInfo {
         slug: slug.to_string(),
         orchestration: None,
         chat_completions: Default::default(),
         display_name,
         description: None,
-<<<<<<< HEAD
         default_reasoning_level: is_deepseek_v4_flash.then_some(ReasoningEffort::High),
         supported_reasoning_levels: if is_deepseek_v4_flash {
             vec![
@@ -209,16 +144,7 @@ pub fn model_info_from_slug(slug: &str) -> ModelInfo {
         } else {
             Vec::new()
         },
-        shell_type: ConfigShellToolType::Default,
-||||||| 413492cd6c
-        default_reasoning_level: None,
-        supported_reasoning_levels: Vec::new(),
-        shell_type: ConfigShellToolType::Default,
-=======
-        default_reasoning_level: None,
-        supported_reasoning_levels: Vec::new(),
         shell_type: ConfigShellToolType::UnifiedExec,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         visibility: ModelVisibility::None,
         supported_in_api: true,
         priority: 99,
@@ -248,12 +174,6 @@ pub fn model_info_from_slug(slug: &str) -> ModelInfo {
         effective_context_window_percent: 95,
         experimental_supported_tools: Vec::new(),
         input_modalities: default_input_modalities(),
-<<<<<<< HEAD
-        used_fallback_model_metadata,
-||||||| 413492cd6c
-        used_fallback_model_metadata: true, // this is the fallback model metadata
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         supports_search_tool: false,
         supports_experimental_context: false,
         use_responses_lite: false,
@@ -269,54 +189,25 @@ pub fn model_info_from_slug(slug: &str) -> ModelInfo {
     }
 }
 
-<<<<<<< HEAD
-fn local_personality_messages_for_slug(slug: &str) -> Option<ModelMessages> {
-    let header = match slug {
-        "gpt-5.2-codex" | "exp-codex-personality" => DEFAULT_PERSONALITY_HEADER,
-        "deepseek-ai/DeepSeek-V4-Flash-0731" | "zai-org/GLM-5.2-FP8" => COMPAT_PERSONALITY_HEADER,
-        _ => return None,
-    };
-
-    Some(ModelMessages {
-        instructions_template: Some(format!(
-            "{header}\n\n{PERSONALITY_PLACEHOLDER}\n\n{BASE_INSTRUCTIONS}"
-        )),
-        instructions_variables: Some(ModelInstructionsVariables {
-            personality_default: Some(String::new()),
-            personality_friendly: Some(LOCAL_FRIENDLY_TEMPLATE.to_string()),
-            personality_pragmatic: Some(LOCAL_PRAGMATIC_TEMPLATE.to_string()),
-        }),
-        approvals: None,
-        auto_review: None,
-        permissions: None,
-        token_budget: None,
-    })
-||||||| 413492cd6c
-fn local_personality_messages_for_slug(slug: &str) -> Option<ModelMessages> {
-    match slug {
-        "gpt-5.2-codex" | "exp-codex-personality" => Some(ModelMessages {
-            instructions_template: Some(format!(
-                "{DEFAULT_PERSONALITY_HEADER}\n\n{PERSONALITY_PLACEHOLDER}\n\n{BASE_INSTRUCTIONS}"
-            )),
-            instructions_variables: Some(ModelInstructionsVariables {
-                personality_default: Some(String::new()),
-                personality_friendly: Some(LOCAL_FRIENDLY_TEMPLATE.to_string()),
-                personality_pragmatic: Some(LOCAL_PRAGMATIC_TEMPLATE.to_string()),
-            }),
-            approvals: None,
-            auto_review: None,
-            permissions: None,
-            token_budget: None,
-        }),
-        _ => None,
-    }
-=======
 fn local_model_messages() -> ModelMessages {
     ModelMessages {
         instructions_template: Some(BASE_INSTRUCTIONS.to_string()),
         ..Default::default()
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+}
+
+/// Corbanu's curated rented-GPU models carry known metadata,
+/// so they are not reported as unknown models.
+pub(crate) fn is_curated_gpu_model(slug: &str) -> bool {
+    curated_gpu_model(slug).is_some()
+}
+
+fn curated_gpu_model(slug: &str) -> Option<(&'static str, i64)> {
+    match slug {
+        "deepseek-ai/DeepSeek-V4-Flash-0731" => Some(("DeepSeek V4 Flash 0731", 384_000)),
+        "zai-org/GLM-5.2-FP8" => Some(("GLM 5.2 FP8", 131_072)),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

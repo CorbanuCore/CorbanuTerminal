@@ -37,6 +37,14 @@ mod tests {
         assert_eq!(client_version_to_whole(), OPENAI_CODEX_COMPAT_VERSION);
     }
 
+    fn instructions(model: &codex_protocol::openai_models::ModelInfo) -> &str {
+        model
+            .model_messages
+            .as_ref()
+            .and_then(|messages| messages.instructions_template.as_deref())
+            .unwrap_or_default()
+    }
+
     #[test]
     fn astra_overrides_keep_native_instructions_and_context_ceiling() {
         let model = bundled_models_response()
@@ -45,24 +53,35 @@ mod tests {
             .into_iter()
             .find(|model| model.slug == "gpt-6-astra")
             .expect("Astra metadata");
-        for personality_enabled in [false, true] {
-            let resolved = model_info::with_config_overrides(
-                model.clone(),
-                &ModelsManagerConfig {
-                    personality_enabled,
-                    model_context_window: Some(1_050_000),
-                    ..Default::default()
-                },
-            );
-            assert_eq!(resolved.context_window, Some(872_000));
-            let instructions = resolved.get_model_instructions(/*personality*/ None);
-            assert_eq!(instructions, model.base_instructions);
-            assert!(instructions.len() < 40_000);
-        }
+        let resolved = model_info::with_config_overrides(
+            model.clone(),
+            &ModelsManagerConfig {
+                model_context_window: Some(1_050_000),
+                ..Default::default()
+            },
+        );
+        assert_eq!(resolved.context_window, Some(872_000));
+        assert_eq!(instructions(&resolved), instructions(&model));
+        assert!(!instructions(&resolved).is_empty());
+        assert!(instructions(&resolved).len() < 40_000);
+    }
+
+    /// Templates are literal text now; none may still carry the retired
+    /// personality placeholder.
+    #[test]
+    fn bundled_templates_carry_no_personality_placeholder() {
+        let stale = bundled_models_response()
+            .expect("bundled models")
+            .models
+            .into_iter()
+            .filter(|model| instructions(model).contains("{{ personality }}"))
+            .map(|model| model.slug)
+            .collect::<Vec<_>>();
+        assert_eq!(stale, Vec::<String>::new());
     }
 
     #[test]
-    fn template_only_catalog_preserves_instructions_without_personality() {
+    fn template_only_catalog_preserves_instructions() {
         let mut model = model_info::model_info_from_slug("template-only-fixture");
         let mut messages = bundled_models_response()
             .expect("bundled models")
@@ -71,13 +90,8 @@ mod tests {
             .find_map(|model| model.model_messages)
             .expect("model messages");
         messages.instructions_template = Some("Native operating contract".to_string());
-        messages.instructions_variables = None;
-        model.base_instructions.clear();
         model.model_messages = Some(messages);
         let resolved = model_info::with_config_overrides(model, &ModelsManagerConfig::default());
-        assert_eq!(
-            resolved.get_model_instructions(/*personality*/ None),
-            "Native operating contract"
-        );
+        assert_eq!(instructions(&resolved), "Native operating contract");
     }
 }

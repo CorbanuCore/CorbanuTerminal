@@ -113,3 +113,62 @@ fn cache_identity_tracks_catalog_url() {
     assert_ne!(bundled, first);
     assert_ne!(first, second);
 }
+
+/// Corbanu: an env_key provider's identity comes from its resolved key (a
+/// stored or named-account key), so it is computed without the environment
+/// variable, and a different key is a different catalog.
+#[test]
+fn env_key_identity_uses_the_resolved_key_without_reading_the_environment() {
+    let mut provider = ModelProviderInfo {
+        env_key: Some("CORBANU_TEST_S1B2_UNSET_IDENTITY_KEY".to_string()),
+        base_url: Some("https://provider.example/v1".to_string()),
+        requires_openai_auth: false,
+        ..ModelProviderInfo::default()
+    };
+    let first = CodexAuth::from_api_key("stored-key-one");
+    let key = identity(&provider, Some(&first)).expect("identity without the env var");
+    assert_ne!(
+        identity(&provider, Some(&CodexAuth::from_api_key("stored-key-two"))).unwrap(),
+        key
+    );
+    provider.account = Some(codex_model_provider_info::NamedProviderAccount {
+        provider_id: "custom".to_string(),
+        name: "work".to_string(),
+    });
+    // The same key value is the same credential, so the catalog is shared.
+    identity(&provider, Some(&first)).expect("a named account's identity");
+}
+
+/// PF-27-S05: in a brokered process the identity names the key's source
+/// (env_key and account) without asking the broker for headers (none is
+/// installed here, so a broker call would fail), and different sources never
+/// share a catalog. A rotated key under the same source keeps the catalog
+/// until its cache expires (the broker gives Core no key fingerprint).
+#[test]
+fn brokered_env_key_identity_names_the_key_source_without_the_broker() {
+    crate::model_key_broker::set_test_broker_required(/*required*/ true);
+    let placeholder = CodexAuth::from_api_key(crate::model_key_broker::BROKERED_KEY_PLACEHOLDER);
+    let provider = |env_key: &str, account: Option<&str>| ModelProviderInfo {
+        env_key: Some(env_key.to_string()),
+        base_url: Some("https://provider.example/v1".to_string()),
+        requires_openai_auth: false,
+        account: account.map(|name| codex_model_provider_info::NamedProviderAccount {
+            provider_id: "custom".to_string(),
+            name: name.to_string(),
+        }),
+        ..ModelProviderInfo::default()
+    };
+    let identities = [
+        provider("KEY_ONE", None),
+        provider("KEY_TWO", None),
+        provider("KEY_ONE", Some("work")),
+        provider("KEY_ONE", Some("home")),
+    ]
+    .iter()
+    .map(|provider| identity(provider, Some(&placeholder)))
+    .collect::<CoreResult<Vec<_>>>();
+    crate::model_key_broker::set_test_broker_required(/*required*/ false);
+    let identities = identities.expect("no broker call");
+    let unique = identities.iter().collect::<std::collections::HashSet<_>>();
+    assert_eq!(unique.len(), identities.len());
+}

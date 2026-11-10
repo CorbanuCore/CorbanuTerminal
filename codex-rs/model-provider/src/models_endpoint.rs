@@ -90,50 +90,24 @@ impl OpenAiModelsEndpoint {
     }
 
     async fn auth(&self) -> Option<CodexAuth> {
-        match self.auth_manager.as_ref() {
-            Some(auth_manager) => {
-                crate::provider::auth_for_provider(auth_manager.auth().await, &self.provider_info)
-            }
-            None => None,
-        }
+        crate::provider::configured_provider_auth(&self.provider_info, self.auth_manager.as_ref())
+            .await
     }
 
     async fn uses_codex_backend(&self) -> bool {
+        // Resolve auth first: for command auth this picks up a rotated token,
+        // so the catalog identity check sees the current credential.
+        let auth = self.auth().await;
+        // Only an OpenAI-auth provider uses the Codex backend; a third-party
+        // provider never refreshes with a cached ChatGPT login.
         self.provider_info.requires_openai_auth
-            && self
-                .auth()
-                .await
-                .as_ref()
-                .is_some_and(CodexAuth::uses_codex_backend)
+            && auth.as_ref().is_some_and(CodexAuth::uses_codex_backend)
     }
 
     async fn list_models(
         &self,
         client_version: &str,
         http_client_factory: HttpClientFactory,
-<<<<<<< HEAD
-    ) -> CoreResult<(Vec<ModelInfo>, Option<String>)> {
-        let _timer =
-            codex_otel::start_global_timer("codex.remote_models.fetch_update.duration_ms", &[]);
-        let auth = self.auth().await;
-        if auth.is_none()
-            && self.provider_info.auth.is_some()
-            && let Some(account) = self.provider_info.account.as_ref()
-        {
-            // PF-84 (#419): a named account whose command produced no
-            // credential never sends an unauthenticated request.
-            return Err(std::io::Error::other(format!(
-                "account `{}` of provider `{}` has no usable credential; not listing models",
-                account.name, account.provider_id
-            ))
-            .into());
-        }
-||||||| 413492cd6c
-    ) -> CoreResult<(Vec<ModelInfo>, Option<String>)> {
-        let _timer =
-            codex_otel::start_global_timer("codex.remote_models.fetch_update.duration_ms", &[]);
-        let auth = self.auth().await;
-=======
     ) -> CoreResult<ModelsEndpointResponse> {
         timeout(
             MODELS_REFRESH_TIMEOUT,
@@ -156,6 +130,7 @@ impl OpenAiModelsEndpoint {
         let (auth, selected_runtime_auth) = tokio::spawn(async move {
             let selected_runtime_auth = match runtime_auth {
                 Some((runtime, mode)) => {
+                    crate::provider::refuse_runtime_auth_when_brokered()?;
                     crate::validate_runtime_destination(
                         provider_info
                             .model_catalog_url
@@ -182,14 +157,28 @@ impl OpenAiModelsEndpoint {
             };
             let auth = match &selected_runtime_auth {
                 Some((selected_runtime_auth, _)) => Some(selected_runtime_auth.auth().clone()),
-                None => match auth_manager {
-                    Some(auth_manager) => auth_manager.auth().await,
-                    None => None,
-                },
+                // The provider's own login, as its requests use (a provider
+                // key for an env_key provider), never the ambient login.
+                None => {
+                    crate::provider::configured_provider_auth(&provider_info, auth_manager.as_ref())
+                        .await
+                }
             };
             Ok::<_, CodexErr>((auth, selected_runtime_auth))
         })
         .await??;
+        if auth.is_none()
+            && self.provider_info.auth.is_some()
+            && let Some(account) = self.provider_info.account.as_ref()
+        {
+            // PF-84 (#419): a named account whose command produced no
+            // credential never sends an unauthenticated request.
+            return Err(std::io::Error::other(format!(
+                "account `{}` of provider `{}` has no usable credential; not listing models",
+                account.name, account.provider_id
+            ))
+            .into());
+        }
         let metric_auth_mode = if self.has_provider_api_key()
             || auth.as_ref().is_some_and(CodexAuth::is_api_key_auth)
         {
@@ -204,7 +193,6 @@ impl OpenAiModelsEndpoint {
             &[("auth_mode", metric_auth_mode)],
         );
         let identity = crate::models_identity::identity(&self.provider_info, auth.as_ref())?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let auth_mode = auth.as_ref().map(CodexAuth::auth_mode);
         let mut api_provider = resolve_api_provider(&self.provider_info, auth.as_ref())?;
         if (auth.as_ref().is_some_and(CodexAuth::is_api_key_auth) || self.has_provider_api_key())
@@ -356,10 +344,11 @@ impl ModelsEndpointClient for OpenAiModelsEndpoint {
     }
 
     fn identity(&self) -> Option<String> {
-        let auth = self
-            .auth_manager
-            .as_ref()
-            .and_then(|manager| manager.auth_cached());
+        // The same login the fetch uses, so a fetched catalog is published.
+        let auth = crate::provider::configured_provider_auth_cached(
+            &self.provider_info,
+            self.auth_manager.as_ref(),
+        );
         crate::models_identity::identity(&self.provider_info, auth.as_ref()).ok()
     }
 
@@ -858,7 +847,6 @@ mod tests {
         );
     }
 
-<<<<<<< HEAD
     /// PF-84 (#419): a named command account with no credential never sends
     /// an unauthenticated `GET /models`.
     #[tokio::test]
@@ -880,7 +868,11 @@ mod tests {
             }),
             ..provider_info_with_command_auth()
         };
-        let endpoint = OpenAiModelsEndpoint::new(provider_info, /*auth_manager*/ None);
+        let endpoint = OpenAiModelsEndpoint::new(
+            provider_info,
+            /*auth_manager*/ None,
+            /*gateway_auth_manager*/ None,
+        );
 
         let error = endpoint
             .list_models(
@@ -890,8 +882,8 @@ mod tests {
             .await
             .expect_err("no credential, no request");
         assert!(error.to_string().contains("account `ghost`"), "{error}");
-||||||| 413492cd6c
-=======
+    }
+
     #[tokio::test]
     async fn model_discovery_enforces_managed_residency_over_provider_headers() {
         let server = MockServer::start().await;
@@ -1205,7 +1197,6 @@ mod tests {
         assert!(!error.to_string().contains("catalog-secret"));
         assert!(!format!("{error:?}").contains("catalog-secret"));
         assert_eq!(destination.received_requests().await.unwrap().len(), 0);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 

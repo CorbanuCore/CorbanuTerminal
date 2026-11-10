@@ -215,12 +215,14 @@ pub(super) async fn resolve_provider_auth(
     }
 }
 
-<<<<<<< HEAD
 /// SigV4 auth from an already-loaded context (a named account's profile).
-pub(super) fn sigv4_auth_provider(context: AwsAuthContext) -> SharedAuthProvider {
-    Arc::new(BedrockMantleSigV4AuthProvider::new(context))
-||||||| 413492cd6c
-=======
+pub(super) fn sigv4_auth_provider(
+    context: AwsAuthContext,
+    endpoint: BedrockEndpoint,
+) -> SharedAuthProvider {
+    Arc::new(BedrockSigV4AuthProvider::new(context, endpoint))
+}
+
 pub(super) async fn resolve_region(
     source: BedrockAuthSource,
     managed_auth: Option<&CodexAuth>,
@@ -244,7 +246,6 @@ pub(super) async fn resolve_region(
         | BedrockAuthMethod::EnvBearerToken { region, .. } => Ok(region),
         BedrockAuthMethod::AwsSdkAuth { context } => Ok(context.region().to_string()),
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn non_empty_env_var_from(

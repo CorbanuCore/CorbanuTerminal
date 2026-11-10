@@ -25,10 +25,12 @@ async fn catalog_origins_survive_reload_and_auth_change() {
         let catalog = manager
             .model_catalog_with_origins(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
             .await;
-        assert!(catalog.contains(&CatalogModel {
-            model: model.into(),
-            origin: ModelOrigin::Provider
-        }));
+        // Corbanu's bundled row keeps owning its metadata, so match by slug.
+        assert!(
+            catalog.iter().any(
+                |entry| entry.model.slug == model.slug && entry.origin == ModelOrigin::Provider
+            )
+        );
         assert_eq!(
             catalog
                 .iter()

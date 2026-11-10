@@ -16,32 +16,24 @@ use codex_login::ExternalAuth;
 use codex_login::ExternalAuthRefreshContext;
 use codex_login::TokenData;
 use codex_protocol::auth::AuthMode;
-<<<<<<< HEAD
+use codex_protocol::error::CodexErr;
 use codex_protocol::openai_models::ChatReasoningEffortProtocol;
 use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::LongContextRates;
 use codex_protocol::openai_models::MeteredRates;
+use codex_protocol::openai_models::ModelAccessPrograms;
 use codex_protocol::openai_models::ModelBilling;
 use codex_protocol::openai_models::ModelCapabilityTier;
 use codex_protocol::openai_models::ModelOrchestrationMetadata;
-use codex_protocol::openai_models::ModelVisibility;
-||||||| 413492cd6c
-=======
-use codex_protocol::error::CodexErr;
-use codex_protocol::openai_models::ModelAccessPrograms;
 use codex_protocol::openai_models::ModelOrigin;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ModelsResponse;
-<<<<<<< HEAD
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_protocol::openai_models::UtcHourWindow;
 use codex_protocol::openai_models::WeekdaySet;
-||||||| 413492cd6c
-=======
 use codex_protocol::turn_input::CyberAccessProgram;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::collections::VecDeque;
@@ -66,13 +58,29 @@ mod catalog_origin_tests;
 
 const DEFAULT_HTTP_CLIENT_FACTORY: HttpClientFactory =
     HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault);
-const STANDARD_BASE: &str = include_str!("../../core/src/agent/builtins/standard_base.md");
+const STANDARD_BASE: &str = include_str!("../../core/assets/agent/builtins/standard_base.md");
 const GLM_FLASH_WORK_PATTERN: &str =
-    include_str!("../../core/src/agent/builtins/glm_flash_work_pattern.md");
+    include_str!("../../core/assets/agent/builtins/glm_flash_work_pattern.md");
 const STANDARD_BASE_OUTCOME_MARKER: &str = "inspect code before changing it, keep edits scoped";
 const STANDARD_BASE_EVIDENCE_MARKER: &str = "only narrate when needed";
 const OLD_STANDARD_BASE_MARKER: &str = "Narrate as you work";
 const GPT55_GUIDE_MARKER: &str = "vivid inner life";
+
+/// Corbanu keeps the bundled catalog beside a provider's list; for slugs the
+/// bundle does not name, the merged list is the bundle followed by them.
+fn with_bundled(models: Vec<ModelInfo>) -> Vec<ModelInfo> {
+    let mut merged = load_remote_models_from_file().expect("bundled models should parse");
+    merged.extend(models);
+    merged
+}
+
+fn instructions(model: &ModelInfo) -> &str {
+    model
+        .model_messages
+        .as_ref()
+        .and_then(|messages| messages.instructions_template.as_deref())
+        .unwrap_or_default()
+}
 
 fn assert_standard_base(actual: &str) {
     assert_eq!(actual.trim_end(), STANDARD_BASE.trim_end());
@@ -541,7 +549,7 @@ async fn injected_cache_hit_avoids_remote_fetch() {
         )
         .await;
 
-    assert_eq!(catalog.models, cached_models);
+    assert_eq!(catalog.models, with_bundled(cached_models));
     assert_eq!(endpoint.fetch_count(), 0);
 }
 
@@ -565,7 +573,7 @@ async fn injected_cache_read_error_falls_back_and_persists_remote_models() {
         )
         .await;
 
-    assert_eq!(catalog.models, remote_models);
+    assert_eq!(catalog.models, with_bundled(remote_models.clone()));
     assert_eq!(endpoint.fetch_count(), 1);
     let stored_entries = cache.stored_entries();
     assert_eq!(
@@ -604,17 +612,22 @@ async fn injected_cache_write_error_does_not_fail_remote_refresh() {
         .raw_model_catalog(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
         .await;
 
-    assert_eq!(catalog.models, remote_models);
+    assert_eq!(catalog.models, with_bundled(remote_models.clone()));
     assert_eq!(
         manager
             .model_catalog_with_origins(RefreshStrategy::InMemory, DEFAULT_HTTP_CLIENT_FACTORY)
             .await,
-        remote_models
+        load_remote_models_from_file()
+            .expect("bundled models should parse")
             .into_iter()
             .map(|model| CatalogModel {
                 model: model.into(),
-                origin: ModelOrigin::Provider,
+                origin: ModelOrigin::Bundled,
             })
+            .chain(remote_models.into_iter().map(|model| CatalogModel {
+                model: model.into(),
+                origin: ModelOrigin::Provider,
+            }))
             .collect::<Vec<_>>()
     );
     assert_eq!(endpoint.fetch_count(), 1);
@@ -861,7 +874,8 @@ async fn get_model_info_applies_long_context_override_to_bundled_gpt_5_6_models(
         let mut expected = manager
             .get_model_info(slug, &ModelsManagerConfig::default())
             .await;
-        expected.context_window = Some(872_000);
+        // Corbanu's GPT-5.6 rows stop at 372K.
+        expected.context_window = Some(372_000);
 
         assert_eq!(model_info, expected);
     }
@@ -978,20 +992,13 @@ async fn corbanu_api_public_models_inherit_exact_catalog_metadata() {
         let catalog_info = manager.get_model_info(catalog_model, &config).await;
 
         assert_eq!(public_info.slug, public_model);
-        assert!(!public_info.used_fallback_model_metadata);
+        assert_ne!(public_info.origin, ModelOrigin::Synthetic);
         assert_eq!(public_info.context_window, catalog_info.context_window);
         assert_eq!(
             public_info.max_output_tokens,
             catalog_info.max_output_tokens
         );
         assert_eq!(public_info.input_modalities, catalog_info.input_modalities);
-        assert_eq!(
-            public_info.supports_parallel_tool_calls,
-            catalog_info.supports_parallel_tool_calls
-        );
-        if public_model == "corbanu/deepseek-v4.1-flash" {
-            assert!(!public_info.supports_parallel_tool_calls);
-        }
         assert_eq!(
             public_info.supported_reasoning_levels,
             catalog_info.supported_reasoning_levels
@@ -1203,7 +1210,7 @@ async fn assert_catalogue_issue_128_saved_ids(manager: &dyn ModelsManager) {
                 preset.is_default,
                 &resolved.orchestration,
                 resolved.max_output_tokens,
-                resolved.used_fallback_model_metadata,
+                resolved.origin == ModelOrigin::Synthetic,
             ),
             (
                 slug,
@@ -1304,20 +1311,15 @@ async fn catalogue_issue_128_remote_and_cached_overlays_preserve_saved_ids() {
             .get_model_info(&retired_model.slug, &ModelsManagerConfig::default())
             .await;
         assert_eq!(explicit.slug, retired_model.slug);
-        assert!(!explicit.used_fallback_model_metadata);
+        assert_ne!(explicit.origin, ModelOrigin::Synthetic);
     }
 
     // Expire the actual persisted cache, then simulate discovery omitting the
     // retained IDs. Refetch must still resolve every saved ID from the bundle.
-    cached_manager
-        .cache_manager
-        .as_ref()
-        .unwrap()
-        .manipulate_cache_for_test(|fetched_at| {
-            *fetched_at = Utc::now() - chrono::Duration::hours(1);
-        })
-        .await
-        .expect("expire cache");
+    mutate_file_cache_for_test(codex_home.path(), |cache| {
+        cache.fetched_at = Utc::now() - chrono::Duration::hours(1);
+    })
+    .await;
     let refreshed_manager =
         openai_manager_for_tests(codex_home.path().to_path_buf(), cached_endpoint.clone());
     refreshed_manager
@@ -1554,13 +1556,8 @@ async fn get_model_info_keeps_bundled_models_when_chatgpt_remote_is_present() {
         .await;
 
     assert_eq!(model_info.slug, bundled_slug);
-<<<<<<< HEAD
-    assert!(!model_info.used_fallback_model_metadata);
-||||||| 413492cd6c
-    assert!(model_info.used_fallback_model_metadata);
-=======
-    assert_eq!(model_info.origin, ModelOrigin::Synthetic);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    // Corbanu keeps the bundled catalog beside a ChatGPT remote list.
+    assert_eq!(model_info.origin, ModelOrigin::Bundled);
 }
 
 #[tokio::test]
@@ -1739,7 +1736,7 @@ async fn astra_remote_overlay_keeps_manual_policy_and_supported_efforts() {
         .get_model_info("gpt-6-astra", &ModelsManagerConfig::default())
         .await;
     assert_eq!(resolved.max_output_tokens, bundled.max_output_tokens);
-    assert!(!resolved.used_fallback_model_metadata);
+    assert_ne!(resolved.origin, ModelOrigin::Synthetic);
 }
 
 #[tokio::test]
@@ -2186,16 +2183,22 @@ async fn online_refresh_updates_access_programs_with_unchanged_etag() {
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
 
     // Caller-specific access can change without changing the catalog ETag.
+    // Corbanu lists the bundled catalog too, whose default stays the default.
+    let preset = |list: Vec<ModelPreset>| {
+        list.into_iter()
+            .find(|preset| preset.model == "access-programs")
+    };
     for model in [granted_model, revoked_model] {
-        let mut expected = ModelPreset::from(model.clone());
-        expected.is_default = true;
+        let expected = ModelPreset::from(model.clone());
         assert_eq!(
-            manager
-                .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
-                .await,
-            vec![expected.clone()]
+            preset(
+                manager
+                    .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+                    .await
+            ),
+            Some(expected.clone())
         );
-        assert_eq!(manager.get_remote_models().await, vec![model]);
+        assert_eq!(manager.get_remote_models().await, with_bundled(vec![model]));
         assert_eq!(
             manager.remote_models.read().await.entry.etag.as_deref(),
             Some("stable-catalog-etag")
@@ -2206,13 +2209,15 @@ async fn online_refresh_updates_access_programs_with_unchanged_etag() {
         let cache_manager =
             openai_manager_for_tests(codex_home.path().to_path_buf(), cache_endpoint.clone());
         assert_eq!(
-            cache_manager
-                .list_models(
-                    RefreshStrategy::OnlineIfUncached,
-                    DEFAULT_HTTP_CLIENT_FACTORY
-                )
-                .await,
-            vec![expected]
+            preset(
+                cache_manager
+                    .list_models(
+                        RefreshStrategy::OnlineIfUncached,
+                        DEFAULT_HTTP_CLIENT_FACTORY
+                    )
+                    .await
+            ),
+            Some(expected)
         );
         assert_eq!(cache_endpoint.fetch_count(), 0);
         assert_eq!(
@@ -2504,11 +2509,11 @@ async fn refresh_available_models_fetches_when_external_api_key_overrides_chatgp
 
     assert_eq!(
         cached_remote,
-        vec![remote_model(
+        with_bundled(vec![remote_model(
             dynamic_slug,
             "External API Key",
             /*priority*/ 1
-        )]
+        )])
     );
     assert_eq!(endpoint.fetch_count(), 1);
 }
@@ -2784,8 +2789,13 @@ fn bundled_anthropic_wire_provider_models_have_output_limits() {
                 ),
                 ..Default::default()
             };
-            let info = construct_model_info_from_candidates(&model, &response.models, &config);
-            if info.used_fallback_model_metadata || info.max_output_tokens.is_none() {
+            let info = construct_model_info_from_candidates(
+                &model,
+                &response.models,
+                ModelOrigin::Bundled,
+                &config,
+            );
+            if info.origin == ModelOrigin::Synthetic || info.max_output_tokens.is_none() {
                 missing.push(format!("{provider_id}: {model}"));
             }
         }
@@ -3305,7 +3315,7 @@ fn bundled_orchestration_states_published_rates_for_gpt_6_1_sol() {
     assert_eq!(model.context_window, Some(1_050_000));
     assert_eq!(model.max_output_tokens, Some(128_000));
     assert_eq!(model.visibility, ModelVisibility::List);
-    assert!(model.base_instructions.contains("based on GPT-6.1 Sol"));
+    assert!(instructions(model).contains("based on GPT-6.1 Sol"));
 }
 
 /// Off-peak holiday dates are whole UTC days on which a weekday peak would
@@ -3378,9 +3388,7 @@ fn bundled_models_json_contains_ambient_and_zai_models() {
         vec![ReasoningEffort::Medium, ReasoningEffort::XHigh]
     );
     assert_eq!(ambient_default.visibility, ModelVisibility::List);
-    assert!(ambient_default.supports_parallel_tool_calls);
-    assert_standard_base(&ambient_default.base_instructions);
-    assert!(!ambient_default.used_fallback_model_metadata);
+    assert_standard_base(instructions(ambient_default));
 
     let zai_glm_5_3 = response
         .models
@@ -3417,7 +3425,6 @@ fn bundled_models_json_contains_ambient_and_zai_models() {
         ]
     );
     assert_eq!(zai_glm_5_3.visibility, ModelVisibility::List);
-    assert!(zai_glm_5_3.supports_parallel_tool_calls);
     assert_eq!(
         zai_glm_5_3
             .orchestration
@@ -3434,8 +3441,7 @@ fn bundled_models_json_contains_ambient_and_zai_models() {
     );
     let preset = ModelPreset::from(zai_glm_5_3.clone());
     assert_eq!(preset.provider_id.as_deref(), Some("zai"));
-    assert_standard_base(&zai_glm_5_3.base_instructions);
-    assert!(!zai_glm_5_3.used_fallback_model_metadata);
+    assert_standard_base(instructions(zai_glm_5_3));
 
     let ambient_kimi = response
         .models
@@ -3458,9 +3464,7 @@ fn bundled_models_json_contains_ambient_and_zai_models() {
         vec![ReasoningEffort::Medium, ReasoningEffort::XHigh]
     );
     assert_eq!(ambient_kimi.visibility, ModelVisibility::Hide);
-    assert!(ambient_kimi.supports_parallel_tool_calls);
-    assert_standard_base(&ambient_kimi.base_instructions);
-    assert!(!ambient_kimi.used_fallback_model_metadata);
+    assert_standard_base(instructions(ambient_kimi));
 
     let ambient = response
         .models
@@ -3471,9 +3475,7 @@ fn bundled_models_json_contains_ambient_and_zai_models() {
     assert_eq!(ambient.display_name, "Ambient Large");
     assert_eq!(ambient.context_window, Some(131_072));
     assert_eq!(ambient.visibility, ModelVisibility::Hide);
-    assert!(ambient.supports_parallel_tool_calls);
-    assert_standard_base(&ambient.base_instructions);
-    assert!(!ambient.used_fallback_model_metadata);
+    assert_standard_base(instructions(ambient));
 }
 
 #[test]
@@ -3516,18 +3518,10 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
             .find(|model| model.slug == slug)
             .unwrap_or_else(|| panic!("bundled models.json should include {slug}"));
 
-        assert_standard_base(&model.base_instructions);
-        assert!(
-            model
-                .base_instructions
-                .contains(STANDARD_BASE_OUTCOME_MARKER)
-        );
-        assert!(
-            model
-                .base_instructions
-                .contains(STANDARD_BASE_EVIDENCE_MARKER)
-        );
-        assert!(!model.base_instructions.contains(OLD_STANDARD_BASE_MARKER));
+        assert_standard_base(instructions(model));
+        assert!(instructions(model).contains(STANDARD_BASE_OUTCOME_MARKER));
+        assert!(instructions(model).contains(STANDARD_BASE_EVIDENCE_MARKER));
+        assert!(!instructions(model).contains(OLD_STANDARD_BASE_MARKER));
     }
 
     let gpt55 = response
@@ -3536,13 +3530,9 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
         .find(|model| model.slug == "gpt-5.5")
         .expect("bundled models.json should include gpt-5.5");
 
-    assert!(gpt55.base_instructions.contains(GPT55_GUIDE_MARKER));
-    assert!(
-        !gpt55
-            .base_instructions
-            .contains(STANDARD_BASE_EVIDENCE_MARKER)
-    );
-    assert_ne!(gpt55.base_instructions.trim_end(), STANDARD_BASE.trim_end());
+    assert!(instructions(gpt55).contains(GPT55_GUIDE_MARKER));
+    assert!(!instructions(gpt55).contains(STANDARD_BASE_EVIDENCE_MARKER));
+    assert_ne!(instructions(gpt55).trim_end(), STANDARD_BASE.trim_end());
 }
 
 #[test]
@@ -3570,12 +3560,11 @@ fn bundled_models_json_contains_kimi_code_k3() {
             ReasoningEffort::Max,
         ]
     );
-    assert!(kimi.supports_parallel_tool_calls);
     assert_eq!(
         kimi.chat_completions.reasoning_protocol,
         ChatReasoningProtocol::PreservedRequired
     );
-    assert_standard_base(&kimi.base_instructions);
+    assert_standard_base(instructions(kimi));
 
     let conservative =
         crate::model_info::with_config_overrides(kimi.clone(), &ModelsManagerConfig::default());
@@ -3801,8 +3790,7 @@ fn bundled_models_json_contains_openrouter_models() {
     }
     assert_eq!(kimi.visibility, ModelVisibility::List);
     for model in [hy3, kimi] {
-        assert!(!model.supports_parallel_tool_calls);
-        assert_standard_base(&model.base_instructions);
+        assert_standard_base(instructions(model));
     }
 
     let meta = response
@@ -3812,8 +3800,7 @@ fn bundled_models_json_contains_openrouter_models() {
         .expect("bundled models.json should include Meta Muse Spark 1.1");
     assert_eq!(meta.context_window, Some(1_048_576));
     assert!(meta.apply_patch_tool_type.is_none());
-    assert!(meta.supports_parallel_tool_calls);
-    assert_standard_base(&meta.base_instructions);
+    assert_standard_base(instructions(meta));
 
     let claude_opus = response
         .models
@@ -4148,7 +4135,7 @@ fn bundled_models_json_contains_direct_deepseek_flash() {
             vec![ReasoningEffort::High, ReasoningEffort::Max]
         );
         assert_eq!(deepseek.orchestration, v4_1_peak, "{slug}");
-        assert_standard_base(&deepseek.base_instructions);
+        assert_standard_base(instructions(deepseek));
     }
 }
 
@@ -4173,7 +4160,7 @@ fn glm_5_3_flash_routes_use_standard_base_with_work_pattern() {
             .find(|model| model.slug == slug)
             .unwrap_or_else(|| panic!("bundled models.json should include {slug}"));
         assert_eq!(
-            model.base_instructions.trim_end(),
+            instructions(model).trim_end(),
             expected.trim_end(),
             "{slug}"
         );
@@ -4198,15 +4185,10 @@ async fn load_cached_list_needs_a_usable_cache() {
         .await;
     let reloaded = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
     assert!(reloaded.load_cached_list().await, "fresh cache");
-    reloaded
-        .cache_manager
-        .as_ref()
-        .expect("cache manager")
-        .manipulate_cache_for_test(|fetched_at| {
-            *fetched_at = Utc::now() - chrono::Duration::hours(1);
-        })
-        .await
-        .expect("age the cache");
+    mutate_file_cache_for_test(codex_home.path(), |cache| {
+        cache.fetched_at = Utc::now() - chrono::Duration::hours(1);
+    })
+    .await;
     assert!(!reloaded.load_cached_list().await, "stale cache");
 
     let no_fetch = openai_manager_for_tests(

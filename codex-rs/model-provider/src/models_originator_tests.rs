@@ -15,6 +15,15 @@ use wiremock::matchers::header;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
+/// Corbanu keeps the bundled catalog beside a provider's discovered models.
+fn with_bundled(catalog: &ModelsResponse) -> ModelsResponse {
+    let mut models = codex_models_manager::bundled_models_response()
+        .unwrap()
+        .models;
+    models.extend(catalog.models.iter().cloned());
+    ModelsResponse { models }
+}
+
 /// Runtime discovery updates reach existing and newly created scopes, including cached catalogs.
 #[tokio::test]
 async fn originator_managers_share_api_key_discovery_policy() {
@@ -26,7 +35,7 @@ async fn originator_managers_share_api_key_discovery_policy() {
         codex_model_provider_info::RESIDENCY_HEADER_NAME.to_string(),
         "us".into(),
     )]));
-    let mut model = model_info_from_slug("gpt-5.5");
+    let mut model = model_info_from_slug("originator-test-model");
     model.visibility = codex_protocol::openai_models::ModelVisibility::List;
 
     let catalog = ModelsResponse {
@@ -65,7 +74,7 @@ async fn originator_managers_share_api_key_discovery_policy() {
             child
                 .raw_model_catalog(RefreshStrategy::OnlineIfUncached, client.clone())
                 .await,
-            catalog
+            with_bundled(&catalog)
         );
     }
 
@@ -86,7 +95,7 @@ async fn originator_managers_share_api_key_discovery_policy() {
             child
                 .raw_model_catalog(RefreshStrategy::OnlineIfUncached, client.clone())
                 .await,
-            catalog
+            with_bundled(&catalog)
         );
     }
     server.verify().await;
@@ -116,7 +125,7 @@ async fn originator_catalogs_are_isolated_and_reused_from_disk() {
         "codex_work_mobile",
         "chatgpt_cca",
     ] {
-        let mut model = model_info_from_slug("gpt-5.5");
+        let mut model = model_info_from_slug("originator-test-model");
         model.visibility = codex_protocol::openai_models::ModelVisibility::List;
 
         model.description = Some(originator.to_string());
@@ -168,7 +177,10 @@ async fn originator_catalogs_are_isolated_and_reused_from_disk() {
             );
         }
         actual.push(chat_catalog);
-        assert_eq!(actual, catalogs);
+        assert_eq!(
+            actual,
+            catalogs.iter().map(with_bundled).collect::<Vec<_>>()
+        );
         for originator in [
             "",
             "unknown",
