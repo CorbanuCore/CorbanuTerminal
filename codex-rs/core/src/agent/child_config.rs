@@ -73,7 +73,7 @@ pub(crate) async fn prepare_agent_spawn_config(
     // Corbanu (as main's V2 handler): a session may still run a model that was later hidden or
     // disabled in the refreshed catalogue. A V2 child that inherits that already-authorized
     // runtime keeps the session contract; a runtime selected for the child still fails closed.
-    let child_runtime_was_selected = options.version == SpawnConfigVersion::V1
+    let mut child_runtime_was_selected = options.version == SpawnConfigVersion::V1
         || options.model_provider.is_some()
         || options.model.is_some()
         || options.reasoning_effort.is_some()
@@ -97,7 +97,20 @@ pub(crate) async fn prepare_agent_spawn_config(
     if !options.full_history_fork
         || (options.version == SpawnConfigVersion::V2 && options.role_name.is_some())
     {
+        let runtime_before_role = (
+            config.model_provider_id.clone(),
+            config.model.clone(),
+            config.model_reasoning_effort.clone(),
+        );
         apply_spawn_agent_role(session, &mut config, options.role_name).await?;
+        // A configured default role applied without `agent_type` selects the runtime too
+        // when it changes the provider, model or effort.
+        child_runtime_was_selected |= runtime_before_role
+            != (
+                config.model_provider_id.clone(),
+                config.model.clone(),
+                config.model_reasoning_effort.clone(),
+            );
         if options.version == SpawnConfigVersion::V2
             && options.full_history_fork
             && config.developer_instructions.is_none()
@@ -560,8 +573,9 @@ async fn apply_spawn_agent_role(
     config: &mut Config,
     role_name: Option<&str>,
 ) -> Result<(), String> {
-    // Corbanu: the role's model and effort are validated with the final runtime in
-    // `ensure_spawn_runtime_eligible`, against the child's own provider.
+    // Corbanu: a role that changes the model or effort is validated with the final runtime in
+    // `ensure_spawn_runtime_eligible`, against the child's own provider (V2 skips the check
+    // only when nothing selected the child's runtime).
     if session.multi_agent_version() == Some(MultiAgentVersion::V2) {
         apply_role_to_config_for_multi_agent_v2(config, role_name).await
     } else {

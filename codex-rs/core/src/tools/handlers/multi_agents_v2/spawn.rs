@@ -125,6 +125,7 @@ async fn handle_with_analytics(
             prompt: None,
             model: agent_snapshot.map(|snapshot| snapshot.model.clone()),
             reasoning_effort: agent_snapshot.and_then(|snapshot| snapshot.reasoning_effort.clone()),
+            // The account name stays in the tool result and turn items, not in analytics.
             provider_account: None,
             agents_states,
         },
