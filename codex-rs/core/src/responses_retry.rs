@@ -158,6 +158,12 @@ pub(crate) async fn handle_response_stream_error(
         )
         .await;
         if retry_state.retries >= max_retries {
+            sess.services
+                .thread_extension_data
+                .insert(ExhaustedResponseRetry {
+                    turn_id: turn_context.sub_id.clone(),
+                    retry_at: retry_after.map(RetryAfter::deadline),
+                });
             return Err(err);
         }
     }

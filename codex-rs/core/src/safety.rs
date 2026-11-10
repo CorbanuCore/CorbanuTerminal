@@ -93,6 +93,10 @@ impl PatchPolicyMatcher<'_> {
     /// #606: a write through a writable root the sandboxes leave out (#535)
     /// is not constrained to writable paths, so approvals must not count it
     /// as writable either (fail closed).
+    ///
+    /// The links are resolved against the cwd, as on `main`; a link reached
+    /// only through another workspace root is not detected here, but such a
+    /// patch still runs inside the sandbox, which leaves the link out.
     fn through_excluded_link(&self, path: &PathUri) -> bool {
         let Some(excluded) = &self.excluded_links else {
             return false;
