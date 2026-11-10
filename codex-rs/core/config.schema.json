@@ -2775,6 +2775,7 @@
         },
         "discover_timeout_sec": {
           "default": null,
+          "description": "Seconds a stdio server that opted in to MCP 2026-07-28 may take to answer `server/discover` before Corbanu falls back to legacy `initialize`. Must be greater than 0; omit it to wait up to `startup_timeout_sec`.",
           "format": "double",
           "type": "number"
         },

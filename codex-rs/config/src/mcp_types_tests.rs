@@ -246,6 +246,65 @@ fn deserialize_stdio_server_config_with_discover_timeout() {
     );
 }
 
+// #2020: `0` skipped `server/discover` entirely; it is rejected at load instead.
+#[test]
+fn deserialize_stdio_server_config_rejects_zero_discover_timeout() {
+    for zero in ["0", "0.0"] {
+        let err = toml::from_str::<McpServerConfig>(&format!(
+            r#"
+                command = "echo"
+                discover_timeout_sec = {zero}
+            "#
+        ))
+        .expect_err("should reject discover_timeout_sec = 0");
+
+        assert!(
+            err.to_string()
+                .contains("discover_timeout_sec must be greater than 0"),
+            "unexpected error for {zero}: {err}"
+        );
+    }
+}
+
+#[test]
+fn zero_discover_timeout_error_names_the_server() {
+    let err = toml::from_str::<HashMap<String, HashMap<String, McpServerConfig>>>(
+        r#"
+            [mcp_servers.docs]
+            command = "echo"
+            discover_timeout_sec = 0
+        "#,
+    )
+    .expect_err("should reject discover_timeout_sec = 0");
+
+    let message = err.to_string();
+    assert!(
+        message.contains("mcp_servers.docs")
+            && message.contains("discover_timeout_sec must be greater than 0"),
+        "unexpected error: {message}"
+    );
+}
+
+#[test]
+fn deserialize_stdio_server_config_accepts_one_or_unset_discover_timeout() {
+    let one: McpServerConfig = toml::from_str(
+        r#"
+            command = "echo"
+            discover_timeout_sec = 1
+        "#,
+    )
+    .expect("should deserialize discover_timeout_sec = 1");
+    let unset: McpServerConfig = toml::from_str(
+        r#"
+            command = "echo"
+        "#,
+    )
+    .expect("should deserialize without discover_timeout_sec");
+
+    assert_eq!(one.discover_timeout_sec, Some(Duration::from_secs(1)));
+    assert_eq!(unset.discover_timeout_sec, None);
+}
+
 #[test]
 fn deserialize_streamable_http_server_config_rejects_discover_timeout() {
     let err = toml::from_str::<McpServerConfig>(
