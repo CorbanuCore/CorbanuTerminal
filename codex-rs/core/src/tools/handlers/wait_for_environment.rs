@@ -168,15 +168,11 @@ impl ToolExecutor<ToolInvocation> for WaitForEnvironmentHandler {
     }
 }
 
-<<<<<<< HEAD
 impl CoreToolRuntime for WaitForEnvironmentHandler {
     fn repeated_identical_calls_are_polling(&self) -> bool {
         true
     }
-||||||| 413492cd6c
-impl CoreToolRuntime for WaitForEnvironmentHandler {}
-=======
-impl CoreToolRuntime for WaitForEnvironmentHandler {}
+}
 
 // Keep failure output small while preserving a UTF-8 boundary.
 fn environment_failure(environment_id: &str, error: &str) -> FunctionCallError {
@@ -185,5 +181,4 @@ fn environment_failure(environment_id: &str, error: &str) -> FunctionCallError {
     FunctionCallError::RespondToModel(format!(
         "Environment `{environment_id}` failed to start: {reason}"
     ))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

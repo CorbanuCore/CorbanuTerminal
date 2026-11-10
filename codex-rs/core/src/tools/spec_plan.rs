@@ -1,24 +1,13 @@
 use crate::agent::exceeds_thread_spawn_depth_limit;
 use crate::agent::next_thread_spawn_depth;
 use crate::environment_selection::TurnEnvironmentSnapshot;
-<<<<<<< HEAD
-use crate::mcp_tool_exposure::build_mcp_tool_runtimes;
-use crate::security::protected_surface::ToolOrigin;
-||||||| 413492cd6c
-use crate::mcp_tool_exposure::build_mcp_tool_runtimes;
-=======
 use crate::image_preparation::unified_image_budget_enabled;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use crate::security::protected_surface::ToolOrigin;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::tools::code_mode::execute_spec::create_code_mode_tool;
-<<<<<<< HEAD
 use crate::tools::collaboration_wire::uses_openai_reserved_collaboration_schema;
 use crate::tools::context::ToolInvocation;
-||||||| 413492cd6c
-use crate::tools::context::ToolInvocation;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::tools::effective_tool_mode;
 use crate::tools::flat_tool_names::FlatToolNames;
 use crate::tools::flat_tool_names::flatten_namespaced_tools;
@@ -59,11 +48,7 @@ use crate::tools::handlers::multi_agents_common::DEFAULT_WAIT_TIMEOUT_MS;
 use crate::tools::handlers::multi_agents_common::MAX_WAIT_TIMEOUT_MS;
 use crate::tools::handlers::multi_agents_common::MIN_WAIT_TIMEOUT_MS;
 use crate::tools::handlers::multi_agents_spec::MULTI_AGENT_V1_NAMESPACE;
-<<<<<<< HEAD
 use crate::tools::handlers::multi_agents_spec::SpawnAgentRuntime;
-||||||| 413492cd6c
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::tools::handlers::multi_agents_spec::SpawnAgentToolOptions;
 use crate::tools::handlers::multi_agents_spec::WaitAgentTimeoutOptions;
 use crate::tools::handlers::multi_agents_spec::apply_openai_reserved_collaboration_schema;
@@ -82,6 +67,7 @@ use crate::tools::handlers::view_image_spec::ViewImageToolOptions;
 use crate::tools::hosted_spec::WebSearchToolOptions;
 use crate::tools::hosted_spec::create_web_search_tool;
 use crate::tools::multi_agent_tool::multi_agent_v2_handler;
+use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::NativeReview;
 use crate::tools::registry::RegisteredTool;
 use crate::tools::registry::ToolExposure;
@@ -93,14 +79,10 @@ use codex_extension_api::ExtensionData;
 use codex_features::Feature;
 use codex_features::SleepToolMode;
 use codex_login::AuthManager;
-<<<<<<< HEAD
-use codex_model_provider_info::OPENAI_PROVIDER_ID;
-||||||| 413492cd6c
-=======
 use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
+use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_prompts::ResolvedModelMessages;
 use codex_protocol::DEFAULT_FUNCTION_NAMESPACE;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::account::PlanType;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::WebSearchMode;
@@ -111,16 +93,13 @@ use codex_protocol::error::Result as CodexResult;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::InputModality;
-<<<<<<< HEAD
-use codex_protocol::openai_models::ModelPreset;
-||||||| 413492cd6c
-=======
 use codex_protocol::openai_models::ModelInfo;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ToolMode;
 use codex_protocol::permissions::FileSystemSandboxKind;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_tools::IndirectNamespacePrefixes;
+use codex_tools::ResponsesApiNamespace;
 use codex_tools::ResponsesApiNamespaceTool;
 use codex_tools::ResponsesApiTool;
 use codex_tools::TOOL_SEARCH_TOOL_NAME;
@@ -129,23 +108,14 @@ use codex_tools::ToolEnvironmentMode;
 use codex_tools::ToolExecutor;
 use codex_tools::ToolExposures;
 use codex_tools::ToolName;
+use codex_tools::ToolSearchInfo;
 use codex_tools::ToolSpec;
 use codex_tools::can_request_original_image_detail;
 use codex_tools::collect_code_mode_exec_prompt_tool_definitions;
 use codex_tools::collect_request_plugin_install_entries;
 use codex_tools::default_namespace_description;
 use codex_tools::request_user_input_available_modes;
-<<<<<<< HEAD
-use codex_tools::shell_command_backend_for_features;
-use codex_tools::shell_type_for_model_and_features;
 use codex_utils_string::take_bytes_at_char_boundary;
-use futures::future::BoxFuture;
-||||||| 413492cd6c
-use codex_tools::shell_command_backend_for_features;
-use codex_tools::shell_type_for_model_and_features;
-use futures::future::BoxFuture;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -154,7 +124,6 @@ use std::sync::Arc;
 use tracing::instrument;
 use tracing::warn;
 
-<<<<<<< HEAD
 /// Most function tools one request may carry on wires without namespaces: the
 /// smallest documented limit among them (OpenAI Chat Completions rejects more
 /// than 128 tools).
@@ -163,11 +132,6 @@ pub(crate) const MAX_TOOLS_WITHOUT_NAMESPACES: usize = 128;
 const MAX_FLAT_NAMESPACE_DESCRIPTION_BYTES: usize = 300;
 /// `ext/memories` tool namespace.
 const MEMORY_TOOLS_NAMESPACE: &str = "memories";
-const MULTI_AGENT_V2_NAMESPACE_DESCRIPTION: &str = "Tools for spawning and managing sub-agents.";
-||||||| 413492cd6c
-const MULTI_AGENT_V2_NAMESPACE_DESCRIPTION: &str = "Tools for spawning and managing sub-agents.";
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 const IMAGE_GEN_NAMESPACE: &str = "image_gen";
 const IMAGEGEN_TOOL_NAME: &str = "imagegen";
 
@@ -520,22 +484,6 @@ pub(crate) fn finalize_tool_router(
         search_exposure,
     )?;
 
-<<<<<<< HEAD
-    let ModelVisibleSpecs {
-        specs,
-        flat_tool_names,
-        omitted_tools,
-    } = build_model_visible_specs(turn_context, &registry, &code_mode_tool_names, hosted_specs);
-    ToolRouter::from_parts(registry, specs)
-        .with_flat_tool_names(flat_tool_names.with_multi_agent_v2_namespace(
-            turn_context.config.multi_agent_v2.tool_namespace.clone(),
-        ))
-        .with_omitted_tools(omitted_tools)
-||||||| 413492cd6c
-    let model_visible_specs =
-        build_model_visible_specs(turn_context, &registry, &code_mode_tool_names, hosted_specs);
-    ToolRouter::from_parts(registry, model_visible_specs)
-=======
     if let Some(exposure) = search_exposure {
         append_tool_search_executor(
             turn_context,
@@ -614,7 +562,11 @@ pub(crate) fn finalize_tool_router(
         }
     }
 
-    let model_visible_specs = build_model_visible_specs(
+    let ModelVisibleSpecs {
+        specs: model_visible_specs,
+        flat_tool_names,
+        omitted_tools,
+    } = build_model_visible_specs(
         turn_context,
         model_info,
         &registry,
@@ -635,8 +587,13 @@ pub(crate) fn finalize_tool_router(
         code_mode_tool_names,
         tool_namespaces_info,
         &child_management_tools,
-    ))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    )
+    .with_flat_tool_names(
+        flat_tool_names.with_multi_agent_v2_namespace(
+            turn_context.config.multi_agent_v2.tool_namespace.clone(),
+        ),
+    )
+    .with_omitted_tools(omitted_tools))
 }
 
 fn apply_direct_model_only_namespace_overrides(
@@ -729,91 +686,64 @@ fn build_model_visible_specs(
 ) -> ModelVisibleSpecs {
     let namespace_tools = namespace_tools_enabled(turn_context);
     let mut specs = Vec::new();
-<<<<<<< HEAD
     // Without namespace support, namespaced tools are offered under flat names
     // instead of being dropped with their namespace: MCP tools (#515, #227)
     // and every other grouped tool (#547). Built-in tools go first so MCP tools
     // cannot push them past the tool-count limit.
     let mut flattened_builtin_tools = Vec::new();
     let mut flattened_mcp_tools = Vec::new();
-    for runtime in registry.runtimes() {
-        let tool_name = runtime.tool_name();
-        let exposure = runtime.exposure();
-        if exposure.is_direct() && !is_hidden_by_code_mode_only(turn_context, &tool_name, exposure)
-        {
-            let spec = spec_for_model_request(
-                turn_context,
-                exposure,
-                &tool_name,
-                code_mode_tool_names,
-                runtime.spec(),
-            );
-            match spec {
-                ToolSpec::Namespace(namespace) if !namespace_tools => {
-                    // V1 sub-agent tools have plain aliases here (`spawn_agent_v1`, ...).
-                    if namespace.name == MULTI_AGENT_V1_NAMESPACE {
-                        continue;
-                    }
-                    // Memory reads would send stored memories to providers that
-                    // never saw them; that disclosure is a product decision, so
-                    // they stay off these wires for now (#547).
-                    if namespace.name == MEMORY_TOOLS_NAMESPACE {
-                        continue;
-                    }
-                    let Some(tool) = flat_namespace_function(namespace, &tool_name) else {
-                        warn!(
-                            tool = %tool_name,
-                            "namespaced tool has no single function; not offered without namespace tools"
-                        );
-                        continue;
-                    };
-                    // Key it by its registry name so the flat name routes back
-                    // to exactly this runtime.
-                    if runtime.tool_origin() == ToolOrigin::Mcp {
-                        flattened_mcp_tools.push((tool_name, tool));
-                    } else {
-                        flattened_builtin_tools.push((tool_name, tool));
-                    }
-                }
-                spec => specs.push(spec),
-            }
-||||||| 413492cd6c
-    for runtime in registry.runtimes() {
-        let tool_name = runtime.tool_name();
-        let exposure = runtime.exposure();
-        if exposure.is_direct() && !is_hidden_by_code_mode_only(turn_context, &tool_name, exposure)
-        {
-            let spec = runtime.spec();
-            specs.push(spec_for_model_request(
-                turn_context,
-                exposure,
-                &tool_name,
-                code_mode_tool_names,
-                spec,
-            ));
-=======
     for tool in registry.entries() {
         let exposure = tool.exposure;
         if !is_directly_visible(turn_context, model_info, tool) {
             continue;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
 
         let tool_name = tool.runtime.tool_name();
-        let spec = Arc::unwrap_or_clone(tool.spec());
-        specs.push(spec_for_model_request(
+        let spec = spec_for_model_request(
             turn_context,
             model_info,
             exposure,
             &tool_name,
             code_mode_tool_names,
-            spec,
-        ));
+            Arc::unwrap_or_clone(tool.spec()),
+        );
+        match spec {
+            ToolSpec::Namespace(namespace) if !namespace_tools => {
+                // V1 sub-agent tools have plain aliases here (`spawn_agent_v1`, ...).
+                if namespace.name == MULTI_AGENT_V1_NAMESPACE {
+                    continue;
+                }
+                // Memory reads would send stored memories to providers that
+                // never saw them; that disclosure is a product decision, so
+                // they stay off these wires for now (#547).
+                if namespace.name == MEMORY_TOOLS_NAMESPACE {
+                    continue;
+                }
+                let Some(function) = flat_namespace_function(namespace, &tool_name) else {
+                    warn!(
+                        tool = %tool_name,
+                        "namespaced tool has no single function; not offered without namespace tools"
+                    );
+                    continue;
+                };
+                // Key it by its registry name so the flat name routes back
+                // to exactly this runtime.
+                if tool.runtime.tool_origin() == ToolOrigin::Mcp {
+                    flattened_mcp_tools.push((tool_name, function));
+                } else {
+                    flattened_builtin_tools.push((tool_name, function));
+                }
+            }
+            spec => specs.push(spec),
+        }
     }
     specs.extend(hosted_specs);
 
-<<<<<<< HEAD
-    let mut specs: Vec<ToolSpec> = merge_into_namespaces(specs)
+    let mcp_namespaces = registry
+        .mcp_namespaces()
+        .map(|(_, namespace)| namespace)
+        .collect();
+    let mut specs: Vec<ToolSpec> = merge_into_namespaces(specs, &mcp_namespaces)
         .into_iter()
         .filter(|spec| namespace_tools || !matches!(spec, ToolSpec::Namespace(_)))
         .collect();
@@ -848,9 +778,9 @@ fn build_model_visible_specs(
         .map(|spec| spec.name().to_string())
         .chain(
             registry
-                .runtimes()
-                .map(|runtime| runtime.tool_name())
-                .filter(|tool_name| tool_name.namespace.is_none())
+                .entries()
+                .map(|tool| tool.runtime.tool_name())
+                .filter(ToolName::is_default_namespace)
                 .map(|tool_name| tool_name.name),
         )
         .collect();
@@ -879,8 +809,10 @@ fn flat_namespace_function(
     let mut tools = namespace
         .tools
         .into_iter()
-        .map(|tool| match tool {
-            ResponsesApiNamespaceTool::Function(tool) => tool,
+        .filter_map(|tool| match tool {
+            ResponsesApiNamespaceTool::Function(tool) => Some(tool),
+            // Freeform tools have no function form on these wires.
+            ResponsesApiNamespaceTool::Custom(_) => None,
         })
         .collect::<Vec<_>>();
     // A runtime is one tool; with several, take the one it is named for.
@@ -898,20 +830,6 @@ fn flat_namespace_function(
         };
     }
     Some(tool)
-||||||| 413492cd6c
-    merge_into_namespaces(specs)
-        .into_iter()
-        .filter(|spec| {
-            namespace_tools_enabled(turn_context) || !matches!(spec, ToolSpec::Namespace(_))
-        })
-        .collect()
-=======
-    let mcp_namespaces = registry
-        .mcp_namespaces()
-        .map(|(_, namespace)| namespace)
-        .collect();
-    merge_into_namespaces(specs, &mcp_namespaces)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn spec_for_model_request(
@@ -922,16 +840,8 @@ fn spec_for_model_request(
     code_mode_tool_names: &BTreeMap<String, ToolName>,
     spec: ToolSpec,
 ) -> ToolSpec {
-<<<<<<< HEAD
-    let tool_mode = effective_tool_mode(turn_context);
-    let spec = if matches!(tool_mode, ToolMode::CodeMode | ToolMode::CodeModeOnly)
-||||||| 413492cd6c
-    let tool_mode = effective_tool_mode(turn_context);
-    if matches!(tool_mode, ToolMode::CodeMode | ToolMode::CodeModeOnly)
-=======
     let tool_mode = effective_tool_mode(turn_context, model_info);
-    if matches!(tool_mode, ToolMode::CodeMode | ToolMode::CodeModeOnly)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let spec = if matches!(tool_mode, ToolMode::CodeMode | ToolMode::CodeModeOnly)
         && exposure.is_available_in_code_mode()
         && !is_excluded_from_code_mode(turn_context, tool_name)
         && codex_code_mode::is_code_mode_nested_tool(spec.name())
@@ -1004,6 +914,12 @@ pub(crate) fn tool_suggest_enabled(turn_context: &TurnContext) -> bool {
     features.enabled(Feature::ToolSuggest)
         && features.enabled(Feature::Apps)
         && features.enabled(Feature::Plugins)
+}
+
+/// Whether this provider's wire carries namespace tools; without them Corbanu
+/// offers namespaced tools under flat names (#515, #547, #688).
+fn namespace_tools_enabled(turn_context: &TurnContext) -> bool {
+    turn_context.provider.capabilities().namespace_tools
 }
 
 fn multi_agent_v2_enabled(turn_context: &TurnContext) -> bool {
@@ -1672,22 +1588,6 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
         registry.add(CurrentTimeHandler);
     }
     if features.enabled(Feature::SleepTool)
-<<<<<<< HEAD
-        || turn_context
-            .config
-            .current_time_reminder
-            .as_ref()
-            .is_some_and(|config| config.sleep_tool)
-||||||| 413492cd6c
-        if turn_context
-            .config
-            .current_time_reminder
-            .as_ref()
-            .is_some_and(|config| config.sleep_tool)
-        {
-            registry.add(SleepHandler);
-        }
-=======
         && match turn_context.config.sleep_tool_mode {
             SleepToolMode::AlwaysOn => true,
             SleepToolMode::ModelDriven => {
@@ -1702,7 +1602,13 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
                 }
             }
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        // Corbanu: a configured `current_time_reminder.sleep_tool` offers it without the
+        // reminder too, as before rust-v0.167.0.
+        || turn_context
+            .config
+            .current_time_reminder
+            .as_ref()
+            .is_some_and(|config| config.sleep_tool)
     {
         registry.add(SleepHandler);
     }
@@ -1723,20 +1629,13 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
         ));
     }
 
-<<<<<<< HEAD
     if environment_mode.has_environment() && edit_tools_allowed_by_permission_profile(turn_context)
     {
-||||||| 413492cd6c
-    if environment_mode.has_environment() && turn_context.model_info.apply_patch_tool_type.is_some()
-    {
-=======
-    if context.model_info.apply_patch_tool_type.is_some() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
         if native_structured_edit_protocol_enabled(turn_context) {
             registry.add(StructuredEditHandler::new(include_environment_id));
             registry.add(StructuredWriteHandler::new(include_environment_id));
-        } else if turn_context.model_info.apply_patch_tool_type.is_some() {
+        } else if context.model_info.apply_patch_tool_type.is_some() {
             registry.add(ApplyPatchHandler::new(include_environment_id));
             registry.add(StructuredEditHandler::new(include_environment_id));
             registry.add(StructuredWriteHandler::new(include_environment_id));
@@ -1768,16 +1667,17 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
 }
 
 fn edit_tools_allowed_by_permission_profile(turn_context: &TurnContext) -> bool {
-    let file_system_policy = turn_context.permission_profile.file_system_sandbox_policy();
+    let permission_profile = turn_context.permission_profile();
+    let file_system_policy = permission_profile.file_system_sandbox_policy();
     match file_system_policy.kind {
         FileSystemSandboxKind::Unrestricted | FileSystemSandboxKind::ExternalSandbox => true,
         FileSystemSandboxKind::Restricted => {
             #[allow(deprecated)]
             let cwd = turn_context.cwd.as_path();
-            file_system_policy.can_write_path_with_cwd(cwd, cwd)
-                || !file_system_policy
-                    .get_writable_roots_with_cwd(cwd)
-                    .is_empty()
+            // A writable cwd is one of the writable roots.
+            !file_system_policy
+                .get_writable_roots_with_cwd(cwd)
+                .is_empty()
         }
     }
 }
@@ -1809,13 +1709,12 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 agent_type_description(turn_context, context.default_agent_type_description);
             let hide_spawn_agent_metadata =
                 turn_context.config.multi_agent_v2.hide_spawn_agent_metadata;
-<<<<<<< HEAD
             let spawn_options = SpawnAgentToolOptions {
                 available_models: spawn_agent_available_models(
                     turn_context,
                     /*supports_cross_provider_overrides*/ true,
                 ),
-                inherited_runtime: spawn_agent_inherited_runtime(turn_context),
+                inherited_runtime: spawn_agent_inherited_runtime(turn_context, context.model_info),
                 agent_type_description,
                 // PF Terminal ships hierarchy roles (Nazgul, Troll, and Orc). They are
                 // real runtime profiles, not optional user configuration, so the native
@@ -1826,56 +1725,19 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                     .config
                     .multi_agent_v2
                     .expose_spawn_agent_model_overrides,
+                model_catalog_in_context: turn_context
+                    .config
+                    .features
+                    .enabled(Feature::ModelCatalogInContext),
                 usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
                 expose_account: turn_context.config.features.enabled(Feature::NamedAccounts),
             };
-            registry.register_trusted(override_tool_exposure(
-||||||| 413492cd6c
-            registry.register_trusted(override_tool_exposure(
-=======
             registry.register_trusted_with_native_review(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 multi_agent_v2_handler(
-<<<<<<< HEAD
-                    SpawnAgentHandlerV2::new(spawn_options.clone()),
-||||||| 413492cd6c
-                    SpawnAgentHandlerV2::new(SpawnAgentToolOptions {
-                        available_models: turn_context.available_models.clone(),
-                        agent_type_description,
-                        expose_agent_type: !turn_context.config.agent_roles.is_empty(),
-                        hide_agent_type_model_reasoning: hide_spawn_agent_metadata,
-                        expose_spawn_agent_model_overrides: turn_context
-                            .config
-                            .multi_agent_v2
-                            .expose_spawn_agent_model_overrides,
-                        multi_agent_version: turn_context.multi_agent_version,
-                        usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
-                    }),
-=======
                     SpawnAgentHandlerV2::new(
-                        SpawnAgentToolOptions {
-                            available_models: turn_context.available_models.clone(),
-                            multi_agent_version: turn_context.multi_agent_version,
-                            model_catalog_in_context: turn_context
-                                .config
-                                .features
-                                .enabled(Feature::ModelCatalogInContext),
-                            agent_type_description,
-                            expose_agent_type: !turn_context.config.agent_roles.is_empty(),
-                            hide_agent_type_model_reasoning: hide_spawn_agent_metadata,
-                            expose_spawn_agent_model_overrides: turn_context
-                                .config
-                                .multi_agent_v2
-                                .expose_spawn_agent_model_overrides,
-                            usage_hint_text: turn_context
-                                .config
-                                .multi_agent_v2
-                                .usage_hint_text
-                                .clone(),
-                        },
+                        spawn_options.clone(),
                         spawn_agent_description.map(str::to_owned),
                     ),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     tool_namespace,
                     // Spawn composes the selected description with inheritance and usage guidance.
                     /*description_override*/
@@ -1936,31 +1798,28 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                     model_messages.multi_agent_tool_parameters_override("list_agents"),
                 ),
                 exposure,
-<<<<<<< HEAD
-            ));
+            );
             if uses_openai_reserved_collaboration_schema(turn_context) {
                 // OpenAI's reserved collaboration schema encrypts assignment fields. That is
                 // correct for OpenAI recipients but opaque to external providers. These aliases
                 // retry the same Core operation with an ordinary plaintext function argument;
                 // the native handlers fail closed before admission when an adapter is required.
-                registry.register_trusted(override_tool_exposure(
+                registry.register_trusted_with_native_review(
                     Arc::new(PlaintextSpawnAgentHandler::new(spawn_options)),
                     exposure,
-                ));
-                registry.register_trusted(override_tool_exposure(
+                    native_review,
+                );
+                registry.register_trusted_with_native_review(
                     Arc::new(PlaintextSendMessageHandler),
                     exposure,
-                ));
-                registry.register_trusted(override_tool_exposure(
+                    native_review,
+                );
+                registry.register_trusted_with_native_review(
                     Arc::new(PlaintextFollowupTaskHandler),
                     exposure,
-                ));
+                    native_review,
+                );
             }
-||||||| 413492cd6c
-            ));
-=======
-            );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         } else {
             let agent_type_description =
                 agent_type_description(turn_context, context.default_agent_type_description);
@@ -1969,54 +1828,26 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
             } else {
                 ToolExposure::Direct
             };
-<<<<<<< HEAD
             let spawn_options = SpawnAgentToolOptions {
                 available_models: spawn_agent_available_models(
                     turn_context,
                     /*supports_cross_provider_overrides*/ false,
                 ),
-                inherited_runtime: spawn_agent_inherited_runtime(turn_context),
+                inherited_runtime: spawn_agent_inherited_runtime(turn_context, context.model_info),
                 agent_type_description,
                 // Built-in PF hierarchy roles remain selectable even when the operator has not
                 // created any custom role files.
                 expose_agent_type: true,
                 hide_agent_type_model_reasoning: false,
                 expose_spawn_agent_model_overrides: true,
+                model_catalog_in_context: turn_context
+                    .config
+                    .features
+                    .enabled(Feature::ModelCatalogInContext),
                 usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
                 expose_account: turn_context.config.features.enabled(Feature::NamedAccounts),
             };
             registry.add_with_exposure(SpawnAgentHandler::new(spawn_options.clone()), exposure);
-||||||| 413492cd6c
-            registry.add_with_exposure(
-                SpawnAgentHandler::new(SpawnAgentToolOptions {
-                    available_models: turn_context.available_models.clone(),
-                    agent_type_description,
-                    expose_agent_type: !turn_context.config.agent_roles.is_empty(),
-                    hide_agent_type_model_reasoning: false,
-                    expose_spawn_agent_model_overrides: true,
-                    multi_agent_version: turn_context.multi_agent_version,
-                    usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
-                }),
-                exposure,
-            );
-=======
-            registry.add_with_exposure(
-                SpawnAgentHandler::new(SpawnAgentToolOptions {
-                    available_models: turn_context.available_models.clone(),
-                    multi_agent_version: turn_context.multi_agent_version,
-                    model_catalog_in_context: turn_context
-                        .config
-                        .features
-                        .enabled(Feature::ModelCatalogInContext),
-                    agent_type_description,
-                    expose_agent_type: !turn_context.config.agent_roles.is_empty(),
-                    hide_agent_type_model_reasoning: false,
-                    expose_spawn_agent_model_overrides: true,
-                    usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
-                }),
-                exposure,
-            );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             registry.add_with_exposure(SendInputHandler, exposure);
             registry.add_with_exposure(ResumeAgentHandler, exposure);
             registry
@@ -2131,20 +1962,6 @@ fn append_extension_tool_executors(
     standalone_web_search_tool
 }
 
-<<<<<<< HEAD
-fn multi_agent_v2_handler(
-    handler: impl CoreToolRuntime + 'static,
-    namespace: Option<&str>,
-) -> Arc<dyn CoreToolRuntime> {
-    match namespace {
-        Some(namespace) => Arc::new(MultiAgentV2NamespaceOverride {
-            handler: Arc::new(handler),
-            namespace: namespace.to_string(),
-        }),
-        None => Arc::new(handler),
-    }
-}
-
 /// V1 sub-agent tools are namespaced; every provider without namespace tools
 /// (Chat Completions and Anthropic Messages wires) gets plain aliases (#547).
 fn v1_plain_function_subagents_enabled(turn_context: &TurnContext) -> bool {
@@ -2199,7 +2016,10 @@ fn spawn_agent_available_models(
     models
 }
 
-fn spawn_agent_inherited_runtime(turn_context: &TurnContext) -> Option<SpawnAgentRuntime> {
+fn spawn_agent_inherited_runtime(
+    turn_context: &TurnContext,
+    model_info: &ModelInfo,
+) -> Option<SpawnAgentRuntime> {
     let model_provider = turn_context.config.model_provider_id.clone();
     turn_context
         .config
@@ -2208,11 +2028,11 @@ fn spawn_agent_inherited_runtime(turn_context: &TurnContext) -> Option<SpawnAgen
         .is_none_or(|allowlist| allowlist.contains(&model_provider))
         .then(|| SpawnAgentRuntime {
             model_provider,
-            model: turn_context.model_info.slug.clone(),
+            model: model_info.slug.clone(),
             reasoning_effort: turn_context
-                .reasoning_effort
-                .clone()
-                .or_else(|| turn_context.model_info.default_reasoning_level.clone()),
+                .reasoning_effort()
+                .cloned()
+                .or_else(|| model_info.default_reasoning_level.clone()),
             service_tier: turn_context.config.service_tier.clone(),
         })
 }
@@ -2274,7 +2094,10 @@ impl ToolExecutor<ToolInvocation> for MultiAgentV1PlainFunctionOverride {
         ToolSearchInfo::from_tool_spec(self.spec(), /*source_info*/ None)
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle<'a>(&'a self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'a>
+    where
+        ToolInvocation: 'a,
+    {
         self.handler.handle(invocation)
     }
 }
@@ -2314,135 +2137,6 @@ fn single_namespace_function(
     }
     tool
 }
-
-struct MultiAgentV2NamespaceOverride {
-    handler: Arc<dyn CoreToolRuntime>,
-    namespace: String,
-}
-
-impl ToolExecutor<ToolInvocation> for MultiAgentV2NamespaceOverride {
-    fn tool_name(&self) -> ToolName {
-        ToolName::namespaced(self.namespace.clone(), self.handler.tool_name().name)
-    }
-
-    fn spec(&self) -> ToolSpec {
-        match self.handler.spec() {
-            ToolSpec::Function(tool) => ToolSpec::Namespace(ResponsesApiNamespace {
-                name: self.namespace.clone(),
-                description: MULTI_AGENT_V2_NAMESPACE_DESCRIPTION.to_string(),
-                tools: vec![ResponsesApiNamespaceTool::Function(tool)],
-            }),
-            spec => spec,
-        }
-    }
-
-    fn exposure(&self) -> ToolExposure {
-        self.handler.exposure()
-    }
-
-    fn supports_parallel_tool_calls(&self) -> bool {
-        self.handler.supports_parallel_tool_calls()
-    }
-
-    fn search_info(&self) -> Option<ToolSearchInfo> {
-        self.handler.search_info()
-    }
-
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
-        self.handler.handle(invocation)
-    }
-}
-
-impl CoreToolRuntime for MultiAgentV2NamespaceOverride {
-    fn repeated_identical_calls_are_polling(&self) -> bool {
-        self.handler.repeated_identical_calls_are_polling()
-    }
-
-    fn wait_until_ready<'a>(&'a self, session: &'a Arc<Session>) -> Option<BoxFuture<'a, ()>> {
-        self.handler.wait_until_ready(session)
-    }
-
-    fn matches_kind(&self, payload: &crate::tools::context::ToolPayload) -> bool {
-        self.handler.matches_kind(payload)
-    }
-
-    fn create_diff_consumer(
-        &self,
-    ) -> Option<Box<dyn crate::tools::registry::ToolArgumentDiffConsumer>> {
-        self.handler.create_diff_consumer()
-    }
-}
-
-||||||| 413492cd6c
-fn multi_agent_v2_handler(
-    handler: impl CoreToolRuntime + 'static,
-    namespace: Option<&str>,
-) -> Arc<dyn CoreToolRuntime> {
-    match namespace {
-        Some(namespace) => Arc::new(MultiAgentV2NamespaceOverride {
-            handler: Arc::new(handler),
-            namespace: namespace.to_string(),
-        }),
-        None => Arc::new(handler),
-    }
-}
-
-struct MultiAgentV2NamespaceOverride {
-    handler: Arc<dyn CoreToolRuntime>,
-    namespace: String,
-}
-
-impl ToolExecutor<ToolInvocation> for MultiAgentV2NamespaceOverride {
-    fn tool_name(&self) -> ToolName {
-        ToolName::namespaced(self.namespace.clone(), self.handler.tool_name().name)
-    }
-
-    fn spec(&self) -> ToolSpec {
-        match self.handler.spec() {
-            ToolSpec::Function(tool) => ToolSpec::Namespace(ResponsesApiNamespace {
-                name: self.namespace.clone(),
-                description: MULTI_AGENT_V2_NAMESPACE_DESCRIPTION.to_string(),
-                tools: vec![ResponsesApiNamespaceTool::Function(tool)],
-            }),
-            spec => spec,
-        }
-    }
-
-    fn exposure(&self) -> ToolExposure {
-        self.handler.exposure()
-    }
-
-    fn supports_parallel_tool_calls(&self) -> bool {
-        self.handler.supports_parallel_tool_calls()
-    }
-
-    fn search_info(&self) -> Option<ToolSearchInfo> {
-        self.handler.search_info()
-    }
-
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
-        self.handler.handle(invocation)
-    }
-}
-
-impl CoreToolRuntime for MultiAgentV2NamespaceOverride {
-    fn wait_until_ready<'a>(&'a self, session: &'a Arc<Session>) -> Option<BoxFuture<'a, ()>> {
-        self.handler.wait_until_ready(session)
-    }
-
-    fn matches_kind(&self, payload: &crate::tools::context::ToolPayload) -> bool {
-        self.handler.matches_kind(payload)
-    }
-
-    fn create_diff_consumer(
-        &self,
-    ) -> Option<Box<dyn crate::tools::registry::ToolArgumentDiffConsumer>> {
-        self.handler.create_diff_consumer()
-    }
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 fn compare_code_mode_tools(
     left: &codex_code_mode::ToolDefinition,
     right: &codex_code_mode::ToolDefinition,

@@ -334,18 +334,10 @@ fn truncate_code_mode_result(
     formatted_truncate_function_output_items_with_policy(items, policy, estimate_audio_token_count)
 }
 
-<<<<<<< HEAD
-async fn call_nested_tool(
-    exec: ExecContext,
-||||||| 413492cd6c
-async fn call_nested_tool(
-    _exec: ExecContext,
-=======
 // Submit synchronously so the recorder sees the call before the cell's dispatch gate closes.
 fn submit_nested_tool(
     session: Arc<Session>,
     step_context: Arc<StepContext>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     tool_runtime: ToolCallRuntime,
     invocation: CodeModeNestedToolCall,
     call_id: String,
@@ -407,37 +399,6 @@ fn submit_nested_tool(
         encrypted_function_args: None,
         native_call: None,
     };
-<<<<<<< HEAD
-    let result = tool_runtime
-        .handle_tool_call_with_source(
-            call,
-            ToolCallSource::CodeMode {
-                cell_id: cell_id.to_string(),
-                runtime_tool_call_id,
-            },
-            cancellation_token,
-        )
-        .await;
-    // PF-23-S01: the cell reads this result (or its error) before it is
-    // recorded, so a later call in the same cell is already post-taint.
-    exec.session
-        .services
-        .model_client()
-        .note_unrecorded_input_for_taint();
-    Ok(result?.code_mode_result())
-||||||| 413492cd6c
-    let result = tool_runtime
-        .handle_tool_call_with_source(
-            call,
-            ToolCallSource::CodeMode {
-                cell_id: cell_id.to_string(),
-                runtime_tool_call_id,
-            },
-            cancellation_token,
-        )
-        .await?;
-    Ok(result.code_mode_result())
-=======
     session
         .services
         .analytics_events_client
@@ -457,8 +418,16 @@ fn submit_nested_tool(
         cancellation_token,
         Arc::default(),
     );
-    Ok(async move { Ok(result.await?.code_mode_result()) })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    Ok(async move {
+        let result = result.await;
+        // PF-23-S01: the cell reads this result (or its error) before it is
+        // recorded, so a later call in the same cell is already post-taint.
+        session
+            .services
+            .model_client()
+            .note_unrecorded_input_for_taint();
+        Ok(result?.code_mode_result())
+    })
 }
 
 fn build_nested_tool_payload(
