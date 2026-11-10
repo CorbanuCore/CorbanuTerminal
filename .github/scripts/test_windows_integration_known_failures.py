@@ -29,13 +29,23 @@ class KnownFailureListTest(unittest.TestCase):
             with self.subTest(test=entry.test):
                 self.assertIn(entry.package, PACKAGE_DIRS)
                 *modules, function = entry.test.split("::")
-                source = (
-                    REPO_ROOT / "codex-rs" / PACKAGE_DIRS[entry.package] / "tests"
-                ).joinpath(*modules[:-1], modules[-1] + ".rs")
-                self.assertTrue(source.is_file(), source)
-                self.assertRegex(
-                    source.read_text(encoding="utf-8"),
-                    rf"(?m)^\s*(pub )?(async )?fn {re.escape(function)}\(",
+                tests_dir = REPO_ROOT / "codex-rs" / PACKAGE_DIRS[entry.package] / "tests"
+                if modules:
+                    sources = [tests_dir.joinpath(*modules[:-1], modules[-1] + ".rs")]
+                    self.assertTrue(sources[0].is_file(), sources[0])
+                else:
+                    # A test at the top of its own binary (tests/<binary>.rs,
+                    # e.g. upstream #51678's windows_sandbox) has no module path.
+                    sources = sorted(tests_dir.glob("*.rs"))
+                function_line = re.compile(
+                    rf"(?m)^\s*(pub )?(async )?fn {re.escape(function)}\("
+                )
+                self.assertTrue(
+                    any(
+                        function_line.search(source.read_text(encoding="utf-8"))
+                        for source in sources
+                    ),
+                    f"no fn {function} in {[str(source) for source in sources]}",
                 )
 
     def test_malformed_lines_are_rejected(self) -> None:
