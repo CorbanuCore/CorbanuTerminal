@@ -95,6 +95,21 @@ class BEPTest(unittest.TestCase):
             self.assertEqual(report["attempts"], [])
             read.assert_not_called()
 
+    def test_announced_missing_events_and_aborted_attempts_are_incomplete(self):
+        missing = {"testResult": {"label": "//codex-rs/core:unit-tests", "attempt": 2}}
+        events = self.events()
+        events[2]["children"] = [missing]
+        self.assertIn("missing_announced_events", self.collect(events)["issues"])
+        events.insert(-1, {"id": missing, "aborted": {"reason": "INTERRUPTED"}})
+        report = self.collect(events)
+        self.assertNotIn("missing_announced_events", report["issues"])
+        self.assertIn("unavailable_test_result", report["issues"])
+        self.assertEqual(report["captureStatus"], "incomplete")
+        self.assertEqual(len(report["attempts"]), 1)
+        # Child identity key order does not affect closure.
+        events[2]["children"] = [{"testResult": {"attempt": 2, "label": "//codex-rs/core:unit-tests"}}]
+        self.assertNotIn("missing_announced_events", self.collect(events)["issues"])
+
     def test_duplicate_binding_and_truncated_stream(self):
         for index in (0, 1):
             events = self.events()

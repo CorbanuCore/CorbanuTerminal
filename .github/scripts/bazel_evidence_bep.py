@@ -118,10 +118,34 @@ def collect(bep_path, testlogs_root, invocation_id, checkout_sha, workflow_outco
     finishes = [event["finished"] for event in events if "finished" in event]
     if not events or events[-1].get("lastMessage") is not True or len(finishes) != 1 or not isinstance(finishes[0], dict):
         issues.append("incomplete_bep")
+    # A terminal marker alone does not close the announced event graph.
+    # Canonical JSON keys are kept only in memory, never exposed in the report.
+    observed, announced = set(), set()
+    for event in events:
+        event_id = event.get("id")
+        if isinstance(event_id, dict):
+            observed.add(json.dumps(event_id, sort_keys=True, separators=(",", ":")))
+        children = event.get("children", [])
+        if not isinstance(children, list):
+            issues.append("invalid_event_children")
+            continue
+        for child in children:
+            if not isinstance(child, dict):
+                issues.append("invalid_event_children")
+                continue
+            announced.add(json.dumps(child, sort_keys=True, separators=(",", ":")))
+    if announced - observed:
+        issues.append("missing_announced_events")
     identities = set()
     remaining_bytes, remaining_methods = MAX_TOTAL_LOG_BYTES, MAX_METHODS
     for event in events:
+        event_id = event.get("id", {})
+        has_attempt_id = isinstance(event_id, dict) and "testResult" in event_id
         if "testResult" not in event:
+            if has_attempt_id:
+                # Includes aborted attempts. Their absence is neither success
+                # nor failure, and must prevent a complete capture.
+                issues.append("unavailable_test_result")
             continue
         if len(report["attempts"]) >= MAX_ATTEMPTS:
             issues.append("attempt_limit")
