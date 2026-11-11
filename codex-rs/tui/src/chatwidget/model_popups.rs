@@ -316,6 +316,19 @@ impl ChatWidget {
             .collect()
     }
 
+    /// Update an open session model picker when provider discovery settles.
+    /// A late result must never reopen a dismissed picker or replace a child dialog.
+    pub(crate) fn refresh_open_model_picker(&mut self) {
+        match self.bottom_pane.active_view_id() {
+            Some("session-model-picker") => self.open_model_popup(),
+            Some("session-all-models-picker") => {
+                let Ok(models) = self.model_catalog.try_list_models();
+                self.open_all_models_popup(models);
+            }
+            _ => {}
+        }
+    }
+
     /// Open a popup to choose a quick auto model. Selecting "All models"
     /// opens the full picker with every available preset.
     pub(crate) fn open_model_popup(&mut self) {
@@ -402,6 +415,8 @@ impl ChatWidget {
             .partition(|preset| Self::is_auto_model(&preset.model));
 
         if auto_presets.is_empty() {
+            self.bottom_pane
+                .dismiss_active_view_if_id("session-model-picker");
             self.open_all_models_popup(other_presets);
             return;
         }
@@ -417,6 +432,10 @@ impl ChatWidget {
                     .provider_id
                     .clone()
                     .or_else(|| Self::model_provider_for_selection(&model));
+                let selection_id = Some(format!(
+                    "{}:{model}",
+                    provider.as_deref().unwrap_or_default()
+                ));
                 let requires_advanced_selection =
                     Self::is_advanced_reasoning_effort(&preset.default_reasoning_effort)
                         || preset
@@ -445,6 +464,7 @@ impl ChatWidget {
                     )
                 };
                 SelectionItem {
+                    selection_id,
                     name: display_name.clone(),
                     description,
                     is_current: model.as_str() == current_model,
@@ -472,6 +492,7 @@ impl ChatWidget {
             ));
 
             items.push(SelectionItem {
+                selection_id: Some("all-models".to_string()),
                 name: "All models".to_string(),
                 description,
                 is_current,
@@ -485,12 +506,27 @@ impl ChatWidget {
             "Select Model",
             "Pick a quick auto mode or browse all models.",
         );
-        self.bottom_pane.show_selection_view(SelectionViewParams {
+        self.show_or_refresh_model_picker(SelectionViewParams {
+            view_id: Some("session-model-picker"),
             footer_hint: Some(standard_popup_hint_line()),
             items,
             header,
             ..Default::default()
         });
+    }
+
+    fn show_or_refresh_model_picker(&mut self, mut params: SelectionViewParams) {
+        if let Some(view_id) = params.view_id
+            && self.bottom_pane.active_view_id() == Some(view_id)
+        {
+            if let Some(tab_id) = self.bottom_pane.active_tab_id_for_active_view(view_id) {
+                params.initial_tab_id = Some(tab_id.to_string());
+            }
+            self.bottom_pane
+                .refresh_selection_view_if_active(view_id, params);
+        } else {
+            self.bottom_pane.show_selection_view(params);
+        }
     }
 
     fn is_auto_model(model: &str) -> bool {
@@ -579,6 +615,10 @@ impl ChatWidget {
         });
 
         if presets.is_empty() {
+            if matches!(purpose, ModelSelectionPurpose::Session) {
+                self.bottom_pane
+                    .dismiss_active_view_if_id("session-all-models-picker");
+            }
             self.add_info_message(
                 "No additional models are available right now.".to_string(),
                 /*hint*/ None,
@@ -673,7 +713,9 @@ impl ChatWidget {
         } else {
             Box::new(())
         };
-        self.bottom_pane.show_selection_view(SelectionViewParams {
+        self.show_or_refresh_model_picker(SelectionViewParams {
+            view_id: matches!(purpose, ModelSelectionPurpose::Session)
+                .then_some("session-all-models-picker"),
             footer_hint,
             items,
             tabs,
@@ -719,6 +761,10 @@ impl ChatWidget {
             });
         })];
         SelectionItem {
+            selection_id: Some(format!(
+                "{}:{model}",
+                preset_provider.as_deref().unwrap_or_default()
+            )),
             name: display_name.clone(),
             description,
             is_current,
