@@ -48,6 +48,7 @@ fn request(url: &str) -> HttpRequestParams {
         redirect_policy: HttpRedirectPolicy::Follow,
         request_id: "test-request".to_string(),
         stream_response: true,
+        address_policy: None,
     }
 }
 

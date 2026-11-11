@@ -309,6 +309,9 @@ async fn run_add(config_overrides: &CliConfigOverrides, add_args: AddArgs) -> Re
     } = add_args;
 
     validate_server_name(&name)?;
+    if let Some(clash) = config.non_prefixed_mcp_server_name_clash(&name) {
+        bail!(clash.mcp_add_message());
+    }
 
     let codex_home = find_codex_home().context("failed to resolve CODEX_HOME")?;
     let mut servers = load_global_mcp_servers(&codex_home)
@@ -373,6 +376,7 @@ async fn run_add(config_overrides: &CliConfigOverrides, add_args: AddArgs) -> Re
         supports_parallel_tool_calls: false,
         disabled_reason: None,
         startup_timeout_sec: None,
+        discover_timeout_sec: None,
         tool_timeout_sec: None,
         default_tools_approval_mode: None,
         enabled_tools: None,

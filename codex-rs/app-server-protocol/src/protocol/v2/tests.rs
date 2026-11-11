@@ -794,6 +794,7 @@ fn additional_file_system_permissions_preserves_canonical_entries() {
             },
             CoreFileSystemSandboxEntry {
                 path: CoreFileSystemPath::GlobPattern {
+                    scan: None,
                     pattern: "**/*.env".to_string(),
                 },
                 access: CoreFileSystemAccessMode::Deny,

@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use codex_config::types::McpServerTransportConfig;
 use codex_core::config::load_global_mcp_servers;
+use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
@@ -388,6 +389,47 @@ async fn add_cant_add_command_and_url() -> Result<()> {
 
     let servers = load_global_mcp_servers(codex_home.path()).await?;
     assert!(servers.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn add_rejects_unprefixed_builtin_namespace() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    std::fs::write(
+        codex_home.path().join("config.toml"),
+        "[features]\nnon_prefixed_mcp_tool_names = true\n",
+    )?;
+
+    let mut add_cmd = codex_command(codex_home.path())?;
+    add_cmd
+        .args(["mcp", "add", "web", "--", "echo", "hello"])
+        .assert()
+        .failure()
+        .stderr(contains("`web` is a built-in tool namespace"))
+        .stderr(contains(
+            "Choose another name, such as `corbanu mcp add web_mcp ...`.",
+        ))
+        .stderr(contains("corbanu mcp remove").not());
+
+    let mut add_reserved_cmd = codex_command(codex_home.path())?;
+    add_reserved_cmd
+        .args(["mcp", "add", "functions", "--", "echo", "hello"])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "`functions` is a tool namespace reserved by the Responses API",
+        ))
+        .stderr(contains("`corbanu mcp add functions_mcp ...`"));
+
+    let servers = load_global_mcp_servers(codex_home.path()).await?;
+    assert!(servers.is_empty());
+
+    let mut add_prefixed_cmd = codex_command(codex_home.path())?;
+    add_prefixed_cmd
+        .args(["mcp", "add", "web_mcp", "--", "echo", "hello"])
+        .assert()
+        .success();
 
     Ok(())
 }

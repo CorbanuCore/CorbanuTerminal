@@ -156,6 +156,9 @@ pub struct McpConfig {
     pub prefix_mcp_tool_names: bool,
     /// MCP servers whose model-visible tool namespaces omit the `mcp__` prefix.
     pub non_prefixed_mcp_tool_servers: Vec<String>,
+    /// The configured multi-agent V2 tool namespace, which MCP servers
+    /// exposed without the `mcp__` prefix must not take.
+    pub multi_agent_v2_tool_namespace: Option<String>,
     /// Protocol compatibility policy captured when this MCP configuration is created.
     pub protocol_mode: McpProtocolMode,
     /// Client-side elicitation capabilities advertised during MCP initialization.
@@ -542,6 +545,7 @@ fn mcp_server_config_for_url(
         supports_parallel_tool_calls: false,
         disabled_reason: None,
         startup_timeout_sec: Some(Duration::from_secs(30)),
+        discover_timeout_sec: None,
         tool_timeout_sec: None,
         default_tools_approval_mode: None,
         enabled_tools: None,

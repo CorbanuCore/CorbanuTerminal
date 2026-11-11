@@ -843,3 +843,60 @@ exclude_slash_tmp = true
     }
     insta::assert_snapshot!("issue_816_before_restart_facts", seen.join("\n"));
 }
+
+/// #1468 (from #807's review): core keeps every run inside a policy that
+/// keeps the macOS keychain services away (`unsandboxed_execution_allowed`),
+/// so on macOS the rows must not say approved commands leave the sandbox.
+/// Other platforms ignore the rule, and the escape route stays.
+#[tokio::test]
+async fn issue_1468_keychain_rule_keeps_commands_in_the_sandbox_on_macos() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    let user_config = r#"approval_policy = "on-request"
+default_permissions = "locked"
+
+[permissions.locked]
+extends = ":workspace"
+
+[permissions.locked.filesystem]
+":tmpdir" = "read"
+":slash_tmp" = "read"
+":keychain_services" = "deny"
+
+[permissions.locked.network]
+enabled = false
+"#;
+    let config = build(
+        home.path(),
+        cwd.path(),
+        &with_windows_sandbox(user_config),
+        /*aggressive_level*/ false,
+    )
+    .await;
+    assert!(
+        config
+            .permissions
+            .file_system_sandbox_policy()
+            .denies_keychain_services()
+    );
+    let [sandbox, _, network, vault, _, _] = current_values(&config, SecurityLevel::Permissive);
+    let vault = vault.split("; ").next().unwrap().to_string();
+    if cfg!(target_os = "macos") {
+        assert_eq!(
+            [sandbox, network, vault],
+            [
+                "profile locked: commands can write to the current folder; approved and allow-listed commands stay inside the sandbox, which keeps the macOS keychain away; permission-request tools are off".to_string(),
+                "off for agent commands; web search cached".to_string(),
+                "the vault store and sign-in file are readable to agent commands".to_string(),
+            ]
+        );
+    } else {
+        assert_eq!(
+            [sandbox, network],
+            [
+                "profile locked: commands can write to the current folder; approved or allow-listed commands can run outside the sandbox; permission-request tools are off".to_string(),
+                "off inside the sandbox, on for commands that run outside it; web search cached".to_string(),
+            ]
+        );
+    }
+}
