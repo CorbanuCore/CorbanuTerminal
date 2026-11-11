@@ -335,6 +335,20 @@ class WindowsSandboxNextestGroupTest(unittest.TestCase):
             f"Windows codex-core {GROUP} override in {NEXTEST_TOML.relative_to(REPO_ROOT)}",
         )
 
+    def test_exec_server_elevated_fixture_shares_the_legacy_group(self) -> None:
+        config = tomllib.loads(NEXTEST_TOML.read_text(encoding="utf-8"))
+        matches = [
+            override
+            for override in config["profile"]["default"]["overrides"]
+            if override.get("filter") == (
+                "package(codex-exec-server) & "
+                "test(file_system_elevated_relative_read_denial_uses_policy_cwd)"
+            )
+        ]
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0]["platform"], WINDOWS)
+        self.assertEqual(matches[0]["test-group"], GROUP)
+
     def test_core_scan_finds_the_elevated_tests(self) -> None:
         # Both the integration tests' helper and the unit tests' one, which
         # another file imports.
@@ -352,8 +366,12 @@ class WindowsSandboxNextestGroupTest(unittest.TestCase):
                 "sec_439_no_network_names_the_level_only_under_aggressive",
                 "sec_win_1863_command_exec_localhost_unc_cwd_fails_closed",
                 "sec_win_d398_command_exec_non_canonical_cwd",
+                "windows_elevated_approved_git_pull_preserves_deny_read",
                 "windows_elevated_does_not_create_missing_workspace_metadata",
                 "windows_elevated_enforces_deny_read_and_protects_setup_marker",
+                "windows_elevated_powershell_preserves_relative_paths",
+                "windows_elevated_temp_only_core_and_direct_spawn_enforce_carveouts",
+                "windows_elevated_unified_exec_enforces_large_recursive_deny_reads",
             ],
         )
 
