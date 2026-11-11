@@ -258,6 +258,19 @@ async fn a_refused_record_is_an_error_and_not_kept() -> anyhow::Result<()> {
         "{error:#}"
     );
     assert_eq!(pending_records(&path), Vec::<PathBuf>::new());
+    // #314 (D228): the refused record's day is marked for the conversation
+    // it was recorded under, whether or not anything still waits for it.
+    let marked: Vec<(String, i64)> =
+        sqlx::query_as("SELECT thread_id, utc_day FROM draft_accounting_gap_days")
+            .fetch_all(runtime.pool.as_ref())
+            .await?;
+    assert_eq!(
+        marked,
+        vec![(
+            owner.to_string(),
+            i64::from(misowned.dispatched_at_ms).div_euclid(86_400_000)
+        )]
+    );
     // The writer goes on with later records.
     let next = attempt(owner);
     assert_eq!(
@@ -592,9 +605,11 @@ async fn an_adopted_retry_waits_for_its_predecessor() -> anyhow::Result<()> {
 /// the hold), nothing fails, and every record ends up in the ledger.
 ///
 /// The bounds hold when the test has the four cores its runtime uses: Bazel
-/// reserves them (`cpu:4` in state's BUILD.bazel) and so does nextest
-/// (`threads-required`). Scheduled as a one-core test beside compiles on a
-/// 4-core Windows runner, its waits stretched past the bound (#905).
+/// runs the test alone, after everything else (`unit_test_alone` in state's
+/// BUILD.bazel), and nextest reserves them (`threads-required`). Scheduled as
+/// a one-core test beside compiles on a 4-core Windows runner, its waits
+/// stretched past the bound (#905); with other work keeping that runner
+/// busy, p99 reached 3.36 s (#1849's run).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn ten_sessions_on_one_home_wait_briefly_and_lose_no_record() -> anyhow::Result<()> {
     const SESSIONS: usize = 10;

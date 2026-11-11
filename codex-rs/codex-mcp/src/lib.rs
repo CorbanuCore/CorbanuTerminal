@@ -16,7 +16,11 @@ pub use runtime::McpRuntimeContext;
 pub use runtime::McpRuntimeInput;
 pub use runtime::SandboxState;
 pub use tool_catalog_cache::McpToolCatalogCache;
+pub use tools::BUILTIN_TOOL_NAMESPACES;
+pub use tools::RESPONSES_RESERVED_NAMESPACES;
+pub use tools::ReservedMcpNamespace;
 pub use tools::ToolInfo;
+pub use tools::unprefixed_mcp_namespace_reservation;
 
 /// Backward-compatible name for the shared Codex Apps tools runtime.
 pub type CodexAppsToolsCache = codex_connectors::ConnectorRuntimeManager<ToolInfo>;

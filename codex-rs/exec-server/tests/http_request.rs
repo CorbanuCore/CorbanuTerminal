@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::io::ErrorKind;
 use std::time::Duration;
 
+use codex_exec_server::HttpAddressPolicy;
 use codex_exec_server::HttpHeader;
 use codex_exec_server::HttpRedirectPolicy;
 use codex_exec_server::HttpRequestBodyDeltaNotification;
@@ -70,6 +71,7 @@ async fn exec_server_http_request_buffers_response_body() -> anyhow::Result<()> 
                 redirect_policy: HttpRedirectPolicy::Follow,
                 request_id: "buffered-request".to_string(),
                 stream_response: false,
+                address_policy: None,
             })?,
         )
         .await?;
@@ -137,6 +139,7 @@ async fn exec_server_http_request_omits_url_fragment() -> anyhow::Result<()> {
                 redirect_policy: HttpRedirectPolicy::Follow,
                 request_id: "fragment-request".to_string(),
                 stream_response: false,
+                address_policy: None,
             })?,
         )
         .await?;
@@ -189,6 +192,7 @@ async fn exec_server_http_request_uses_configured_system_proxy() -> anyhow::Resu
                 redirect_policy: HttpRedirectPolicy::Follow,
                 request_id: "system-proxy-request".to_string(),
                 stream_response: false,
+                address_policy: None,
             })?,
         )
         .await?;
@@ -245,6 +249,7 @@ async fn exec_server_http_request_normalizes_unicode_hostname() -> anyhow::Resul
                 redirect_policy: HttpRedirectPolicy::Follow,
                 request_id: "unicode-hostname-request".to_string(),
                 stream_response: false,
+                address_policy: None,
             })?,
         )
         .await?;
@@ -293,6 +298,7 @@ async fn exec_server_http_request_can_stop_at_redirects() -> anyhow::Result<()> 
                 redirect_policy: HttpRedirectPolicy::Stop,
                 request_id: "redirect-request".to_string(),
                 stream_response: false,
+                address_policy: None,
             })?,
         )
         .await?;
@@ -348,6 +354,7 @@ async fn exec_server_http_request_can_follow_redirects() -> anyhow::Result<()> {
                 redirect_policy: HttpRedirectPolicy::Follow,
                 request_id: "follow-redirect-request".to_string(),
                 stream_response: false,
+                address_policy: None,
             })?,
         )
         .await?;
@@ -417,6 +424,7 @@ async fn exec_server_http_request_streams_response_body_notifications() -> anyho
                 redirect_policy: HttpRedirectPolicy::Follow,
                 request_id: "stream-1".to_string(),
                 stream_response: true,
+                address_policy: None,
             })?,
         )
         .await?;
@@ -504,6 +512,7 @@ async fn exec_server_http_request_rejects_duplicate_stream_request_ids() -> anyh
                 redirect_policy: HttpRedirectPolicy::Follow,
                 request_id: "stream-dup".to_string(),
                 stream_response: true,
+                address_policy: None,
             })?,
         )
         .await?;
@@ -528,6 +537,7 @@ async fn exec_server_http_request_rejects_duplicate_stream_request_ids() -> anyh
                 redirect_policy: HttpRedirectPolicy::Follow,
                 request_id: "stream-dup".to_string(),
                 stream_response: true,
+                address_policy: None,
             })?,
         )
         .await?;
@@ -583,6 +593,7 @@ async fn exec_server_http_request_honors_optional_timeout() -> anyhow::Result<()
                 redirect_policy: HttpRedirectPolicy::Follow,
                 request_id: "buffered-request".to_string(),
                 stream_response: false,
+                address_policy: None,
             })?,
         )
         .await?;
@@ -609,6 +620,7 @@ async fn exec_server_http_request_honors_optional_timeout() -> anyhow::Result<()
                 redirect_policy: HttpRedirectPolicy::Follow,
                 request_id: "buffered-request".to_string(),
                 stream_response: false,
+                address_policy: None,
             })?,
         )
         .await?;
@@ -630,6 +642,72 @@ async fn exec_server_http_request_honors_optional_timeout() -> anyhow::Result<()
         Err(err) if is_expected_peer_disconnect(&err) => {}
         Err(err) => return Err(err),
     }
+
+    server.shutdown().await?;
+    Ok(())
+}
+
+/// What this tests: the executor advertises and enforces `addressPolicy`
+/// (#1947): a loopback literal is refused before connecting unless the policy
+/// allows loopback.
+#[tokio::test]
+async fn exec_server_http_request_enforces_address_policy() -> anyhow::Result<()> {
+    let mut server = exec_server().await?;
+    initialize_exec_server(&mut server).await?;
+    let info_id = server
+        .send_request("environment/info", serde_json::json!(null))
+        .await?;
+    let info: Value = wait_for_response(&mut server, info_id).await?;
+    assert_eq!(info["capabilities"]["httpAddressPolicy"], Value::Bool(true));
+
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let url = format!("http://{}/token", listener.local_addr()?);
+    let request = |address_policy| HttpRequestParams {
+        method: "POST".to_string(),
+        url: url.clone(),
+        headers: Vec::new(),
+        body: None,
+        timeout_ms: Some(5_000),
+        redirect_policy: HttpRedirectPolicy::Follow,
+        request_id: "buffered-request".to_string(),
+        stream_response: false,
+        address_policy: Some(address_policy),
+    };
+
+    let blocked_id = server
+        .send_request(
+            "http/request",
+            serde_json::to_value(request(HttpAddressPolicy::default()))?,
+        )
+        .await?;
+    let error = wait_for_error_response(&mut server, blocked_id).await?;
+    assert!(
+        error
+            .message
+            .starts_with(codex_exec_server::HTTP_ADDRESS_POLICY_DENIED_PREFIX),
+        "unexpected error: {}",
+        error.message
+    );
+    assert!(
+        timeout(Duration::from_millis(200), listener.accept())
+            .await
+            .is_err(),
+        "a blocked request must not connect"
+    );
+
+    let allowed_id = server
+        .send_request(
+            "http/request",
+            serde_json::to_value(request(HttpAddressPolicy {
+                allow_loopback: true,
+                ..HttpAddressPolicy::default()
+            }))?,
+        )
+        .await?;
+    let captured = accept_http_request(&listener).await?;
+    respond_with_status_and_headers(captured.stream, "200 OK", &[], b"allowed").await?;
+    let response: HttpRequestResponse = wait_for_response(&mut server, allowed_id).await?;
+    assert_eq!(response.body.into_inner(), b"allowed".to_vec());
 
     server.shutdown().await?;
     Ok(())
