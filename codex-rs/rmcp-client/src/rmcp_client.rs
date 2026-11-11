@@ -14,6 +14,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use std::time::Instant;
 
+use crate::oauth::DefaultKeyringStore;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
@@ -22,7 +23,6 @@ use codex_config::McpServerOAuthConfig;
 use codex_config::types::AuthKeyringBackendKind;
 use codex_config::types::McpServerEnvVar;
 use codex_exec_server::HttpClient;
-use codex_keyring_store::DefaultKeyringStore;
 use codex_otel::auth_storage::AuthStorageOriginator;
 use futures::FutureExt;
 use futures::future::BoxFuture;

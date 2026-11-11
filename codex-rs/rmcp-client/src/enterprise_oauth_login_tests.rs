@@ -1,4 +1,4 @@
-//! Enterprise login exercises the real callback and keyring adapter in an isolated process.
+//! Enterprise login exercises the real callback and storage policy with a synthetic store.
 
 use std::any::Any;
 use std::collections::HashMap;
@@ -49,6 +49,8 @@ async fn isolated_process(test_name: &str) -> Result<bool> {
         .args(["--exact", test_name, "--nocapture"])
         .env(CHILD, "1")
         .env("CODEX_HOME", home.path())
+        .env("CORBANU_HOME", home.path())
+        .env("PFTERMINAL_HOME", home.path())
         .current_dir(home.path())
         .output()
         .await?;
@@ -265,7 +267,7 @@ async fn enterprise_public_api_storage_and_privacy() -> Result<()> {
         return Ok(());
     }
     let keyring = TestKeyring::default();
-    keyring::set_default_credential_builder(Box::new(keyring.clone()));
+    crate::oauth::fixture_keyring::install(Box::new(keyring.clone()));
     let server = MockServer::start().await;
     let issuer = format!("{}/idp", server.uri());
     metadata(&server, &issuer).await;
@@ -285,7 +287,8 @@ async fn enterprise_public_api_storage_and_privacy() -> Result<()> {
         .mount(&server)
         .await;
 
-    // Callback, exchange and DefaultKeyringStore all run through public entrypoints.
+    // Callback, exchange and storage policy run through public entrypoints;
+    // only the credential-store dependency is replaced with a synthetic fixture.
     use McpEmaTokenEndpointAuthMethod::ClientSecretBasic;
     use McpEmaTokenEndpointAuthMethod::ClientSecretPost;
     for (login_index, (callback_url, auth_method)) in [
