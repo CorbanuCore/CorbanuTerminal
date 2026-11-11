@@ -2503,6 +2503,18 @@ impl Classifier {
                 )
             });
         if assigns {
+            // #1974: an assignment that may not run, or that runs only in
+            // a subshell, does not resolve the variable in the parent shell
+            // (`false && r=x`, `a || r=x`, `(r=x)`, an `if` body, a
+            // backgrounded group, a substitution). Such a variable is unseen
+            // from here on: a later use asks rather than trusting the value
+            // this assignment would have set, and a value it already held
+            // is dropped too, since the assignment may have replaced it.
+            let reaches_parent = !simple.substituted
+                && !simple.in_subshell
+                && !simple.in_keyword
+                && !simple.backgrounded
+                && !matches!(simple.after, certain_cd::Joint::And | certain_cd::Joint::Or);
             for word in words {
                 work::step();
                 if let Some((name, value)) = word.split_once('=')
@@ -2511,6 +2523,10 @@ impl Classifier {
                         .chars()
                         .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
                 {
+                    if !reaches_parent {
+                        variables.insert(name.to_string(), shell::UNSEEN_OUTPUT.to_string());
+                        continue;
+                    }
                     // Output the classifier cannot see keeps the variable
                     // unseen; an environment reference (`$JAVA_HOME/bin/java`)
                     // is kept as written.
@@ -4103,6 +4119,10 @@ mod tainted_action_git_option_value_tests;
 #[cfg(test)]
 #[path = "tainted_action_git_quoted_tests.rs"]
 mod tainted_action_git_quoted_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_post_taint_tests.rs"]
+mod tainted_action_post_taint_tests;
 
 #[cfg(test)]
 #[path = "tainted_action_option_glob_tests.rs"]
