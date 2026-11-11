@@ -91,7 +91,7 @@
         "status": "disabled",
         "provider_id": "openrouter",
         "capability": "frontier",
-        "reason": "manual selection only; long-prompt pricing tiers are not represented in allocation economics"
+        "reason": "manual selection only; Grok long-prompt tiers are not configured in allocation-facing pricing"
       },
       "display_name": "OpenRouter Grok 4.7",
       "description": "OpenRouter: Grok 4.7 — $1.60/M input, $4.8/M output. Rates double above 200K prompt tokens.",
