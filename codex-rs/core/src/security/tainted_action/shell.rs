@@ -92,6 +92,15 @@ pub(super) struct SimpleCommand {
     pub(super) operated: Vec<usize>,
     /// D194: what joins it to the command before it.
     pub(super) after: Joint,
+    /// #1974: it is lexed inside a `( ... )` subshell, so an assignment in
+    /// it does not reach the parent shell.
+    pub(super) in_subshell: bool,
+    /// #1974: it is lexed inside an `if`/`while`/`until`/`for`/`case`/
+    /// `select` body, so it may not run.
+    pub(super) in_keyword: bool,
+    /// #1974: it is terminated by `&`, or inside a group `&` terminates,
+    /// so it runs in a background subshell.
+    pub(super) backgrounded: bool,
     /// #1772 review 3: a redirection sends its stdout elsewhere (`>log`,
     /// `>&2`, `1>&2`, `&>log`; not `2>log` or `2>&1`), so a substitution
     /// of it prints nothing the words show.
@@ -649,8 +658,10 @@ enum Redirect {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Group {
-    /// `( ... )` or `{ ... }`.
-    Bracket,
+    /// `( ... )`: a subshell.
+    Subshell,
+    /// `{ ... }`: a group in the current shell.
+    Brace,
     /// `if`/`while`/`until`/`for`/`case`/`select` ... `fi`/`done`/`esac`.
     Keyword,
 }
@@ -671,8 +682,17 @@ struct Lexer {
     /// #989: the word being built holds a parameter operator.
     operated: bool,
     open: Vec<Open>,
-    /// Open groups and the pipe that feeds every command inside them.
-    groups: Vec<(Group, Option<usize>)>,
+    /// Open groups, the pipe that feeds every command inside them, and the
+    /// number of finished commands when each opened.
+    groups: Vec<(Group, Option<usize>, usize)>,
+    /// #1974: how many subshell groups are open, for `in_subshell` without
+    /// scanning the stack (a line may open thousands: `x x ( ...`).
+    subshell_depth: usize,
+    /// #1974: how many keyword groups are open, for `in_keyword`.
+    keyword_depth: usize,
+    /// #1974: the commands the most recently closed bracket group holds,
+    /// as a range into `done`, for a `&` that backgrounds the group.
+    just_closed_group: Option<(usize, usize)>,
     redirect: Redirect,
     /// #1607: a `!` follows the output redirection just read (`>!`, `>>!`,
     /// `&>!`, `>&!`, `2>!`), which zsh reads as `>|`: the file is the word
@@ -711,10 +731,17 @@ impl Lexer {
     fn flush(&mut self) {
         if !self.word.is_empty() {
             let index = Some(self.current.words.len());
-            if std::mem::take(&mut self.redirect_word_next) {
+            let redirect_word = std::mem::take(&mut self.redirect_word_next);
+            if redirect_word {
                 self.current.redirect_words.extend(index);
             }
             let redirect = std::mem::take(&mut self.redirect);
+            // #1974: a word other than a redirection's file ends the group
+            // a `&` may background (`{ r=x; } >log &` keeps it: `log` is
+            // the redirection's file).
+            if redirect == Redirect::None && !redirect_word {
+                self.just_closed_group = None;
+            }
             let clobber = std::mem::take(&mut self.clobber) && redirect == Redirect::Stdout;
             match redirect {
                 // #1772 review 2: main keeps only the last one.
@@ -791,17 +818,39 @@ impl Lexer {
 
     /// The pipe feeding the innermost group (stored with it when it opened).
     fn group_pipe(&self) -> Option<usize> {
-        self.groups.last().and_then(|(_, pipe)| *pipe)
+        self.groups.last().and_then(|(_, pipe, _)| *pipe)
     }
 
     fn open_group(&mut self, group: Group, pipe: Option<usize>) {
         let inherited = pipe.or(self.group_pipe());
-        self.groups.push((group, inherited));
+        self.groups.push((group, inherited, self.done.len()));
+        match group {
+            Group::Subshell => self.subshell_depth += 1,
+            Group::Keyword => self.keyword_depth += 1,
+            Group::Brace => {}
+        }
     }
 
-    fn close_group(&mut self, group: Group) {
-        if self.groups.last().is_some_and(|(open, _)| *open == group) {
-            self.groups.pop();
+    /// Close the group on top, if it is `group`: its commands' start in
+    /// `done`, for a `&` that backgrounds them (#1974).
+    fn close_group(&mut self, group: Group) -> Option<usize> {
+        if !self
+            .groups
+            .last()
+            .is_some_and(|(open, _, _)| *open == group)
+        {
+            return None;
+        }
+        match self.groups.pop() {
+            Some((_, _, start)) => {
+                match group {
+                    Group::Subshell => self.subshell_depth -= 1,
+                    Group::Keyword => self.keyword_depth -= 1,
+                    Group::Brace => {}
+                }
+                Some(start)
+            }
+            None => None,
         }
     }
 
@@ -820,6 +869,13 @@ impl Lexer {
             ..SimpleCommand::default()
         };
         let mut finished = std::mem::replace(&mut self.current, next);
+        // #1974: whether an assignment in it reaches the parent shell:
+        // the groups still open around it, counted, not scanned. The group
+        // this command opens (`if ...`) or closes (`fi`) is not its own
+        // yet: the `if` command runs its condition, and `fi` holds no
+        // assignment.
+        finished.in_subshell = self.subshell_depth > 0;
+        finished.in_keyword = self.keyword_depth > 0;
         // #1772 review 2: main's reading moves no word (`>/dev/null done`
         // keeps bash's reading: `done` is no reserved word there).
         if self.reading != Reading::Legacy {
@@ -831,7 +887,9 @@ impl Lexer {
             Some("if" | "while" | "until" | "for" | "case" | "select") => {
                 self.open_group(Group::Keyword, finished.pipe_from.or(self.group_pipe()));
             }
-            Some("fi" | "done" | "esac") => self.close_group(Group::Keyword),
+            Some("fi" | "done" | "esac") => {
+                let _ = self.close_group(Group::Keyword);
+            }
             _ => {}
         }
         for &index in &finished.fed_by {
@@ -856,7 +914,9 @@ impl Lexer {
 
     /// `(` or `{`: a group; when it directly follows a pipe, the pipe feeds
     /// every command in it.
-    fn open_bracket(&mut self) {
+    fn open_bracket(&mut self, group: Group) {
+        // #1974: a new group supersedes the one a `&` might background.
+        self.just_closed_group = None;
         self.flush();
         let piped = if self.current.words.is_empty() {
             self.current.pipe_from
@@ -865,20 +925,26 @@ impl Lexer {
         };
         self.start(Start::Plain);
         self.joint = Some(Joint::Other);
-        self.open_group(Group::Bracket, piped);
+        self.open_group(group, piped);
         if self.current.pipe_from.is_none() {
             self.current.pipe_from = self.group_pipe();
         }
     }
 
-    fn close_bracket(&mut self) {
+    fn close_bracket(&mut self, group: Group) {
         self.start(Start::Plain);
         self.joint = Some(Joint::Other);
-        self.close_group(Group::Bracket);
+        // #1974: a `&` after the group backgrounds every command in it;
+        // anything else runs the group in sequence.
+        self.just_closed_group = self
+            .close_group(group)
+            .map(|start| (start, self.done.len()));
         self.current.pipe_from = self.group_pipe();
     }
 
     fn open_substitution(&mut self, backtick: bool, output: bool, process: bool, arithmetic: bool) {
+        // #1974: a substitution supersedes the group a `&` might background.
+        self.just_closed_group = None;
         let skip = self.real_open >= MAX_SUBSTITUTION_DEPTH;
         if skip {
             self.too_deep = true;
@@ -926,6 +992,8 @@ impl Lexer {
     /// other output is a placeholder the classifier cannot see through.
     /// `arithmetic_close`: this `)` is followed by another (`$((...))`).
     fn close_substitution(&mut self, arithmetic_close: bool) {
+        // #1974: a substitution supersedes the group a `&` might background.
+        self.just_closed_group = None;
         self.finish_current();
         let Some(open) = self.open.pop() else {
             return;
@@ -1155,13 +1223,13 @@ impl Lexer {
                     && (self.reading != Reading::LiteralBraces
                         || self.current.words.is_empty()) =>
                 {
-                    self.open_bracket();
+                    self.open_bracket(Group::Brace);
                 }
                 '}' if self.word.is_empty()
                     && (self.reading != Reading::LiteralBraces
                         || self.current.words.is_empty()) =>
                 {
-                    self.close_bracket();
+                    self.close_bracket(Group::Brace);
                 }
                 '{' | '}'
                     if self.reading == Reading::LiteralBraces
@@ -1227,10 +1295,12 @@ impl Lexer {
                     {
                         arithmetic_end = end;
                     }
-                    self.open_bracket();
+                    self.open_bracket(Group::Subshell);
                 }
-                ')' => self.close_bracket(),
+                ')' => self.close_bracket(Group::Subshell),
                 '|' => {
+                    // #1974: a piped group is not backgrounded by a later `&`.
+                    self.just_closed_group = None;
                     let pipe = next != Some('|') && (index == 0 || chars[index - 1] != '|');
                     self.start(if pipe { Start::Piped } else { Start::Plain });
                     self.operator(&chars, index);
@@ -1243,7 +1313,31 @@ impl Lexer {
                     self.flush();
                 }
                 ';' | '&' | '\n' => {
-                    self.start(Start::Plain);
+                    if ch == '&' && next != Some('&') && next != Some('>') {
+                        // #1974: a command `&` backgrounds runs in a
+                        // subshell, as does a group `&` follows (`&&` and
+                        // `&>` are not backgrounding).
+                        if let Some((start, end)) = self.just_closed_group.take()
+                            && let Some(commands) = self.done.get_mut(start..end)
+                        {
+                            for command in commands {
+                                work::step();
+                                command.backgrounded = true;
+                            }
+                        }
+                        let finished = self.done.len();
+                        self.start(Start::Plain);
+                        if self.done.len() > finished
+                            && let Some(command) = self.done.last_mut()
+                        {
+                            command.backgrounded = true;
+                        }
+                    } else {
+                        // #1974: `;`, a newline and `&&` run what came
+                        // before in sequence, so no group stays backgrounded.
+                        self.just_closed_group = None;
+                        self.start(Start::Plain);
+                    }
                     self.operator(&chars, index);
                 }
                 ch if ch.is_whitespace() || matches!(ch, '<' | '>' | ',') => self.flush(),
