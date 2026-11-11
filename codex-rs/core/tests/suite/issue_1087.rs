@@ -46,7 +46,8 @@ struct Outcome {
 /// Runs the image tool on the Corbanu home's `auth.json` under `level`.
 async fn run(level: SecurityLevel) -> anyhow::Result<(Outcome, String)> {
     let home = Arc::new(TempDir::new()?);
-    let auth = home.path().canonicalize()?.join("auth.json");
+    // #1976: without the `\\?\` prefix Windows' canonical form adds, as shown.
+    let auth = dunce::canonicalize(home.path())?.join("auth.json");
     std::fs::write(&auth, "ISSUE1087_CANARY")?;
     let auth = auth.display().to_string();
     let server = start_mock_server().await;

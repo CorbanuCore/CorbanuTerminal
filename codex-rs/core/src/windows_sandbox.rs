@@ -16,6 +16,35 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Instant;
 
+/// #2000: how strongly each Windows sandbox level confines commands.
+pub(crate) fn windows_sandbox_strength(level: WindowsSandboxLevel) -> u8 {
+    match level {
+        WindowsSandboxLevel::Disabled => 0,
+        WindowsSandboxLevel::RestrictedToken => 1,
+        WindowsSandboxLevel::Elevated => 2,
+    }
+}
+
+/// #2000: makes `config` select at least `level`'s Windows sandbox, so a
+/// sandbox set up during a session reaches what is started from its config
+/// (child agents, also after a role rebuilt their config). Never lowers it.
+pub(crate) fn raise_windows_sandbox(config: &mut Config, level: WindowsSandboxLevel) {
+    if windows_sandbox_strength(level)
+        <= windows_sandbox_strength(WindowsSandboxLevel::from_config(config))
+    {
+        return;
+    }
+    match level {
+        WindowsSandboxLevel::Elevated => {
+            config.set_windows_elevated_sandbox_enabled(/*value*/ true)
+        }
+        WindowsSandboxLevel::RestrictedToken => {
+            config.set_windows_sandbox_enabled(/*value*/ true);
+        }
+        WindowsSandboxLevel::Disabled => {}
+    }
+}
+
 pub trait WindowsSandboxLevelExt {
     fn from_config(config: &Config) -> WindowsSandboxLevel;
     fn from_features(features: &Features) -> WindowsSandboxLevel;

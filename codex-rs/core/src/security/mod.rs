@@ -38,6 +38,7 @@ pub(crate) mod taint;
 pub(crate) mod tainted_action;
 pub(crate) mod ui_events;
 pub(crate) mod user_namespaces;
+pub(crate) mod windows_unsandboxed;
 
 pub(crate) use effective_policy::EffectivePolicyInitialization;
 pub(crate) use effective_policy::EffectivePolicyView;

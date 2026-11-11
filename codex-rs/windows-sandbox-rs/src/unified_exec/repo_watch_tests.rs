@@ -83,7 +83,7 @@ fn legacy_repositories_are_watched() {
     // A bare repository planted in a plain folder (gap 2).
     init_shape(&bare, &format!("{INIT_CONFIG}\tpager = evil.exe\r\n"));
     // Can't be confirmed while the session runs.
-    let refused_live = crate::confirm_planted_project_metadata(&kept).is_err();
+    let refused_live = confirm_shown(&kept).is_err();
     drop(lease);
 
     let after = (
@@ -100,7 +100,7 @@ fn legacy_repositories_are_watched() {
         .map(|record| record.path)
         .collect();
     // Confirmed, it stays quiet until it changes again.
-    let confirmed = crate::confirm_planted_project_metadata(&kept).expect("confirm");
+    let confirmed = confirm_shown(&kept).expect("confirm");
     drop(
         crate::integrity_leases::acquire(std::slice::from_ref(&root), /*log_dir*/ None)
             .expect("unchanged session"),
@@ -319,6 +319,120 @@ fn legacy_hooks_path_targets_are_watched() {
         (changes(&husky), changes(&stubs)),
         (
             Some(vec!["core.hooksPath: post-checkout added".to_string()]),
+            None,
+        )
+    );
+}
+
+/// `count` empty files in `dir`.
+fn files(dir: &Path, count: usize) {
+    fs::create_dir_all(dir).expect("create");
+    for n in 0..count {
+        fs::write(dir.join(format!("f{n}")), "").expect("file");
+    }
+}
+
+/// #1877 item 3: in a project inside a root the walk doesn't cover
+/// (`%TEMP%`), a link to a large folder of the project itself (pnpm's
+/// `node_modules`) isn't walked again, so it isn't flagged after every
+/// command.
+#[test]
+fn legacy_links_back_into_a_project_in_temp_are_not_walked_again() {
+    let _guard = legacy_process_test_guard();
+    let test_root = user_owned_test_root();
+    let scratch = canonical(test_root.path());
+    let project = scratch.join("project");
+    // Walked last: the walk's budget runs out with a folder left.
+    files(&project.join("store\\z"), 20_001);
+    fs::create_dir_all(project.join("store\\a")).expect("create");
+    let project = canonical(&project);
+    junction(&project.join("node_modules"), &project.join("store"));
+
+    let lease = crate::integrity_leases::acquire_watching(
+        &[scratch, project.clone()],
+        std::slice::from_ref(&project),
+        /*log_dir*/ None,
+    )
+    .expect("lease");
+    drop(lease);
+
+    assert_eq!(changes(&project.join("node_modules")), None);
+}
+
+/// #1877 item 4: a link into a root the walk doesn't cover, to a single
+/// folder with more entries than the link walk's budget, isn't listed past
+/// the budget and counts as too large.
+#[test]
+fn legacy_a_link_to_one_huge_folder_counts_as_too_large() {
+    let _guard = legacy_process_test_guard();
+    let test_root = user_owned_test_root();
+    for dir in ["root", "scratch"] {
+        fs::create_dir_all(test_root.path().join(dir)).expect("create");
+    }
+    let root = canonical(&test_root.path().join("root"));
+    let scratch = canonical(&test_root.path().join("scratch"));
+    files(&scratch.join("big"), 20_001);
+    junction(&root.join("vendor"), &scratch.join("big"));
+
+    let lease = crate::integrity_leases::acquire_watching(
+        &[root.clone(), scratch],
+        std::slice::from_ref(&root),
+        /*log_dir*/ None,
+    )
+    .expect("lease");
+    drop(lease);
+
+    assert_eq!(
+        changes(&root.join("vendor")),
+        Some(vec![
+            "links to a folder too large to check for repositories".to_string()
+        ])
+    );
+}
+
+/// #1877 item 5 (D486): confirming covers a repository only as the prompt
+/// showed it. A change another command records while the prompt is up isn't
+/// cleared with it; confirming is refused and it is asked about again.
+#[test]
+fn legacy_confirming_keeps_changes_recorded_after_the_prompt() {
+    let _guard = legacy_process_test_guard();
+    let test_root = user_owned_test_root();
+    let root = test_root.path().join("root");
+    fs::create_dir_all(&root).expect("create root");
+    let root = canonical(&root);
+    let repo = root.join("a\\.git");
+    init_shape(&repo, INIT_CONFIG);
+    let session = |change: &dyn Fn()| {
+        let lease =
+            crate::integrity_leases::acquire(std::slice::from_ref(&root), /*log_dir*/ None)
+                .expect("lease");
+        change();
+        drop(lease);
+    };
+    session(&|| {
+        fs::write(
+            repo.join("config"),
+            format!("{INIT_CONFIG}\tfsmonitor = evil.exe\r\n"),
+        )
+        .expect("config");
+    });
+    // The prompt is drawn now; another command then adds a hook.
+    let shown = crate::planted_stamps().expect("stamps").get(&repo).copied();
+    session(&|| fs::write(repo.join("hooks\\post-checkout"), "evil").expect("hook"));
+    let refused = crate::confirm_planted_project_metadata(&repo, shown).is_err();
+    let kept = changes(&repo);
+    let confirmed = confirm_shown(&repo).expect("confirm");
+
+    assert_eq!(
+        (shown.is_some(), refused, kept, confirmed, changes(&repo)),
+        (
+            true,
+            true,
+            Some(vec![
+                "config changed".to_string(),
+                "hooks/post-checkout added".to_string()
+            ]),
+            true,
             None,
         )
     );

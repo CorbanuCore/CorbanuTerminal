@@ -174,6 +174,29 @@ struct PlantedMetadata {
     /// ran, with what changed, until the user confirms them.
     #[serde(default)]
     git_changes: BTreeMap<PathBuf, BTreeSet<String>>,
+    /// #1877 item 5: when each path in `entries` or `git_changes` was last
+    /// recorded (a counter, [`PlantedMetadata::stamp`]). A confirmation
+    /// covers a path only as the person was shown it: one recorded again
+    /// since is asked about again.
+    #[serde(default)]
+    stamps: BTreeMap<PathBuf, u64>,
+    #[serde(default)]
+    last_stamp: u64,
+}
+
+impl PlantedMetadata {
+    /// #1877 item 5: `path` was recorded (again) just now. Stamps count up
+    /// from the clock, so a file an older version saved without them can't
+    /// hand out one a prompt already showed.
+    fn stamp(&mut self, path: &Path) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| {
+                u64::try_from(since.as_nanos()).unwrap_or(u64::MAX)
+            });
+        self.last_stamp = self.last_stamp.max(now).saturating_add(1);
+        self.stamps.insert(path.to_path_buf(), self.last_stamp);
+    }
 }
 
 /// A live session's hold on its roots' Low label; released on drop.
@@ -199,6 +222,42 @@ pub(crate) struct IntegrityLease {
 /// root holds it protects like `.git`.
 pub(crate) fn registry_parent_dir() -> Option<PathBuf> {
     local_app_data().map(|dir| dir.join(REGISTRY_PARENT))
+}
+
+/// D453 (#1896 item 1): the records folder, made first if missing, when one
+/// of `write_roots` holds it (as the non-admin sandbox checks: a root that is
+/// it or lies inside it doesn't count), so the elevated setup denies its
+/// commands writing there. `None` where the folder can't be used for
+/// records (logged): no records are kept there then.
+pub(crate) fn records_folder_inside(write_roots: &[PathBuf], log_dir: &Path) -> Option<PathBuf> {
+    use crate::path_normalization::canonicalize_path;
+    use crate::spawn_prep::strictly_inside_a_root;
+    let local_app_data = local_app_data()?;
+    let roots: Vec<PathBuf> = write_roots
+        .iter()
+        .map(|root| canonicalize_path(root))
+        .collect();
+    // First where it would be made (it may not exist yet), so a session
+    // whose roots don't hold it never makes it here.
+    if !strictly_inside_a_root(
+        &canonicalize_path(&local_app_data).join(REGISTRY_PARENT),
+        &roots,
+    ) {
+        return None;
+    }
+    match ensure_registry() {
+        Ok(_) => {
+            let parent = local_app_data.join(REGISTRY_PARENT);
+            strictly_inside_a_root(&canonicalize_path(&parent), &roots).then_some(parent)
+        }
+        Err(err) => {
+            crate::logging::log_note(
+                &format!("D453: the records folder isn't protected or used: {err:#}"),
+                Some(log_dir),
+            );
+            None
+        }
+    }
 }
 
 fn registry_dir() -> Option<PathBuf> {
@@ -668,13 +727,19 @@ fn record_planted(registry: &Path, absent: &[PathBuf], log_dir: Option<&Path>) -
             .filter(|path| !planted.confirmed.contains(**path))
             .map(|path| (*path).clone())
             .collect();
-        planted.entries.extend(new.iter().cloned());
-        if planted.entries.len() == before {
+        if new.is_empty() {
             return Ok(());
         }
+        planted.entries.extend(new.iter().cloned());
+        // #1877 item 5: one recorded already appeared again.
+        for path in &new {
+            planted.stamp(path);
+        }
         save_json(registry, PLANTED_FILE, &planted)?;
-        // D424: told right after the command too.
-        crate::planted_log::record(&new);
+        if planted.entries.len() != before {
+            // D424: told right after the command too.
+            crate::planted_log::record(&new);
+        }
         Ok(())
     });
     let paths = appeared
@@ -717,6 +782,7 @@ fn record_nested_planted(
         for path in &appeared {
             planted.confirmed.remove(path);
             planted.entries.insert(path.clone());
+            planted.stamp(path);
         }
         save_json(registry, PLANTED_FILE, &planted)?;
         // D424: told right after the command too.
@@ -761,6 +827,7 @@ fn record_git_planted(
         for path in &appeared {
             planted.confirmed.remove(path);
             planted.entries.insert(path.clone());
+            planted.stamp(path);
         }
         save_json(registry, PLANTED_FILE, &planted)?;
         // D424: told right after the command too.
@@ -832,7 +899,8 @@ fn repo_paths(
         .filter(|root| !nested_roots.contains(root))
         .cloned()
         .collect();
-    let (behind, behind_notes) = crate::nested_metadata::repos_behind_links(&links, &unwalked);
+    let (behind, behind_notes) =
+        crate::nested_metadata::repos_behind_links(&links, &unwalked, nested_roots);
     repos.extend(behind);
     notes.extend(behind_notes);
     repos.extend(crate::nested_metadata::bare_roots(roots));
@@ -899,6 +967,7 @@ fn record_repo_changes(
                 .entry(path.clone())
                 .or_default()
                 .extend(changes.iter().cloned());
+            planted.stamp(path);
         }
         save_json(registry, PLANTED_FILE, &planted)?;
         // D424: told right after the command too.
@@ -1031,12 +1100,31 @@ pub fn planted_project_metadata() -> Result<Vec<PathBuf>> {
         .collect())
 }
 
+/// #1877 item 5: when each recorded path ([`planted_project_metadata`],
+/// [`planted_git_changes`]) was last recorded, to pass to
+/// [`confirm_planted_project_metadata`]. Read it before those lists: a path
+/// recorded in between then counts as recorded after it was shown.
+pub fn planted_stamps() -> Result<BTreeMap<PathBuf, u64>> {
+    let Some(registry) = registry_dir() else {
+        return Ok(BTreeMap::new());
+    };
+    match std::fs::symlink_metadata(&registry) {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
+        Err(err) => return Err(err).with_context(|| format!("inspect {}", registry.display())),
+        Ok(_) => {}
+    }
+    Ok(load_planted(&registry)?.stamps)
+}
+
 /// D262: the user checked `path` (one of [`planted_project_metadata`]) and
 /// wants it loaded. Returns whether it was recorded.
 ///
 /// Refused while a session that saw it appear still runs: that session's
-/// processes could still change it after the user checked it.
-pub fn confirm_planted_project_metadata(path: &Path) -> Result<bool> {
+/// processes could still change it after the user checked it. #1877 item 5
+/// (D486): `shown` is its stamp ([`planted_stamps`]) when the person was
+/// shown it; refused too when it was recorded again since (another command
+/// changed it while the prompt was up), so it is asked about again.
+pub fn confirm_planted_project_metadata(path: &Path, shown: Option<u64>) -> Result<bool> {
     let registry = ensure_registry()?;
     let lock = lock(&registry)?;
     // Records what ended sessions saw and drops their files, so only live
@@ -1069,6 +1157,16 @@ pub fn confirm_planted_project_metadata(path: &Path) -> Result<bool> {
         }
     }
     let mut planted = load_planted(&registry)?;
+    // One no longer recorded (confirmed meanwhile, or gone) has nothing
+    // unseen.
+    let recorded = planted.entries.contains(path) || planted.git_changes.contains_key(path);
+    if recorded && planted.stamps.get(path).copied() != shown {
+        anyhow::bail!(
+            "{} was recorded again after Corbanu Terminal asked about it; check it again, and Corbanu Terminal will ask again",
+            path.display()
+        );
+    }
+    planted.stamps.remove(path);
     let removed = planted.entries.remove(path) | planted.git_changes.remove(path).is_some();
     // Not recorded again by a sweep that finds a session file recording
     // failed for earlier.
@@ -1120,11 +1218,20 @@ fn prune_planted(registry: &Path, absent: &[PathBuf]) -> Result<()> {
     planted
         .confirmed
         .retain(|path| !absent.contains(path) && std::fs::symlink_metadata(path).is_ok());
+    let PlantedMetadata {
+        entries,
+        git_changes,
+        stamps,
+        ..
+    } = &mut planted;
+    let stamps_before = stamps.len();
+    stamps.retain(|path, _| entries.contains(path) || git_changes.contains_key(path));
     if (
         planted.entries.len(),
         planted.confirmed.len(),
         planted.git_changes.len(),
     ) != before
+        || planted.stamps.len() != stamps_before
     {
         save_json(registry, PLANTED_FILE, &planted)?;
     }
