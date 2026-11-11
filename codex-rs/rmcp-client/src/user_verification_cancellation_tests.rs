@@ -226,6 +226,10 @@ async fn dropping_shared_resource_and_custom_requests_cancels_the_pending_reques
     Ok(())
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "traced_test installs an in-memory subscriber to observe synthetic cancellation acknowledgements"
+)]
 #[traced_test]
 #[tokio::test]
 async fn recovered_connections_accept_elicitations_with_previously_cancelled_ids()
