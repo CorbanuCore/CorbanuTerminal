@@ -136,6 +136,42 @@ fn issue1808_chroot_judges_its_command() {
     assert_eq!(wrong, Vec::<String>::new());
 }
 
+/// The chroot root retains the current Windows drive, including nested roots.
+/// This runs on every platform without opening Windows files.
+#[test]
+fn issue1808_chroot_windows_root_retains_drive() {
+    for drive in ["C", "D"] {
+        let home = format!("{drive}:/home/fixture");
+        let codex_home = format!("{home}/.corbanu");
+        let cwd = format!("{drive}:/work");
+        for shell in ["/bin/bash", "/bin/zsh"] {
+            for (line, expected) in [
+                (
+                    "chroot / cp x home/fixture/.zshrc",
+                    Some(ProtectedActionKind::Persistence),
+                ),
+                (
+                    "chroot / chroot / cp x home/fixture/.zshrc",
+                    Some(ProtectedActionKind::Persistence),
+                ),
+                ("chroot --skip-chdir / cp x home/fixture/.zshrc", None),
+                ("chroot / cp x work/output", None),
+            ] {
+                assert_eq!(
+                    classify_as_windows(
+                        &[shell.to_string(), "-lc".to_string(), line.to_string()],
+                        &cwd,
+                        Path::new(&codex_home),
+                        Some(Path::new(&home)),
+                    ),
+                    expected,
+                    "{drive}: {shell}: {line}",
+                );
+            }
+        }
+    }
+}
+
 /// A chroot child inherits the enclosing command's script input, even when
 /// redirection operands precede the wrapper or are not child arguments.
 #[test]

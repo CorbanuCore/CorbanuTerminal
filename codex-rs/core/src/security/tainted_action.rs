@@ -2602,7 +2602,10 @@ impl Classifier {
             // `/home/u/.zshrc`); it is judged there, and in the current
             // folder too.
             if !skip_chdir {
-                self.command(run, "/", depth + 1);
+                // Keep the drive under Windows path rules; a bare "/" cwd
+                // would lose it before resolving the child's relative paths.
+                let root = self.homes.resolve("/", &folders.cwd);
+                self.command(run, &root, depth + 1);
             }
             self.command(run, &folders.cwd, depth + 1);
         }
