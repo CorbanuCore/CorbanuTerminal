@@ -307,7 +307,10 @@ async fn streamable_http_401_does_not_trigger_recovery() -> anyhow::Result<()> {
         json!([""]),
     )])));
     assert_eq!(call_echo_tool(&client, "unauthorized").await?, expected);
-    assert_eq!(call_echo_tool(&client, "still-unauthorized").await?, expected);
+    assert_eq!(
+        call_echo_tool(&client, "still-unauthorized").await?,
+        expected
+    );
 
     // Each failed call consumes exactly one rejection; neither retries the tool
     // nor initializes a new session. A later user call reuses the original one.
