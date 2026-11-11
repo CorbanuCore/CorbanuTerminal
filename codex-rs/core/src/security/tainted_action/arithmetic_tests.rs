@@ -837,3 +837,301 @@ fn qualifier_code_reading_stays_linear() {
         });
     }
 }
+
+/// #1111: distinct unclosed delimiters must not copy every remaining suffix.
+/// This measures allocations and counted loop work, not library search time.
+#[test]
+fn unclosed_flag_argument_copying_stays_linear() {
+    for flag in ['l', 'r', 'I'] {
+        for quote in ["", "'\\\""] {
+            work::assert_linear("unclosed flag argument copies", |scale| {
+                let mut flags = String::from("${(");
+                for at in 0..1_000 * scale {
+                    flags.push(flag);
+                    flags.push(char::from_u32(0x4e00 + at as u32).unwrap());
+                    flags.push_str(quote);
+                }
+                flags.push_str(")x}");
+                assert!(!flags_unsafe(&flags, &|_: &str| false));
+            });
+        }
+    }
+}
+
+/// The real name predicate also borrows substitution-free arguments.
+#[test]
+fn unclosed_flag_caller_allocation_stays_linear() {
+    for flag in ['l', 'r', 'I'] {
+        let safe = HashSet::from([flag.to_string()]);
+        let run = |scale| {
+            let mut flags = String::from("${(");
+            for at in 0..100 * scale {
+                flags.push(flag);
+                flags.push(char::from_u32(0x4e00 + at as u32).unwrap());
+                flags.push_str("'\\\"");
+            }
+            flags.push_str(")x}");
+            assert!(!flags_unsafe(&flags, &|name: &str| !safe.contains(name)));
+        };
+        let small = work::measure(|| run(1));
+        let large = work::measure(|| run(work::SCALE as usize));
+        assert!(small.bytes > 0);
+        assert!(
+            large.bytes <= 6 * small.bytes,
+            "flag {flag}: {} bytes at 1x, {} at 4x",
+            small.bytes,
+            large.bytes
+        );
+    }
+}
+
+/// #1111: overlapping arguments with distinct non-ASCII delimiters, closed
+/// or not, with or without command substitutions, are read once in all,
+/// not once per argument (steps and allocated bytes).
+#[test]
+fn overlapping_flag_arguments_are_read_once() {
+    let safe = HashSet::from(["l", "r", "I", "n"]);
+    let delimiter = |at: usize| char::from_u32(0x4e00 + at as u32).unwrap();
+    for flag in ['l', 'r', 'I'] {
+        for tail in ["", " n", "`n` n", "$(n n"] {
+            work::assert_linear("unclosed flag arguments", |scale| {
+                let mut flags = String::from("${(");
+                for at in 0..500 * scale {
+                    flags.push(flag);
+                    flags.push(delimiter(at));
+                }
+                flags.push_str(tail);
+                flags.push_str(")x}");
+                assert!(!flags_unsafe(&flags, &|name: &str| !safe.contains(name)));
+            });
+            work::assert_linear("closed overlapping flag arguments", |scale| {
+                let count = 500 * scale;
+                let mut flags = String::from("${(");
+                for at in 0..count {
+                    flags.push(flag);
+                    flags.push(delimiter(at));
+                }
+                flags.push_str(tail);
+                flags.extend((0..count).map(delimiter));
+                flags.push_str(")x}");
+                assert!(!flags_unsafe(&flags, &|name: &str| !safe.contains(name)));
+            });
+        }
+    }
+}
+
+/// `flags_unsafe` as it was before #1111's single reading, judging each
+/// argument on its own: the reference the current one must agree with.
+/// With `ascii_only`, only arguments with ASCII delimiters are judged.
+fn flags_unsafe_reference(
+    region: &str,
+    unsafe_in: &impl Fn(&str) -> bool,
+    ascii_only: bool,
+) -> bool {
+    let body = &region[3..];
+    let Some(close) = body.find(')') else {
+        return unsafe_in(&unquoted(region));
+    };
+    let flags = &body[..close];
+    if flags.contains(['P', 'e']) {
+        return unsafe_in(&unquoted(region));
+    }
+    if references(flags).any(unsafe_in) {
+        return true;
+    }
+    flags.char_indices().any(|(at, flag)| {
+        if !matches!(flag, 'l' | 'r' | 'I') {
+            return false;
+        }
+        let rest = &flags[at + flag.len_utf8()..];
+        let Some(delimiter) = rest.chars().next().filter(|ch| !ch.is_ascii_alphanumeric()) else {
+            return false;
+        };
+        if ascii_only && !delimiter.is_ascii() {
+            return false;
+        }
+        let start = at + flag.len_utf8() + delimiter.len_utf8();
+        let end = flags[start..]
+            .find(delimiter)
+            .map_or(flags.len(), |end| start + end);
+        unsafe_in(&unquoted(&flags[start..end]))
+    })
+}
+
+/// A small deterministic generator for the equivalence tests.
+struct Pieces(u64);
+
+impl Pieces {
+    fn below(&mut self, bound: usize) -> usize {
+        // xorshift64*
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        (self.0.wrapping_mul(0x2545_f491_4f6c_dd1d) >> 33) as usize % bound
+    }
+
+    fn text(&mut self, pieces: &[&str], max: usize) -> String {
+        let len = self.below(max + 1);
+        (0..len).map(|_| pieces[self.below(pieces.len())]).collect()
+    }
+}
+
+/// A pure name predicate that holds for about one name in `modulus`.
+fn hashed_unsafe(seed: u64, modulus: u64) -> impl Fn(&str) -> bool {
+    move |name: &str| {
+        let hash = name.bytes().fold(seed, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x100_0000_01b3)
+        });
+        hash % modulus == 0
+    }
+}
+
+const PIECES: &[&str] = &[
+    "l", "r", "I", "a", "b", "_", "1", "9", "$", "{", "}", "(", "`", "#", "@", "*", "\"", "'",
+    "\\", ":", "|", " ", "中", "丁", "é", "l中", "r丁", "Ié", "l:", "l|", "$(", "$((", "${", "a_b",
+    "P", "e", "x", "😀", "l😀",
+];
+
+/// #1111: on generated flags (quotes, substitutions, every kind of
+/// delimiter, closed or not), `flags_unsafe` decides exactly as judging each
+/// argument on its own does.
+#[test]
+fn flags_unsafe_matches_judging_each_argument() {
+    let mut pieces = Pieces(0x1111_2026_1106_0001);
+    // A rare `)` ends the flags early.
+    let with_close: Vec<&str> = PIECES.iter().copied().chain([")"]).collect();
+    let (mut unsafe_count, mut safe_count) = (0, 0);
+    // Cases only a non-ASCII argument makes unsafe, and safe cases with one.
+    let (mut by_non_ascii, mut safe_non_ascii) = (0, 0);
+    for case in 0..60_000_u64 {
+        let text = pieces.text(&with_close, /*max*/ 24);
+        let region = format!("${{({text})x}}");
+        let unsafe_name = hashed_unsafe(case, 2 + case % 6);
+        let unsafe_in = |text: &str| names(&without_substitutions(text)).any(&unsafe_name);
+        let expected = flags_unsafe_reference(&region, &unsafe_in, /*ascii_only*/ false);
+        assert_eq!(flags_unsafe(&region, &unsafe_name), expected, "{region}");
+        let flags = text.split(')').next().unwrap_or_default();
+        let non_ascii = !flags.contains(['P', 'e'])
+            && flag_arguments(flags)
+                .iter()
+                .any(|(delimiter, _)| !delimiter.is_ascii());
+        if expected {
+            unsafe_count += 1;
+            by_non_ascii += usize::from(!flags_unsafe_reference(
+                &region, &unsafe_in, /*ascii_only*/ true,
+            ));
+        } else {
+            safe_count += 1;
+            safe_non_ascii += usize::from(non_ascii);
+        }
+    }
+    assert!(
+        unsafe_count > 10_000 && safe_count > 10_000,
+        "{unsafe_count} {safe_count}"
+    );
+    assert!(
+        by_non_ascii > 2_000 && safe_non_ascii > 2_000,
+        "{by_non_ascii} {safe_non_ascii}"
+    );
+}
+
+/// The single reading equals reading each piece of text between non-ASCII
+/// bounds on its own, with closing brackets, nested substitutions and
+/// backticks.
+#[test]
+fn first_unsafe_names_match_reading_each_piece() {
+    let mut pieces = Pieces(0x1111_2026_1106_0002);
+    let pieces_with_closes: Vec<&str> = PIECES.iter().copied().chain([")", "))", "`)"]).collect();
+    for case in 0..20_000_u64 {
+        let text = pieces.text(&pieces_with_closes, /*max*/ 30);
+        let unsafe_name = hashed_unsafe(case, 2 + case % 6);
+        let first = first_unsafe_names(&text, &unsafe_name);
+        // Offsets after a non-ASCII character or at the start, and ends at
+        // a non-ASCII character or at the end.
+        let starts: Vec<usize> = std::iter::once(0)
+            .chain(
+                text.char_indices()
+                    .filter(|(_, ch)| !ch.is_ascii())
+                    .map(|(at, ch)| at + ch.len_utf8()),
+            )
+            .collect();
+        let ends: Vec<usize> = text
+            .char_indices()
+            .filter(|(_, ch)| !ch.is_ascii())
+            .map(|(at, _)| at)
+            .chain([text.len()])
+            .collect();
+        for &start in &starts {
+            for &end in ends.iter().filter(|&&end| end >= start) {
+                let expected = names(&without_substitutions(&text[start..end])).any(&unsafe_name);
+                assert_eq!(first[start] < end, expected, "{text:?} {start}..{end}");
+            }
+        }
+    }
+}
+
+#[test]
+fn flag_arguments_keep_original_quote_and_delimiter_boundaries() {
+    for (region, expected) in [
+        ("${(l|l_a_b)x}", vec!["l_a_b", "a"]),
+        ("${(l|'l_a_b')x}", vec!["l_a_b", "a"]),
+        ("${(r界\"m\"界I:2:)x}", vec!["m", "2"]),
+        ("${(l::r:)x}", vec!["", ""]),
+        ("${(l\\v\\)x}", vec!["v"]),
+        ("${(I'v')x}", vec!["v"]),
+        ("${(l|$v)x}", vec!["$v"]),
+    ] {
+        let flags = &region[3..region.find(')').unwrap()];
+        let arguments: Vec<String> = flag_arguments(flags)
+            .into_iter()
+            .map(|(_, range)| unquoted(&flags[range]))
+            .collect();
+        assert_eq!(arguments, expected, "{region}");
+    }
+}
+
+#[test]
+fn malformed_flag_arguments_keep_unsafe_inner_names() {
+    let safe = HashSet::from(["l_a_b"]);
+    let unsafe_in = |name: &str| !safe.contains(name);
+    // The first unclosed argument is safe; an overlapping inner one is not.
+    for region in ["${(l|l_a_b)x}", "${(l|'l_a_b')x}"] {
+        assert!(flags_unsafe(region, &unsafe_in), "{region}");
+    }
+    // A substitution can hide a name in the outer argument but not the inner
+    // argument. Stopping after the first safe suffix would miss it.
+    for region in ["${(l|`r_m_n`)x}", "${(l|$(r_m_n)x}"] {
+        assert!(flags_unsafe(region, &unsafe_in), "{region}");
+    }
+    let safe = HashSet::from(["l_a_b", "a"]);
+    assert!(!flags_unsafe("${(l|l_a_b)x}", &|name: &str| !safe.contains(name)));
+    for flag in ['l', 'r', 'I'] {
+        for argument in ["m", "'m'", "\"m\"", "\\m"] {
+            let line = format!("out=$(cat notes); echo ${{({flag}|{argument})x}}");
+            assert!(runs_unseen_in("zsh", &line), "{line}");
+        }
+        let region = format!("${{({flag}|1)x}}");
+        assert!(!flags_unsafe(&region, &unsafe_in), "{region}");
+        // The whole-line fallback rejects transformed zsh expansions after
+        // command output, independently of the numeric flag argument.
+        let line = format!("out=$(cat notes); echo ${{({flag}|1)x}}");
+        assert!(runs_unseen_in("zsh", &line), "{line}");
+    }
+}
+
+#[test]
+fn substitution_blanking_keeps_exact_text() {
+    for (text, expected) in [
+        ("", ""),
+        ("名字 + n + $v", "名字 + n + $v"),
+        ("a$(date +%s)b", "a b"),
+        ("a$(nested $(x))b", "a b"),
+        ("a`date`b", "a b"),
+        ("a`unfinished", "a "),
+        ("a$(unfinished", "a "),
+        ("$((n + 1))", "$((n + 1))"),
+        ("a$(x)b`y`c", "a b c"),
+    ] {
+        assert_eq!(&*without_substitutions(text), expected, "{text}");
+    }
+}

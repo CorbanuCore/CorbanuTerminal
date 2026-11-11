@@ -1,0 +1,738 @@
+use super::*;
+use pretty_assertions::assert_eq;
+use std::cell::RefCell;
+use std::fs;
+
+type Hook = Box<dyn Fn(&Path)>;
+
+thread_local! {
+    static BEFORE_READ: RefCell<Option<Hook>> = const { RefCell::new(None) };
+}
+
+/// #1909: called with each file just before it is opened for its print.
+pub(crate) fn before_read(path: &Path) {
+    BEFORE_READ.with(|hook| {
+        if let Some(hook) = hook.borrow().as_ref() {
+            hook(path);
+        }
+    });
+}
+
+/// Runs `body` with `hook` called on each file just before it is read.
+pub(crate) fn with_before_read<T>(hook: impl Fn(&Path) + 'static, body: impl FnOnce() -> T) -> T {
+    BEFORE_READ.with(|slot| *slot.borrow_mut() = Some(Box::new(hook)));
+    let result = body();
+    BEFORE_READ.with(|slot| *slot.borrow_mut() = None);
+    result
+}
+
+thread_local! {
+    static BEFORE_REOPEN: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
+}
+
+/// #1909: called for a reparse point other than a link after its tag was
+/// checked, just before it is reopened to be read as itself (the hook knows
+/// which file it set up: since #1935 the reopen is reached from a handle).
+pub(crate) fn before_reopen() {
+    BEFORE_REOPEN.with(|hook| {
+        if let Some(hook) = hook.borrow().as_ref() {
+            hook();
+        }
+    });
+}
+
+/// Whether this process may make a symbolic link (Developer Mode or the
+/// privilege; CI runs as an administrator).
+#[cfg(windows)]
+pub(crate) fn symlinks_allowed(dir: &Path) -> bool {
+    let probe = dir.join("symlink-probe");
+    match std::os::windows::fs::symlink_file(dir.join("none"), &probe) {
+        Ok(()) => {
+            fs::remove_file(&probe).expect("remove probe");
+            true
+        }
+        Err(err) if err.raw_os_error() == Some(1314) => {
+            eprintln!("skipped: making a symbolic link needs Developer Mode or the privilege");
+            false
+        }
+        Err(err) => panic!("symlink probe: {err}"),
+    }
+}
+
+/// Swaps the file `path` for a link to `target`, as a process a command
+/// left running could.
+#[cfg(windows)]
+pub(crate) fn swap_for_link(path: &Path, target: &Path) {
+    fs::remove_file(path).expect("remove");
+    std::os::windows::fs::symlink_file(target, path).expect("link");
+}
+
+/// #1909: a file Windows compresses (`compact /exe`, whose filter serves
+/// the content and hides its reparse point) gets the same print.
+#[cfg(windows)]
+#[test]
+fn file_print_reads_a_compressed_file() {
+    // The first folder whose volume can compress (CI's temp folder is on
+    // a volume that can't; `Public` is on the system drive).
+    let candidates = [Some(std::env::temp_dir()), dirs_next::public_dir()];
+    let (_dir, file, before) = candidates
+        .into_iter()
+        .flatten()
+        .find_map(|base| {
+            let dir = tempfile::tempdir_in(base).ok()?;
+            let file = dir.path().join("config");
+            fs::write(&file, "[core]\n\tbare = false\n".repeat(8192)).expect("write");
+            let before = file_print(&file);
+            let output = std::process::Command::new("compact")
+                .args(["/c", "/exe:xpress4k"])
+                .arg(&file)
+                .output()
+                .expect("compact");
+            println!("compact: {}", String::from_utf8_lossy(&output.stdout));
+            output.status.success().then_some((dir, file, before))
+        })
+        .expect("no folder on a volume that can compress");
+    assert_eq!(
+        (
+            file_print(&file),
+            before.len(),
+            before.contains("hard link")
+        ),
+        (before.clone(), 64, false)
+    );
+}
+
+/// Makes the file `path` a reparse point with the Microsoft tag `tag`
+/// (not a link) that no filter serves; false when this process may not.
+#[cfg(windows)]
+fn set_reparse_tag(path: &Path, tag: u32) -> bool {
+    use std::os::windows::fs::OpenOptionsExt as _;
+    use std::os::windows::io::AsRawHandle as _;
+    const FSCTL_SET_REPARSE_POINT: u32 = 0x0009_00A4;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    let mut buffer = [0_u8; 16];
+    buffer[0..4].copy_from_slice(&tag.to_le_bytes());
+    buffer[4..6].copy_from_slice(&8_u16.to_le_bytes());
+    buffer[8..16].copy_from_slice(b"corbanu1");
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .expect("open");
+    let mut returned = 0_u32;
+    // SAFETY: a valid handle and buffer.
+    let ok = unsafe {
+        windows_sys::Win32::System::IO::DeviceIoControl(
+            file.as_raw_handle() as _,
+            FSCTL_SET_REPARSE_POINT,
+            buffer.as_ptr().cast(),
+            buffer.len() as u32,
+            std::ptr::null_mut(),
+            0,
+            &mut returned,
+            std::ptr::null_mut(),
+        )
+    };
+    if ok == 0 {
+        let err = std::io::Error::last_os_error();
+        // Access denied or a privilege not held (CI runs as an administrator).
+        assert!(matches!(err.raw_os_error(), Some(5 | 1314)), "{err}");
+        eprintln!("skipped: setting a reparse point needs more rights: {err}");
+    }
+    ok != 0
+}
+
+/// #1909: a reparse point other than a link that can't be read as itself
+/// (its filter is missing) differs every time, so a change is never missed.
+#[cfg(windows)]
+#[test]
+fn file_print_of_an_unserved_reparse_point_differs_every_time() {
+    const TAG_HSM: u32 = 0xC000_0004;
+    let dir = tempfile::tempdir().expect("tempdir");
+    let file = dir.path().join("config");
+    fs::write(&file, "x\n").expect("write");
+    if !set_reparse_tag(&file, TAG_HSM) {
+        return;
+    }
+    let (first, second) = (file_print(&file), file_print(&file));
+    assert_eq!(
+        (first == second, first.starts_with("truncated at")),
+        (false, true),
+        "{first}"
+    );
+}
+
+/// Makes the file `path`, a reparse point tagged `tag`, a symbolic link to
+/// the NT path `target` in place (same file; needs the privilege), as a
+/// process a command left running could.
+#[cfg(windows)]
+fn retag_as_link(path: &Path, tag: u32, target: &str) {
+    use std::os::windows::ffi::OsStrExt as _;
+    use std::os::windows::fs::OpenOptionsExt as _;
+    use std::os::windows::io::AsRawHandle as _;
+    const FSCTL_SET_REPARSE_POINT: u32 = 0x0009_00A4;
+    const FSCTL_DELETE_REPARSE_POINT: u32 = 0x0009_00AC;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const TAG_SYMLINK: u32 = 0xA000_000C;
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .expect("open");
+    // A link's own data must be empty.
+    file.set_len(0).expect("truncate");
+    let control = |code: u32, buffer: &[u8]| {
+        let mut returned = 0_u32;
+        // SAFETY: a valid handle and buffer.
+        let ok = unsafe {
+            windows_sys::Win32::System::IO::DeviceIoControl(
+                file.as_raw_handle() as _,
+                code,
+                buffer.as_ptr().cast(),
+                buffer.len() as u32,
+                std::ptr::null_mut(),
+                0,
+                &mut returned,
+                std::ptr::null_mut(),
+            )
+        };
+        assert!(ok != 0, "{code:#x}: {}", std::io::Error::last_os_error());
+    };
+    let mut header = [0_u8; 8];
+    header[0..4].copy_from_slice(&tag.to_le_bytes());
+    control(FSCTL_DELETE_REPARSE_POINT, &header);
+    // `REPARSE_DATA_BUFFER` for an absolute symbolic link: the substitute
+    // and print names are both `target`.
+    let name: Vec<u8> = std::ffi::OsStr::new(target)
+        .encode_wide()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    let len = name.len() as u16;
+    let mut buffer = Vec::new();
+    buffer.extend(TAG_SYMLINK.to_le_bytes());
+    buffer.extend((12 + 2 * len).to_le_bytes());
+    buffer.extend([0_u8; 2]);
+    for field in [0, len, len, len] {
+        buffer.extend(field.to_le_bytes());
+    }
+    buffer.extend(0_u32.to_le_bytes());
+    buffer.extend(&name);
+    buffer.extend(&name);
+    control(FSCTL_SET_REPARSE_POINT, &buffer);
+}
+
+/// #1909 (#1913 review): a reparse point other than a link that becomes a
+/// link after its tag was checked and before it is reopened is not
+/// followed: the link names a pipe this test serves, which never sees the
+/// open (Windows refuses to follow a link on a reopen from a handle).
+#[cfg(windows)]
+#[test]
+fn file_print_does_not_follow_a_link_tagged_before_the_reopen() {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Foundation::GetLastError;
+    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows_sys::Win32::System::Pipes::ConnectNamedPipe;
+    use windows_sys::Win32::System::Pipes::CreateNamedPipeW;
+    const TAG_HSM: u32 = 0xC000_0004;
+    const PIPE_ACCESS_DUPLEX: u32 = 3;
+    const PIPE_NOWAIT: u32 = 1;
+    const ERROR_PIPE_LISTENING: u32 = 536;
+    let dir = tempfile::tempdir().expect("tempdir");
+    if !symlinks_allowed(dir.path()) {
+        return;
+    }
+    let file = dir.path().join("config");
+    fs::write(&file, "x\n").expect("write");
+    if !set_reparse_tag(&file, TAG_HSM) {
+        return;
+    }
+    let pipe_name = format!("corbanu-1909-reopen-{}", std::process::id());
+    let wide: Vec<u16> = format!(r"\\.\pipe\{pipe_name}")
+        .encode_utf16()
+        .chain([0])
+        .collect();
+    // SAFETY: a valid name; the handle is closed below.
+    let pipe = unsafe {
+        CreateNamedPipeW(
+            wide.as_ptr(),
+            PIPE_ACCESS_DUPLEX,
+            PIPE_NOWAIT,
+            1,
+            512,
+            512,
+            0,
+            std::ptr::null(),
+        )
+    };
+    assert_ne!(pipe, INVALID_HANDLE_VALUE, "pipe");
+    let target = format!(r"\??\pipe\{pipe_name}");
+    let retagged = std::rc::Rc::new(std::cell::Cell::new(false));
+    let print = {
+        let retagged = std::rc::Rc::clone(&retagged);
+        let path = file.clone();
+        BEFORE_REOPEN.with(|slot| {
+            *slot.borrow_mut() = Some(Box::new(move || {
+                retag_as_link(&path, TAG_HSM, &target);
+                retagged.set(true);
+            }))
+        });
+        let print = file_print(&file);
+        BEFORE_REOPEN.with(|slot| *slot.borrow_mut() = None);
+        print
+    };
+    // SAFETY: the pipe handle is open; non-blocking, so this only reports
+    // whether a client ever opened it.
+    let never_opened = unsafe {
+        let connected = ConnectNamedPipe(pipe, std::ptr::null_mut()) != 0;
+        let err = GetLastError();
+        CloseHandle(pipe);
+        !connected && err == ERROR_PIPE_LISTENING
+    };
+    let is_link = fs::symlink_metadata(&file).is_ok_and(|metadata| metadata.is_symlink());
+    assert_eq!(
+        (
+            retagged.get(),
+            is_link,
+            never_opened,
+            print.starts_with("truncated at")
+        ),
+        (true, true, true, true),
+        "{print}"
+    );
+}
+
+/// #1909: a file swapped for a link after it was looked at is not read
+/// through; reading through the link now would give the target's content.
+#[cfg(windows)]
+#[test]
+fn file_print_does_not_read_a_link_swapped_in() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    if !symlinks_allowed(dir.path()) {
+        return;
+    }
+    let secret = dir.path().join("secret");
+    fs::write(&secret, "secret\n").expect("write");
+    let file = dir.path().join("config");
+    fs::write(&file, "x\n").expect("write");
+    let target = secret.clone();
+    let print = with_before_read(
+        move |path| swap_for_link(path, &target),
+        || file_print(&file),
+    );
+    assert_eq!(
+        (
+            print.as_str(),
+            content_print(&file) == content_print(&secret)
+        ),
+        ("unreadable", true)
+    );
+}
+
+const INIT_CONFIG: &str = "[core]\n\trepositoryformatversion = 0\n\tfilemode = false\n\tbare = false\n\tlogallrefupdates = true\n\tsymlinks = false\n\tignorecase = true\n";
+const CLONE_CONFIG: &str = "[core]\n\trepositoryformatversion = 0\n\tfilemode = false\n\tbare = false\n\tlogallrefupdates = true\n\tsymlinks = false\n\tignorecase = true\n[remote \"origin\"]\n\turl = https://example.com/a.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n[branch \"main\"]\n\tremote = origin\n\tmerge = refs/heads/main\n";
+
+/// The shape `git init` leaves in `dir` (Git for Windows).
+fn init_shape(dir: &Path, config: &str) {
+    for folder in [
+        "hooks",
+        "info",
+        "objects/info",
+        "objects/pack",
+        "refs/heads",
+        "refs/tags",
+    ] {
+        fs::create_dir_all(dir.join(folder)).expect("create folder");
+    }
+    fs::write(dir.join("HEAD"), "ref: refs/heads/main\n").expect("HEAD");
+    fs::write(dir.join("config"), config).expect("config");
+    fs::write(dir.join("description"), "Unnamed repository\n").expect("description");
+    fs::write(dir.join("info/exclude"), "# git ls-files\n").expect("exclude");
+    for hook in [
+        "pre-commit.sample",
+        "post-update.sample",
+        "fsmonitor-watchman.sample",
+    ] {
+        fs::write(dir.join("hooks").join(hook), "#!/bin/sh\n").expect("hook");
+    }
+}
+
+fn tempdir() -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dunce::canonicalize(dir.path()).expect("canonical");
+    (dir, path)
+}
+
+/// D421: `git init` and `git clone` shapes are plain; any hook, include,
+/// unknown key, `ext::` URL, `commondir`, rebase state, submodule or
+/// legacy remote isn't, and neither is a `.git` file.
+#[test]
+fn only_init_and_clone_shapes_are_plain() {
+    let (_dir, base) = tempdir();
+    let plain = |name: &str, config: &str, extra: &dyn Fn(&Path)| {
+        let git = base.join(name).join(".git");
+        init_shape(&git, config);
+        extra(&git);
+        is_plain(&git)
+    };
+    let write = |relative: &'static str, text: &'static str| {
+        move |git: &Path| {
+            let path = git.join(relative);
+            fs::create_dir_all(path.parent().expect("parent")).expect("parent folder");
+            fs::write(path, text).expect("write");
+        }
+    };
+    let none = |_: &Path| {};
+    let gitdir_file = base.join("file").join(".git");
+    fs::create_dir_all(gitdir_file.parent().expect("parent")).expect("folder");
+    fs::write(&gitdir_file, "gitdir: ../x\n").expect("gitdir file");
+
+    assert_eq!(
+        [
+            plain("init", INIT_CONFIG, &none),
+            plain("clone", CLONE_CONFIG, &none),
+            plain("empty-branches", INIT_CONFIG, &|git: &Path| {
+                fs::create_dir(git.join("branches")).expect("branches");
+            }),
+            plain("hook", INIT_CONFIG, &write("hooks/post-checkout", "evil")),
+            plain(
+                "fsmonitor",
+                &format!("{INIT_CONFIG}\tfsmonitor = evil.exe\n"),
+                &none
+            ),
+            plain(
+                "include",
+                &format!("{INIT_CONFIG}[include]\n\tpath = x\n"),
+                &none
+            ),
+            plain(
+                "ext",
+                &CLONE_CONFIG.replace("https://example.com/a.git", "ext::sh -c evil"),
+                &none,
+            ),
+            plain("same-line", "[core] fsmonitor = evil.exe\n", &none),
+            plain("continued", "[core]\n\tbare = \\\nfalse\n", &none),
+            plain("commondir", INIT_CONFIG, &write("commondir", "..")),
+            plain(
+                "rebase",
+                INIT_CONFIG,
+                &write("rebase-merge/git-rebase-todo", "exec evil")
+            ),
+            plain(
+                "module",
+                INIT_CONFIG,
+                &write("modules/m/HEAD", "ref: refs/heads/main")
+            ),
+            plain("remotes", INIT_CONFIG, &write("remotes/origin", "URL: x")),
+            plain(
+                "worktree-config",
+                INIT_CONFIG,
+                &write("config.worktree", "")
+            ),
+            is_plain(&gitdir_file),
+        ],
+        [
+            true, true, true, false, false, false, false, false, false, false, false, false, false,
+            false, false,
+        ]
+    );
+}
+
+/// D421: a link anywhere inside makes a repository not plain.
+#[cfg(unix)]
+#[test]
+fn a_link_inside_is_not_plain() {
+    let (_dir, base) = tempdir();
+    let git = base.join(".git");
+    init_shape(&git, INIT_CONFIG);
+    std::os::unix::fs::symlink(base.join("elsewhere"), git.join("COMMIT_EDITMSG")).expect("link");
+    assert!(!is_plain(&git));
+}
+
+/// Git's own rule for a git folder, `commondir` included.
+#[test]
+fn git_directories_follow_gits_rule() {
+    let (_dir, base) = tempdir();
+    let bare = base.join("bare");
+    init_shape(&bare, INIT_CONFIG);
+    let split = base.join("split");
+    fs::create_dir_all(&split).expect("split");
+    fs::write(
+        split.join("HEAD"),
+        "0123456789abcdef0123456789abcdef01234567\n",
+    )
+    .expect("HEAD");
+    fs::write(split.join("commondir"), "../bare\n").expect("commondir");
+    let no_refs = base.join("no-refs");
+    fs::create_dir_all(no_refs.join("objects")).expect("objects");
+    fs::write(no_refs.join("HEAD"), "ref: refs/heads/main\n").expect("HEAD");
+    let bad_head = base.join("bad-head");
+    init_shape(&bad_head, INIT_CONFIG);
+    fs::write(bad_head.join("HEAD"), "not a ref\n").expect("HEAD");
+    assert_eq!(
+        [
+            is_git_directory(&bare),
+            is_git_directory(&split),
+            is_git_directory(&no_refs),
+            is_git_directory(&bad_head),
+        ],
+        [true, true, false, false]
+    );
+}
+
+/// D420: a fingerprint changes with what git would run (by content), not
+/// with a rewrite to the same content or git's bookkeeping; a `.git` file's
+/// `gitdir:` target and its `commondir` are followed inside the roots, and
+/// submodules' config and hooks count.
+#[test]
+fn fingerprints_track_what_git_would_run() {
+    let (_dir, base) = tempdir();
+    let roots = [base.clone()];
+    let git = base.join("repo").join(".git");
+    init_shape(&git, INIT_CONFIG);
+    init_shape(&git.join("modules").join("sub"), INIT_CONFIG);
+    let before = fingerprint(&git, &roots);
+    // Bookkeeping and a same-content rewrite.
+    fs::write(git.join("HEAD"), "ref: refs/heads/other\n").expect("HEAD");
+    fs::write(git.join("index"), "index").expect("index");
+    fs::write(git.join("config"), INIT_CONFIG).expect("same config");
+    let unchanged = changes(&before, &fingerprint(&git, &roots));
+    fs::write(git.join("hooks/post-checkout"), "evil").expect("hook");
+    fs::write(
+        git.join("modules/sub/config"),
+        format!("{INIT_CONFIG}\tfsmonitor = evil.exe\n"),
+    )
+    .expect("module config");
+    fs::remove_file(git.join("hooks/pre-commit.sample")).expect("remove sample");
+    let changed = changes(&before, &fingerprint(&git, &roots));
+
+    // A worktree's `.git` file, its git folder and the shared one.
+    let main = base.join("main").join(".git");
+    init_shape(&main, INIT_CONFIG);
+    let worktree_git = main.join("worktrees").join("wt");
+    fs::create_dir_all(&worktree_git).expect("worktree git folder");
+    fs::write(worktree_git.join("commondir"), "../..\n").expect("commondir");
+    let checkout = base.join("wt");
+    fs::create_dir_all(&checkout).expect("checkout");
+    fs::write(
+        checkout.join(".git"),
+        format!("gitdir: {}\n", worktree_git.display()),
+    )
+    .expect(".git file");
+    let file_before = fingerprint(&checkout.join(".git"), &roots);
+    fs::write(main.join("hooks/pre-push"), "evil").expect("shared hook");
+    let file_changed = changes(&file_before, &fingerprint(&checkout.join(".git"), &roots));
+    // Outside the roots, the target isn't looked into.
+    let outside = fingerprint(&checkout.join(".git"), &[base.join("elsewhere")]);
+
+    assert_eq!(
+        (
+            unchanged,
+            changed,
+            file_changed,
+            outside.keys().cloned().collect::<Vec<_>>()
+        ),
+        (
+            Vec::<String>::new(),
+            vec![
+                "hooks/post-checkout added".to_string(),
+                "modules/sub/config changed".to_string(),
+                "hooks/pre-commit.sample removed".to_string(),
+            ],
+            vec!["gitdir/commondir/hooks/pre-push added".to_string()],
+            vec![".git".to_string()],
+        )
+    );
+}
+
+/// Git's own parsing (#1849 review): a detached `HEAD` with anything after
+/// 40 hex digits is valid, and `commondir`/`gitdir:` values keep their
+/// leading blanks (only trailing line ends go).
+#[test]
+fn heads_and_paths_parse_like_git() {
+    let (_dir, base) = tempdir();
+    let junk_head = base.join("junk-head");
+    init_shape(&junk_head, INIT_CONFIG);
+    fs::write(
+        junk_head.join("HEAD"),
+        "0123456789abcdef0123456789abcdef01234567 trailing junk",
+    )
+    .expect("HEAD");
+    // ` c` (leading blank) is the folder git uses.
+    let spaced = base.join("spaced");
+    init_shape(&spaced.join(" c"), INIT_CONFIG);
+    fs::write(spaced.join("HEAD"), "ref: refs/heads/main\n").expect("HEAD");
+    fs::write(spaced.join("commondir"), " c\r\n").expect("commondir");
+    let file = base.join("checkout").join(".git");
+    fs::create_dir_all(file.parent().expect("parent")).expect("checkout");
+    fs::write(&file, "gitdir:  x\n").expect(".git file");
+    let no_space = base.join("other").join(".git");
+    fs::create_dir_all(no_space.parent().expect("parent")).expect("other");
+    fs::write(&no_space, "gitdir:x\n").expect(".git file");
+    assert_eq!(
+        (
+            is_git_directory(&junk_head),
+            is_git_directory(&spaced),
+            gitdir_target(&file),
+            gitdir_target(&no_space),
+        ),
+        (true, true, Some(base.join("checkout").join(" x")), None)
+    );
+}
+
+/// #1849 review: an empty module folder added, a hard-linked config and a
+/// hooks folder turned into a link all count.
+#[cfg(unix)]
+#[test]
+fn links_and_empty_modules_count() {
+    let (_dir, base) = tempdir();
+    let roots = [base.clone()];
+    let git = base.join("repo").join(".git");
+    init_shape(&git, INIT_CONFIG);
+    let before = fingerprint(&git, &roots);
+    fs::create_dir_all(git.join("modules").join("aaa")).expect("empty module");
+    let module = changes(&before, &fingerprint(&git, &roots));
+    let before = fingerprint(&git, &roots);
+    fs::hard_link(git.join("config"), base.join("elsewhere-config")).expect("hard link");
+    let hard = changes(&before, &fingerprint(&git, &roots));
+    let before = fingerprint(&git, &roots);
+    fs::rename(git.join("hooks"), base.join("hooks-real")).expect("move hooks");
+    std::os::unix::fs::symlink(base.join("hooks-real"), git.join("hooks")).expect("link");
+    let linked = changes(&before, &fingerprint(&git, &roots));
+    let before = fingerprint(&git, &roots);
+    std::os::unix::fs::symlink(base.join("msg"), git.join("COMMIT_EDITMSG")).expect("link");
+    let written = changes(&before, &fingerprint(&git, &roots));
+    assert_eq!(
+        (
+            module,
+            hard,
+            linked.contains(&"hooks/ added".to_string()),
+            written
+        ),
+        (
+            vec!["modules/aaa/ added".to_string()],
+            vec!["config changed".to_string()],
+            true,
+            vec!["COMMIT_EDITMSG added".to_string()],
+        )
+    );
+}
+
+/// #1849 review 2: a module named with a slash (`modules\vendor\foo`) is
+/// watched, a `commondir` loop is looked at once, and a quoted `ext::` URL
+/// isn't plain.
+#[test]
+fn slashed_modules_loops_and_quoted_urls() {
+    let (_dir, base) = tempdir();
+    let roots = [base.clone()];
+    let git = base.join("repo").join(".git");
+    init_shape(&git, INIT_CONFIG);
+    let module = git.join("modules").join("vendor").join("foo");
+    init_shape(&module, INIT_CONFIG);
+    // Modules whose `commondir` leads back to the repository.
+    for n in 0..50 {
+        let looped = git.join("modules").join(format!("loop{n}"));
+        fs::create_dir_all(&looped).expect("loop module");
+        fs::write(looped.join("commondir"), "../..").expect("commondir");
+    }
+    let before = fingerprint(&git, &roots);
+    fs::write(module.join("hooks").join("post-checkout"), "evil").expect("hook");
+    let changed = changes(&before, &fingerprint(&git, &roots));
+    assert_eq!(
+        (
+            changed,
+            before.len() < 2_000,
+            plain_config(&CLONE_CONFIG.replace("https://example.com/a.git", "\"e\"xt::sh -c evil")),
+        ),
+        (
+            vec!["modules/vendor/foo/hooks/post-checkout added".to_string()],
+            true,
+            false
+        )
+    );
+}
+
+/// #1849 review 3: a module whose name has a segment git uses for its own
+/// folders (`vendor/refs`) is watched when its parent isn't a git folder,
+/// and a module path too deep to look through counts as changed.
+#[test]
+fn modules_named_like_git_folders_and_too_deep() {
+    let (_dir, base) = tempdir();
+    let roots = [base.clone()];
+    let git = base.join("repo").join(".git");
+    init_shape(&git, INIT_CONFIG);
+    let module = git.join("modules").join("vendor").join("refs");
+    init_shape(&module, INIT_CONFIG);
+    let before = fingerprint(&git, &roots);
+    fs::write(module.join("hooks").join("post-checkout"), "evil").expect("hook");
+    let changed = changes(&before, &fingerprint(&git, &roots));
+
+    let deep = base.join("deep").join(".git");
+    init_shape(&deep, INIT_CONFIG);
+    let mut path = deep.join("modules");
+    for segment in 0..8 {
+        path = path.join(format!("s{segment}"));
+    }
+    fs::create_dir_all(&path).expect("deep module");
+    let deep_before = fingerprint(&deep, &roots);
+    let deep_again = changes(&deep_before, &fingerprint(&deep, &roots));
+    assert_eq!(
+        (
+            changed,
+            deep_again
+                .iter()
+                .any(|change| change.ends_with("(more) changed"))
+        ),
+        (
+            vec!["modules/vendor/refs/hooks/post-checkout added".to_string()],
+            true
+        )
+    );
+}
+
+/// #1909: a `repo` client's work tree names, in its `.git` file, a git
+/// folder that is also a repository of its own; one snapshot looks at it
+/// once and records exactly what a look per repository records.
+#[test]
+fn shared_folder_prints_match_one_look_per_repository() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dunce::canonicalize(dir.path()).expect("canonical");
+    let roots = vec![root.clone()];
+    let mut entries = Vec::new();
+    for n in 0..3 {
+        let git = root.join(format!(".repo/projects/p{n}.git"));
+        init_shape(&git, CLONE_CONFIG);
+        fs::write(git.join("hooks/commit-msg"), format!("#!/bin/sh\n# {n}\n")).expect("hook");
+        let work = root.join(format!("p{n}"));
+        fs::create_dir_all(&work).expect("work tree");
+        fs::write(
+            work.join(".git"),
+            format!("gitdir: ../.repo/projects/p{n}.git\n"),
+        )
+        .expect(".git file");
+        entries.push(git);
+        entries.push(work.join(".git"));
+    }
+    let folders = FolderPrints::default();
+    let shared: Vec<Prints> = entries
+        .iter()
+        .map(|entry| fingerprint_with(entry, &roots, &folders))
+        .collect();
+    let alone: Vec<Prints> = entries
+        .iter()
+        .map(|entry| fingerprint(entry, &roots))
+        .collect();
+    // One look per git folder: three, not six.
+    let looks = folders.0.lock().expect("looks").len();
+    assert_eq!(
+        (
+            shared == alone,
+            looks,
+            shared[1]
+                .keys()
+                .any(|name| name.starts_with("gitdir/hooks/"))
+        ),
+        (true, 3, true)
+    );
+}

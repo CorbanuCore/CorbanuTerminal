@@ -144,23 +144,288 @@ sign-off by Travis on 2026-10-13):
   for example), are left alone.
 - Commands can no longer write outside writable roots to objects that grant
   Everyone or the logon SID write access, or open other programs' named pipes
-  and other IPC endpoints for writing, unless those are labelled Low.
+  and other IPC endpoints for writing, unless those are labelled Low. Windows
+  creates one such folder: `C:\ProgramData\Microsoft\DeviceSync` grants
+  Everyone write access and is labelled Low, so legacy commands can create,
+  change and delete files there (found by a scan of the windows-2022 runner;
+  Low folders granting Everyone Modify were measured writable by legacy
+  commands, #1770). Accepted and documented in `docs/sandbox.md` (D401): it is one
+  folder, and a normal user can't change its permissions. The elevated
+  backend's admin setup can deny it, with the other Everyone-writable
+  folders (D400, draft #1798, awaiting security sign-off).
 - The desktop commands start on is labelled Low: the per-command private
   desktop, or Core's own desktop when Core runs off the interactive window
   station with `sandbox_private_desktop = false`.
+
+A legacy command's job doesn't allow breaking away (#733; not covered by that
+sign-off): a child started with `CREATE_BREAKAWAY_FROM_JOB` fails with access
+denied, so its descendants stay in its job, where cancelling ends them and the
+lease waits for them. A program that asks to break away gets that error unless
+it retries without the flag. The elevated backend's commands can't break
+away either (D256, #1507), so cancelling or a timeout ends every process
+they start in their job. The other launch routes below (WMI, the Task
+Scheduler, COM servers) were measured for legacy commands only, not for the
+elevated backend's sandbox account. Unsandboxed commands still allow
+breaking away.
+
+Other ways to start a process (#1507), measured on the hosted Windows runner
+(no Explorer running; not yet measured on a desktop): WMI's
+`Win32_Process.Create` refuses a legacy command (access denied), as do
+activating Explorer's `ShellWindows` (E_ACCESSDENIED) and the Task
+Scheduler (opening its task folder fails with 0x80070003). Naming another
+legacy command's process as the parent (`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`)
+is refused too since D259 (but see #1560 below): each legacy command's token
+carries its own identity SID, and its default DACL (what its processes, threads, token and
+the pipes and other objects it creates without explicit security get)
+grants full access only to the user, SYSTEM and that SID, and only
+`SYNCHRONIZE` to Everyone, the logon SID and the capability SIDs (D429; before,
+read and execute). A legacy command
+writes only through its restricting SIDs, so it keeps full access to its own
+processes but can't open another legacy command's with any write right
+(start a child under it, change its DACL, duplicate its handles, write its
+memory) or adjust its token. Core and other unsandboxed programs keep full
+access through the user SID. Cost: a legacy command can't write to an object
+that another legacy command's process (a concurrent one, or one left running
+by an earlier command) created without explicit security, such as a named
+pipe, event or section a shared daemon serves; nor to a file it created in a
+folder without inheritable entries. Since D429 (#1803) an elevated command
+(another account, which holds Everyone and the logon SID) can no longer read a
+legacy command's memory or thread contexts, query or end it; before, read and
+execute gave it `PROCESS_VM_READ` and `THREAD_GET_CONTEXT`. Cost: other accounts
+can no longer read what a legacy command creates without explicit security
+(a section or event it makes, or a file in a folder without inheritable
+entries); SYSTEM and the user keep full access. Not closed: other
+legacy commands can still read its memory and thread contexts, and end its
+processes, through the user SID (read rights and `PROCESS_TERMINATE` pass a
+write-restricted token on its normal SIDs alone, and every legacy command holds
+the user SID, #1838), and can still duplicate and impersonate its token
+(`TOKEN_DUPLICATE` isn't a write right). The borrowed token carries the command's identity, so with it
+they can write to its processes again, including starting a child in its job
+through the parent-process route, and write in its writable roots while it
+runs (#1560). The boundary D259 draws between legacy commands holds only once
+#1560 is closed. This matters only while two legacy commands run at the same
+time with different writable roots (different projects, or different extra
+writable folders): either can write in the other's. Documented for now
+(D291, Travis 2026-11-06) in the non-admin warning and `docs/sandbox.md`.
+The memory read between legacy commands (#1838) is documented too (D433,
+Travis 2026-11-09), next to #1560 in `docs/sandbox.md`, which points people
+who work on several projects at once to the elevated backend (where #1800,
+awaiting security sign-off, would close the read). No default DACL can close
+it while legacy tokens are write-restricted; a different token shape (#1838
+option (a), the same direction as #1560 option (a)) is to be weighed with
+#1560's token measurement. D291 also pointed people who work on several
+projects at once to the elevated backend, but measured since, its commands
+could do the same to each other and more: they share one sandbox account (a
+restricting SID of every elevated token) and the logon SID of the session
+that starts their runners, and had full access to each other's processes and runners even without borrowing a
+token (#1648). Since D324 (Travis 2026-11-07) each elevated command's token
+carries its own identity SID too, and its default DACL grants full access
+only to SYSTEM, the sandbox users' group (every elevated token holds it as a
+normal group, never as a restricting SID, so it can't pass the write check)
+and that SID; the logon SID, the sandbox account, `OWNER RIGHTS`, Everyone
+and the capability SIDs get read and execute. As its first step, each
+runner also limits what the sandbox account, which all elevated commands
+share, may do to it: query its process and threads (and wait for them),
+query its token, and nothing on the objects it creates without explicit
+security, such as its pipes and the ConPTY console host, which get full
+access for SYSTEM and read, write and execute for the sandbox users' group. Measured on CI, elevated and in a normal session: an
+elevated command can no longer open another elevated command's process, its
+own or another command's runner, or a runner's console host for any of the 8
+write rights, adjust their tokens, or open a runner's token; a ConPTY
+console host's token still opens for `TOKEN_DUPLICATE`, but a command
+impersonating it gets identification level only and can't write or start
+processes as it (measured); it keeps full access to its own processes; a cmd pipeline,
+PowerShell (with and without ConPTY), `git init` and `git status` still
+work. Core starts each runner suspended and, before it runs, limits its
+process and main thread to SYSTEM; the runner has no console, so no console
+host starts before its first step. Not closed: the threads Windows' loader
+starts in a runner before that first step get the logon's default DACL,
+which gives the sandbox account full access, so a command racing a
+runner's start-up can still open one for write rights (10 to 16 of 20
+start-ups on CI, #1721). Such a thread lets the command run code in the
+unrestricted runner, outside its restricted token and job, so this
+start-up race is the remaining route out of the elevated sandbox that D324
+didn't close; a CI test keeps the other start-up routes closed. Elevated
+commands can still read each other's processes, including their ConPTY
+console hosts (another workspace's terminal output), as before (reads
+aren't restricted), end them (D292), and borrow another elevated command's
+token through the group's `TOKEN_DUPLICATE` and write in that command's
+writable roots, as legacy commands can (#1560); impersonating another
+command's threads may be a second borrowing route (unmeasured, #1560). So the docs
+still say neither backend keeps concurrent projects apart. Closing the
+borrowing for both backends, after the #1560 token measurement, is D324's
+second step. Killing
+another command's processes stays possible on purpose (D292). Two routes
+still start a child
+outside the command's job: the COM servers `ShellBrowserWindow` (the child
+runs at Low integrity but with an unrestricted token) and
+`MMC20.Application` (Low, restricted). Closing them waits on a measurement
+on a real desktop (D260); their tests are ignored until then.
+
+Reads between elevated commands (#1803), measured on CI (run 42446494973,
+admin and normal sessions): an elevated command in one workspace can read
+the memory of another workspace's concurrent elevated command (51 MB, with
+its typed input and its output) and of that command's ConPTY console host
+(27 MB, same markers; its threads' contexts too), but can't open either for
+writing or duplicating handles, nor read its runner. Owner decisions
+(2026-11-08): #1800 closes the command-memory read (its commands' default
+DACL lets the sandbox users' group and Everyone only read the security
+descriptor, wait and query limited information); a stop-gap
+on main, which needs security sign-off, is made only if #1800 is delayed by
+days. #1800 leaves the console-host read, since the runner's default DACL
+still gives the group read access; a follow-up on top of #1800 narrows the
+group to query and synchronize rights there, gated by a test built from the
+win-1803m probe (D417).
 
 Protected paths that already exist inside writable roots when a session
 starts, such as `.git`, `.codex`, and `.agents`, also get an Everyone deny of
 `FILE_DELETE_CHILD` on the path, its subdirectories, and its parent directory.
 That keeps the sandbox from deleting, moving, or replacing them through the
 parent, which would otherwise let it plant Git hooks or config that later run
-unsandboxed. Renaming a writable ancestor of a nested protected path is not
-covered. The deny entries are persistent and visible in the folder's security
-settings. Unsandboxed deletes normally keep working because they use each
+unsandboxed. For an explicitly configured read-only path nested deeper in a
+writable root (`w\a\b`, say), each folder between the root and it (`w\a`)
+also denies the sandbox `DELETE`, and that folder's parent denies Everyone
+`FILE_DELETE_CHILD`, so a command can't move or rename the folder away and
+recreate the read-only path (#1506 item 3, D263). An explicitly configured
+read-only path that doesn't exist yet is created (as a folder) before the
+command starts and protected the same way, whether it comes from the
+profile alone (the shell tool, unified exec, `codex sandbox`) or as an extra
+deny-write path (#1686); a link a command could replace on the way to it
+stops the command first. A path meant to be a file (`.env`, say) thus becomes an empty
+folder in each writable root that lacks it, which tools that read it may
+reject. Such a path is created before the session records which `.codex`/`.agents`
+folders exist (D262, D283 below), so a configured read-only `.agents` (or a
+nested `.codex`) the sandbox makes isn't reported as planted (a session that
+started before it was made, and saw it absent, still reports it, except one
+whose only root containing it is a `%TEMP%` one, which isn't watched). A
+top-level `.codex`, `.agents` or `.git` made on the way to a deeper
+read-only path (`.codex\hooks`, `.git\hooks`) is then protected as one
+that was there. A
+skip-missing entry applies only to a path that exists, a path in
+a writable root that doesn't exist is left alone, and the command root's
+top-level `.codex` is covered by D262 below. Commands can still write
+inside those folders but can't delete or rename the folders themselves; the
+default `.git`, `.codex` and `.agents` protections sit directly in the root
+and don't add these. A `.codex` or `.agents` folder at the top of a writable
+root that doesn't exist when a session starts isn't protected, so a command
+can create it (#1506 item 2). Each session records which of them were absent;
+one that exists when the session ends (or, for a session still running, as
+soon as it appears; for one that crashed, at the next sweep) is recorded as
+possibly planted in `planted-metadata.json` next to the integrity-label
+records (D262). Until the user confirms it, Core loads neither its config
+and hooks (the project layer is disabled) nor its skills, and says so at
+startup; the TUI asks whether to load it, and confirming is refused while a
+session that saw it appear still runs. A planted link counts as the folder
+itself (it isn't followed), and a linked worktree's hooks from a planted root
+checkout `.codex` are ignored too. If the records can't be read, no project
+`.codex`/`.agents` content is loaded at all. Anything that creates such a
+folder while a session runs is reported, including the user. A top-level
+`.codex` or `.agents` that is itself a link (a junction, symbolic link or
+mount point), or can't be inspected, stops the command: its protections
+would land on the link's target, and a command could replace the link with
+a writable folder that D262 doesn't report, since something was there when
+the session started (#1682). Replace the link with a folder. This applies
+to the roots D283 watches (not those that come only from `%TEMP%`/`%TMP%`)
+that hold their own write capability; the user profile folder doesn't
+(only its children do), so a linked `~\.codex` there doesn't stop the
+command. Other reparse points, such as cloud placeholders, aren't links
+(#1668). A top-level `.git` link isn't refused: `.git` may be missing and
+then created by a command anyway, and some tools (Google's `repo`) link it.
+
+`.codex`/`.agents` deeper in a writable root (Core loads them from every
+folder between the project root and its working directory) are covered too
+(#1541, D283). When a session starts, it lists every one below the top of
+its writable roots (except those that come only from `%TEMP%`/`%TMP%`:
+every program creates folders there, so each project folder made there
+while any legacy command ran would count as planted, and the temp folder
+isn't treated as a project location; a workspace or configured root stays
+watched even if the temp folder resolves to it), with its file identity; it doesn't look inside `.git`
+folders, inside those it finds, or behind links (about 30 ms on a
+100,000-file workspace). Other reparse points, such as ProjFS (VFS for Git)
+folders or cloud placeholders a program sees as they are, aren't links: the
+walk looks inside them, and one named `.codex` or `.agents` is protected and
+identified like a plain folder (#1672). Names are compared the way NTFS compares them, so
+a name such as `.agentſ` counts (and is never trusted). Each one it finds
+gets the top-level ones' protection: an explicit Medium label, the
+capability-SID write deny and the tracked Everyone delete-child denies. It
+and every folder between it and the root also get D263's denies, so a
+command can't move or rename them (nor swap one for a link while Core reads
+it). The host then checks the folder is still the one it found before it
+writes the rest. If any of that fails, the command doesn't start. When the
+session ends (or, for one that crashed, at the next sweep), every such entry
+that wasn't in its list as the same file is recorded as possibly planted,
+like the top-level ones. That is a new one, or one replaced, even if the
+user had confirmed it before. So is every folder the walk couldn't list:
+everything below it counts as planted until confirmed. While the session
+runs, Core treats such an entry as planted right away, even before it
+exists, and checks again right before loading each folder. Confirming is
+refused. Costs and limits:
+- A nested link named `.codex` or `.agents` is never protected (its target
+  is the sandbox's choice). It counts as planted after every session in its
+  root until confirmed again, which is noisy for repositories that link
+  `.agents`.
+- Commands can't rename, move or delete nested `.codex`/`.agents` folders or
+  the folders above them (a `git checkout` or `npm ci` that does is refused
+  there).
+- A command doesn't start if those denies can't be written.
+- Sessions started by builds before D283 aren't watched for nested folders.
+- The walk lists ProjFS folders and exposed cloud placeholders through their
+  provider (#1672): a stalled provider stalls it, and one that fails a
+  listing makes that folder unlistable. Content a provider hasn't filled in
+  yet comes from the provider, not from writes the sandbox's denies govern,
+  as for such files in a plain `.codex`.
+
+The
+Everyone deny entries are visible in the folder's security settings while a
+session needs them. Each one a session adds is recorded first, in
+`delete-child-denies.json` next to the integrity-label records (#1506 item 1,
+D261), and removed by the sweep that puts labels back once no live session's
+writable root holds its folder and the folder isn't labelled Low (a Low
+label means a sandbox, perhaps another Windows account's, whose records
+these aren't, may be using it); a session that crashed has its entries
+removed by the next sweep (a later legacy command, or the next TUI or
+app-server start). Accepted gap (#1542 item 5, D293): the records and their
+lock are per Windows account, so in the milliseconds between one account's
+sweep finding a folder not Low and removing the deny, another account's
+session could label the folder Low and start a command that relies on that
+deny. A deny that D263 needs above an explicit nested read-only
+path must be in place, or the command doesn't start. So must there be no
+link (junction, symbolic link or mount point) above such a path that a
+command could replace, that is, one whose folder lies inside a writable
+root, whether in the path as configured or on the way to a link's target
+(#1542 item 1, D293). D263's denies land on the link's target, so the link
+itself could be removed and the read-only path recreated behind it.
+Configure the path through the link's target instead. The same holds for a
+read-only path that is itself such a link (#1667). The check runs again
+after the folders' own `DELETE` denies are written (their parents'
+delete-child denies follow just after), which narrows the window for a link
+a running command swaps in meanwhile. A root spelled through a link from
+outside the writable roots is fine. Other reparse points, such as OneDrive
+placeholders, aren't links and don't stop the command; they get the same
+denies as plain folders, above such a path or as a protected path itself
+(#1668). As for plain folders, a D263 deny that can't be written stops the
+command. A read-only path spelled
+through a writable root's link, and so listed against the root's resolved
+path, gets the same protection (#1542 item 2). An entry that was already there and isn't recorded (one
+the user made, or one left by a version before this change) is never
+removed. Without usable records the entries are added untracked and stay, as
+before. Unsandboxed deletes normally keep working because they use each
 object's own `DELETE` right; only a delete that relies on the parent's
-`FILE_DELETE_CHILD` is affected. To remove the entries, run
+`FILE_DELETE_CHILD` is affected. To remove leftover entries, run
 `icacls <dir> /remove:d *S-1-1-0` on the affected directories. That command
-also removes any other Everyone deny entries on them.
+also removes any other Everyone deny entries on them. The sandbox `DELETE`
+denies on folders above nested read-only paths (D263) name the sandbox's own
+capability SIDs, like its other deny entries, and stay; if one can't be added,
+the command doesn't start. To remove them, first drop the nested read-only
+path from your configuration (otherwise the next legacy command adds them
+back), then run `icacls <dir> /remove:d *<sid>` on each folder between the
+writable root and the read-only path, for each SID listed in `cap_sid` under
+`CODEX_HOME` (a JSON file). That also removes the sandbox's other deny
+entries for that SID on the folder, which the next legacy command that needs
+them adds back. The same goes for the `DELETE` denies D283 adds on nested
+`.codex`/`.agents` folders and the folders above them: they stay after the
+nested folder is gone (remove that folder first, or the next legacy command
+adds them back).
 
 New `[permissions]` / split filesystem policies remain supported on Windows
 only when they can be enforced directly by the selected Windows backend or

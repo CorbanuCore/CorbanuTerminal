@@ -300,7 +300,7 @@ fn writer_lock_is_released_when_file_removal_fails() -> std::io::Result<()> {
 fn writer_lock_is_released_when_coordination_fails() -> std::io::Result<()> {
     let home = TempDir::new()?;
     let coordinator = Arc::new(WriterLockCoordinator::new(home.path()));
-    let owner = coordinator
+    let mut owner = coordinator
         .acquire(ThreadId::default())
         .expect("acquire writer lock");
     let path = owner.path.clone();
@@ -317,8 +317,12 @@ fn writer_lock_is_released_when_coordination_fails() -> std::io::Result<()> {
     fs::remove_file(&coordination_path)?;
     fs::create_dir(&coordination_path)?;
 
-    drop(owner);
+    owner.cleanup();
 
+    assert!(
+        owner.file.is_none(),
+        "failed coordination still takes the owned writer file"
+    );
     assert!(
         coordination_path.is_dir(),
         "coordination failure is preserved"

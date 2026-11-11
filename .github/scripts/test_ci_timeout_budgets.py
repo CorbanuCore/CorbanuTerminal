@@ -103,8 +103,12 @@ class PrLinuxClippyTest(unittest.TestCase):
         self.assertNotIn("save_caches", self.workflow("rust-ci-full.yml"))
         self.assertEqual(self.workflow("rust-ci.yml").count("save_caches: false"), 2)
 
-    def test_pr_ci_skips_linux_test_suite(self) -> None:
-        self.assertNotIn("nextest", self.workflow("rust-ci.yml"))
+    def test_pr_ci_skips_full_linux_test_suite(self) -> None:
+        # PRs run only the changed crates' tests (#1972); the whole suite
+        # stays postmerge.
+        rust_ci = self.workflow("rust-ci.yml")
+        self.assertNotIn("nextest", rust_ci)
+        self.assertNotIn("rust-ci-full-nextest-platform.yml", rust_ci)
 
     def test_lint_build_definition_is_shared(self) -> None:
         full = self.workflow("rust-ci-full.yml")
@@ -419,10 +423,24 @@ class PrAppServerSchemaFixturesTest(unittest.TestCase):
             ["codex-rs/core/src/lib.rs", "README.md", "docs/ci.md"],
             ["codex-rs/protocol-extra/src/lib.rs", "codex-rs/app-server/src/lib.rs"],
             ["codex-rs/utils/path-utils/src/lib.rs", "codex-rs/ext/web-search/src/lib.rs"],
-            [".github/workflows/rust-ci-full.yml", "codex-rs/Cargo.lock"],
+            [".github/workflows/rust-ci-full.yml", "codex-rs/Cargo.lock.bak"],
+            ["codex-rs/Cargo.toml.bak"],
+            ["codex-rs/codex-experimental-api-macros-extra/src/lib.rs"],
         ):
             with self.subTest(files=files):
                 self.assertFalse(self.detect(files))
+
+    def test_runs_for_schema_generation_inputs(self) -> None:
+        # #1298: the macro controls experimental-field filtering, and a
+        # schemars/ts-rs feature or lockfile update can change the output.
+        for path in (
+            "codex-rs/codex-experimental-api-macros/src/lib.rs",
+            "codex-rs/codex-experimental-api-macros/Cargo.toml",
+            "codex-rs/Cargo.toml",
+            "codex-rs/Cargo.lock",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(self.detect([path]))
 
     def test_watches_every_schema_deriving_dependency(self) -> None:
         # Workspace crates that codex-app-server-protocol depends on
@@ -500,9 +518,18 @@ class PrAppServerSchemaFixturesTest(unittest.TestCase):
 
 class PrWindowsNativeTestsTest(unittest.TestCase):
     """#636 (owner decision 2026-10-15): native Windows tests on PRs that
-    change codex-tui, codex-core, codex-state or codex-login."""
+    change codex-tui, codex-core, codex-state or codex-login; since #1813 also
+    windows-sandbox-rs, network-proxy, process-hardening, sandboxing and
+    exec-server."""
 
     CRATES = ("tui", "core", "state", "login")
+    MORE_CRATES = (
+        "windows-sandbox-rs",
+        "network-proxy",
+        "process-hardening",
+        "sandboxing",
+        "exec-server",
+    )
     REUSABLE = "rust-ci-windows-native-tests.yml"
 
     def workflow(self, name: str) -> str:
@@ -533,8 +560,8 @@ class PrWindowsNativeTestsTest(unittest.TestCase):
         )
         return result.stdout.strip() == "true"
 
-    def test_runs_only_for_the_four_crates_and_its_workflow(self) -> None:
-        for crate in self.CRATES:
+    def test_runs_only_for_its_crates_and_its_workflow(self) -> None:
+        for crate in self.CRATES + self.MORE_CRATES:
             with self.subTest(crate=crate):
                 self.assertTrue(self.detect(["README.md", f"codex-rs/{crate}/src/lib.rs"]))
         self.assertTrue(self.detect([f".github/workflows/{self.REUSABLE}"]))
@@ -568,6 +595,8 @@ class PrWindowsNativeTestsTest(unittest.TestCase):
             r"(?m)^    needs: changed\n"
             r"    if: \$\{\{ needs\.changed\.outputs\.windows_native_tests == 'true' \}\}\n"
             rf"    uses: \./\.github/workflows/{re.escape(self.REUSABLE)}\n"
+            r"    with:\n"
+            r"      targets: \$\{\{ needs\.changed\.outputs\.windows_native_targets \}\}\n"
             r"    secrets: inherit$",
         )
 
@@ -592,11 +621,13 @@ class PrWindowsNativeTestsTest(unittest.TestCase):
         self.assertNotRegex(triggers, r"(?m)^  (pull_request|push|schedule):")
         self.assertIn("runs-on: windows-2022", reusable)
         self.assertIn("timeout-minutes: 90", reusable)
-        targets = re.search(r"(?ms)^ +bazel_targets=\(\n(.*?)^ +\)$", reusable)
-        self.assertIsNotNone(targets)
+        # Called without targets, it tests the four #636 crates.
+        default = re.search(r"(?m)^        default: (.*)$", triggers)
+        self.assertIsNotNone(default)
         self.assertEqual(
-            targets.group(1).split(), [f"//codex-rs/{crate}/..." for crate in self.CRATES]
+            default.group(1).split(), [f"//codex-rs/{crate}/..." for crate in self.CRATES]
         )
+        self.assertIn('read -r -a bazel_targets <<< "$TARGETS"', reusable)
         self.assertIn("--build_tests_only", reusable)
         # Native, like nightly's test-windows-native-main, not the gnullvm
         # cross build that needs BuildBuddy.

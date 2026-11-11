@@ -22,3 +22,6 @@ Include a link to a bug report or enhancement request.
       `codex-utils-path-uri`, `codex-extension-items`), run
       `just write-app-server-schema` and
       `just write-app-server-schema --experimental`, and commit the fixtures.
+- [ ] A change users will notice adds a release-note fragment in
+      `qa/release/unreleased/notes/` (see its `README.md`); don't recreate
+      `qa/release/unreleased/RELEASE_NOTES.md`.

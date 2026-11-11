@@ -16,6 +16,7 @@ use super::response_body_stream::HttpBodyStreamRegistration;
 use crate::HttpClient;
 use crate::client::ExecServerClient;
 use crate::client::ExecServerError;
+use crate::protocol::HTTP_ADDRESS_POLICY_UNSUPPORTED;
 use crate::protocol::HTTP_REQUEST_METHOD;
 use crate::protocol::HttpRequestParams;
 use crate::protocol::HttpRequestResponse;
@@ -24,11 +25,32 @@ use crate::protocol::HttpRequestResponse;
 const HTTP_BODY_DELTA_CHANNEL_CAPACITY: usize = 256;
 
 impl ExecServerClient {
+    /// Refuses a policy-bearing request when the executor would ignore the
+    /// policy: an older executor drops the unknown `addressPolicy` field.
+    async fn ensure_address_policy_supported(
+        &self,
+        params: &HttpRequestParams,
+    ) -> Result<(), ExecServerError> {
+        if params.address_policy.is_some()
+            && !self
+                .environment_info()
+                .await?
+                .capabilities
+                .http_address_policy
+        {
+            return Err(ExecServerError::Protocol(
+                HTTP_ADDRESS_POLICY_UNSUPPORTED.to_string(),
+            ));
+        }
+        Ok(())
+    }
+
     /// Performs an HTTP request and buffers the response body.
     pub async fn http_request(
         &self,
         mut params: HttpRequestParams,
     ) -> Result<HttpRequestResponse, ExecServerError> {
+        self.ensure_address_policy_supported(&params).await?;
         params.stream_response = false;
         self.call(HTTP_REQUEST_METHOD, &params).await
     }
@@ -42,6 +64,7 @@ impl ExecServerClient {
         &self,
         mut params: HttpRequestParams,
     ) -> Result<(HttpRequestResponse, HttpResponseBodyStream), ExecServerError> {
+        self.ensure_address_policy_supported(&params).await?;
         let rpc_client = self.rpc_client().await?;
         params.stream_response = true;
         let request_id = self.inner.next_http_body_stream_request_id();
