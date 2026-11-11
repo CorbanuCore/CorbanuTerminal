@@ -779,6 +779,103 @@ pub(super) fn finder_exec_commands(words: &[String]) -> Vec<(usize, usize)> {
     commands
 }
 
+/// #1808: one `chroot [options] NEWROOT [COMMAND...]` among the programs of
+/// some words: where its root and its command are (`None`: missing),
+/// whether `--skip-chdir` keeps the current folder (otherwise chroot runs the
+/// command in `/` of the new root), and whether it has an option this reading
+/// does not know (GNU's value-taking abbreviations, BSD's `-u`/`-g`/`-G`).
+/// Words a redirection holds (`chroot / <x`) are neither the root nor the
+/// command: the shell takes them away.
+struct ChrootRead {
+    root: Option<usize>,
+    command: Option<usize>,
+    skip_chdir: bool,
+    unknown_option: bool,
+}
+
+/// #1808: each chroot among the programs of `words[from..]` (`from`: the
+/// operands of `eval`). Positions are in `words`. Each chroot reads only its
+/// own options and root.
+fn chroot_reads(simple: &SimpleCommand, words: &[String], from: usize) -> Vec<ChrootRead> {
+    let next_unheld = |mut at: usize| {
+        while at < words.len() && held(simple, at) {
+            work::step();
+            at += 1;
+        }
+        (at < words.len()).then_some(at)
+    };
+    programs(words.get(from..).unwrap_or_default())
+        .into_iter()
+        .map(|at| from + at)
+        .filter(|&at| {
+            work::step();
+            basename(&words[at]).eq_ignore_ascii_case("chroot")
+        })
+        .map(|at| {
+            let mut read = ChrootRead {
+                root: None,
+                command: None,
+                skip_chdir: false,
+                unknown_option: false,
+            };
+            let mut next = at + 1;
+            while let Some(at) = next_unheld(next) {
+                work::step();
+                let word = words[at].as_str();
+                next = at + 1;
+                if word == "--" {
+                    break;
+                }
+                if !word.starts_with('-') || word == "-" {
+                    next = at;
+                    break;
+                }
+                match word {
+                    // The value is the next word that is not held.
+                    "--userspec" | "--groups" => {
+                        next = next_unheld(at + 1).map_or(words.len(), |value| value + 1);
+                    }
+                    "--skip-chdir" => read.skip_chdir = true,
+                    _ if word.starts_with("--userspec=") || word.starts_with("--groups=") => {}
+                    _ => read.unknown_option = true,
+                }
+            }
+            read.root = next_unheld(next);
+            read.command = read.root.and_then(|root| next_unheld(root + 1));
+            read
+        })
+        .collect()
+}
+
+/// #1808: whether a chroot runs code the classifier cannot judge: a command
+/// looked up under a root other than `/` (another filesystem's programs), a
+/// root it cannot see, an option it does not know, or no command at all
+/// (chroot then runs the root's shell, which may read a redirected file as
+/// its script: `chroot / <x`).
+pub(super) fn chroot_runs_unjudged(simple: &SimpleCommand, words: &[String], from: usize) -> bool {
+    chroot_reads(simple, words, from).into_iter().any(|read| {
+        read.unknown_option
+            || read.root.is_none_or(|root| words[root] != "/")
+            || read.command.is_none()
+    })
+}
+
+/// #1808: where the command of each `chroot ... /` starts, and whether it
+/// keeps the current folder (`--skip-chdir`). The classifier judges it as a
+/// command line of its own, besides the line as read before (chroot stays
+/// the command word for every other check).
+pub(super) fn chroot_commands(
+    simple: &SimpleCommand,
+    words: &[String],
+    from: usize,
+) -> Vec<(usize, bool)> {
+    chroot_reads(simple, words, from)
+        .into_iter()
+        .filter(|read| !read.unknown_option && read.root.is_some_and(|root| words[root] == "/"))
+        .filter_map(|read| Some((read.command?, read.skip_chdir)))
+        .collect()
+}
+
 /// #1482 item 4: whether a sudo among the programs of these words runs an
 /// askpass helper, an editor named by the environment, or code inside a
 /// chroot (`sudo -A`, `sudo -e`, `--askpass`, `--edit`, `sudoedit`,

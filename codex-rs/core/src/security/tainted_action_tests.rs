@@ -19,6 +19,10 @@ mod issue_1901_disguised_stat_load;
 #[path = "issue_1276_to_1620_tests.rs"]
 mod issue_1276_to_1620;
 
+// #1808: chroot after untrusted content.
+#[path = "tainted_action_chroot_tests.rs"]
+mod chroot_tests;
+
 /// #1716: the work counter (`super::work`) with tracing silenced while it
 /// counts; it shadows the `work` of `use super::*` for these tests. The
 /// `#[traced_test]` tests in this binary install a process-wide subscriber
