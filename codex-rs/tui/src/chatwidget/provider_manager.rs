@@ -18,6 +18,10 @@ use crate::provider_named_accounts::ProviderAccountEvent;
 
 const MANAGER_VIEW_ID: &str = "provider-manager";
 
+#[cfg(test)]
+#[path = "provider_manager_status_account_tests.rs"]
+mod status_account_tests;
+
 impl ChatWidget {
     pub(crate) fn open_provider_manager_api_key(
         &mut self,
@@ -173,6 +177,7 @@ impl ChatWidget {
         methods: Vec<crate::provider_named_accounts::AddAccountMethod>,
     ) {
         let tx = self.app_event_tx.clone();
+        let refused_tx = self.app_event_tx.clone();
         let title = match &rename_from {
             Some(from) => format!("Rename {provider_display_name} account `{from}`"),
             None => format!("Add a {provider_display_name} account"),
@@ -216,7 +221,19 @@ impl ChatWidget {
                 };
                 tx.send(AppEvent::ProviderAccount(event));
             }),
-        );
+        )
+        // #1289: Enter submits the name even right after fast typing; a
+        // newline would leave the next (secret) input in this clear field.
+        // Input sent together with the submit (a key) is held, not passed
+        // on to whatever the submit opens, and the name is refused.
+        .with_submit_mode(
+            crate::bottom_pane::custom_prompt_view::CustomPromptSubmitMode::EnterSingleLine,
+        )
+        .with_on_refused(Box::new(move || {
+            refused_tx.send(AppEvent::ProviderAccount(ProviderAccountEvent::Finished {
+                result: Err(codex_vault::ProviderAccountError::InvalidName.to_string()),
+            }));
+        }));
         self.bottom_pane.show_view(Box::new(view));
     }
 
@@ -833,6 +850,188 @@ fn setup_description(capability: &ProviderSetupCapability) -> String {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+
+    fn type_keys(chat: &mut ChatWidget, keys: &[crossterm::event::KeyCode]) {
+        for key in keys {
+            chat.handle_key_event(crossterm::event::KeyEvent::new(
+                *key,
+                crossterm::event::KeyModifiers::NONE,
+            ));
+        }
+    }
+
+    /// #1289: the name prompt submits once input has been quiet for
+    /// `SINGLE_LINE_SUBMIT_HOLD`; wait that out and run what the app's draw
+    /// loop runs (paste-burst flush, then the pre-draw tick).
+    fn wait_out_submit_hold(chat: &mut ChatWidget) {
+        std::thread::sleep(
+            crate::bottom_pane::custom_prompt_view::SINGLE_LINE_SUBMIT_HOLD
+                + std::time::Duration::from_millis(50),
+        );
+        if !chat.handle_paste_burst_tick(crate::tui::FrameRequester::test_dummy()) {
+            chat.pre_draw_tick();
+        }
+    }
+
+    fn open_zai_name_prompt(chat: &mut ChatWidget) {
+        chat.open_provider_account_name_prompt(
+            "Z.AI",
+            "zai".to_string(),
+            /*rename_from*/ None,
+            vec![crate::provider_named_accounts::AddAccountMethod::ApiKey],
+        );
+    }
+
+    /// #1289: typing the name and pressing Enter at once (as fast as a paste)
+    /// moves on to the key entry; the Enter is not taken as a newline.
+    #[tokio::test]
+    async fn add_account_name_enter_right_after_typing_submits() {
+        use crossterm::event::KeyCode;
+        let (mut chat, _tx, mut rx, _op_rx) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        chat.open_provider_account_name_prompt(
+            "Z.AI",
+            "zai".to_string(),
+            /*rename_from*/ None,
+            vec![crate::provider_named_accounts::AddAccountMethod::ApiKey],
+        );
+        let mut keys: Vec<KeyCode> = "work".chars().map(KeyCode::Char).collect();
+        keys.push(KeyCode::Enter);
+        type_keys(&mut chat, &keys);
+        wait_out_submit_hold(&mut chat);
+
+        let Ok(AppEvent::ProviderAccount(ProviderAccountEvent::AddNamed {
+            provider_id,
+            name,
+            method,
+        })) = rx.try_recv()
+        else {
+            let popup =
+                crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 80);
+            panic!("one Enter must submit the name; the prompt still shows:\n{popup}");
+        };
+        assert_eq!(
+            (provider_id.as_str(), name.as_str(), method),
+            (
+                "zai",
+                "work",
+                crate::provider_named_accounts::AddAccountMethod::ApiKey
+            )
+        );
+    }
+
+    /// #1289: a name holding a newline (a paste) is refused before the key
+    /// entry opens, and the refusal does not echo what was entered.
+    #[tokio::test]
+    async fn add_account_name_with_a_newline_is_refused_before_key_entry() {
+        let (mut chat, _tx, mut rx, _op_rx) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        chat.open_provider_account_name_prompt(
+            "Z.AI",
+            "zai".to_string(),
+            /*rename_from*/ None,
+            vec![crate::provider_named_accounts::AddAccountMethod::ApiKey],
+        );
+        chat.handle_paste("work\npf1289-not-a-real-key".to_string());
+        let shown =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 80);
+        assert!(
+            !shown.contains("pf1289"),
+            "only the first pasted line may be shown:\n{shown}"
+        );
+        type_keys(&mut chat, &[crossterm::event::KeyCode::Enter]);
+        wait_out_submit_hold(&mut chat);
+
+        let Ok(AppEvent::ProviderAccount(ProviderAccountEvent::Finished { result })) =
+            rx.try_recv()
+        else {
+            panic!("a name with a newline must be refused");
+        };
+        let error = result.expect_err("refused");
+        assert!(error.starts_with("invalid account name"), "{error}");
+        assert!(!error.contains("pf1289"), "{error}");
+        assert!(rx.try_recv().is_err(), "nothing may follow the refusal");
+    }
+
+    /// #1337 review: Ctrl+J (an editor newline key, and what a raw-mode
+    /// terminal can report for a pasted line feed) submits the name like
+    /// Enter. The key typed next goes to the masked entry, never in clear.
+    #[tokio::test]
+    async fn add_account_name_ctrl_j_submits_and_the_key_stays_masked() {
+        use crossterm::event::KeyCode;
+        use crossterm::event::KeyEvent;
+        use crossterm::event::KeyModifiers;
+        let (mut chat, _tx, mut rx, _op_rx) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        open_zai_name_prompt(&mut chat);
+        let keys: Vec<KeyCode> = "work".chars().map(KeyCode::Char).collect();
+        type_keys(&mut chat, &keys);
+        chat.handle_key_event(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::CONTROL));
+        wait_out_submit_hold(&mut chat);
+
+        let Ok(AppEvent::ProviderAccount(ProviderAccountEvent::AddNamed {
+            provider_id,
+            name,
+            method,
+        })) = rx.try_recv()
+        else {
+            let keys: Vec<KeyCode> = "sk-fake-0000".chars().map(KeyCode::Char).collect();
+            type_keys(&mut chat, &keys);
+            let popup =
+                crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 80);
+            panic!("Ctrl+J must submit the name; after typing a key the prompt shows:\n{popup}");
+        };
+        // What the app does with AddNamed for an API-key account.
+        chat.open_provider_account_value_entry("Z.AI", provider_id, name, method);
+        let keys: Vec<KeyCode> = "sk-fake-0000".chars().map(KeyCode::Char).collect();
+        type_keys(&mut chat, &keys);
+
+        let shown =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 80);
+        assert!(!shown.contains("sk-fake"), "{shown}");
+        assert_eq!(chat.composer_text_with_pending(), "");
+    }
+
+    /// #1337 review: a key sent in the same burst as the name and its Enter
+    /// reaches nothing: not the chat composer, not a view under the prompt.
+    /// The prompt keeps it out, refuses with the fixed text and saves nothing.
+    #[tokio::test]
+    async fn add_account_name_keys_right_after_enter_reach_nothing() {
+        use crossterm::event::KeyCode;
+        let (mut chat, _tx, mut rx, _op_rx) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        open_zai_name_prompt(&mut chat);
+        let mut keys: Vec<KeyCode> = "work".chars().map(KeyCode::Char).collect();
+        keys.push(KeyCode::Enter);
+        keys.extend("sk-fake-0000".chars().map(KeyCode::Char));
+        type_keys(&mut chat, &keys);
+
+        let shown =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 80);
+        assert!(!shown.contains("sk-fake"), "{shown}");
+        wait_out_submit_hold(&mut chat);
+
+        let mut events = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            events.push(event);
+        }
+        let shown =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 80);
+        assert_eq!(
+            chat.composer_text_with_pending(),
+            "",
+            "events: {events:?}\n{shown}"
+        );
+        assert!(!shown.contains("sk-fake"), "{shown}");
+        assert!(!chat.has_active_view(), "{shown}");
+        let [AppEvent::ProviderAccount(ProviderAccountEvent::Finished { result: Err(error) })] =
+            events.as_slice()
+        else {
+            panic!("only the refusal may be sent: {events:?}");
+        };
+        assert!(error.starts_with("invalid account name"), "{error}");
+        assert!(!error.contains("sk-fake"), "{error}");
+    }
 
     #[tokio::test]
     async fn configured_credentials_can_be_replaced_while_active_or_inactive() {

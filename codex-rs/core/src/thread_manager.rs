@@ -1130,10 +1130,22 @@ impl ThreadManager {
             }
         }
 
-        let mut tracked_threads = self.state.threads.write().await;
-        for thread_id in &report.completed {
-            tracked_threads.remove(thread_id);
+        let no_threads_left = {
+            let mut tracked_threads = self.state.threads.write().await;
+            for thread_id in &report.completed {
+                tracked_threads.remove(thread_id);
+            }
+            tracked_threads.is_empty()
+        };
+        // D377: with every thread shut down, no sandboxed command uses the
+        // session's temp folders any more.
+        #[cfg(windows)]
+        if no_threads_left {
+            let _ =
+                tokio::task::spawn_blocking(codex_windows_sandbox::end_session_temp_folders).await;
         }
+        #[cfg(not(windows))]
+        let _ = no_threads_left;
 
         report
             .completed
@@ -1346,6 +1358,13 @@ impl ThreadManager {
             .as_ref()
             .and_then(|ops_log| ops_log.lock().ok().map(|log| log.clone()))
             .unwrap_or_default()
+    }
+
+    /// The captured-ops log. `send_op` locks it right before it hands an op to the thread, so
+    /// a test that holds it stops a sender at the hand-off.
+    #[cfg(test)]
+    pub(crate) fn ops_log_for_tests(&self) -> Option<SharedCapturedOps> {
+        self.state.ops_log.clone()
     }
 }
 

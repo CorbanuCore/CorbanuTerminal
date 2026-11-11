@@ -1,0 +1,170 @@
+name: windows-integration-tests
+
+# #1856 (owner decision D443): codex-core's and codex-app-server's integration
+# tests (tests/*.rs) run in no Bazel job on Windows. On the native lane
+# (x86_64-pc-windows-gnullvm) they depend on codex-code-mode-host / V8, which
+# needs a target-platform Python that rules_python does not provide there, so
+# Bazel skips them as incompatible. Other crates' integration tests run natively
+# through their `-windows-cross` targets (nightly in bazel.yml; on PRs, the
+# changed groups in rust-ci-windows-native-tests.yml).
+#
+# This workflow runs them with Cargo and nextest on windows-2022 (msvc), one
+# package per matrix leg, on PRs that change the package (or this job's files).
+# It is NOT called from blocking-ci.yml, so `CI required` neither waits for it
+# nor fails with it: the first native runs found 32 failures, listed with their
+# issues in .github/windows-integration-known-failures.txt and excluded here so
+# a new failure stands out. Trial (scratch run 42626867876, cold, no compile
+# cache): about 22 minutes to build, then 4.5 minutes of tests for codex-core
+# and 12.5 for codex-app-server.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/windows-integration-tests.yml"
+      - ".github/windows-integration-known-failures.txt"
+      - ".github/scripts/windows_integration_known_failures.py"
+      - "codex-rs/.config/nextest.toml"
+      - "codex-rs/core/**"
+      - "codex-rs/app-server/**"
+
+concurrency:
+  group: windows-integration-tests::${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  packages:
+    name: Select packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      packages: ${{ steps.select.outputs.packages }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select packages
+        id: select
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          select=.github/scripts/windows_integration_known_failures.py
+          if [[ "$EVENT" == "pull_request" ]]; then
+            # NUL-separated: Git quotes unusual path names otherwise.
+            git diff --name-only -z --no-renames "$BASE_SHA...$HEAD_SHA" \
+              | python3 "$select" packages >> "$GITHUB_OUTPUT"
+          else
+            # Manual runs test every package.
+            printf '%s\0' .github/workflows/windows-integration-tests.yml \
+              | python3 "$select" packages >> "$GITHUB_OUTPUT"
+          fi
+          grep '^packages=' "$GITHUB_OUTPUT"
+
+  test:
+    name: ${{ matrix.package }}
+    needs: packages
+    if: ${{ needs.packages.outputs.packages != '[]' }}
+    runs-on: windows-2022
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.packages.outputs.packages) }}
+    defaults:
+      run:
+        working-directory: codex-rs
+    env:
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Compute lockfile hash
+        id: lockhash
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "hash=$(sha256sum Cargo.lock | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "toolchain_hash=$(sha256sum rust-toolchain.toml | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      # Restore-only: the registry and git checkouts postmerge rust-ci-full's
+      # Windows clippy leg saves on main. No compile cache. The path list must
+      # match rust-ci-lint-build.yml's exactly: it is part of the cache version.
+      - name: Restore cargo home cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ${{ github.workspace }}/.cargo-home/bin/
+            ${{ github.workspace }}/.cargo-home/registry/index/
+            ${{ github.workspace }}/.cargo-home/registry/cache/
+            ${{ github.workspace }}/.cargo-home/git/db/
+          key: cargo-home-windows-2022-x86_64-pc-windows-msvc-dev-${{ steps.lockhash.outputs.hash }}-${{ steps.lockhash.outputs.toolchain_hash }}
+          restore-keys: |
+            cargo-home-windows-2022-x86_64-pc-windows-msvc-dev-
+
+      # After the cache restore, which also restores ~/.cargo/bin.
+      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: nextest
+          version: 0.9.103
+
+      # Binaries the tests start from other packages; cargo builds only the
+      # tested package's own binaries.
+      - name: Build helper binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --profile ci-test \
+            -p codex-windows-sandbox --bin codex-windows-sandbox-setup --bin codex-command-runner \
+            -p codex-cli --bin codex \
+            -p codex-code-mode-host --bin codex-code-mode-host \
+            -p codex-exec --bin codex-exec \
+            -p codex-rmcp-client --bin test_stdio_server --bin test_streamable_http_server
+
+      - name: Integration tests (known Windows failures excluded)
+        shell: bash
+        env:
+          PACKAGE: ${{ matrix.package }}
+          RUST_BACKTRACE: 1
+          RUST_MIN_STACK: "8388608" # 8 MiB
+          NEXTEST_STATUS_LEVEL: fail
+        run: |
+          set -euo pipefail
+          python="$(command -v python3 || command -v python)"
+          known=../.github/scripts/windows_integration_known_failures.py
+          "$python" "$known" summary "$PACKAGE" >> "$GITHUB_STEP_SUMMARY"
+          filter="$("$python" "$known" filter "$PACKAGE")"
+          filter="${filter%$'\r'}"
+          echo "nextest filter: $filter"
+          helpers="${CARGO_TARGET_DIR}/ci-test"
+          env \
+            "CARGO_BIN_EXE_codex_windows_sandbox_setup=$(cygpath -w "${helpers}/codex-windows-sandbox-setup.exe")" \
+            "CARGO_BIN_EXE_codex_command_runner=$(cygpath -w "${helpers}/codex-command-runner.exe")" \
+            cargo nextest run --cargo-profile ci-test -p "$PACKAGE" --test '*' \
+              --no-fail-fast --final-status-level fail -E "$filter"
+
+      - name: Upload nextest JUnit report
+        if: always() && !cancelled()
+        continue-on-error: true
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: nextest-junit-windows-integration-${{ matrix.package }}
+          path: ${{ env.CARGO_TARGET_DIR }}/nextest/default/junit.xml
+          if-no-files-found: ignore

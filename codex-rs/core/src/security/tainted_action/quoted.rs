@@ -5,9 +5,12 @@
 //! Substitutions are read as commands of their own; here-documents and
 //! here-strings are kept as the text fed to their command.
 
+use super::certain_cd;
+use super::certain_cd::Joint;
 use super::shell::UNSEEN_OUTPUT;
 use super::shell::ansi_c;
 use super::work;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct Word {
@@ -16,10 +19,19 @@ pub(super) struct Word {
     pub(super) text: String,
     /// Some of it was quoted or escaped, so the word lexer may split it.
     pub(super) quoted: bool,
+    /// D258: quoted/escaped text at or before this word in this command,
+    /// including redirection targets and text inside expansions.
+    pub(super) quoted_before: bool,
+    /// A comma or `..` inside matching, unquoted braces may expand into
+    /// arguments. Quoted/escaped braces and separate `{0}..{1}` do not.
+    pub(super) brace_expansion: bool,
     /// It holds an expansion whose value the classifier does not know.
     pub(super) dynamic: bool,
     /// An expansion outside double quotes: it may split into several words.
     pub(super) splits: bool,
+    /// #1704: an unquoted character by which the shell may glob it (`*`,
+    /// `?`, `[`, zsh's `^`, `~`, `#`).
+    pub(super) globs: bool,
     /// The word lexer keeps it as one word (a `$'...'` string, a
     /// here-string), so commands in it do not count against the lexer's
     /// even when it is a shell's script.
@@ -27,6 +39,9 @@ pub(super) struct Word {
     /// A here-document body, which the word lexer reads as command lines:
     /// commands in it count against the lexer's.
     pub(super) lines: bool,
+    /// #1620: its text starts with an unquoted `=`, which zsh expands to a
+    /// program's path (`=mytool`, `="mytool"`, `""=mytool`; not `'=https'`).
+    pub(super) equals_first: bool,
 }
 
 #[derive(Debug, Default)]
@@ -50,6 +65,13 @@ pub(super) struct Command {
     pub(super) other_text: Vec<Word>,
     /// It runs inside a substitution, in a shell of its own.
     pub(super) substituted: bool,
+    /// D194: what joins it to the command before it.
+    pub(super) after: Joint,
+    /// #1515: this reading ended it at a `{`, `}` or `(` the shell may
+    /// read as text: an argument (`git -C { config core.pager sh`; bash
+    /// reads `}` so too), a glob (zsh `x(N)`, extglob `@(a)`) or zsh's
+    /// `=(…)`. The words after it may be its own.
+    pub(super) cut: bool,
 }
 
 impl Command {
@@ -101,6 +123,8 @@ fn read(text: &str, nesting: usize, body: bool, arithmetic: bool) -> Reading {
         unterminated: false,
         unsure: false,
         arithmetic: arithmetic || text.contains("((") || text.contains('['),
+        in_arithmetic: None,
+        closes: None,
     };
     if body {
         reader.substitutions_only();
@@ -166,6 +190,13 @@ struct Reader<'a> {
     /// The text may hold arithmetic (`$((`, `((`, `$[`) or a subscript
     /// (`a[...]`), where single quotes do not stop a substitution.
     arithmetic: bool,
+    /// #1515: the `((`/`$((` arithmetic being read, as the index of its
+    /// last `)` and its substitution depth: a `(` before that index at that
+    /// depth is arithmetic, not a cut. By index, so text this reading skips
+    /// (a comment, a here-document) cannot leave it open.
+    in_arithmetic: Option<(usize, usize)>,
+    /// [`clean_closes`] of the text, once a `((` needs it.
+    closes: Option<HashMap<usize, usize>>,
 }
 
 /// One list of commands being read.
@@ -173,7 +204,17 @@ struct List {
     command: usize,
     word: Word,
     has_word: bool,
+    /// D258: quote history belongs to this command, not the whole line.
+    quoted_before: bool,
+    /// The current word's unquoted brace groups and their separators.
+    braces: Vec<bool>,
     redirect: Redirect,
+    /// #1607: a `!` follows the output redirection just read (`>!`, `>>!`,
+    /// `&>!`, `>&!`, `2>!`), which zsh reads as `>|`: the file is the word
+    /// after the `!`, where bash writes a file `!` (or `!f`).
+    clobber: bool,
+    /// #1607: the next word is written too (after `>! `).
+    also_written: bool,
     /// Here-documents whose bodies start after the next newline.
     pending: Vec<HereDocument>,
     /// `case` commands open in this list at the current bracket depth:
@@ -187,6 +228,8 @@ struct List {
     case_at: Option<usize>,
     /// The list is a substitution's, which a `)` closes.
     nested: bool,
+    /// D194: the operators since the last word (`None`: a word).
+    joint: Option<Joint>,
 }
 
 /// Reserved words after which `case` is still a command's first word.
@@ -216,9 +259,16 @@ impl Reader<'_> {
         if !std::mem::take(&mut list.has_word) {
             return;
         }
-        let word = std::mem::take(&mut list.word);
+        let mut word = std::mem::take(&mut list.word);
+        word.quoted_before |= list.quoted_before || word.quoted;
+        list.quoted_before = word.quoted_before;
+        list.braces.clear();
         let command = &mut self.out[list.command];
         let redirect = std::mem::replace(&mut list.redirect, Redirect::None);
+        let clobber = std::mem::take(&mut list.clobber) && redirect == Redirect::Stdout;
+        if std::mem::take(&mut list.also_written) && redirect == Redirect::None {
+            command.writes_to.push(word.clone());
+        }
         if redirect == Redirect::None && !word.quoted {
             let keyword = std::mem::replace(&mut list.keyword, false);
             match word.text.as_str() {
@@ -237,9 +287,28 @@ impl Reader<'_> {
             list.keyword = false;
         }
         match redirect {
-            Redirect::None => command.words.push(word),
+            Redirect::None => {
+                let joint = list.joint.take();
+                if command.words.is_empty() {
+                    command.after = joint.unwrap_or_default();
+                }
+                command.words.push(word);
+            }
             Redirect::Stdin | Redirect::Descriptor => command.other_text.push(word),
-            Redirect::Stdout => command.writes_to.push(word),
+            Redirect::Stdout => {
+                // #1607: both readings write. zsh writes the word after
+                // the `!`: the rest of this one (`>!f`) or the next one
+                // (`>! f`, which bash passes on as an argument).
+                match word.text.strip_prefix('!').filter(|_| clobber) {
+                    Some("") => list.also_written = true,
+                    Some(rest) => command.writes_to.push(Word {
+                        text: rest.to_owned(),
+                        ..word.clone()
+                    }),
+                    None => {}
+                }
+                command.writes_to.push(word);
+            }
             Redirect::HereString => command.input.push(Word {
                 whole: true,
                 ..word
@@ -256,8 +325,74 @@ impl Reader<'_> {
         }
     }
 
+    /// #1515: a `{` or `}` word where the shell reads a word (`git -C {
+    /// …`), not a reserved word: after a command's words, other than
+    /// `function NAME {`.
+    fn note_argument_brace(&mut self, list: &List) {
+        let words = &self.out[list.command].words;
+        let function = words.len() == 2 && !words[0].quoted && words[0].text == "function";
+        if !list.keyword && !words.is_empty() && !function {
+            self.out[list.command].cut = true;
+        }
+    }
+
+    /// #1515: whether a `(` opens a group, a function's `()`, an array
+    /// value, a `case` pattern or a test's pattern, rather than being text
+    /// a shell may read as a glob (`x(N)`, `@(a)`, `=(…)`) or as an
+    /// argument.
+    fn opens_group(&self, list: &List, next: Option<char>) -> bool {
+        let words = &self.out[list.command].words;
+        let first = words
+            .first()
+            .filter(|word| !word.quoted)
+            .map(|word| word.text.as_str());
+        let last = words
+            .last()
+            .filter(|word| !word.quoted)
+            .map(|word| word.text.as_str());
+        let named = words.len() + usize::from(list.has_word);
+        if !list.has_word {
+            return list.keyword
+                || (words.len() == 1 && first == Some("for"))
+                || (list.case_at.is_some() && last == Some("in"))
+                || first == Some("[[")
+                || (next == Some(')')
+                    && (named == 1 || (named == 2 && first == Some("function"))));
+        }
+        let text = list.word.text.as_str();
+        (next == Some(')')
+            && !list.word.quoted
+            && (named == 1 || (named == 2 && first == Some("function"))))
+            || first == Some("[[")
+            || (!list.word.quoted && array_name(text) && assigning(words))
+    }
+
+    /// #1515: whether `index` is inside the arithmetic being read, at its
+    /// depth.
+    fn arithmetic_at(&self, index: usize) -> bool {
+        self.in_arithmetic
+            .is_some_and(|(end, depth)| index < end && depth == self.nesting)
+    }
+
+    /// #1515: the `((` or `$((` whose second `(` is at `open` is
+    /// arithmetic, read at `depth`, when that bracket closes right before
+    /// the last `)` and [`clean_closes`] pairs it: nothing between them
+    /// that may make a shell count brackets differently (see its rule).
+    fn note_arithmetic(&mut self, open: usize, depth: usize) {
+        let chars = self.chars;
+        let closes = self.closes.get_or_insert_with(|| clean_closes(chars));
+        if let Some(&close) = closes.get(&open)
+            && chars.get(close + 1) == Some(&')')
+        {
+            self.in_arithmetic = Some((close + 1, depth));
+        }
+    }
+
     fn finish_command(&mut self, list: &mut List) {
         self.finish_word(list);
+        list.also_written = false;
+        list.quoted_before = false;
+        list.word.quoted_before = false;
         list.keyword = true;
         // `case WORD in`; in a substitution, another form (zsh's
         // `case x { ... }`) is not read.
@@ -302,12 +437,21 @@ impl Reader<'_> {
             command: self.new_command(),
             word: Word::default(),
             has_word: false,
+            quoted_before: false,
+            braces: Vec::new(),
             redirect: Redirect::None,
+            clobber: false,
+            also_written: false,
             pending: Vec::new(),
             cases: 0,
             keyword: true,
             case_at: None,
             nested,
+            joint: Some(if nested || self.nesting > 0 {
+                Joint::Other
+            } else {
+                Joint::Start
+            }),
         };
         // The `case` counts of the brackets around the text being read.
         let mut opened: Vec<usize> = Vec::new();
@@ -329,14 +473,34 @@ impl Reader<'_> {
                         }
                     }
                     self.finish_command(&mut list);
+                    list.joint = Some(Joint::Other);
                 }
                 '(' => {
+                    // #1515: a `((` that `))` closes is arithmetic up to it.
+                    let opens = self.opens_group(&list, next);
+                    if opens && next == Some('(') && !self.arithmetic_at(index) {
+                        if arithmetic_position(&self.out[list.command].words, &list) {
+                            self.note_arithmetic(index + 1, self.nesting);
+                        } else {
+                            // #1623 review: main noted a `((` here too, which
+                            // replaced any outer span. Not noting it must not
+                            // leave an outer span hiding later cuts (`(( a
+                            // >(case x in ((b)) ;; esac); git ... ))`), so end
+                            // it: no span hides nothing.
+                            self.in_arithmetic = None;
+                        }
+                    }
+                    if !opens && !self.arithmetic_at(index) {
+                        self.out[list.command].cut = true;
+                    }
                     self.finish_command(&mut list);
                     opened.push(std::mem::take(&mut list.cases));
+                    list.joint = Some(Joint::Other);
                 }
                 ' ' | '\t' => self.finish_word(&mut list),
                 '\n' => {
                     self.finish_command(&mut list);
+                    list.joint = Some(Joint::then(list.joint, Joint::Seq));
                     index = self.here_documents(index + 1, &mut list.pending);
                     continue;
                 }
@@ -349,14 +513,26 @@ impl Reader<'_> {
                     } else {
                         2
                     };
+                    list.clobber = chars.get(index) == Some(&'!');
                     continue;
                 }
-                ';' | '&' => self.finish_command(&mut list),
+                ';' | '&' => {
+                    self.finish_command(&mut list);
+                    if let Some(op) = certain_cd::operator(previous, ch, next) {
+                        list.joint = Some(Joint::then(list.joint, op));
+                    }
+                    // #1607: zsh's `>>&!` (this reading ends a command at
+                    // the `&` of `>>&`).
+                    list.clobber = ch == '&' && previous == Some('>') && next == Some('!');
+                }
                 '|' => {
                     self.finish_word(&mut list);
                     let from = list.command;
                     let pipe = next != Some('|') && previous != Some('|');
                     self.finish_command(&mut list);
+                    if let Some(op) = certain_cd::operator(previous, ch, next) {
+                        list.joint = Some(Joint::then(list.joint, op));
+                    }
                     if pipe {
                         // After a group (`( ... ) | tee f`) the piped
                         // command is the group's empty one.
@@ -368,12 +544,16 @@ impl Reader<'_> {
                     }
                 }
                 '{' if !list.has_word && next.is_none_or(char::is_whitespace) => {
+                    self.note_argument_brace(&list);
                     self.finish_command(&mut list);
+                    list.joint = Some(Joint::Other);
                 }
                 '}' if !list.has_word
                     && next.is_none_or(|next| next.is_whitespace() || ";|&)".contains(next)) =>
                 {
+                    self.note_argument_brace(&list);
                     self.finish_command(&mut list);
+                    list.joint = Some(Joint::Other);
                 }
                 // A comment is judged too (the word lexer reads it as words).
                 '#' if !list.has_word => {
@@ -410,6 +590,7 @@ impl Reader<'_> {
                     continue;
                 }
                 '\\' => {
+                    list.word.quoted_before = true;
                     match next {
                         // A line continuation.
                         Some('\n') => {}
@@ -465,10 +646,43 @@ impl Reader<'_> {
                         list.redirect = redirect;
                     }
                     index += used;
+                    list.clobber = chars.get(index) == Some(&'!');
                     continue;
                 }
                 ch => {
                     list.has_word = true;
+                    match ch {
+                        '{' => list.braces.push(false),
+                        '}' => {
+                            if let Some(expands) = list.braces.pop() {
+                                list.word.brace_expansion |= expands;
+                            }
+                        }
+                        ',' => {
+                            if let Some(expands) = list.braces.last_mut() {
+                                *expands = true;
+                            }
+                        }
+                        '.' if !list.braces.is_empty() => {
+                            // Continuations disappear before brace expansion:
+                            // `{u.\\\n.u}` is the range `{u..u}`.
+                            let mut after = index + 1;
+                            while chars.get(after) == Some(&'\\')
+                                && chars.get(after + 1) == Some(&'\n')
+                            {
+                                work::step();
+                                after += 2;
+                            }
+                            if chars.get(after) == Some(&'.')
+                                && let Some(expands) = list.braces.last_mut()
+                            {
+                                *expands = true;
+                            }
+                        }
+                        _ => {}
+                    }
+                    list.word.equals_first |= ch == '=' && list.word.text.is_empty();
+                    list.word.globs |= matches!(ch, '*' | '?' | '[' | '^' | '~' | '#');
                     list.word.text.push(ch);
                 }
             }
@@ -526,6 +740,20 @@ impl Reader<'_> {
     /// `$name`, `${...}`, `$(...)`, `$((...))` or a backtick substitution
     /// at `index`; returns the index after it.
     fn expansion(&mut self, index: usize, word: &mut Word, in_double: bool) -> usize {
+        let end = self.read_expansion(index, word, in_double);
+        // D258: substitutions can replace their source text in `word`.
+        // Retain any quote that may have split the other lexer before it
+        // disappears, without changing `quoted`'s existing meaning.
+        word.quoted_before |= self.chars[index..end.min(self.chars.len())]
+            .iter()
+            .any(|ch| {
+                work::step();
+                matches!(ch, '\'' | '"' | '\\')
+            });
+        end
+    }
+
+    fn read_expansion(&mut self, index: usize, word: &mut Word, in_double: bool) -> usize {
         let chars = self.chars;
         let next = chars.get(index + 1).copied();
         let dynamic = |word: &mut Word| {
@@ -557,6 +785,9 @@ impl Reader<'_> {
             Some('(') => {
                 word.text.push_str(UNSEEN_OUTPUT);
                 dynamic(word);
+                if chars.get(index + 2) == Some(&'(') && !self.arithmetic_at(index) {
+                    self.note_arithmetic(index + 2, self.nesting + 1);
+                }
                 self.list(index + 2, /*nested*/ true)
             }
             Some('{') => {
@@ -729,6 +960,105 @@ impl Reader<'_> {
     }
 }
 
+/// #1623: where a `((` may start arithmetic: in command (keyword)
+/// position, right after `for` (`for (( ... ))`), or after an array
+/// assignment's `=` (`a=((...))`, which neither bash nor zsh runs as
+/// commands, so reading it as arithmetic keeps it quiet as before). Not in
+/// a `case` pattern or `[[ ... ]]`, where a group may open but no
+/// arithmetic does.
+fn arithmetic_position(words: &[Word], list: &List) -> bool {
+    if list.has_word {
+        return !list.word.quoted && array_name(&list.word.text) && assigning(words);
+    }
+    list.keyword || (words.len() == 1 && !words[0].quoted && words[0].text == "for")
+}
+
+/// #1515: each `(` of `chars` and the `)` that closes it, when nothing
+/// between them can make a shell count brackets other than this one pass
+/// does (one pass). Every review found another such corner of zsh's
+/// arithmetic (`${x#((}`, a comment, a here-document, `##(`, unpaired
+/// `[`/`]`, brackets in a nested `$(…)`), so the whole class is out: a
+/// quote, backslash, backtick, newline, `#`, `[`, `]`, `{`, `}` (so `${`)
+/// or `$(` between them, or a `${…}` around them, disqualifies the pair,
+/// and the text is read as commands.
+fn clean_closes(chars: &[char]) -> HashMap<usize, usize> {
+    // Each open `(`: where, and whether a `${…}` holds it.
+    let mut open: Vec<(usize, bool)> = Vec::new();
+    let mut last_quote = None;
+    let mut closes = HashMap::new();
+    // The `${…}` (and braces inside) open.
+    let mut braces = 0usize;
+    for (at, ch) in chars.iter().enumerate() {
+        work::step();
+        let before = at.checked_sub(1).map(|before| chars[before]);
+        match ch {
+            '{' if braces > 0 || before == Some('$') => {
+                braces += 1;
+                last_quote = Some(at);
+            }
+            '}' if braces > 0 => {
+                braces -= 1;
+                last_quote = Some(at);
+            }
+            '\'' | '"' | '`' | '\\' | '\n' | '#' | '[' | ']' | '{' | '}' => {
+                last_quote = Some(at);
+            }
+            '$' if chars.get(at + 1) == Some(&'(') => last_quote = Some(at),
+            '(' => open.push((at, braces > 0)),
+            ')' => {
+                if let Some((from, braced)) = open.pop()
+                    && !braced
+                    && last_quote.is_none_or(|quote| quote < from)
+                {
+                    closes.insert(from, at);
+                }
+            }
+            _ => {}
+        }
+    }
+    closes
+}
+
+/// #1515: an array assignment's start (`a=`, `a+=`, `a[1]=`), which `(`
+/// follows.
+fn array_name(text: &str) -> bool {
+    text.strip_suffix('=').is_some_and(variable_name)
+}
+
+/// #1515: whether a word after `words` is an assignment: they are all
+/// assignments (`a=1 b=(x)`), or a builtin that assigns comes first
+/// (`declare -a b=(x)`). Elsewhere `b=(x)` is a zsh glob.
+fn assigning(words: &[Word]) -> bool {
+    words.first().is_some_and(|first| {
+        !first.quoted
+            && matches!(
+                first.text.as_str(),
+                "declare" | "typeset" | "local" | "export" | "readonly" | "integer" | "float"
+            )
+    }) || words.iter().all(|word| {
+        work::step();
+        word.text
+            .split_once('=')
+            .is_some_and(|(name, _)| variable_name(name))
+    })
+}
+
+/// A variable's name in an assignment (`a`, `a+`, `a[1]`).
+fn variable_name(name: &str) -> bool {
+    let name = name.strip_suffix('+').unwrap_or(name);
+    let name = name
+        .split_once('[')
+        .filter(|(_, subscript)| subscript.ends_with(']'))
+        .map_or(name, |(name, _)| name);
+    name.chars()
+        .next()
+        .is_some_and(|ch| ch.is_ascii_alphabetic() || ch == '_')
+        && name.chars().all(|ch| {
+            work::step();
+            ch.is_ascii_alphanumeric() || ch == '_'
+        })
+}
+
 /// The redirection at the start of `chars` and its length.
 fn redirection(chars: &[char]) -> (Redirect, usize) {
     match chars {
@@ -804,6 +1134,55 @@ mod tests {
                 .map(|word| (word.dynamic, word.splits))
                 .collect::<Vec<_>>(),
             vec![(false, false), (true, false), (false, false), (true, true)]
+        );
+    }
+
+    #[test]
+    fn d258_brace_and_quote_metadata_follows_words_and_commands() {
+        let read = all("git >'a; b' clone {\"--upload-pack=./x\",} URL; git add src/{a,b}.rs");
+        let words = read
+            .iter()
+            .map(|command| {
+                command
+                    .words
+                    .iter()
+                    .map(|word| (word.text.as_str(), word.quoted_before, word.brace_expansion))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            words,
+            vec![
+                vec![
+                    ("git", false, false),
+                    ("clone", true, false),
+                    ("{--upload-pack=./x,}", true, true),
+                    ("URL", true, false),
+                ],
+                vec![
+                    ("git", false, false),
+                    ("add", false, false),
+                    ("src/{a,b}.rs", false, true),
+                ],
+            ]
+        );
+        let read = all(
+            r#"echo "x{a,b}" {1..3} "{1..3}" {a,"b,c"} {a\,b} {a,b\} x{a,b}{c,d} stash@{0}..stash@{1}"#,
+        );
+        assert_eq!(
+            read[0]
+                .words
+                .iter()
+                .skip(1)
+                .map(|word| word.brace_expansion)
+                .collect::<Vec<_>>(),
+            vec![false, true, false, true, false, false, true, false]
+        );
+        let read = all("git clone --{u.\\\n.u}pload-pack=./x URL");
+        let word = &read[0].words[2];
+        assert_eq!(
+            (word.text.as_str(), word.quoted_before, word.brace_expansion,),
+            ("--{u..u}pload-pack=./x", true, true)
         );
     }
 

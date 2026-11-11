@@ -144,6 +144,12 @@ token counts are shown: no prices and no cost records.
   counts again, its spawned agents' included once the TUI reattaches them.
   Memory extraction outside a turn shows with the next count.
 
+`corbanu exec --json` reports usage differently. Its `turn.completed` usage
+adds the descendants it observed, and is `null`, for example when any of them
+copied the parent's history. Default MultiAgentV2 spawns do (`fork_turns: "all"`), so
+default multi-agent runs report `usage: null` (#1601; see [exec.md](exec.md)).
+The Account usage line still counts each spawned agent toward its own account.
+
 Developer-accounting builds also have `/cost`, which shows the same requests by
 provider, account and model for one UTC day. For a session that stays within
 one day, its token counts per account match these, except for background
@@ -162,12 +168,18 @@ automatic approval reviewer, is one of these on an OpenAI API key: OpenAI
 doesn't publish a price for it, and `/cost` says so.
 
 A realtime voice session over a WebSocket shows in `/cost` as one request with
-its start and end times; its token counts and cost are unknown, not zero, since
-its usage is not reported to this client. A WebRTC realtime call shows as one
-request, the call's creation. The end time recorded with it is when the client's
-control channel to the call closed, which can be before the media call itself
-ends (for example if that channel fails to connect), so `/cost` does not show it
-as the session's end.
+its start and end times and the input, cached-input, output and total tokens
+OpenAI reported at the end of each response. Those counts may be low: a
+response cut short by the session's end reports none, and a report that could
+not be read is not counted. Its cost is unknown, not zero (`no price
+available`, never $0): Corbanu has no realtime price table, so no rate is
+applied even when the session's model has a catalogue price. Sessions recorded
+by earlier versions, and sessions with no recorded tokens, show their token
+counts and cost as unknown. A WebRTC realtime call shows as one request, the
+call's creation, with its tokens unknown. The end time recorded with it is when
+the client's control channel to the call closed, which can be before the media
+call itself ends (for example if that channel fails to connect), so `/cost`
+does not show it as the session's end.
 
 A day with nothing recorded for the conversation says "no requests recorded"
 only when the whole UTC day ends before the conversation started (as dated by
