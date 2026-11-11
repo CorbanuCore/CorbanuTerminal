@@ -4830,8 +4830,9 @@ dependencies = [
 name = "codex-utils-cargo-bin"
 version = "0.1.48"
 dependencies = [
- "assert_cmd",
+ "pretty_assertions",
  "runfiles",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 
