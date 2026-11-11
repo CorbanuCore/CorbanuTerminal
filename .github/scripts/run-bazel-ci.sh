@@ -7,6 +7,7 @@ print_failed_bazel_action_summary=0
 remote_download_toplevel=0
 windows_msvc_host_platform=0
 windows_cross_compile=0
+named_evidence_dir=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -29,6 +30,11 @@ while [[ $# -gt 0 ]]; do
     --windows-cross-compile)
       windows_cross_compile=1
       shift
+      ;;
+    --named-evidence-dir)
+      [[ $# -ge 2 && -n "$2" ]] || { echo "Missing named evidence directory" >&2; exit 1; }
+      named_evidence_dir="$2"
+      shift 2
       ;;
     --)
       shift
@@ -83,10 +89,7 @@ case "${RUNNER_OS:-}" in
     ;;
 esac
 
-print_bazel_test_log_tails() {
-  local console_log="$1"
-  local testlogs_dir
-
+resolve_bazel_testlogs_dir() {
   local -a bazel_info_args=(info)
   if [[ -n "${BUILDBUDDY_API_KEY:-}" ]]; then
     # `bazel info` needs the same CI config as the failed test invocation so
@@ -99,18 +102,26 @@ print_bazel_test_log_tails() {
   # Only pass flags that affect Bazel's output-root selection or repository
   # lookup. Test/build-only flags such as execution logs or remote download
   # mode can make `bazel info` fail, which would hide the real test log path.
-  for arg in "${post_config_bazel_args[@]}"; do
-    case "$arg" in
-      --host_platform=* | --repo_contents_cache=* | --repository_cache=*)
-        bazel_info_args+=("$arg")
-        ;;
-    esac
-  done
+  if (( ${#post_config_bazel_args[@]} > 0 )); then
+    for arg in "${post_config_bazel_args[@]}"; do
+      case "$arg" in
+        --host_platform=* | --repo_contents_cache=* | --repository_cache=*)
+          bazel_info_args+=("$arg")
+          ;;
+      esac
+    done
+  fi
 
-  testlogs_dir="$(run_bazel_with_startup_args \
+  run_bazel_with_startup_args \
     --noexperimental_remote_repo_contents_cache \
     "${bazel_info_args[@]}" \
-    bazel-testlogs 2>/dev/null || echo bazel-testlogs)"
+    bazel-testlogs 2>/dev/null
+}
+
+print_bazel_test_log_tails() {
+  local console_log="$1"
+  local testlogs_dir
+  testlogs_dir="$(resolve_bazel_testlogs_dir || echo bazel-testlogs)"
 
   local failed_targets=()
   while IFS= read -r target; do
@@ -417,7 +428,30 @@ print_bazel_server_log_tails() {
   done
 }
 
+evidence_checkout=""
+if [[ -n "$named_evidence_dir" ]]; then
+  if [[ ! -d "$named_evidence_dir" ]] || ! evidence_checkout="$(git rev-parse HEAD 2>/dev/null)"; then
+    echo "::warning::Named evidence setup unavailable; tests will still run." >&2
+    named_evidence_dir=""
+  fi
+fi
+
 for bazel_attempt in 1 2; do
+  attempt_args=("${bazel_run_args[@]}")
+  evidence_invocation=""
+  # A crash retry is a separate invocation. Capture the previous report before
+  # Bazel can replace its test logs, and never reuse its BEP file or UUID.
+  if [[ -n "$named_evidence_dir" ]]; then
+    if evidence_invocation="$(python3 -c 'import uuid; print(uuid.uuid4())' 2>/dev/null)"; then
+      attempt_args+=(
+        "--build_event_json_file=${named_evidence_dir}/events-${bazel_attempt}.json"
+        "--invocation_id=${evidence_invocation}"
+        "--build_metadata=CORBANU_CHECKOUT_SHA=${evidence_checkout}"
+      )
+    else
+      echo "::warning::Named evidence ID unavailable; tests will still run." >&2
+    fi
+  fi
   set +e
   # Work around Bazel 9 remote repo contents cache / overlay materialization
   # failures seen in CI (for example "is not a symlink" or permission errors
@@ -425,12 +459,30 @@ for bazel_attempt in 1 2; do
   # the startup-level repo contents cache; keyed runs still use BuildBuddy.
   run_bazel_with_startup_args \
     --noexperimental_remote_repo_contents_cache \
-    "${bazel_run_args[@]}" \
+    "${attempt_args[@]}" \
     -- \
     "${bazel_targets[@]}" \
     2>&1 | tee "$bazel_console_log"
   bazel_status=${PIPESTATUS[0]}
   set -e
+  if [[ -n "$evidence_invocation" ]]; then
+    root_file="${named_evidence_dir}/testlogs-root-${bazel_attempt}.txt"
+    if ! { resolve_bazel_testlogs_dir > "$root_file"; } 2>/dev/null; then
+      { : > "$root_file"; } 2>/dev/null || true
+    fi
+    evidence_outcome=failure
+    [[ $bazel_status -eq 0 ]] && evidence_outcome=success
+    # Collector failure is evidence incompleteness, never a replacement for
+    # the original test status. Only report-*.json is uploaded.
+    python3 "$(dirname "${BASH_SOURCE[0]}")/collect_bazel_named_evidence.py" \
+      --bep "${named_evidence_dir}/events-${bazel_attempt}.json" \
+      --testlogs-root-file "$root_file" \
+      --invocation-id "$evidence_invocation" \
+      --checkout-sha "$evidence_checkout" \
+      --workflow-outcome "$evidence_outcome" \
+      --output "${named_evidence_dir}/report-${bazel_attempt}.json" \
+      || echo "::warning::Named evidence incomplete; original test status retained." >&2
+  fi
   if [[ $bazel_status -ne $bazel_server_crash_status ]]; then
     break
   fi
