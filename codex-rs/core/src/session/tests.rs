@@ -5934,6 +5934,7 @@ enabled = false
             description: None,
             config_file: Some(role_path.to_path_buf()),
             nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
         },
     );
     crate::agent::role::apply_role_to_config(&mut child_config, Some("custom"))
@@ -9318,6 +9319,7 @@ async fn step_context_keeps_its_mcp_runtime_for_tools() -> anyhow::Result<()> {
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,

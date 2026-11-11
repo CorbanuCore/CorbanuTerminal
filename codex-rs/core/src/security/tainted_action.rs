@@ -45,6 +45,7 @@ mod loader_variables;
 mod mktemp;
 mod named_shell;
 mod nested;
+mod option_globs;
 mod outbound;
 mod outputs;
 mod paths;
@@ -436,6 +437,62 @@ pub(crate) fn classify_as_named(
     classify_as_named_with(action, codex_home, dirs::home_dir().as_deref())
 }
 
+/// #1897 follow-up: a hint for the approval prompt when the line pushes a
+/// branch named by a variable (`git push origin "$b"`), which asks because
+/// git would read a value starting with `-` as an option. Text only; it
+/// decides nothing.
+pub(crate) const PUSH_BRANCH_HINT: &str = "Tip: git may read a branch held in a variable after \
+     `git push` (`git push origin \"$b\"`) as an option; `refs/heads/\"$b\"` or `-- \"$b\"` \
+     names it as a branch and avoids that check.";
+
+/// [`PUSH_BRANCH_HINT`] for an action judged `kind`, when one of its
+/// command lines has `git push` (with git options but no option values
+/// before `push`), then, after the first operand (the remote), a word
+/// starting with `$` (after quotes) in the same command.
+pub(crate) fn approval_hint(
+    action: &ApprovalAction,
+    kind: ProtectedActionKind,
+) -> Option<&'static str> {
+    let (ApprovalAction::Shell { command, .. } | ApprovalAction::ExecCommand { command, .. }) =
+        action
+    else {
+        return None;
+    };
+    if kind != ProtectedActionKind::UnseenCode {
+        return None;
+    }
+    for line in command.iter().flat_map(|part| part.split('\n')) {
+        work::step();
+        // None: no `git … push` yet; Some(n): after it, with n operands.
+        let (mut git, mut operands) = (false, None);
+        for word in line.split_whitespace() {
+            work::step();
+            match operands {
+                Some(n) if !word.starts_with('-') => {
+                    if n >= 1 && word.trim_start_matches(['"', '\'']).starts_with('$') {
+                        return Some(PUSH_BRANCH_HINT);
+                    }
+                    operands = Some(n + 1);
+                }
+                Some(_) => {}
+                None if basename(word) == "git" => git = true,
+                // `push` as git's subcommand, its first word.
+                None if git && !word.starts_with('-') => {
+                    git = false;
+                    if word == "push" {
+                        operands = Some(0);
+                    }
+                }
+                None => {}
+            }
+            if word.contains([';', '&', '|']) {
+                (git, operands) = (false, None);
+            }
+        }
+    }
+    None
+}
+
 pub(super) fn classify_with(
     action: &ApprovalAction,
     codex_home: &Path,
@@ -552,18 +609,30 @@ pub(super) fn classify_as_windows(
     classifier.found
 }
 
-/// #1772 review 1: [`judged`], and when it read some text where main reads
-/// it otherwise (`shell::simple_commands_read`), the action judged again
-/// with main's reading: the stronger finding is kept, so the new reading
-/// only adds findings (`echo '>"'; ./x; echo '"'`, `sh -c 'true &>f ./x'`).
-/// #1772 review 2: the second judgment is main's reading exactly (every
-/// change of reading sets `read_newly`, and the helper lexers read as
-/// main), so the verdict is never quieter than main's.
+/// Judge with literal brace values while preserving the full pre-#1975
+/// verdict: #1772 redirections with old braces, plus the legacy reading.
 fn judged_both(action: &ApprovalAction, homes: impl Fn() -> Homes, as_named: bool) -> Classifier {
-    let mut classifier = judged(action, homes(), as_named, /*main_reading*/ false);
-    if classifier.read_newly {
-        let main = judged(action, homes(), as_named, /*main_reading*/ true);
-        if let Some(kind) = main.found {
+    judged_readings(|reading| judged(action, homes(), as_named, reading))
+}
+
+/// Shared by production classification and the forced-shell measuring
+/// harness. A changed brace reading requires the pre-#1975 redirection
+/// reading, even if the latest reading did not itself change redirections.
+/// Only that baseline's redirection flag determines whether its legacy
+/// fallback is needed. Each pass has fresh classifier state and homes.
+fn judged_readings(read: impl Fn(shell::Reading) -> Classifier) -> Classifier {
+    let mut classifier = read(shell::Reading::LiteralBraces);
+    let mut redirections_read_newly = classifier.redirections_read_newly;
+    if classifier.braces_read_newly {
+        let baseline = read(shell::Reading::Redirections);
+        redirections_read_newly = baseline.redirections_read_newly;
+        if let Some(kind) = baseline.found {
+            classifier.note(kind);
+        }
+    }
+    if redirections_read_newly {
+        let legacy = read(shell::Reading::Legacy);
+        if let Some(kind) = legacy.found {
             classifier.note(kind);
         }
     }
@@ -571,9 +640,13 @@ fn judged_both(action: &ApprovalAction, homes: impl Fn() -> Homes, as_named: boo
 }
 
 /// One judgment of the action, under the path rules of `homes`.
-/// `main_reading`: redirections are lexed as on main
-/// (`shell::simple_commands_read`).
-fn judged(action: &ApprovalAction, homes: Homes, as_named: bool, main_reading: bool) -> Classifier {
+/// `reading` selects independent redirection and brace behavior.
+fn judged(
+    action: &ApprovalAction,
+    homes: Homes,
+    as_named: bool,
+    reading: shell::Reading,
+) -> Classifier {
     // `avoids_zsh` reads command words too, so reset before any reader can
     // observe a changed #1773 sudo option boundary.
     indirect::reset_sudo_option_boundary_changed();
@@ -584,41 +657,34 @@ fn judged(action: &ApprovalAction, homes: Homes, as_named: bool, main_reading: b
             }
             ApprovalAction::ApplyPatch { .. } => false,
         };
-    judged_avoiding_read(action, homes, avoids_zsh, main_reading)
+    judged_avoiding_read(action, homes, avoids_zsh, reading)
 }
 
 /// [`judged`] with the zsh-only checks skipped at the top level when
 /// `avoids_zsh` (#932's measuring harness also judges with it forced), and
-/// judged again with main's reading as [`judged_both`] does.
+/// combined with the full pre-#1975 verdict as [`judged_both`] does.
 #[cfg(test)]
 fn judged_avoiding(
     action: &ApprovalAction,
     homes: impl Fn() -> Homes,
     avoids_zsh: bool,
 ) -> Classifier {
-    indirect::reset_sudo_option_boundary_changed();
-    let mut classifier =
-        judged_avoiding_read(action, homes(), avoids_zsh, /*main_reading*/ false);
-    if classifier.read_newly {
+    judged_readings(|reading| {
         indirect::reset_sudo_option_boundary_changed();
-        let main = judged_avoiding_read(action, homes(), avoids_zsh, /*main_reading*/ true);
-        if let Some(kind) = main.found {
-            classifier.note(kind);
-        }
-    }
-    classifier
+        judged_avoiding_read(action, homes(), avoids_zsh, reading)
+    })
 }
 
 /// One judgment, with the zsh-only checks skipped at the top level when
-/// `avoids_zsh`, and `main_reading` (see [`judged`]).
+/// `avoids_zsh`, under the selected `reading` (see [`judged`]).
 fn judged_avoiding_read(
     action: &ApprovalAction,
     homes: Homes,
     avoids_zsh: bool,
-    main_reading: bool,
+    reading: shell::Reading,
 ) -> Classifier {
     let mut classifier = Classifier::new(homes, avoids_zsh);
-    classifier.main_reading = main_reading;
+    classifier.reading = reading;
     match action {
         ApprovalAction::Shell { command, cwd, .. }
         | ApprovalAction::ExecCommand { command, cwd, .. } => {
@@ -690,8 +756,9 @@ impl Classifier {
             avoids_zsh,
             homes,
             found: None,
-            main_reading: false,
-            read_newly: false,
+            reading: shell::Reading::LiteralBraces,
+            redirections_read_newly: false,
+            braces_read_newly: false,
             scripts_read: 0,
             rebuilt: 0,
             not_shell: 0,
@@ -707,6 +774,7 @@ impl Classifier {
             stat_builtin: false,
             stat_pending: false,
             quoted_text: false,
+            lexed_unseen: false,
             brace_unsure: false,
             launched: launched_git::Launch::default(),
             substitution_budget: Budget {
@@ -1439,11 +1507,13 @@ struct Folders {
 struct Classifier {
     homes: Homes,
     found: Option<ProtectedActionKind>,
-    /// #1772 review 1: lex redirections as on main (`judged`).
-    main_reading: bool,
+    /// Redirection and brace behavior for this independent judgment.
+    reading: shell::Reading,
     /// #1772 review 1: some lexed text was read where main reads it
-    /// otherwise (`shell::Lexed::read_newly`).
-    read_newly: bool,
+    /// otherwise (`shell::Lexed::redirections_read_newly`).
+    redirections_read_newly: bool,
+    /// #1975: literal braces changed this reading.
+    braces_read_newly: bool,
     scripts_read: usize,
     /// #1261: under Windows path rules, whether the first judgment lexed
     /// text holding a backslash. Its POSIX lexer drops every backslash
@@ -1523,6 +1593,14 @@ struct Classifier {
     /// which the word lexer ignores: it may end a command early there
     /// (`'a; b'`, `'a ( b'`, `a\;b`).
     quoted_text: bool,
+    /// #1910: a word the word lexer read in this line (or one that runs it)
+    /// holds text it does not show. Until then it has given a value to every
+    /// expansion it read (`r=origin; git fetch "$r"`), so the quote-aware
+    /// reading leaves remotes to it. That value comes from the assignments it
+    /// read, which may be misread from quoted text (`echo 'x;r=o'`) or may
+    /// not run (`(r=origin)`); those are on `main` already. The lines it
+    /// reads for itself (a script, joined literals) do not count.
+    lexed_unseen: bool,
     /// D258: the line (or one that runs it) holds more than plain words,
     /// operators, quotes and well-formed brace groups ([`brace_plain`]). The
     /// word lexer may then cut or misread a command where the quote-aware
@@ -1872,6 +1950,7 @@ impl Classifier {
         }
         let outer_sudo_redefined = self.sudo_redefined;
         let outer_quoted_text = self.quoted_text;
+        let outer_lexed_unseen = self.lexed_unseen;
         self.quoted_text |= command.iter().any(|part| part.contains(['\'', '"', '\\']));
         let outer_brace_unsure = self.brace_unsure;
         self.brace_unsure |= command.iter().any(|part| !brace_plain(part));
@@ -1880,8 +1959,9 @@ impl Classifier {
             .any(|part| unknown_folder::may_redefine_sudo(part));
         // #841: this line's own sed programs (nested lines have theirs).
         let outer_scope = std::mem::replace(&mut self.sed_scope, SedScope::of(command));
-        let lexed = shell::simple_commands_read(command, self.main_reading);
-        self.read_newly |= lexed.read_newly;
+        let lexed = shell::simple_commands_read(command, self.reading);
+        self.redirections_read_newly |= lexed.redirections_read_newly;
+        self.braces_read_newly |= lexed.braces_read_newly;
         if !self.stat_builtin {
             self.stat_builtin = code_tables::may_load_stat(command, &lexed.commands);
         }
@@ -2368,6 +2448,7 @@ impl Classifier {
         self.sed_scope = outer_scope;
         self.sudo_redefined = outer_sudo_redefined;
         self.quoted_text = outer_quoted_text;
+        self.lexed_unseen = outer_lexed_unseen;
         self.brace_unsure = outer_brace_unsure;
         self.visited = outer_visited;
         self.visited_all = outer_visited_all;
@@ -2397,6 +2478,11 @@ impl Classifier {
             || folders.lost
             || self.unknown_folder > 0;
         let lower: Vec<String> = words.iter().map(|word| word.to_lowercase()).collect();
+        self.lexed_unseen = self.lexed_unseen
+            || words.iter().any(|word| {
+                work::step();
+                rerun::git_word_unseen(word)
+            });
         let (hidden, mut unchecked) = self.word_marks(simple, words, variables);
         loops.read(&simple.words);
         let looped = loops.marks(&simple.words);
@@ -2471,7 +2557,14 @@ impl Classifier {
         if indirect::sudo_option_boundaries_differ(simple, words) {
             self.note(ProtectedActionKind::UnseenCode);
         }
-        if indirect::redirect_hides_command(simple, words, /*from*/ 0)
+        // #1821: a sudo that a finder's exec option starts (`find . -exec
+        // sudo -A ./x \;`) gets the same helper and chroot checks, each read
+        // within its own command so the cost stays linear.
+        let finder_sudo = indirect::finder_exec_commands(words)
+            .into_iter()
+            .any(|(start, end)| indirect::sudo_runs_helper(simple, &words[..end], start));
+        if finder_sudo
+            || indirect::redirect_hides_command(simple, words, /*from*/ 0)
             || indirect::sudo_runs_helper(simple, words, /*from*/ 0)
             || operands.is_some_and(|from| {
                 indirect::redirect_hides_command(simple, words, from)
@@ -3951,6 +4044,21 @@ mod tainted_action_linear_tests;
 #[cfg(test)]
 #[path = "tainted_action_git_ext_tests.rs"]
 mod tainted_action_git_ext_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_brace_reading_tests.rs"]
+mod tainted_action_brace_reading_tests;
+#[cfg(test)]
+#[path = "tainted_action_git_option_value_tests.rs"]
+mod tainted_action_git_option_value_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_git_quoted_tests.rs"]
+mod tainted_action_git_quoted_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_option_glob_tests.rs"]
+mod tainted_action_option_glob_tests;
 
 #[cfg(test)]
 #[path = "tainted_action_timing_probe_tests.rs"]

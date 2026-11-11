@@ -206,12 +206,18 @@ runs (#1560). The boundary D259 draws between legacy commands holds only once
 #1560 is closed. This matters only while two legacy commands run at the same
 time with different writable roots (different projects, or different extra
 writable folders): either can write in the other's. Documented for now
-(D291, Travis 2026-11-06) in the non-admin warning and `docs/sandbox.md`. D291
-also pointed people who work on several projects at once to the elevated
-backend, but measured since, its commands could do the same to each other and
-more: they share one sandbox account (a restricting SID of every elevated
-token) and the logon SID of the session that starts their runners, and had
-full access to each other's processes and runners even without borrowing a
+(D291, Travis 2026-11-06) in the non-admin warning and `docs/sandbox.md`.
+The memory read between legacy commands (#1838) is documented too (D433,
+Travis 2026-11-09), next to #1560 in `docs/sandbox.md`, which points people
+who work on several projects at once to the elevated backend (where #1800,
+awaiting security sign-off, would close the read). No default DACL can close
+it while legacy tokens are write-restricted; a different token shape (#1838
+option (a), the same direction as #1560 option (a)) is to be weighed with
+#1560's token measurement. D291 also pointed people who work on several
+projects at once to the elevated backend, but measured since, its commands
+could do the same to each other and more: they share one sandbox account (a
+restricting SID of every elevated token) and the logon SID of the session
+that starts their runners, and had full access to each other's processes and runners even without borrowing a
 token (#1648). Since D324 (Travis 2026-11-07) each elevated command's token
 carries its own identity SID too, and its default DACL grants full access
 only to SYSTEM, the sandbox users' group (every elevated token holds it as a

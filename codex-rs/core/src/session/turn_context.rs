@@ -653,6 +653,14 @@ impl TurnContext {
                 .windows_sandbox_private_desktop,
             windows_sandbox_proxy_settings_mode: None,
             use_legacy_landlock: self.config.features.use_legacy_landlock(),
+            // #1976 (D491): refused where the host has no platform sandbox.
+            unsandboxed_refusal: crate::security::windows_unsandboxed::applies(
+                self.config.security_level,
+                self.windows_sandbox_level,
+            )
+            .then(|| {
+                crate::security::windows_unsandboxed::file_refusal(self.config.security_level)
+            }),
         }
     }
 
@@ -809,6 +817,13 @@ impl Session {
             );
         }
         per_turn_config.features = config.features.clone();
+        // #2000: a Windows sandbox set up during the session (it only gets
+        // stronger) is the one for everything started from this config, such
+        // as child agents, not the one the session started with.
+        crate::windows_sandbox::raise_windows_sandbox(
+            &mut per_turn_config,
+            session_configuration.windows_sandbox_level,
+        );
         per_turn_config
     }
 

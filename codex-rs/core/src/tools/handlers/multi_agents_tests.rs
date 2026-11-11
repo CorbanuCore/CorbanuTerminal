@@ -1,5 +1,7 @@
 use super::*;
 
+#[path = "multi_agents_interrupt_mail_tests.rs"]
+mod interrupt_mail_tests;
 #[path = "multi_agents_source_identity_route_tests.rs"]
 mod source_identity_route_tests;
 use crate::StartThreadOptions;
@@ -57,6 +59,7 @@ use codex_protocol::models::SandboxEnforcement;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::AgentStatus;
 use codex_protocol::protocol::AskForApproval;
+use codex_protocol::protocol::ErrorEvent;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::FileSystemAccessMode;
 use codex_protocol::protocol::FileSystemPath;
@@ -262,6 +265,7 @@ model_reasoning_effort = "low"
             description: Some("Role with model overrides".to_string()),
             config_file: Some(role_config_path),
             nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
         },
     );
     turn.config = Arc::new(config);
@@ -551,9 +555,19 @@ struct InterruptAgentResult {
     process_effect: String,
 }
 
+/// Agents whose spawn turn `settle_agent` has already waited out.
+static SETTLED_SPAWNS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<ThreadId>>> =
+    std::sync::LazyLock::new(Default::default);
+
 /// Ends the real turn a spawn started on `agent_id` (it would otherwise
 /// change the agent's status at any moment) and waits until the agent is
 /// neither starting nor running.
+///
+/// The first settle of an agent also waits for that turn's `TurnComplete` or
+/// `TurnAborted` (#1894): an `Error` (the dummy key's 401) marks the agent
+/// `Errored` while the turn is still active, and its terminal event, sent
+/// later, would overwrite a turn the caller starts next. Later settles have no
+/// real turn left to wait for.
 async fn settle_agent(manager: &ThreadManager, agent_id: ThreadId) -> AgentStatus {
     let thread = manager
         .get_thread(agent_id)
@@ -564,6 +578,24 @@ async fn settle_agent(manager: &ThreadManager, agent_id: ThreadId) -> AgentStatu
         .await
         .expect("interrupt should submit");
     let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    let first_settle = SETTLED_SPAWNS
+        .lock()
+        .expect("settled spawns lock")
+        .insert(agent_id);
+    if first_settle {
+        loop {
+            let event = tokio::time::timeout_at(deadline, thread.next_event())
+                .await
+                .expect("the spawn's turn did not end")
+                .expect("agent events should stream");
+            if matches!(
+                event.msg,
+                EventMsg::TurnComplete(_) | EventMsg::TurnAborted(_)
+            ) {
+                break;
+            }
+        }
+    }
     loop {
         let status = manager.agent_control().get_status(agent_id).await;
         if !matches!(status, AgentStatus::PendingInit | AgentStatus::Running) {
@@ -1297,6 +1329,7 @@ service_tier = "priority"
                 description: Some("Role with a child service tier".to_string()),
                 config_file: Some(role_config_path),
                 nickname_candidates: None,
+                source: crate::config::AgentRoleSource::User,
             },
         );
         turn.config = Arc::new(config);
@@ -1371,6 +1404,7 @@ service_tier = "turbo"
             description: Some("Role with an unsupported child tier".to_string()),
             config_file: Some(role_config_path),
             nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
         },
     );
     turn.config = Arc::new(config);
@@ -1435,6 +1469,7 @@ service_tier = "priority"
             description: Some("Role with a supported child tier".to_string()),
             config_file: Some(role_config_path),
             nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
         },
     );
     turn.config = Arc::new(config);
@@ -8391,4 +8426,140 @@ async fn followup_task_after_untrusted_content(level: codex_security_policy::Sec
     let status = manager.agent_control().get_status(agent_id).await;
     assert!(matches!(status, AgentStatus::Completed(_)), "{status:?}");
     asks_for_every_target("finished", targets.to_vec()).await;
+}
+
+/// #1894: an `Error` marks a spawned agent `Errored` while the spawn's turn is
+/// still active (the dummy key's 401 does this). Settling must still wait for
+/// that turn's terminal event, or the late event overwrites the turn the test
+/// starts next. The error is sent here directly, so the window is always open.
+#[tokio::test]
+async fn settle_agent_waits_for_the_spawn_turn_after_an_error() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let manager = thread_manager();
+    let root = manager
+        .start_thread(StartThreadOptions::new((*turn.config).clone()))
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = root.thread_id;
+    let mut config = (*turn.config).clone();
+    let _ = config.features.enable(Feature::MultiAgentV2);
+    set_turn_config(&mut turn, config);
+    let session = Arc::new(session);
+    let turn = Arc::new(turn);
+    SpawnAgentHandlerV2::default()
+        .handle(invocation(
+            session.clone(),
+            turn.clone(),
+            "spawn_agent",
+            function_payload(json!({"message": "boot worker", "task_name": "worker"})),
+        ))
+        .await
+        .expect("spawn worker");
+    let agent_id = session
+        .services
+        .agent_control
+        .resolve_agent_reference(session.thread_id, &turn.session_source, "worker")
+        .await
+        .expect("worker should resolve");
+    let thread = manager
+        .get_thread(agent_id)
+        .await
+        .expect("worker thread should exist");
+    let spawn_turn_id = loop {
+        let event = tokio::time::timeout(Duration::from_secs(30), thread.next_event())
+            .await
+            .expect("the spawn's turn should start")
+            .expect("agent events should stream");
+        if matches!(event.msg, EventMsg::TurnStarted(_)) {
+            break event.id;
+        }
+    };
+    let spawn_turn = thread
+        .session
+        .turn_context_for_sub_id(&spawn_turn_id)
+        .await
+        .expect("the spawn's turn should still be running");
+    thread
+        .session
+        .send_event(
+            spawn_turn.as_ref(),
+            EventMsg::Error(ErrorEvent {
+                message: "unexpected status 401 Unauthorized".to_string(),
+                codex_error_info: None,
+            }),
+        )
+        .await;
+    assert!(matches!(
+        manager.agent_control().get_status(agent_id).await,
+        AgentStatus::Errored(_)
+    ));
+
+    let _turn = start_agent_turn(&manager, agent_id).await;
+    let mut late = Vec::new();
+    while let Ok(event) =
+        tokio::time::timeout(Duration::from_millis(500), thread.next_event()).await
+    {
+        let event = event.expect("agent events should stream");
+        if event.id == spawn_turn.sub_id
+            && matches!(
+                event.msg,
+                EventMsg::TurnComplete(_) | EventMsg::TurnAborted(_)
+            )
+        {
+            late.push(format!("{:?}", event.msg));
+        }
+    }
+    assert_eq!(
+        late,
+        Vec::<String>::new(),
+        "settle_agent returned before the spawn's turn sent its terminal event"
+    );
+    assert_eq!(
+        manager.agent_control().get_status(agent_id).await,
+        AgentStatus::Running
+    );
+}
+
+/// #2000: a child agent whose role sets permissions (so its config is rebuilt
+/// from the session's starting layers, without the Windows sandbox set up
+/// since) still gets the session's raised Windows sandbox.
+#[tokio::test]
+async fn issue_2000_a_role_rebuilt_child_keeps_the_raised_windows_sandbox() {
+    use crate::windows_sandbox::WindowsSandboxLevelExt;
+    use codex_protocol::config_types::WindowsSandboxLevel;
+    let (_session, mut turn) = make_session_and_context().await;
+    tokio::fs::create_dir_all(&turn.config.codex_home)
+        .await
+        .expect("codex home should be created");
+    let role_config_path = turn.config.codex_home.as_path().join("sandbox-role.toml");
+    tokio::fs::write(&role_config_path, "sandbox_mode = \"workspace-write\"\n")
+        .await
+        .expect("role config should be written");
+    let mut config = (*turn.config).clone();
+    config.agent_roles.insert(
+        "sandbox-role".to_string(),
+        AgentRoleConfig {
+            description: Some("Role that sets its own sandbox".to_string()),
+            config_file: Some(role_config_path),
+            nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
+        },
+    );
+    let starting = WindowsSandboxLevel::from_config(&config);
+    assert_eq!(starting, WindowsSandboxLevel::Disabled);
+    // The session's per-turn config after "Set up default sandbox".
+    turn.windows_sandbox_level = WindowsSandboxLevel::Elevated;
+    config.set_windows_elevated_sandbox_enabled(/*value*/ true);
+
+    crate::agent::role::apply_role_to_config(&mut config, Some("sandbox-role"))
+        .await
+        .expect("role should apply");
+    // The role rebuilt the config from the starting layers.
+    assert_eq!(WindowsSandboxLevel::from_config(&config), starting);
+    apply_spawn_agent_runtime_overrides(&mut config, &turn).expect("runtime overrides");
+    assert_eq!(
+        WindowsSandboxLevel::from_config(&config),
+        WindowsSandboxLevel::Elevated
+    );
 }
