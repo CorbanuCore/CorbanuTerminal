@@ -165,6 +165,14 @@ async fn stream_completion_preserves_reasoning_when_final_delta_omits_it() {
 data: {"type":"message_start","message":{"id":"reasoning-fixture","usage":{"input_tokens":2,"output_tokens":30,"output_tokens_details":{"thinking_tokens":9}}}}
 
 "#,
+        br#"event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+"#,
+        br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"OK"}}
+
+"#,
         br#"event: message_delta
 data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":40}}
 
