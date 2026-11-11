@@ -88,6 +88,8 @@ HELPER_BINARIES = {
     "codex-core": _SUITE_HELPERS,
     "codex-app-server": _SUITE_HELPERS,
     "codex-tui": _SUITE_HELPERS,
+    "codex-rmcp-client": _SUITE_HELPERS,
+    "codex-mcp": _SUITE_HELPERS,
 }
 
 
