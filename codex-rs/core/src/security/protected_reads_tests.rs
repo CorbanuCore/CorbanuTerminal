@@ -428,6 +428,43 @@ fn issue_1334_split_denial_with_colon_space_is_attributed_to_the_home() {
     }
 }
 
+/// #1334: a program prefix must not become a relative descendant of a
+/// protected command operand when the actual denial names an unrelated file.
+#[test]
+fn issue_1334_program_prefix_does_not_create_a_protected_descendant() {
+    let (cwd, home, protected, other) = if cfg!(windows) {
+        (
+            r"C:\work",
+            r"C:\home\.corbanu",
+            r"C:\home\.corbanu\auth.json",
+            r"C:\other.txt",
+        )
+    } else {
+        (
+            "/work",
+            "/home/.corbanu",
+            "/home/.corbanu/auth.json",
+            "/etc/other.txt",
+        )
+    };
+    let command = vec!["cat".to_string(), protected.to_string()];
+    let denied = |path: &Path| path.starts_with(protected);
+    for (reported, expected) in [(other, None), (protected, Some(protected.to_string()))] {
+        assert_eq!(
+            path_in_lines(
+                &command,
+                Path::new(cwd),
+                /*user_home*/ None,
+                Path::new(home),
+                &[format!("cat: {reported}: Operation not permitted")],
+                &denied,
+                DenialPathScope::ProtectedPath,
+            ),
+            expected,
+        );
+    }
+}
+
 /// #442 (milestone AGG-09): under Aggressive a denied read of a protected
 /// file is explained where it failed, naming the level and /security; it is
 /// not explained under Permissive or for a failure that is not a denial.
