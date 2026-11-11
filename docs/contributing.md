@@ -65,8 +65,18 @@ A reviewable pull request includes:
 - a focused explanation of the user outcome;
 - final-tree test results;
 - true-TUI and live-repository evidence when required;
-- documentation changes; and
+- documentation changes;
+- a release-note fragment for a change users will notice (see below); and
 - any release blocker that remains.
+
+### Release notes
+
+Add a fragment file under `qa/release/unreleased/notes/`, named
+`<pr-or-issue-number>-<short-slug>.md`, that starts with a `## ` section
+heading (copy an existing heading to add to that section). Don't edit a
+shared release-notes file: there isn't one, and CI fails if
+`qa/release/unreleased/RELEASE_NOTES.md` comes back. Details and the checker:
+[`qa/release/unreleased/README.md`](../qa/release/unreleased/README.md).
 
 Do not mark work complete while required evidence is missing.
 

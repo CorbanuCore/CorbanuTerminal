@@ -576,3 +576,30 @@ fn issue_1139_moderate_git_folder_write_names_the_level() {
         None
     );
 }
+
+/// #1323: under Moderate, a search that exited 0 is not explained by its
+/// pattern when its output prints an old denial line naming it; a path the
+/// search reads, and a failed search, are explained as before.
+#[test]
+fn issue_1323_a_search_pattern_is_not_a_denied_path() {
+    let fixture = Fixture::new();
+    let auth = format!("{}/auth.json", fixture.home.display());
+    let denied = |script: String, line: String, failed: bool| {
+        explain_denied(
+            &fixture.inputs(Fixture::profile()),
+            /*contract*/ None,
+            &["/bin/bash".to_string(), "-c".to_string(), script],
+            &fixture.project,
+            &[line],
+            failed,
+        )
+        .map(|(denied, _)| denied)
+    };
+    let old_line = format!("notes.md:3:cat: {auth}: Operation not permitted");
+    let search = format!("rg -F '{auth}' notes.md");
+    assert_eq!(denied(search.clone(), old_line.clone(), false), None);
+    assert_eq!(denied(search, old_line, true), Some(Denied::Read));
+    let read = format!("grep -c token '{auth}'; echo \"exit=$?\"");
+    let line = format!("grep: {auth}: Operation not permitted");
+    assert_eq!(denied(read, line, false), Some(Denied::Read));
+}

@@ -228,6 +228,10 @@ create files there too.
 
 ## Commands run outside the sandbox
 
+On Windows without any Windows sandbox, Aggressive refuses every agent command
+and file tool access, with the steps to set the default sandbox up (#1976;
+see `docs/sandbox.md`).
+
 Under Moderate no agent command runs outside the sandbox, even when you
 approve it; Aggressive keeps every command in its sandbox too, once it applies
 after a restart. Before the restart, from when you confirm Aggressive in
@@ -262,6 +266,15 @@ Moderate's rules don't cover run without one; choose a sandbox in your
 settings to keep every command in it. Where the sandbox can't start (for
 example Linux without user namespaces), commands fail under Moderate instead
 of running outside it.
+
+## Agents after untrusted content
+
+Aggressive checks the agent tools the same way as Moderate (D320, D335; see
+[Moderate](security-moderate.md)): after untrusted content, starting an agent
+or restarting a finished one (including `send_input` to an agent that isn't
+running) asks for your approval (refused with approvals off), and waiting on
+one, closing it, `send_message`, and `send_input` to a running agent go
+ahead. The same race applies as under Moderate (D389).
 
 ## Remembered approvals
 

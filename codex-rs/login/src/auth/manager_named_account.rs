@@ -40,10 +40,13 @@ pub(super) struct NamedAccountStore {
     /// Reads of the stored sign-in, and whether `seen` was free during each.
     #[cfg(test)]
     reads: Mutex<Vec<bool>>,
+    /// One-shot interleaving after a Gone observation, before its cache clear.
+    #[cfg(test)]
+    before_clear: Mutex<Option<Box<dyn FnOnce() + Send>>>,
 }
 
-/// What the store was seen holding, and how often the held sign-in changed
-/// (an answer read before a change is not recorded after it).
+/// What the store was seen holding, and the cache installation generation
+/// (an answer read before an installation is not recorded after it).
 struct Seen {
     state: StoreSeen,
     epoch: u64,
@@ -59,6 +62,8 @@ impl NamedAccountStore {
             }),
             #[cfg(test)]
             reads: Mutex::new(Vec::new()),
+            #[cfg(test)]
+            before_clear: Mutex::new(None),
         }
     }
 
@@ -68,14 +73,15 @@ impl NamedAccountStore {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    /// Drops what the store was last seen holding (the held sign-in changed).
+    /// Drops what the store was last seen holding (cached auth was installed,
+    /// even if it has the same credentials as before).
     pub(super) fn forget(&self) {
         let mut seen = self.seen();
         seen.state = StoreSeen::Unknown;
         seen.epoch = seen.epoch.wrapping_add(1);
     }
 
-    /// Records what a read found, unless the held sign-in changed since it
+    /// Records what a read found, unless cached auth was installed since it
     /// started.
     fn record(&self, epoch: u64, state: StoreSeen) {
         let mut seen = self.seen();
@@ -105,7 +111,7 @@ impl NamedAccountStore {
 pub(super) enum HeldSignIn {
     Current,
     Changed,
-    Gone,
+    Gone { epoch: u64 },
 }
 
 /// What the store held, at which marker, the last time it was read.
@@ -206,8 +212,8 @@ impl AuthManager {
         else {
             return HeldSignIn::Current;
         };
-        // Taken before the held sign-in is read: once the held sign-in
-        // changes, what was seen (and this answer) no longer applies.
+        // Taken before the held sign-in is read: once cached auth is
+        // installed, what was seen (and this answer) no longer applies.
         let epoch = store.seen().epoch;
         let Some(held) = self.auth_cached_unchecked() else {
             return HeldSignIn::Current;
@@ -227,16 +233,18 @@ impl AuthManager {
             {
                 return HeldSignIn::Current;
             }
-            (Some(marker), StoreSeen::Gone(seen)) if marker == seen => return HeldSignIn::Gone,
+            (Some(marker), StoreSeen::Gone(seen)) if marker == seen => {
+                return HeldSignIn::Gone { epoch };
+            }
             _ => {}
         }
         let Some(marker) = marker else {
             store.record(epoch, StoreSeen::Unknown);
-            return HeldSignIn::Gone;
+            return HeldSignIn::Gone { epoch };
         };
         if store.vault.key_storage() == codex_vault::VaultKeyStorage::NotInitialized {
             store.record(epoch, StoreSeen::Gone(marker));
-            return HeldSignIn::Gone;
+            return HeldSignIn::Gone { epoch };
         }
         let (held_sign_in, state) = match store.read(account) {
             Ok(Some(stored)) if stored.has_primary_auth_material() => {
@@ -246,7 +254,7 @@ impl AuthManager {
                     (HeldSignIn::Changed, StoreSeen::Unknown)
                 }
             }
-            Ok(_) => (HeldSignIn::Gone, StoreSeen::Gone(marker)),
+            Ok(_) => (HeldSignIn::Gone { epoch }, StoreSeen::Gone(marker)),
             Err(error) => {
                 tracing::warn!(%account, %error, "named account sign-in unreadable; keeping it");
                 (HeldSignIn::Current, StoreSeen::Unreadable(marker))
@@ -254,6 +262,33 @@ impl AuthManager {
         };
         store.record(epoch, state);
         held_sign_in
+    }
+
+    /// #1326: a `Gone` answer applies only to the held sign-in it checked.
+    /// Check and clear under the cache write lock so a concurrent replacement
+    /// cannot be removed between them. This keeps the setter's lock order:
+    /// cache first, then `seen`, with no vault read under either lock.
+    /// Returns whether the clear applied; otherwise recheck the current sign-in.
+    pub(super) fn clear_named_sign_in_if_unchanged(&self, epoch: u64) -> bool {
+        let Some(store) = self.named_store.as_ref() else {
+            return false;
+        };
+        #[cfg(test)]
+        {
+            let before_clear = store.before_clear.lock().expect("before-clear hook").take();
+            if let Some(before_clear) = before_clear {
+                before_clear();
+            }
+        }
+        if let Ok(mut cached) = self.inner.write() {
+            // Release `seen` before the replacement invalidates it.
+            let unchanged = store.seen().epoch == epoch;
+            if unchanged {
+                self.replace_cached_auth(&mut cached, /*new_auth*/ None);
+                return true;
+            }
+        }
+        false
     }
 
     /// Loads the named account's current sign-in, built without awaiting

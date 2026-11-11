@@ -103,15 +103,18 @@ fn command_words(command: &[String], windows: bool) -> Vec<String> {
     let posix = !windows || command.first().is_some_and(|program| posix_shell(program));
     command
         .iter()
-        .flat_map(|argument| {
-            if posix {
-                shlex::split(argument)
-                    .unwrap_or_else(|| argument.split_whitespace().map(str::to_string).collect())
-            } else {
-                windows_words(argument)
-            }
-        })
+        .flat_map(|argument| argument_words(argument, posix))
         .collect()
+}
+
+/// The words of one argument of a command (see [`command_words`]).
+fn argument_words(argument: &str, posix: bool) -> Vec<String> {
+    if posix {
+        shlex::split(argument)
+            .unwrap_or_else(|| argument.split_whitespace().map(str::to_string).collect())
+    } else {
+        windows_words(argument)
+    }
 }
 
 /// #1296: whether `program` is a POSIX shell (Git for Windows' `bash.exe`).
@@ -733,6 +736,7 @@ pub(crate) async fn denial_explanation(
                 &inputs.codex_home,
                 denied,
                 Some(&denial_lines),
+                /*skip_patterns*/ !failed,
             )
         };
         let in_lines = |lines: &[String], accept: &dyn Fn(&Path) -> bool| {
@@ -1054,6 +1058,7 @@ pub(crate) async fn protected_note_in_command(
                 &inputs.codex_home,
                 denied,
                 /*denial_lines*/ None,
+                /*skip_patterns*/ false,
             )
         };
         word(&|path| matcher.is_read_denied(path))
@@ -1168,6 +1173,7 @@ fn kept_read_note(
             kept.is_some()
         },
         /*denial_lines*/ None,
+        /*skip_patterns*/ false,
     )?;
     Some(moderate_kept_read_note(&word, found.get()?))
 }
@@ -1350,6 +1356,8 @@ pub(crate) async fn notify(session: &Session, turn: &TurnContext, explanation: S
 /// The first word of `command` (shell scripts split into words) that names a
 /// path `denied` reports as unreadable, as the command spelled it. With
 /// `denial_lines`, only a word whose file name one of those lines mentions.
+/// #1323: with `skip_patterns` (the command exited 0), not a search pattern
+/// (`rg ".env" logs/` can print an old denial line naming `.env`).
 pub(super) fn denied_word(
     command: &[String],
     cwd: &Path,
@@ -1357,10 +1365,19 @@ pub(super) fn denied_word(
     codex_home: &Path,
     denied: impl Fn(&Path) -> bool,
     denial_lines: Option<&[String]>,
+    skip_patterns: bool,
 ) -> Option<String> {
-    command_words(command, WINDOWS)
+    let words = command_words(command, WINDOWS);
+    let patterns = if skip_patterns {
+        search_patterns::search_pattern_indices(command, &words, WINDOWS)
+    } else {
+        Default::default()
+    };
+    words
         .into_iter()
-        .flat_map(|whole| {
+        .enumerate()
+        .filter(|(index, _)| !patterns.contains(index))
+        .flat_map(|(_, whole)| {
             // `--file=.env`, `<.env`, `.env;`: the path part of the word.
             let word = whole.trim_matches(|c: char| matches!(c, ';' | '|' | '&' | '(' | ')'));
             let word = word.trim_start_matches(['<', '>']);
@@ -1526,6 +1543,8 @@ fn expand(
 }
 
 mod moderate;
+
+mod search_patterns;
 
 #[cfg(test)]
 #[path = "protected_reads_tests.rs"]

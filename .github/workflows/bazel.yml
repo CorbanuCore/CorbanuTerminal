@@ -112,6 +112,19 @@ jobs:
           done
           df -h /
 
+      # The Linux sandbox expands unreadable globs with `rg` from PATH, and its
+      # regression tests require real ripgrep (#1376). Install the ripgrep the
+      # package ships: the sha256-pinned DotSlash manifest that rust-release.yml
+      # also fetches. /usr/local/bin is on Bazel's fixed Linux test PATH too.
+      - name: Install packaged ripgrep (Linux)
+        if: ${{ runner.os == 'Linux' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rg_bin="$(dotslash -- fetch "${GITHUB_WORKSPACE}/scripts/codex_package/rg")"
+          sudo install -m 0755 "${rg_bin}" /usr/local/bin/rg
+          rg --version
+
       - name: bazel test //...
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
@@ -158,7 +171,7 @@ jobs:
       - name: Save bazel repository cache
         if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true' && github.ref == 'refs/heads/main'
         continue-on-error: true
-        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.prepare_bazel.outputs.repository-cache-path }}
           key: ${{ steps.prepare_bazel.outputs.repository-cache-key }}
@@ -200,12 +213,19 @@ jobs:
         shell: bash
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+          SHARD: ${{ matrix.shard }}
         run: |
           if [[ -n "${BUILDBUDDY_API_KEY:-}" ]]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping Windows gnullvm Bazel shard because authenticated remote execution is unavailable; the native MSVC validation job remains mandatory."
+            # #1856: say plainly that this shard's tests did not run. The job
+            # still succeeds.
+            disclosure="Windows gnullvm cross shard ${SHARD:-?}/4: its bazel test step did NOT run because authenticated remote execution (BuildBuddy) is unavailable. The native Windows lane runs most crates' unit and integration tests; see docs/ci.md (#1856). The native MSVC validation job remains mandatory."
+            echo "::notice::${disclosure}"
+            if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+              printf '%s\n' "${disclosure}" >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
 
       - name: Test BuildBuddy Bazel wrapper
@@ -424,7 +444,7 @@ jobs:
       - name: Save bazel repository cache
         if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true' && github.ref == 'refs/heads/main'
         continue-on-error: true
-        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.prepare_bazel.outputs.repository-cache-path }}
           key: ${{ steps.prepare_bazel.outputs.repository-cache-key }}
@@ -533,7 +553,7 @@ jobs:
       - name: Save bazel repository cache
         if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true' && github.ref == 'refs/heads/main'
         continue-on-error: true
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.prepare_bazel.outputs.repository-cache-path }}
           key: ${{ steps.prepare_bazel.outputs.repository-cache-key }}
@@ -657,7 +677,7 @@ jobs:
       - name: Save bazel repository cache
         if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true' && github.ref == 'refs/heads/main'
         continue-on-error: true
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.prepare_bazel.outputs.repository-cache-path }}
           key: ${{ steps.prepare_bazel.outputs.repository-cache-key }}

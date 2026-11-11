@@ -45,6 +45,7 @@ fn issue_442_finds_the_denied_path_the_command_names() {
             codex_home,
             denied,
             /*denial_lines*/ None,
+            /*skip_patterns*/ false,
         )
     };
     assert_eq!(word("cat .env"), Some(".env".to_string()));
@@ -73,6 +74,7 @@ fn issue_442_finds_the_denied_path_the_command_names() {
             codex_home,
             denied,
             Some(&lines),
+            /*skip_patterns*/ false,
         ),
         None
     );
@@ -84,7 +86,8 @@ fn issue_442_finds_the_denied_path_the_command_names() {
             Some(user_home),
             codex_home,
             denied,
-            Some(&lines)
+            Some(&lines),
+            /*skip_patterns*/ false,
         ),
         Some(".env".to_string())
     );
@@ -178,6 +181,7 @@ fn issue_506_listing_denial_is_attributed_through_variables_and_dot_dot() {
                 codex_home,
                 denied,
                 Some(&[line.to_string()]),
+                /*skip_patterns*/ false,
             ),
             Some(expected.to_string()),
             "{command:?}"
@@ -191,6 +195,7 @@ fn issue_506_listing_denial_is_attributed_through_variables_and_dot_dot() {
             codex_home,
             denied,
             Some(&[other_line.to_string()]),
+            /*skip_patterns*/ false,
         ),
         None
     );
@@ -598,6 +603,7 @@ fn issue_621_finds_the_denied_path_inside_interpreter_code() {
             codex_home,
             denied,
             /*denial_lines*/ None,
+            /*skip_patterns*/ false,
         )
     };
     let (found, not_found) = if cfg!(windows) {
@@ -802,6 +808,7 @@ fn issue_1296_windows_spellings_of_a_protected_path_are_found() {
             codex_home,
             denied,
             /*denial_lines*/ None,
+            /*skip_patterns*/ false,
         )
     };
     for (command, expected) in [
@@ -1541,4 +1548,63 @@ async fn issue_1312_denial_hidden_by_a_later_command_is_explained() {
             "{denials:?}"
         );
     }
+}
+
+/// #1323: under Aggressive, a search that exited 0 is not explained by its
+/// pattern (`rg ".env" logs/` printing an old denial line naming `.env`),
+/// and lists no recent denial; a protected path it reads, or one a command
+/// before a later one that hid its failure reads, still is (#1312), and a
+/// failed search is explained as before.
+#[cfg(unix)]
+#[tokio::test]
+async fn issue_1323_a_search_pattern_is_not_a_denied_path() {
+    let (session, turn) = crate::session::tests::make_session_and_context().await;
+    #[allow(deprecated)]
+    let cwd = turn.cwd.clone();
+    let explain = async |script: &str, exit_code: i32, output: &str| {
+        denial_explanation(
+            &session,
+            &turn,
+            &shell(script),
+            cwd.as_path(),
+            Some(exit_code),
+            output,
+        )
+        .await
+    };
+    aggressive(&session);
+    let auth = turn.config.codex_home.join("auth.json");
+    std::fs::create_dir_all(turn.config.codex_home.as_path()).unwrap();
+    std::fs::write(&auth, "x").unwrap();
+    let auth = auth.display().to_string();
+    let old_line = format!("logs/x.log:5:cat: {auth}: Permission denied\n");
+    let before = recent_denials(&session, &turn).len();
+    for search in [
+        format!("rg '{auth}' logs/"),
+        format!("grep -rn -e '{auth}' logs/"),
+        format!("cat logs/x.log | grep -F '{auth}'"),
+    ] {
+        assert_eq!(explain(&search, 0, &old_line).await, None, "{search}");
+    }
+    assert_eq!(
+        recent_denials(&session, &turn).len(),
+        before,
+        "nothing listed"
+    );
+    let read = Some(explanation(&auth));
+    let denied = format!("cat: {auth}: Permission denied\nexit=1\n");
+    let cat = format!("cat '{auth}'; echo \"exit=$?\"");
+    assert_eq!(explain(&cat, 0, &denied).await, read);
+    let grep_denied = format!("grep: {auth}: Permission denied\nexit=2\n");
+    let grep = format!("grep token '{auth}'; echo \"exit=$?\"");
+    assert_eq!(explain(&grep, 0, &grep_denied).await, read);
+    // A pattern that runs a command: what that command opens is explained.
+    let substituted = format!("grep \"$(cat '{auth}')\" notes.md; echo \"exit=$?\"");
+    assert_eq!(explain(&substituted, 0, &denied).await, read);
+    // A later line's read is not the search's pattern.
+    let lines = format!("rg token logs/\ncat -e '{auth}'\necho done");
+    assert_eq!(explain(&lines, 0, &denied).await, read);
+    // A failed search: unchanged.
+    let search = format!("rg '{auth}' logs/");
+    assert_eq!(explain(&search, 1, &old_line).await, read);
 }

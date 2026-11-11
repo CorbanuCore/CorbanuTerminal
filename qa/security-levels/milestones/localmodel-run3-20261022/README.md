@@ -8,6 +8,10 @@ designs it; if it passes, AGG-20's named limit lifts; **D162** delete the real Z
 Follow-ups to [moderate-vm-parity3-20261021](../moderate-vm-parity3-20261021/README.md) (MOD-21, MOD-11) and
 [aggressive-amendment7-20261021](../aggressive-amendment7-20261021/README.md) (AGG-20P). **No sign-off changes here.**
 
+## Owner disposition after this run
+
+Travis accepted D182–D185 on 2026-10-22. See the [owner decision addendum](owner-decisions-20261022.md): MOD-21 is an evidenced pass; MOD-11's observed behavior and AGG-20P-A's intended result are accepted with their original deviations retained. The table below remains the original judgment under the frozen packet.
+
 ## Result
 
 | Group | Case | Earlier | This run | Issue |

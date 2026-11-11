@@ -277,6 +277,7 @@ fn explain_denied(
                 codex_home,
                 read,
                 Some(denial_lines),
+                /*skip_patterns*/ !failed,
             )
         })
         // #621: a path built at run time that the denial line reports.

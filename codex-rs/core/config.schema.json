@@ -2773,6 +2773,12 @@
           },
           "type": "array"
         },
+        "discover_timeout_sec": {
+          "default": null,
+          "description": "Seconds a stdio server that opted in to MCP 2026-07-28 may take to answer `server/discover` before Corbanu falls back to legacy `initialize`. Must be greater than 0; omit it to wait up to `startup_timeout_sec`.",
+          "format": "double",
+          "type": "number"
+        },
         "enabled": {
           "default": null,
           "type": "boolean"
@@ -5970,6 +5976,10 @@
     },
     "skip_reopen_warmup": {
       "description": "When `true`, reopening a conversation (resume, restart, `/side` or any other fork) does not send the paid warm-up request that primes the model's cache; the first reply after reopening may be slower. Defaults to `false`.",
+      "type": "boolean"
+    },
+    "skip_startup_warmup": {
+      "description": "When `true`, no conversation sends the startup warm-up request, new or reopened; the first reply may be slower. For clients that start a thread only for realtime voice, which never uses the warm-up (#1045). Defaults to `false`.",
       "type": "boolean"
     },
     "sqlite_home": {

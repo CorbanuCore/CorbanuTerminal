@@ -247,6 +247,8 @@ impl StepContext {
 }
 
 mod guardian_tests;
+mod hard_abort_tool_output_tests;
+mod mcp_skill_dependency_tests;
 mod panicking_task_tests;
 
 struct InstructionsTestCase {
@@ -2974,6 +2976,70 @@ async fn record_token_usage_info_notifies_extension_contributors() {
 }
 
 #[tokio::test]
+async fn issue1577_context_window_fill_keeps_thread_usage_counters() {
+    let (session, turn_context) = make_session_and_context().await;
+    let context_window = turn_context
+        .model_context_window()
+        .expect("the test model has a context window");
+    let first_usage = TokenUsage {
+        input_tokens: 4_000,
+        cached_input_tokens: 1_000,
+        cache_write_input_tokens: 0,
+        output_tokens: 200,
+        reasoning_output_tokens: 50,
+        total_tokens: 4_200,
+    };
+    let second_usage = TokenUsage {
+        input_tokens: 300,
+        cached_input_tokens: 100,
+        cache_write_input_tokens: 0,
+        output_tokens: 40,
+        reasoning_output_tokens: 10,
+        total_tokens: 340,
+    };
+
+    session
+        .record_token_usage_info(&turn_context, Some(&first_usage))
+        .await
+        .expect("first usage should be recorded");
+    session.set_total_tokens_full(&turn_context).await;
+
+    assert_eq!(
+        session.token_usage_info().await,
+        Some(TokenUsageInfo {
+            total_token_usage: TokenUsage {
+                total_tokens: context_window,
+                ..first_usage.clone()
+            },
+            last_token_usage: TokenUsage {
+                total_tokens: context_window - first_usage.total_tokens,
+                ..TokenUsage::default()
+            },
+            model_context_window: Some(context_window),
+        }),
+        "the fill keeps the provider's counters and still marks the window full"
+    );
+
+    session
+        .record_token_usage_info(&turn_context, Some(&second_usage))
+        .await
+        .expect("second usage should be recorded");
+
+    assert_eq!(
+        session.total_token_usage().await,
+        Some(TokenUsage {
+            input_tokens: 4_300,
+            cached_input_tokens: 1_100,
+            cache_write_input_tokens: 0,
+            output_tokens: 240,
+            reasoning_output_tokens: 60,
+            total_tokens: context_window + second_usage.total_tokens,
+        }),
+        "the report after the fill is added to the earlier counters, not to zeros"
+    );
+}
+
+#[tokio::test]
 async fn turn_start_lifecycle_exposes_turn_metadata_and_token_baseline() {
     struct SessionTurnStartMarker;
     struct ThreadTurnStartMarker;
@@ -5506,6 +5572,7 @@ async fn session_configuration_apply_permission_profile_preserves_existing_deny_
     let workspace_policy = SandboxPolicy::new_workspace_write_policy();
     let deny_entry = FileSystemSandboxEntry {
         path: FileSystemPath::GlobPattern {
+            scan: None,
             pattern: "**/*.env".to_string(),
         },
         access: FileSystemAccessMode::Deny,
@@ -5867,6 +5934,7 @@ enabled = false
             description: None,
             config_file: Some(role_path.to_path_buf()),
             nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
         },
     );
     crate::agent::role::apply_role_to_config(&mut child_config, Some("custom"))
@@ -6253,6 +6321,14 @@ pub(crate) async fn build_world_state_from_turn_context(
         .expect("world state should build")
 }
 
+/// Gives `session` a new event channel and returns its receiver, for tests
+/// that read what a session emits.
+pub(crate) fn capture_events(session: &mut Session) -> async_channel::Receiver<Event> {
+    let (tx_event, rx_event) = async_channel::unbounded();
+    session.tx_event = tx_event;
+    rx_event
+}
+
 // todo: use online model info
 pub(crate) async fn make_session_and_context_for_config(config: Config) -> (Session, TurnContext) {
     let (tx_sub, _rx_sub) = async_channel::bounded(16);
@@ -6489,6 +6565,7 @@ pub(crate) async fn make_session_and_context_for_config(config: Config) -> (Sess
         tx_sub,
         tx_event,
         agent_status: agent_status_tx,
+        spawned_with_first_turn: Default::default(),
         state: Mutex::new(state),
         managed_network_proxy_refresh_lock: Semaphore::new(/*permits*/ 1),
         features: config.features.clone(),
@@ -6505,6 +6582,7 @@ pub(crate) async fn make_session_and_context_for_config(config: Config) -> (Sess
         active_turn: Mutex::new(None),
         input_queue: super::input_queue::InputQueue::new(),
         applied_agent_message_ids: Mutex::new(HashSet::new()),
+        mailbox_incarnation: uuid::Uuid::now_v7().to_string(),
         guardian_review_session: crate::guardian::GuardianReviewSessionManager::default(),
         services,
         git_enrichment_policy: GitEnrichmentPolicy::Fresh,
@@ -8764,6 +8842,7 @@ where
         tx_sub,
         tx_event,
         agent_status: agent_status_tx,
+        spawned_with_first_turn: Default::default(),
         state: Mutex::new(state),
         managed_network_proxy_refresh_lock: Semaphore::new(/*permits*/ 1),
         features: config.features.clone(),
@@ -8780,6 +8859,7 @@ where
         active_turn: Mutex::new(None),
         input_queue: super::input_queue::InputQueue::new(),
         applied_agent_message_ids: Mutex::new(HashSet::new()),
+        mailbox_incarnation: uuid::Uuid::now_v7().to_string(),
         guardian_review_session: crate::guardian::GuardianReviewSessionManager::default(),
         services,
         git_enrichment_policy: GitEnrichmentPolicy::Fresh,
@@ -9239,6 +9319,7 @@ async fn step_context_keeps_its_mcp_runtime_for_tools() -> anyhow::Result<()> {
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -10102,6 +10183,7 @@ fn file_system_policy_with_unreadable_glob(turn_context: &TurnContext) -> FileSy
     let cwd_display = turn_context.cwd.as_path().display().to_string();
     policy.entries.push(FileSystemSandboxEntry {
         path: FileSystemPath::GlobPattern {
+            scan: None,
             pattern: format!("{cwd_display}/**/*.env"),
         },
         access: FileSystemAccessMode::Deny,

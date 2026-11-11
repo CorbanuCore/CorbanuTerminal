@@ -2985,15 +2985,20 @@ impl AuthManager {
     /// was removed or signed out (by any process); [`AuthManager::auth`]
     /// picks up a later sign-in.
     pub fn auth_cached(&self) -> Option<CodexAuth> {
-        match self.held_named_sign_in() {
-            named_account::HeldSignIn::Current => {}
-            named_account::HeldSignIn::Changed => self.reload_named_sign_in_sync(),
-            named_account::HeldSignIn::Gone => {
-                self.set_cached_auth(/*new_auth*/ None);
-                return None;
+        loop {
+            match self.held_named_sign_in() {
+                named_account::HeldSignIn::Current => {}
+                named_account::HeldSignIn::Changed => self.reload_named_sign_in_sync(),
+                named_account::HeldSignIn::Gone { epoch } => {
+                    if !self.clear_named_sign_in_if_unchanged(epoch) {
+                        // The replacement may itself have been removed since
+                        // it was installed. Check it before returning it.
+                        continue;
+                    }
+                }
             }
+            return self.auth_cached_unchecked();
         }
-        self.auth_cached_unchecked()
     }
 
     /// The cached auth as it is, for the guarded reloads that compare it with
@@ -3280,28 +3285,34 @@ impl AuthManager {
 
     fn set_cached_auth(&self, new_auth: Option<CodexAuth>) -> bool {
         if let Ok(mut guard) = self.inner.write() {
-            let previous = guard.auth.as_ref();
-            let changed = !AuthManager::auths_equal(previous, new_auth.as_ref());
-            let auth_changed_for_refresh =
-                !Self::auths_equal_for_refresh(previous, new_auth.as_ref());
-            self.clear_provider_api_key_cache();
-            if auth_changed_for_refresh {
-                guard.permanent_refresh_failure = None;
-            }
-            tracing::info!("Reloaded auth, changed: {changed}");
-            guard.auth = new_auth;
-            // D171: what the store was last seen holding was about the
-            // sign-in held before.
-            if changed && let Some(store) = self.named_store.as_ref() {
-                store.forget();
-            }
-            if auth_changed_for_refresh {
-                self.auth_change_tx.send_modify(|revision| *revision += 1);
-            }
-            changed
+            self.replace_cached_auth(&mut guard, new_auth)
         } else {
             false
         }
+    }
+
+    /// Replaces auth while the caller holds the cache write lock, including
+    /// invalidation and notification for every guarded cache update.
+    fn replace_cached_auth(&self, cached: &mut CachedAuth, new_auth: Option<CodexAuth>) -> bool {
+        let previous = cached.auth.as_ref();
+        let changed = !AuthManager::auths_equal(previous, new_auth.as_ref());
+        let auth_changed_for_refresh = !Self::auths_equal_for_refresh(previous, new_auth.as_ref());
+        self.clear_provider_api_key_cache();
+        if auth_changed_for_refresh {
+            cached.permanent_refresh_failure = None;
+        }
+        tracing::info!("Reloaded auth, changed: {changed}");
+        cached.auth = new_auth;
+        // #1326: every cache installation invalidates earlier observations,
+        // including a reinstall of the same credentials after removal.
+        // Equality still controls the return value and refresh notifications.
+        if let Some(store) = self.named_store.as_ref() {
+            store.forget();
+        }
+        if auth_changed_for_refresh {
+            self.auth_change_tx.send_modify(|revision| *revision += 1);
+        }
+        changed
     }
 
     pub async fn set_external_auth(
