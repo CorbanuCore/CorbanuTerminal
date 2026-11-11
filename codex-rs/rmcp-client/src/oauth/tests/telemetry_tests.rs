@@ -17,7 +17,7 @@ fn policy_and_pinned_operations_keep_distinct_outcomes_and_originator() -> Resul
         return Ok(());
     }
     let _env = TempCodexHome::new();
-    keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
+    crate::oauth::fixture_keyring::install(keyring::mock::default_credential_builder());
     let metrics = test_metrics()?;
     let store = MockKeyringStore::default();
     let tokens = sample_tokens();
