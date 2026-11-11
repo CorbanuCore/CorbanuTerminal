@@ -759,6 +759,9 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
     if option_env!("BAZEL_PACKAGE").is_some() {
         return;
     }
+    // The elevated setup below resets the sandbox users' passwords (#1827).
+    // The rerun on a fresh window station takes it too, in its own process.
+    let _guard = crate::unified_exec::tests::legacy_process_test_guard();
     if !on_fresh_window_station(
         "window_station::tests::sec_win_345_sandboxed_commands_dont_get_the_runners_access",
     ) {
@@ -954,7 +957,7 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
 
 /// Copies the elevated sandbox's helpers (`CARGO_BIN_EXE_*`, else the
 /// build's own) next to this test binary, where the sandbox looks for them.
-fn stage_sandbox_helpers() {
+pub(crate) fn stage_sandbox_helpers() {
     let exe = std::env::current_exe().expect("test binary");
     let deps = exe.parent().expect("test dir");
     let resources = deps.join("codex-resources");

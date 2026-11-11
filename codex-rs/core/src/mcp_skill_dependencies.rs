@@ -8,6 +8,8 @@ use codex_config::McpServerTransportConfig;
 use codex_config::load_global_mcp_servers;
 use codex_login::default_client::is_first_party_originator;
 use codex_login::default_client::originator;
+use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::WarningEvent;
 use codex_protocol::request_user_input::RequestUserInputArgs;
 use codex_protocol::request_user_input::RequestUserInputQuestion;
 use codex_protocol::request_user_input::RequestUserInputQuestionOption;
@@ -112,12 +114,19 @@ pub(crate) async fn maybe_install_mcp_dependencies(
 
     let mut updated = false;
     let mut added = Vec::new();
-    for (name, config) in missing {
+    for (name, server_config) in missing {
         if servers.contains_key(&name) {
             continue;
         }
-        servers.insert(name.clone(), config.clone());
-        added.push((name, config));
+        if let Some(clash) = config.non_prefixed_mcp_server_name_clash(&name) {
+            let message = clash.skill_dependency_message();
+            warn!("{message}");
+            sess.send_event(turn_context, EventMsg::Warning(WarningEvent { message }))
+                .await;
+            continue;
+        }
+        servers.insert(name.clone(), server_config.clone());
+        added.push((name, server_config));
         updated = true;
     }
 
@@ -386,6 +395,7 @@ fn mcp_dependency_to_server_config(
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -417,6 +427,7 @@ fn mcp_dependency_to_server_config(
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,

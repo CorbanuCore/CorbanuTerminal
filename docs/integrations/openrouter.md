@@ -25,23 +25,35 @@ Set OPENROUTER_API_KEY to your OpenRouter API key.
 
 ## Current Models
 
-Visible OpenRouter models are bundled in
-`codex-rs/models-manager/models.json`:
+OpenRouter models bundled in `codex-rs/models-manager/models.json`. Grok 4.6,
+Grok 4.5, DeepSeek V4 Pro, DeepSeek V4 Pro 0813 and DeepSeek V4 Flash 0731 are
+hidden from `/model` and kept for saved configs; the others are listed:
 
-| Slug                              | Display name                      | Listed pricing text                                            |
-| --------------------------------- | --------------------------------- | -------------------------------------------------------------- |
-| `x-ai/grok-4.6`                   | OpenRouter Grok 4.6               | `$2.00/M input`, `$0.50/M cached input`, `$6.00/M output`      |
-| `deepseek/deepseek-v4-flash-0731` | OpenRouter DeepSeek V4 Flash 0731 | `$0.14/M input`, `$0.0028/M cached input`, `$0.28/M output`    |
-| `deepseek/deepseek-v4-pro-0813`   | OpenRouter DeepSeek V4 Pro 0813   | `$0.435/M input`, `$0.003625/M cached input`, `$0.87/M output` |
-| `deepseek/deepseek-v4-pro`        | OpenRouter DeepSeek V4 Pro        | `$0.435/M input`, `$0.87/M output`                             |
-| `moonshotai/kimi-k3`              | OpenRouter Kimi K3                | `$3.00/M input`, `$0.30/M cached input`, `$15.00/M output`     |
-| `x-ai/grok-4.5`                   | OpenRouter Grok 4.5               | `$2.00/M input`, `$6.00/M output`                              |
-| `minimax/minimax-m3`              | OpenRouter MiniMax M3             | `$0.60/M input`, `$2.40/M output`                              |
-| `openrouter/owl-alpha`            | OpenRouter Owl Alpha              | `$0/M input`, `$0/M output`                                    |
-| `google/gemini-3.5-flash`         | OpenRouter Gemini 3.5 Flash       | `$1.50/M input`, `$9.00/M output`                              |
-| `tencent/hy3:free`                | OpenRouter Tencent Hy3 Free       | `$0/M input`, `$0/M output`                                    |
+| Slug                                     | Display name                      | Listed pricing text                                            |
+| ---------------------------------------- | --------------------------------- | -------------------------------------------------------------- |
+| `x-ai/grok-4.7`                          | OpenRouter Grok 4.7               | `$1.60/M input`, `$4.8/M output`                               |
+| `deepseek/deepseek-v4.1-flash`           | OpenRouter DeepSeek V4.1 Flash    | `$0.15/M input`, `$0.6/M output`                               |
+| `xiaomi/mimo-v2.6-pro`                   | OpenRouter MiMo V2.6 Pro          | `$0.435/M input`, `$0.87/M output`                             |
+| `z-ai/glm-5.3-flash`                     | OpenRouter GLM 5.3 Flash          | `$0.15/M input`, `$0.5/M output`                               |
+| `nvidia/nemotron-3-ultra-550b-a55b:free` | OpenRouter Nemotron 3 Ultra Free  | `$0/M input`, `$0/M output`                                    |
+| `x-ai/grok-4.6`                          | OpenRouter Grok 4.6               | `$2.00/M input`, `$0.50/M cached input`, `$6.00/M output`      |
+| `deepseek/deepseek-v4-flash-0731`        | OpenRouter DeepSeek V4 Flash 0731 | `$0.14/M input`, `$0.0028/M cached input`, `$0.28/M output`    |
+| `deepseek/deepseek-v4-pro-0813`          | OpenRouter DeepSeek V4 Pro 0813   | `$0.435/M input`, `$0.003625/M cached input`, `$0.87/M output` |
+| `deepseek/deepseek-v4-pro`               | OpenRouter DeepSeek V4 Pro        | `$0.435/M input`, `$0.87/M output`                             |
+| `moonshotai/kimi-k3`                     | OpenRouter Kimi K3                | `$3.00/M input`, `$0.30/M cached input`, `$15.00/M output`     |
+| `x-ai/grok-4.5`                          | OpenRouter Grok 4.5               | `$2.00/M input`, `$6.00/M output`                              |
+| `minimax/minimax-m3`                     | OpenRouter MiniMax M3             | `$0.60/M input`, `$2.40/M output`                              |
+| `google/gemini-3.5-flash`                | OpenRouter Gemini 3.5 Flash       | `$1.50/M input`, `$9.00/M output`                              |
 
-Grok 4.6's listed rates double when the prompt exceeds 200,000 tokens.
+Grok 4.7's and Grok 4.6's listed rates double when the prompt exceeds 200,000
+tokens. DeepSeek V4.1 Flash and MiMo V2.6 Pro rates vary by provider and time
+of day, and peak prices are higher. Nemotron 3 Ultra Free is a free endpoint;
+rate limits and provider data-use terms apply.
+
+`openrouter/owl-alpha` and `tencent/hy3:free` are retired: OpenRouter lists no
+endpoints for them (checked 2026-10-28 and 2026-11-07), so requests to them are
+expected to fail. The hidden catalogue rows stay only so a saved config resolves
+to its own entry instead of another model; pick a current model with `/model`.
 
 DeepSeek V4 Flash is intentionally pinned to the exact
 `deepseek/deepseek-v4-flash-0731` slug. Direct DeepSeek uses provider
@@ -103,7 +115,6 @@ corbanu -m moonshotai/kimi-k3
 corbanu -m x-ai/grok-4.6
 corbanu -m x-ai/grok-4.5
 corbanu -m minimax/minimax-m3
-corbanu -m openrouter/owl-alpha
 corbanu -m google/gemini-3.5-flash
 ```
 

@@ -7,7 +7,11 @@
 //! So is a positional parameter (`xargs sh -c 'git config "$@"' _`).
 //!
 //! Words added at the end of a line whose subcommand git has already read
-//! are that subcommand's, so `xargs git log --oneline` stays quiet. Fails
+//! are that subcommand's, so `xargs git log --oneline` stays quiet, unless
+//! the subcommand contacts a remote, or is one git does not know, which may
+//! be an alias of one, and the launcher adds its input words (#1876: `xargs
+//! git fetch` may be given an `ext::` remote or `--upload-pack=…`), which
+//! asks. Fails
 //! closed otherwise: git with no subcommand yet, or an option first (the
 //! word lexer may split quoted text, so where the subcommand starts is
 //! certain only when it is the first word), or a first word input may fill
@@ -17,17 +21,81 @@
 
 use super::ProtectedActionKind;
 use super::outputs;
+use super::rerun;
 use super::shell::basename;
 use super::work;
 
 /// Launchers that add words from their input to the line they run (#1276:
 /// `xjobs` too).
-const FEEDERS: &[&str] = &["xargs", "gxargs", "xjobs"];
+pub(super) const FEEDERS: &[&str] = &["xargs", "gxargs", "xjobs"];
 /// Launchers like GNU `parallel` (#1276: `env_parallel`, `rush`): they
 /// also put input where placeholders are and run the line with a shell.
 pub(super) const PARALLELS: &[&str] = &["parallel", "env_parallel", "rush"];
 /// Finders whose exec options start a launched command (#1276: `bfs`).
-const FINDERS: &[&str] = &["find", "gfind", "fd", "fdfind", "bfs"];
+pub(super) const FINDERS: &[&str] = &["find", "gfind", "fd", "fdfind", "bfs"];
+
+/// GNU `parallel` options that take the next word as their value.
+pub(super) const PARALLEL_VALUED: &[&str] = &[
+    "-j",
+    "--jobs",
+    "-P",
+    "--max-procs",
+    "-N",
+    "--max-replace-args",
+    "-n",
+    "--max-args",
+    "-a",
+    "--arg-file",
+    "-d",
+    "--delimiter",
+    "--colsep",
+    "-C",
+    "-S",
+    "--sshlogin",
+    "--timeout",
+    "--halt",
+    "--joblog",
+    "--results",
+    "--retries",
+    "--delay",
+    "--tmpdir",
+    "--workdir",
+    "--wd",
+    "--memfree",
+    "--load",
+    "--block",
+];
+/// GNU `parallel` options that take no value.
+pub(super) const PARALLEL_FLAGS: &[&str] = &[
+    "-k",
+    "--keep-order",
+    "-q",
+    "--quote",
+    "-0",
+    "--null",
+    "-v",
+    "--verbose",
+    "--dry-run",
+    "--dryrun",
+    "--bar",
+    "--progress",
+    "--eta",
+    "--lb",
+    "--line-buffer",
+    "--group",
+    "-u",
+    "--ungroup",
+    "--tag",
+    "--pipe",
+    "--pipepart",
+    "-r",
+    "--no-run-if-empty",
+    "-m",
+    "-X",
+    "--xargs",
+    "--will-cite",
+    "--citation",
+];
 
 /// Replacement strings (`xargs -I R`) remembered; past this many, any word
 /// may be one.
@@ -44,6 +112,11 @@ pub(super) struct LaunchedGit<'a> {
     braces: bool,
     /// A launcher that adds words from its input runs what follows.
     fed: bool,
+    /// #1876: one that adds them after what follows (`xargs`, `parallel`),
+    /// not only where placeholders are (`find -execdir git pull \;` adds
+    /// none; it picks the repository, whose stored remotes are not on the
+    /// line). Words from a script's launcher count (`xargs sh -c …`).
+    appends: bool,
     /// A `find` or `fd`, whose exec options start such a command.
     finder: bool,
     /// An `fd`, whose `-x` may hold its command (`-xgit`).
@@ -81,6 +154,13 @@ pub(super) struct Marks<'a> {
     /// #1276: it holds a loop variable that iterates the positional
     /// parameters (`for k; do git config "$k"`).
     pub(super) looped: &'a [bool],
+    /// #1276 item 3: it holds an expansion of a value the quote-aware
+    /// reading does not know outside double quotes, so, like `$@`, it may
+    /// be several words (`x=$(cat f); git config $x`).
+    pub(super) splits: &'a [bool],
+    /// #1276 item 3: it holds an expansion of a value the quote-aware
+    /// reading does not know (`git config "$k"`, which may be `-e`).
+    pub(super) dynamic: &'a [bool],
 }
 
 /// #1276: loop variables that iterate the positional parameters (`for k;`,
@@ -162,6 +242,7 @@ impl<'a> LaunchedGit<'a> {
             lower,
             braces,
             fed: launched.fed || launched.replaced,
+            appends: launched.fed,
             finder: false,
             fd: false,
             placeholders: false,
@@ -215,6 +296,7 @@ impl<'a> LaunchedGit<'a> {
                 || self.attached(index).is_some());
         let parallel = PARALLELS.contains(&name);
         self.placeholders |= finder_exec || parallel;
+        self.appends |= FEEDERS.contains(&name) || parallel;
         if FEEDERS.contains(&name) || parallel || finder_exec {
             self.fed = true;
             self.hidden_launcher |= self.hidden(index);
@@ -248,68 +330,6 @@ impl<'a> LaunchedGit<'a> {
     /// takes any unambiguous prefix of a long one, so any option not known
     /// to set none may: any word may be input.
     fn parallel_option(&mut self, word: &str) {
-        /// Options that take the next word as their value.
-        const VALUED: &[&str] = &[
-            "-j",
-            "--jobs",
-            "-P",
-            "--max-procs",
-            "-N",
-            "--max-replace-args",
-            "-n",
-            "--max-args",
-            "-a",
-            "--arg-file",
-            "-d",
-            "--delimiter",
-            "--colsep",
-            "-C",
-            "-S",
-            "--sshlogin",
-            "--timeout",
-            "--halt",
-            "--joblog",
-            "--results",
-            "--retries",
-            "--delay",
-            "--tmpdir",
-            "--workdir",
-            "--wd",
-            "--memfree",
-            "--load",
-            "--block",
-        ];
-        /// Options that take no value.
-        const FLAGS: &[&str] = &[
-            "-k",
-            "--keep-order",
-            "-q",
-            "--quote",
-            "-0",
-            "--null",
-            "-v",
-            "--verbose",
-            "--dry-run",
-            "--dryrun",
-            "--bar",
-            "--progress",
-            "--eta",
-            "--lb",
-            "--line-buffer",
-            "--group",
-            "-u",
-            "--ungroup",
-            "--tag",
-            "--pipe",
-            "--pipepart",
-            "-r",
-            "--no-run-if-empty",
-            "-m",
-            "-X",
-            "--xargs",
-            "--will-cite",
-            "--citation",
-        ];
         if std::mem::take(&mut self.parallel_value_next) {
             return;
         }
@@ -327,9 +347,9 @@ impl<'a> LaunchedGit<'a> {
                         .all(|ch| ch.is_ascii_digit() || "+-%".contains(ch))
             })
         });
-        if VALUED.contains(&option) {
+        if PARALLEL_VALUED.contains(&option) {
             self.parallel_value_next = !word.contains('=');
-        } else if !(counted || FLAGS.contains(&option)) {
+        } else if !(counted || PARALLEL_FLAGS.contains(&option)) {
             self.any_replacement = true;
         }
     }
@@ -411,10 +431,13 @@ impl<'a> LaunchedGit<'a> {
             // quote-aware reading cannot see, which then cannot check what
             // this reading makes of quoted values.
             let unchecked = this.hidden_launcher || this.hidden(index) || this.hidden(from - 1);
+            // #1276 item 3: or the first word after `config` is a value
+            // this reading does not know, which may be an option (`-e`).
+            let dynamic = this.marks.dynamic.get(from).copied().unwrap_or(false);
             let (reads, positional, unknown) = this.seen();
             // Or a word it cannot know (`"$k"` with `k=core.pager`).
             let unchecked = unchecked || unknown[index + 1];
-            ((fed || positional[from]) && (unchecked || !reads[from]))
+            ((fed || positional[from] || dynamic) && (unchecked || !reads[from]))
                 .then_some(ProtectedActionKind::Persistence)
         };
         if let Some(Some(subcommand)) = helper {
@@ -424,6 +447,9 @@ impl<'a> LaunchedGit<'a> {
             }
             return if subcommand == "config" {
                 config(self, index + 1)
+            } else if self.appends && rerun::GIT_TRANSPORTS.contains(&subcommand.as_str()) {
+                // #1876: input may be the remote (`ext::…`) or `--upload-pack=…`.
+                Some(ProtectedActionKind::UnseenCode)
             } else {
                 None
             };
@@ -434,6 +460,20 @@ impl<'a> LaunchedGit<'a> {
                 Some(ProtectedActionKind::UnseenCode)
             }
             Some(_) if self.lower[index + 1] == "config" => config(self, index + 2),
+            // #1876: a transport subcommand given input words: one may be
+            // the remote (`echo 'ext::sh -c id' | xargs git fetch`) or a
+            // transport option (`--upload-pack=sh`).
+            // One git does not know may be an alias of one (`xargs git f`
+            // with `alias.f=fetch`). The word lexer may leave a quote on it
+            // (`parallel 'cd x && git log' ::: a` gives `log'`).
+            Some(_)
+                if self.appends
+                    && rerun::git_may_contact_remote(
+                        &self.lower[index + 1].replace(['\'', '"'], ""),
+                    ) =>
+            {
+                Some(ProtectedActionKind::UnseenCode)
+            }
             Some(_) => None,
         }
     }
@@ -451,8 +491,10 @@ impl<'a> LaunchedGit<'a> {
             let mut unchecked = vec![false; words.len() + 1];
             for (at, word) in words.iter().enumerate().rev() {
                 work::step();
-                positional[at] =
-                    positional[at + 1] || holds_positional(word) || mark(marks.looped, at);
+                positional[at] = positional[at + 1]
+                    || holds_positional(word)
+                    || mark(marks.looped, at)
+                    || mark(marks.splits, at);
                 unchecked[at] = unchecked[at + 1] || mark(marks.unchecked, at);
             }
             (reads, positional, unchecked)

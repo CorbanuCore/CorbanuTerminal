@@ -5,6 +5,8 @@
 //! split into commands too. Command boundaries, pipes and substitutions are
 //! kept so wrappers, pipelines and code fed to an interpreter can be followed.
 
+use super::certain_cd;
+use super::certain_cd::Joint;
 use super::work;
 
 /// Shells whose `-c` argument is its own command line.
@@ -52,12 +54,25 @@ pub(super) struct SimpleCommand {
     pub(super) fed_by: Vec<usize>,
     /// It runs inside `>(...)`: its stdin is the outer command's output.
     pub(super) reads_outer_output: bool,
-    /// Index of the word its stdin is redirected from (`< file`).
-    pub(super) stdin_from: Option<usize>,
-    /// Index of its here-string word (`<<< word`).
-    pub(super) here_string: Option<usize>,
+    /// Indexes of the words its stdin is redirected from (`< file`), in
+    /// ascending order: every one, not only the last (#1772 item 3: `<a <b
+    /// ./x`).
+    pub(super) stdin_from: Vec<usize>,
+    /// Indexes of its here-string words (`<<< word`), in ascending order.
+    pub(super) here_string: Vec<usize>,
     /// Indexes of the words its output is redirected to (`> file`, `>> file`).
     pub(super) writes_to: Vec<usize>,
+    /// #1482 item 2: indexes of the words a redirection holds that are not
+    /// its file: a descriptor number (`2` of `2>log` and `2>&1`, `1` of
+    /// `2>&1`, `2` of `>&2`), a `{fd}` name (`{fd}>log`, read as `fd`) and
+    /// a here-document's delimiter (`EOF` of `<<EOF`). The shell runs none
+    /// of them.
+    pub(super) redirect_words: Vec<usize>,
+    /// #1607: files zsh writes where bash reads the line otherwise, by
+    /// word index: the word after `>!` (`>! f`, which bash passes on as an
+    /// argument; `false`) or the rest of the `!` word (`>!f`, bash's file
+    /// `!f`; `true`: drop the `!`). Judged only as files written.
+    pub(super) zsh_writes: Vec<(usize, bool)>,
     /// Indexes of the words holding what a lookup printed (`$(readlink x)`
     /// stands for `x`, but prints whatever the link holds).
     pub(super) looked_up: Vec<usize>,
@@ -68,10 +83,30 @@ pub(super) struct SimpleCommand {
     /// made by a brace expansion or `$IFS`, or holding a substitution's
     /// spliced output (`{git,config}`, `git${IFS}config`, `$(echo git)`).
     pub(super) hidden: Vec<usize>,
+    /// #1064: it is the text of an arithmetic expansion (`$((i + 1))`),
+    /// which runs no command.
+    pub(super) arithmetic: bool,
     /// #989: indexes of the words holding a parameter expansion the lexer
     /// misreads (`${c:-eval}`, `${!c}`, `${c}al`, `"$c"al`, zsh `$c:t`): it
     /// drops braces and quotes, so the substituted word is not its value.
     pub(super) operated: Vec<usize>,
+    /// D194: what joins it to the command before it.
+    pub(super) after: Joint,
+    /// #1772 review 3: a redirection sends its stdout elsewhere (`>log`,
+    /// `>&2`, `1>&2`, `&>log`; not `2>log` or `2>&1`), so a substitution
+    /// of it prints nothing the words show.
+    pub(super) stdout_redirected: bool,
+    /// #1772 item 1: when `redirections_last` moved the words a
+    /// redirection holds after the others, the position each word had as
+    /// written (`written_at[now]`); empty when nothing moved.
+    pub(super) written_at: Vec<usize>,
+    /// #1774: how many of `words` `simple_commands` has checked for a shell
+    /// name, and whether one was. Words are only appended while the command
+    /// is being read (`redirections_last` reorders a finished one), and the
+    /// count travels with a command a substitution sets aside, so each word
+    /// is checked once.
+    pub(super) shells_checked: usize,
+    pub(super) shell_seen: bool,
 }
 
 /// Lexed simple commands, in the order they finish (a substitution comes
@@ -83,6 +118,14 @@ pub(super) struct Lexed {
     /// Substitutions nested past `MAX_SUBSTITUTION_DEPTH`; the deeper ones
     /// were read without linking their output (#1020).
     pub(super) too_deep: bool,
+    /// #1772 review 1: some text was read where main reads it otherwise: a
+    /// quoted or escaped redirection file holding a blank as one word,
+    /// `&>` as one redirection, a redirection's words moved last, a second
+    /// `<` or `<<<`, a substitution with its stdout redirected left
+    /// unspliced (see `simple_commands_read`).
+    pub(super) redirections_read_newly: bool,
+    /// #1975: literal braces retained instead of discarded or read as groups.
+    pub(super) braces_read_newly: bool,
 }
 
 /// How deeply substitutions (`$(`, `<(`, `>(`, backticks) are read inside
@@ -99,25 +142,60 @@ pub(super) fn basename(word: &str) -> &str {
         .unwrap_or(word)
 }
 
-/// Simple commands of the argv and of any script inside it (`bash -lc "..."`).
+/// Simple commands of the argv and of any script inside it (`bash -lc "..."`),
+/// read as main reads them. #1772 review 2: the helper lexers (`one_word`,
+/// `holds_git_name`, arithmetic's) keep main's reading; only the
+/// classifier's own lexing reads newly (`simple_commands_read`).
 pub(super) fn simple_commands(command: &[String]) -> Lexed {
-    let mut lexer = Lexer::default();
+    simple_commands_read(command, Reading::Legacy)
+}
+
+/// Which lexer changes are enabled for one independent judgment. Pre-#1975
+/// main used both `Legacy` and `Redirections`; retaining only `Legacy` is
+/// insufficient when a brace group contains a redirected `cd`.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub(super) enum Reading {
+    /// Before #1772: original redirections and braces; also used by helpers.
+    Legacy,
+    /// #1772 redirections, with the original brace handling.
+    Redirections,
+    /// #1772 redirections and #1975 literal brace arguments.
+    #[default]
+    LiteralBraces,
+}
+
+/// [`simple_commands`] under one reading. The classifier combines the
+/// strongest finding from the changed reading and both pre-#1975 readings.
+/// Redirection changes are enabled except in `Legacy`; literal brace
+/// handling is enabled only in `LiteralBraces`. Helper lexers stay `Legacy`.
+/// Each flag records whether its change affected the lexed text, so an
+/// equivalent reading need not be judged again.
+pub(super) fn simple_commands_read(command: &[String], reading: Reading) -> Lexed {
+    let mut lexer = Lexer {
+        joint: Some(Joint::Start),
+        reading,
+        ..Lexer::default()
+    };
     let mut incomplete = false;
     let mut previous: Option<&str> = None;
     for arg in command {
         work::step();
         // The script after a shell's `-c`/`-lc` is its own command line.
-        let in_shell = lexer
-            .current
-            .words
-            .iter()
-            .any(|word| SHELLS.contains(&basename(&word.to_lowercase())));
+        // #1774: only the words added since the last argument are checked.
+        let current = &mut lexer.current;
+        for word in &current.words[current.shells_checked..] {
+            work::step();
+            current.shell_seen |= SHELLS.contains(&basename(&word.to_lowercase()));
+        }
+        current.shells_checked = current.words.len();
+        let in_shell = current.shell_seen;
         if in_shell
             && previous.is_some_and(|flag| {
                 flag.starts_with('-') && !flag.starts_with("--") && flag.contains('c')
             })
         {
             lexer.start(Start::Plain);
+            lexer.joint = Some(Joint::Start);
         }
         previous = Some(arg.as_str());
         let (expanded, complete) = expand_braces(&replace_ifs(arg));
@@ -126,11 +204,33 @@ pub(super) fn simple_commands(command: &[String]) -> Lexed {
         lexer.flush();
     }
     let too_deep = lexer.too_deep;
+    // #1772 review 2: after `finish`, which reorders the last command.
+    let (commands, redirections_read_newly, braces_read_newly) = lexer.finish();
     Lexed {
-        commands: lexer.finish(),
+        commands,
         incomplete,
         too_deep,
+        redirections_read_newly,
+        braces_read_newly,
     }
+}
+
+/// #1482 item 5: whether `text`, read as a line, is one word. An argv
+/// element is one word whatever it holds; one that the lexer reads as
+/// several words or commands (`A=1 ./y`, `./{x,y}`, ``true`./x` ``) is not
+/// the word the classifier judges. Quotes and braces the lexer drops in one
+/// word (`-I{}`) are read as before. Empty text runs nothing.
+pub(super) fn one_word(text: &str) -> bool {
+    if text.is_empty() {
+        return true;
+    }
+    let lexed = simple_commands(&[text.to_string()]);
+    !lexed.incomplete
+        && !lexed.too_deep
+        && matches!(
+            lexed.commands.as_slice(),
+            [only] if only.fed_by.is_empty() && only.words.len() == 1
+        )
 }
 
 /// Whether text may use bash's prompt transformation (`${v@P}`,
@@ -144,7 +244,11 @@ pub(super) fn simple_commands(command: &[String]) -> Lexed {
 /// #1064: also a transformation whose operator is not one of the letters
 /// that only quote or describe the value (`${v@$p}`, `${!r@${p^}}`): it may
 /// be `P` when it runs.
-pub(super) fn prompt_expansion(text: &str) -> bool {
+///
+/// #1064: `foreign`: the line may run code of another language, which can
+/// build shell text at run time (`chr(64)`); there an uncertain subscript
+/// counts on any line holding an `@`, as before.
+pub(super) fn prompt_expansion(text: &str, foreign: bool) -> bool {
     if !text.contains('@') {
         return false;
     }
@@ -153,10 +257,54 @@ pub(super) fn prompt_expansion(text: &str) -> bool {
         .chars()
         .filter(|ch| !matches!(ch, '\'' | '"' | '\\'))
         .collect();
+    // #1064: a subscript whose end is uncertain counts only where some
+    // subscript's end is followed by an operator (in either reading), or
+    // where other code may build one.
+    let after_subscript = foreign
+        || [joined.as_str(), bare.as_str()]
+            .iter()
+            .any(|text| operator_after_subscript(text));
     [joined.as_str(), bare.as_str()].iter().any(|text| {
         text.match_indices("@P").any(|(at, _)| {
             !text[at + 2..].starts_with(|ch: char| ch.is_ascii_alphanumeric() || ch == '_')
-        }) || computed_transformation(text)
+        }) || computed_transformation(text, after_subscript)
+    })
+}
+
+/// #932 measuring: which reading of `prompt_expansion` holds for some
+/// argument (`@P`, or a computed transformation), for the local measuring
+/// harness.
+#[cfg(test)]
+pub(super) fn prompt_expansion_why(command: &[String], foreign: bool) -> String {
+    let Some(text) = command.iter().find(|arg| prompt_expansion(arg, foreign)) else {
+        return "-".to_string();
+    };
+    let joined = text.replace("\\\n", "");
+    let bare: String = joined
+        .chars()
+        .filter(|ch| !matches!(ch, '\'' | '"' | '\\'))
+        .collect();
+    let at_p = [joined.as_str(), bare.as_str()].iter().any(|text| {
+        text.match_indices("@P").any(|(at, _)| {
+            !text[at + 2..].starts_with(|ch: char| ch.is_ascii_alphanumeric() || ch == '_')
+        })
+    });
+    if at_p {
+        "at_p".to_string()
+    } else {
+        format!("computed foreign={foreign}")
+    }
+}
+
+/// #1064: whether text holds `]@` followed by anything but one of the
+/// letters that only quote or describe a value (`${a[$(f)]@$p}`, but not
+/// `${a[@]}`, `"$@"` or `${a[i]@Q}`). The `]` that ends a subscript is
+/// written right before a transformation's `@` (backslash-newlines joined,
+/// or with quotes and backslashes removed). Linear.
+fn operator_after_subscript(text: &str) -> bool {
+    text.match_indices("]@").any(|(at, _)| {
+        work::step();
+        !text[at + 2..].starts_with(|ch: char| "QEAKakUuL".contains(ch))
     })
 }
 
@@ -164,7 +312,10 @@ pub(super) fn prompt_expansion(text: &str) -> bool {
 /// before it and a subscript after it) whose `op` is not one of `QEAKakUuL`
 /// (`${!prefix@}` lists names). A subscript is read at most 64 bytes; one
 /// not closed by then counts. Linear.
-fn computed_transformation(text: &str) -> bool {
+///
+/// #1064: such a subscript counts only when `after_subscript` (see
+/// [`operator_after_subscript`]), so `"${a[${#a[@]}-1]}"` does not.
+fn computed_transformation(text: &str, after_subscript: bool) -> bool {
     text.match_indices("${").any(|(at, _)| {
         work::step();
         let mut rest = &text[at + "${".len()..];
@@ -198,12 +349,12 @@ fn computed_transformation(text: &str) -> bool {
                             break;
                         }
                     }
-                    b'\'' | b'"' | b'\\' | b'`' | b'(' | b'{' => return true,
+                    b'\'' | b'"' | b'\\' | b'`' | b'(' | b'{' => return after_subscript,
                     _ => {}
                 }
             }
             let Some(close) = close else {
-                return true;
+                return after_subscript;
             };
             rest = &rest[close + 1..];
         }
@@ -264,7 +415,7 @@ fn reparses(text: &str) -> bool {
 /// `${(P)n::=on}`: a `${(` flag group with any later `P` and `=` may
 /// assign the variable a value names (`options` included). Linear.
 fn assigns_named(text: &str) -> bool {
-    let (Some(flag), Some(assign)) = (text.rfind('P'), text.rfind('=')) else {
+    let (Some(flag), Some(assign)) = (work::rfind(text, "P"), work::rfind(text, "=")) else {
         return false;
     };
     text.find("${(").is_some_and(|at| flag > at && assign > at)
@@ -275,7 +426,7 @@ fn assigns_named(text: &str) -> bool {
 /// delimiter (`${(s:,:~pj:$x:)a}`, `${(@)=~x}`), so a later home folder
 /// (`${(f)x} ~/dir`) counts too. Linear.
 fn substitutes_globs(text: &str) -> bool {
-    let Some(last) = text.rfind('~') else {
+    let Some(last) = work::rfind(text, "~") else {
         return false;
     };
     text.match_indices('$').any(|(at, _)| {
@@ -436,7 +587,7 @@ fn expand_braces(text: &str) -> (String, bool) {
 /// The alternatives of the first innermost `{a,b}` group, if any.
 fn brace_alternatives(word: &str) -> Option<Vec<String>> {
     let close = word.find('}')?;
-    let open = word[..close].rfind('{')?;
+    let open = work::rfind(&word[..close], "{")?;
     let inner = &word[open + 1..close];
     if !inner.contains(',') {
         return None;
@@ -470,6 +621,10 @@ struct Open {
     /// #1159: the redirection the outer word is the target of (`> $(cat
     /// f)`), not the substitution's first word.
     outer_redirect: Redirect,
+    /// #1607: the outer word follows a zsh `>!` (`>!$(cat f)`, `>! $(cat f)`).
+    outer_clobber: bool,
+    outer_zsh_writes_next: bool,
+    outer_redirect_word_next: bool,
     first: usize,
     backtick: bool,
     /// `>(...)`: the substitution reads the outer command's output.
@@ -516,19 +671,64 @@ struct Lexer {
     /// Open groups and the pipe that feeds every command inside them.
     groups: Vec<(Group, Option<usize>)>,
     redirect: Redirect,
+    /// #1607: a `!` follows the output redirection just read (`>!`, `>>!`,
+    /// `&>!`, `>&!`, `2>!`), which zsh reads as `>|`: the file is the word
+    /// after the `!`, where bash writes a file `!` (or `!f`).
+    clobber: bool,
+    /// #1607: zsh writes the next word (after `>! `).
+    zsh_writes_next: bool,
+    /// #1482 item 2: the next word is part of a redirection, not its file
+    /// (`SimpleCommand::redirect_words`).
+    redirect_word_next: bool,
     /// A substitution opened past `MAX_SUBSTITUTION_DEPTH`.
     too_deep: bool,
     /// Open substitutions that are not past `MAX_SUBSTITUTION_DEPTH`.
     real_open: usize,
+    /// D194: the operators since the last word (`None`: a word).
+    joint: Option<Joint>,
+    /// Independent redirection/brace reading for this judgment.
+    reading: Reading,
+    /// #1772 review 1: see `Lexed::redirections_read_newly`.
+    redirections_read_newly: bool,
+    /// #1975: see `Lexed::braces_read_newly`.
+    braces_read_newly: bool,
 }
 
 impl Lexer {
+    /// D194: the operator at `chars[index]`.
+    fn operator(&mut self, chars: &[char], index: usize) {
+        let previous = index.checked_sub(1).map(|at| chars[at]);
+        if let Some(op) =
+            certain_cd::operator(previous, chars[index], chars.get(index + 1).copied())
+        {
+            self.joint = Some(Joint::then(self.joint, op));
+        }
+    }
+
     fn flush(&mut self) {
         if !self.word.is_empty() {
             let index = Some(self.current.words.len());
-            match std::mem::take(&mut self.redirect) {
-                Redirect::Stdin => self.current.stdin_from = index,
-                Redirect::HereString => self.current.here_string = index,
+            if std::mem::take(&mut self.redirect_word_next) {
+                self.current.redirect_words.extend(index);
+            }
+            let redirect = std::mem::take(&mut self.redirect);
+            let clobber = std::mem::take(&mut self.clobber) && redirect == Redirect::Stdout;
+            match redirect {
+                // #1772 review 2: main keeps only the last one.
+                Redirect::Stdin if self.reading == Reading::Legacy => {
+                    self.current.stdin_from = index.into_iter().collect()
+                }
+                Redirect::HereString if self.reading == Reading::Legacy => {
+                    self.current.here_string = index.into_iter().collect();
+                }
+                Redirect::Stdin => {
+                    self.redirections_read_newly |= !self.current.stdin_from.is_empty();
+                    self.current.stdin_from.extend(index);
+                }
+                Redirect::HereString => {
+                    self.redirections_read_newly |= !self.current.here_string.is_empty();
+                    self.current.here_string.extend(index);
+                }
                 Redirect::Stdout => self.current.writes_to.extend(index),
                 Redirect::None => {}
             }
@@ -542,7 +742,47 @@ impl Lexer {
                 self.current.operated.push(self.current.words.len());
             }
             let word = std::mem::take(&mut self.word);
+            let joint = self.joint.take();
+            if self.current.words.is_empty() {
+                self.current.after = joint.unwrap_or_default();
+            }
+            // #1607: the words stay bash's; zsh's file after the `!` is
+            // the rest of this word (`>!f`) or the next word (`>! f`).
+            let at = self.current.words.len();
+            if std::mem::take(&mut self.zsh_writes_next) {
+                self.current.zsh_writes.push((at, false));
+            }
+            match word.strip_prefix('!').filter(|_| clobber) {
+                Some("") => self.zsh_writes_next = true,
+                Some(_) => self.current.zsh_writes.push((at, true)),
+                None => {}
+            }
             self.current.words.push(word);
+        }
+    }
+
+    /// #1772 review 3: at an output redirection operator, whether it
+    /// redirects stdout: no descriptor number before it, or `1`. A `{fd}`
+    /// name counts as stdout too (it can only ask more).
+    fn redirects_stdout(&self) -> bool {
+        let word = &self.word;
+        word.is_empty() || word == "1" || !word.bytes().all(|byte| byte.is_ascii_digit())
+    }
+
+    /// #1482 item 2: at a redirection operator, whether the word being
+    /// built is its descriptor (`2>log`, `2>&1`, `0<f`) or `{fd}` name
+    /// (`{fd}>log`, its braces already dropped): flushed as part of the
+    /// redirection.
+    fn redirect_prefix(&mut self, previous: Option<char>) {
+        let word = &self.word;
+        if !word.is_empty()
+            && (word.bytes().all(|byte| byte.is_ascii_digit())
+                || (previous == Some('}')
+                    && word
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')))
+        {
+            self.redirect_word_next = true;
         }
     }
 
@@ -564,6 +804,8 @@ impl Lexer {
 
     fn finish_current(&mut self) -> Option<usize> {
         self.flush();
+        self.zsh_writes_next = false;
+        self.redirect_word_next = false;
         if self.current.words.is_empty() && self.current.fed_by.is_empty() {
             // Nothing to finish: keep its pipe and context (`a | (sh)`,
             // `a |& sh`, `a |` + newline + `sh`).
@@ -574,7 +816,12 @@ impl Lexer {
             reads_outer_output: self.current.reads_outer_output,
             ..SimpleCommand::default()
         };
-        let finished = std::mem::replace(&mut self.current, next);
+        let mut finished = std::mem::replace(&mut self.current, next);
+        // #1772 review 2: main's reading moves no word (`>/dev/null done`
+        // keeps bash's reading: `done` is no reserved word there).
+        if self.reading != Reading::Legacy {
+            self.redirections_read_newly |= finished.redirections_last();
+        }
         // A compound command fed by a pipe feeds every command inside it.
         let first = finished.words.first().map(|word| word.to_lowercase());
         match first.as_deref() {
@@ -609,6 +856,7 @@ impl Lexer {
             None
         };
         self.start(Start::Plain);
+        self.joint = Some(Joint::Other);
         self.open_group(Group::Bracket, piped);
         if self.current.pipe_from.is_none() {
             self.current.pipe_from = self.group_pipe();
@@ -617,6 +865,7 @@ impl Lexer {
 
     fn close_bracket(&mut self) {
         self.start(Start::Plain);
+        self.joint = Some(Joint::Other);
         self.close_group(Group::Bracket);
         self.current.pipe_from = self.group_pipe();
     }
@@ -641,6 +890,9 @@ impl Lexer {
         let outer_hidden = std::mem::take(&mut self.hidden);
         let outer_operated = std::mem::take(&mut self.operated);
         let outer_redirect = std::mem::take(&mut self.redirect);
+        let outer_clobber = std::mem::take(&mut self.clobber);
+        let outer_zsh_writes_next = std::mem::take(&mut self.zsh_writes_next);
+        let outer_redirect_word_next = std::mem::take(&mut self.redirect_word_next);
         self.open.push(Open {
             outer,
             outer_word,
@@ -648,6 +900,9 @@ impl Lexer {
             outer_hidden,
             outer_operated,
             outer_redirect,
+            outer_clobber,
+            outer_zsh_writes_next,
+            outer_redirect_word_next,
             first: self.done.len(),
             backtick,
             output,
@@ -655,6 +910,7 @@ impl Lexer {
             arithmetic,
             skip,
         });
+        self.joint = Some(Joint::Other);
     }
 
     /// Close the innermost substitution and continue the command it
@@ -666,6 +922,8 @@ impl Lexer {
         let Some(open) = self.open.pop() else {
             return;
         };
+        // Back in the command it interrupted.
+        self.joint = None;
         if open.skip {
             // The command it interrupted continues; what it printed is
             // unseen.
@@ -677,6 +935,9 @@ impl Lexer {
             // `> >(cmd)` adds no outer word: its redirection is done.
             if !open.output {
                 self.redirect = open.outer_redirect;
+                self.clobber = open.outer_clobber;
+                self.zsh_writes_next = open.outer_zsh_writes_next;
+                self.redirect_word_next = open.outer_redirect_word_next;
                 self.word.push_str(UNSEEN_OUTPUT);
             }
             return;
@@ -696,6 +957,12 @@ impl Lexer {
             .collect();
         let spliced = match top.as_slice() {
             _ if open.output || open.process => None,
+            // #1772 review 3: `$(>&2 echo x)`, `$(echo x >log)` print
+            // nothing here.
+            [only] if self.reading != Reading::Legacy && self.done[*only].stdout_redirected => {
+                self.redirections_read_newly = true;
+                None
+            }
             [only] => substitution_output(&self.done[*only].words),
             // `$(cd X && pwd)` prints X.
             [cd, pwd]
@@ -719,10 +986,17 @@ impl Lexer {
         self.operated = open.outer_operated;
         if !open.output {
             self.redirect = open.outer_redirect;
+            self.clobber = open.outer_clobber;
+            self.zsh_writes_next = open.outer_zsh_writes_next;
+            self.redirect_word_next = open.outer_redirect_word_next;
             // Not literal text: the output of a lookup or of `cd X && pwd`.
             self.looked_up |= spliced.is_some()
                 && !matches!(top.as_slice(), [only] if fact_output(&self.done[*only]));
             let unseen = if open.arithmetic && arithmetic_close {
+                for index in open.first..self.done.len() {
+                    work::step();
+                    self.done[index].arithmetic = true;
+                }
                 ARITHMETIC_OUTPUT
             } else {
                 UNSEEN_OUTPUT
@@ -731,13 +1005,19 @@ impl Lexer {
         }
     }
 
-    fn finish(mut self) -> Vec<SimpleCommand> {
+    /// The commands and independent redirection/brace change flags,
+    /// collected after finishing the last command and its substitutions.
+    fn finish(mut self) -> (Vec<SimpleCommand>, bool, bool) {
         while !self.open.is_empty() {
             work::step();
             self.close_substitution(/*arithmetic_close*/ false);
         }
         self.finish_current();
-        self.done
+        (
+            self.done,
+            self.redirections_read_newly,
+            self.braces_read_newly,
+        )
     }
 
     fn arg(&mut self, arg: &str) {
@@ -748,6 +1028,16 @@ impl Lexer {
         // a line break: a `((` in a comment or here-document is not
         // arithmetic, and the lines after it are code.
         let mut arithmetic_end = 0;
+        // Parameter delimiters keep the old normalization (`${tmp}` ->
+        // `$tmp`), which the variable and mktemp checks expect. Other braces
+        // are remembered too, so a nested literal does not close a parameter.
+        let mut parameter_braces = Vec::new();
+        // #1772 item 2: a quote of this kind (`[single, double]`) has no
+        // closing one later in the text.
+        let mut unclosed = [false; 2];
+        // The closing quote of double quotes read as before: none up to it
+        // opens a quoted redirection file.
+        let mut read_as_before: Option<usize> = None;
         let arithmetic_line = |start: usize, end: Option<usize>| {
             end.filter(|end| !chars[start..*end].contains(&'\n'))
         };
@@ -755,6 +1045,16 @@ impl Lexer {
             work::step();
             let ch = chars[index];
             let next = chars.get(index + 1).copied();
+            let previous = index.checked_sub(1).map(|at| chars[at]);
+            let parameter_brace = match ch {
+                '{' => {
+                    let parameter = previous == Some('$');
+                    parameter_braces.push(parameter);
+                    parameter
+                }
+                '}' => parameter_braces.pop().unwrap_or(false),
+                _ => false,
+            };
             match ch {
                 '$' if index >= arithmetic_end && misread_parameter(&chars[index + 1..]) => {
                     self.operated = true;
@@ -783,6 +1083,52 @@ impl Lexer {
                 }
                 // A line continuation joins the two lines.
                 '\\' if next == Some('\n') => index += 1,
+                // #1772 item 2: an escaped space in a redirection's file
+                // (`>a\ b ./x`) is part of the file name.
+                '\\' if self.redirect != Redirect::None
+                    && self.reading != Reading::Legacy
+                    && next.is_some_and(char::is_whitespace) =>
+                {
+                    self.redirections_read_newly = true;
+                    self.current.escaped = true;
+                    self.word.extend(next);
+                    index += 2;
+                    continue;
+                }
+                // #1772 item 2: a quoted redirection file (`>'a b' ./x`,
+                // `2>"a b" ./x`) is one word, spaces and operators included.
+                // A double-quoted one holding an expansion or escape, and an
+                // escaped quote (`>\'a`), are read as before.
+                '\'' | '"'
+                    if self.redirect != Redirect::None
+                        && self.reading != Reading::Legacy
+                        && previous != Some('\\')
+                        && !unclosed[usize::from(ch == '"')]
+                        && read_as_before.is_none_or(|end| index > end) =>
+                {
+                    let end = match quoted_target(&chars, index, &mut unclosed) {
+                        Ok(end) => end,
+                        Err(close) => {
+                            // Read as before up to the closing quote: the
+                            // quotes are dropped, and no quote inside opens
+                            // (`>"$d's" ./x`).
+                            read_as_before = close;
+                            index += 1;
+                            continue;
+                        }
+                    };
+                    self.redirections_read_newly = true;
+                    for inner in &chars[index + 1..end] {
+                        work::step();
+                        if *inner == HIDDEN {
+                            self.hidden = true;
+                        } else {
+                            self.word.push(literal_char(*inner));
+                        }
+                    }
+                    index = end + 1;
+                    continue;
+                }
                 '`' => {
                     if self.open.last().is_some_and(|open| open.backtick) {
                         self.close_substitution(/*arithmetic_close*/ false);
@@ -796,14 +1142,34 @@ impl Lexer {
                 ')' if self.open.last().is_some_and(|open| !open.backtick) => {
                     self.close_substitution(/*arithmetic_close*/ next == Some(')'));
                 }
-                '{' if self.word.is_empty() && next.is_none_or(char::is_whitespace) => {
+                // #1975: in bash a brace argument cannot delimit a group.
+                // Closing one at `git fetch -o '}' -- "$r"` splits off the
+                // remote. Keep the main reading for its separate judgment.
+                '{' if self.word.is_empty()
+                    && next.is_none_or(char::is_whitespace)
+                    && (self.reading != Reading::LiteralBraces
+                        || self.current.words.is_empty()) =>
+                {
                     self.open_bracket();
                 }
-                '}' if self.word.is_empty() => self.close_bracket(),
+                '}' if self.word.is_empty()
+                    && (self.reading != Reading::LiteralBraces
+                        || self.current.words.is_empty()) =>
+                {
+                    self.close_bracket();
+                }
+                '{' | '}'
+                    if self.reading == Reading::LiteralBraces
+                        && (!parameter_brace || self.word.is_empty()) =>
+                {
+                    self.braces_read_newly = true;
+                    self.word.push(ch);
+                }
                 '\\' => self.current.escaped = true,
                 HIDDEN => self.hidden = true,
                 '\'' | '"' | '{' | '}' => {}
                 '<' if next == Some('<') && chars.get(index + 2) == Some(&'<') => {
+                    self.redirect_prefix(previous);
                     self.flush();
                     self.redirect = Redirect::HereString;
                     index += 3;
@@ -811,30 +1177,42 @@ impl Lexer {
                 }
                 '<' if next == Some('<') => {
                     // A here-document: its text follows in the script.
+                    self.redirect_prefix(previous);
                     self.flush();
+                    self.redirect_word_next = true;
+                    self.joint = Some(Joint::Other);
                     index += 2;
                     continue;
                 }
                 '<' => {
+                    self.redirect_prefix(previous);
                     self.flush();
                     self.redirect = Redirect::Stdin;
                 }
                 // `>&2`, `2>&1`, `>&-`: a descriptor, not a file; `>&file`
                 // writes the file.
                 '>' if next == Some('&') => {
+                    self.current.stdout_redirected |= self.redirects_stdout();
+                    self.redirect_prefix(previous);
                     self.flush();
                     let descriptor = chars
                         .get(index + 2)
                         .is_some_and(|after| after.is_ascii_digit() || *after == '-');
-                    if !descriptor {
+                    if descriptor {
+                        self.redirect_word_next = true;
+                    } else {
                         self.redirect = Redirect::Stdout;
+                        self.clobber = chars.get(index + 2) == Some(&'!');
                     }
                     index += 2;
                     continue;
                 }
                 '>' => {
+                    self.current.stdout_redirected |= self.redirects_stdout();
+                    self.redirect_prefix(previous);
                     self.flush();
                     self.redirect = Redirect::Stdout;
+                    self.clobber = next == Some('!');
                 }
                 '(' => {
                     if next == Some('(')
@@ -850,13 +1228,123 @@ impl Lexer {
                 '|' => {
                     let pipe = next != Some('|') && (index == 0 || chars[index - 1] != '|');
                     self.start(if pipe { Start::Piped } else { Start::Plain });
+                    self.operator(&chars, index);
                 }
-                ';' | '&' | '\n' => self.start(Start::Plain),
+                // #1772 item 4: `&>` and `&>>` redirect stdout and stderr
+                // in bash and zsh; the `>` is read next. Not a command
+                // separator. `sh` and `dash` read `&` and `>` (review 2).
+                '&' if next == Some('>') && self.reading != Reading::Legacy => {
+                    self.redirections_read_newly = true;
+                    self.flush();
+                }
+                ';' | '&' | '\n' => {
+                    self.start(Start::Plain);
+                    self.operator(&chars, index);
+                }
                 ch if ch.is_whitespace() || matches!(ch, '<' | '>' | ',') => self.flush(),
                 ch => self.word.push(literal_char(ch)),
             }
             index += 1;
         }
+    }
+}
+
+/// #1772 item 2: the index of the quote closing the one at `start`, when
+/// the text between them is literal: single quotes, or double quotes
+/// holding no `$`, backtick or backslash. Otherwise it is read as before:
+/// `Err` with the closing quote of double quotes holding one, which opens
+/// nothing. A quote with no closing one sets `unclosed` (`[single,
+/// double]`), so no later quote of that kind is looked for: each text is
+/// scanned once.
+fn quoted_target(
+    chars: &[char],
+    start: usize,
+    unclosed: &mut [bool; 2],
+) -> Result<usize, Option<usize>> {
+    let quote = chars[start];
+    let mut special = false;
+    for (at, ch) in chars.iter().enumerate().skip(start + 1) {
+        work::step();
+        if *ch == quote {
+            return if quote == '\'' || !special {
+                Ok(at)
+            } else {
+                Err(Some(at))
+            };
+        }
+        special |= matches!(ch, '$' | '`' | '\\');
+    }
+    unclosed[usize::from(quote == '"')] = true;
+    Err(None)
+}
+
+impl SimpleCommand {
+    /// Whether a redirection holds the word at `at`: its file, descriptor,
+    /// `{fd}` name or here-document delimiter. The lexer adds the indexes in
+    /// ascending order.
+    pub(super) fn held(&self, at: usize) -> bool {
+        work::step();
+        self.writes_to.binary_search(&at).is_ok()
+            || self.redirect_words.binary_search(&at).is_ok()
+            || self.stdin_from.binary_search(&at).is_ok()
+            || self.here_string.binary_search(&at).is_ok()
+    }
+
+    /// #1772 item 1: the shell removes a redirection's words wherever they
+    /// stand, so `>log cd sub` runs `cd sub` as `cd sub >log` does. The
+    /// words a redirection holds move after the others, in order, and
+    /// every index moves with its word: each reading then sees the command
+    /// it runs, and its redirections where it reads them on any line.
+    /// Commands whose redirections already come last are unchanged.
+    /// Returns whether any word moved.
+    fn redirections_last(&mut self) -> bool {
+        let held: Vec<bool> = (0..self.words.len()).map(|at| self.held(at)).collect();
+        let Some(first_held) = held.iter().position(|held| *held) else {
+            return false;
+        };
+        if held[first_held..].iter().all(|held| *held) {
+            return false;
+        }
+        let order: Vec<usize> = (0..held.len())
+            .filter(|at| !held[*at])
+            .chain((0..held.len()).filter(|at| held[*at]))
+            .collect();
+        let mut moved = vec![0; held.len()];
+        for (to, from) in order.iter().enumerate() {
+            work::step();
+            moved[*from] = to;
+        }
+        let mut words = std::mem::take(&mut self.words)
+            .into_iter()
+            .map(Some)
+            .collect::<Vec<_>>();
+        self.words = order
+            .iter()
+            .filter_map(|from| words.get_mut(*from).and_then(Option::take))
+            .collect();
+        for indexes in [
+            &mut self.stdin_from,
+            &mut self.here_string,
+            &mut self.writes_to,
+            &mut self.redirect_words,
+            &mut self.looked_up,
+            &mut self.hidden,
+            &mut self.operated,
+        ] {
+            work::step();
+            for at in indexes.iter_mut() {
+                work::step();
+                *at = moved.get(*at).copied().unwrap_or(*at);
+            }
+            indexes.sort_unstable();
+        }
+        for (at, _) in &mut self.zsh_writes {
+            work::step();
+            *at = moved.get(*at).copied().unwrap_or(*at);
+        }
+        self.zsh_writes.sort_unstable();
+        self.written_at = order;
+        true
     }
 }
 

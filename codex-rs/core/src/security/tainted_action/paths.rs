@@ -297,6 +297,21 @@ impl Homes {
         if self.windows {
             return self.resolve_windows(word, cwd, /*places*/ false);
         }
+        let word = self.expand_homes(word);
+        if word.starts_with('/') || cwd.is_empty() {
+            normalize_path(&word)
+        } else {
+            normalize_path(&format!("{cwd}/{word}"))
+        }
+    }
+
+    /// #1436: [`Self::resolve`]'s home spellings expanded, the word kept as
+    /// written otherwise: its path cleanup would drop `$X` from `$X/..`.
+    /// Under Windows rules, [`Self::resolve`] without a folder.
+    pub(super) fn expand_homes(&self, word: &str) -> String {
+        if self.windows {
+            return self.resolve_windows(word, "", /*places*/ false);
+        }
         let mut word = word.to_string();
         for (name, value) in [
             ("CODEX_HOME", Some(&self.codex_home_raw)),
@@ -320,11 +335,7 @@ impl Homes {
                 word = format!("{}/{user}{tail}", parent.to_string_lossy());
             }
         }
-        if word.starts_with('/') || cwd.is_empty() {
-            normalize_path(&word)
-        } else {
-            normalize_path(&format!("{cwd}/{word}"))
-        }
+        word
     }
 
     /// [`Self::resolve`] under Windows rules: the same spellings, the Windows

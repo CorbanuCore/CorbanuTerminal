@@ -26,15 +26,26 @@ use serde_json::json;
 
 const CALL_ID: &str = "sec-439-no-network";
 
+/// A fetch that failed to resolve its host, as curl reports it.
+#[cfg(not(windows))]
+const FAILED_FETCH: &str = "echo 'curl: (6) Could not resolve host: example.com' >&2; exit 6";
+/// The same in PowerShell, which runs `exec_command` on Windows (#1967).
+#[cfg(windows)]
+const FAILED_FETCH: &str =
+    "[Console]::Error.WriteLine('curl: (6) Could not resolve host: example.com'); exit 6";
+
 struct Outcome {
     output: String,
     warnings: Vec<String>,
     developer: Vec<String>,
 }
 
-async fn run(aggressive: bool) -> Result<Outcome> {
+async fn run_sec_439(aggressive: bool) -> Result<Outcome> {
     let server = start_mock_server().await;
     let mut builder = test_codex().with_config(move |config| {
+        // #1967: the sandbox Aggressive needs on Windows (#691); without it
+        // Windows refuses the command before it can fail.
+        core_test_support::use_elevated_windows_sandbox(config);
         config
             .features
             .enable(Feature::UnifiedExec)
@@ -50,7 +61,7 @@ async fn run(aggressive: bool) -> Result<Outcome> {
     });
     let test = builder.build(&server).await?;
     let args = json!({
-        "cmd": "echo 'curl: (6) Could not resolve host: example.com' >&2; exit 6",
+        "cmd": FAILED_FETCH,
         "yield_time_ms": 5_000,
     });
     let first = mount_sse_once(
@@ -126,8 +137,9 @@ async fn run(aggressive: bool) -> Result<Outcome> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[serial_test::serial(codex_home)]
 async fn sec_439_no_network_names_the_level_only_under_aggressive() -> Result<()> {
-    let aggressive = run(/*aggressive*/ true).await?;
+    let aggressive = run_sec_439(/*aggressive*/ true).await?;
     assert!(
         aggressive
             .output
@@ -153,7 +165,7 @@ async fn sec_439_no_network_names_the_level_only_under_aggressive() -> Result<()
         aggressive.developer
     );
 
-    let permissive = run(/*aggressive*/ false).await?;
+    let permissive = run_sec_439(/*aggressive*/ false).await?;
     assert!(
         permissive.output.contains("Could not resolve host")
             && !permissive.output.contains("Aggressive"),

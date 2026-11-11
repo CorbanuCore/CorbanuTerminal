@@ -107,6 +107,15 @@ keychain services (`com.apple.SecurityServer`, `com.apple.securityd.xpc`,
 explicit throwaway keychain path; never run it against the default or login
 keychain.
 
+## Release notes
+
+A change users will notice adds its own fragment,
+`qa/release/unreleased/notes/<pr-or-issue-number>-<slug>.md`, starting with a
+`## ` section heading (reuse an existing heading to join that section). Never
+recreate `qa/release/unreleased/RELEASE_NOTES.md`; `repo-checks` fails if it
+exists. Check with `python3 scripts/release/release_notes.py check` and
+`preview`. See `qa/release/unreleased/README.md`.
+
 ## Interactive product proof
 
 A user-facing interactive feature is not complete until the final built
@@ -269,9 +278,10 @@ product authority.
 
 Release-preparation checklist:
 
-- Move entries from `qa/release/unreleased/RELEASE_NOTES.md` into
+- Run `python3 scripts/release/release_notes.py assemble --version <version>`.
+  It moves the unreleased fragments in `qa/release/unreleased/notes/` into
   `qa/release/<version>/RELEASE_NOTES.md`, preserving existing version notes,
-  then clear only the transferred entries from the unreleased file.
+  and deletes only the fragments it transferred.
 
 Absent an explicit release instruction from a human with release authority, a
 release candidate is qualified when its record shows:
