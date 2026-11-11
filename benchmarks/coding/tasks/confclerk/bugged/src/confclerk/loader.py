@@ -32,11 +32,7 @@ def load_json(path: str | Path) -> dict[str, Any]:
     return data
 
 
-def load_config(
-    paths: list[str | Path] | None = None,
-    env: dict[str, str] | None = None,
-    prefix: str = "CONFCLERK",
-) -> dict[str, Any]:
+def load_config(paths: list[str | Path] | None = None, env: dict[str, str] | None = None, prefix: str = "CONFCLERK") -> dict[str, Any]:
     sources: list[SourceRecord] = []
     for index, path in enumerate(paths or []):
         sources.append(SourceRecord(str(path), load_json(path), precedence=index))
@@ -52,7 +48,7 @@ def env_overrides(env: dict[str, str], prefix: str = "CONFCLERK") -> dict[str, A
     for key, value in env.items():
         if not key.startswith(marker):
             continue
-        path = key[len(marker) :].lower().replace("__", ".")
+        path = key[len(marker):].lower().replace("__", ".")
         dotted_set(data, path, parse_scalar(value))
     return data
 

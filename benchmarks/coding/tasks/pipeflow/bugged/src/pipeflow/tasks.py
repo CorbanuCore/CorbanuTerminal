@@ -23,21 +23,13 @@ def concat(params: dict[str, Any], context: dict[str, Any]) -> str:
 def sum_values(params: dict[str, Any], context: dict[str, Any]) -> int | float:
     total: int | float = 0
     for item in params.get("items", []):
-        value = (
-            context["outputs"][item[1:]]
-            if isinstance(item, str) and item.startswith("$")
-            else item
-        )
+        value = context["outputs"][item[1:]] if isinstance(item, str) and item.startswith("$") else item
         total += value
     return total
 
 
 def multiply(params: dict[str, Any], context: dict[str, Any]) -> int | float:
-    value = (
-        context["outputs"][params["input"][1:]]
-        if str(params.get("input", "")).startswith("$")
-        else params.get("input", 1)
-    )
+    value = context["outputs"][params["input"][1:]] if str(params.get("input", "")).startswith("$") else params.get("input", 1)
     return value * params.get("factor", 1)
 
 

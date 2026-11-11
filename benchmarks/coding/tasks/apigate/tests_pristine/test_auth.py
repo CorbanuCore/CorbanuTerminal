@@ -41,9 +41,7 @@ class AuthTests(unittest.TestCase):
         store = TokenStore()
         record = store.issue("user", ["write"], now=self.now)
 
-        refreshed = store.refresh(
-            record.refresh_token, now=self.now + timedelta(seconds=1)
-        )
+        refreshed = store.refresh(record.refresh_token, now=self.now + timedelta(seconds=1))
 
         self.assertNotEqual(refreshed.token, record.token)
         self.assertNotEqual(refreshed.refresh_token, record.refresh_token)
@@ -67,9 +65,7 @@ class AuthTests(unittest.TestCase):
         store = TokenStore(ttl_seconds=5, refresh_ttl_seconds=30)
         record = store.issue("user", now=self.now)
 
-        refreshed = store.refresh(
-            record.refresh_token, now=self.now + timedelta(seconds=6)
-        )
+        refreshed = store.refresh(record.refresh_token, now=self.now + timedelta(seconds=6))
 
         self.assertEqual(refreshed.user_id, "user")
 
@@ -92,9 +88,7 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(removed, 1)
         with self.assertRaises(AuthError):
             store.authenticate(user_record.token, now=self.now)
-        self.assertEqual(
-            store.authenticate(admin_record.token, now=self.now).user_id, "admin"
-        )
+        self.assertEqual(store.authenticate(admin_record.token, now=self.now).user_id, "admin")
 
 
 if __name__ == "__main__":

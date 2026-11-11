@@ -27,9 +27,7 @@ class BugProbeTests(unittest.TestCase):
         scheduler = QueueScheduler(MemoryStore(), clock)
         scheduler.enqueue("first", priority=5)
         scheduler.enqueue("second", priority=5)
-        self.assertEqual(
-            [job.id for job in scheduler.ready_jobs()], ["first", "second"]
-        )
+        self.assertEqual([job.id for job in scheduler.ready_jobs()], ["first", "second"])
 
     def test_probe_bug4_expired_lease_at_boundary_requeues(self) -> None:
         clock = FrozenClock(0)
@@ -40,9 +38,7 @@ class BugProbeTests(unittest.TestCase):
         self.assertEqual(scheduler.release_expired(), ["job"])
         self.assertEqual(scheduler.acquire("w2").id, "job")
 
-    def test_probe_bug5_max_attempts_moves_to_dead_letter_without_extra_retry(
-        self,
-    ) -> None:
+    def test_probe_bug5_max_attempts_moves_to_dead_letter_without_extra_retry(self) -> None:
         clock = FrozenClock(0)
         store = MemoryStore()
         scheduler = QueueScheduler(store, clock)

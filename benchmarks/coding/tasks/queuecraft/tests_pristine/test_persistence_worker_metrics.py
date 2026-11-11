@@ -4,14 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from queuecraft import (
-    FrozenClock,
-    JsonStore,
-    QueueCraft,
-    QueueScheduler,
-    Worker,
-    WorkerPool,
-)
+from queuecraft import FrozenClock, JsonStore, QueueCraft, QueueScheduler, Worker, WorkerPool
 from queuecraft.metrics import event_counts, summarize_events
 
 
@@ -27,9 +20,7 @@ class PersistenceWorkerMetricsTests(unittest.TestCase):
 
     def test_worker_run_once_acks(self) -> None:
         clock = FrozenClock(0)
-        scheduler = QueueScheduler(
-            JsonStore(Path(tempfile.mkdtemp()) / "q.json"), clock
-        )
+        scheduler = QueueScheduler(JsonStore(Path(tempfile.mkdtemp()) / "q.json"), clock)
         scheduler.enqueue("a", {"n": 1})
         result = Worker(scheduler, "w").run_once()
         self.assertTrue(result.ok)
@@ -37,13 +28,9 @@ class PersistenceWorkerMetricsTests(unittest.TestCase):
 
     def test_worker_failure_retries(self) -> None:
         clock = FrozenClock(0)
-        scheduler = QueueScheduler(
-            JsonStore(Path(tempfile.mkdtemp()) / "q.json"), clock
-        )
+        scheduler = QueueScheduler(JsonStore(Path(tempfile.mkdtemp()) / "q.json"), clock)
         scheduler.enqueue("a", max_attempts=2)
-        result = Worker(
-            scheduler, "w", handler=lambda job: (_ for _ in ()).throw(RuntimeError("x"))
-        ).run_once()
+        result = Worker(scheduler, "w", handler=lambda job: (_ for _ in ()).throw(RuntimeError("x"))).run_once()
         self.assertFalse(result.ok)
         self.assertEqual(scheduler.stats()["queued"], 1)
 

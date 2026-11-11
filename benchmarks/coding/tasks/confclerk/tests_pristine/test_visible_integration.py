@@ -12,9 +12,7 @@ class VisibleIntegrationTests(unittest.TestCase):
         template = "{{ service.name }}"
         if config.get("features", {}).get("preview"):
             template = "{{ preview.message }}"
-        rendered = TemplateRenderer().render(
-            template, {"service": {"name": "stable"}, **config}
-        )
+        rendered = TemplateRenderer().render(template, {"service": {"name": "stable"}, **config})
         self.assertEqual(rendered, "stable")
 
 

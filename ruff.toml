@@ -1,1 +1,10 @@
-extend-exclude = ["sdk/python", "codex-rs/vendor"]
+# Captured evidence and benchmark input packets are byte-pinned data, not editable
+# sources. Preserve historical hashes; never regenerate them to satisfy formatting.
+# Keep this boundary aligned with is_frozen_artifact in scripts/format.py.
+extend-exclude = [
+    "sdk/python",
+    "codex-rs/vendor",
+    "qa/**/collected/**",
+    "benchmarks/coding/tasks/**/bugged/**",
+    "benchmarks/coding/tasks/**/tests_pristine/**",
+]

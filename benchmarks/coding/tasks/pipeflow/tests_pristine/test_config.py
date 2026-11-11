@@ -11,20 +11,14 @@ class ConfigTests(unittest.TestCase):
     def test_loads_json_file_and_defaults_retry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "config.json"
-            path.write_text(
-                '{"tasks":{"a":{"uses":"identity","params":{"value":1}}}}',
-                encoding="utf-8",
-            )
+            path.write_text('{"tasks":{"a":{"uses":"identity","params":{"value":1}}}}', encoding="utf-8")
             config = load_config(path, env={})
         self.assertEqual(config["retry"]["max_attempts"], 1)
         self.assertEqual(config["tasks"]["a"]["deps"], [])
 
     def test_env_override_type_coerces_bool_int_float_and_json(self) -> None:
         config = load_config(
-            {
-                "retry": {"max_attempts": 1, "backoff_seconds": 0.0},
-                "tasks": {"a": {"uses": "identity", "enabled": True}},
-            },
+            {"retry": {"max_attempts": 1, "backoff_seconds": 0.0}, "tasks": {"a": {"uses": "identity", "enabled": True}}},
             env={
                 "PIPEFLOW__TASKS__A__ENABLED": "false",
                 "PIPEFLOW__RETRY__MAX_ATTEMPTS": "3",

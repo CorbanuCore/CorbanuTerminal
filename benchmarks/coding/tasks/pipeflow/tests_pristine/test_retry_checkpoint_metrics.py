@@ -19,9 +19,7 @@ class SupportModuleTests(unittest.TestCase):
         self.assertEqual(policy.delay_for(3), 0.4)
 
     def test_retry_policy_from_config(self) -> None:
-        policy = RetryPolicy.from_config(
-            {"max_attempts": "2", "backoff_seconds": "0", "multiplier": "3"}
-        )
+        policy = RetryPolicy.from_config({"max_attempts": "2", "backoff_seconds": "0", "multiplier": "3"})
         self.assertEqual(policy.max_attempts, 2)
         self.assertEqual(policy.multiplier, 3.0)
 

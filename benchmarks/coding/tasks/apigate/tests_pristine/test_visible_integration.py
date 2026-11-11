@@ -13,9 +13,7 @@ class VisibleRefreshIntegrationTests(unittest.TestCase):
         app = create_demo_app()
         now = datetime(2026, 7, 2, tzinfo=timezone.utc)
 
-        issued = app.handle(
-            Request("POST", "/auth/issue", body={"user_id": "user"}, now=now)
-        )
+        issued = app.handle(Request("POST", "/auth/issue", body={"user_id": "user"}, now=now))
         refresh_token = issued["json"]["data"]["refresh_token"]
 
         refreshed = app.handle(

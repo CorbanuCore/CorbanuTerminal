@@ -6,13 +6,7 @@ from typing import Any
 
 
 class APIError(Exception):
-    def __init__(
-        self,
-        status: int,
-        code: str,
-        message: str,
-        details: dict[str, Any] | None = None,
-    ):
+    def __init__(self, status: int, code: str, message: str, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.status = status
         self.code = code
@@ -20,11 +14,7 @@ class APIError(Exception):
         self.details = details or {}
 
     def to_body(self) -> dict[str, Any]:
-        body: dict[str, Any] = {
-            "ok": False,
-            "error": self.code,
-            "message": self.message,
-        }
+        body: dict[str, Any] = {"ok": False, "error": self.code, "message": self.message}
         if self.details:
             body["details"] = self.details
         return body

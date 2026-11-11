@@ -19,11 +19,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
 }
 
 
-def load_config(
-    source: str | Path | dict[str, Any],
-    env: dict[str, str] | None = None,
-    prefix: str = "PIPEFLOW",
-) -> dict[str, Any]:
+def load_config(source: str | Path | dict[str, Any], env: dict[str, str] | None = None, prefix: str = "PIPEFLOW") -> dict[str, Any]:
     """Load a config dict or JSON file and apply typed environment overrides.
 
     Environment variables use double underscores to address nested keys:
@@ -63,9 +59,7 @@ def merge_dicts(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]
     return result
 
 
-def apply_env_overrides(
-    config: dict[str, Any], env: dict[str, str], prefix: str = "PIPEFLOW"
-) -> None:
+def apply_env_overrides(config: dict[str, Any], env: dict[str, str], prefix: str = "PIPEFLOW") -> None:
     marker = prefix + "__"
     for raw_key, raw_value in env.items():
         if not raw_key.startswith(marker):
@@ -78,9 +72,7 @@ def apply_env_overrides(
         target[final_key] = coerce_value(raw_value, old_value)
 
 
-def _resolve_parent(
-    config: dict[str, Any], path: list[str]
-) -> tuple[dict[str, Any], str]:
+def _resolve_parent(config: dict[str, Any], path: list[str]) -> tuple[dict[str, Any], str]:
     cur = config
     for part in path[:-1]:
         key = _match_key(cur, part)

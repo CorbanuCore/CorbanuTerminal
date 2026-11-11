@@ -20,9 +20,7 @@ def normalize_body(value: Any) -> Any:
     raise TypeError(f"cannot serialize {type(value).__name__}")
 
 
-def serialize_response(
-    response: Response | dict[str, Any] | list[Any] | str | int | None,
-) -> dict[str, Any]:
+def serialize_response(response: Response | dict[str, Any] | list[Any] | str | int | None) -> dict[str, Any]:
     if isinstance(response, Response):
         status = response.status
         headers = dict(response.headers)
@@ -32,11 +30,7 @@ def serialize_response(
         headers = {}
         body = response
     normalized = normalize_body(body)
-    wire = (
-        ""
-        if normalized is None
-        else json.dumps(normalized, sort_keys=True, separators=(",", ":"))
-    )
+    wire = "" if normalized is None else json.dumps(normalized, sort_keys=True, separators=(",", ":"))
     headers.setdefault("content-type", "application/json")
     return {"status": status, "headers": headers, "body": wire, "json": normalized}
 

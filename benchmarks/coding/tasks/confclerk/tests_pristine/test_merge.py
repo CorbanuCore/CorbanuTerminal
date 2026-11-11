@@ -18,14 +18,9 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(merge_dicts({"a": 1, "b": 2}, {"a": DELETE}), {"b": 2})
 
     def test_replace_marker(self) -> None:
-        self.assertEqual(
-            merge_dicts({"a": {"x": 1}}, {"a": {REPLACE: True, "y": 2}}),
-            {"a": {"y": 2}},
-        )
+        self.assertEqual(merge_dicts({"a": {"x": 1}}, {"a": {REPLACE: True, "y": 2}}), {"a": {"y": 2}})
 
     def test_source_precedence(self) -> None:
-        result = merge_sources(
-            [SourceRecord("high", {"a": 2}, 10), SourceRecord("low", {"a": 1}, 0)]
-        )
+        result = merge_sources([SourceRecord("high", {"a": 2}, 10), SourceRecord("low", {"a": 1}, 0)])
         self.assertEqual(result.config["a"], 2)
         self.assertGreaterEqual(result.note_count("set"), 1)

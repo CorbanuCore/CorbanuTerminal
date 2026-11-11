@@ -41,12 +41,7 @@ class TokenStore:
         self._refresh: dict[str, TokenRecord] = {}
         self._counter = 0
 
-    def issue(
-        self,
-        user_id: str,
-        scopes: list[str] | tuple[str, ...] = (),
-        now: datetime | None = None,
-    ) -> TokenRecord:
+    def issue(self, user_id: str, scopes: list[str] | tuple[str, ...] = (), now: datetime | None = None) -> TokenRecord:
         now = self._normalize_now(now)
         self._counter += 1
         record = TokenRecord(
@@ -62,9 +57,7 @@ class TokenStore:
         self._refresh[record.refresh_token] = record
         return record
 
-    def authenticate(
-        self, token: str | None, now: datetime | None = None
-    ) -> TokenRecord:
+    def authenticate(self, token: str | None, now: datetime | None = None) -> TokenRecord:
         if not token:
             raise AuthError(401, "missing_token", "bearer token is required")
         record = self._tokens.get(token)
@@ -75,9 +68,7 @@ class TokenStore:
             raise AuthError(401, "expired_token", "token is expired")
         return record
 
-    def refresh(
-        self, refresh_token: str | None, now: datetime | None = None
-    ) -> TokenRecord:
+    def refresh(self, refresh_token: str | None, now: datetime | None = None) -> TokenRecord:
         if not refresh_token:
             raise AuthError(401, "missing_refresh_token", "refresh token is required")
         old = self._refresh.get(refresh_token)

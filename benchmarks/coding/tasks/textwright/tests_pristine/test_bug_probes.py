@@ -21,7 +21,7 @@ class BugProbeTests(unittest.TestCase):
 
     def test_probe_bug4_link_href_is_attribute_escaped(self) -> None:
         html = render('[x](https://e.test/?a="b")')
-        self.assertIn("&quot;b&quot;", html)
+        self.assertIn('&quot;b&quot;', html)
 
     def test_probe_bug5_inline_code_preserves_stars_without_emphasis(self) -> None:
         html = render("`*literal*`")

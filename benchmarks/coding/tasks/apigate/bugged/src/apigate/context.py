@@ -14,9 +14,7 @@ class RequestContext:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-_current: contextvars.ContextVar[RequestContext | None] = contextvars.ContextVar(
-    "apigate_context", default=None
-)
+_current: contextvars.ContextVar[RequestContext | None] = contextvars.ContextVar("apigate_context", default=None)
 
 
 def get_context() -> RequestContext:

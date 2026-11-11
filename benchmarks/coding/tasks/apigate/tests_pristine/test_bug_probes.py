@@ -9,9 +9,7 @@ from apigate.types import Request
 
 
 def issue_token(app, user_id: str, now: datetime) -> tuple[str, str]:
-    response = app.handle(
-        Request("POST", "/auth/issue", body={"user_id": user_id}, now=now)
-    )
+    response = app.handle(Request("POST", "/auth/issue", body={"user_id": user_id}, now=now))
     data = response["json"]["data"]
     return data["access_token"], data["refresh_token"]
 
@@ -37,37 +35,18 @@ class BugProbeTests(unittest.TestCase):
         self.assertIn("access_token", response["json"]["data"])
         self.assertTrue(response["json"]["data"]["expires_at"].endswith("Z"))
 
-    def test_probe_bug2_permission_revoke_invalidates_cache_before_next_check(
-        self,
-    ) -> None:
+    def test_probe_bug2_permission_revoke_invalidates_cache_before_next_check(self) -> None:
         app = create_demo_app()
         token, _ = issue_token(app, "user", self.now)
 
         before = app.handle(
-            Request(
-                "GET",
-                "/widgets/me",
-                headers={"authorization": f"Bearer {token}"},
-                now=self.now,
-            )
+            Request("GET", "/widgets/me", headers={"authorization": f"Bearer {token}"}, now=self.now)
         )
         self.assertEqual(before["status"], 200)
 
-        app.handle(
-            Request(
-                "POST",
-                "/admin/revoke",
-                body={"user_id": "user", "permission": "widgets:read"},
-                now=self.now,
-            )
-        )
+        app.handle(Request("POST", "/admin/revoke", body={"user_id": "user", "permission": "widgets:read"}, now=self.now))
         after = app.handle(
-            Request(
-                "GET",
-                "/widgets/me",
-                headers={"authorization": f"Bearer {token}"},
-                now=self.now,
-            )
+            Request("GET", "/widgets/me", headers={"authorization": f"Bearer {token}"}, now=self.now)
         )
 
         self.assertEqual(after["status"], 403)
@@ -78,12 +57,7 @@ class BugProbeTests(unittest.TestCase):
         token, _ = issue_token(app, "user", self.now)
 
         response = app.handle(
-            Request(
-                "GET",
-                "/widgets/me",
-                headers={"authorization": f"Bearer {token}"},
-                now=self.now,
-            )
+            Request("GET", "/widgets/me", headers={"authorization": f"Bearer {token}"}, now=self.now)
         )
 
         self.assertEqual(response["status"], 200)
@@ -97,12 +71,7 @@ class BugProbeTests(unittest.TestCase):
         token, _ = issue_token(app, "user", self.now)
 
         response = app.handle(
-            Request(
-                "GET",
-                "/widgets/me",
-                headers={"authorization": f"Bearer {token}"},
-                now=self.now,
-            )
+            Request("GET", "/widgets/me", headers={"authorization": f"Bearer {token}"}, now=self.now)
         )
         self.assertEqual(response["status"], 200)
 

@@ -17,9 +17,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     headers = {"authorization": f"Bearer {args.token}"} if args.token else {}
     body = json.loads(args.body)
-    result = create_demo_app().handle(
-        Request(args.method, args.path, headers=headers, body=body)
-    )
+    result = create_demo_app().handle(Request(args.method, args.path, headers=headers, body=body))
     print(json.dumps(result, sort_keys=True))
     return 0
 

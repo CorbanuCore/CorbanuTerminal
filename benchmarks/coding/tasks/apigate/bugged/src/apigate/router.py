@@ -67,14 +67,7 @@ class Router:
         permission: str | None = None,
         rate_limit: str | None = None,
     ) -> Route:
-        route = Route(
-            method,
-            template,
-            handler,
-            auth_required=auth_required,
-            permission=permission,
-            rate_limit=rate_limit,
-        )
+        route = Route(method, template, handler, auth_required=auth_required, permission=permission, rate_limit=rate_limit)
         self.routes.append(route)
         self.routes.sort(key=lambda item: item._specificity)
         return route
@@ -90,9 +83,5 @@ class Router:
             if params is not None:
                 return route, params
         if method_seen:
-            raise APIError(
-                405, "method_not_allowed", "method is not allowed for this path"
-            )
-        raise APIError(
-            404, "not_found", f"no route for {request.method} {request.path}"
-        )
+            raise APIError(405, "method_not_allowed", "method is not allowed for this path")
+        raise APIError(404, "not_found", f"no route for {request.method} {request.path}")

@@ -177,9 +177,7 @@ def validate_manifest_shape(
     if not isinstance(capabilities, list) or not all(
         isinstance(value, str) and value.strip() for value in capabilities
     ):
-        errors.append(
-            "plugin.json field `interface.capabilities` must be an array of strings"
-        )
+        errors.append("plugin.json field `interface.capabilities` must be an array of strings")
     for field in ("websiteURL", "privacyPolicyURL", "termsOfServiceURL"):
         validate_optional_https_url(interface, field, errors, prefix="interface")
     brand_color = interface.get("brandColor")
@@ -252,9 +250,7 @@ def reject_unknown_fields(
     errors: list[str],
 ) -> None:
     for key in sorted(set(payload) - allowed_keys):
-        errors.append(
-            f"plugin.json field `{prefix}.{key}` is not accepted by plugin validation"
-        )
+        errors.append(f"plugin.json field `{prefix}.{key}` is not accepted by plugin validation")
 
 
 def validate_optional_https_url(
@@ -269,9 +265,7 @@ def validate_optional_https_url(
         return
     parsed = urlparse(value) if isinstance(value, str) else None
     if parsed is None or parsed.scheme != "https" or not parsed.netloc:
-        errors.append(
-            f"plugin.json field `{prefix}.{key}` must be an absolute `https://` URL"
-        )
+        errors.append(f"plugin.json field `{prefix}.{key}` must be an absolute `https://` URL")
 
 
 def validate_optional_contract_path(
@@ -340,13 +334,9 @@ def validate_app_manifest(path: Path, errors: list[str]) -> None:
         )
         app_id = value.get("id")
         if not isinstance(app_id, str) or not app_id.strip():
-            errors.append(
-                f"`.app.json` app `{key}` field `id` must be a non-empty string"
-            )
+            errors.append(f"`.app.json` app `{key}` field `id` must be a non-empty string")
         category = value.get("category")
-        if category is not None and (
-            not isinstance(category, str) or not category.strip()
-        ):
+        if category is not None and (not isinstance(category, str) or not category.strip()):
             errors.append(
                 f"`.app.json` app `{key}` field `category` must be a non-empty string"
             )
@@ -448,9 +438,7 @@ def validate_skill_manifest(skill_root: Path, errors: list[str]) -> None:
         return
     skill_name = frontmatter.get("name")
     if not isinstance(skill_name, str) or not skill_name.strip():
-        errors.append(
-            f"skill `{skill_root.name}` frontmatter field `name` must be non-empty"
-        )
+        errors.append(f"skill `{skill_root.name}` frontmatter field `name` must be non-empty")
     description = frontmatter.get("description")
     if not isinstance(description, str) or not description.strip():
         errors.append(
@@ -500,9 +488,7 @@ def validate_skill_agent_manifest(
     )
     interface = payload.get("interface")
     if not isinstance(interface, dict):
-        errors.append(
-            f"skill `{skill_root.name}` agent field `interface` must be an object"
-        )
+        errors.append(f"skill `{skill_root.name}` agent field `interface` must be an object")
         return
     reject_skill_agent_unknown_fields(
         interface,
@@ -551,9 +537,7 @@ def validate_skill_agent_manifest(
     policy = payload.get("policy")
     if policy is not None:
         if not isinstance(policy, dict):
-            errors.append(
-                f"skill `{skill_root.name}` agent field `policy` must be an object"
-            )
+            errors.append(f"skill `{skill_root.name}` agent field `policy` must be an object")
         else:
             reject_skill_agent_unknown_fields(
                 policy,
@@ -630,9 +614,7 @@ def validate_asset_path(
         errors.append(f"{label} must be a non-empty relative path")
         return
     candidate = PurePosixPath(raw_path.replace("\\", "/"))
-    if candidate.is_absolute() or any(
-        part in {"", ".", ".."} for part in candidate.parts
-    ):
+    if candidate.is_absolute() or any(part in {"", ".", ".."} for part in candidate.parts):
         errors.append(f"{label} must stay inside the plugin archive")
         return
     resolved_path = (base_dir / candidate.as_posix()).resolve()

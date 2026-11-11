@@ -9,11 +9,7 @@ class VisibleIntegrationTests(unittest.TestCase):
     def test_env_disabled_unavailable_source_does_not_break_pipeline(self) -> None:
         config = {
             "tasks": {
-                "fetch": {
-                    "uses": "explode",
-                    "enabled": True,
-                    "params": {"message": "upstream unavailable"},
-                },
+                "fetch": {"uses": "explode", "enabled": True, "params": {"message": "upstream unavailable"}},
                 "final": {"uses": "identity", "params": {"value": "ready"}},
             }
         }

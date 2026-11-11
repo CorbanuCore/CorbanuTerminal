@@ -27,9 +27,7 @@ def topological_sort(tasks: dict[str, dict]) -> list[str]:
                 continue
             indegree[name] += 1
             children[dep].append(name)
-    ready = deque(
-        sorted((name for name, degree in indegree.items() if degree == 0), reverse=True)
-    )
+    ready = deque(sorted((name for name, degree in indegree.items() if degree == 0), reverse=True))
     order: list[str] = []
     while ready:
         name = ready.popleft()
