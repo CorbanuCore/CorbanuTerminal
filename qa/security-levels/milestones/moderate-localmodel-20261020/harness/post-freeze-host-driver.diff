@@ -1,0 +1,19 @@
+--- frozen/harness/tart-run.sh
++++ run/tart-run.sh
+@@ -18,7 +18,7 @@
+ VM=qwen-1052-run
+ LOCK=$WORKERS/vm-tart.lock
+ TM=(/opt/homebrew/bin/tmux -S "$Q/tmux.sock")
+-C=$Q/common; mkdir -p "$C" "$Q/runs"
++C=$Q/${QWEN_COMMON:-common}; mkdir -p "$C" "$Q/runs"   # one folder per clone (QWEN_COMMON)
+ ip_of() { cat "$C/vm-ip.txt"; }
+ ag() { ssh -n "${SSH_OPTS[@]}" "agent@$(ip_of)" "$@"; }         # coordinator account, no stdin
+ agi() { ssh "${SSH_OPTS[@]}" "agent@$(ip_of)" "$@"; }           # coordinator account, stdin
+--- frozen/harness/cap.sh
++++ run/cap.sh
+@@ -5,4 +5,4 @@
+ . /Volumes/CorbanuDrive/Corbanu/worktrees/qwen-1052/scripts/qa/tart/lib.sh
+ R="$1"; shift
+ q=""; for a in "$@"; do q="$q '${a//\'/\'\\\'\'}'"; done
+-exec ssh -n "${SSH_OPTS[@]}" "agent@$(cat $Q/common/vm-ip.txt)" "cd /tmp; sudo -n -u agmx0 -H /opt/agms/bin/agms-launch tui $R$q"
++exec ssh -n "${SSH_OPTS[@]}" "agent@$(cat $Q/${QWEN_COMMON:-common}/vm-ip.txt)" "cd /tmp; sudo -n -u agmx0 -H /opt/agms/bin/agms-launch tui $R$q"

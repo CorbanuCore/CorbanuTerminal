@@ -11,6 +11,7 @@ use crate::tools::events::truncate_rejection_message;
 use crate::tools::sandboxing::PermissionRequestPayload;
 use crate::tools::sandboxing::ToolError;
 use codex_analytics::GuardianApprovalRequestSource;
+use codex_exec_server::LOCAL_ENVIRONMENT_ID;
 use codex_hooks::PermissionRequestDecision;
 use codex_network_proxy::BlockedRequest;
 use codex_network_proxy::BlockedRequestObserver;
@@ -271,6 +272,19 @@ fn abandoned_network_approval_outcome(
     })
 }
 
+/// Whether `environment_id` runs remotely; an unknown non-local id counts.
+fn is_remote_environment(
+    environments: &crate::environment_selection::TurnEnvironmentSnapshot,
+    environment_id: &str,
+) -> bool {
+    environments
+        .turn_environments()
+        .find(|environment| environment.environment_id == environment_id)
+        .map_or(environment_id != LOCAL_ENVIRONMENT_ID, |environment| {
+            environment.environment.is_remote()
+        })
+}
+
 /// Whether an allowlist miss may be reviewed instead of hard-denied.
 fn allows_network_approval_flow(policy: AskForApproval) -> bool {
     !matches!(policy, AskForApproval::Never)
@@ -292,6 +306,10 @@ impl PendingApprovalDecision {
 struct PendingHostApproval {
     decision: SyncOnceLock<PendingApprovalDecision>,
     notify: Notify,
+    /// #1054: how many requests have joined this prompt, so tests can order
+    /// an answer after a waiter is certain to receive it.
+    #[cfg(test)]
+    joined_waiters: tokio::sync::watch::Sender<usize>,
 }
 
 impl PendingHostApproval {
@@ -299,10 +317,14 @@ impl PendingHostApproval {
         Self {
             decision: SyncOnceLock::new(),
             notify: Notify::new(),
+            #[cfg(test)]
+            joined_waiters: tokio::sync::watch::Sender::new(0),
         }
     }
 
     async fn wait_for_decision(&self) -> PendingApprovalDecision {
+        #[cfg(test)]
+        self.joined_waiters.send_modify(|joined| *joined += 1);
         loop {
             let notified = self.notify.notified();
             if let Some(decision) = self.decision.get() {
@@ -903,6 +925,13 @@ impl NetworkApprovalService {
         )
         .await
         {
+            // #722 (D246): a hook may not allow a remote request without a
+            // prompt; Guardian or the user decides it.
+            Some(PermissionRequestDecision::Allow)
+                if is_remote_environment(&turn_context.environments, &environment_id) =>
+            {
+                None
+            }
             Some(PermissionRequestDecision::Allow) => Some(ReviewDecision::Approved),
             Some(PermissionRequestDecision::Deny { message }) => {
                 if let Some(owner_call) = owner_call.as_ref() {

@@ -15,13 +15,13 @@ use codex_protocol::request_permissions::RequestPermissionProfile;
 use codex_protocol::request_permissions::RequestPermissionsResponse;
 use codex_protocol::request_user_input::RequestUserInputResponse;
 use codex_rmcp_client::ElicitationResponse;
-use codex_sandboxing::policy_transforms::merge_permission_profiles;
 use rmcp::model::RequestId;
 use tokio::sync::oneshot;
 
 use crate::agent::control::AgentExecutionGuard;
 use crate::agent::control::NativeAutoTurnGuard;
 use crate::mcp_tool_call::McpToolApprovalMetadata;
+use crate::session::TurnInput;
 use crate::session::TurnInputQueue;
 use crate::session::turn_context::TurnContext;
 use crate::tasks::AnySessionTask;
@@ -99,12 +99,19 @@ pub(crate) struct TurnState {
     pending_dynamic_tools: HashMap<String, oneshot::Sender<DynamicToolResponse>>,
     pub(crate) pending_input: TurnInputQueue,
     mailbox_delivery_phase: MailboxDeliveryPhase,
-    granted_permissions_by_environment_id: HashMap<String, AdditionalPermissionProfile>,
-    strict_auto_review_enabled: bool,
+    /// D51 (#1001): bound to the policy marker they were granted under.
+    granted_permissions: super::GrantedPermissions,
+    /// D51 (#1001): the policy marker strict auto-review was turned on
+    /// under, with the grant it came with; it ends with that grant. Ending it
+    /// also ends the automatic review of commands that would run unasked:
+    /// deliberately, as the new level's approval rules then govern.
+    strict_auto_review_under: Option<super::AuthorityMarker>,
     pub(crate) tool_calls: u64,
     pub(crate) has_memory_citation: bool,
     pub(crate) token_usage_at_turn_start: TokenUsage,
     mailbox_message_ids: HashSet<String>,
+    /// #1952 (D485): mailbox messages handed to this turn as input, recorded or not.
+    taken_mailbox_message_ids: HashSet<String>,
 }
 
 /// An open approval prompt. #945: it remembers the policy marker (epoch
@@ -130,6 +137,37 @@ impl TurnState {
 
     pub(crate) fn take_mailbox_message_ids(&mut self) -> Vec<String> {
         self.mailbox_message_ids.drain().collect()
+    }
+
+    /// #1952 (D485): notes the mailbox messages among `inputs`, which this turn has taken off
+    /// the mailbox queue. Call it in the same step as the take, with no await in between.
+    pub(crate) fn track_taken_mailbox_messages<'a>(
+        &mut self,
+        inputs: impl IntoIterator<Item = &'a TurnInput>,
+    ) {
+        self.taken_mailbox_message_ids
+            .extend(inputs.into_iter().filter_map(|input| match input {
+                TurnInput::InterAgentCommunication(communication) => {
+                    communication.message_id.clone()
+                }
+                TurnInput::UserInput { .. } | TurnInput::ResponseItem(_) => None,
+            }));
+    }
+
+    /// #1952 (D485): the mailbox messages this turn took but never recorded (`recorded` holds
+    /// those it did), leaving out any still deferred to re-admission, which outlives the turn.
+    pub(crate) fn take_unrecorded_mailbox_message_ids(
+        &mut self,
+        recorded: &[String],
+    ) -> Vec<String> {
+        let taken = std::mem::take(&mut self.taken_mailbox_message_ids);
+        taken
+            .into_iter()
+            .filter(|message_id| {
+                !recorded.contains(message_id)
+                    && !self.pending_input.defers_mailbox_message(message_id)
+            })
+            .collect()
     }
 
     pub(crate) fn insert_pending_approval(
@@ -262,32 +300,28 @@ impl TurnState {
         &mut self,
         environment_id: &str,
         permissions: AdditionalPermissionProfile,
-    ) {
-        let granted_permissions = merge_permission_profiles(
-            self.granted_permissions_by_environment_id
-                .get(environment_id),
-            Some(&permissions),
-        );
-        if let Some(granted_permissions) = granted_permissions {
-            self.granted_permissions_by_environment_id
-                .insert(environment_id.to_string(), granted_permissions);
-        }
+        granted_under: super::AuthorityMarker,
+        current: super::AuthorityMarker,
+    ) -> bool {
+        self.granted_permissions
+            .record(environment_id, permissions, granted_under, current)
     }
 
     pub(crate) fn granted_permissions(
-        &self,
+        &mut self,
         environment_id: &str,
+        current: super::AuthorityMarker,
     ) -> Option<AdditionalPermissionProfile> {
-        self.granted_permissions_by_environment_id
-            .get(environment_id)
-            .cloned()
+        self.granted_permissions.get(environment_id, current)
     }
 
-    pub(crate) fn enable_strict_auto_review(&mut self) {
-        self.strict_auto_review_enabled = true;
+    pub(crate) fn enable_strict_auto_review(&mut self, under: super::AuthorityMarker) {
+        self.strict_auto_review_under = Some(under);
     }
 
-    pub(crate) fn strict_auto_review_enabled(&self) -> bool {
-        self.strict_auto_review_enabled
+    /// Whether strict auto-review is on under the policy in force
+    /// (`current`): not after a security transition (D51).
+    pub(crate) fn strict_auto_review_enabled(&self, current: super::AuthorityMarker) -> bool {
+        self.strict_auto_review_under == Some(current)
     }
 }

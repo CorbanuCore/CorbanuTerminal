@@ -1,0 +1,12 @@
+{
+  "built_at": "2026-10-20T09:30:00Z",
+  "commit": "8c73c8ea80",
+  "branch": "main",
+  "what_is_new": "Main at #926 (green): #926 post-command .git check, #986 arithmetic hardening, #1014 non-bwrap supervisor, #1019-#1053 stale-approval fencing, #1024 D48, #1025/#1050 placeholder record, #1007/#1008/#1017/#1040, #1051.",
+  "signing_identity": "Developer ID Application: Travis Good (K5N2T25C23)",
+  "launcher_target": "/Volumes/CorbanuDrive/Corbanu/.codex-work/integration-build-20260922a/integration-package-dev/bin/corbanu",
+  "corbanu_sha256": "15cb32e9407cc346286d39f24514bb391027db10d2aceb12c1c2798e482c4ae6",
+  "developer_marker": true,
+  "build_target_dir": "/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/target-dev-active",
+  "previous_binary": "integration-package-dev/bin/corbanu.prev-8bf182de43"
+}

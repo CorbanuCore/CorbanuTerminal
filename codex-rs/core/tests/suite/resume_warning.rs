@@ -17,7 +17,7 @@ use codex_protocol::protocol::TurnStartedEvent;
 use codex_protocol::protocol::UserMessageEvent;
 use codex_protocol::protocol::WarningEvent;
 use core::time::Duration;
-use core_test_support::load_default_config_for_test;
+use core_test_support::load_default_config_for_test_in;
 use core_test_support::wait_for_event;
 use tempfile::TempDir;
 
@@ -92,9 +92,10 @@ fn resume_history(
 async fn emits_warning_when_resumed_model_differs() {
     // Arrange a config with a current model and a prior rollout recorded under a different model.
     let home = TempDir::new().expect("tempdir");
-    let mut config = load_default_config_for_test(&home).await;
+    let cwd = TempDir::new().expect("tempdir");
+    let mut config = load_default_config_for_test_in(&home, Default::default(), cwd.path()).await;
     config.model = Some("current-model".to_string());
-    // Ensure cwd is absolute (the helper sets it to the temp dir already).
+    // Ensure cwd is absolute (the helper sets it to the temp dir).
     assert!(config.cwd.is_absolute());
 
     let rollout_path = home.path().join("rollout.jsonl");

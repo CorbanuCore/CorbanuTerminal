@@ -1,0 +1,5 @@
+commit bc1deda532
+version 0.1.48
+corbanu sha256 2a1ad7626102290c38b2dd573ac5aad179b11d5c834546fdb661e2a29ddc7a1f
+packet /Volumes/CorbanuDrive/Corbanu/.codex-work/qwen-rerun2-20261021/packet-v8
+staged 2026-10-21T02:32:34Z

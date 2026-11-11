@@ -11,7 +11,7 @@ class CrossPlatformDependencyPolicyTest(unittest.TestCase):
         manifest = tomllib.loads(workspace_manifest.read_text(encoding="utf-8"))
         ctor = manifest["workspace"]["dependencies"]["ctor"]
 
-        self.assertEqual(ctor, "1.0.6")
+        self.assertEqual(ctor, "1.0.13")
 
         lockfile = (workspace_manifest.parent / "Cargo.lock").read_text(encoding="utf-8")
         self.assertNotIn('name = "ctor-proc-macro"', lockfile)

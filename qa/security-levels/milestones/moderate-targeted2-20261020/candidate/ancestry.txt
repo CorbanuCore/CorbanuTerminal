@@ -1,0 +1,5 @@
+# Ancestry of the fixes in the candidate's source commit (git, integrator, 2026-10-20)
+source: 8bf182de43f412e1571858ad4b5d747f5420461a
+#900 merge commit f715f9455adbfcba566bb95f31a3a5881f7a6d92 is an ancestor of 8bf182de43 (git merge-base --is-ancestor)
+#949 merge commit 1482a455260f9aea0793135f8d2371fb2039caa5 is an ancestor of 8bf182de43 (git merge-base --is-ancestor)
+#962 merge commit a875e4cca21a0d8a0a993e26abdea04e5d729c81 is an ancestor of 8bf182de43 (git merge-base --is-ancestor)

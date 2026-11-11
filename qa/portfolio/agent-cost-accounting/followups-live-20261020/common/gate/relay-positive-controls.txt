@@ -1,0 +1,7 @@
+https://api.openai.com/v1/models 200
+https://api.moonshot.ai/v1/models 200
+direct 127.0.0.1:443 GET /v1/models 401
+{"conn": "1792461870701313000-49209", "event": "forwarded", "host": "chatgpt.com", "method": "GET", "path": "/backend-api/plugins/export/curated", "real": false, "request_bytes": 0, "response_bytes": 149, "seconds": 0.001, "status": "404", "time_ns": 1792461870705398000, "ts": "2026-10-20T02:04:30+0
+{"conn": "1792461870514030000-49206", "event": "forwarded", "host": "api.z.ai", "method": "POST", "model": "glm-5.3-flash", "path": "/api/paas/v4/chat/completions", "real": true, "request_bytes": 26874, "response_bytes": 8979, "seconds": 15.786, "service_tier": null, "status": "200", "stream": true,
+{"conn": "1792461886422627000-49211", "event": "forwarded", "host": "api.openai.com", "method": "GET", "path": "/v1/models", "real": true, "request_bytes": 0, "response_bytes": 22202, "seconds": 1.114, "status": "200", "time_ns": 1792461887545097000, "ts": "2026-10-20T02:04:47+0000", "usage": null, 
+{"conn": "1792461887559718000-49213", "event": "forwarded", "host": "api.moonshot.ai", "method": "GET", "path": "/v1/models", "real": true, "request_bytes": 0, "response_bytes": 2541, "seconds": 0.359, "status": "200", "time_ns": 1792461887923074000, "ts": "2026-10-20T02:04:47+0000", "usage": null, 

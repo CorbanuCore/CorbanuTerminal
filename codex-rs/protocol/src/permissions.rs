@@ -19,8 +19,18 @@ use crate::protocol::NetworkAccess;
 use crate::protocol::SandboxPolicy;
 use crate::protocol::WritableRoot;
 
+mod glob_scan;
+pub use glob_scan::FileSystemDenyGlob;
+pub use glob_scan::FileSystemGlobScan;
+
+mod effective_reads;
+pub use effective_reads::EffectiveReads;
 mod effective_writes;
 pub use effective_writes::EffectiveWrites;
+
+#[cfg(test)]
+#[path = "permissions/effective_reads_tests.rs"]
+mod effective_reads_tests;
 
 const PROTECTED_METADATA_GIT_PATH_NAME: &str = ".git";
 const PROTECTED_METADATA_AGENTS_PATH_NAME: &str = ".agents";
@@ -452,7 +462,7 @@ struct FileSystemSemanticSignature {
     readable_roots: Vec<AbsolutePathBuf>,
     writable_roots: Vec<WritableRoot>,
     unreadable_roots: Vec<AbsolutePathBuf>,
-    unreadable_globs: Vec<String>,
+    unreadable_globs: Vec<FileSystemDenyGlob>,
     unlistable_directories: Vec<AbsolutePathBuf>,
     unmovable_paths: Vec<AbsolutePathBuf>,
     keychain_services_denied: bool,
@@ -676,6 +686,11 @@ pub enum FileSystemPath {
     /// FileSystemAccessMode::Deny only.
     GlobPattern {
         pattern: String,
+        /// Linux expansion provenance for generated database-entry denials.
+        /// Omitted for ordinary user and credential globs.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        scan: Option<FileSystemGlobScan>,
     },
     Special {
         value: FileSystemSpecialPath,
@@ -909,6 +924,30 @@ impl FileSystemSandboxPolicy {
             !entry.skips_missing_path()
                 && !entry.access.can_write()
                 && resolve_entry_path(&entry.path, cwd.as_ref()).as_ref() == Some(&path)
+        })
+    }
+
+    /// As [`Self::has_explicit_non_write_entry_for_path_with_cwd`], but an
+    /// entry spelled differently also matches when both resolve (links
+    /// followed) to the same existing location: a carve-out under a writable
+    /// root reached through a link is listed against the root's resolved path
+    /// (#1542 item 2, D293).
+    pub fn has_explicit_non_write_entry_resolving_to(&self, path: &Path, cwd: &Path) -> bool {
+        if self.has_explicit_non_write_entry_for_path_with_cwd(path, cwd) {
+            return true;
+        }
+        let Some(real) = resolve_candidate_path(path, cwd)
+            .and_then(|path| canonicalize_allowing_missing(path.as_path()))
+        else {
+            return false;
+        };
+        let cwd = AbsolutePathBuf::from_absolute_path(cwd).ok();
+        self.entries.iter().any(|entry| {
+            !entry.skips_missing_path()
+                && !entry.access.can_write()
+                && resolve_entry_path(&entry.path, cwd.as_ref())
+                    .and_then(|entry| canonicalize_allowing_missing(entry.as_path()))
+                    .is_some_and(|entry| entry == real)
         })
     }
 
@@ -1202,25 +1241,15 @@ impl FileSystemSandboxPolicy {
     /// This does not model a sandbox's own clauses; on macOS use
     /// `codex_sandboxing::seatbelt::seatbelt_allows_file_read` (#488).
     pub fn can_read_effective_path_with_cwd(&self, path: &Path, cwd: &Path) -> bool {
-        match self.kind {
-            FileSystemSandboxKind::Unrestricted | FileSystemSandboxKind::ExternalSandbox => {
-                return true;
-            }
-            FileSystemSandboxKind::Restricted => {}
-        }
-        let Some(path) = resolve_candidate_path(path, cwd) else {
-            return false;
-        };
-        let path = normalize_effective_absolute_path(path);
-        self.resolved_entries_with_cwd(cwd)
-            .into_iter()
-            .map(|entry| ResolvedFileSystemEntry {
-                path: normalize_effective_absolute_path(entry.path),
-                access: entry.access,
-            })
-            .filter(|entry| path.as_path().starts_with(entry.path.as_path()))
-            .max_by_key(resolved_entry_precedence)
-            .is_some_and(|entry| entry.access.can_read())
+        self.effective_reads_with_cwd(cwd)
+            .can_read_effective_path(path)
+    }
+
+    /// Issue918: effective-read checks for one set of paths, with the resolved
+    /// entries normalized once on first use. Build a fresh view for each set;
+    /// it is not a persistent cache or an atomic filesystem snapshot.
+    pub fn effective_reads_with_cwd<'a>(&'a self, cwd: &'a Path) -> EffectiveReads<'a> {
+        EffectiveReads::new(self, cwd)
     }
 
     /// Like [`Self::can_write_path_with_cwd`], with the policy's paths and
@@ -1395,11 +1424,12 @@ impl FileSystemSandboxPolicy {
                         entry.path = FileSystemPath::Path { path };
                     }
                 }
-                FileSystemPath::GlobPattern { pattern } => {
+                FileSystemPath::GlobPattern { pattern, scan } => {
                     if let (Some(cwd), Some(subpath)) =
                         (cwd.as_ref(), parse_project_roots_glob_pattern(pattern))
                     {
                         entry.path = FileSystemPath::GlobPattern {
+                            scan: scan.clone(),
                             pattern: resolve_project_roots_glob_pattern(subpath, cwd),
                         };
                     }
@@ -1437,10 +1467,11 @@ impl FileSystemSandboxPolicy {
                         missing_path_behavior: entry.missing_path_behavior,
                     }));
                 }
-                FileSystemPath::GlobPattern { pattern } => {
+                FileSystemPath::GlobPattern { pattern, scan } => {
                     if let Some(subpath) = parse_project_roots_glob_pattern(&pattern) {
                         entries.extend(workspace_roots.iter().map(|root| FileSystemSandboxEntry {
                             path: FileSystemPath::GlobPattern {
+                                scan: scan.clone(),
                                 pattern: resolve_project_roots_glob_pattern(subpath, root),
                             },
                             access: entry.access,
@@ -1448,7 +1479,7 @@ impl FileSystemSandboxPolicy {
                         }));
                     } else {
                         entries.push(FileSystemSandboxEntry {
-                            path: FileSystemPath::GlobPattern { pattern },
+                            path: FileSystemPath::GlobPattern { pattern, scan },
                             access: entry.access,
                             missing_path_behavior: entry.missing_path_behavior,
                         });
@@ -1825,21 +1856,35 @@ impl FileSystemSandboxPolicy {
 
     /// Returns unreadable glob patterns resolved against the provided cwd.
     pub fn get_unreadable_globs_with_cwd(&self, cwd: &Path) -> Vec<String> {
+        let mut patterns: Vec<String> = self
+            .get_unreadable_glob_scans_with_cwd(cwd)
+            .into_iter()
+            .map(|glob| glob.pattern)
+            .collect();
+        patterns.sort();
+        patterns.dedup();
+        patterns
+    }
+
+    /// Keeps each scan's provenance: an identical generic and generated
+    /// database pattern must remain distinct when Linux expands them.
+    pub fn get_unreadable_glob_scans_with_cwd(&self, cwd: &Path) -> Vec<FileSystemDenyGlob> {
         if !matches!(self.kind, FileSystemSandboxKind::Restricted) {
             return Vec::new();
         }
-
         let mut patterns = self
             .entries
             .iter()
             .filter(|entry| entry.access == FileSystemAccessMode::Deny)
             .filter_map(|entry| match &entry.path {
-                FileSystemPath::GlobPattern { pattern } => {
-                    Some(AbsolutePathBuf::resolve_path_against_base(pattern, cwd))
-                }
+                FileSystemPath::GlobPattern { pattern, scan } => Some(FileSystemDenyGlob {
+                    pattern: AbsolutePathBuf::resolve_path_against_base(pattern, cwd)
+                        .to_string_lossy()
+                        .into_owned(),
+                    scan: scan.clone(),
+                }),
                 FileSystemPath::Path { .. } | FileSystemPath::Special { .. } => None,
             })
-            .map(|pattern| pattern.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
         patterns.sort();
         patterns.dedup();
@@ -2063,7 +2108,7 @@ impl FileSystemSandboxPolicy {
             readable_roots: sorted_absolute_paths(self.get_readable_roots_with_cwd(cwd)),
             writable_roots: sorted_writable_roots(self.get_writable_roots_with_cwd(cwd)),
             unreadable_roots: sorted_absolute_paths(self.get_unreadable_roots_with_cwd(cwd)),
-            unreadable_globs: self.get_unreadable_globs_with_cwd(cwd),
+            unreadable_globs: self.get_unreadable_glob_scans_with_cwd(cwd),
             unlistable_directories: sorted_absolute_paths(self.get_unlistable_directories()),
             unmovable_paths: sorted_absolute_paths(self.get_unmovable_paths()),
             keychain_services_denied: self.denies_keychain_services(),
@@ -2144,6 +2189,30 @@ fn resolve_project_roots_glob_pattern(subpath: &Path, root: &AbsolutePathBuf) ->
         .into_owned()
 }
 
+/// `path` with links followed, for a path that may not exist yet (#1686):
+/// its nearest existing ancestor canonicalized, plus the rest as spelled.
+fn canonicalize_allowing_missing(path: &Path) -> Option<std::path::PathBuf> {
+    let mut missing = Vec::new();
+    let mut existing = path;
+    loop {
+        match std::fs::canonicalize(existing) {
+            Ok(real) => {
+                return Some(
+                    missing
+                        .iter()
+                        .rev()
+                        .fold(real, |path, part| path.join(part)),
+                );
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                missing.push(existing.file_name()?.to_os_string());
+                existing = existing.parent()?;
+            }
+            Err(_) => return None,
+        }
+    }
+}
+
 fn resolve_candidate_path(path: &Path, cwd: &Path) -> Option<AbsolutePathBuf> {
     if path.is_absolute() {
         AbsolutePathBuf::from_absolute_path(path).ok()
@@ -2171,9 +2240,15 @@ fn file_system_paths_share_target(left: &FileSystemPath, right: &FileSystemPath)
             special_path_matches_absolute_path(value, path)
         }
         (
-            FileSystemPath::GlobPattern { pattern: left },
-            FileSystemPath::GlobPattern { pattern: right },
-        ) => left == right,
+            FileSystemPath::GlobPattern {
+                pattern: left,
+                scan: left_scan,
+            },
+            FileSystemPath::GlobPattern {
+                pattern: right,
+                scan: right_scan,
+            },
+        ) => left == right && left_scan == right_scan,
         (FileSystemPath::GlobPattern { .. }, _) | (_, FileSystemPath::GlobPattern { .. }) => false,
     }
 }
@@ -2564,6 +2639,7 @@ fn sorted_writable_roots(mut roots: Vec<WritableRoot>) -> Vec<WritableRoot> {
     roots
 }
 
+#[cfg(any(test, debug_assertions))]
 thread_local! {
     static EFFECTIVE_PATH_NORMALIZATIONS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
@@ -2571,12 +2647,15 @@ thread_local! {
 /// #907: how many paths this thread has normalized with filesystem calls
 /// (each walks the path's ancestors, then resolves the first that exists),
 /// so tests can bound what a policy check costs. Instrumentation only.
+/// Available in debug builds and this crate's unit tests, not release libraries.
+#[cfg(any(test, debug_assertions))]
 #[doc(hidden)]
 pub fn effective_path_normalizations_on_this_thread() -> u64 {
     EFFECTIVE_PATH_NORMALIZATIONS.with(std::cell::Cell::get)
 }
 
 fn normalize_effective_absolute_path(path: AbsolutePathBuf) -> AbsolutePathBuf {
+    #[cfg(any(test, debug_assertions))]
     EFFECTIVE_PATH_NORMALIZATIONS.with(|count| count.set(count.get() + 1));
     let raw_path = path.to_path_buf();
     for ancestor in raw_path.ancestors() {
@@ -2943,6 +3022,83 @@ mod tests {
     #[cfg(unix)]
     fn symlink_dir(original: &Path, link: &Path) -> std::io::Result<()> {
         std::os::unix::fs::symlink(original, link)
+    }
+
+    /// D293 (#1542 item 2): an entry spelled through a linked root matches
+    /// the path listed against the root's resolved location; a different
+    /// path or a writable entry doesn't.
+    #[cfg(unix)]
+    #[test]
+    fn explicit_non_write_entry_matches_through_a_link() -> std::io::Result<()> {
+        let dir = TempDir::new()?;
+        let real = dir.path().join("real");
+        fs::create_dir_all(real.join("a/b"))?;
+        fs::create_dir_all(real.join("w"))?;
+        let linked = dir.path().join("linked");
+        symlink_dir(&real, &linked)?;
+        let absolute = |path: std::path::PathBuf| {
+            AbsolutePathBuf::from_absolute_path(path).expect("absolute path")
+        };
+        let policy = FileSystemSandboxPolicy::restricted(vec![
+            FileSystemSandboxEntry::new(
+                FileSystemPath::Path {
+                    path: absolute(linked.join("a/b")),
+                },
+                FileSystemAccessMode::Read,
+            ),
+            FileSystemSandboxEntry::new(
+                FileSystemPath::Path {
+                    path: absolute(linked.join("w")),
+                },
+                FileSystemAccessMode::Write,
+            ),
+        ]);
+        let resolved = fs::canonicalize(&real)?;
+        assert_eq!(
+            (
+                policy.has_explicit_non_write_entry_for_path_with_cwd(
+                    &resolved.join("a/b"),
+                    dir.path()
+                ),
+                policy.has_explicit_non_write_entry_resolving_to(&resolved.join("a/b"), dir.path()),
+                policy.has_explicit_non_write_entry_resolving_to(&linked.join("a/b"), dir.path()),
+                policy.has_explicit_non_write_entry_resolving_to(&resolved.join("a"), dir.path()),
+                policy.has_explicit_non_write_entry_resolving_to(&resolved.join("w"), dir.path()),
+            ),
+            (false, true, true, false, false)
+        );
+        Ok(())
+    }
+
+    /// #1686: also for a path that doesn't exist yet, spelled through a link.
+    #[cfg(unix)]
+    #[test]
+    fn explicit_non_write_entry_resolving_to_a_missing_path() -> std::io::Result<()> {
+        let dir = TempDir::new()?;
+        let real = dir.path().join("real");
+        fs::create_dir_all(&real)?;
+        let linked = dir.path().join("linked");
+        symlink_dir(&real, &linked)?;
+        let policy = FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry::new(
+            FileSystemPath::Path {
+                path: AbsolutePathBuf::from_absolute_path(linked.join("a/ro"))
+                    .expect("absolute path"),
+            },
+            FileSystemAccessMode::Read,
+        )]);
+        let resolved = fs::canonicalize(&real)?;
+        assert_eq!(
+            (
+                policy
+                    .has_explicit_non_write_entry_resolving_to(&resolved.join("a/ro"), dir.path()),
+                policy.has_explicit_non_write_entry_resolving_to(&linked.join("a/ro"), dir.path()),
+                policy.has_explicit_non_write_entry_resolving_to(&resolved.join("a"), dir.path()),
+                policy
+                    .has_explicit_non_write_entry_resolving_to(&resolved.join("a/rw"), dir.path()),
+            ),
+            (true, true, false, false)
+        );
+        Ok(())
     }
 
     #[test]
@@ -4264,6 +4420,7 @@ mod tests {
             },
             FileSystemSandboxEntry {
                 path: FileSystemPath::GlobPattern {
+                    scan: None,
                     pattern: project_roots_glob_pattern(Path::new("**/*.env")),
                 },
                 access: FileSystemAccessMode::Deny,
@@ -4307,6 +4464,7 @@ mod tests {
                 },
                 FileSystemSandboxEntry {
                     path: FileSystemPath::GlobPattern {
+                        scan: None,
                         pattern: AbsolutePathBuf::resolve_path_against_base(
                             "**/*.env",
                             first.as_path(),
@@ -4319,6 +4477,7 @@ mod tests {
                 },
                 FileSystemSandboxEntry {
                     path: FileSystemPath::GlobPattern {
+                        scan: None,
                         pattern: AbsolutePathBuf::resolve_path_against_base(
                             "**/*.env",
                             second.as_path(),
@@ -4338,6 +4497,7 @@ mod tests {
         let cwd = TempDir::new().expect("tempdir");
         let policy = FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
             path: FileSystemPath::GlobPattern {
+                scan: None,
                 pattern: project_roots_glob_pattern(Path::new("**/*.env")),
             },
             access: FileSystemAccessMode::Deny,
@@ -4350,6 +4510,7 @@ mod tests {
             actual,
             FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
                 path: FileSystemPath::GlobPattern {
+                    scan: None,
                     pattern: AbsolutePathBuf::resolve_path_against_base("**/*.env", cwd.path())
                         .to_string_lossy()
                         .into_owned(),
@@ -4474,7 +4635,10 @@ mod tests {
 
     fn unreadable_glob_entry(pattern: String) -> FileSystemSandboxEntry {
         FileSystemSandboxEntry {
-            path: FileSystemPath::GlobPattern { pattern },
+            path: FileSystemPath::GlobPattern {
+                pattern,
+                scan: None,
+            },
             access: FileSystemAccessMode::Deny,
             missing_path_behavior: None,
         }
@@ -4678,7 +4842,10 @@ mod tests {
                 .into_iter()
                 .map(|pattern| {
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::GlobPattern { pattern },
+                        FileSystemPath::GlobPattern {
+                            pattern,
+                            scan: None,
+                        },
                         FileSystemAccessMode::Deny,
                     )
                 })
@@ -4741,7 +4908,10 @@ mod tests {
                 .into_iter()
                 .map(|pattern| {
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::GlobPattern { pattern },
+                        FileSystemPath::GlobPattern {
+                            pattern,
+                            scan: None,
+                        },
                         FileSystemAccessMode::Deny,
                     )
                 })
@@ -4763,6 +4933,7 @@ mod tests {
         // covers the templates, at any level.
         let own_env_star = FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
+                scan: None,
                 pattern: format!("{root}/**/.env.*"),
             },
             FileSystemAccessMode::Deny,
@@ -4795,6 +4966,7 @@ mod tests {
         let mut entries = policy.entries;
         entries.push(FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
+                scan: None,
                 pattern: format!("{root}/**/*.example"),
             },
             FileSystemAccessMode::Deny,
@@ -4821,6 +4993,7 @@ mod tests {
                 .map(|name| {
                     FileSystemSandboxEntry::new(
                         FileSystemPath::GlobPattern {
+                            scan: None,
                             pattern: format!("**/{name}"),
                         },
                         FileSystemAccessMode::Deny,

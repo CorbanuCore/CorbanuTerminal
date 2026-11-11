@@ -430,6 +430,8 @@ impl PathUri {
     /// when the URI was created from an [`AbsolutePathBuf`] on the current host, including fallback
     /// URIs created by [`Self::from_abs_path`]. Foreign conventions are rejected rather than being
     /// projected onto a syntactically valid but unrelated host path.
+    /// A Windows `\\localhost\share` path is the exception: its URI loses `localhost`, so it is
+    /// refused with [`PathUriParseError::LocalhostUncPath`].
     pub fn to_abs_path(&self) -> io::Result<AbsolutePathBuf> {
         if self.infer_path_convention() != Some(PathConvention::native()) {
             return Err(io::Error::new(
@@ -452,8 +454,10 @@ impl PathUri {
                 use std::os::windows::ffi::OsStringExt;
                 path_bytes.len().is_multiple_of(2).then(|| {
                     let path_wide = path_bytes
-                        .chunks_exact(2)
-                        .map(|bytes| u16::from_le_bytes([bytes[0], bytes[1]]))
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|bytes| u16::from_le_bytes(*bytes))
                         .collect::<Vec<_>>();
                     std::path::PathBuf::from(std::ffi::OsString::from_wide(&path_wide))
                 })
@@ -473,6 +477,20 @@ impl PathUri {
             ));
         }
 
+        // A `\\localhost\share` path keeps an empty host once
+        // `without_localhost_authority` drops `localhost`. `url` can't convert
+        // that: it panics in debug builds (#1863).
+        if self.0.host_str() == Some("") {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                PathUriParseError::LocalhostUncPath {
+                    path: format!(
+                        r"\\localhost{}",
+                        decode_uri_path(self.0.path()).replace('/', r"\")
+                    ),
+                },
+            ));
+        }
         let path = self.0.to_file_path().map_err(|()| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -657,7 +675,9 @@ fn infer_opaque_path_convention(path_bytes: &[u8]) -> Option<PathConvention> {
     }
 
     let mut path_wide = path_bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|bytes| u16::from_le_bytes([bytes[0], bytes[1]]));
     let first = path_wide.next()?;
     let second = path_wide.next()?;
@@ -800,6 +820,10 @@ pub enum PathUriParseError {
     UnsupportedScheme(String),
     #[error("'{path}' is invalid on '{os}'", os = std::env::consts::OS)]
     InvalidFileUriPath { path: String },
+    #[error(
+        "`{path}` is a network (UNC) path on \\\\localhost, which isn't supported; use the folder's local path instead"
+    )]
+    LocalhostUncPath { path: String },
     #[error("credentials are not allowed in path URIs")]
     CredentialsNotAllowed,
     #[error("ports are not allowed in path URIs")]

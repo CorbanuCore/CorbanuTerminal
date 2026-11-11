@@ -1,0 +1,6 @@
+{"launcher_ok": true, "tmux_child_ok": true, "pty_input_echoed": true, "failed": [], "probe_count": 99, "ok": true}
+AGMS-SMOKE-OK
+https://api.z.ai/api/paas/v4/models 200
+{"conn": "1792509278216488000-49210", "event": "denied_proxy_request", "request_line": "CONNECT chatgpt.com:443 HTTP/1.1", "time_ns": 1792509278216582000, "ts": "2026-10-20T15:14:38+0000"}
+{"conn": "1792509277822910000-49207", "event": "forwarded", "method": "POST", "model": "glm-5.3-flash", "path": "/api/paas/v4/chat/completions", "request_bytes": 26874, "response_bytes": 3830, "role": "product", "seconds": 6.915, "status": "200", "stream": true, "target": "zai", "time_ns": 179250928
+{"conn": "1792509284944123000-49211", "event": "forwarded", "method": "GET", "path": "/api/paas/v4/models", "request_bytes": 0, "response_bytes": 1509, "role": "product", "seconds": 0.388, "status": "200", "target": "zai", "time_ns": 1792509285336647000, "ts": "2026-10-20T15:14:45+0000"}

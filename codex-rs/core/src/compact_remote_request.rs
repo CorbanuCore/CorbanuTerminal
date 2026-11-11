@@ -159,6 +159,7 @@ mod throttle_tests {
             session,
             turn_context,
             home: _home,
+            cwd: _cwd,
         } = RateLimitedSession::start().await;
         session
             .record_conversation_items(

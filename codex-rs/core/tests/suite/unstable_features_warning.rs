@@ -9,7 +9,7 @@ use codex_protocol::protocol::InitialHistory;
 use codex_protocol::protocol::WarningEvent;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use core::time::Duration;
-use core_test_support::load_default_config_for_test;
+use core_test_support::load_default_config_for_test_in;
 use core_test_support::wait_for_event;
 use tempfile::TempDir;
 use tokio::time::timeout;
@@ -18,7 +18,8 @@ use toml::toml;
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn emits_warning_when_unstable_features_enabled_via_config() {
     let home = TempDir::new().expect("tempdir");
-    let mut config = load_default_config_for_test(&home).await;
+    let cwd = TempDir::new().expect("tempdir");
+    let mut config = load_default_config_for_test_in(&home, Default::default(), cwd.path()).await;
     config
         .features
         .enable(Feature::ApplyPatchStreamingEvents)
@@ -67,7 +68,8 @@ async fn emits_warning_when_unstable_features_enabled_via_config() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn suppresses_warning_when_configured() {
     let home = TempDir::new().expect("tempdir");
-    let mut config = load_default_config_for_test(&home).await;
+    let cwd = TempDir::new().expect("tempdir");
+    let mut config = load_default_config_for_test_in(&home, Default::default(), cwd.path()).await;
     config
         .features
         .enable(Feature::ApplyPatchStreamingEvents)

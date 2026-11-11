@@ -213,6 +213,7 @@ mod code_mode_warning;
 mod config_lock;
 mod confirmed_aggressive;
 pub(crate) mod context_window;
+mod detached_agent_config;
 mod extension_metrics;
 mod handlers;
 mod inject;
@@ -309,6 +310,31 @@ impl SteerInputError {
 /// waits for that list (API-key sign-ins need no fetch and never wait).
 const FIRST_MODEL_LIST_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// Sends [`EventMsg::ExecApprovalRequestWithdrawn`] when a command approval
+/// is dropped before it was answered (#722, D279).
+struct WithdrawApprovalOnDrop {
+    tx_event: Sender<Event>,
+    event: Option<ExecApprovalRequestWithdrawnEvent>,
+}
+
+impl WithdrawApprovalOnDrop {
+    fn disarm(mut self) {
+        self.event = None;
+    }
+}
+
+impl Drop for WithdrawApprovalOnDrop {
+    fn drop(&mut self) {
+        if let Some(event) = self.event.take() {
+            // Unbounded channel: never blocks. A closed channel has no client.
+            let _ = self.tx_event.try_send(Event {
+                id: event.turn_id.clone(),
+                msg: EventMsg::ExecApprovalRequestWithdrawn(event),
+            });
+        }
+    }
+}
+
 /// Notes from the previous real user turn.
 ///
 /// Conceptually this is the same role that `previous_model` used to fill, but
@@ -385,6 +411,7 @@ use codex_protocol::protocol::ErrorEvent;
 use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ExecApprovalRequestEvent;
+use codex_protocol::protocol::ExecApprovalRequestWithdrawnEvent;
 use codex_protocol::protocol::InitialHistory;
 use codex_protocol::protocol::ModelRerouteEvent;
 use codex_protocol::protocol::ModelRerouteReason;
@@ -1161,7 +1188,12 @@ impl Session {
                 return;
             }
         };
-        let current_exec_policy = self.services.exec_policy.current();
+        // D52 (#1001): under Aggressive, network allow rules saved outside it
+        // are suspended.
+        let current_exec_policy = self
+            .services
+            .exec_policy
+            .current_for(self.services.model_client().live_level_is_aggressive());
         let spec = match spec.with_exec_policy_network_rules(current_exec_policy.as_ref()) {
             Ok(spec) => spec,
             Err(err) => {
@@ -2731,6 +2763,13 @@ impl Session {
         self.deliver_event_raw(event).await;
     }
 
+    /// Sets the agent status a later event would set, for tests that need a
+    /// status (`PendingInit`, say) a real turn would leave at any moment.
+    #[cfg(test)]
+    pub(crate) fn set_agent_status_for_test(&self, status: AgentStatus) {
+        self.agent_status.send_replace(status);
+    }
+
     async fn deliver_event_raw(&self, event: Event) {
         // Record the last known agent status.
         if let Some(status) = agent_status_from_event(&event.msg) {
@@ -2899,6 +2938,16 @@ impl Session {
             .acquire()
             .await
             .map_err(|_| anyhow::anyhow!("managed network proxy refresh semaphore closed"))?;
+        // D52 (#1001): one allowed while Aggressive is in force applies under
+        // Aggressive too (the others are suspended there). An unreadable live
+        // level counts as Aggressive, as it is enforced. Read before the
+        // marker: the marker only moves forward, so an unchanged marker means
+        // this was the level at the prompt (as for command rules, #945).
+        let approved_under = if self.services.model_client().live_level_is_aggressive() {
+            crate::exec_policy::ApprovedUnder::Aggressive
+        } else {
+            crate::exec_policy::ApprovedUnder::LessStrict
+        };
         if let Some(shown_under) = shown_under
             && self.services.transition_since(shown_under)
         {
@@ -2944,6 +2993,7 @@ impl Session {
                 execpolicy_amendment.protocol,
                 execpolicy_amendment.decision,
                 Some(execpolicy_amendment.justification),
+                approved_under,
             )
             .await
             .map_err(|err| {
@@ -3066,6 +3116,11 @@ impl Session {
             .as_ref()
             .map(PluginCommandAttribution::serialized_fields)
             .unzip();
+        let withdrawn = ExecApprovalRequestWithdrawnEvent {
+            call_id: call_id.clone(),
+            approval_id: approval_id.clone(),
+            turn_id: turn_context.sub_id.clone(),
+        };
         let event = EventMsg::ExecApprovalRequest(ExecApprovalRequestEvent {
             call_id,
             plugin_id,
@@ -3084,8 +3139,17 @@ impl Session {
             available_decisions: Some(available_decisions),
             parsed_cmd,
         });
+        // #722 (D279): a caller that stops waiting (a remote network request
+        // timed out or its process ended) drops this future, and the action is
+        // already refused. Tell clients to close the prompt.
+        let withdraw_on_drop = WithdrawApprovalOnDrop {
+            tx_event: self.tx_event.clone(),
+            event: Some(withdrawn),
+        };
         self.send_event(turn_context, event).await;
-        rx_approve.await.unwrap_or(ReviewDecision::Abort)
+        let decision = rx_approve.await.unwrap_or(ReviewDecision::Abort);
+        withdraw_on_drop.disarm();
+        decision
     }
 
     #[expect(
@@ -3306,6 +3370,7 @@ impl Session {
                 &response,
                 &environment.environment_id,
                 originating_turn_state.as_ref(),
+                shown_under,
             )
             .await;
             return Ok(Some(response));
@@ -3519,6 +3584,7 @@ impl Session {
                     &response,
                     &entry.environment.environment_id,
                     originating_turn_state.as_ref(),
+                    entry.shown_under,
                 )
                 .await;
                 entry.tx_response.send(response).ok();
@@ -3673,11 +3739,15 @@ impl Session {
         }
     }
 
-    async fn record_granted_request_permissions_for_turn(
+    /// Records a grant answered to a request shown under `granted_under`.
+    /// D51 (#1001): it holds only while no security transition is committed
+    /// (see [`crate::state::GrantedPermissions`]).
+    pub(crate) async fn record_granted_request_permissions_for_turn(
         &self,
         response: &RequestPermissionsResponse,
         environment_id: &str,
         originating_turn_state: Option<&Arc<Mutex<crate::state::TurnState>>>,
+        granted_under: Option<(u64, u64)>,
     ) {
         if response.permissions.is_empty() {
             return;
@@ -3687,15 +3757,31 @@ impl Session {
             PermissionGrantScope::Turn => {
                 if let Some(turn_state) = originating_turn_state {
                     let mut ts = turn_state.lock().await;
-                    ts.record_granted_permissions(environment_id, permissions);
-                    if response.strict_auto_review {
-                        ts.enable_strict_auto_review();
+                    // Read under the lock: a later grant is never recorded
+                    // under an earlier marker.
+                    let current = self.services.authority_marker();
+                    let recorded = ts.record_granted_permissions(
+                        environment_id,
+                        permissions,
+                        granted_under,
+                        current,
+                    );
+                    // D51: strict auto-review comes with the grant and ends
+                    // with it.
+                    if recorded && response.strict_auto_review {
+                        ts.enable_strict_auto_review(current);
                     }
                 }
             }
             PermissionGrantScope::Session => {
                 let mut state = self.state.lock().await;
-                state.record_granted_permissions(environment_id, permissions);
+                let current = self.services.authority_marker();
+                state.record_granted_permissions(
+                    environment_id,
+                    permissions,
+                    granted_under,
+                    current,
+                );
             }
         }
     }
@@ -3711,8 +3797,8 @@ impl Session {
         let granted = {
             let active = self.active_turn.lock().await;
             let active = active.as_ref()?;
-            let ts = active.turn_state.lock().await;
-            ts.granted_permissions(environment_id)
+            let mut ts = active.turn_state.lock().await;
+            ts.granted_permissions(environment_id, self.services.authority_marker())
         };
         self.usable_grant(granted).await
     }
@@ -3789,7 +3875,7 @@ impl Session {
             return false;
         };
         let ts = active.turn_state.lock().await;
-        ts.strict_auto_review_enabled()
+        ts.strict_auto_review_enabled(self.services.authority_marker())
     }
 
     pub(crate) async fn granted_session_permissions(
@@ -3797,8 +3883,8 @@ impl Session {
         environment_id: &str,
     ) -> Option<AdditionalPermissionProfile> {
         let granted = {
-            let state = self.state.lock().await;
-            state.granted_permissions(environment_id)
+            let mut state = self.state.lock().await;
+            state.granted_permissions(environment_id, self.services.authority_marker())
         };
         self.usable_grant(granted).await
     }
@@ -4840,6 +4926,26 @@ impl Session {
         state.clone_history()
     }
 
+    /// Drops each tool output whose call already has an output in history.
+    pub(crate) async fn retain_unrecorded_tool_outputs(&self, outputs: &mut Vec<ResponseItem>) {
+        fn output_call_id(item: &ResponseItem) -> Option<&str> {
+            match item {
+                ResponseItem::FunctionCallOutput { call_id, .. }
+                | ResponseItem::CustomToolCallOutput { call_id, .. } => Some(call_id),
+                ResponseItem::ToolSearchOutput { call_id, .. } => call_id.as_deref(),
+                _ => None,
+            }
+        }
+        let state = self.state.lock().await;
+        let recorded: HashSet<&str> = state
+            .history
+            .raw_items()
+            .iter()
+            .filter_map(output_call_id)
+            .collect();
+        outputs.retain(|item| output_call_id(item).is_none_or(|id| !recorded.contains(id)));
+    }
+
     pub(crate) async fn current_window_id(&self) -> String {
         let state = self.state.lock().await;
         let thread_id = self.thread_id;
@@ -5548,6 +5654,10 @@ mod elicitation_holders_tests;
 pub(crate) mod tests;
 
 #[cfg(test)]
+#[path = "pending_mailbox_wake_tests.rs"]
+mod pending_mailbox_wake_tests;
+
+#[cfg(test)]
 #[path = "account_switch_tests.rs"]
 mod account_switch_tests;
 
@@ -5558,3 +5668,15 @@ mod home_access_session_tests;
 #[cfg(test)]
 #[path = "stale_approval_tests.rs"]
 mod stale_approval_tests;
+
+#[cfg(test)]
+#[path = "stale_poll_mail_tests.rs"]
+mod stale_poll_mail_tests;
+
+#[cfg(test)]
+#[path = "withdrawn_approval_tests.rs"]
+mod withdrawn_approval_tests;
+
+#[cfg(test)]
+#[path = "windows_sandbox_settings_tests.rs"]
+mod windows_sandbox_settings_tests;

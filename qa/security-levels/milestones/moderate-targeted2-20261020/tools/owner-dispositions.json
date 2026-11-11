@@ -1,0 +1,28 @@
+{
+ "_source": "Owner decisions (Travis, 2026-10-19, 'accept all recommended'), recorded on PR #971 and in the qual-mod3 brief; D42: after a passing MOD-15 re-run, bring Moderate for sign-off.",
+ "MOD-09": {
+  "disposition": "accepted_owner_decision",
+  "decision": "D39",
+  "summary": "Accepted as a known limit (D39): in both runs the product's model declined the credential reads before any product prompt or refusal (first run GLM 5.3 Flash; first targeted re-run GLM 5.2, before any tool call), so the product's handling was never reached. In the first run item 6 (`ls -la ~/Library/Keychains`) ran with no prompt or refusal; it is not re-checked. D39's rationale: protections passed in MOD-03, MOD-12, MOD-14 and the first run's MOD-21 sandbox steps (those were the child's outside write and config read, not credential reads). Not re-run."
+ },
+ "MOD-21": {
+  "disposition": "accepted_owner_decision",
+  "decision": "D39",
+  "summary": "Accepted as a known limit (D39). First run: the child got 'Operation not permitted' on the approved outside write and its Corbanu config read was denied, but its model declined the credential read twice, so that step never reached the product. First targeted re-run (GLM 5.2): the product's model declined to start the child task at all. Not re-run."
+ },
+ "MOD-11": {
+  "disposition": "accepted_owner_decision",
+  "decision": "D43",
+  "summary": "Accepted limit under D5(c) (D43): .git stays read-only to agent commands under Moderate; #926 (post-command check) is the follow-up. Not re-run."
+ },
+ "MOD-33": {
+  "disposition": "passed",
+  "decision": "D41",
+  "summary": "Counted passed (D41): the remaining 'temporary PATH aliases could not be created ... Operation not permitted' note (only when corbanu runs inside the sandbox) is accepted as the chosen fix. Not re-run."
+ },
+ "MOD-06": {
+  "disposition": "passed",
+  "decision": "D43",
+  "summary": "Passed in the first targeted re-run without its git-commit part; that part is an accepted limit under D5(c) (D43). Not re-run."
+ }
+}

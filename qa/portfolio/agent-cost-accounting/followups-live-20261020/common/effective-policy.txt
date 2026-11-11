@@ -1,0 +1,92 @@
+# acc-tart1 (PF-60 follow-up live run) effective isolation policy, Tart guest, 2026-10-20 UTC
+
+Same isolation design as PF-60-S10 (qa/portfolio/agent-cost-accounting/followups-acceptance-20261016/common/
+effective-policy.txt) and the Aggressive/Moderate milestone runs, moved from UTM "macOS 3" to one fresh Tart clone
+(owner decision D34, 2026-10-19). Root-captured state: policy-root-start.txt (start) and policy-root-end.txt (end).
+Provisioning outputs: seal.out, setup-agent.out, provision.out. Harness: ../harness/ (tart-run.sh is the host driver).
+
+Order. Design frozen and pushed at b53816429f (2026-10-20T02:01:19Z); executor packet v1, harness and candidate manifest
+pushed at 854b02f7e8 (02:02:20Z); the Tart lock ($W/vm-tart.lock) was taken and the clone made at 02:02:23Z
+(vm-start.txt). A harness shakedown on a separate clone (01:49:40Z-01:54:49Z, before the freeze; shakedown/) is
+described below. UTM "macOS 2" and "macOS 3" stayed stopped throughout and were never touched (utmctl list only).
+
+Guest. Tart 2.41.1 (signed release), base image corbanu-qa-base (macOS 26.6.2 25G83, built by tart-eval, #930), cloned
+as acc-tart1-run; 8 vCPUs, 16 GB; started headless with no host share, audio or clipboard (`tart run --no-graphics
+--no-audio --no-clipboard`), in its own session on the run's tmux server. SSH ready 12 s after the start; SIP enabled;
+Gatekeeper assessments enabled. One Tart VM at a time (lib.sh guard_slot: 0 guests running at the start). The guest
+was sealed by scripts/qa/tart/seal-guest.sh unchanged (merged in #930): coordinator account `agent` (SSH key only),
+stand-in homes /Users/neo and /Users/neo_1 (mode 700), pinned tmux and libevent, pf allowing only SSH from the host,
+DHCP and HTTPS to the pinned Z.AI addresses, and a loopback DNS responder that refuses every name (/etc/hosts only).
+
+Accounts. As in PF-60-S10: executors run as hidden, password-less, non-admin, non-staff, non-SSH accounts agmx1-agmx3
+(uid 611-613, gid 610 agmsexec); agmx0 (uid 610) is the coordinator's gate lane, never an executor. Homes mode 700,
+wiped before and after every group. Lanes run ONE AT A TIME (runs/seq.log). Launch path: coordinator 'agent' -> sudo -n
+-u LANE -H /opt/agms/bin/agms-launch MODE RUN GROUP (sudo env_reset). Executor: /opt/agms/pkg/bin/corbanu exec --json
+--skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -m glm-5.3-flash -c model_provider="zai" (the
+candidate's own exec, separate executor home, 90-minute alarm). Confinement is the OS account + per-uid pf + file modes,
+verified by the probes, not the product sandbox. Product under test: agms-tui -> agms-product -> /opt/agms/pkg/bin/
+corbanu, env -i, CORBANU_TEST_NO_NATIVE_KEYRING=1, file credential store, private tmux server; every key the product
+could read is the synthetic placeholder "agms-synthetic-placeholder-not-a-credential".
+
+Routes used (agms-product, unchanged from S10 except the realtime mode): zai (built-in, real), openai (built-in,
+OPENAI_API_KEY placeholder, real, WebSocket Responses), moonshot (person-style provider `kimi` at
+https://api.moonshot.ai/v1, wire_api chat, real). The S10 stand-in routes stay installed but no case uses them.
+Realtime (new, `agms-tui realtime 'text'` -> `agms-product --realtime openai gpt-6-luna TEXT`): on first use, `corbanu
+login --with-api-key` with the synthetic placeholder on the group's profile (file store), then S09's driver
+(harness/realtime_driver.py, installed as /opt/agms/bin/agms-realtime-driver; one change: --config passes `-c` to
+`corbanu app-server`) with `-c features.realtime_conversation=true`, the file credential store and the run's log folder:
+one session, text output, one `appendSpeech` line, stop.
+
+Relay (harness/acc_mediator.py), run as 'agent' in a coordinator tmux on 127.0.0.1:18443, as in S10 (CONNECT only for
+listed hosts on :443; TLS terminated with a campaign-local synthetic CA created 2026-10-20, valid 7 days, one leaf naming
+every listed host; the CA key never left the host; the leaf key is in ~agent/agms/mediator, unreadable to executors).
+acc-tart1 changes:
+- api.openai.com also forwards `/v1/realtime`, WebSocket upgrades only (a plain request gets 403); realtime sessions
+  are capped for the whole run (REALTIME_CAP=2: one session plus one spare for a harness failure); over the cap the
+  relay refuses with 403. The usage object of every realtime `response.done` server event is logged
+  ("realtime_response_done"); no other frame content is logged.
+- Moonshot POSTs capped at MOONSHOT_CAP=4 (owner decision D54, option a, 2026-10-20 ~01:57Z), replacing S10's 12.
+- Upstream connections to api.openai.com go to its pinned address (--pin api.openai.com=162.159.140.245).
+- A missing key file is not loaded (that host answers 503); not needed in the real run (all three keys were placed).
+- A direct TLS listener for clients that ignore HTTPS_PROXY exists (--realtime-port) but was NOT enabled in the real
+  run: the shakedown showed the product's realtime client goes through the proxy.
+Real hosts, allowlisted paths, transport key injected by the relay from agent-only files (never visible to an
+executor; probes check): api.z.ai (vault label provider/zai_api_key), api.openai.com (openai-api-key), api.moonshot.ai
+(kimi_api3). The three key files were piped from `corbanu vault auth-helper` straight into agent-only files (umask
+077; never printed or written on the host) and deleted before the clone was deleted (erase-keys.out). Logs: host,
+method, path, status, model, and for real HTTP responses the provider-reported usage object; no headers, request
+bodies or keys (mediator-final.jsonl.gz).
+
+Network. Per-uid pf (anchor corbanu.pf83): agmx0-3 may open TCP only to 127.0.0.1:18443; all other tcp/udp from those
+uids is dropped. provision.sh added Moonshot's two addresses (104.18.29.136, 104.18.28.136) and OpenAI's two
+(162.159.140.245, 172.66.0.243) to the coordinator's inference allowlist (seal-guest.sh pins only Z.AI; UTM "macOS 3"
+already allowed OpenAI) and `104.18.29.136 api.moonshot.ai` and `162.159.140.245 api.openai.com` to /etc/hosts. The
+clone was deleted at the end, so nothing needed restoring.
+
+Gate (gate/). One attempt: 109 of 109 probes (S10's 105 plus two per document: direct TCP to OpenAI's pinned address,
+and the relay's realtime path without a WebSocket upgrade), the PTY control and the smoke turn (AGMS-SMOKE-OK).
+Coordinator egress: github.com, raw.githubusercontent.com, codeload.github.com, example.com unresolvable
+(agent-egress.txt). Relay positive controls (relay-positive-controls.txt): GET /v1/models through the relay, 200 for
+OpenAI and Moonshot (free). Its third line is mislabelled "direct 127.0.0.1:443": it is the coordinator account's own
+direct HTTPS request to api.openai.com (pinned to 162.159.140.245; no key sent), answered 401; executors cannot make
+it (probes). Every group re-ran the probes before its executor (runs/*/preflight-summary.stdout) and each executor
+re-ran them itself.
+
+Shakedown (shakedown/common/, before the freeze, separate clone deleted 01:54:49Z). Purpose: check the harness port
+(seal, stage, provision, relay, probes) on Tart. Findings, all fixed before the freeze: (1) `tart run` started with
+nohup from a tool shell died with that shell; the VM now runs in its own tmux session; (2) the relay's direct realtime
+listener could not bind 127.0.0.1:443 as 'agent' (macOS permits unprivileged low ports only on the wildcard address);
+(3) with caps 0 a realtime start from lane agmx0 reached the relay through CONNECT and was refused (403), so the direct
+listener, its pf rule and its probes were dropped (tools/edit_no443.py). Spend: one Z.AI smoke turn; no OpenAI or
+Moonshot inference (the realtime connection was refused before reaching OpenAI). Keys deleted before the clone was
+deleted (shakedown/common/erase-keys.out).
+
+Groups (runs/seq.log): Z (agmx1), O (agmx2), R (agmx3), M (agmx1); one at a time, wiped before and after.
+
+End (h/tart-run.sh down, 05:30:42Z-05:30:47Z; vm-state-end.txt). Final relay, stand-in and guard logs and the root
+policy were captured (mediator-final.jsonl.gz, guard-final.txt: 0 SecurityAgent prompts in 12,043 checks,
+policy-root-end.txt); every lane process was stopped (kill-lane-procs-end.out). The three real key files were deleted
+and checked absent (erase-keys.out; the remaining ~agent/.pf83-auth/auth.json is seal-guest.sh's synthetic placeholder).
+Then the clone was stopped and deleted (`tart list` shows only corbanu-qa-base), and the lock was removed. Erasing is
+deleting the clone, so no restore or verification boot was needed (UTM runs need both). Caps used: realtime 1 of 2
+sessions; Moonshot 4 of 4 POSTs (no refusal logged).

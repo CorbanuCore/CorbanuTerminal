@@ -1,0 +1,12 @@
+╰──────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     Qwen3.8-Flash-Next-Uncensored-MLX-Serve-mixe… │
+│ directory: ~/runs/…/fixture/workspace                    │
+╰──────────────────────────────────────────────────────────╯
+
+
+› Improve documentation in @filename
+
+  Qwen3.8-Flash-Next-Uncensored-MLX-Serve-mixed-4-8bit via qwen default · ~/runs/agms-R01-agmx1-20261020T083213Z/fixture/workspace · Corbanu Terminal…

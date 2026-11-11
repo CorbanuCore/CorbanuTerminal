@@ -24,6 +24,7 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -59,11 +60,34 @@ type Registrations = BTreeMap<u64, SessionSignIn>;
 static SESSIONS: LazyLock<Mutex<HashMap<PathBuf, Registrations>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static NEXT_ID: AtomicU64 = AtomicU64::new(CONFIGURED + 1);
+/// Homes whose configured stand-in turns [`SessionSignIn::Unknown`] once a
+/// session on a named account registers (#1085). Locked only inside
+/// [`with_sessions`].
+static HOLD_ONCE_NAMED: LazyLock<Mutex<HashSet<PathBuf>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 
 fn with_sessions<T>(f: impl FnOnce(&mut HashMap<PathBuf, Registrations>) -> T) -> T {
     f(&mut SESSIONS
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner))
+}
+
+/// Turns the configured stand-in of `home` [`SessionSignIn::Unknown`] for
+/// good when it is held once named and `registrations` hold a named account.
+/// Callers hold the sessions lock.
+fn hold_if_named(home: &PathBuf, registrations: &mut Registrations) {
+    if !registrations
+        .values()
+        .any(|sign_in| matches!(sign_in, SessionSignIn::Named(_)))
+    {
+        return;
+    }
+    let mut held = HOLD_ONCE_NAMED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if held.remove(home) {
+        registrations.insert(CONFIGURED, SessionSignIn::Unknown);
+    }
 }
 
 fn set(home: &PathBuf, id: u64, sign_in: SessionSignIn) {
@@ -75,6 +99,7 @@ fn set(home: &PathBuf, id: u64, sign_in: SessionSignIn) {
             }
             sign_in => {
                 registrations.insert(id, sign_in);
+                hold_if_named(home, registrations);
             }
         }
         if registrations.is_empty() {
@@ -207,6 +232,23 @@ impl AuthManager {
     /// server's requests before any thread exists.
     pub fn register_configured_sign_in(&self, sign_in: SessionSignIn) {
         set(&self.codex_home, CONFIGURED, sign_in);
+    }
+
+    /// #1085: a server whose clients could choose a named account it did not
+    /// know of at startup (one enrolled while it runs). Once a session on a
+    /// named account registers in this home, the configured stand-in becomes
+    /// [`SessionSignIn::Unknown`] for the rest of the process, so requests
+    /// outside a conversation never fall back to the default login.
+    pub fn hold_configured_sign_in_once_named(&self) {
+        with_sessions(|sessions| {
+            HOLD_ONCE_NAMED
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(self.codex_home.clone());
+            if let Some(registrations) = sessions.get_mut(&self.codex_home) {
+                hold_if_named(&self.codex_home, registrations);
+            }
+        });
     }
 
     /// The manager of the sign-in this process's user sessions run on

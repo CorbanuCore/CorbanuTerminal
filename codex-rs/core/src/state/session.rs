@@ -2,8 +2,6 @@
 
 use codex_protocol::models::AdditionalPermissionProfile;
 use codex_protocol::models::ResponseItem;
-use codex_sandboxing::policy_transforms::merge_permission_profiles;
-use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
@@ -42,7 +40,8 @@ pub(crate) struct SessionState {
     pub(crate) current_time_reminder: CurrentTimeReminderState,
     pub(crate) active_connector_selection: HashSet<String>,
     pub(crate) pending_session_start_sources: VecDeque<codex_hooks::SessionStartSource>,
-    granted_permissions_by_environment_id: HashMap<String, AdditionalPermissionProfile>,
+    /// D51 (#1001): bound to the policy marker they were granted under.
+    granted_permissions: super::GrantedPermissions,
     next_turn_is_first: bool,
     /// Whether the latest model request was authorised by the `OPENAI_API_KEY`
     /// fallback; the notice is shown only when this turns on.
@@ -82,7 +81,7 @@ impl SessionState {
             current_time_reminder: CurrentTimeReminderState::default(),
             active_connector_selection: HashSet::new(),
             pending_session_start_sources: VecDeque::new(),
-            granted_permissions_by_environment_id: HashMap::new(),
+            granted_permissions: super::GrantedPermissions::default(),
             next_turn_is_first: true,
             openai_api_key_env_fallback_in_use: false,
             account_token_usage: Vec::new(),
@@ -355,25 +354,19 @@ impl SessionState {
         &mut self,
         environment_id: &str,
         permissions: AdditionalPermissionProfile,
-    ) {
-        let granted_permissions = merge_permission_profiles(
-            self.granted_permissions_by_environment_id
-                .get(environment_id),
-            Some(&permissions),
-        );
-        if let Some(granted_permissions) = granted_permissions {
-            self.granted_permissions_by_environment_id
-                .insert(environment_id.to_string(), granted_permissions);
-        }
+        granted_under: super::AuthorityMarker,
+        current: super::AuthorityMarker,
+    ) -> bool {
+        self.granted_permissions
+            .record(environment_id, permissions, granted_under, current)
     }
 
     pub(crate) fn granted_permissions(
-        &self,
+        &mut self,
         environment_id: &str,
+        current: super::AuthorityMarker,
     ) -> Option<AdditionalPermissionProfile> {
-        self.granted_permissions_by_environment_id
-            .get(environment_id)
-            .cloned()
+        self.granted_permissions.get(environment_id, current)
     }
 }
 

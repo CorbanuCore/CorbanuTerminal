@@ -19,15 +19,41 @@
 //!   without delete sharing for the session's lifetime. A file that can be
 //!   deleted belongs to a session that ended without releasing its lease (a
 //!   crash): its roots no longer count;
+//! - `delete-child-denies.json`: each Everyone `FILE_DELETE_CHILD` deny a
+//!   legacy session added on a protected path or its parent (#1506 item 1,
+//!   D261), recorded before it is added;
+//! - `planted-metadata.json`: each `.codex` or `.agents` folder at the top of
+//!   a writable root that was absent when a session started and existed when
+//!   it ended (#1506 item 2, D262). Core doesn't load these until the user
+//!   confirms them ([`planted_project_metadata`],
+//!   [`confirm_planted_project_metadata`]);
+//!   Also each one deeper in a writable root that wasn't there, as the same
+//!   file, when a session started and is there when it ended (#1541,
+//!   D283; [`crate::nested_metadata`]);
+//!   and (D420, #1775) each repository below the top of a writable root (or
+//!   a writable root that is a bare repository) that appeared, or whose
+//!   config, hooks or other files git runs programs from changed, while a
+//!   session ran ([`planted_git_changes`]; [`crate::git_watch`]);
 //! - `registry.lock`, held exclusively while the registry changes.
 //!
 //! A lease ends when the command's last process exits, so processes it
 //! leaves running (a server, say) keep writing until they exit too.
 //!
+//! D425 (#1846): an elevated session keeps the same records with a lease
+//! that labels nothing ([`watch`]); its roots never keep a label in place.
+//! It ends when the command exits: Core can't see the processes the
+//! command leaves running, which run in the runner's job.
+//!
 //! Every acquire, every release and the startup sweep
 //! ([`repair_stale_integrity_labels`]) put back the label of each recorded
-//! root that no live session holds.
+//! root that no live session holds, and remove each recorded deny that lies
+//! in no live session's root. A deny that was there before and isn't
+//! recorded is not ours: it is never removed.
 
+use crate::acl::add_deny_delete_child_ace;
+use crate::acl::has_deny_delete_child_ace;
+use crate::acl::remove_deny_delete_child_ace;
+use crate::git_config_targets::TargetState;
 use crate::integrity::LabelAce;
 use crate::integrity::effective_label_is_low;
 use crate::integrity::label_private_dir_medium;
@@ -35,6 +61,8 @@ use crate::integrity::label_writable_root_low;
 use crate::integrity::read_explicit_labels;
 use crate::integrity::set_explicit_labels;
 use crate::logging::log_note;
+use crate::nested_metadata::NestedMetadata;
+use crate::nested_metadata::RepoState;
 use anyhow::Context;
 use anyhow::Result;
 use codex_utils_pty::JobObject;
@@ -60,6 +88,11 @@ const REGISTRY_PARENT: &str = "CorbanuTerminalSandbox";
 const REGISTRY_DIR: &str = "integrity-labels";
 const LOCK_FILE: &str = "registry.lock";
 const LABELS_FILE: &str = "labels.json";
+const DENIES_FILE: &str = "delete-child-denies.json";
+/// Read by `codex-config` too (`planted_project_metadata.rs`): keep in step.
+const PLANTED_FILE: &str = "planted-metadata.json";
+/// Project metadata folders Core loads from a project (#1506 item 2).
+const PROJECT_METADATA_NAMES: [&str; 2] = [".codex", ".agents"];
 const SESSION_PREFIX: &str = "session-";
 const SESSION_SUFFIX: &str = ".json";
 /// Labelling a large tree under the lock can take a while.
@@ -75,9 +108,95 @@ struct Labels {
     roots: BTreeMap<PathBuf, Vec<LabelAce>>,
 }
 
+/// An Everyone `FILE_DELETE_CHILD` deny on `path` (canonical), as
+/// [`crate::acl::add_deny_delete_child_ace`] adds it.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub(crate) struct DeleteChildDeny {
+    pub(crate) path: PathBuf,
+    pub(crate) inherit_to_subdirs: bool,
+}
+
+/// The denies legacy sessions added and a sweep removes again.
+#[derive(Default, Serialize, Deserialize)]
+struct DeleteChildDenies {
+    entries: BTreeSet<DeleteChildDeny>,
+}
+
 #[derive(Serialize, Deserialize)]
 struct SessionRecord {
     roots: Vec<PathBuf>,
+    /// D262: the roots' `.codex`/`.agents` folders absent at the start.
+    #[serde(default)]
+    absent_metadata: Vec<PathBuf>,
+    /// D283: the ones below the top of the roots at the start (`None` from
+    /// builds before D283).
+    #[serde(default)]
+    nested_metadata: Option<Vec<NestedMetadata>>,
+    /// D283: the roots it watches for them (not `%TEMP%`/`%TMP%`).
+    #[serde(default)]
+    nested_roots: Vec<PathBuf>,
+    /// D332: the top-level `.git` of each of `roots` at the start (`None`
+    /// from builds before D332, which didn't watch them).
+    #[serde(default)]
+    git_dirs: Option<Vec<NestedMetadata>>,
+    /// D420 (#1775): the repositories below the top of `nested_roots`, and
+    /// those of `roots` that are bare repositories, at the start (`None` from
+    /// builds before D420).
+    #[serde(default)]
+    repos: Option<Vec<RepoState>>,
+    /// D422 (#1775): the files and folders those repositories' configs (and
+    /// the top-level `.git`'s) name inside `roots` (`core.hooksPath`, an
+    /// include, a program), with their contents, at the start (`None` from
+    /// builds before D422).
+    #[serde(default)]
+    config_targets: Option<Vec<TargetState>>,
+    /// D425 (#1846): an elevated session's, which labels nothing: its roots
+    /// don't keep a label (or a deny) in place.
+    #[serde(default)]
+    records_only: bool,
+}
+
+impl SessionRecord {
+    /// The roots whose labels and denies this session keeps in place.
+    fn held_roots(&self) -> &[PathBuf] {
+        if self.records_only { &[] } else { &self.roots }
+    }
+}
+
+/// D262: project metadata folders that appeared while a session ran, and
+/// those the user confirmed (until they are absent at a session's start).
+#[derive(Default, Serialize, Deserialize)]
+struct PlantedMetadata {
+    entries: BTreeSet<PathBuf>,
+    #[serde(default)]
+    confirmed: BTreeSet<PathBuf>,
+    /// D420 (#1775): repositories that appeared or changed while a session
+    /// ran, with what changed, until the user confirms them.
+    #[serde(default)]
+    git_changes: BTreeMap<PathBuf, BTreeSet<String>>,
+    /// #1877 item 5: when each path in `entries` or `git_changes` was last
+    /// recorded (a counter, [`PlantedMetadata::stamp`]). A confirmation
+    /// covers a path only as the person was shown it: one recorded again
+    /// since is asked about again.
+    #[serde(default)]
+    stamps: BTreeMap<PathBuf, u64>,
+    #[serde(default)]
+    last_stamp: u64,
+}
+
+impl PlantedMetadata {
+    /// #1877 item 5: `path` was recorded (again) just now. Stamps count up
+    /// from the clock, so a file an older version saved without them can't
+    /// hand out one a prompt already showed.
+    fn stamp(&mut self, path: &Path) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| {
+                u64::try_from(since.as_nanos()).unwrap_or(u64::MAX)
+            });
+        self.last_stamp = self.last_stamp.max(now).saturating_add(1);
+        self.stamps.insert(path.to_path_buf(), self.last_stamp);
+    }
 }
 
 /// A live session's hold on its roots' Low label; released on drop.
@@ -85,12 +204,60 @@ pub(crate) struct IntegrityLease {
     registry: PathBuf,
     session: Option<(File, PathBuf)>,
     log_dir: Option<PathBuf>,
+    absent_metadata: Vec<PathBuf>,
+    nested_roots: Vec<PathBuf>,
+    nested_metadata: Vec<NestedMetadata>,
+    /// D332: the roots, and their top-level `.git` at the start.
+    roots: Vec<PathBuf>,
+    git_dirs: Vec<NestedMetadata>,
+    /// D420: the repositories at the start.
+    repos: Vec<RepoState>,
+    /// D422: what their configs name, at the start.
+    config_targets: Vec<TargetState>,
+    /// D425: labels nothing ([`watch`]).
+    records_only: bool,
 }
 
 /// `%LOCALAPPDATA%\CorbanuTerminalSandbox`, which a session whose writable
 /// root holds it protects like `.git`.
 pub(crate) fn registry_parent_dir() -> Option<PathBuf> {
     local_app_data().map(|dir| dir.join(REGISTRY_PARENT))
+}
+
+/// D453 (#1896 item 1): the records folder, made first if missing, when one
+/// of `write_roots` holds it (as the non-admin sandbox checks: a root that is
+/// it or lies inside it doesn't count), so the elevated setup denies its
+/// commands writing there. `None` where the folder can't be used for
+/// records (logged): no records are kept there then.
+pub(crate) fn records_folder_inside(write_roots: &[PathBuf], log_dir: &Path) -> Option<PathBuf> {
+    use crate::path_normalization::canonicalize_path;
+    use crate::spawn_prep::strictly_inside_a_root;
+    let local_app_data = local_app_data()?;
+    let roots: Vec<PathBuf> = write_roots
+        .iter()
+        .map(|root| canonicalize_path(root))
+        .collect();
+    // First where it would be made (it may not exist yet), so a session
+    // whose roots don't hold it never makes it here.
+    if !strictly_inside_a_root(
+        &canonicalize_path(&local_app_data).join(REGISTRY_PARENT),
+        &roots,
+    ) {
+        return None;
+    }
+    match ensure_registry() {
+        Ok(_) => {
+            let parent = local_app_data.join(REGISTRY_PARENT);
+            strictly_inside_a_root(&canonicalize_path(&parent), &roots).then_some(parent)
+        }
+        Err(err) => {
+            crate::logging::log_note(
+                &format!("D453: the records folder isn't protected or used: {err:#}"),
+                Some(log_dir),
+            );
+            None
+        }
+    }
 }
 
 fn registry_dir() -> Option<PathBuf> {
@@ -119,13 +286,71 @@ fn local_app_data() -> Option<PathBuf> {
 
 /// Labels `roots` (canonical paths) Low for a session, until the lease is
 /// dropped. A root another live session already holds keeps its label.
+#[cfg(test)]
 pub(crate) fn acquire(roots: &[PathBuf], log_dir: Option<&Path>) -> Result<IntegrityLease> {
+    acquire_watching(roots, roots, log_dir)
+}
+
+/// As [`acquire`]; D283 watches `nested_roots` (some of `roots`) for nested
+/// `.codex`/`.agents` folders.
+pub(crate) fn acquire_watching(
+    roots: &[PathBuf],
+    nested_roots: &[PathBuf],
+    log_dir: Option<&Path>,
+) -> Result<IntegrityLease> {
+    start(roots, nested_roots, log_dir, /*records_only*/ false)
+}
+
+/// D425 (#1846): for an elevated session, the records [`acquire_watching`]
+/// keeps (D262, D283, D332, D420, D422), labelling nothing. Dropping it
+/// records what appeared or changed.
+pub(crate) fn watch(
+    roots: &[PathBuf],
+    nested_roots: &[PathBuf],
+    log_dir: Option<&Path>,
+) -> Result<IntegrityLease> {
+    start(roots, nested_roots, log_dir, /*records_only*/ true)
+}
+
+fn start(
+    roots: &[PathBuf],
+    nested_roots: &[PathBuf],
+    log_dir: Option<&Path>,
+    records_only: bool,
+) -> Result<IntegrityLease> {
     let registry = ensure_registry()?;
+    // Outside the lock: the walk can take a while. Whatever appears from
+    // here on counts as planted.
+    let mut found = crate::nested_metadata::find(nested_roots);
+    let walk = take_repo_walk(&mut found);
+    // #1896 item 3: an elevated session doesn't protect them, so it records
+    // what is inside each too.
+    let nested_metadata = if records_only {
+        crate::nested_metadata::with_contents(found.entries)
+    } else {
+        found.entries
+    };
+    // D332: every root, `%TEMP%` too, as D262 does: one look per root.
+    let git_dirs = crate::nested_metadata::top_level_git(roots);
+    // D420: the repositories below the top of the watched roots, and the
+    // roots (`%TEMP%` too) that are bare repositories.
+    let (repo_entries, _notes) = repo_paths(walk, roots, nested_roots, &[]);
+    let repos = crate::nested_metadata::repo_states(&repo_entries, roots);
+    // D422: what their configs, and the top-level `.git`'s, name.
+    let config_targets = config_target_states(&repo_entries, roots);
     let lock = lock(&registry)?;
     let mut lease = IntegrityLease {
         registry,
         session: None,
         log_dir: log_dir.map(Path::to_path_buf),
+        absent_metadata: absent_project_metadata(roots),
+        nested_roots: nested_roots.to_vec(),
+        nested_metadata,
+        roots: roots.to_vec(),
+        git_dirs,
+        repos,
+        config_targets,
+        records_only,
     };
     let wanted: BTreeSet<PathBuf> = roots.iter().cloned().collect();
     let result = acquire_locked(&mut lease, &wanted);
@@ -135,14 +360,28 @@ pub(crate) fn acquire(roots: &[PathBuf], log_dir: Option<&Path>) -> Result<Integ
 }
 
 fn acquire_locked(lease: &mut IntegrityLease, wanted: &BTreeSet<PathBuf>) -> Result<()> {
+    // Damaged records don't stop commands: Core then loads no project
+    // metadata at all (see `planted_project_metadata`).
+    if let Err(err) = prune_planted(&lease.registry, &lease.absent_metadata) {
+        log_note(
+            &format!("planted metadata: {err:#}"),
+            lease.log_dir.as_deref(),
+        );
+    }
     // Registered first: whatever happens below, a sweep can undo it.
-    lease.session = Some(create_session(&lease.registry, wanted)?);
+    lease.session = Some(create_session(lease, wanted)?);
     let mut labels = load_labels(&lease.registry)?;
     sweep(&lease.registry, &mut labels, lease.log_dir.as_deref())?;
+    if lease.records_only {
+        return Ok(());
+    }
     for root in wanted {
         // A root that can't be labelled stays as it is: commands can't write
         // there, which is safe, and the others still work.
-        if let Err(err) = lease_root(&lease.registry, &mut labels, root) {
+        let leased = lease_root(&lease.registry, &mut labels, root);
+        // #734: core tells the person about a root left read-only.
+        crate::unlabelled_roots::record(root, leased.is_ok());
+        if let Err(err) = leased {
             log_note(
                 &format!(
                     "integrity labels: writable root {} can't be labelled Low, so sandboxed commands can't write there (labelling needs permission to change the folder's owner settings, WRITE_OWNER, and a file system that holds integrity labels): {err:#}",
@@ -179,6 +418,12 @@ fn lease_root(registry: &Path, labels: &mut Labels, root: &Path) -> Result<()> {
 }
 
 impl IntegrityLease {
+    /// D283: the `.codex`/`.agents` entries below the top of the roots when
+    /// the session started, which it must protect.
+    pub(crate) fn nested_metadata_to_protect(&self) -> Vec<NestedMetadata> {
+        crate::nested_metadata::to_protect(&self.nested_metadata)
+    }
+
     /// Ends the lease once no process of the command's `job` runs: right
     /// away when none does, so a caller that reports the exit afterwards
     /// finds the labels back; otherwise, when `descendants_preserved` (the
@@ -205,12 +450,48 @@ impl IntegrityLease {
         let Some((file, path)) = self.session.take() else {
             return Ok(());
         };
+        // D283: the command's processes are gone; walked before the lock (it
+        // can take a while) while the session file still counts as live.
+        let mut nested_now = crate::nested_metadata::find(&self.nested_roots);
+        let git_now = crate::nested_metadata::top_level_git(&self.roots);
+        let repos_changed = session_repo_changes(
+            &self.repos,
+            Some(self.config_targets.as_slice()),
+            take_repo_walk(&mut nested_now),
+            &self.roots,
+            &self.nested_roots,
+        );
         // If the lock can't be had, the closed session file is stale and
         // the next sweep puts the labels back.
         let lock = lock(&self.registry)?;
         drop(file);
-        // Closed now: a sweep that finds it left behind removes it.
-        let _ = std::fs::remove_file(&path);
+        // Closed now: a sweep that finds it left behind removes it. The
+        // folders it saw appear are recorded first; if that fails, the file
+        // stays for a later sweep to try again.
+        if record_planted(
+            &self.registry,
+            &self.absent_metadata,
+            self.log_dir.as_deref(),
+        )
+        .is_ok()
+            && record_nested_planted(
+                &self.registry,
+                &self.nested_metadata,
+                nested_now,
+                self.log_dir.as_deref(),
+            )
+            .is_ok()
+            && record_git_planted(
+                &self.registry,
+                &self.git_dirs,
+                git_now,
+                self.log_dir.as_deref(),
+            )
+            .is_ok()
+            && record_repo_changes(&self.registry, repos_changed, self.log_dir.as_deref()).is_ok()
+        {
+            let _ = std::fs::remove_file(&path);
+        }
         let mut labels = load_labels(&self.registry)?;
         sweep(&self.registry, &mut labels, self.log_dir.as_deref())?;
         drop(lock);
@@ -296,12 +577,80 @@ fn sweep(registry: &Path, labels: &mut Labels, log_dir: Option<&Path>) -> Result
         let record = std::fs::read(&path)
             .ok()
             .and_then(|bytes| serde_json::from_slice::<SessionRecord>(&bytes).ok());
+        // D262: record what the session saw appear before its file can go
+        // (live or not). If that fails (a full disk, say), keep the file and
+        // count the session as live: its folders that appeared still count as
+        // planted, and a later sweep tries again.
+        if let Some(record) = &record
+            && record_planted(registry, &record.absent_metadata, log_dir).is_err()
+        {
+            live.extend(record.held_roots().iter().cloned());
+            continue;
+        }
+        // D283: a session that ended without releasing its lease: what
+        // appeared deeper in its roots, before its file goes. A live one (or
+        // one that can't be told apart from a live one) records that when it
+        // ends, so its file stays.
+        // D420 reuses the walk's repositories.
+        let mut walked_repos: Option<RepoWalk> = None;
+        if let Some(record) = &record
+            && let Some(nested) = &record.nested_metadata
+        {
+            let recorded = session_file_is_closed(&path) && {
+                let mut found = crate::nested_metadata::find(&record.nested_roots);
+                walked_repos = Some(take_repo_walk(&mut found));
+                record_nested_planted(registry, nested, found, log_dir).is_ok()
+            };
+            if !recorded {
+                live.extend(record.held_roots().iter().cloned());
+                continue;
+            }
+        }
+        // D420: likewise for the repositories in its roots.
+        if let Some(record) = &record
+            && let Some(repos) = &record.repos
+        {
+            let recorded = session_file_is_closed(&path) && {
+                let walk = walked_repos.take().unwrap_or_else(|| {
+                    take_repo_walk(&mut crate::nested_metadata::find(&record.nested_roots))
+                });
+                let changed = session_repo_changes(
+                    repos,
+                    record.config_targets.as_deref(),
+                    walk,
+                    &record.roots,
+                    &record.nested_roots,
+                );
+                record_repo_changes(registry, changed, log_dir).is_ok()
+            };
+            if !recorded {
+                live.extend(record.held_roots().iter().cloned());
+                continue;
+            }
+        }
+        // D332: likewise for the roots' top-level `.git`.
+        if let Some(record) = &record
+            && let Some(git_dirs) = &record.git_dirs
+        {
+            let recorded = session_file_is_closed(&path)
+                && record_git_planted(
+                    registry,
+                    git_dirs,
+                    crate::nested_metadata::top_level_git(&record.roots),
+                    log_dir,
+                )
+                .is_ok();
+            if !recorded {
+                live.extend(record.held_roots().iter().cloned());
+                continue;
+            }
+        }
         match std::fs::remove_file(&path) {
             // Its session ended without releasing the lease.
             Ok(()) => {}
             Err(err) => match record {
                 Some(record) if err.raw_os_error() == Some(ERROR_SHARING_VIOLATION) => {
-                    live.extend(record.roots);
+                    live.extend(record.held_roots().iter().cloned());
                 }
                 // A session file that can't be read or probed may belong to
                 // a live session: keep every label this time.
@@ -343,7 +692,772 @@ fn sweep(registry: &Path, labels: &mut Labels, log_dir: Option<&Path>) -> Result
         }
     }
     save_labels(registry, labels)?;
+    remove_unneeded_denies(registry, &live, log_dir);
     Ok(restored)
+}
+
+/// D262: the `.codex`/`.agents` folders at the top of `roots` that don't
+/// exist (a link counts as existing).
+fn absent_project_metadata(roots: &[PathBuf]) -> Vec<PathBuf> {
+    roots
+        .iter()
+        .flat_map(|root| PROJECT_METADATA_NAMES.map(|name| root.join(name)))
+        .filter(|path| {
+            std::fs::symlink_metadata(path)
+                .is_err_and(|err| err.kind() == std::io::ErrorKind::NotFound)
+        })
+        .collect()
+}
+
+/// D262: records each of `absent` (absent when a session started) that exists
+/// now, whoever made it: a sandboxed command may have planted it. Called
+/// with the registry locked.
+fn record_planted(registry: &Path, absent: &[PathBuf], log_dir: Option<&Path>) -> Result<()> {
+    let appeared: Vec<&PathBuf> = absent
+        .iter()
+        .filter(|path| std::fs::symlink_metadata(path).is_ok())
+        .collect();
+    if appeared.is_empty() {
+        return Ok(());
+    }
+    let result = load_planted(registry).and_then(|mut planted| {
+        let before = planted.entries.len();
+        let new: Vec<PathBuf> = appeared
+            .iter()
+            .filter(|path| !planted.confirmed.contains(**path))
+            .map(|path| (*path).clone())
+            .collect();
+        if new.is_empty() {
+            return Ok(());
+        }
+        planted.entries.extend(new.iter().cloned());
+        // #1877 item 5: one recorded already appeared again.
+        for path in &new {
+            planted.stamp(path);
+        }
+        save_json(registry, PLANTED_FILE, &planted)?;
+        if planted.entries.len() != before {
+            // D424: told right after the command too.
+            crate::planted_log::record(&new);
+        }
+        Ok(())
+    });
+    let paths = appeared
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    match &result {
+        Ok(()) => log_note(
+            &format!(
+                "project metadata appeared while a sandboxed command ran; Core won't load it until confirmed: {paths}"
+            ),
+            log_dir,
+        ),
+        Err(err) => log_note(
+            &format!("project metadata appeared ({paths}) but could not be recorded: {err:#}"),
+            log_dir,
+        ),
+    }
+    result
+}
+
+/// D283: records each `.codex`/`.agents` entry below the top of the roots
+/// found `now` that isn't in `before` (taken when the session started) as the
+/// same file, and each folder the walk couldn't list (everything below it
+/// counts as planted). An earlier confirmation doesn't cover them: they are
+/// new or were replaced. Called with the registry locked.
+fn record_nested_planted(
+    registry: &Path,
+    before: &[NestedMetadata],
+    now: crate::nested_metadata::Found,
+    log_dir: Option<&Path>,
+) -> Result<()> {
+    let mut appeared = crate::nested_metadata::appeared(before, now.entries);
+    appeared.extend(now.unlistable);
+    if appeared.is_empty() {
+        return Ok(());
+    }
+    let result = load_planted(registry).and_then(|mut planted| {
+        for path in &appeared {
+            planted.confirmed.remove(path);
+            planted.entries.insert(path.clone());
+            planted.stamp(path);
+        }
+        save_json(registry, PLANTED_FILE, &planted)?;
+        // D424: told right after the command too.
+        crate::planted_log::record(&appeared);
+        Ok(())
+    });
+    let paths = appeared
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    match &result {
+        Ok(()) => log_note(
+            &format!(
+                "project metadata appeared or changed below the top of a writable root while a sandboxed command ran; Core won't load it until confirmed: {paths}"
+            ),
+            log_dir,
+        ),
+        Err(err) => log_note(
+            &format!("project metadata appeared ({paths}) but could not be recorded: {err:#}"),
+            log_dir,
+        ),
+    }
+    result
+}
+
+/// D332: records each top-level `.git` found `now` that isn't in `before`
+/// (taken when the session started) as the same file. An earlier
+/// confirmation doesn't cover it: it is new or was replaced. Called with the
+/// registry locked.
+fn record_git_planted(
+    registry: &Path,
+    before: &[NestedMetadata],
+    now: Vec<NestedMetadata>,
+    log_dir: Option<&Path>,
+) -> Result<()> {
+    let appeared = crate::nested_metadata::appeared(before, now);
+    if appeared.is_empty() {
+        return Ok(());
+    }
+    let result = load_planted(registry).and_then(|mut planted| {
+        for path in &appeared {
+            planted.confirmed.remove(path);
+            planted.entries.insert(path.clone());
+            planted.stamp(path);
+        }
+        save_json(registry, PLANTED_FILE, &planted)?;
+        // D424: told right after the command too.
+        crate::planted_log::record(&appeared);
+        Ok(())
+    });
+    let paths = appeared
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    match &result {
+        Ok(()) => log_note(
+            &format!(
+                "a .git folder appeared or changed at the top of a writable root while a sandboxed command ran; git runs its hooks and config outside the sandbox, so Core warns until it is confirmed: {paths}"
+            ),
+            log_dir,
+        ),
+        Err(err) => log_note(
+            &format!(
+                "a .git folder appeared or changed ({paths}) but could not be recorded: {err:#}"
+            ),
+            log_dir,
+        ),
+    }
+    result
+}
+
+/// D422 (#1775): the files and folders the configs of `repos` (from
+/// [`repo_paths`]) and of the roots' top-level `.git` name inside `roots`,
+/// with their contents.
+fn config_target_states(repos: &[PathBuf], roots: &[PathBuf]) -> Vec<TargetState> {
+    let mut entries: Vec<PathBuf> = roots
+        .iter()
+        .map(|root| root.join(".git"))
+        .filter(|git| std::fs::symlink_metadata(git).is_ok())
+        .collect();
+    entries.extend(repos.iter().cloned());
+    crate::git_config_targets::target_states(&crate::git_config_targets::repo_dirs(&entries), roots)
+}
+
+/// D420 (#1775): what a walk found for repositories: the repositories, its
+/// folder links, and its notes ([`crate::nested_metadata::Found`]).
+type RepoWalk = (Vec<PathBuf>, Vec<PathBuf>, Vec<(PathBuf, String)>);
+
+fn take_repo_walk(found: &mut crate::nested_metadata::Found) -> RepoWalk {
+    (
+        std::mem::take(&mut found.repos),
+        std::mem::take(&mut found.links),
+        std::mem::take(&mut found.notes),
+    )
+}
+
+/// D420 (#1775): the repositories to compare for a session over `roots`
+/// (`nested_roots` walked), and the notes: the walk's repositories, those
+/// behind its folder links into roots it doesn't walk (`%TEMP%`), the roots
+/// that are bare repositories, and each of `before` (the repositories at the
+/// session's start) the walk didn't find but that still opens (one a
+/// command hid behind a link somewhere above it is still compared).
+fn repo_paths(
+    walk: RepoWalk,
+    roots: &[PathBuf],
+    nested_roots: &[PathBuf],
+    before: &[RepoState],
+) -> (Vec<PathBuf>, Vec<(PathBuf, String)>) {
+    let (mut repos, links, mut notes) = walk;
+    let unwalked: Vec<PathBuf> = roots
+        .iter()
+        .filter(|root| !nested_roots.contains(root))
+        .cloned()
+        .collect();
+    let (behind, behind_notes) =
+        crate::nested_metadata::repos_behind_links(&links, &unwalked, nested_roots);
+    repos.extend(behind);
+    notes.extend(behind_notes);
+    repos.extend(crate::nested_metadata::bare_roots(roots));
+    // #1877: the same path both ways by `is_at_or_below`, looked up rather
+    // than compared with each.
+    let key = crate::git_config_targets::path_key;
+    let mut listed: std::collections::HashSet<Vec<String>> =
+        repos.iter().map(|path| key(path)).collect();
+    for state in before {
+        let state_key = key(&state.path);
+        if !listed.contains(&state_key) && std::fs::symlink_metadata(&state.path).is_ok() {
+            repos.push(state.path.clone());
+            listed.insert(state_key);
+        }
+    }
+    (repos, notes)
+}
+
+/// D420/D421 (#1775): what changed in a session's repositories since
+/// `before`, (D422) in the files and folders their configs name since
+/// `before_targets`, and the notes (which count every time).
+fn session_repo_changes(
+    before: &[RepoState],
+    before_targets: Option<&[TargetState]>,
+    walk: RepoWalk,
+    roots: &[PathBuf],
+    nested_roots: &[PathBuf],
+) -> Vec<(PathBuf, Vec<String>)> {
+    let (entries, notes) = repo_paths(walk, roots, nested_roots, before);
+    let mut changed = crate::nested_metadata::repo_changes(
+        before,
+        crate::nested_metadata::repo_states(&entries, roots),
+    );
+    // D422: what their configs name (not for a session from a build before
+    // D422, which didn't record them).
+    if let Some(before_targets) = before_targets {
+        changed.extend(crate::git_config_targets::target_changes(
+            before_targets,
+            config_target_states(&entries, roots),
+        ));
+    }
+    changed.extend(notes.into_iter().map(|(path, note)| (path, vec![note])));
+    changed
+}
+
+/// D420/D421 (#1775): records `changed` ([`session_repo_changes`]): each
+/// repository that is new (unless it has the plain `git init`/`git clone`
+/// shape) or replaced, or whose config, hooks or other files git runs
+/// programs from changed since the session started, with what changed, and
+/// each note. An earlier confirmation doesn't cover a later change. Called
+/// with the registry locked.
+fn record_repo_changes(
+    registry: &Path,
+    changed: Vec<(PathBuf, Vec<String>)>,
+    log_dir: Option<&Path>,
+) -> Result<()> {
+    if changed.is_empty() {
+        return Ok(());
+    }
+    let result = load_planted(registry).and_then(|mut planted| {
+        for (path, changes) in &changed {
+            planted
+                .git_changes
+                .entry(path.clone())
+                .or_default()
+                .extend(changes.iter().cloned());
+            planted.stamp(path);
+        }
+        save_json(registry, PLANTED_FILE, &planted)?;
+        // D424: told right after the command too.
+        crate::planted_log::record_git(&changed);
+        Ok(())
+    });
+    let paths = changed
+        .iter()
+        .map(|(path, changes)| format!("{} ({})", path.display(), changes.join(", ")))
+        .collect::<Vec<_>>()
+        .join("; ");
+    match &result {
+        Ok(()) => log_note(
+            &format!(
+                "a repository appeared or changed in a writable root while a sandboxed command ran; git runs its hooks and config outside the sandbox, so Core warns until it is confirmed: {paths}"
+            ),
+            log_dir,
+        ),
+        Err(err) => log_note(
+            &format!(
+                "a repository appeared or changed ({paths}) but could not be recorded: {err:#}"
+            ),
+            log_dir,
+        ),
+    }
+    result
+}
+
+/// D420 (#1775): the repositories that appeared or changed while a legacy
+/// session ran and the user hasn't confirmed yet, with what changed. Empty
+/// when there are no records.
+pub fn planted_git_changes() -> Result<Vec<(PathBuf, Vec<String>)>> {
+    let Some(registry) = registry_dir() else {
+        return Ok(Vec::new());
+    };
+    match std::fs::symlink_metadata(&registry) {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(err) => return Err(err).with_context(|| format!("inspect {}", registry.display())),
+        Ok(_) => {}
+    }
+    Ok(load_planted(&registry)?
+        .git_changes
+        .into_iter()
+        .filter(|(path, _)| std::fs::symlink_metadata(path).is_ok())
+        .map(|(path, changes)| (path, changes.into_iter().collect()))
+        .collect())
+}
+
+/// Whether no handle holds the session file at `path` open: its session
+/// ended, or crashed. (A live session holds it without write or delete
+/// sharing.)
+fn session_file_is_closed(path: &Path) -> bool {
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .share_mode(FILE_SHARE_READ)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .is_ok()
+}
+
+/// D283: whether `folder` (a `.codex` or `.agents` folder, parent
+/// canonical) counts as planted right now: it lies below the top of a
+/// writable root of a legacy session that still runs (or ended without its
+/// records being swept) and wasn't there, as the same file, when that
+/// session started (one that doesn't exist yet counts too); or, read after
+/// that, the records list it or a folder above it. Core asks this for each
+/// folder it is about to load, on top of [`planted_project_metadata`]'s
+/// list, which a session ending since may have added to.
+pub fn project_metadata_counts_as_planted(folder: &Path) -> Result<bool> {
+    let Some(registry) = registry_dir() else {
+        return Ok(false);
+    };
+    match std::fs::symlink_metadata(&registry) {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(err) => return Err(err).with_context(|| format!("inspect {}", registry.display())),
+        Ok(_) => {}
+    }
+    // Sessions first: one that ends meanwhile records what it saw before
+    // its file goes.
+    let live = session_records(&registry)?.iter().any(|record| {
+        record.nested_metadata.as_ref().is_some_and(|nested| {
+            crate::nested_metadata::appeared_in_session(&record.nested_roots, nested, folder)
+        }) || record.git_dirs.as_ref().is_some_and(|git_dirs| {
+            crate::nested_metadata::git_appeared_in_session(&record.roots, git_dirs, folder)
+        })
+    });
+    if live {
+        return Ok(true);
+    }
+    let planted = load_planted(&registry)?;
+    Ok(planted
+        .entries
+        .iter()
+        .any(|entry| crate::nested_metadata::starts_with(folder, entry)))
+}
+
+/// D262 (#1506 item 2): the `.codex`/`.agents` folders that appeared while a
+/// legacy session ran and the user hasn't confirmed yet, including those a
+/// session that is still running (a server it left behind, say) has seen
+/// appear. Empty when there are no records.
+pub fn planted_project_metadata() -> Result<Vec<PathBuf>> {
+    let Some(registry) = registry_dir() else {
+        return Ok(Vec::new());
+    };
+    match std::fs::symlink_metadata(&registry) {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(err) => return Err(err).with_context(|| format!("inspect {}", registry.display())),
+        Ok(_) => {}
+    }
+    // Session files first: a session that ends meanwhile records what it
+    // saw before its file goes, so nothing falls between the two reads.
+    let records = session_records(&registry)?;
+    let PlantedMetadata {
+        entries: mut planted,
+        confirmed,
+        ..
+    } = load_planted(&registry)?;
+    for record in records {
+        planted.extend(
+            record.absent_metadata.into_iter().filter(|path| {
+                !confirmed.contains(path) && std::fs::symlink_metadata(path).is_ok()
+            }),
+        );
+    }
+    // A folder that is gone needs no confirmation.
+    Ok(planted
+        .into_iter()
+        .filter(|path| std::fs::symlink_metadata(path).is_ok())
+        .collect())
+}
+
+/// #1877 item 5: when each recorded path ([`planted_project_metadata`],
+/// [`planted_git_changes`]) was last recorded, to pass to
+/// [`confirm_planted_project_metadata`]. Read it before those lists: a path
+/// recorded in between then counts as recorded after it was shown.
+pub fn planted_stamps() -> Result<BTreeMap<PathBuf, u64>> {
+    let Some(registry) = registry_dir() else {
+        return Ok(BTreeMap::new());
+    };
+    match std::fs::symlink_metadata(&registry) {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
+        Err(err) => return Err(err).with_context(|| format!("inspect {}", registry.display())),
+        Ok(_) => {}
+    }
+    Ok(load_planted(&registry)?.stamps)
+}
+
+/// D262: the user checked `path` (one of [`planted_project_metadata`]) and
+/// wants it loaded. Returns whether it was recorded.
+///
+/// Refused while a session that saw it appear still runs: that session's
+/// processes could still change it after the user checked it. #1877 item 5
+/// (D486): `shown` is its stamp ([`planted_stamps`]) when the person was
+/// shown it; refused too when it was recorded again since (another command
+/// changed it while the prompt was up), so it is asked about again.
+pub fn confirm_planted_project_metadata(path: &Path, shown: Option<u64>) -> Result<bool> {
+    let registry = ensure_registry()?;
+    let lock = lock(&registry)?;
+    // Records what ended sessions saw and drops their files, so only live
+    // sessions' files remain.
+    let mut labels = load_labels(&registry)?;
+    sweep(&registry, &mut labels, /*log_dir*/ None)?;
+    for record in session_records(&registry)? {
+        if record.absent_metadata.iter().any(|absent| absent == path)
+            || record.nested_metadata.as_ref().is_some_and(|nested| {
+                crate::nested_metadata::appeared_in_session(&record.nested_roots, nested, path)
+            })
+            || record.git_dirs.as_ref().is_some_and(|git_dirs| {
+                crate::nested_metadata::git_appeared_in_session(&record.roots, git_dirs, path)
+            })
+            || record
+                .repos
+                .as_ref()
+                .is_some_and(|repos| repo_changed_in_session(&record.roots, repos, path))
+            // D422: a target that session watches and that differs now.
+            || record.config_targets.as_ref().is_some_and(|targets| {
+                targets
+                    .iter()
+                    .any(|target| target.path == path && target.now() != target.prints)
+            })
+        {
+            anyhow::bail!(
+                "a sandboxed command that may have created {} is still running; confirm it once that command has ended",
+                path.display()
+            );
+        }
+    }
+    let mut planted = load_planted(&registry)?;
+    // One no longer recorded (confirmed meanwhile, or gone) has nothing
+    // unseen.
+    let recorded = planted.entries.contains(path) || planted.git_changes.contains_key(path);
+    if recorded && planted.stamps.get(path).copied() != shown {
+        anyhow::bail!(
+            "{} was recorded again after Corbanu Terminal asked about it; check it again, and Corbanu Terminal will ask again",
+            path.display()
+        );
+    }
+    planted.stamps.remove(path);
+    let removed = planted.entries.remove(path) | planted.git_changes.remove(path).is_some();
+    // Not recorded again by a sweep that finds a session file recording
+    // failed for earlier.
+    planted.confirmed.insert(path.to_path_buf());
+    save_json(&registry, PLANTED_FILE, &planted)?;
+    drop(lock);
+    Ok(removed)
+}
+
+/// D420: whether the repository at `path` lies in one of `roots` of a live
+/// session and isn't, now, what that session saw when it started (one that
+/// is new counts unless it is plain).
+fn repo_changed_in_session(roots: &[PathBuf], before: &[RepoState], path: &Path) -> bool {
+    // A repository: a `.git` entry or a git folder (not a folder a config
+    // names, which D422 checks). A recorded bare repository that is briefly
+    // not a git folder while its session runs can be confirmed; that
+    // session records it again when it ends if it changed.
+    let repo = path
+        .file_name()
+        .is_some_and(|name| name.eq_ignore_ascii_case(".git"))
+        || crate::git_watch::is_git_directory(path);
+    if !repo
+        || !roots
+            .iter()
+            .any(|root| crate::nested_metadata::starts_with(path, root))
+    {
+        return false;
+    }
+    let now = crate::nested_metadata::repo_states(&[path.to_path_buf()], roots);
+    !crate::nested_metadata::repo_changes(before, now).is_empty()
+}
+
+/// D262: drops records of folders that are gone, and forgets a confirmed
+/// folder that is absent when a session starts, so it is reported if it
+/// reappears.
+fn prune_planted(registry: &Path, absent: &[PathBuf]) -> Result<()> {
+    let mut planted = load_planted(registry)?;
+    let before = (
+        planted.entries.len(),
+        planted.confirmed.len(),
+        planted.git_changes.len(),
+    );
+    planted
+        .entries
+        .retain(|path| std::fs::symlink_metadata(path).is_ok());
+    planted
+        .git_changes
+        .retain(|path, _| std::fs::symlink_metadata(path).is_ok());
+    planted
+        .confirmed
+        .retain(|path| !absent.contains(path) && std::fs::symlink_metadata(path).is_ok());
+    let PlantedMetadata {
+        entries,
+        git_changes,
+        stamps,
+        ..
+    } = &mut planted;
+    let stamps_before = stamps.len();
+    stamps.retain(|path, _| entries.contains(path) || git_changes.contains_key(path));
+    if (
+        planted.entries.len(),
+        planted.confirmed.len(),
+        planted.git_changes.len(),
+    ) != before
+        || planted.stamps.len() != stamps_before
+    {
+        save_json(registry, PLANTED_FILE, &planted)?;
+    }
+    Ok(())
+}
+
+/// The records of the session files in `registry` that can be read (a live
+/// session's file is shared for reading).
+fn session_records(registry: &Path) -> Result<Vec<SessionRecord>> {
+    let mut records = Vec::new();
+    for entry in
+        std::fs::read_dir(registry).with_context(|| format!("list {}", registry.display()))?
+    {
+        let name = entry?.file_name().to_string_lossy().into_owned();
+        if !(name.starts_with(SESSION_PREFIX) && name.ends_with(SESSION_SUFFIX)) {
+            continue;
+        }
+        if let Some(record) = std::fs::read(registry.join(&name))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<SessionRecord>(&bytes).ok())
+        {
+            records.push(record);
+        }
+    }
+    Ok(records)
+}
+
+fn load_planted(registry: &Path) -> Result<PlantedMetadata> {
+    let path = registry.join(PLANTED_FILE);
+    match std::fs::read(&path) {
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .with_context(|| format!("{} is damaged; remove it", path.display())),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(PlantedMetadata::default()),
+        Err(err) => Err(err).with_context(|| format!("read {}", path.display())),
+    }
+}
+
+/// #1506 item 1 (D261): removes each recorded deny that lies in no live
+/// session's root. One that can't be removed stays recorded for a later
+/// sweep; a path that is gone, or is a link now, is dropped untouched. Other
+/// reparse points, such as cloud placeholders, are the folder itself
+/// (#1668).
+fn remove_unneeded_denies(registry: &Path, live: &BTreeSet<PathBuf>, log_dir: Option<&Path>) {
+    let mut denies = match load_denies(registry) {
+        Ok(denies) => denies,
+        Err(err) => {
+            log_note(&format!("delete-child denies: {err:#}"), log_dir);
+            return;
+        }
+    };
+    // SAFETY: builds the well-known Everyone SID.
+    let Ok(mut everyone) = (unsafe { crate::token::world_sid() }) else {
+        return;
+    };
+    let everyone = everyone.as_mut_ptr() as *mut std::ffi::c_void;
+    let before = denies.entries.len();
+    let live: Vec<String> = live.iter().map(|root| comparable_path(root)).collect();
+    denies.entries.retain(|deny| {
+        let path = comparable_path(&deny.path);
+        if live.iter().any(|root| path_is_within(&path, root)) {
+            return true;
+        }
+        match std::fs::symlink_metadata(&deny.path) {
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return false,
+            Ok(meta) if meta.file_type().is_symlink() => return false,
+            _ => {}
+        }
+        // Low: a Low-integrity sandbox may be using the folder right now, a
+        // session of another Windows account (whose records these aren't),
+        // say. Otherwise a Low-integrity command can't delete through it
+        // anyway, so the deny isn't needed.
+        // SAFETY: reads the label of an existing folder that is not a link.
+        if !matches!(unsafe { effective_label_is_low(&deny.path) }, Ok(false)) {
+            return true;
+        }
+        // SAFETY: `everyone` is a valid SID; the path is a folder, not a link.
+        match unsafe { remove_deny_delete_child_ace(&deny.path, everyone, deny.inherit_to_subdirs) }
+        {
+            Ok(_) => false,
+            Err(err) => {
+                log_note(
+                    &format!(
+                        "delete-child denies: could not remove the Everyone deny on {}: {err:#}",
+                        deny.path.display()
+                    ),
+                    log_dir,
+                );
+                true
+            }
+        }
+    });
+    if denies.entries.len() != before
+        && let Err(err) = save_denies(registry, &denies)
+    {
+        log_note(&format!("delete-child denies: {err:#}"), log_dir);
+    }
+}
+
+/// `path` as compared for liveness: without a `\\?\` prefix (which
+/// `dunce` keeps on long paths) and, as Windows paths are, case-insensitive.
+fn comparable_path(path: &Path) -> String {
+    let path = path.to_string_lossy();
+    let path = if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else {
+        path.strip_prefix(r"\\?\").unwrap_or(&path).to_string()
+    };
+    path.trim_end_matches('\\').to_ascii_lowercase()
+}
+
+/// Whether comparable `path` is `root` or lies below it.
+fn path_is_within(path: &str, root: &str) -> bool {
+    path == root
+        || path
+            .strip_prefix(root)
+            .is_some_and(|rest| rest.starts_with('\\'))
+}
+
+/// #1506 item 1 (D261): adds each Everyone `FILE_DELETE_CHILD` deny in
+/// `denies` that isn't there yet, recording it first, so a sweep removes it
+/// once it lies in no live session's root, even after a crash. Links are
+/// never followed; other reparse points, such as cloud placeholders, count
+/// as plain folders (#1668). Without usable records the denies are added
+/// untracked, as before, so protection never depends on the records.
+///
+/// With `required`, every deny must be in place afterwards (as an explicit
+/// entry) or this fails, so the command doesn't start without it (D263's
+/// denies above nested read-only paths); otherwise it is best effort, as
+/// the `.git`/`.codex`/`.agents` denies always were.
+pub(crate) fn add_tracked_delete_child_denies(
+    denies: &[DeleteChildDeny],
+    required: bool,
+    log_dir: Option<&Path>,
+) -> Result<()> {
+    let mut usable = Vec::new();
+    for deny in denies {
+        // `is_dir` is false for links.
+        let is_plain_dir = std::fs::symlink_metadata(&deny.path).is_ok_and(|meta| meta.is_dir());
+        match is_plain_dir
+            .then(|| dunce::canonicalize(&deny.path).ok())
+            .flatten()
+        {
+            Some(path) => usable.push(DeleteChildDeny {
+                path,
+                inherit_to_subdirs: deny.inherit_to_subdirs,
+            }),
+            None if required => anyhow::bail!(
+                "the Windows sandbox could not protect {}: it is not a plain folder",
+                deny.path.display()
+            ),
+            None => {}
+        }
+    }
+    if usable.is_empty() {
+        return Ok(());
+    }
+    // SAFETY: builds the well-known Everyone SID.
+    let mut everyone = unsafe { crate::token::world_sid() }?;
+    let everyone = everyone.as_mut_ptr() as *mut std::ffi::c_void;
+    let tracked = ensure_registry().and_then(|registry| {
+        let lock = lock(&registry)?;
+        // SAFETY: `everyone` is a valid SID.
+        let result = unsafe { add_tracked_locked(&registry, &usable, everyone) };
+        drop(lock);
+        result
+    });
+    if let Err(err) = tracked {
+        log_note(
+            &format!(
+                "delete-child denies: some may not be recorded, and those stay after the session: {err:#}"
+            ),
+            log_dir,
+        );
+        for deny in &usable {
+            // SAFETY: as above; the path is an existing folder.
+            let _ =
+                unsafe { add_deny_delete_child_ace(&deny.path, everyone, deny.inherit_to_subdirs) };
+        }
+    }
+    if required {
+        for deny in &usable {
+            // SAFETY: as above.
+            let present =
+                unsafe { has_deny_delete_child_ace(&deny.path, everyone, deny.inherit_to_subdirs) };
+            if !matches!(present, Ok(true)) {
+                anyhow::bail!(
+                    "the Windows sandbox could not add the Everyone delete-child deny on {}",
+                    deny.path.display()
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// # Safety
+/// `everyone` must be a valid SID.
+unsafe fn add_tracked_locked(
+    registry: &Path,
+    denies: &[DeleteChildDeny],
+    everyone: *mut std::ffi::c_void,
+) -> Result<()> {
+    let mut records = load_denies(registry)?;
+    let mut missing = Vec::new();
+    for deny in denies {
+        if !has_deny_delete_child_ace(&deny.path, everyone, deny.inherit_to_subdirs)? {
+            missing.push(deny);
+        }
+    }
+    if missing.is_empty() {
+        return Ok(());
+    }
+    let before = records.entries.len();
+    records
+        .entries
+        .extend(missing.iter().map(|deny| (*deny).clone()));
+    // Recorded before they change, so a crash cannot lose them.
+    if records.entries.len() != before {
+        save_denies(registry, &records)?;
+    }
+    for deny in missing {
+        if !add_deny_delete_child_ace(&deny.path, everyone, deny.inherit_to_subdirs)? {
+            anyhow::bail!("could not add the Everyone deny on {}", deny.path.display());
+        }
+    }
+    Ok(())
 }
 
 fn restore(root: &Path, original: &[LabelAce]) -> Result<()> {
@@ -351,7 +1465,9 @@ fn restore(root: &Path, original: &[LabelAce]) -> Result<()> {
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err).with_context(|| format!("inspect {}", root.display())),
         // A link now stands where the root was: never relabel what it points at.
-        Ok(meta) if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 => Ok(()),
+        // Other reparse points, such as cloud placeholders, are the folder
+        // itself (#1668).
+        Ok(meta) if meta.file_type().is_symlink() => Ok(()),
         // SAFETY: relabels an existing folder or file that is not a link.
         Ok(_) => unsafe { set_explicit_labels(root, original) },
     }
@@ -418,7 +1534,9 @@ fn lock(registry: &Path) -> Result<File> {
     }
 }
 
-fn create_session(registry: &Path, roots: &BTreeSet<PathBuf>) -> Result<(File, PathBuf)> {
+/// Registers `lease`'s session (for `roots`) with what it saw at the start.
+fn create_session(lease: &IntegrityLease, roots: &BTreeSet<PathBuf>) -> Result<(File, PathBuf)> {
+    let registry = &lease.registry;
     let mut rng = SmallRng::from_entropy();
     let path = registry.join(format!(
         "{SESSION_PREFIX}{}-{:016x}{SESSION_SUFFIX}",
@@ -437,6 +1555,13 @@ fn create_session(registry: &Path, roots: &BTreeSet<PathBuf>) -> Result<(File, P
         .with_context(|| format!("create {}", path.display()))?;
     let record = SessionRecord {
         roots: roots.iter().cloned().collect(),
+        absent_metadata: lease.absent_metadata.clone(),
+        nested_metadata: Some(lease.nested_metadata.clone()),
+        nested_roots: lease.nested_roots.clone(),
+        git_dirs: Some(lease.git_dirs.clone()),
+        repos: Some(lease.repos.clone()),
+        config_targets: Some(lease.config_targets.clone()),
+        records_only: lease.records_only,
     };
     file.write_all(&serde_json::to_vec(&record)?)?;
     file.flush()?;
@@ -468,6 +1593,55 @@ fn save_labels(registry: &Path, labels: &Labels) -> Result<()> {
         .with_context(|| format!("write {}", tmp.display()))?;
     drop(file);
     std::fs::rename(&tmp, &path).with_context(|| format!("replace {}", path.display()))
+}
+
+fn load_denies(registry: &Path) -> Result<DeleteChildDenies> {
+    let path = registry.join(DENIES_FILE);
+    match std::fs::read(&path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).with_context(|| {
+            format!(
+                "{} is damaged, so the Windows sandbox can't tell which Everyone delete-child denies it added; remove it (the denies stay; icacls <dir> /remove:d *S-1-1-0 removes them)",
+                path.display()
+            )
+        }),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(DeleteChildDenies::default()),
+        Err(err) => Err(err).with_context(|| format!("read {}", path.display())),
+    }
+}
+
+fn save_denies(registry: &Path, denies: &DeleteChildDenies) -> Result<()> {
+    save_json(registry, DENIES_FILE, denies)
+}
+
+/// Replaces `registry/name` with `value`, flushed first.
+fn save_json(registry: &Path, name: &str, value: &impl Serialize) -> Result<()> {
+    let path = registry.join(name);
+    let tmp = registry.join(format!("{name}.tmp"));
+    let mut file = File::create(&tmp).with_context(|| format!("create {}", tmp.display()))?;
+    file.write_all(&serde_json::to_vec_pretty(value)?)
+        .and_then(|()| file.sync_all())
+        .with_context(|| format!("write {}", tmp.display()))?;
+    drop(file);
+    std::fs::rename(&tmp, &path).with_context(|| format!("replace {}", path.display()))
+}
+
+/// Tests only: the recorded denies.
+#[cfg(test)]
+pub(crate) fn recorded_delete_child_denies() -> Result<Vec<DeleteChildDeny>> {
+    let registry = ensure_registry()?;
+    let lock = lock(&registry)?;
+    let denies = load_denies(&registry)?;
+    drop(lock);
+    Ok(denies.entries.into_iter().collect())
+}
+
+/// Tests only: waits for a release in progress to finish (it holds the
+/// lock for its whole sweep).
+#[cfg(test)]
+pub(crate) fn wait_for_release_in_progress() -> Result<()> {
+    let registry = ensure_registry()?;
+    drop(lock(&registry)?);
+    Ok(())
 }
 
 /// Tests only: the recorded roots.

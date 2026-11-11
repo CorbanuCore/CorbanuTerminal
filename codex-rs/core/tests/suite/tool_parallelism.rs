@@ -153,41 +153,108 @@ async fn read_file_tools_run_in_parallel() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_tools_run_in_parallel() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
-    // A timing check: under Wine-exec every shell command starts through
-    // Wine, which alone takes most of the bound (1.7 s against 1.6 s on
-    // nightly-ci, #636), so it could not tell parallel from serial there.
-    skip_if_wine_exec!(
-        Ok(()),
-        "shell start-up under Wine exceeds the parallel-timing bound"
-    );
+    // Not qualified under Wine-exec, where every command starts through
+    // Wine (#636).
+    skip_if_wine_exec!(Ok(()), "shell start-up under Wine is not qualified here");
 
     let server = start_mock_server().await;
     let mut builder = test_codex().with_model("gpt-5.4");
     let test = builder.build(&server).await?;
 
-    let shell_args = json!({
-        "command": "sleep 0.25",
-        // Avoid user-specific shell startup cost (e.g. zsh profile scripts) in timing assertions.
-        "login": false,
-        "timeout_ms": 1_000,
-    });
-    let args_one = serde_json::to_string(&shell_args)?;
-    let args_two = serde_json::to_string(&shell_args)?;
+    // Unified exec is on by default off Windows, so `exec_command` is the
+    // model-visible shell tool. The legacy `shell_command` stays registered
+    // hidden, and hidden tools run serially, so the old wall-clock check on
+    // it only passed because two short sleeps fit inside the bound (#1448).
+    // Assert the overlap directly, as upstream does (openai/codex#56006).
+    let shell_args = |call_id: &str| {
+        json!({
+            "cmd": format!(": > {call_id}.started; while [ ! -f release ]; do sleep 0.01; done; echo {call_id}"),
+            "login": false,
+            "yield_time_ms": 30_000,
+        })
+        .to_string()
+    };
+    let args_one = shell_args("call-1");
+    let args_two = shell_args("call-2");
 
     let first_response = sse(vec![
         json!({"type": "response.created", "response": {"id": "resp-1"}}),
-        ev_function_call("call-1", "shell_command", &args_one),
-        ev_function_call("call-2", "shell_command", &args_two),
+        ev_function_call("call-1", "exec_command", &args_one),
+        ev_function_call("call-2", "exec_command", &args_two),
         ev_completed("resp-1"),
     ]);
     let second_response = sse(vec![
         ev_assistant_message("msg-1", "done"),
         ev_completed("resp-2"),
     ]);
-    mount_sse_sequence(&server, vec![first_response, second_response]).await;
+    let responses = mount_sse_sequence(&server, vec![first_response, second_response]).await;
 
-    let duration = run_turn_and_measure(&test, "run shell_command twice").await?;
-    assert_parallel_duration(duration);
+    let release_commands = async {
+        // Longer than upstream's 5 s: a loaded runner can be slow to start
+        // both shells, and the wait ends as soon as both have.
+        let overlap = tokio::time::timeout(Duration::from_secs(20), async {
+            while !test.cwd.path().join("call-1.started").exists()
+                || !test.cwd.path().join("call-2.started").exists()
+            {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        fs::write(test.cwd.path().join("release"), "")?;
+        overlap.map_err(|_| anyhow::anyhow!("shell commands did not overlap"))
+    };
+    let (turn_result, overlap_result) =
+        tokio::join!(run_turn(&test, "run exec_command twice"), release_commands);
+    overlap_result?;
+    turn_result?;
+
+    for call_id in ["call-1", "call-2"] {
+        let output = responses
+            .function_call_output_text(call_id)
+            .expect("missing exec output");
+        assert!(output.contains("Process exited with code 0"), "{output}");
+        assert!(output.contains(&format!("Output:\n{call_id}")), "{output}");
+    }
+
+    Ok(())
+}
+
+/// How long the `test_sync_tool` call in the mixed-parallel test stays alive
+/// after it starts. The overlap proof observes the shell's marker file while
+/// this window is still open.
+const MIXED_TOOL_OVERLAP_SLEEP_MS: u64 = 10_000;
+
+/// Bound on waiting for the shell's marker file. A serial run only starts the
+/// shell after `test_sync_tool` has finished (at least
+/// `MIXED_TOOL_OVERLAP_SLEEP_MS` later), so it times out here.
+const MIXED_TOOL_OVERLAP_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Runs one mixed turn and proves the two distinct tools overlapped in time.
+///
+/// The `exec_command` shell writes `call-2.started` as soon as it starts and
+/// then blocks until the test writes `release`. The `test_sync_tool` call
+/// sleeps `MIXED_TOOL_OVERLAP_SLEEP_MS` after starting, so it is still
+/// executing while the coordinator observes the marker within
+/// `MIXED_TOOL_OVERLAP_TIMEOUT` of the turn starting. The coordinator only
+/// writes `release` after seeing the marker, so both tools were alive at the
+/// same instant. This asserts a witnessed simultaneity event, not a wall-clock
+/// duration: turn overhead alone cannot fail it.
+async fn run_mixed_turn_and_assert_overlap(test: &TestCodex) -> anyhow::Result<()> {
+    let release_commands = async {
+        // Longer than the shell start-up seen on loaded runners; the wait
+        // ends as soon as the shell has started.
+        let overlap = tokio::time::timeout(MIXED_TOOL_OVERLAP_TIMEOUT, async {
+            while !test.cwd.path().join("call-2.started").exists() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        fs::write(test.cwd.path().join("release"), "")?;
+        overlap.map_err(|_| anyhow::anyhow!("test_sync_tool and exec_command did not overlap"))
+    };
+    let (turn_result, overlap_result) = tokio::join!(run_turn(test, "mix tools"), release_commands);
+    overlap_result?;
+    turn_result?;
 
     Ok(())
 }
@@ -195,42 +262,111 @@ async fn shell_tools_run_in_parallel() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mixed_parallel_tools_run_in_parallel() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
-    // A timing check: under Wine-exec every shell command starts through
-    // Wine, which alone takes most of the bound (1.7 s against 1.6 s on
-    // nightly-ci, #636), so it could not tell parallel from serial there.
-    skip_if_wine_exec!(
-        Ok(()),
-        "shell start-up under Wine exceeds the parallel-timing bound"
-    );
+    // Under Wine-exec every shell command starts through Wine (#636), so
+    // shell start-up there is not qualified here. The overlap proof below
+    // does not depend on a wall-clock duration bound.
+    skip_if_wine_exec!(Ok(()), "shell start-up under Wine is not qualified here");
 
     let server = start_mock_server().await;
     let test = build_codex_with_test_tool(&server).await?;
 
+    // `test_sync_tool` stays alive for the overlap window (see
+    // `run_mixed_turn_and_assert_overlap`).
     let sync_args = json!({
-        "sleep_after_ms": 300
+        "sleep_after_ms": MIXED_TOOL_OVERLAP_SLEEP_MS
     })
     .to_string();
+    // `exec_command`, not the hidden (serial) legacy `shell_command`: with
+    // the latter this turn ran serially and only fit the bound by luck (#1448).
+    // The shell marks its start and blocks until the test releases it, so the
+    // test observes both tools alive at the same instant.
     let shell_args = serde_json::to_string(&json!({
-        "command": "sleep 0.25",
+        "cmd": ": > call-2.started; while [ ! -f release ]; do sleep 0.01; done; echo call-2",
         // Avoid user-specific shell startup cost in timing assertions.
         "login": false,
-        "timeout_ms": 1_000,
+        // The call returns when the process exits; a short yield could
+        // return "still running" under load and fail the exit-code check.
+        "yield_time_ms": 10_000,
     }))?;
 
     let first_response = sse(vec![
         json!({"type": "response.created", "response": {"id": "resp-1"}}),
         ev_function_call("call-1", "test_sync_tool", &sync_args),
-        ev_function_call("call-2", "shell_command", &shell_args),
+        ev_function_call("call-2", "exec_command", &shell_args),
         ev_completed("resp-1"),
     ]);
     let second_response = sse(vec![
         ev_assistant_message("msg-1", "done"),
         ev_completed("resp-2"),
     ]);
-    mount_sse_sequence(&server, vec![first_response, second_response]).await;
+    let responses = mount_sse_sequence(&server, vec![first_response, second_response]).await;
 
-    let duration = run_turn_and_measure(&test, "mix tools").await?;
-    assert_parallel_duration(duration);
+    run_mixed_turn_and_assert_overlap(&test).await?;
+    let sync_output = responses
+        .function_call_output_text("call-1")
+        .expect("missing test_sync_tool output");
+    assert!(sync_output.contains("ok"), "{sync_output}");
+    let output = responses
+        .function_call_output_text("call-2")
+        .expect("missing exec output");
+    assert!(output.contains("Process exited with code 0"), "{output}");
+    assert!(output.contains("Output:\ncall-2"), "{output}");
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn mixed_parallel_tools_run_serially_fails_overlap_check() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    // Same Wine caveat as the parallel test: shell start-up under Wine is
+    // not qualified here.
+    skip_if_wine_exec!(Ok(()), "shell start-up under Wine is not qualified here");
+
+    let server = start_mock_server().await;
+    let test = build_codex_with_test_tool(&server).await?;
+
+    let sync_args = json!({
+        "sleep_after_ms": MIXED_TOOL_OVERLAP_SLEEP_MS
+    })
+    .to_string();
+    let shell_args = serde_json::to_string(&json!({
+        "cmd": ": > call-2.started; while [ ! -f release ]; do sleep 0.01; done; echo call-2",
+        "login": false,
+        "yield_time_ms": 10_000,
+    }))?;
+
+    // Deliberately serial: the shell call is issued in a later model
+    // response, so it only starts after `test_sync_tool` has finished.
+    let first_response = sse(vec![
+        json!({"type": "response.created", "response": {"id": "resp-1"}}),
+        ev_function_call("call-1", "test_sync_tool", &sync_args),
+        ev_completed("resp-1"),
+    ]);
+    let second_response = sse(vec![
+        json!({"type": "response.created", "response": {"id": "resp-2"}}),
+        ev_function_call("call-2", "exec_command", &shell_args),
+        ev_completed("resp-2"),
+    ]);
+    let third_response = sse(vec![
+        ev_assistant_message("msg-1", "done"),
+        ev_completed("resp-3"),
+    ]);
+    let _responses = mount_sse_sequence(
+        &server,
+        vec![first_response, second_response, third_response],
+    )
+    .await;
+
+    let result = run_mixed_turn_and_assert_overlap(&test).await;
+    let err = result.expect_err("serial execution must fail the overlap check");
+    // Surface the inner failure in the log: this test passes precisely
+    // because the overlap check failed.
+    eprintln!("overlap check failed as expected: {err}");
+    assert!(
+        err.to_string()
+            .contains("test_sync_tool and exec_command did not overlap"),
+        "{err}"
+    );
 
     Ok(())
 }

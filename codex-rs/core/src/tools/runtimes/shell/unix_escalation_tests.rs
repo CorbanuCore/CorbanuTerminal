@@ -84,6 +84,7 @@ fn denied_read_file_system_sandbox_policy() -> FileSystemSandboxPolicy {
         },
         FileSystemSandboxEntry {
             path: FileSystemPath::GlobPattern {
+                scan: None,
                 pattern: "**/*.env".to_string(),
             },
             access: FileSystemAccessMode::Deny,
@@ -995,7 +996,10 @@ async fn strict_rules_refuse_intercepted_wrapped_vault_exec() -> anyhow::Result<
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn issue_1001_intercepted_exec_approved_before_a_transition_is_asked_again()
 -> anyhow::Result<()> {
-    let (action, reasons) = issue_1001_intercepted_exec(/*switch_aggressive_on*/ false).await?;
+    let (action, reasons) = issue_1001_intercepted_exec(
+        /*switch_aggressive_on*/ false, /*prompt_permissions*/ None,
+    )
+    .await?;
     assert_eq!(
         action,
         codex_shell_escalation::EscalationDecision::Escalate(EscalationExecution::Unsandboxed),
@@ -1015,11 +1019,36 @@ async fn issue_1001_intercepted_exec_approved_before_a_transition_is_asked_again
 /// the level it started under) are stale too: refused, not asked again.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn issue_1001_intercepted_exec_approved_before_aggressive_is_refused() -> anyhow::Result<()> {
-    let (action, reasons) = issue_1001_intercepted_exec(/*switch_aggressive_on*/ true).await?;
+    let (action, reasons) = issue_1001_intercepted_exec(
+        /*switch_aggressive_on*/ true, /*prompt_permissions*/ None,
+    )
+    .await?;
     assert_eq!(
         action,
         codex_shell_escalation::EscalationDecision::Deny {
             reason: Some(crate::tools::orchestrator::STALE_AGGRESSIVE_REFUSAL.to_string())
+        }
+    );
+    assert_eq!(reasons.len(), 1, "{reasons:?}");
+    Ok(())
+}
+
+/// D51: an exec asked about with permissions read before the transition
+/// (grants end there) is refused, not asked again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_1001_intercepted_exec_with_permissions_is_refused() -> anyhow::Result<()> {
+    let network = AdditionalPermissionProfile {
+        network: Some(codex_protocol::models::NetworkPermissions {
+            enabled: Some(true),
+        }),
+        ..Default::default()
+    };
+    let (action, reasons) =
+        issue_1001_intercepted_exec(/*switch_aggressive_on*/ false, Some(network)).await?;
+    assert_eq!(
+        action,
+        codex_shell_escalation::EscalationDecision::Deny {
+            reason: Some(crate::tools::orchestrator::STALE_PERMISSIONS_REFUSAL.to_string())
         }
     );
     assert_eq!(reasons.len(), 1, "{reasons:?}");
@@ -1031,6 +1060,7 @@ async fn issue_1001_intercepted_exec_approved_before_aggressive_is_refused() -> 
 /// action and the reasons of the prompts shown.
 async fn issue_1001_intercepted_exec(
     switch_aggressive_on: bool,
+    prompt_permissions: Option<AdditionalPermissionProfile>,
 ) -> anyhow::Result<(
     codex_shell_escalation::EscalationDecision,
     Vec<Option<String>>,
@@ -1078,7 +1108,7 @@ async fn issue_1001_intercepted_exec(
         permission_profile: PermissionProfile::workspace_write(),
         sandbox_permissions: SandboxPermissions::UseDefault,
         approval_sandbox_permissions: SandboxPermissions::UseDefault,
-        prompt_permissions: None,
+        prompt_permissions: prompt_permissions.clone(),
         stopwatch: codex_shell_escalation::Stopwatch::new(Duration::from_secs(30)),
     };
     let next_prompt = async || -> ExecApprovalRequestEvent {
@@ -1134,7 +1164,7 @@ async fn issue_1001_intercepted_exec(
             session
                 .notify_approval(&first.effective_approval_id(), ReviewDecision::Approved)
                 .await;
-            if !switch_aggressive_on {
+            if !switch_aggressive_on && prompt_permissions.is_none() {
                 // Asked again, and approved.
                 let second = next_prompt().await;
                 reasons.push(second.reason.clone());

@@ -115,8 +115,10 @@ fn d27_moderate_names_the_one_command_way_and_aggressive_does_not() {
         "{note}"
     );
     let note = approval_note(Rule::ModerateAfterUntrusted);
-    assert!(note.contains("no approval lifts this now"), "{note}");
-    assert!(note.contains("In a new session"), "{note}");
+    assert!(
+        note.contains("approving this prompt doesn't lift it"),
+        "{note}"
+    );
     // Kill switch on, or Moderate not fully in force: no new-session advice.
     for text in [
         denial_explanation(Rule::ModerateNotInForce),
@@ -159,5 +161,37 @@ fn d27_moderate_names_the_one_command_way_and_aggressive_does_not() {
             warning.contains(expected),
             "{expected:?} missing: {warning}"
         );
+    }
+}
+
+/// D48 (c): after untrusted content under Moderate, the explanations name
+/// the known tools as the only commands it may still be allowed for (and a
+/// new session's first command); the list is the owner's.
+#[test]
+fn d48_moderate_names_the_known_tools() {
+    assert_eq!(
+        KNOWN_TOOLS,
+        ["unshare", "bwrap", "podman", "buildah", "flatpak", "nix"]
+    );
+    for text in [
+        denial_explanation(Rule::ModerateOneCommand),
+        denial_explanation(Rule::ModerateAfterUntrusted),
+        approval_note(Rule::ModerateOneCommand),
+        approval_note(Rule::ModerateAfterUntrusted),
+    ] {
+        assert!(
+            text.contains(
+                "one plain command that runs unshare, bwrap, podman, buildah, flatpak or nix"
+            ),
+            "{text}"
+        );
+    }
+    for text in [
+        denial_explanation(Rule::ModerateNotInForce),
+        approval_note(Rule::ModerateNotInForce),
+        denial_explanation(Rule::Aggressive),
+        approval_note(Rule::Aggressive),
+    ] {
+        assert!(!text.contains("plain command"), "{text}");
     }
 }

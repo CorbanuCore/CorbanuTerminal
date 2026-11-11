@@ -45,8 +45,11 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
         crate::security::protected_surface::post_taint_read_policy(sess, &step_context.turn);
     // PF-23-S02: the read itself goes through the same sandbox, so a link
     // swapped in after the check above still cannot be read.
-    let read_sandbox = read_policy.as_ref().and_then(|_| {
-        step_context.environments.primary().map(|environment| {
+    // #1976 (D491): also where the host has no sandbox for a protected level.
+    let read_sandbox = step_context
+        .environments
+        .primary()
+        .map(|environment| {
             crate::security::protected_surface::protect_file_tool_context(
                 sess,
                 &step_context.turn,
@@ -55,7 +58,7 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
                     .file_system_sandbox_context(/*additional_permissions*/ None, environment),
             )
         })
-    });
+        .filter(|sandbox| read_policy.is_some() || sandbox.unsandboxed_refusal.is_some());
     if read_policy.is_some() && read_sandbox.is_none() {
         return Err(
             "failed to upload files: no protected file sandbox is available for this session"
@@ -220,6 +223,10 @@ async fn build_uploaded_argument_value(
         .join(file_path)
         .map_err(|error| contextualize_error(error.to_string()))?;
     let fs = turn_environment.environment.get_filesystem();
+    // #1976 (D491): the host read below would run outside any sandbox.
+    if let Some(refusal) = read_sandbox.and_then(|sandbox| sandbox.unsandboxed_refusal.as_ref()) {
+        return Err(contextualize_error(refusal.clone()));
+    }
     let (size, contents) = if let Some(policy) = read_policy
         && !read_sandbox.is_some_and(FileSystemSandboxContext::should_run_in_sandbox)
     {

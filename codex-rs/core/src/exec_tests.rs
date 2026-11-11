@@ -947,6 +947,7 @@ fn windows_elevated_supports_unreadable_globs() {
         },
         codex_protocol::permissions::FileSystemSandboxEntry {
             path: codex_protocol::permissions::FileSystemPath::GlobPattern {
+                scan: None,
                 pattern: "**/*.env".to_string(),
             },
             access: codex_protocol::permissions::FileSystemAccessMode::Deny,
@@ -995,7 +996,9 @@ fn windows_elevated_supports_unreadable_globs() {
 #[test]
 fn windows_elevated_rejects_reopened_writable_descendants() {
     let temp_dir = tempfile::TempDir::new().expect("tempdir");
-    let docs = temp_dir.path().join("docs");
+    // Canonical, as the resolver reports the folders (D331).
+    let root = dunce::canonicalize(temp_dir.path()).expect("canonical tempdir");
+    let docs = root.join("docs");
     let nested = docs.join("nested");
     std::fs::create_dir_all(&nested).expect("create nested");
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
@@ -1041,13 +1044,12 @@ fn windows_elevated_rejects_reopened_writable_descendants() {
         unsupported_windows_restricted_token_sandbox_reason(
             SandboxType::WindowsRestrictedToken,
             &permission_profile,
-            &temp_dir.path().abs(),
+            &root.abs(),
             WindowsSandboxLevel::Elevated,
         ),
-        Some(
-            "windows elevated sandbox cannot reopen writable descendants under read-only carveouts directly; refusing to run unsandboxed"
-                .to_string()
-        )
+        Some(codex_sandboxing::writable_inside_read_only_refusal(
+            &docs, &nested
+        ))
     );
 }
 
@@ -1227,6 +1229,14 @@ async fn process_exec_tool_call_respects_cancellation_token() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn cancellation_termination_grace_period_stays_50_ms_outside_test_overrides() {
+    assert_eq!(
+        cancellation_termination_grace_period(),
+        Duration::from_millis(50)
+    );
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn process_exec_tool_call_cancellation_allows_sigterm_cleanup() -> Result<()> {
@@ -1290,16 +1300,24 @@ while :; do sleep 1 & wait $!; done"#
         arg0: None,
     };
 
+    // The trap only has to run before the grace period ends. Production's 50 ms
+    // (pinned by `cancellation_termination_grace_period_stays_50_ms_outside_test_overrides`)
+    // can expire first on a loaded runner, leaving the cleanup marker empty
+    // (#349), so this exec gets 2 s; the 5 s bound still covers readiness, the
+    // grace period and the escalation.
     let result = timeout(
         Duration::from_secs(5),
-        process_exec_tool_call(
-            params,
-            &PermissionProfile::Disabled,
-            &cwd,
-            std::slice::from_ref(&cwd),
-            &None,
-            /*use_legacy_landlock*/ false,
-            /*stdout_stream*/ None,
+        CANCELLATION_TERMINATION_GRACE_PERIOD_OVERRIDE.scope(
+            Duration::from_secs(2),
+            process_exec_tool_call(
+                params,
+                &PermissionProfile::Disabled,
+                &cwd,
+                std::slice::from_ref(&cwd),
+                &None,
+                /*use_legacy_landlock*/ false,
+                /*stdout_stream*/ None,
+            ),
         ),
     )
     .await

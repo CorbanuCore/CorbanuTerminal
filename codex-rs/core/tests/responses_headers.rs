@@ -17,7 +17,7 @@ use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use core_test_support::TestCodexResponsesRequestKind;
-use core_test_support::load_default_config_for_test;
+use core_test_support::load_default_config_for_test_in;
 use core_test_support::responses;
 use core_test_support::responses_metadata as test_responses_metadata;
 use core_test_support::test_codex::test_codex;
@@ -99,7 +99,9 @@ async fn responses_stream_includes_subagent_header_on_review() {
     };
 
     let codex_home = TempDir::new().expect("failed to create TempDir");
-    let mut config = load_default_config_for_test(&codex_home).await;
+    let cwd = TempDir::new().expect("failed to create TempDir");
+    let mut config =
+        load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
     config.model_provider_id = provider.name.clone();
     config.model_provider = provider.clone();
     let effort = config.model_reasoning_effort.clone();
@@ -242,7 +244,9 @@ async fn responses_stream_includes_subagent_header_on_other() {
     };
 
     let codex_home = TempDir::new().expect("failed to create TempDir");
-    let mut config = load_default_config_for_test(&codex_home).await;
+    let cwd = TempDir::new().expect("failed to create TempDir");
+    let mut config =
+        load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
     config.model_provider_id = provider.name.clone();
     config.model_provider = provider.clone();
     let effort = config.model_reasoning_effort.clone();
@@ -366,7 +370,9 @@ async fn responses_respects_model_info_overrides_from_config() {
     };
 
     let codex_home = TempDir::new().expect("failed to create TempDir");
-    let mut config = load_default_config_for_test(&codex_home).await;
+    let cwd = TempDir::new().expect("failed to create TempDir");
+    let mut config =
+        load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
     config.model = Some("gpt-3.5-turbo".to_string());
     config.model_provider_id = provider.name.clone();
     config.model_provider = provider.clone();

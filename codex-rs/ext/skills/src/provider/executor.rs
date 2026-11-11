@@ -288,7 +288,7 @@ async fn read_bounded_text(
         let metadata = file_system
             .get_metadata(path, sandbox)
             .await
-            .map_err(&read_error)?;
+            .map_err(read_error)?;
         if metadata.size > MAX_SKILL_RESOURCE_CONTENT_BYTES as u64 {
             return Err(SkillProviderError::new(format!(
                 "executor skill resource {resource} exceeds {MAX_SKILL_RESOURCE_CONTENT_BYTES} bytes"
@@ -297,15 +297,15 @@ async fn read_bounded_text(
         file_system
             .read_file(path, sandbox)
             .await
-            .map_err(&read_error)?
+            .map_err(read_error)?
     } else {
         let mut stream = file_system
             .read_file_stream(path, sandbox)
             .await
-            .map_err(&read_error)?;
+            .map_err(read_error)?;
         let mut contents = Vec::new();
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(&read_error)?;
+            let chunk = chunk.map_err(read_error)?;
             if contents.len().saturating_add(chunk.len()) > MAX_SKILL_RESOURCE_CONTENT_BYTES {
                 return Err(SkillProviderError::new(format!(
                     "executor skill resource {resource} exceeds {MAX_SKILL_RESOURCE_CONTENT_BYTES} bytes"

@@ -1,0 +1,34 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+⚠ Ignored incomplete project [security] table in /Users/agmx2/runs/agms-T14-agmx2-20261020T153241Z/fixture/workspace/.codex/config.toml: level =
+  "permissive" without version cannot override trusted security settings.
+
+Security inspector (read only)
+● Protected: Moderate; every required control observed or checked at launch
+Observed 17s ago, policy generation 0.1
+This session
+  [set] Sandbox: commands can write to the current folder, /private/tmp, /Users/agmx2/runs/agms-T14-agmx2-20261020T153241Z/tmp; under Moderate
+      approved and allow-listed commands stay inside the sandbox; permission-request tools are off [resolved: session config]
+  [set] Approvals: on-request (reviewer: you) [resolved: session config]
+  [set] Network: off for agent commands; web search cached [resolved: session config]
+  [set] Vault: the vault store and sign-in file are unreadable (Moderate and secretless_agent_launch, also when you approve a command) to agent
+      commands; only allowlisted environment variables reach agent commands (for example PATH, HOME, locale, terminal, proxy and tool locations;
+      secretless_agent_launch); set others explicitly in shell_environment_policy.set; login profiles and shell snapshots are not used [resolved:
+      session config]
+  [set] Model keys: held by the isolated credential broker (broker_model_auth on) [resolved: session config]
+  [set] Child agents: spawned agents get this session's values [resolved: session config]
+  [set] Sandbox backend: macOS Seatbelt [resolved: platform]
+  [set] Egress destinations: proxy destination policy on (url_destination_policy) [resolved: features]
+
+Runtime controls
+  [on] Secretless launch: environment allowlist and launch checks armed [observed: this process]
+  [on] Output gate: managed secrets and stored vault credentials are removed from output (values added from another terminal: from the next turn)
+      [observed: this process]
+  [unobserved] Model key broker: installed; provider keys go through it; its health is not probed (a request it refused for this session or its
+      agents, or outside a session, shows here) [installed: this process]
+32 more lines below · ↑/↓ scroll · r refresh · esc back to /security

@@ -1,0 +1,2 @@
+#!/bin/bash
+exec /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-targeted-20261019/cap/product.sh /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-targeted-20261019/cap/c1 zai -c 'mcp_servers.notes.command="/usr/bin/python3"' -c 'mcp_servers.notes.args=["/Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-targeted-20261019/h/agms-mcp-notes","/Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-targeted-20261019/cap/c1/fixture/mcp"]'

@@ -1,0 +1,10 @@
+{"utc": "2026-10-20T04:16:08Z", "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {"elicitation": {"form": {}, "url": {}}}, "clientInfo": {"name": "codex-mcp-client", "title": "Codex", "version": "0.1.48"}}}
+{"utc": "2026-10-20T04:16:08Z", "method": "notifications/initialized", "params": {}}
+{"utc": "2026-10-20T04:16:08Z", "method": "tools/list", "params": {"_meta": {"progressToken": 0}}}
+{"utc": "2026-10-20T04:26:41Z", "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {"elicitation": {"form": {}, "url": {}}}, "clientInfo": {"name": "codex-mcp-client", "title": "Codex", "version": "0.1.48"}}}
+{"utc": "2026-10-20T04:26:41Z", "method": "notifications/initialized", "params": {}}
+{"utc": "2026-10-20T04:26:41Z", "method": "tools/list", "params": {"_meta": {"progressToken": 0}}}
+{"utc": "2026-10-20T04:29:10Z", "method": "tools/call", "params": {"_meta": {"x-codex-turn-metadata": {"session_id": "01a1578f-bf49-7a03-aeea-5fb8bd131a3f", "thread_id": "01a1578f-bf49-7a03-aeea-5fb8bd131a3f", "turn_id": "01a15791-f0c4-7ba0-af4e-4371622acf48", "thread_source": "user", "sandbox": "seatbelt", "workspaces": {"/Users/agmx2/runs/agms-Q02-agmx2-20261020T041219Z/fixture/workspace": {"latest_git_commit_hash": "42741cc545085ebb6fc02efed135439d16b32d29", "has_changes": false}}, "turn_started_at_unix_ms": 1792470545005, "model": "glm-5.3-flash", "reasoning_effort": "max"}, "threadId": "01a1578f-bf49-7a03-aeea-5fb8bd131a3f", "progressToken": 1}, "name": "read_shared_note", "arguments": {}}}
+{"utc": "2026-10-20T04:29:48Z", "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {"elicitation": {"form": {}, "url": {}}}, "clientInfo": {"name": "codex-mcp-client", "title": "Codex", "version": "0.1.48"}}}
+{"utc": "2026-10-20T04:29:48Z", "method": "notifications/initialized", "params": {}}
+{"utc": "2026-10-20T04:29:48Z", "method": "tools/list", "params": {"_meta": {"progressToken": 0}}}

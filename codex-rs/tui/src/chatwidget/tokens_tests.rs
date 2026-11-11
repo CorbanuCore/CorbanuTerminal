@@ -308,6 +308,8 @@ fn packet() -> InspectionDay {
         unknown_parent_requests: Default::default(),
         requests: std::collections::BTreeMap::from([(q.attempt.request_id, vec![q])]),
         other_conversations: Some(Default::default()),
+        empty_day: None,
+        recording_gap: false,
     })
 }
 
@@ -364,6 +366,93 @@ fn accounting_inspect_range_partial_no_amount_and_explicit_coverage() {
     Range total unavailable — partial or unavailable buckets excluded; no partial total.
     Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [1970-01-01T00:00:00.000Z, 1970-01-01T01:00:00.000Z): [1970-01-01T00:00:00.001Z, 1970-01-01T01:00:00.000Z)
     ");
+}
+
+/// #314 (D228, Travis 2026-10-28): a day on which accounting failed to record
+/// a request of this conversation says its totals may be incomplete, right
+/// under the heading, so the requests it did record never read as the whole
+/// day. Missing data never looks like free work.
+#[test]
+fn accounting_recording_gap_says_the_day_may_be_incomplete() {
+    let InspectionDay::Ready(mut view) = packet() else {
+        unreachable!()
+    };
+    let complete = inspection_pages(Ok(packet()));
+    assert!(
+        !complete[0]
+            .text
+            .iter()
+            .any(|line| line.contains("may be incomplete")),
+        "{:#?}",
+        complete[0].text
+    );
+    view.recording_gap = true;
+    let pages = inspection_pages(Ok(InspectionDay::Ready(view)));
+    let screen: Vec<&str> = pages[0]
+        .text
+        .iter()
+        .map(String::as_str)
+        .take_while(|line| *line != "—— Details ——")
+        .collect();
+    insta::assert_snapshot!(screen.join("\n"), @"
+    This conversation on 1970-01-01 (UTC):
+    Totals for this day may be incomplete: Corbanu failed to record at least one request of this conversation or its subagents, which may still have been billed. The cause is in Corbanu's accounting log; check your provider's bill.
+    • synthetic · synthetic-model — Pay per use. 1 request, 140 tokens. Estimated cost: at least $0.000180 (1 attempt had no price).
+    No other conversation recorded requests on this day.
+    Next step for requests priced only in part: check the bill from synthetic. Some of their tokens have no published price, so the estimate is only a lower bound.
+    Costs are estimates from published prices; synthetic doesn't report its charges — check synthetic's bill.
+    Select a provider below to see its requests.
+    ");
+}
+
+/// #314 (D228): an empty day with a gap says both that nothing was recorded
+/// and that this is not a complete account.
+#[test]
+fn accounting_recording_gap_on_an_empty_day() {
+    let InspectionDay::Ready(mut view) = packet() else {
+        unreachable!()
+    };
+    view.requests.clear();
+    view.totals = DayTotals::default();
+    view.own_totals = DayTotals::default();
+    view.empty_day = Some(codex_state::accounting::EmptyDay::NotRecorded);
+    view.recording_gap = true;
+    let pages = inspection_pages(Ok(InspectionDay::Ready(view)));
+    assert!(
+        pages[0].text[1].starts_with("Totals for this day may be incomplete:"),
+        "{:#?}",
+        pages[0].text
+    );
+}
+
+/// #314 (D228): a range with a gap day says so on its overview, and the
+/// bucket's own page says it for its period.
+#[test]
+fn accounting_recording_gap_in_a_range() {
+    let InspectionDay::Ready(mut view) = packet() else {
+        unreachable!()
+    };
+    view.recording_gap = true;
+    view.read_at_ms = view.coverage.completed_as_of_ms;
+    let pages = inspection_pages(Ok(range_packet(
+        /*partial*/ false,
+        InspectionDay::Ready(view),
+    )));
+    assert!(
+        pages[0]
+            .text
+            .iter()
+            .any(|line| line.starts_with("Totals for this range may be incomplete:")),
+        "{:#?}",
+        pages[0].text
+    );
+    let texts: Vec<&Vec<String>> = pages.iter().map(|page| &page.text).collect();
+    assert!(
+        texts[1..].iter().any(|text| text
+            .iter()
+            .any(|line| line.starts_with("Totals for this period may be incomplete:"))),
+        "{texts:#?}"
+    );
 }
 
 /// A week read on its third day: day 0 recorded up to the checkpoint, the
@@ -1217,8 +1306,8 @@ fn money_day(known: Decimal, unknown: i64, attempts: i64) -> DayTotals {
 }
 
 /// A day of subscription work: plan attempts, the consumption they imply, and
-/// the API equivalent, with `unknown_equivalents` for rows the catalogue does
-/// not price.
+/// the API equivalent, with `unknown_equivalents` for attempts with no API rate
+/// or an incomplete token count.
 fn plan_day(equivalent: Decimal, burn_milli_tokens: i64, unknown_equivalents: i64) -> DayTotals {
     DayTotals {
         attempts: 2,
@@ -1244,14 +1333,34 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
     Plan consumption: 140 tokens at the plan rate that applied
     Same tokens at API rates: $0.001610
     ");
-    // A plan row the catalogue states no API price for says so, rather than
+    // A plan row with no API rate recorded says so, rather than
     // reporting zero.
     insta::assert_snapshot!(estimate(&plan_day(Decimal::default(), /*burn_milli_tokens*/ 280_000, /*unknown_equivalents*/ 2), EstimateGaps::default()).join("\n"), @"
     No recorded attempt here was billed per token.
     Subscription capacity: 2 of 2 attempts, not billed per token
     Plan consumption: 280 tokens at the plan rate that applied
-    Same tokens at API rates: unavailable — the catalogue states no API price for 2 of 2 plan attempts
+    Same tokens at API rates: unavailable — no API rate or complete token count for 2 of 2 plan attempts
     ");
+    // #352: a plan attempt with API rates but no cache-write count (OpenAI on
+    // a ChatGPT login reports none) has a known part and no complete figure.
+    let mut q = quote();
+    q.snapshot = Some(native_snapshot(
+        serde_json::json!({"noncached":"1","read":"0.1","write":"1.25","output":"4"}),
+        "PlanEquivalent",
+        /*basis_source*/ None,
+        /*plan_burn_millis*/ Some(1000),
+    ));
+    q.known_subtotal = Decimal::default();
+    q.subtotal_display = Decimal::default().display();
+    q.known_equivalent = decimal("0.00018");
+    q.all_buckets_equivalent = None;
+    q.plan_burn_millis = Some(1000);
+    q.plan_burn_milli_tokens = Some(160_000);
+    let partial = DayTotals::from_quotes([&q]).unwrap();
+    assert_eq!(
+        plan(&partial).last().unwrap(),
+        "Same tokens at API rates: at least $0.000180; 1 of 1 plan attempts have no API rate or an incomplete token count"
+    );
     // A day with no plan work says nothing about plans at all.
     assert_eq!(
         estimate(
@@ -1468,9 +1577,10 @@ const PRICE_METADATA: [&str; 6] = [
 fn accounting_inspect_basis_only_request_shows_no_price_metadata() {
     let none = serde_json::json!({"noncached":null,"read":null,"write":null,"output":null});
     for (basis, source, shown) in [
-        ("PlanEquivalent", None, "subscription"),
-        ("Billed", None, "pay per use"),
-        ("Local", None, "local, no charge"),
+        ("PlanEquivalent", None, "subscription (built-in default)"),
+        ("Billed", None, "pay per use (built-in default)"),
+        ("Local", None, "local, no charge (built-in default)"),
+        // An undeclared basis has no default to name.
         ("Undeclared", None, "not declared"),
         (
             "PlanEquivalent",
@@ -1485,10 +1595,13 @@ fn accounting_inspect_basis_only_request_shows_no_price_metadata() {
             source,
             /*plan_burn_millis*/ None,
         ));
-        let text = attempt_text(&q).join("\n");
-        assert!(text.contains(&format!("Billing basis: {shown}")), "{text}");
+        let lines = attempt_text(&q);
+        let text = lines.join("\n");
+        assert!(lines.contains(&format!("Billing basis: {shown}")), "{text}");
         // #396: no parentheses inside the sentence's own clause.
-        let clause = shown.replace(" (set in your config)", "; set in your config");
+        let clause = shown
+            .replace(" (set in your config)", "; set in your config")
+            .replace(" (built-in default)", "; built-in default");
         assert!(
             text.contains(&format!(
                 "Price: none recorded — this request records only its billing basis: {clause}"
@@ -1496,6 +1609,7 @@ fn accounting_inspect_basis_only_request_shows_no_price_metadata() {
             "{text}"
         );
         assert!(!text.contains("(set in your config))"), "{text}");
+        assert!(!text.contains("(built-in default))"), "{text}");
         for absent in PRICE_METADATA
             .iter()
             .chain(&["no dispatch-time price snapshot"])
@@ -1590,6 +1704,8 @@ async fn accounting_inspect_empty_day_after_checkpoint_renders_lag() -> anyhow::
     use codex_state::accounting::AccountingStore;
 
     let home = tempfile::tempdir()?;
+    // Stored before the id is minted, so it is the conversation's start.
+    let created = chrono::Utc::now();
     let owner = ThreadId::new();
     let runtime = codex_state::StateRuntime::init(
         codex_state::SqliteConfig::from_sqlite_home(
@@ -1601,7 +1717,7 @@ async fn accounting_inspect_empty_day_after_checkpoint_renders_lag() -> anyhow::
     let metadata = codex_state::ThreadMetadataBuilder::new(
         owner,
         home.path().join("synthetic.jsonl"),
-        chrono::Utc::now(),
+        created,
         codex_protocol::protocol::SessionSource::Cli,
     );
     runtime.upsert_thread(&metadata.build("synthetic")).await?;
@@ -1614,13 +1730,16 @@ async fn accounting_inspect_empty_day_after_checkpoint_renders_lag() -> anyhow::
     assert_eq!(view.totals, DayTotals::default());
     assert!(view.requests.is_empty());
     assert_eq!(view.coverage.completed_as_of_ms, 0);
-    // The empty conversation says so in its scope, and that no other
-    // conversation recorded anything that day either.
+    // FUP-02: the conversation started today, so 1970-01-01 provably had
+    // none of its requests; and no other conversation recorded anything.
     assert_eq!(
         inspection_pages(Ok(empty))[0].text[..2].to_vec(),
         vec![
-            "This conversation on 1970-01-01 (UTC): no recorded requests.",
-            "No other conversation recorded requests on this day.",
+            format!(
+                "This conversation on 1970-01-01 (UTC): no requests recorded — this conversation started on {} (UTC), after this day.",
+                created.date_naive()
+            ),
+            "No other conversation recorded requests on this day.".to_string(),
         ]
     );
 
@@ -1821,8 +1940,11 @@ fn accounting_inspect_availability_state_snapshots() {
     empty.totals = DayTotals::default();
     empty.requests.clear();
     assert_eq!(
-        inspection_pages(Ok(InspectionDay::Ready(empty)))[0].text[0],
-        "This conversation on 1970-01-01 (UTC): no recorded requests."
+        inspection_pages(Ok(InspectionDay::Ready(empty)))[0].text[..2],
+        [
+            "This conversation on 1970-01-01 (UTC): nothing recorded.",
+            super::empty_day::NOT_PROOF,
+        ]
     );
     let InspectionDay::Ready(view) = packet() else {
         unreachable!()
@@ -2626,6 +2748,58 @@ fn accounting_inspect_first_screen_names_provider_model_and_billing_type() {
 }
 
 #[test]
+fn accounting_operator_preserves_alias_wire_and_custom_route_identity() {
+    let cases = [
+        ("corbanu-plan", "pfterminal-plan"),
+        ("corbanu-terminal-plan", "pfterminal-plan"),
+        ("corbanu-plan-anthropic", "pfterminal-plan"),
+        ("pfterminal-plan-anthropic", "pfterminal-plan"),
+        ("zai-anthropic", "zai"),
+        ("openrouter-anthropic", "openrouter"),
+        ("baseten-anthropic", "baseten"),
+        ("vercel-anthropic", "vercel"),
+        ("vercel-anthropic-fast", "vercel"),
+        ("pfterminal-plan", "pfterminal-plan"),
+        ("openai", "openai"),
+        ("anthropic", "anthropic"),
+    ];
+    let actual = cases.map(|(route, _)| (route, operator(route)));
+    assert_eq!(actual, cases);
+
+    // Custom IDs remain exact: sharing alias normalization must not start
+    // treating different case, whitespace, or similar names as built-ins.
+    let mut custom = vec![String::new(), "private/自分のモデル".to_string()];
+    for (route, _) in cases {
+        custom.extend([
+            route.to_uppercase(),
+            format!(" {route}"),
+            format!("{route} "),
+            format!("{route}-custom"),
+        ]);
+    }
+    let unchanged = custom.iter().map(String::as_str).collect::<Vec<_>>();
+    let actual = custom
+        .iter()
+        .map(|route| operator(route))
+        .collect::<Vec<_>>();
+    assert_eq!(actual, unchanged);
+}
+
+#[test]
+fn accounting_model_names_resolve_corbanu_alias_routes() {
+    let slug = "corbanu/deepseek-v4.1-flash";
+    let routes = [
+        "pfterminal-plan",
+        "pfterminal-plan-anthropic",
+        "corbanu-plan",
+        "corbanu-terminal-plan",
+        "corbanu-plan-anthropic",
+    ];
+    let actual = routes.map(|route| model_name(route, slug));
+    assert_eq!(actual, ["DeepSeek V4.1 Flash"; 5]);
+}
+
+#[test]
 fn accounting_inspect_plain_wording_counts_attempts_and_names_every_route() {
     let mut first = quote();
     first.all_buckets_priced = None;
@@ -2658,8 +2832,66 @@ fn accounting_inspect_plain_wording_counts_attempts_and_names_every_route() {
         Some("synthetic · synthetic-model")
     );
     // Real routes read by their display names.
-    assert_eq!(model_name("gpt-6-sol"), "GPT-6 Sol");
+    assert_eq!(model_name("openai", "gpt-6-sol"), "GPT-6 Sol");
     assert_eq!(provider_name("deepseek"), "DeepSeek");
+    // #352: the two local providers are told apart.
+    assert_eq!(provider_name("ollama"), "Ollama");
+    assert_eq!(provider_name("lmstudio"), "LM Studio");
+    // #352: another provider's catalogue row is not this route's name.
+    assert_eq!(model_name("ambient", "z-ai/glm-5.2"), "Ambient GLM 5.2");
+    assert_eq!(model_name("openrouter", "z-ai/glm-5.2"), "z-ai/glm-5.2");
+    assert_eq!(
+        model_name("openrouter", "z-ai/glm-5.3-flash"),
+        "OpenRouter GLM 5.3 Flash"
+    );
+    // An Anthropic-wire route is its operator's.
+    assert_eq!(model_name("zai-anthropic", "glm-5.2"), "Z.AI GLM 5.2");
+    assert_eq!(
+        model_name("vercel-anthropic-fast", "zai/glm-5.2"),
+        "Vercel GLM 5.2"
+    );
+    // A provider you configured shows the slug: the name's brand is unknown.
+    assert_eq!(model_name("my-zai", "glm-5.2"), "glm-5.2");
+    // #1196: a name without a route brand names the model on any route.
+    assert_eq!(
+        model_name("my-claude-proxy", "claude-opus-5-5"),
+        "Claude Opus 5.5"
+    );
+    assert_eq!(
+        model_name("openrouter", "claude-opus-5-5"),
+        "Claude Opus 5.5"
+    );
+    assert_eq!(model_name("my-openai", "gpt-6-sol"), "GPT-6 Sol");
+    // A brand of several words counts only when every word is in the name.
+    assert_eq!(
+        model_name("anthropic", "claude-opus-5-5-plan"),
+        "claude-opus-5-5-plan"
+    );
+    assert_eq!(model_name("kimi-code", "k3"), "Kimi Code K3");
+    assert_eq!(model_name("openrouter", "k3"), "k3");
+    assert_eq!(
+        model_name("openrouter", "deepseek-v4-pro"),
+        "deepseek-v4-pro"
+    );
+    // The brand is the operator's: Vercel owns its Anthropic-wire fast route.
+    assert_eq!(
+        model_name("openrouter", "zai/glm-5.2-fast"),
+        "zai/glm-5.2-fast"
+    );
+    // No catalogue name read on another route says how a route sells the model.
+    let catalogue = codex_models_manager::bundled_models_response().unwrap();
+    for model in catalogue.models {
+        let name = model_name("my-route", &model.slug);
+        let lower = name.to_lowercase();
+        assert!(
+            name == model.slug
+                || !lower
+                    .split_whitespace()
+                    .any(|word| ["plan", "(direct)", "free"].contains(&word)),
+            "{} reads as {name:?} on another route",
+            model.slug
+        );
+    }
 }
 
 #[test]
@@ -3483,7 +3715,7 @@ fn accounting_realtime_session_reads_unknown_not_zero() {
         .collect();
     assert!(
         screen.iter().any(|line| line.as_str()
-            == "Realtime: 1 session; token counts and cost unknown, not zero — a realtime session's usage is not reported to this client."),
+            == "Realtime: 1 session; token counts and cost unknown, not zero — no token usage was recorded for it."),
         "{screen:#?}"
     );
     let (label, index) = pages[0]
@@ -3498,7 +3730,7 @@ fn accounting_realtime_session_reads_unknown_not_zero() {
     let request = &pages[*index].text;
     assert!(
         request.iter().any(|line| line
-            == "Kind: Realtime session — started 1970-01-01T00:00:01.000Z, ended 1970-01-01T00:01:01.000Z; its token counts and cost are unknown, not zero: a realtime session's usage is not reported to this client."),
+            == "Kind: Realtime session — started 1970-01-01T00:00:01.000Z, ended 1970-01-01T00:01:01.000Z; its token counts and cost are unknown, not zero: no token usage was recorded for it."),
         "{request:#?}"
     );
     let attempt = attempt_text(&session);
@@ -3528,6 +3760,110 @@ fn accounting_realtime_session_reads_unknown_not_zero() {
     }
 }
 
+/// #889 D223: a recorded realtime session with the tokens its responses
+/// reported (332 input, 214 of them cached, 151 output) and no rate, as the
+/// ledger quotes it: the reported parts priced by nothing.
+fn realtime_reported_quote(started: i64, ended: Option<i64>) -> ObservationQuote {
+    let mut q = realtime_quote(started, ended);
+    q.usage = Usage {
+        input: Some(332),
+        read: Some(214),
+        output: Some(151),
+        total: Some(483),
+        session_ended_at_ms: ended,
+        ..Usage::default()
+    };
+    // Noncached input needs the unreported cache-write count.
+    q.buckets = [
+        BucketQuote::MissingUsage,
+        BucketQuote::MissingRate,
+        BucketQuote::MissingUsage,
+        BucketQuote::MissingRate,
+    ];
+    q
+}
+
+/// #889 D223 (Travis, 2026-10-28): `/cost` shows a realtime session's
+/// reported tokens and says its cost is unknown, not zero - never a dollar
+/// figure, on any page.
+#[test]
+fn accounting_realtime_session_shows_reported_tokens_and_no_cost() {
+    let InspectionDay::Ready(mut view) = packet() else {
+        unreachable!()
+    };
+    let session = realtime_reported_quote(/*started*/ 1_000, Some(61_000));
+    view.requests =
+        std::collections::BTreeMap::from([(session.attempt.request_id, vec![session.clone()])]);
+    view.totals = DayTotals::from_quotes(view.requests.values().flatten()).unwrap();
+    view.own_totals = view.totals.clone();
+    let pages = inspection_pages(Ok(InspectionDay::Ready(view)));
+    let screen: Vec<&str> = pages[0]
+        .text
+        .iter()
+        .map(String::as_str)
+        .take_while(|line| *line != "—— Details ——")
+        .collect();
+    insta::assert_snapshot!(screen.join("\n"), @"
+    This conversation on 1970-01-01 (UTC):
+    • OpenAI · gpt-realtime-1.5 — Pay per use. 1 request, 483 tokens. Estimated cost: no price available.
+    Realtime: 1 session; tokens as the provider reported them at the end of each response; cost unknown, not zero — Corbanu has no realtime prices.
+    No other conversation recorded requests on this day.
+    Next step for requests with no price: check the bill from OpenAI. No published price covers them, so no cost is shown for them here.
+    Costs are estimates from published prices; OpenAI doesn't report its charges — check OpenAI's bill.
+    Select a provider below to see its requests.
+    ");
+    let (_, index) = pages[0]
+        .links
+        .iter()
+        .find(|(label, _)| label.contains("Realtime session"))
+        .expect("a realtime request link");
+    assert!(
+        pages[*index].text.iter().any(|line| line
+            == "Kind: Realtime session — started 1970-01-01T00:00:01.000Z, ended 1970-01-01T00:01:01.000Z; its tokens are those the provider reported at the end of each response, so they may be low: a response cut short by the session's end reports none, and one whose report could not be read is not counted; its cost is unknown, not zero: Corbanu has no realtime prices."),
+        "{:#?}",
+        pages[*index].text
+    );
+    let attempt = attempt_text(&session);
+    assert!(
+        attempt.iter().any(|line| line
+            == "Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim."),
+        "{attempt:#?}"
+    );
+    for text in pages
+        .iter()
+        .flat_map(|page| {
+            page.text
+                .iter()
+                .chain(page.links.iter().map(|(label, _)| label))
+        })
+        .chain(attempt.iter())
+    {
+        assert!(!text.contains('$'), "{text}");
+    }
+}
+
+/// #889 D223: with sessions both with and without recorded tokens, the first
+/// screen says how many of each.
+#[test]
+fn accounting_realtime_sessions_with_and_without_tokens_say_which() {
+    let old = realtime_quote(/*started*/ 1_000, Some(2_000));
+    let mut reported = realtime_reported_quote(/*started*/ 3_000, Some(4_000));
+    reported.attempt.attempt_id = Uuid::from_u128(31);
+    reported.attempt.request_id = Uuid::from_u128(32);
+    assert_eq!(
+        realtime_session_line([&old, &reported]).as_deref(),
+        Some(
+            "Realtime: 2 sessions; tokens as the provider reported them at the end of each response for 1, none recorded for 1; cost unknown, not zero — Corbanu has no realtime prices."
+        )
+    );
+    assert_eq!(
+        realtime_session_line([&reported]).as_deref(),
+        Some(
+            "Realtime: 1 session; tokens as the provider reported them at the end of each response; cost unknown, not zero — Corbanu has no realtime prices."
+        )
+    );
+}
+
 /// #824: a session whose end was never recorded (the process stopped
 /// mid-session) says so rather than inventing a time.
 #[test]
@@ -3548,13 +3884,16 @@ fn accounting_realtime_session_without_an_end_says_so() {
         "{kind}"
     );
     // An owner prefix keeps it a realtime session; an ordinary turn and a
-    // WebRTC call (recorded at its creation, with no session end) are not.
+    // WebRTC call are not. A WebRTC call is recorded at its creation; the end
+    // it may carry (#955) is its client control channel's, not the media
+    // call's, so it is not shown as a session end (#1000).
     let mut side = session.clone();
     side.attempt.turn = format!("side:realtime:ws:{}", Uuid::from_u128(24));
     assert!(realtime_session(&[&side]));
     assert!(!realtime_session(&[&quote()]));
     let mut call = session;
     call.attempt.turn = format!("realtime:{}", Uuid::from_u128(25));
+    call.usage.session_ended_at_ms = Some(61_000);
     assert!(!realtime_session(&[&call]));
     assert!(
         !attempt_text(&call)

@@ -1,8 +1,11 @@
 use super::*;
 use crate::agent::next_thread_spawn_depth;
+use crate::config::resume_default_key_error;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::tools::handlers::multi_agents_spec::create_resume_agent_tool;
+use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::WarningEvent;
 use codex_tools::ToolSpec;
 use std::sync::Arc;
 
@@ -85,6 +88,7 @@ async fn handle_resume_agent(
         .agent_control
         .get_status(receiver_thread_id)
         .await;
+    let mut descendants_not_resumed = Vec::new();
     let (receiver_agent, error) = if matches!(status, AgentStatus::NotFound) {
         match Box::pin(try_resume_closed_agent(
             &session,
@@ -94,7 +98,8 @@ async fn handle_resume_agent(
         ))
         .await
         {
-            Ok(()) => {
+            Ok(refused) => {
+                descendants_not_resumed = refused;
                 status = session
                     .services
                     .agent_control
@@ -147,10 +152,27 @@ async fn handle_resume_agent(
     if let Some(err) = error {
         return Err(err);
     }
+    // #1144: a descendant that stayed closed is reported, not only logged.
+    for refused in &descendants_not_resumed {
+        session
+            .send_event(
+                &turn,
+                EventMsg::Warning(WarningEvent {
+                    message: format!(
+                        "Agent {} was resumed, but its sub-agent {} was not: {}",
+                        receiver_thread_id, refused.id, refused.error
+                    ),
+                }),
+            )
+            .await;
+    }
     turn.session_telemetry
         .counter("codex.multi_agent.resume", /*inc*/ 1, &[]);
 
-    Ok(ResumeAgentResult { status })
+    Ok(ResumeAgentResult {
+        status,
+        descendants_not_resumed,
+    })
 }
 
 impl CoreToolRuntime for Handler {
@@ -167,6 +189,16 @@ struct ResumeAgentArgs {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct ResumeAgentResult {
     pub(crate) status: AgentStatus,
+    /// Open sub-agents of the resumed agent that stayed closed, with why
+    /// (#1144).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) descendants_not_resumed: Vec<DescendantNotResumed>,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct DescendantNotResumed {
+    pub(crate) id: String,
+    pub(crate) error: String,
 }
 
 impl ToolOutput for ResumeAgentResult {
@@ -192,21 +224,45 @@ async fn try_resume_closed_agent(
     turn: &Arc<TurnContext>,
     receiver_thread_id: ThreadId,
     child_depth: i32,
-) -> Result<(), FunctionCallError> {
+) -> Result<Vec<DescendantNotResumed>, FunctionCallError> {
     let config = build_agent_resume_config(turn.as_ref())?;
-    Box::pin(session.services.agent_control.resume_agent_from_rollout(
-        config,
-        receiver_thread_id,
-        thread_spawn_source(
-            session.thread_id(),
-            &turn.session_source,
-            child_depth,
-            /*agent_role*/ None,
-            /*task_name*/ None,
-            Some(format!("resume:{receiver_thread_id}")),
-        )?,
-    ))
+    // #1074: refused before it starts when its connection has no credential
+    // of its own (#689).
+    if let Some(message) = resume_default_key_error(
+        &config,
+        &config.model_provider_id,
+        &config.model_provider,
+        &turn.config.model_provider_id,
+        turn.provider.info(),
+    ) {
+        return Err(FunctionCallError::RespondToModel(message));
+    }
+    Box::pin(
+        session
+            .services
+            .agent_control
+            .resume_agent_tree_from_rollout(
+                config,
+                receiver_thread_id,
+                thread_spawn_source(
+                    session.thread_id(),
+                    &turn.session_source,
+                    child_depth,
+                    /*agent_role*/ None,
+                    /*task_name*/ None,
+                    Some(format!("resume:{receiver_thread_id}")),
+                )?,
+            ),
+    )
     .await
-    .map(|_| ())
+    .map(|(_, refused_descendants)| {
+        refused_descendants
+            .into_iter()
+            .map(|(id, error)| DescendantNotResumed {
+                id: id.to_string(),
+                error,
+            })
+            .collect()
+    })
     .map_err(|err| collab_agent_error(receiver_thread_id, err))
 }

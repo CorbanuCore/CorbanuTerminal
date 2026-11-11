@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"01a15851-ce72-7a00-a3f3-59a3a7344714"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Model metadata for `Qwen3.8-Flash-Next-Uncensored-MLX-Serve-mixed-4-8bit` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."}}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -c 'echo BROKER-OK-$((6*7))'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -c 'echo BROKER-OK-$((6*7))'","aggregated_output":"BROKER-OK-42\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"BROKER-OK-42"}}
+{"type":"turn.completed","usage":{"input_tokens":22664,"cached_input_tokens":11320,"cache_write_input_tokens":0,"output_tokens":44,"reasoning_output_tokens":0}}

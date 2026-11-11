@@ -120,6 +120,13 @@ pub struct ThreadStartParams {
     pub history_mode: Option<ThreadHistoryMode>,
     #[ts(optional = nullable)]
     pub session_start_source: Option<ThreadStartSource>,
+    /// The person edited the first message of a saved conversation and this
+    /// thread continues from that point (#1038). It has no history, but its
+    /// startup warm-up is a reopen warm-up: labelled, announced, and skipped
+    /// with `skip_reopen_warmup`, as when a later message is edited.
+    #[experimental("thread/start.reopenedByPromptEdit")]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reopened_by_prompt_edit: bool,
     /// Optional client-supplied analytics source classification for this thread.
     #[ts(optional = nullable)]
     pub thread_source: Option<ThreadSource>,
@@ -380,6 +387,15 @@ pub struct ThreadSettingsUpdateParams {
     /// Override the personality for subsequent turns.
     #[ts(optional = nullable)]
     pub personality: Option<Personality>,
+    /// Use the Windows sandbox that config now selects (for example after
+    /// `windowsSandbox/setupStart` and a config write) for subsequent turns.
+    /// The server reads the mode from its own config and the elevated
+    /// sandbox's setup state; mid-thread it only makes the sandbox stronger
+    /// (a weaker mode is rejected and applies from the next thread). No
+    /// effect on other platforms.
+    #[experimental("thread/settings/update.refreshWindowsSandbox")]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub refresh_windows_sandbox: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

@@ -1,0 +1,10 @@
+2026-10-21T08:09:54Z
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3
+System-wide memory free percentage: 92%
+start-rc=0
+ssh open 2026-10-21T08:13:41Z
+ssh: connect to host 192.168.64.3 port 22: Host is down
+host clock: 2026-10-21T08:13:44Z
+ssh: connect to host 192.168.64.3 port 22: Host is down

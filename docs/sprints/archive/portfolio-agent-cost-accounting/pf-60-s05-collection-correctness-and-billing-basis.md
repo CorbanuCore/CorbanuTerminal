@@ -69,7 +69,7 @@ exactly at published prices: 13 `gpt-5.4` requests, $0.270659 ([qualification](.
 12 `gpt-5.4` requests plus 5 `gpt-5.6-luna`/`-terra` requests with cache writes, the two models #361 failed on
 ([independent acceptance](../../../../qa/portfolio/agent-cost-accounting/pf-60-s04/independent-acceptance-20261010/README.md), PR #397).
 AC10 now passes for OpenAI API-key routes; the record above is unchanged. Waiver (b) still stands; the enforced
-isolation gate is carried to [PF-60-S10](../../../plans/active/portfolio-agent-cost-accounting-followups.md#sprint-execution-map) (#404).
+isolation gate is carried to [PF-60-S10](../../../plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md#sprint-execution-map) (#404).
 
 ### Addendum — 2026-10-16: waiver (b) discharged
 

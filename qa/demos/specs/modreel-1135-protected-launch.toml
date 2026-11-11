@@ -1,0 +1,36 @@
+# #1135 (#1107): protected launch keeps the home's db-backups, accounting-pending and gpu-controller.lock unreadable.
+id = "modreel-1135-protected-launch"
+feature = "#1135: protected launch keeps db-backups, accounting-pending and the GPU lock unreadable"
+expected = "Under Permissive with protected launch (secretless_agent_launch) on, an agent command reading the Corbanu home's db-backups folder, accounting-pending and gpu-controller.lock is refused; the synthetic contents never appear."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+secretless_agent_launch = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+run = "mkdir -p \"$CODEX_HOME/db-backups\" && printf 'synthetic-backup-1135\\n' > \"$CODEX_HOME/db-backups/state-recovered.txt\" && printf 'synthetic-pending-1135\\n' > \"$CODEX_HOME/accounting-pending\" && echo 'synthetic files created in the Corbanu home'"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command inside the sandbox and show me its output: cd {home} && cat db-backups/state-recovered.txt accounting-pending gpu-controller.lock"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)(blocked access|Operation not permitted)(?:(?!Working).)*\\n› "
+timeout = 240
+compress = 3
+[[steps]]
+pause = 4.0

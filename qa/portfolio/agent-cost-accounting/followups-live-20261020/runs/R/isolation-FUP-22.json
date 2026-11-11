@@ -1,0 +1,42 @@
+{
+ "enforcement": "os-enforced",
+ "agent": "01a1578b-7b6a-75f3-b12f-2afb800a8f1b",
+ "run_id": "acc-R-agmx3-20261020T042042Z",
+ "case_id": "FUP-22",
+ "group": "R",
+ "design_sha256": "b4cfb62553e6bb167e332f172d1d4a6fe9827f8d8eb47c65da673a360f5a4d29",
+ "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+ "policy": {
+  "path": "common/effective-policy.txt",
+  "sha256": "060c01094411dae52a474506fa376e4d10b3041e50a72bd8dffb2f7906883970"
+ },
+ "tool_inventory": {
+  "path": "common/tool-inventory.json",
+  "sha256": "8cb8822e11dba6d758e7d39d0736c33ac6a037aca44f69a022d18fd5ef06413a"
+ },
+ "probe_evidence": {
+  "path": "runs/R/probes.json",
+  "sha256": "db24d0c64cb13717df0de11121bb6193c1c0975840945b7aa096f52ba4c2c951"
+ },
+ "mediator_window": {
+  "path": "runs/R/mediator-window.jsonl",
+  "sha256": "6a0081d3f36a50d59a2f6a51dd5dce320fa5b6f4af7ae4e0112ad55a7d6768ce"
+ },
+ "packet_readable": true,
+ "candidate_launchable": true,
+ "actual_input_available": true,
+ "probe_documents_ok": {
+  "preflight-launcher.json": true,
+  "preflight-tmux-child.json": true,
+  "preflight-executor.json": true
+ },
+ "note": "group run: cases share one executor session and one preflight; lanes ran one at a time on one Tart clone",
+ "source_denied": true,
+ "history_denied": true,
+ "symlink_escape_denied": true,
+ "credentials_denied": true,
+ "cross_run_ipc_denied": true,
+ "network_restricted": true,
+ "package_readonly": true,
+ "children_confined": true
+}

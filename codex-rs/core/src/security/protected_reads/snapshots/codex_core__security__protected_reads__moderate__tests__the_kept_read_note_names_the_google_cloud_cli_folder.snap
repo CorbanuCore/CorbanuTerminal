@@ -1,0 +1,9 @@
+---
+source: core/src/security/protected_reads/moderate_tests.rs
+expression: "notes.join(\"\\n\\n\")"
+---
+`%APPDATA%\gcloud` is the Google Cloud CLI's folder (credentials and config): secretless agent launch keeps it unreadable to agent commands at every security level, even if you approve, so approving cannot unlock it. If you approve, the command runs, but that read fails.
+
+`%APPDATA%\gcloud\credentials.db` is in the Google Cloud CLI's folder (credentials and config): secretless agent launch keeps it unreadable to agent commands at every security level, even if you approve, so approving cannot unlock it. If you approve, the command runs, but that read fails.
+
+`~/.netrc` is a CLI token file: secretless agent launch keeps it unreadable to agent commands at every security level, even if you approve, so approving cannot unlock it. If you approve, the command runs, but that read fails.

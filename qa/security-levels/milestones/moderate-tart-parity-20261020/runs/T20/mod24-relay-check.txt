@@ -1,0 +1,32 @@
+MOD-24 relay check (integrator), Tart parity run, group T20. Window: from the product's start on zai-plain-http
+(tester: started 17:05:08Z, prompt sent 17:05:24Z, fatal error shown 17:05:24Z) to the first product request after
+the relaunch on zai (tester: Enter at 17:06:20Z). Rows are the guest mediator log and the host relay log (role,
+method, path, status, model; refused CONNECTs). Product rows in the window: none until the pong at 17:06:30Z.
+
+== guest mediator (common/T20-20261020T165754Z/mediator-final.jsonl.gz)
+2026-10-20T17:05:08Z forwarded executor POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+2026-10-20T17:05:09Z refused CONNECT github.com:443 HTTP/1.1
+2026-10-20T17:05:09Z refused CONNECT chatgpt.com:443 HTTP/1.1
+2026-10-20T17:05:09Z refused CONNECT api.github.com:443 HTTP/1.1
+2026-10-20T17:05:10Z refused CONNECT chatgpt.com:443 HTTP/1.1
+2026-10-20T17:05:24Z forwarded executor POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+2026-10-20T17:05:34Z forwarded executor POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+2026-10-20T17:05:43Z forwarded executor POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+2026-10-20T17:05:56Z forwarded executor POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+2026-10-20T17:06:02Z forwarded executor POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+2026-10-20T17:06:05Z refused CONNECT github.com:443 HTTP/1.1
+2026-10-20T17:06:05Z refused CONNECT chatgpt.com:443 HTTP/1.1
+2026-10-20T17:06:05Z refused CONNECT api.github.com:443 HTTP/1.1
+2026-10-20T17:06:05Z refused CONNECT chatgpt.com:443 HTTP/1.1
+2026-10-20T17:06:18Z forwarded executor POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+2026-10-20T17:06:30Z forwarded product POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+
+== host relay (runs/T20/host-relay-window.jsonl; also common/host-zai-relay-T20-window.jsonl)
+2026-10-20T17:05:08Z forwarded executor POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+2026-10-20T17:05:23Z forwarded executor POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+2026-10-20T17:05:33Z forwarded executor POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+2026-10-20T17:05:43Z forwarded executor POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+2026-10-20T17:05:56Z forwarded executor POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+2026-10-20T17:06:02Z forwarded executor POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+2026-10-20T17:06:18Z forwarded executor POST /api/paas/v4/chat/completions 200 glm-5.3-flash
+2026-10-20T17:06:30Z forwarded product POST /api/paas/v4/chat/completions 200 glm-5.3-flash

@@ -1,0 +1,43 @@
+{
+ "enforcement": "os-enforced",
+ "agent": "01a159e2-6e18-7e82-865f-b99449d3e4dc",
+ "run_id": "agms-T13-agmx1-20261020T151445Z",
+ "case_id": "MOD-15",
+ "group": "T13",
+ "machine": "Tart clone of corbanu-qa-base (evidence folder common/T13-20261020T151220Z)",
+ "design_sha256": "f8351bef7550dae9a943a44f09f97958eff677ca42761eb3b008a850e6e1d69a",
+ "candidate_sha256": "15cb32e9407cc346286d39f24514bb391027db10d2aceb12c1c2798e482c4ae6",
+ "policy": {
+  "path": "common/effective-policy.txt",
+  "sha256": "59dc6fdea4319317d2ae9be4290206c48650417834cae5ee34a36fca821714dc"
+ },
+ "tool_inventory": {
+  "path": "common/tool-inventory.json",
+  "sha256": "832c044c7cf21ade1a9348cd3549300e90f837bae9df5a5d015dde34a38a5b9f"
+ },
+ "probe_evidence": {
+  "path": "runs/T13/probes.json",
+  "sha256": "cc128b76ca668ce34b3cfb39b320dfff2a9fa7c40dacf7bf339caab70553e88a"
+ },
+ "mediator_window": {
+  "path": "runs/T13/mediator-window.jsonl",
+  "sha256": "ae7c08ebc17906838322889d58bedbca21ce3f554946209f1ef297bc0385880a"
+ },
+ "packet_readable": true,
+ "candidate_launchable": true,
+ "actual_input_available": true,
+ "probe_documents_ok": {
+  "preflight-launcher.json": true,
+  "preflight-tmux-child.json": true,
+  "preflight-executor.json": true
+ },
+ "note": "group run: cases share one executor session and one preflight; one fresh Tart clone per group",
+ "source_denied": true,
+ "history_denied": true,
+ "symlink_escape_denied": true,
+ "credentials_denied": true,
+ "cross_run_ipc_denied": true,
+ "network_restricted": true,
+ "package_readonly": true,
+ "children_confined": true
+}

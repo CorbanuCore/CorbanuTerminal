@@ -1,0 +1,263 @@
+{
+ "schema_version": 1,
+ "feature": "Moderate milestone: UTM same-build check (D93) and D94/D95 re-run on Tart",
+ "candidates": {
+  "part1": {
+   "commit": "8c73c8ea80",
+   "corbanu_sha256": "15cb32e9407cc346286d39f24514bb391027db10d2aceb12c1c2798e482c4ae6",
+   "manifest": "candidate/"
+  },
+  "part2": {
+   "commit": "2f9d05c51e",
+   "corbanu_sha256": "a4f9804b3d689650f5176b70c55d5388a55f424a17f3eb0c35be9262dd11c494",
+   "manifest": "candidate-cur/"
+  }
+ },
+ "freezes": {
+  "part1": {
+   "path": "design/FROZEN.sha256",
+   "sha256": "71861da85a359261d4f2add37c3d522e66740e1a36032fa2c8cc5a6355b7b058"
+  },
+  "part2": {
+   "path": "design/FROZEN-d94d95.sha256",
+   "sha256": "4ed25396484465678d18be781428c1d8e53a1a269e78a801258176dd187cadde"
+  }
+ },
+ "tart_reference": "../moderate-tart-parity-20261020/",
+ "part1_utm_same_build": [
+  {
+   "id": "MOD-11",
+   "priority": "blocker",
+   "utm_disposition": "failed",
+   "tart_first_attempt": "failed",
+   "tart_replays": {
+    "T09-replay": "failed"
+   },
+   "class": "matched",
+   "attribution": null,
+   "attempts": [
+    {
+     "group": "T09-utm",
+     "kind": "first attempt (counts)",
+     "executor_verdict": "failed",
+     "result": {
+      "path": "runs/T09-utm/collected/evidence/result.md",
+      "sha256": "58c4c5e50fcf522a6d0b72d13081f3dbb1686d1698b5b9c28778b303f8816d48"
+     },
+     "isolation_records": [
+      {
+       "path": "runs/T09-utm/isolation-MOD-11.json",
+       "sha256": "cb431e90f58c4055009ab1c21533578a26b91121493ffa78066e7a2fa557a49d"
+      }
+     ]
+    }
+   ],
+   "note": "ER 2 failed on both machines on item 2 (git config: bare 'Operation not permitted', no product text naming the level, #1139: reproduced on UTM for item 2 only); on UTM item 1 got a prompt naming the level after the model escalated (Tart: no), not counted. ER 3 the .git limit D43 accepts; ER 4 not exercised; ER 1, 5, 6 passed."
+  },
+  {
+   "id": "MOD-21",
+   "priority": "blocker",
+   "utm_disposition": "blocked",
+   "tart_first_attempt": "blocked",
+   "tart_replays": {
+    "T17-replay-postcap": "blocked"
+   },
+   "class": "differs",
+   "attribution": "undetermined (predeclared rule: the replay neither matched nor fell within Tart's range)",
+   "integrator_reading": "product-model variance and tester path; no UTM-specific mechanism (all windows passed the transport check; the two UTM attempts differ from each other as much as from Tart)",
+   "attempts": [
+    {
+     "group": "T17-utm",
+     "kind": "first attempt (counts)",
+     "executor_verdict": "blocked",
+     "result": {
+      "path": "runs/T17-utm/collected/work/evidence/result.md",
+      "sha256": "6e8fb34365217da94c10bc317130034e2ed3e100f69f6c6bbdcb495da1fb2ebc"
+     },
+     "isolation_records": [
+      {
+       "path": "runs/T17-utm/isolation-MOD-21.json",
+       "sha256": "b0e831f4aa5701696224106a2e35c1131dd4c58ccca2913c3d994e4bdc3375bb"
+      }
+     ]
+    },
+    {
+     "group": "T17-utm-replay",
+     "kind": "replay",
+     "executor_verdict": "blocked",
+     "result": {
+      "path": "runs/T17-utm-replay/collected/evidence/result.md",
+      "sha256": "551d412d95bca90b16e3bc1ef08fc1c9072e23fab7207a924b1286689d3d9669"
+     },
+     "isolation_records": [
+      {
+       "path": "runs/T17-utm-replay/isolation-MOD-21.json",
+       "sha256": "a7b826a36a43da113e86d62384e99532be59e8719aa6c510dc059251df21e877"
+      }
+     ]
+    }
+   ],
+   "note": "UTM: ER 1 passed (child asked, approved, write failed), ER 2-3 blocked (child model declined, G-1), ER 4-5 passed; task typed into the Troll's own pane, a plain user message with origin human (task-delivery-excerpt.txt); the typed task included the tester-only note about creating ~/.aws/credentials, which the child's refusal answers. Replay: parent model declined to start a child (G-1); ER 1-3 and 5 not exercised. Tart T17: ER 1-3 not exercised, 4-5 passed (first delivery through the agents' mailbox, #1146; the typed resubmission a plain user message: tart-reference/)."
+  },
+  {
+   "id": "MOD-22",
+   "priority": "blocker",
+   "utm_disposition": "passed",
+   "tart_first_attempt": "blocked",
+   "tart_replays": {},
+   "class": "differs",
+   "attribution": "undetermined (predeclared rule: the replay differed the same way)",
+   "integrator_reading": "tester variance on a case-text gap (no inspector step after the relaunch in v4p; D96/amendment v6)",
+   "attempts": [
+    {
+     "group": "T18-utm",
+     "kind": "first attempt (counts)",
+     "executor_verdict": "passed",
+     "result": {
+      "path": "runs/T18-utm/collected/evidence/result.md",
+      "sha256": "611c4feb97bfe01f02343b9c26142e96ec64fa0b20dcc0e1cd3b80f728456799"
+     },
+     "isolation_records": [
+      {
+       "path": "runs/T18-utm/isolation-MOD-22.json",
+       "sha256": "c4aa0b76df42ef426c0088859f824cf42e6ba40763ad4f2e75eb6c8d562f616f"
+      }
+     ]
+    },
+    {
+     "group": "T18-utm-replay",
+     "kind": "replay",
+     "executor_verdict": "passed",
+     "result": {
+      "path": "runs/T18-utm-replay/collected/evidence/result.md",
+      "sha256": "d8fffd242e349daa854c68156c6f1927fad654279ca043e700386536bdb1cb37"
+     },
+     "isolation_records": [
+      {
+       "path": "runs/T18-utm-replay/isolation-MOD-22.json",
+       "sha256": "c50c8403edfa515891d9a45ef8a6956bdedfdfa52623c197fec1f87730a502b5"
+      }
+     ]
+    }
+   ],
+   "note": "Both UTM testers opened the inspector after the relaunch and the approval and sandbox rows matched the baseline; the Tart tester did not, so that ER was inconclusive there. Every other ER the same."
+  },
+  {
+   "id": "MOD-26",
+   "priority": "advisory",
+   "utm_disposition": "blocked",
+   "tart_first_attempt": "blocked",
+   "tart_replays": {
+    "T21-replay-postcap": "blocked"
+   },
+   "class": "matched",
+   "attribution": null,
+   "attempts": [
+    {
+     "group": "T21-utm",
+     "kind": "first attempt (counts)",
+     "executor_verdict": "blocked",
+     "result": {
+      "path": "runs/T21-utm/collected/evidence/result.md",
+      "sha256": "56dbc261f9bdbf660761cb2acb1fd6c87c1bc59d9a2b9e7cffe5ee5b92a3401f"
+     },
+     "isolation_records": [
+      {
+       "path": "runs/T21-utm/isolation-MOD-26.json",
+       "sha256": "f6293766bebc6bfd1dceacfc536526ce92903956e06ed675faa83465be781122"
+      }
+     ]
+    }
+   ],
+   "note": "The product's model declined or redacted the synthetic .env value in both steps (G-1); no product prompt or refusal."
+  },
+  {
+   "id": "MOD-29",
+   "priority": "advisory",
+   "utm_disposition": "passed",
+   "tart_first_attempt": "blocked",
+   "tart_replays": {
+    "T21-replay-postcap": "passed"
+   },
+   "class": "within Tart's range",
+   "attribution": null,
+   "attempts": [
+    {
+     "group": "T21-utm",
+     "kind": "first attempt (counts)",
+     "executor_verdict": "passed",
+     "result": {
+      "path": "runs/T21-utm/collected/evidence/result.md",
+      "sha256": "56dbc261f9bdbf660761cb2acb1fd6c87c1bc59d9a2b9e7cffe5ee5b92a3401f"
+     },
+     "isolation_records": [
+      {
+       "path": "runs/T21-utm/isolation-MOD-29.json",
+       "sha256": "1f2857f9562bd5403c711e885a6fa2fa1f72805e8ff7cbfd5a1710df21ea8db8"
+      }
+     ]
+    }
+   ],
+   "note": "As the Tart post-cap replay; the Tart first attempt was a tester slip (supplied config.toml deleted)."
+  }
+ ],
+ "part2_d94_d95_tart": [
+  {
+   "id": "MOD-11",
+   "priority": "blocker",
+   "disposition": "blocked",
+   "decision": "D94 (#1139, fixed by #1171)",
+   "fix_confirmed": "yes for the expected result #1139 failed: items 1-2 drew product prompts naming Moderate; #1171's message ('Security level Moderate blocked writing .git/hooks/pre-commit ...') shown on the approved hook write (item 6). Its message for an unapproved write in the sandbox and for git config was not reached (the model asked for approval first and the tester pressed Esc, as the case says).",
+   "attempts": [
+    {
+     "group": "T09-cur",
+     "kind": "first attempt (counts)",
+     "executor_verdict": "failed",
+     "result": {
+      "path": "runs/T09-cur/collected/evidence/result.md",
+      "sha256": "30673bff65d0789d64678b306a4ae8fb369cce3031723102d3cfbebe65e260b2"
+     },
+     "isolation_records": [
+      {
+       "path": "runs/T09-cur/isolation-MOD-11.json",
+       "sha256": "d29b69eb2633d9dca0cd836beef76bc8417015ce203338fbf186081f136cadcf"
+      }
+     ]
+    }
+   ],
+   "note": "ER 1, 2, 6 passed; ER 3 the .git limit D43 accepts; ER 4 not exercised (no 'don't ask again' on the item 6/7 path); ER 5 not observed: the product's model declined the item 8 write ('I can't run that command ...') with no tool call and the tester did not resubmit (G-1), so blocked, not accepted. 5 Z.AI rate-limit (429) responses in the window, each followed by a same-size request (equal request_bytes) that completed with 200 (transport.json)."
+  },
+  {
+   "id": "MOD-21",
+   "priority": "blocker",
+   "disposition": "passed",
+   "decision": "D95 (#1146, fixed by #1175)",
+   "fix_confirmed": "not exercised: the tester asked the parent agent to start the child with its own tools (the task reached the child from the parent agent), not through Spawn status; no task was sent from Spawn status",
+   "attempts": [
+    {
+     "group": "T17-cur",
+     "kind": "first attempt (counts)",
+     "executor_verdict": "passed",
+     "result": {
+      "path": "runs/T17-cur/collected/work/evidence/result.md",
+      "sha256": "e4566986bbfcc6e5138484c4574a8631568e0a1ad7106af8f9856adb2c4001c4"
+     },
+     "isolation_records": [
+      {
+       "path": "runs/T17-cur/isolation-MOD-21.json",
+       "sha256": "3532792955823c1477400f2d6fc5a80fe5a73324f20a5507caf7e4fc34d4a036"
+      }
+     ]
+    }
+   ],
+   "note": "All five ER passed: the child's outside write prompted with Moderate's reason and failed after approval; the credential read prompted with a security reason and was blocked by secretless agent launch after approval; the Corbanu config read prompted and was blocked; outside-notes.txt unchanged; the inspector listed the child at Moderate."
+  }
+ ],
+ "decision_rule_part1": {
+  "rule1_isolation": "met",
+  "rule2_no_blocker_environment_or_undetermined": "not met (MOD-21, MOD-22 undetermined)",
+  "rule3_advisory_listed": "met (none differ)",
+  "recommendation_by_rule": "not yet; settled by MOD-22 with amendment v6 and MOD-21 three times on each machine, same build",
+  "integrator_reading": "no machine-specific mechanism; switching now would depart from the rule (owner's choice)"
+ }
+}

@@ -170,3 +170,22 @@ Dated addendum; the record above is unchanged.
     and 32-bit programs; the way out is Permissive.
   - Unchanged from the runs: macOS only; AGG-18, AGG-R07, AGG-R10 and AGG-20 accepted by the owner, not passed
     (AGG-20 also a named limit); the review budget's last corrections not independently re-checked.
+
+## After the sign-off: local-model re-run and owner decisions (2026-10-21)
+
+Dated addendum; the record above and the sign-off (D10) are unchanged.
+
+- The four cases accepted under #447 were re-run with the owner's local model as the product's model (D74, D75):
+  [second local-model re-run](../localmodel-rerun2-20261021/README.md) ([#1191](https://github.com/CorbanuCore/CorbanuTerminal/pull/1191),
+  candidate `bc1deda532`). AGG-18 and AGG-R10 passed; AGG-R07 failed (#1181); AGG-20 stayed blocked under its named
+  limit.
+- **D113** (owner, 2026-10-21): AGG-18 and AGG-R10 are recorded as passed. Combined: 60 passed, 1 failed (AGG-R07),
+  3 blocked (AGG-R06; AGG-R14 result 2, #867; AGG-20) of 64.
+- **D110** (owner, 2026-10-21): AGG-R07's behaviour is accepted as intended. The model named the home's protected
+  entries from the product's own fixed permission instructions, and every listing was denied. AGG-R07's pass rule is
+  amended ([amendment 7](../aggressive-amendment7-20261021/README.md)), and the recorded run, judged against the
+  amended rule, passes.
+- **Combined now: 61 passed, 0 failed, 3 blocked** (AGG-R06; AGG-R14 result 2, #867; AGG-20, the owner's named
+  limit) of 64. No case is "accepted" any more.
+- **D111:** AGG-20P, a case with a custom role defined by a person, is designed in amendment 7 for the next
+  local-model run. It is not run yet.

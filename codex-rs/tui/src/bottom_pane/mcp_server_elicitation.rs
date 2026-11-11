@@ -3540,6 +3540,45 @@ mod tests {
         );
     }
 
+    /// D52 (#1001), #1057: under Aggressive, core prefixes the question for
+    /// a server outside the Aggressive record's scope with a note that
+    /// "always allow" lasts only this session there. The text must match
+    /// `SESSION_ONLY_NOTE` in core's `mcp_tool_call_aggressive.rs` (and core's
+    /// `issue_1057_session_only_note` snapshot).
+    #[test]
+    fn approval_form_with_aggressive_session_only_note_snapshot() {
+        let (tx, _rx) = test_sender();
+        let request = from_form_request(
+            ThreadId::default(),
+            form_request(
+                "Always allowing this tool saves that choice, but under security level \
+                 Aggressive it applies only until this session ends or the level changes, \
+                 because Aggressive keeps it only for connectors and for servers defined only \
+                 in your own config. At less strict levels the saved choice applies. Allow the \
+                 project_server MCP server to run tool \"post_message\"?",
+                empty_object_schema(),
+                tool_approval_meta(
+                    &[
+                        APPROVAL_PERSIST_SESSION_VALUE,
+                        APPROVAL_PERSIST_ALWAYS_VALUE,
+                    ],
+                    /*tool_params*/ None,
+                    /*tool_params_display*/ None,
+                ),
+            ),
+        )
+        .expect("expected approval fallback");
+        let overlay = McpServerElicitationOverlay::new(
+            request, tx, /*has_input_focus*/ true, /*enhanced_keys_supported*/ false,
+            /*disable_paste_burst*/ false,
+        );
+
+        insta::assert_snapshot!(
+            "mcp_server_elicitation_approval_form_with_aggressive_session_only_note",
+            render_snapshot(&overlay, Rect::new(0, 0, 120, 16))
+        );
+    }
+
     #[test]
     fn approval_form_tool_approval_with_param_summary_snapshot() {
         let (tx, _rx) = test_sender();

@@ -1,0 +1,14 @@
+[
+ {"id": "R01", "cases": "AGG-18", "files": ["agg/design-cases.md", "agg/amendments-and-new-cases.md", "amendments-L2.md"],
+  "note": "Aggressive case AGG-18 as amended by part 1 and part 3 of `agg/amendments-and-new-cases.md` and by `amendments-L2.md` (which governs). Launch only with `--route qwen`."},
+ {"id": "R02", "cases": "AGG-R07", "files": ["agg/design-cases.md", "agg/amendments-and-new-cases.md", "amendments-L2.md"],
+  "note": "Aggressive case AGG-R07 (part 2 of `agg/amendments-and-new-cases.md`) as amended by `amendments-L2.md` (which governs). Launch only with `--route qwen`."},
+ {"id": "R03", "cases": "AGG-R10", "files": ["agg/design-cases.md", "agg/amendments-and-new-cases.md", "amendments-L2.md"],
+  "note": "Aggressive case AGG-R10 (parts 2 and 5 of `agg/amendments-and-new-cases.md`) as amended by `amendments-L2.md` (which governs). Launch only with `--route qwen`."},
+ {"id": "R04", "cases": "AGG-20", "files": ["agg/design-cases.md", "agg/amendments-and-new-cases.md", "amendments-L2.md"],
+  "note": "Aggressive case AGG-20 (frozen in `agg/design-cases.md`) as amended by `amendments-L2.md` (which governs). Launch only with `--route qwen`; the child pane runs on the local model too."},
+ {"id": "R05", "cases": "ACC-04", "files": ["acc/design-cases.md", "acc/amendments.md", "acc/answers.md", "amendments-L2.md"], "neutral": true,
+  "note": "Accounting case ACC-04 (`acc/design-cases.md`, with amendments 1 and 2 of `acc/amendments.md`; `acc/answers.md` and `acc/navigation.md` describe that record's test environment) as amended by `amendments-L2.md` (which governs). Launch only with `--route qwen`. That record's other routes and stand-ins are not provisioned here."},
+ {"id": "R06", "cases": "MOD-09 (items 5 and 7 only)", "files": ["mod/design-cases.md", "mod/amendments.md", "mod/amendments-v3.md", "mod/amendments-v5.md", "amendments-L2.md"],
+  "note": "Moderate case MOD-09, items 5 and 7 only, as amended by `mod/amendments.md`, `mod/amendments-v3.md`, `mod/amendments-v5.md` and `amendments-L2.md` (which governs). Launch only with `--route qwen`."}
+]

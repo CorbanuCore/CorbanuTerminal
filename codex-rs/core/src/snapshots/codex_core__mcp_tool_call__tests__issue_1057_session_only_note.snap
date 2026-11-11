@@ -1,0 +1,5 @@
+---
+source: core/src/mcp_tool_call_tests.rs
+expression: session_only
+---
+Always allowing this tool saves that choice, but under security level Aggressive it applies only until this session ends or the level changes, because Aggressive keeps it only for connectors and for servers defined only in your own config. At less strict levels the saved choice applies. Allow the project_server MCP server to run tool "post_message"?

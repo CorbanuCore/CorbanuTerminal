@@ -268,7 +268,7 @@ pub struct InProcessClientHandle {
     event_rx: mpsc::UnboundedReceiver<InProcessServerEvent>,
     runtime_handle: tokio::task::JoinHandle<()>,
     #[cfg(test)]
-    _test_codex_home: Option<tempfile::TempDir>,
+    _test_folder: Option<tempfile::TempDir>,
 }
 
 impl InProcessClientHandle {
@@ -754,7 +754,7 @@ async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClie
         event_rx,
         runtime_handle,
         #[cfg(test)]
-        _test_codex_home: None,
+        _test_folder: None,
     })
 }
 
@@ -767,32 +767,37 @@ mod tests {
     use codex_app_server_protocol::ThreadStartParams;
     use codex_app_server_protocol::ThreadStartResponse;
     use codex_core::config::ConfigBuilder;
+    use codex_core::config::ConfigOverrides;
     use pretty_assertions::assert_eq;
     use std::path::Path;
     use tempfile::TempDir;
 
-    async fn build_test_config(codex_home: &Path) -> Config {
-        match ConfigBuilder::default()
-            .codex_home(codex_home.to_path_buf())
+    /// A test config whose home and working folder are both in `folder`, a
+    /// temporary folder: without a working folder it would be built for the
+    /// test process's own, the crate's source tree (#1138).
+    async fn build_test_config(folder: &Path) -> Config {
+        let (codex_home, cwd) = (folder.join("home"), folder.join("cwd"));
+        for dir in [&codex_home, &cwd] {
+            std::fs::create_dir_all(dir).expect("test folder");
+        }
+        ConfigBuilder::default()
+            .loader_overrides(codex_config::LoaderOverrides::without_managed_config_for_tests())
+            .codex_home(codex_home)
+            .harness_overrides(ConfigOverrides {
+                cwd: Some(cwd),
+                ..Default::default()
+            })
             .build()
             .await
-        {
-            Ok(config) => config,
-            Err(_) => Config::load_default_with_cli_overrides_for_codex_home(
-                codex_home.to_path_buf(),
-                Vec::new(),
-            )
-            .await
-            .expect("default config should load"),
-        }
+            .expect("test config should load")
     }
 
     async fn start_test_client_with_capacity(
         session_source: SessionSource,
         channel_capacity: usize,
     ) -> InProcessClientHandle {
-        let codex_home = TempDir::new().expect("temp dir");
-        let config = Arc::new(build_test_config(codex_home.path()).await);
+        let test_folder = TempDir::new().expect("temp dir");
+        let config = Arc::new(build_test_config(test_folder.path()).await);
         let state_db = codex_rollout::state_db::try_init(config.as_ref())
             .await
             .expect("state db should initialize for in-process test");
@@ -822,7 +827,7 @@ mod tests {
             channel_capacity,
         };
         let mut client = start(args).await.expect("in-process runtime should start");
-        client._test_codex_home = Some(codex_home);
+        client._test_folder = Some(test_folder);
         client
     }
 
@@ -896,7 +901,7 @@ mod tests {
             client: InProcessClientSender { client_tx },
             event_rx,
             runtime_handle,
-            _test_codex_home: None,
+            _test_folder: None,
         };
 
         client

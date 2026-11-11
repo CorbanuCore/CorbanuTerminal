@@ -12,11 +12,12 @@ crate-type = ["cdylib"]
 bazel_native = []
 
 [dependencies]
-clippy_utils = { git = "https://github.com/rust-lang/rust-clippy", rev = "20ce69b9a63bcd2756cd906fe0964d1e901e042a" }
-dylint_linting = "5.0.0"
+clippy_utils = { git = "https://github.com/rust-lang/rust-clippy", rev = "3fba180bb74610ef2fb44d5dfb18d385e2e1534a" }
+# Keep dylint_* in step with CARGO_DYLINT_VERSION in the workflows.
+dylint_linting = "=6.1.1"
 
 [dev-dependencies]
-dylint_testing = "5.0.0"
+dylint_testing = "=6.1.1"
 
 [workspace]
 

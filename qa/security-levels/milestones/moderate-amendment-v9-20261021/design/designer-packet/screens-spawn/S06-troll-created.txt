@@ -1,0 +1,11 @@
+╰───────────────────────────────────────╯
+╭───────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)         │
+│                                       │
+│ model:     glm-5.2   /model to change │
+│ directory: ~/runs/…/fixture/workspace │
+╰───────────────────────────────────────╯
+■ Spawn a Troll before creating Orc panes, then choose that Troll as supervisor.
+• Spawned Corbanu Terminal Troll pane Burzum. glm-5.2; no task was started.
+› Implement {feature}
+  Z.AI GLM 5.2 via zai standard · ~/runs/agms-T17-agmx2-20261020T161832Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s · Main [default]

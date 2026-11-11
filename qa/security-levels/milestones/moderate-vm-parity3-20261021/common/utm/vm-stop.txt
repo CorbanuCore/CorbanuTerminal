@@ -1,0 +1,69 @@
+agmx0 home entries left: 0
+agmx1 home entries left: 0
+agmx2 home entries left: 0
+agmx3 home entries left: 0
+synthetic credential files left in lane homes: 0
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] lo0: lo0 (skip)
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] anchor matches original: yes
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] per-user rules left: 0
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] accounts left: 0  group: absent
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] sudoers.d:   /opt/agms: absent
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] /Users/neo 750
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] /Users/neo_1 755
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] /opt/homebrew 755
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] /opt/homebrew/bin 775
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] /opt/homebrew/sbin 775
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] mount_virtiofs: mount_virtiofs: fs_tag share not found
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] virtiofs mounted: 0
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] /etc/codex/config.toml restored: yes
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] /etc/hosts unchanged: yes
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] campaign dirs left:        0
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] processes for removed uids:        0
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] guest clock (left at host UTC): 2026-10-21T19:28:56Z
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-end.out:[restore] done
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-fix-end.out:[restore-fix] processes for removed uids:        0
+/Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par3-20261021/common/utm/restore-fix-end.out:[restore-fix] virtiofs mounted: 1
+live check after restore (before shutdown)
+---agms
+ls: /Users/agent/agms: No such file or directory
+ls: /Users/agent/agms/restore-state: No such file or directory
+---
+config.toml
+agmx accounts: 0
+homebrew
+keyfile-present
+AGMS pf lines: 0
+10:set skip on lo0
+/dev/disk0 on /Volumes/My Shared Files (AppleVirtIOFS, local, nodev, nosuid, automounted)
+agadmin-1792610933-9424.sh
+agadmin-1792610938-9424.sh
+su.exp
+ls: /Users/Shared/agms-canary-ipc.pid: No such file or directory
+ls: /Users/agent/agms-canary: No such file or directory
+ls: /etc/sudoers.d/agms-codeblind: No such file or directory
+ls: /private/tmp/agms-canary-ipc: No such file or directory
+who: 
+Deleted Users
+Shared
+agent
+neo
+neo_1
+2026-10-21T19:28:59Z
+mediator leaf key: absent
+tunnel stopped
+2026-10-21T19:29:01Z guest-shutdown-clean.sh
+ag-admin removed
+Shutdown NOW!
+                                                                               
+*** FINAL System shutdown message from agent@Neos-Virtual-Machine.local ***  
+
+System going down IMMEDIATELY                                                  
+
+                                                                               
+
+System shutdown time has arrived
+Connection to 192.168.64.3 closed by remote host.
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3
+2026-10-21T19:29:12Z

@@ -1,0 +1,78 @@
+# D48 (c) (#891, Travis 2026-10-20, security sign-off): under Moderate on Linux,
+# after untrusted content, the one-run user-namespace allowance is offered only
+# for a command whose program is a known tool (unshare, bwrap, podman, buildah,
+# flatpak, nix), through a fresh prompt with D27's warning. Any other command,
+# here `sh -c` around the same unshare, gets no warning and keeps the rule.
+# Record on Linux (the rule is Linux-only).
+id = "issue891-d48-known-tool-after-untrusted"
+feature = "D48: after untrusted content, user namespaces only for a known tool's approved command"
+expected = "Under Moderate on Linux, after a first command's output (untrusted content), the agent asks to run unshare outside the sandbox: the prompt warns that approving lets this one run create user namespaces; approved, it runs in its own user namespace (uid map starts with 0). The same unshare inside sh -c is asked about without the warning and, approved, is refused with the rule named."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command in the sandbox: echo first-output-d48"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)└ first-output-d48(?:(?!Working).)*\\n› "
+timeout = 180
+compress = 3
+[[steps]]
+type = "Now run exactly this shell command with sandbox_permissions set to require_escalated (justification: rootless tools need a user namespace): unshare --user --map-root-user cat /proc/self/uid_map"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Warning \\(Linux\\):[\\s\\S]*?file\\s+protections"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 6.0
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)\\n\\s*└?\\s*0\\s+\\d+\\s+1\\s*\\n(?:(?!Working).)*\\n› "
+timeout = 180
+compress = 3
+[[steps]]
+pause = 2.0
+[[steps]]
+type = "Now run exactly this shell command with sandbox_permissions set to require_escalated (justification: the same through a shell): sh -c 'unshare --user --map-root-user cat /proc/self/uid_map'"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Would you like to run the following command[\\s\\S]*sh -c"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 5.0
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)blocks\\s+creating\\s+user\\s+namespaces(?:(?!Working).)*\\n› "
+timeout = 180
+compress = 3
+[[steps]]
+pause = 3.0

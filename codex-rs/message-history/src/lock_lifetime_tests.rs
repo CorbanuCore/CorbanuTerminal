@@ -1,4 +1,4 @@
-#![cfg(unix)]
+#![cfg(any(unix, windows))]
 
 use super::*;
 use pretty_assertions::assert_eq;
@@ -32,6 +32,8 @@ fn assert_released(competitor: &File) {
     competitor.unlock().expect("release competing control lock");
 }
 
+// This control relies on Unix open-file-description lock ownership.
+#[cfg(unix)]
 #[test]
 fn issue928_native_control_duplicate_retains_lock_until_explicit_unlock() {
     let (_directory, original, retained, competitor) = history_fixture("");
@@ -143,6 +145,62 @@ fn issue928_lookup_failure_exits_release_shared_lock() {
     assert!(retained_write_only.metadata().is_ok());
 }
 
+#[test]
+fn issue1003_lookup_batch_releases_shared_lock() {
+    let (directory, original, retained, competitor) = history_fixture(concat!(
+        "{\"session_id\":\"synthetic\",\"ts\":0,\"text\":\"oldest\"}\n",
+        "{\"session_id\":\"synthetic\",\"ts\":1,\"text\":\"newest\"}\n",
+    ));
+    let config = HistoryConfig::new(directory.path(), &codex_config::types::History::default());
+    let log_id = log_identity(&original.metadata().unwrap()).unwrap();
+    let batch = batch::lookup_batch_from_file(
+        original,
+        log_id,
+        HistoryBatchCursor::new(/*end_offset*/ 1),
+        &config,
+    )
+    .expect("read history batch");
+    assert_eq!(
+        batch
+            .entries
+            .into_iter()
+            .map(|row| (row.offset, row.entry.map(|entry| entry.text)))
+            .collect::<Vec<_>>(),
+        vec![
+            (1, Some("newest".to_string())),
+            (0, Some("oldest".to_string())),
+        ]
+    );
+    assert_released(&competitor);
+    assert!(retained.metadata().is_ok(), "duplicate remains open");
+}
+
+#[test]
+fn issue1003_lookup_batch_failure_exits_release_shared_lock() {
+    let (directory, original, _retained, competitor) =
+        history_fixture("{\"session_id\":\"synthetic\",\"ts\":0,\"text\":\"hello\"}\n");
+    let config = HistoryConfig::new(directory.path(), &codex_config::types::History::default());
+    let log_id = log_identity(&original.metadata().unwrap()).unwrap();
+    drop(original);
+    let write_only = OpenOptions::new()
+        .write(true)
+        .open(directory.path().join(HISTORY_FILENAME))
+        .unwrap();
+    let retained = write_only.try_clone().unwrap();
+    let result = batch::lookup_batch_from_file(
+        write_only,
+        log_id,
+        HistoryBatchCursor::new(/*end_offset*/ 0),
+        &config,
+    );
+    assert!(
+        result.is_err(),
+        "a write-only descriptor must fail the batch scan read"
+    );
+    assert_released(&competitor);
+    assert!(retained.metadata().is_ok(), "duplicate remains open");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn issue928_concurrent_public_appends_preserve_all_entries() {
     let directory = TempDir::new().unwrap();
@@ -171,6 +229,7 @@ async fn issue928_concurrent_public_appends_preserve_all_entries() {
     actual.sort();
     expected.sort();
     assert_eq!(actual, expected);
+    #[cfg(unix)]
     assert_eq!(
         std::fs::metadata(directory.path().join(HISTORY_FILENAME))
             .unwrap()

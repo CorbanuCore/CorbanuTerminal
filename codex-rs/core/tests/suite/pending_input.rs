@@ -542,7 +542,10 @@ async fn any_new_input_interrupts_sleep() {
     wait_for_sleep_item_completed(&codex, FIRST_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
     wait_for_sleep_item_started(&codex, SECOND_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
 
-    submit_agent_mail(&codex, "new mailbox input", AgentMailDelivery::QueueOnly).await;
+    // Not `submit_agent_mail`: its barrier wait discards other events, and the mail can end
+    // the sleep before the barrier's response arrives, which lost this completion (#349).
+    // The sleep's completion already shows the mail was handled.
+    enqueue_agent_mail(&codex, "new mailbox input", AgentMailDelivery::QueueOnly).await;
     wait_for_sleep_item_completed(&codex, SECOND_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
     wait_for_turn_complete(&codex).await;
 

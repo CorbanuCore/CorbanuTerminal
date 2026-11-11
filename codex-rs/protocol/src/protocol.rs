@@ -73,6 +73,7 @@ use ts_rs::TS;
 pub use crate::approvals::ApplyPatchApprovalRequestEvent;
 pub use crate::approvals::ElicitationAction;
 pub use crate::approvals::ExecApprovalRequestEvent;
+pub use crate::approvals::ExecApprovalRequestWithdrawnEvent;
 pub use crate::approvals::ExecPolicyAmendment;
 pub use crate::approvals::GuardianAssessmentAction;
 pub use crate::approvals::GuardianAssessmentDecisionSource;
@@ -396,6 +397,23 @@ pub struct RealtimeResponseCreated {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
 pub struct RealtimeResponseDone {
     pub response_id: Option<String>,
+    /// The token counts the provider reported for this response (#889 D223).
+    /// `None` when it reported none or reported them in a form that is not
+    /// exact nonnegative integers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub usage: Option<RealtimeResponseUsage>,
+}
+
+/// The token counts a realtime `response.done` reported, as the provider
+/// stated them. Each count is `None` when the provider did not state it.
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+pub struct RealtimeResponseUsage {
+    pub input_tokens: Option<u64>,
+    /// The part of `input_tokens` served from the prompt cache.
+    pub cached_input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+    pub total_tokens: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
@@ -775,6 +793,14 @@ pub struct InterAgentCommunication {
     #[ts(optional)]
     pub created_at_ms: Option<i64>,
     pub author: AgentPath,
+    /// Core's description of an `author` outside the recipient's agent tree, such as an agent
+    /// in another pane sending a task to a pane the person opened (issue 1248). Agent paths
+    /// are relative to their own tree, so such an author's `/root` would read as the
+    /// recipient's own root. Shown to the recipient's model as a `Sender:` line; it names the
+    /// sender only and grants no trust: the message stays inter-agent data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub author_label: Option<String>,
     pub recipient: AgentPath,
     #[serde(default)]
     pub other_recipients: Vec<AgentPath>,
@@ -810,6 +836,7 @@ impl InterAgentCommunication {
             }),
             created_at_ms: Some(chrono::Utc::now().timestamp_millis()),
             author,
+            author_label: None,
             recipient,
             other_recipients,
             content,
@@ -838,6 +865,7 @@ impl InterAgentCommunication {
             }),
             created_at_ms: Some(chrono::Utc::now().timestamp_millis()),
             author,
+            author_label: None,
             recipient,
             other_recipients,
             content: String::new(),
@@ -917,7 +945,8 @@ impl InterAgentCommunication {
                     AgentMessageInputContent::InputText {
                         text: format!(
                             "Message Type: {message_type}\nTask name: {}\nSender: {}\nPayload:\n",
-                            self.recipient, self.author
+                            self.recipient,
+                            self.author_label.as_deref().unwrap_or(self.author.as_str())
                         ),
                     },
                     AgentMessageInputContent::EncryptedContent {
@@ -925,9 +954,16 @@ impl InterAgentCommunication {
                     },
                 ]
             }
-            None => vec![AgentMessageInputContent::InputText {
-                text: self.content.clone(),
-            }],
+            None => self
+                .author_label
+                .iter()
+                .map(|label| AgentMessageInputContent::InputText {
+                    text: format!("Sender: {label}"),
+                })
+                .chain([AgentMessageInputContent::InputText {
+                    text: self.content.clone(),
+                }])
+                .collect(),
         };
         ResponseItem::AgentMessage {
             id: self.id.clone(),
@@ -1500,6 +1536,9 @@ pub enum EventMsg {
     ViewImageToolCall(ViewImageToolCallEvent),
 
     ExecApprovalRequest(ExecApprovalRequestEvent),
+
+    /// An earlier `ExecApprovalRequest` is no longer awaited; close its prompt.
+    ExecApprovalRequestWithdrawn(ExecApprovalRequestWithdrawnEvent),
 
     RequestPermissions(RequestPermissionsEvent),
 
@@ -2230,15 +2269,16 @@ impl TokenUsageInfo {
         self.last_token_usage = last.clone();
     }
 
+    /// Marks the context window as full: `total_tokens` becomes the window and
+    /// `last_token_usage` carries the remainder. The provider-reported counters
+    /// in `total_token_usage` are kept, so later reports add to the thread's
+    /// real totals instead of to zeros (#1577).
     pub fn fill_to_context_window(&mut self, context_window: i64) {
         let previous_total = self.total_token_usage.total_tokens;
         let delta = (context_window - previous_total).max(0);
 
         self.model_context_window = Some(context_window);
-        self.total_token_usage = TokenUsage {
-            total_tokens: context_window,
-            ..TokenUsage::default()
-        };
+        self.total_token_usage.total_tokens = context_window;
         self.last_token_usage = TokenUsage {
             total_tokens: delta,
             ..TokenUsage::default()
@@ -3516,7 +3556,9 @@ pub struct TurnContextItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_provider: Option<String>,
     /// PF-84: the named account of `model_provider` (`default` included),
-    /// recorded only while named accounts are on, so resume restores it.
+    /// recorded only while named accounts are on, so resume restores it. An
+    /// account of another provider that `model_provider` runs on (they share
+    /// an API key) is recorded as `<owner>:<name>` (#1129).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_account: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -4886,6 +4928,7 @@ mod tests {
             kind: Some(AgentMessageKind::Assignment),
             created_at_ms: Some(1_000),
             author: AgentPath::root(),
+            author_label: None,
             recipient: AgentPath::root().join("reviewer").expect("recipient path"),
             other_recipients: vec![AgentPath::root().join("worker").expect("recipient path")],
             content: "review the diff".to_string(),
@@ -4968,6 +5011,62 @@ mod tests {
                 internal_chat_message_metadata_passthrough: None,
             }
         );
+    }
+
+    #[test]
+    fn cross_tree_author_label_renders_as_the_sender_line() {
+        let label = "agent /root in another pane's agent tree (thread t1), not this pane's /root";
+        let mut plaintext = InterAgentCommunication::new(
+            AgentPath::root(),
+            AgentPath::root(),
+            Vec::new(),
+            "agent task".to_string(),
+            /*trigger_turn*/ true,
+        );
+        plaintext.author_label = Some(label.to_string());
+        assert_eq!(
+            plaintext.to_model_input_item(),
+            ResponseItem::AgentMessage {
+                id: None,
+                author: "/root".to_string(),
+                recipient: "/root".to_string(),
+                content: vec![
+                    AgentMessageInputContent::InputText {
+                        text: format!("Sender: {label}"),
+                    },
+                    AgentMessageInputContent::InputText {
+                        text: "agent task".to_string(),
+                    },
+                ],
+                internal_chat_message_metadata_passthrough: None,
+            }
+        );
+
+        let mut encrypted = InterAgentCommunication::new_encrypted(
+            AgentPath::root(),
+            AgentPath::root(),
+            Vec::new(),
+            "encrypted payload".to_string(),
+            /*trigger_turn*/ true,
+        );
+        encrypted.author_label = Some(label.to_string());
+        let ResponseItem::AgentMessage { content, .. } = encrypted.to_model_input_item() else {
+            panic!("expected an agent message");
+        };
+        assert_eq!(
+            content[0],
+            AgentMessageInputContent::InputText {
+                text: format!(
+                    "Message Type: NEW_TASK\nTask name: /root\nSender: {label}\nPayload:\n"
+                ),
+            }
+        );
+
+        // Messages without a label (every same-tree message) keep their old shape and JSON.
+        let mut unlabelled = plaintext;
+        unlabelled.author_label = None;
+        let json = serde_json::to_string(&unlabelled).expect("serialize");
+        assert!(!json.contains("author_label"), "{json}");
     }
 
     #[test]
@@ -6437,6 +6536,7 @@ mod tests {
             file_system_sandbox_policy: Some(FileSystemSandboxPolicy::restricted(vec![
                 FileSystemSandboxEntry {
                     path: FileSystemPath::GlobPattern {
+                        scan: None,
                         pattern: "/tmp/private/**/*.txt".to_string(),
                     },
                     access: FileSystemAccessMode::Deny,
@@ -6618,6 +6718,89 @@ mod tests {
         assert_eq!(value["msg"]["failed"][0]["error"], "bad");
         assert_eq!(value["msg"]["cancelled"][0], "c");
         Ok(())
+    }
+
+    fn issue1577_usage(input: i64, cached: i64, output: i64, reasoning: i64) -> TokenUsage {
+        TokenUsage {
+            input_tokens: input,
+            cached_input_tokens: cached,
+            cache_write_input_tokens: 1,
+            output_tokens: output,
+            reasoning_output_tokens: reasoning,
+            total_tokens: input + output,
+        }
+    }
+
+    #[test]
+    fn issue1577_fill_to_context_window_keeps_reported_counters() {
+        let first = issue1577_usage(
+            /*input*/ 4_000, /*cached*/ 1_000, /*output*/ 200, /*reasoning*/ 50,
+        );
+        let mut info = TokenUsageInfo::new_or_append(&None, &Some(first.clone()), Some(128_000))
+            .expect("first report creates the info");
+
+        info.fill_to_context_window(/*context_window*/ 128_000);
+
+        // The provider's counters survive; only total_tokens and last_token_usage
+        // carry the fill, exactly as before.
+        assert_eq!(
+            info,
+            TokenUsageInfo {
+                total_token_usage: TokenUsage {
+                    total_tokens: 128_000,
+                    ..first
+                },
+                last_token_usage: TokenUsage {
+                    total_tokens: 128_000 - 4_200,
+                    ..TokenUsage::default()
+                },
+                model_context_window: Some(128_000),
+            }
+        );
+
+        // The next real report is added to the earlier counters, not to zeros.
+        let second = issue1577_usage(
+            /*input*/ 300, /*cached*/ 100, /*output*/ 40, /*reasoning*/ 10,
+        );
+        info.append_last_usage(&second);
+        assert_eq!(
+            info.total_token_usage,
+            TokenUsage {
+                input_tokens: 4_300,
+                cached_input_tokens: 1_100,
+                cache_write_input_tokens: 2,
+                output_tokens: 240,
+                reasoning_output_tokens: 60,
+                total_tokens: 128_000 + 340,
+            }
+        );
+        assert_eq!(info.last_token_usage, second);
+
+        // A second fill moves total_tokens and last_token_usage as before
+        // (total_tokens is already past the window, so last is 0).
+        info.fill_to_context_window(/*context_window*/ 128_000);
+        assert_eq!(info.total_token_usage.input_tokens, 4_300);
+        assert_eq!(info.total_token_usage.output_tokens, 240);
+        assert_eq!(info.total_token_usage.total_tokens, 128_000);
+        assert_eq!(info.last_token_usage, TokenUsage::default());
+    }
+
+    #[test]
+    fn issue1577_full_context_window_without_reports_has_zero_counters() {
+        assert_eq!(
+            TokenUsageInfo::full_context_window(/*context_window*/ 64_000),
+            TokenUsageInfo {
+                total_token_usage: TokenUsage {
+                    total_tokens: 64_000,
+                    ..TokenUsage::default()
+                },
+                last_token_usage: TokenUsage {
+                    total_tokens: 64_000,
+                    ..TokenUsage::default()
+                },
+                model_context_window: Some(64_000),
+            }
+        );
     }
 
     #[test]

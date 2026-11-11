@@ -18,7 +18,7 @@ use codex_protocol::config_types::ForcedLoginMethod;
 use codex_utils_cli::CliConfigOverrides;
 
 /// Named sign-ins belong to the built-in OpenAI provider.
-const OPENAI_PROVIDER_ID: &str = "openai";
+pub(crate) const OPENAI_PROVIDER_ID: &str = "openai";
 
 /// How a named account signs in.
 #[derive(Debug, Clone, PartialEq, Eq)]

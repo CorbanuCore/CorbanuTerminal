@@ -38,7 +38,7 @@ the remaining gaps on condition that each is carried into a future sprint.
   (debug builds with `developer-accounting`); shipping them to users is not authorised. The `main-2026-10-10` prefix
   names the tree, not a release.
 - **Carried forward:** every accepted gap, the open release linkage and S05's waiver (b) (enforced isolation gate)
-  are in the [accounting follow-ups plan](../active/portfolio-agent-cost-accounting-followups.md), sprints PF-60-S06 to PF-60-S10, each with acceptance criteria
+  are in the [accounting follow-ups plan](main-2026-10-20-portfolio-agent-cost-accounting-followups.md), sprints PF-60-S06 to PF-60-S10, each with acceptance criteria
   and an issue. It needs Travis's activation and a free slot; nothing there is authorised yet.
 - **Open accounting issues not assigned to a follow-up sprint** are listed in that plan's "Dependencies, decisions,
   and blockers" for Travis to place.
@@ -308,7 +308,7 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 | PF-60-S05 | [Collection correctness and declared billing basis](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s05-collection-correctness-and-billing-basis.md) | PF-60-S02 | Declared billing basis with cited defaults; subscription basis kept without a price; versioned ledger format; best-effort compaction, web search and image generation; guardian forks attributed | Accepted by Travis 2026-10-09 with waivers (AC10 OpenAI API-key estimate until #361/#369; AC11 isolation gate) after independent code-blind acceptance (#355, #362); archived. Follow-ups #352, #359, #361, #365, #366, #370 |
 | PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03, PF-60-S05 | qa/portfolio/agent-cost-accounting/qualification.md | Accepted by Travis 2026-10-10 with known limits after independent code-blind acceptance (#397); S05 waiver (a) lifted; archived. PRs #382, #383, #385, #393. Follow-up #396 |
 
-Follow-ups PF-60-S06 to PF-60-S10 are drafts in the [accounting follow-ups plan](../active/portfolio-agent-cost-accounting-followups.md#sprint-execution-map).
+Follow-ups PF-60-S06 to PF-60-S10 are drafts in the [accounting follow-ups plan](main-2026-10-20-portfolio-agent-cost-accounting-followups.md#sprint-execution-map).
 
 ## Acceptance flows
 
@@ -384,7 +384,7 @@ Research outputs stay under the declared research/QA paths. Finished-feature doc
 
 None. Closed without a release by Travis's decision (2026-10-10), as P0 security was: collection is developer-only and
 shipping `/cost` is not authorised. Release linkage, and the live-repository and isolation gates a release would need,
-are carried to the [follow-up plan](../active/portfolio-agent-cost-accounting-followups.md).
+are carried to the [follow-up plan](main-2026-10-20-portfolio-agent-cost-accounting-followups.md).
 
 ## Completion
 
@@ -392,6 +392,6 @@ are carried to the [follow-up plan](../active/portfolio-agent-cost-accounting-fo
 - [x] Scope, inputs, dependencies, exact allocation and authority are current (no lane active at close).
 - [x] Automated/artifact checks and applicable actual-key tests pass (S04 qualification and independent acceptance).
 - [x] Named human accepts: Travis accepted S04 on 2026-10-10 and closed the plan the same day.
-- [x] Remaining ideas are separately gated: the [follow-up plan](../active/portfolio-agent-cost-accounting-followups.md) is a draft; no hard gate is silently waived.
+- [x] Remaining ideas are separately gated: the [follow-up plan](main-2026-10-20-portfolio-agent-cost-accounting-followups.md) is a draft; no hard gate is silently waived.
 - Not done here, carried to the follow-up plan: release linkage and finished user docs (collection is developer-only);
   the enforced isolation gate (S05 waiver (b)); the NOT VERIFIABLE flows; the accepted gaps listed in S04's Closure.

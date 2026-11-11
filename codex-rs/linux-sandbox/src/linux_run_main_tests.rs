@@ -777,6 +777,7 @@ fn the_registry_stays_locked_from_building_the_arguments_to_registering() {
         &args.synthetic_mount_targets,
         &args.protected_create_targets,
         args.registry_lock,
+        &args.args,
     );
     // (Other tests may hold it now.)
     assert!(!REGISTRY_LOCK_HELD.get(), "registering kept the lock");
@@ -871,6 +872,7 @@ fn a_placeholder_found_while_building_stays_until_it_is_registered() {
         &args.synthetic_mount_targets,
         &args.protected_create_targets,
         args.registry_lock,
+        &args.args,
     );
     maker_cleanup.join().expect("the maker's cleanup");
     assert!(

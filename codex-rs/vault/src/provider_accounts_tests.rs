@@ -390,6 +390,45 @@ fn fingerprints_identify_material_without_revealing_it() {
     );
 }
 
+/// REG-02: a sign-in outside the vault (the default login) gets the
+/// fingerprint a named account holding it has, without writing the vault.
+#[test]
+fn a_sign_in_outside_the_vault_matches_the_account_holding_it() {
+    let (dir, vault) = test_vault();
+    let sign_in = r#"{"OPENAI_API_KEY":"sk-reg02-fixture-key"}"#;
+    let other = r#"{"OPENAI_API_KEY":"sk-reg02-other-key"}"#;
+    assert_eq!(
+        vault.sign_in_fingerprint("openai", sign_in).expect("fp"),
+        None,
+        "no salt yet"
+    );
+    let work = name("work");
+    vault
+        .write_provider_account("openai", &work, ProviderAccountKind::ChatgptAuth, sign_in)
+        .expect("write");
+    let before = snapshot(dir.path());
+    let fp = vault
+        .sign_in_fingerprint("openai", sign_in)
+        .expect("fp")
+        .expect("present");
+    assert_eq!(
+        snapshot(dir.path()),
+        before,
+        "a read never writes the vault"
+    );
+    assert_eq!(
+        Some(fp.clone()),
+        vault
+            .provider_account_fingerprint("openai", &work)
+            .expect("account fp")
+    );
+    assert!(!fp.contains("reg02"));
+    assert_ne!(
+        vault.sign_in_fingerprint("openai", other).expect("fp"),
+        Some(fp)
+    );
+}
+
 #[test]
 fn creating_an_existing_account_changes_nothing() {
     let (_dir, vault) = test_vault();
@@ -674,4 +713,80 @@ fn an_unknown_sign_in_reads_as_not_recorded() {
     }))
     .expect("readable");
     assert_eq!(meta.sign_in, Some(ProviderAccountSignIn::ApiKey));
+}
+
+/// #1311 (D171): an update of an account that holds no sign-in writes
+/// nothing (the account is not created), and `change` is not called.
+#[test]
+fn updating_an_absent_sign_in_writes_nothing() {
+    let (_dir, vault) = test_vault();
+    let work = name("work");
+    let updated = vault
+        .update_provider_account_sign_in("openai", &work, |_| -> Result<_, VaultError> {
+            panic!("no sign-in to change")
+        })
+        .expect("update");
+    assert_eq!(updated.expect("change"), false);
+    assert!(
+        vault
+            .provider_account_kinds("openai", &work)
+            .expect("kinds")
+            .is_empty()
+    );
+}
+
+/// #1311 (D171): a removal through another vault handle that starts after an
+/// update read the sign-in waits for the update's write, so the account ends
+/// removed; an update after the removal finds nothing to change.
+#[test]
+fn a_removal_racing_an_update_is_never_undone() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let keyring = Arc::new(MockKeyringStore::default());
+    let open = || Vault::new_with_keyring_store(dir.path().to_path_buf(), keyring.clone());
+    let work = name("work");
+    open()
+        .write_provider_account_with_sign_in(
+            "openai",
+            &work,
+            ProviderAccountKind::ChatgptAuth,
+            "{\"before\":true}",
+            Some(ProviderAccountSignIn::Chatgpt),
+        )
+        .expect("sign-in");
+
+    let updater = open();
+    let remover = open();
+    let removal = std::thread::scope(|scope| {
+        let mut removal = None;
+        let updated = updater
+            .update_provider_account_sign_in("openai", &work, |stored| -> Result<_, VaultError> {
+                assert_eq!(stored, "{\"before\":true}");
+                removal = Some(scope.spawn(|| {
+                    remover
+                        .remove_provider_account("openai", &work)
+                        .expect("remove")
+                }));
+                Ok((
+                    Zeroizing::new("{\"after\":true}".to_string()),
+                    Some(ProviderAccountSignIn::Chatgpt),
+                ))
+            })
+            .expect("update");
+        assert_eq!(updated.expect("change"), true);
+        removal.expect("started").join().expect("remover")
+    });
+
+    assert!(removal);
+    assert_eq!(
+        open()
+            .read_provider_account_sign_in("openai", &work)
+            .expect("read"),
+        None
+    );
+    let updated = open()
+        .update_provider_account_sign_in("openai", &work, |_| -> Result<_, VaultError> {
+            panic!("removed")
+        })
+        .expect("update");
+    assert_eq!(updated.expect("change"), false);
 }

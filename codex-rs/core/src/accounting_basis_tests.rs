@@ -443,10 +443,6 @@ async fn image_generation_rates_apply_only_to_openai_api_key_rates() -> anyhow::
 /// same account, and records them on every attempt; the default account
 /// records none. The ledger moves to format 4 only once a named attempt lands.
 #[tokio::test(flavor = "current_thread")]
-#[cfg_attr(
-    windows,
-    ignore = "Windows: the vault fingerprint read fails with os error 33 (#694)"
-)]
 async fn admission_records_the_named_account() -> anyhow::Result<()> {
     const CANARY: &str = "canary-pf84-s05-work-key";
     let home = tempfile::tempdir()?;
@@ -565,6 +561,7 @@ async fn admission_records_the_named_account() -> anyhow::Result<()> {
             sqlx::query_scalar("SELECT version FROM _accounting_migrations ORDER BY version")
                 .fetch_all(&mut conn)
                 .await?;
+        sqlx::Connection::close(conn).await?;
         anyhow::Ok(applied)
     };
     let route = format!("{endpoint}/chat/completions");
@@ -609,14 +606,26 @@ async fn admission_records_the_named_account() -> anyhow::Result<()> {
     );
     db.close().await;
     // No file in the home (state DB, its WAL, the encrypted vault) holds the key.
+    // A `.lock` file is checked by its size instead of read: the accounting
+    // spool's writer still holds `accounting-pending/<process>.lock` (the
+    // runtime is alive), and Windows enforces that exclusive lock against reads
+    // from any other handle (os error 33, #694). A file shorter than the key
+    // cannot hold it.
     let mut pending = vec![home.path().to_path_buf()];
     while let Some(dir) = pending.pop() {
         for entry in std::fs::read_dir(dir)? {
             let path = entry?.path();
             if path.is_dir() {
                 pending.push(path);
+            } else if path
+                .extension()
+                .is_some_and(|extension| extension == "lock")
+            {
+                let len = std::fs::metadata(&path)?.len();
+                assert!(len < CANARY.len() as u64, "{}: {len} bytes", path.display());
             } else {
-                let bytes = std::fs::read(&path)?;
+                let bytes = std::fs::read(&path)
+                    .map_err(|error| anyhow::anyhow!("read {}: {error}", path.display()))?;
                 assert!(
                     !bytes.windows(CANARY.len()).any(|w| w == CANARY.as_bytes()),
                     "{}",

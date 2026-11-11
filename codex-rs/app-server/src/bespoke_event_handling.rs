@@ -6,6 +6,7 @@ use crate::request_processors::populate_thread_turns_from_history;
 use crate::request_processors::thread_from_stored_thread;
 use crate::request_processors::thread_settings_from_core_snapshot;
 use crate::server_request_error::is_turn_transition_server_request_error;
+use crate::server_request_error::is_withdrawn_server_request_error;
 use crate::thread_state::ThreadState;
 use crate::thread_state::TurnSummary;
 use crate::thread_state::resolve_server_request_on_thread_listener;
@@ -726,6 +727,14 @@ pub(crate) async fn apply_bespoke_event_handling(
                 )
                 .await;
             });
+        }
+        EventMsg::ExecApprovalRequestWithdrawn(withdrawn) => {
+            outgoing
+                .withdraw_command_execution_approval(
+                    &withdrawn.turn_id,
+                    &withdrawn.effective_approval_id(),
+                )
+                .await;
         }
         EventMsg::RequestUserInput(request) => {
             let user_input_guard = thread_watch_manager
@@ -2046,7 +2055,15 @@ async fn on_command_execution_request_approval_response(
                 }
             }
         }
-        Ok(Err(err)) if is_turn_transition_server_request_error(&err) => return,
+        // #722 (D279): a withdrawn request is handled like a turn transition:
+        // core stopped waiting (the action was already refused), so nothing is
+        // submitted and the item is left to the turn's end.
+        Ok(Err(err))
+            if is_turn_transition_server_request_error(&err)
+                || is_withdrawn_server_request_error(&err) =>
+        {
+            return;
+        }
         Ok(Err(err)) => {
             error!("request failed with client error: {err:?}");
             (
@@ -2169,7 +2186,7 @@ mod tests {
     use codex_utils_absolute_path::AbsolutePathBuf;
     use codex_utils_absolute_path::test_support::PathBufExt;
     use codex_utils_absolute_path::test_support::test_path_buf;
-    use core_test_support::load_default_config_for_test;
+    use core_test_support::load_default_config_for_test_in;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use tempfile::TempDir;
@@ -2713,7 +2730,9 @@ mod tests {
     #[tokio::test]
     async fn guardian_command_execution_notifications_wrap_review_lifecycle() -> Result<()> {
         let codex_home = TempDir::new()?;
-        let config = load_default_config_for_test(&codex_home).await;
+        let cwd = TempDir::new()?;
+        let config =
+            load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
         let thread_manager = Arc::new(
             codex_core::test_support::thread_manager_with_models_provider_and_home(
                 CodexAuth::create_dummy_chatgpt_auth_for_testing(),
@@ -3320,7 +3339,9 @@ mod tests {
     #[tokio::test]
     async fn turn_started_omits_active_snapshot_items() -> Result<()> {
         let codex_home = TempDir::new()?;
-        let config = load_default_config_for_test(&codex_home).await;
+        let cwd = TempDir::new()?;
+        let config =
+            load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
         let thread_manager = Arc::new(
             codex_core::test_support::thread_manager_with_models_provider_and_home(
                 CodexAuth::create_dummy_chatgpt_auth_for_testing(),
@@ -3410,7 +3431,9 @@ mod tests {
     #[tokio::test]
     async fn interrupted_subagent_activity_removes_missing_thread_watch() -> Result<()> {
         let codex_home = TempDir::new()?;
-        let config = load_default_config_for_test(&codex_home).await;
+        let cwd = TempDir::new()?;
+        let config =
+            load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
         let thread_manager = Arc::new(
             codex_core::test_support::thread_manager_with_models_provider_and_home(
                 CodexAuth::create_dummy_chatgpt_auth_for_testing(),
@@ -3506,7 +3529,9 @@ mod tests {
     #[tokio::test]
     async fn canonical_dynamic_tool_start_emits_item_and_requests_client() -> Result<()> {
         let codex_home = TempDir::new()?;
-        let config = load_default_config_for_test(&codex_home).await;
+        let cwd = TempDir::new()?;
+        let config =
+            load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
         let thread_manager = Arc::new(
             codex_core::test_support::thread_manager_with_models_provider_and_home(
                 CodexAuth::create_dummy_chatgpt_auth_for_testing(),

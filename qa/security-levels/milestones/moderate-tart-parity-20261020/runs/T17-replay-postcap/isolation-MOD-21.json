@@ -1,0 +1,43 @@
+{
+ "enforcement": "os-enforced",
+ "agent": "01a15aed-8cb2-7963-b92d-0d987cf9ebb0",
+ "run_id": "agms-T17-replay-postcap-agmx1-20261020T200631Z",
+ "case_id": "MOD-21",
+ "group": "T17-replay-postcap",
+ "machine": "Tart clone of corbanu-qa-base (evidence folder common/T17-replay-postcap-20261020T200421Z)",
+ "design_sha256": "f8351bef7550dae9a943a44f09f97958eff677ca42761eb3b008a850e6e1d69a",
+ "candidate_sha256": "15cb32e9407cc346286d39f24514bb391027db10d2aceb12c1c2798e482c4ae6",
+ "policy": {
+  "path": "common/effective-policy.txt",
+  "sha256": "59dc6fdea4319317d2ae9be4290206c48650417834cae5ee34a36fca821714dc"
+ },
+ "tool_inventory": {
+  "path": "common/tool-inventory.json",
+  "sha256": "832c044c7cf21ade1a9348cd3549300e90f837bae9df5a5d015dde34a38a5b9f"
+ },
+ "probe_evidence": {
+  "path": "runs/T17-replay-postcap/probes.json",
+  "sha256": "9fb7fb40e98c4461e7a86ec9f1bf13436fe25a665a1a3d83afcfdb1b9bbe194f"
+ },
+ "mediator_window": {
+  "path": "runs/T17-replay-postcap/mediator-window.jsonl",
+  "sha256": "561a62b43cf400ac78dacff2c18091efacfec6390341b9ce5eed178b0f9442a8"
+ },
+ "packet_readable": true,
+ "candidate_launchable": true,
+ "actual_input_available": true,
+ "probe_documents_ok": {
+  "preflight-launcher.json": true,
+  "preflight-tmux-child.json": true,
+  "preflight-executor.json": true
+ },
+ "note": "group run: cases share one executor session and one preflight; one fresh Tart clone per group",
+ "source_denied": true,
+ "history_denied": true,
+ "symlink_escape_denied": true,
+ "credentials_denied": true,
+ "cross_run_ipc_denied": true,
+ "network_restricted": true,
+ "package_readonly": true,
+ "children_confined": true
+}

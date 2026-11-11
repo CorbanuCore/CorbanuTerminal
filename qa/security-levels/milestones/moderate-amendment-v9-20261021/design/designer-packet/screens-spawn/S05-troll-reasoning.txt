@@ -1,0 +1,12 @@
+╰───────────────────────────────────────╯
+╭───────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)         │
+│                                       │
+│ model:     glm-5.2   /model to change │
+│ directory: ~/runs/…/fixture/workspace │
+╰───────────────────────────────────────╯
+■ Spawn a Troll before creating Orc panes, then choose that Troll as supervisor.
+  Select Reasoning Mode for GLM 5.2 · Z.AI (OpenAI-style)
+  1. Standard (default)  Standard. Normal Z.AI reasoning mode; sends reasoning_effort=high.
+› 2. Deep (current)      Deep. Harder Z.AI reasoning mode; sends reasoning_effort=max.
+  Press enter to confirm or esc to go back

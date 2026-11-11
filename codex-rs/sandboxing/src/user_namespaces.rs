@@ -9,12 +9,19 @@
 //! D27 (a) (Travis, 2026-10-19, security sign-off): under Moderate a person
 //! may allow it for one command, by approving that command's request to run
 //! outside the sandbox before untrusted content enters the session
-//! ([`moderate_one_run_warning`] is what they are told). Aggressive, and a
-//! launch that enforces Aggressive, never allow it.
+//! ([`moderate_one_run_warning`] is what they are told). D48 (c) (Travis,
+//! 2026-10-20, security sign-off): after untrusted content, the same, but
+//! only for a command whose program is one of [`KNOWN_TOOLS`]. Aggressive,
+//! and a launch that enforces Aggressive, never allow it.
 
 /// Tools that need a user namespace, as the explanations list them.
 const TOOLS: &str =
     "rootless Podman, bwrap, unshare, Flatpak, Nix's build sandbox and Chrome's sandbox";
+
+/// D48 (c): the known tools for which, after untrusted content under
+/// Moderate, a person may still allow user namespaces for one command (the
+/// owner's list, matched by exact file name).
+pub const KNOWN_TOOLS: [&str; 6] = ["unshare", "bwrap", "podman", "buildah", "flatpak", "nix"];
 
 /// Programs whose own messages (`unshare: …`, `bwrap: …`) are about the
 /// namespaces they make, so a refusal they report counts.
@@ -84,8 +91,8 @@ pub enum Rule {
     /// Moderate before untrusted content: a person may allow it for one
     /// command (D27).
     ModerateOneCommand,
-    /// Moderate after untrusted content: no approval lifts it in this
-    /// session.
+    /// Moderate after untrusted content: a person may allow it for one
+    /// command that runs a [`KNOWN_TOOLS`] program (D48 (c)), no other.
     ModerateAfterUntrusted,
     /// Moderate while the security kill switch is on or Moderate is not
     /// fully in force (configured and live): no approval lifts it now.
@@ -106,16 +113,17 @@ impl Rule {
 
     /// How a person can still run what needs a user namespace, said after a
     /// command failed. Its output is untrusted content, so under Moderate
-    /// the one-command way is open only in a new session.
+    /// the way left is the known tools' (D48 (c)), or a new session's.
     fn way_out(self) -> &'static str {
         match self {
             Rule::ModerateOneCommand | Rule::ModerateAfterUntrusted => {
-                "Under Moderate a person can allow it for one command, but only before untrusted \
-                 content enters the session, and any command's output counts (this one's too): in \
-                 a new session, when the agent's first command asks to run outside the sandbox and \
-                 the person approves it when asked, that one run may create user namespaces; \
-                 nothing remembers it. Otherwise choose Permissive in /security (it applies after \
-                 a restart)."
+                "Under Moderate a person can allow it for one command that asks to run outside \
+                 the sandbox, by approving it when asked: that one run may create user \
+                 namespaces, and nothing remembers it. Once untrusted content has entered the \
+                 session (any command's output counts, this one's too), that is offered only for \
+                 one plain command that runs unshare, bwrap, podman, buildah, flatpak or nix (by \
+                 name or from a system folder); in a new session, before any, for the first \
+                 command. Otherwise choose Permissive in /security (it applies after a restart)."
             }
             Rule::ModerateNotInForce => {
                 "Under Moderate a person can allow it for one command only while the security \
@@ -150,15 +158,17 @@ pub fn approval_note(rule: Rule) -> String {
     let lifted = match rule {
         Rule::ModerateOneCommand => {
             "approving this prompt doesn't lift it. Under Moderate it is allowed only for a \
-             command that asks to run outside the sandbox before untrusted content enters the \
-             session, when you approve that request. Otherwise a person can choose Permissive in \
-             /security (it applies after a restart)."
+             command that asks to run outside the sandbox, when you approve that request (once \
+             untrusted content has entered the session, only for one plain command that runs \
+             unshare, bwrap, podman, buildah, flatpak or nix). Otherwise a person can choose \
+             Permissive in /security (it applies after a restart)."
         }
         Rule::ModerateAfterUntrusted => {
-            "no approval lifts this now that untrusted content has entered the session (any \
-             command's output counts). In a new session, a first command that asks to run \
-             outside the sandbox may be allowed when you approve it. Otherwise a person can \
-             choose Permissive in /security (it applies after a restart)."
+            "approving this prompt doesn't lift it. Now that untrusted content has entered the \
+             session (any command's output counts), it is allowed only for one plain command \
+             that runs unshare, bwrap, podman, buildah, flatpak or nix (by name or from a system \
+             folder) and asks to run outside the sandbox, when you approve that request. \
+             Otherwise a person can choose Permissive in /security (it applies after a restart)."
         }
         Rule::ModerateNotInForce => {
             "no approval lifts this now (the security kill switch is on, or Moderate isn't fully \

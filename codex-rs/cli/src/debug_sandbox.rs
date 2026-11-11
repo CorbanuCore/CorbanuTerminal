@@ -414,13 +414,18 @@ async fn run_command_under_sandbox(
                 .codex_linux_sandbox_exe
                 .expect("codex-linux-sandbox executable not found");
             let network_sandbox_policy = runtime_permission_profile.network_sandbox_policy();
-            let args = create_linux_sandbox_command_args_for_permission_profile(
+            let mut args = create_linux_sandbox_command_args_for_permission_profile(
                 command,
                 cwd.as_path(),
                 &runtime_permission_profile,
                 sandbox_policy_cwd.as_path(),
                 use_legacy_landlock,
                 allow_network_for_proxy(enforce_managed_network),
+            );
+            // #348: where the helper records the placeholders it makes.
+            codex_sandboxing::landlock::insert_placeholder_record_dir_arg(
+                &mut args,
+                config.codex_home.as_path(),
             );
             spawn_debug_sandbox_child(
                 codex_linux_sandbox_exe,

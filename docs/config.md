@@ -18,6 +18,40 @@ override is set, an explicit `CODEX_HOME` wins; otherwise Corbanu Terminal
 prefers an existing `.corbanu`, reuses a lone `.pfterminal`, and defaults fresh
 installs to `.corbanu`. This keeps product state separate from stock Codex.
 
+### Project config
+
+A trusted project can add its own `.codex/config.toml`. Because that file comes
+from the repository, it can't set the following; Corbanu ignores them there and
+shows a startup warning that names them:
+
+- where requests and credentials go: `openai_base_url`, `chatgpt_base_url`,
+  `model_provider`, `model_providers`, `openrouter_provider`,
+  `apps_mcp_product_sku`, `experimental_realtime_ws_base_url`,
+  `experimental_realtime_webrtc_call_base_url`, `otel` and
+  `features.respect_system_proxy`;
+- which command runs on notifications: `notify`;
+- which config profile applies: `profile` and `profiles`;
+- where Corbanu keeps its state databases and logs: `sqlite_home` and
+  `log_dir`. Otherwise a repository could have thread history, memories and
+  logs written into itself, or have Corbanu open databases it ships;
+- config locks: `debug.config_lockfile`, because replaying a lock replaces the
+  whole config, the settings above included.
+
+Set them in your user config (`CODEX_HOME/config.toml`), with `-c` on the
+command line, or in managed config. `CODEX_SQLITE_HOME` still works too.
+
+The same applies to agent roles a project declares: role files in the
+project's `.codex/agents/` folder and files a project's config names with
+`[agents.<role>] config_file`. When Corbanu spawns a child agent with such a
+role, it ignores those settings in the role file (the child keeps the parent's
+values) and names them in a startup warning. Roles you declare yourself (in
+`CODEX_HOME/agents/` or your user config), roles from managed config and
+built-in roles can still set them. A project role file also can't declare
+further roles (`[agents.<role>]` entries) for its child to spawn; declare those
+in the project's `.codex/agents/` folder instead. If a project only re-describes
+a role you declared or adds nicknames, without its own `config_file`, your file
+applies as before.
+
 ## Built-In Providers
 
 These providers are compiled into Corbanu Terminal:
@@ -151,7 +185,7 @@ The model picker maps these model slugs to the correct built-in provider.
 ## Reopen Warm-Up
 
 When you reopen a conversation (`/resume`, restarting Corbanu on it) or fork it (`/side`, editing an earlier
-message) on a provider that uses a WebSocket connection, such as OpenAI, Corbanu sends one warm-up request to prime
+message, including the first one) on a provider that uses a WebSocket connection, such as OpenAI, Corbanu sends one warm-up request to prime
 the model's cache, so the first reply is faster. It is billed like any request (the session's instructions and
 tools, typically 10,000 to 15,000 input tokens), and Corbanu says so once it has been sent. To skip it, set this at
 the top level of `config.toml` (or pass `-c skip_reopen_warmup=true`):
@@ -162,6 +196,13 @@ skip_reopen_warmup = true
 
 The first reply after reopening may then be slower, and when approvals go to the auto-reviewer, its session starts at
 the first review instead of on reopen. A new conversation still warms up, and so do sub-agents.
+
+App-server clients that start a thread only for realtime voice (`thread/start`, then `thread/realtime/start`) get
+the new-conversation warm-up too, on the thread's text model, which realtime uses only for handoffs (and the
+optional end-of-session transcript turn). Such a client should pass `config: {"skip_startup_warmup": true}` on
+`thread/start` so no warm-up is sent; see "Realtime-only threads" in `codex-rs/app-server/README.md` (#1045).
+`skip_startup_warmup = true` in `config.toml` skips every warm-up, new or reopened, for all conversations, including
+sub-agents and the auto-reviewer (whose session then starts at the first review).
 
 ## Vault And Secrets
 
@@ -236,9 +277,45 @@ the levels protect and their limits are on
 ### Protected launch (`secretless_agent_launch`)
 
 With `secretless_agent_launch` on, every agent command runs inside the OS
-sandbox, with only allowlisted environment variables, and can't read
-Corbanu's vault, sign-in files or config. Nothing runs outside the sandbox at
-any level. At Permissive, Corbanu therefore doesn't offer it (#739):
+sandbox, with only allowlisted environment variables, and can't read these
+files:
+
+- Corbanu's own: its vault (`secrets`), sign-in files (`auth.json`,
+  `.credentials.json`, `provider_auth.json`, `.env`), config (`config.toml`,
+  `managed_config.toml`), `wallet`, history (`history.jsonl`), session
+  transcripts (`sessions`, `archived_sessions`), logs (`log`), shell
+  snapshots (`shell_snapshots`), its runtime folder (`run`), its databases
+  (`*.sqlite*` at the top of its home), the database init lock
+  (`pfterminal_db_init.lock`), the GPU controller lock
+  (`gpu-controller.lock`), pending accounting records
+  (`accounting-pending`), databases recovery set aside (`db-backups` in its
+  home, `<home>.db-backups` beside it), and the credential broker's runtime
+  folder. If you keep the databases in a separate folder (`sqlite_home` or
+  `CODEX_SQLITE_HOME`), commands can't read that folder's databases, init
+  lock, GPU controller lock, pending accounting records and backups
+  (`db-backups` in it, `<folder>.db-backups` beside it) either. On Linux a
+  backup folder beside a folder is covered only when it exists at the
+  command's start.
+- CLI tokens: the files `~/.netrc`, `~/.git-credentials`,
+  `~/.config/gh/hosts.yml`, `~/.aws/credentials`, `~/.docker/config.json`,
+  `~/.npmrc` and Claude's sign-in (`~/.claude/.credentials.json`, and
+  `.credentials.json` in `CLAUDE_CONFIG_DIR` when set); on Windows also
+  `_netrc` in your profile folder, the GitHub CLI's `hosts.yml` in
+  `%APPDATA%`, the whole Google Cloud CLI folder `%APPDATA%\gcloud` (its
+  credentials and config), and Cargo's `credentials.toml` and `credentials`
+  (in `CARGO_HOME`, by default `%USERPROFILE%\.cargo`).
+- On macOS, your keychains (`~/Library/Keychains`).
+
+On Windows, one of these that doesn't exist when a command starts isn't
+covered for that command (such as a backup recovery creates while it runs),
+except Corbanu's own folders inside its home (`secrets`, `wallet`, `run`,
+`shell_snapshots`, `log`, `sessions`, `archived_sessions`,
+`accounting-pending`, `db-backups`) and files created directly in its home.
+
+Approving a command never unlocks these, at any level; under Moderate the
+approval prompt names such a file and says so. Nothing runs outside the
+sandbox at any level. At Permissive, Corbanu therefore doesn't offer it
+(#739):
 
 - A command that asks to run outside the sandbox isn't run, and you aren't
   asked. Corbanu says it isn't possible here. (If your own permission profile
@@ -305,6 +382,40 @@ plus the ones named in that server's `env_vars` or `env`, so a provider key
 reaches one only if you list it there. A shell profile that exports a key
 itself (for example a login shell reading `~/.zprofile`) is outside this
 filter.
+
+<a id="mcp-oauth-addresses"></a>
+
+## MCP OAuth Address Policy
+
+OAuth sign-in for a Streamable HTTP MCP server (discovery, client
+registration, token and refresh requests, and every redirect they follow) may
+connect only to public addresses, unless the server's own URL is local:
+
+| MCP server `url`                                                               | OAuth requests may also reach                        |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| `localhost`, `*.localhost` or a loopback IP (`127.0.0.1`, `[::1]`)             | loopback addresses                                   |
+| a private IP (`10.x`, `172.16-31.x`, `192.168.x`, `100.64.0.0/10`, `fc00::/7`) | private addresses                                    |
+| any IP literal                                                                 | that one address                                     |
+| any other host name                                                            | public addresses only, whatever the name resolves to |
+
+Link-local and cloud metadata addresses (`169.254.169.254`, `fd00:ec2::254`,
+`fd20:ce::254`), metadata host names (`metadata.google.internal`), `0.0.0.0`,
+multicast and reserved addresses are refused, except an IP literal that is the
+server URL's own address. Host names are checked after DNS resolution and the
+request connects only to the checked address. With an HTTP proxy, the proxy
+resolves host names, so only IP literals and host names themselves are
+checked. A blocked request fails with `MCP OAuth request blocked: ...`.
+
+A server named by a host name that resolves to a loopback or private address
+(an intranet name, `host.docker.internal`, a `.local` name or an `/etc/hosts`
+alias) can't use OAuth: even discovery on its own host is refused, so such a
+server that doesn't use OAuth shows its auth status as unknown, with a
+warning at startup. Use the server's IP address in `url` where its certificate
+allows that. A server URL of `0.0.0.0` allows only `0.0.0.0` itself, so use
+`localhost` or `127.0.0.1` if its OAuth endpoints are on loopback. Corbanu
+does not send OAuth requests through a remote executor that predates this
+policy; sign-in fails with `MCP OAuth request not sent: ...` until the
+executor is updated.
 
 <a id="telegram"></a>
 

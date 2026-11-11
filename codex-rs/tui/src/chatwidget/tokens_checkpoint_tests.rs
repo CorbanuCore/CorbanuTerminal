@@ -545,3 +545,57 @@ async fn accounting_checkpoint_unknown_or_mismatched_coverage_is_not_promoted() 
     runtime.close().await;
     Ok(())
 }
+
+// #1009: a checkpoint-limited bucket next to a user-clipped one leaves the
+// range incomplete. The not-current notice is left out for it, so the
+// overview must name the ledger checkpoint instead of saying neither.
+#[tokio::test]
+async fn accounting_checkpoint_incomplete_range_names_the_checkpoint() -> anyhow::Result<()> {
+    for ((rows, requested, read_at), checkpoint) in [
+        // Recorded-through bucket, then a bucket clipped by the requested end.
+        (
+            [(START, 12), (START + HOUR / 2, 34)],
+            (START, START + 2 * HOUR - 1),
+            START + 3 * HOUR,
+        ),
+        // A bucket clipped by the requested start, then one in progress.
+        (
+            [(START, 12), (START + 2 * HOUR + HOUR / 4, 34)],
+            (START + 1, START + 3 * HOUR),
+            START + 2 * HOUR + HOUR / 2,
+        ),
+    ]
+    .into_iter()
+    .zip(["1970-04-11T00:30:00.000Z", "1970-04-11T02:15:00.000Z"])
+    {
+        let (_home, runtime, owner) = ledger(&rows).await?;
+        let result = AccountingStore::inspect_range(
+            &runtime,
+            owner,
+            InspectionRange {
+                start_ms: requested.0,
+                end_ms: requested.1,
+                grouping: InspectionGrouping::Hour,
+            },
+            read_at,
+        )
+        .await?;
+        let pages = inspection_pages(Ok(result));
+        let all = text(&pages);
+        let range = overview(&pages);
+        assert!(
+            all.contains("Recorded through ledger checkpoint:") || all.contains("In progress"),
+            "fixture must have a checkpoint-limited bucket: {all}"
+        );
+        assert!(range.contains("Range total unavailable"), "{all}");
+        assert!(
+            range.contains(&format!(
+                "Recorded through ledger checkpoint: {checkpoint} (as of this read)"
+            )),
+            "{all}"
+        );
+        assert!(!range.contains(NOT_CURRENT), "{all}");
+        runtime.close().await;
+    }
+    Ok(())
+}

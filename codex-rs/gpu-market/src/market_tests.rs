@@ -73,7 +73,7 @@ impl GpuProvider for QuoteProvider {
         self.search_calls.fetch_add(1, Ordering::SeqCst);
         if self
             .transient_omissions
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |remaining| {
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |remaining| {
                 remaining.checked_sub(1)
             })
             .is_ok()

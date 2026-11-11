@@ -1,0 +1,8 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.2 xhigh   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+› Implement {feature}
+  Z.AI GLM 5.2 via zai deep · ~/runs/agms-T17-utm-agmx2-20261021T083219Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s · `/root/troll_burzum`

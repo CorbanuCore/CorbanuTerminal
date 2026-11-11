@@ -1,0 +1,11 @@
+Executable=/Volumes/CorbanuDrive/Corbanu/.codex-work/acc-tart1-20261020/stage/package/bin/corbanu
+Identifier=com.corbanu.corbanu
+Format=Mach-O thin (arm64)
+CodeDirectory v=20500 size=1264575 flags=0x10000(runtime) hashes=39512+2 location=embedded
+Signature size=9042
+Timestamp=19 Oct 2026 at 11:40:23 am
+Info.plist=not bound
+TeamIdentifier=K5N2T25C23
+Runtime Version=26.0.0
+Sealed Resources=none
+Internal requirements count=1 size=180

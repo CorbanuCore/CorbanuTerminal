@@ -25,8 +25,11 @@ jobs:
       argument_comment_lint: ${{ steps.detect.outputs.argument_comment_lint }}
       argument_comment_lint_package: ${{ steps.detect.outputs.argument_comment_lint_package }}
       argument_comment_lint_packages: ${{ steps.detect.outputs.argument_comment_lint_packages }}
+      app_server_schema: ${{ steps.detect.outputs.app_server_schema }}
+      changed_crate_test_packages: ${{ steps.detect.outputs.changed_crate_test_packages }}
       codex: ${{ steps.detect.outputs.codex }}
       windows_native_tests: ${{ steps.detect.outputs.windows_native_tests }}
+      windows_native_targets: ${{ steps.detect.outputs.windows_native_targets }}
       workflows: ${{ steps.detect.outputs.workflows }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -45,7 +48,9 @@ jobs:
             HEAD_SHA='${{ github.event.pull_request.head.sha }}'
             echo "Base SHA: $BASE_SHA"
             echo "Head SHA: $HEAD_SHA"
-            mapfile -t files < <(git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA")
+            mapfile -d '' -t files < <(git diff --name-only -z --no-renames "$BASE_SHA" "$HEAD_SHA")
+            diff_pid=$!
+            wait "$diff_pid"
           else
             # On manual runs, default to the full fast-PR bundle.
             files=("codex-rs/force" "tools/argument-comment-lint/force" ".github/force")
@@ -58,16 +63,40 @@ jobs:
           # Native Windows tests run only on PRs that change these crates
           # (or this job's own workflow). Main pushes and nightly get the
           # forced file list above, which matches none of them; nightly runs
-          # every crate's native Windows tests in bazel.yml instead.
+          # every crate's native Windows tests in bazel.yml instead. Each
+          # group runs its own crates' targets only: tui, core, state and
+          # login (#636); windows-sandbox-rs and the crates whose Windows
+          # tests use it or that it uses: network-proxy, process-hardening
+          # and sandboxing (#1813, after #1795 merged unseen); exec-server,
+          # which has whole Windows-only test files; utils/pty (Windows-only
+          # pipe and ConPTY tests) and app-server (#1839).
           windows_native_tests=false
+          windows_native_core=false
+          windows_native_sandbox=false
+          windows_native_other=false
+          windows_native_pty=false
+          windows_native_app_server=false
+          # Schema fixture tests run on PRs that change the protocol crates,
+          # a crate whose types they export (security-policy, absolute-path,
+          # path-uri, ext/items), the experimental API macros, the workspace
+          # manifest or lockfile, or this workflow; postmerge rust-ci-full
+          # runs them on main.
+          app_server_schema=false
           for f in "${files[@]}"; do
             [[ $f == codex-rs/* ]] && codex=true
             [[ $f == codex-rs/* || $f == tools/argument-comment-lint/* || $f == justfile ]] && argument_comment_lint=true
             [[ $f == defs.bzl || $f == workspace_root_test_launcher.sh.tpl || $f == workspace_root_test_launcher.bat.tpl ]] && argument_comment_lint=true
             [[ $f == tools/argument-comment-lint/* || $f == .github/workflows/rust-ci.yml || $f == .github/workflows/rust-ci-full.yml ]] && argument_comment_lint_package=true
             [[ $f == .github/* ]] && workflows=true
-            [[ $f == codex-rs/tui/* || $f == codex-rs/core/* || $f == codex-rs/state/* || $f == codex-rs/login/* ]] && windows_native_tests=true
-            [[ $f == .github/workflows/rust-ci-windows-native-tests.yml ]] && windows_native_tests=true
+            [[ $f == codex-rs/tui/* || $f == codex-rs/core/* || $f == codex-rs/state/* || $f == codex-rs/login/* ]] && windows_native_core=true windows_native_tests=true
+            [[ $f == codex-rs/windows-sandbox-rs/* || $f == codex-rs/network-proxy/* || $f == codex-rs/process-hardening/* || $f == codex-rs/sandboxing/* ]] && windows_native_sandbox=true windows_native_tests=true
+            [[ $f == codex-rs/exec-server/* ]] && windows_native_other=true windows_native_tests=true
+            [[ $f == codex-rs/utils/pty/* ]] && windows_native_pty=true windows_native_tests=true
+            [[ $f == codex-rs/app-server/* ]] && windows_native_app_server=true windows_native_tests=true
+            [[ $f == .github/workflows/rust-ci-windows-native-tests.yml ]] && windows_native_core=true windows_native_sandbox=true windows_native_other=true windows_native_pty=true windows_native_app_server=true windows_native_tests=true
+            [[ $f == codex-rs/protocol/* || $f == codex-rs/app-server-protocol/* || $f == .github/workflows/rust-ci.yml ]] && app_server_schema=true
+            [[ $f == codex-rs/security-policy/* || $f == codex-rs/utils/absolute-path/* || $f == codex-rs/utils/path-uri/* || $f == codex-rs/ext/items/* ]] && app_server_schema=true
+            [[ $f == codex-rs/codex-experimental-api-macros/* || $f == codex-rs/Cargo.toml || $f == codex-rs/Cargo.lock ]] && app_server_schema=true
           done
 
           echo "argument_comment_lint=$argument_comment_lint" >> "$GITHUB_OUTPUT"
@@ -80,8 +109,35 @@ jobs:
           fi
           echo "Argument comment lint packages: ${packages:-none}"
           echo "argument_comment_lint_packages=${packages% }" >> "$GITHUB_OUTPUT"
+          # Crates whose tests run on Linux: any file under them changed (#1972).
+          test_packages=""
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            test_packages="$(python3 .github/scripts/changed_crate_test_packages.py "$BASE_SHA" "$HEAD_SHA" | tr '\n' ' ')"
+          fi
+          echo "Changed crate test packages: ${test_packages:-none}"
+          echo "changed_crate_test_packages=${test_packages% }" >> "$GITHUB_OUTPUT"
+          echo "app_server_schema=$app_server_schema" >> "$GITHUB_OUTPUT"
           echo "codex=$codex" >> "$GITHUB_OUTPUT"
           echo "windows_native_tests=$windows_native_tests" >> "$GITHUB_OUTPUT"
+          windows_native_targets=""
+          if [[ $windows_native_core == true ]]; then
+            windows_native_targets+=" //codex-rs/tui/... //codex-rs/core/... //codex-rs/state/... //codex-rs/login/..."
+          fi
+          if [[ $windows_native_sandbox == true ]]; then
+            windows_native_targets+=" //codex-rs/windows-sandbox-rs/... //codex-rs/network-proxy/... //codex-rs/process-hardening/... //codex-rs/sandboxing/..."
+          fi
+          if [[ $windows_native_other == true ]]; then
+            windows_native_targets+=" //codex-rs/exec-server/..."
+          fi
+          if [[ $windows_native_pty == true ]]; then
+            windows_native_targets+=" //codex-rs/utils/pty/..."
+          fi
+          if [[ $windows_native_app_server == true ]]; then
+            windows_native_targets+=" //codex-rs/app-server/..."
+          fi
+          windows_native_targets="${windows_native_targets# }"
+          echo "Windows native test targets: ${windows_native_targets:-none}"
+          echo "windows_native_targets=$windows_native_targets" >> "$GITHUB_OUTPUT"
           echo "workflows=$workflows" >> "$GITHUB_OUTPUT"
 
       - name: Check for a clean worktree
@@ -103,7 +159,7 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
         with:
           components: rustfmt
       - name: cargo fmt
@@ -129,7 +185,7 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
       - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
         with:
           tool: cargo-shear@1.11.2
@@ -197,16 +253,59 @@ jobs:
       save_cache: ${{ matrix.runner != 'macos-15' }}
     secrets: inherit
 
+  # Tests of the crates a PR changes, on Linux (#1972): before this no PR job
+  # ran most crates' tests on Linux or macOS (full suite postmerge only).
+  changed_crate_tests:
+    name: Changed crate tests
+    needs: changed
+    if: ${{ needs.changed.outputs.changed_crate_test_packages != '' }}
+    uses: ./.github/workflows/rust-ci-changed-crate-tests.yml
+    with:
+      packages: ${{ needs.changed.outputs.changed_crate_test_packages }}
+
   # Native Windows Bazel tests of codex-tui, codex-core, codex-state and
   # codex-login on PRs that change one of them (#636, owner decision
   # 2026-10-15): Windows-only test failures in these crates broke nightly
-  # after merging. Restore-only, like every PR job.
+  # after merging. Since #1813 also windows-sandbox-rs with network-proxy,
+  # process-hardening and sandboxing, and exec-server; since #1839 also
+  # utils/pty and app-server. Only the changed groups' targets run (see
+  # `changed`). Restore-only, like every PR job.
   windows_native_tests:
     name: Windows native tests
     needs: changed
     if: ${{ needs.changed.outputs.windows_native_tests == 'true' }}
     uses: ./.github/workflows/rust-ci-windows-native-tests.yml
+    with:
+      targets: ${{ needs.changed.outputs.windows_native_targets }}
     secrets: inherit
+
+  # codex-app-server-protocol schema fixture tests on PRs that change
+  # codex-protocol, codex-app-server-protocol or a crate whose types they
+  # export (#1165), or schema-generation inputs (#1298). Only postmerge
+  # rust-ci-full ran them, so a changed protocol type or doc comment without
+  # `just write-app-server-schema` turned main red (#1140, fixed by #1164).
+  app_server_schema_fixtures:
+    name: App-server schema fixtures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: changed
+    if: ${{ needs.changed.outputs.app_server_schema == 'true' }}
+    defaults:
+      run:
+        working-directory: codex-rs
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+      - name: cargo test codex-app-server-protocol schema_fixtures
+        run: cargo test --locked -p codex-app-server-protocol --lib schema_fixtures
+
+      - name: Check for a clean worktree
+        if: always() && !cancelled()
+        uses: ./.github/actions/check-clean-worktree
 
   argument_comment_lint_package:
     name: Argument comment lint package
@@ -214,28 +313,28 @@ jobs:
     needs: changed
     if: ${{ needs.changed.outputs.argument_comment_lint_package == 'true' }}
     env:
-      CARGO_DYLINT_VERSION: 5.0.0
-      DYLINT_LINK_VERSION: 5.0.0
+      CARGO_DYLINT_VERSION: 6.1.1
+      DYLINT_LINK_VERSION: 6.1.1
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
       - name: Install nightly argument-comment-lint toolchain
         shell: bash
         run: |
-          rustup toolchain install nightly-2025-09-18 \
+          rustup toolchain install nightly-2026-08-08 \
             --profile minimal \
             --component llvm-tools-preview \
             --component rustc-dev \
             --component rust-src \
             --no-self-update
-          rustup default nightly-2025-09-18
+          rustup default nightly-2026-08-08
       - name: Restore cargo-dylint tooling
         id: cargo_dylint_cache
-        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/bin/cargo-dylint
@@ -268,7 +367,7 @@ jobs:
       - name: Save cargo-dylint tooling
         if: always() && !cancelled() && steps.cargo_dylint_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
         continue-on-error: true
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/bin/cargo-dylint
@@ -294,8 +393,8 @@ jobs:
     needs: changed
     if: ${{ needs.changed.outputs.argument_comment_lint_packages != '' }}
     env:
-      CARGO_DYLINT_VERSION: 5.0.0
-      DYLINT_LINK_VERSION: 5.0.0
+      CARGO_DYLINT_VERSION: 6.1.1
+      DYLINT_LINK_VERSION: 6.1.1
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -306,17 +405,17 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends pkg-config libcap-dev
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
       - name: Install nightly argument-comment-lint toolchain
         shell: bash
         run: |
-          rustup toolchain install nightly-2025-09-18 \
+          rustup toolchain install nightly-2026-08-08 \
             --profile minimal \
             --component llvm-tools-preview \
             --component rustc-dev \
             --component rust-src \
             --no-self-update
-          rustup default nightly-2025-09-18
+          rustup default nightly-2026-08-08
       - name: Compute lockfile hash
         id: lockhash
         working-directory: codex-rs
@@ -329,7 +428,7 @@ jobs:
       # path list must match it exactly: the path list is part of the cache
       # version, so a shorter list never matches.
       - name: Restore cargo home cache
-        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/bin/
@@ -345,7 +444,7 @@ jobs:
             cargo-home-ubuntu-24.04-x86_64-unknown-linux-gnu-dev-
       - name: Restore cargo-dylint tooling
         id: cargo_dylint_cache
-        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/bin/cargo-dylint
@@ -377,9 +476,7 @@ jobs:
             args+=(-p "$package")
           done
           echo "Linting: $PACKAGES"
-          # The lint's nightly predates some crates' rust-version (sqlx needs
-          # 1.94); the nightly Bazel lint ignores it too.
-          python3 tools/argument-comment-lint/run.py "${args[@]}" -- --ignore-rust-version --keep-going
+          python3 tools/argument-comment-lint/run.py "${args[@]}" -- --keep-going
 
       - name: Check for a clean worktree
         if: always() && !cancelled()
@@ -455,7 +552,9 @@ jobs:
         lint_build_linux,
         lint_build_windows,
         core_security_tests,
+        changed_crate_tests,
         windows_native_tests,
+        app_server_schema_fixtures,
         argument_comment_lint_package,
         argument_comment_lint_changed,
         argument_comment_lint_prebuilt,
@@ -474,10 +573,18 @@ jobs:
           echo "lint   : ${{ needs.lint_build_linux.result }}"
           echo "winlint: ${{ needs.lint_build_windows.result }}"
           echo "coresec: ${{ needs.core_security_tests.result }}"
+          echo "crates : ${{ needs.changed_crate_tests.result }}"
           echo "winnat : ${{ needs.windows_native_tests.result }}"
+          echo "schema : ${{ needs.app_server_schema_fixtures.result }}"
 
           # Every decision below reads its outputs.
           [[ '${{ needs.changed.result }}' == 'success' ]] || { echo 'changed failed'; exit 1; }
+
+          # Required whenever it runs, checked before the early exit below: a
+          # canary path such as scripts/codex_package/rg sets no area flag.
+          if [[ -n "${NEEDS_CHANGED_OUTPUTS_CHANGED_CRATE_TEST_PACKAGES}" ]]; then
+            [[ '${{ needs.changed_crate_tests.result }}' == 'success' ]] || { echo 'changed_crate_tests failed'; exit 1; }
+          fi
 
           # If nothing relevant changed (PR touching only root README, etc.),
           # declare success regardless of other jobs.
@@ -486,9 +593,14 @@ jobs:
             exit 0
           fi
 
-          # Required whenever it runs (PRs touching tui, core, state, login).
+          # Required whenever it runs (PRs touching its crates, see `changed`).
           if [[ "${NEEDS_CHANGED_OUTPUTS_WINDOWS_NATIVE_TESTS}" == 'true' ]]; then
             [[ '${{ needs.windows_native_tests.result }}' == 'success' ]] || { echo 'windows_native_tests failed'; exit 1; }
+          fi
+
+          # Required whenever it runs (PRs touching schema crates or generator inputs).
+          if [[ "${NEEDS_CHANGED_OUTPUTS_APP_SERVER_SCHEMA}" == 'true' ]]; then
+            [[ '${{ needs.app_server_schema_fixtures.result }}' == 'success' ]] || { echo 'app_server_schema_fixtures failed'; exit 1; }
           fi
 
           if [[ "${NEEDS_CHANGED_OUTPUTS_ARGUMENT_COMMENT_LINT_PACKAGE}" == 'true' ]]; then
@@ -515,5 +627,7 @@ jobs:
           NEEDS_CHANGED_OUTPUTS_CODEX: ${{ needs.changed.outputs.codex }}
           NEEDS_CHANGED_OUTPUTS_WORKFLOWS: ${{ needs.changed.outputs.workflows }}
           NEEDS_CHANGED_OUTPUTS_WINDOWS_NATIVE_TESTS: ${{ needs.changed.outputs.windows_native_tests }}
+          NEEDS_CHANGED_OUTPUTS_APP_SERVER_SCHEMA: ${{ needs.changed.outputs.app_server_schema }}
           NEEDS_CHANGED_OUTPUTS_ARGUMENT_COMMENT_LINT_PACKAGE: ${{ needs.changed.outputs.argument_comment_lint_package }}
           NEEDS_CHANGED_OUTPUTS_ARGUMENT_COMMENT_LINT_PACKAGES: ${{ needs.changed.outputs.argument_comment_lint_packages }}
+          NEEDS_CHANGED_OUTPUTS_CHANGED_CRATE_TEST_PACKAGES: ${{ needs.changed.outputs.changed_crate_test_packages }}

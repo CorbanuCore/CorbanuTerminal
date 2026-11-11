@@ -468,7 +468,7 @@ async fn sandbox_denied_shell_command_returns_original_output() -> Result<()> {
         "printf {sentinel:?}; printf {content:?} > {path:?}",
         sentinel = format!("{sentinel}\n"),
         content = "sandbox denied",
-        path = &target_path
+        path = target_path
     );
     let args = json!({
         "command": command,
@@ -557,6 +557,7 @@ async fn shell_command_enforces_glob_deny_read_policy() -> Result<()> {
                 .entries
                 .push(FileSystemSandboxEntry {
                     path: FileSystemPath::GlobPattern {
+                        scan: None,
                         pattern: format!("{}/**/*.env", config.cwd.as_path().display()),
                     },
                     access: FileSystemAccessMode::Deny,

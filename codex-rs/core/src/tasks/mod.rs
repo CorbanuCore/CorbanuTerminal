@@ -17,6 +17,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::AbortOnDropHandle;
 use tracing::Instrument;
 use tracing::Span;
+use tracing::debug;
 use tracing::field;
 use tracing::info_span;
 use tracing::trace;
@@ -56,6 +57,7 @@ use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TurnAbortReason;
 use codex_protocol::protocol::TurnAbortedEvent;
 use codex_protocol::protocol::TurnCompleteEvent;
+use codex_protocol::protocol::TurnDiffEvent;
 use codex_protocol::protocol::WarningEvent;
 
 use codex_features::Feature;
@@ -79,6 +81,18 @@ pub(crate) type SessionTaskResult = CodexResult<Option<String>>;
 /// logged by the process panic hook; its payload is not repeated here.
 pub(crate) const TURN_PANICKED_MESSAGE: &str =
     "this turn stopped because of an internal error (a panic); the details are in the log";
+
+/// How a turn ended, for its mailbox messages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MailboxTurnEnd {
+    /// The turn ended on its own.
+    Completed,
+    /// The turn returned an error (a turn-aborted one included); its leftover input is
+    /// still recorded or submitted again afterwards.
+    Failed,
+    /// An interrupt, a replacing turn or a shutdown stopped the turn.
+    Aborted,
+}
 
 pub(crate) enum MailboxParentProvenance {
     Ignore,
@@ -420,7 +434,13 @@ impl Session {
             debug_assert!(turn.task.is_none());
             Arc::clone(&turn.turn_state)
         };
-        turn_state.lock().await.token_usage_at_turn_start = token_usage_at_turn_start.clone();
+        {
+            let mut turn_state = turn_state.lock().await;
+            turn_state.token_usage_at_turn_start = token_usage_at_turn_start.clone();
+            // #1952 (D485): mail this turn starts with, taken off the mailbox queue above or by
+            // the caller.
+            turn_state.track_taken_mailbox_messages(input.iter().chain(pending_items.iter()));
+        }
         self.input_queue
             .extend_pending_input_for_turn_state(turn_state.as_ref(), pending_items)
             .await;
@@ -578,7 +598,35 @@ impl Session {
             return;
         }
 
+        // A busy session cannot start another turn. Avoid preparing a turn and reading its
+        // named account here; the locked reservation below still checks for a concurrent start.
+        if self.active_turn.lock().await.is_some() {
+            return;
+        }
+
         let turn_context = self.new_default_turn_with_sub_id(sub_id.clone()).await;
+        // #1331 (D171): nor while its named account is removed or signed out.
+        if let Some(err) = crate::session::turn::turn_refusal(self, &turn_context).await {
+            let message = format!(
+                "Agent messages remain queued: {err}. After recovery, send another message or start a turn to retry."
+            );
+            self.send_event(
+                &turn_context,
+                EventMsg::Warning(WarningEvent {
+                    message: message.clone(),
+                }),
+            )
+            .await;
+            if let Err(err) = self
+                .services
+                .agent_control
+                .warn_parent_of_held_mailbox(self.thread_id, &turn_context.session_source, message)
+                .await
+            {
+                debug!("failed to notify parent of held mailbox: {err}");
+            }
+            return;
+        }
         let agent_execution_guard = match self.services.agent_control.try_execution_guard(
             turn_context.multi_agent_version,
             &turn_context.session_source,
@@ -648,7 +696,7 @@ impl Session {
         if let Some(active_turn) = active_turn_to_clear {
             self.finish_turn_mailbox_messages(
                 active_turn.turn_state.as_ref(),
-                /*completed_naturally*/ false,
+                MailboxTurnEnd::Aborted,
             )
             .await;
             // Let interrupted tasks observe cancellation before dropping pending approvals, or an
@@ -690,11 +738,8 @@ impl Session {
             self.emit_turn_abort_lifecycle(reason.clone(), turn_context.extension_data.as_ref())
                 .await;
         }
-        self.finish_turn_mailbox_messages(
-            active_turn.turn_state.as_ref(),
-            /*completed_naturally*/ false,
-        )
-        .await;
+        self.finish_turn_mailbox_messages(active_turn.turn_state.as_ref(), MailboxTurnEnd::Aborted)
+            .await;
         // Let interrupted tasks observe cancellation before dropping pending approvals, or an
         // in-flight approval wait can surface as a model-visible rejection before TurnAborted.
         self.input_queue.clear_pending(&active_turn).await;
@@ -759,8 +804,15 @@ impl Session {
                 ts.token_usage_at_turn_start.clone(),
             )
         };
-        self.finish_turn_mailbox_messages(turn_state.as_ref(), completed_naturally)
-            .await;
+        self.finish_turn_mailbox_messages(
+            turn_state.as_ref(),
+            if completed_naturally {
+                MailboxTurnEnd::Completed
+            } else {
+                MailboxTurnEnd::Failed
+            },
+        )
+        .await;
         // Queue-only mail deliberately does not wake an idle thread or join the immediately
         // following admitted request. Crossing this terminal boundary makes it eligible to join
         // the next human turn without creating a model-only continuation loop.
@@ -933,6 +985,31 @@ impl Session {
                 turn_id: turn_context.sub_id.clone(),
                 profile,
             });
+        // #874 (D6): a process an agent command left running may have
+        // changed a git folder this session watches since its last look;
+        // the person is told before the turn ends.
+        if let Some(level) = crate::security::protected_additional::protected_level(self)
+            .filter(|level| *level != codex_security_policy::SecurityLevel::Permissive)
+        {
+            let thread = self.thread_id;
+            let level = format!("{level:?}");
+            // A failed look is told too.
+            let message = tokio::task::spawn_blocking(move || {
+                crate::security::git_postcheck::recheck(thread, &level, &[])
+            })
+            .await
+            .map_or_else(
+                |_| Some(crate::security::git_postcheck::CHECK_FAILED.to_string()),
+                |(message, _)| message,
+            );
+            if let Some(message) = message {
+                self.send_event(
+                    turn_context.as_ref(),
+                    EventMsg::Warning(codex_protocol::protocol::WarningEvent { message }),
+                )
+                .await;
+            }
+        }
         let event = if let Some(reason) = abort_reason {
             self.emit_turn_abort_lifecycle(reason.clone(), turn_context.extension_data.as_ref())
                 .await;
@@ -1001,15 +1078,59 @@ impl Session {
     async fn finish_turn_mailbox_messages(
         &self,
         turn_state: &tokio::sync::Mutex<crate::state::TurnState>,
-        completed_naturally: bool,
+        end: MailboxTurnEnd,
     ) {
-        let message_ids = turn_state.lock().await.take_mailbox_message_ids();
-        if message_ids.is_empty() {
+        let (message_ids, unrecorded_message_ids) = {
+            let mut turn_state = turn_state.lock().await;
+            let message_ids = turn_state.take_mailbox_message_ids();
+            let unrecorded_message_ids =
+                turn_state.take_unrecorded_mailbox_message_ids(&message_ids);
+            let unrecorded_message_ids = match end {
+                MailboxTurnEnd::Aborted => unrecorded_message_ids,
+                MailboxTurnEnd::Completed | MailboxTurnEnd::Failed => Vec::new(),
+            };
+            (message_ids, unrecorded_message_ids)
+        };
+        if message_ids.is_empty() && unrecorded_message_ids.is_empty() {
             return;
         }
         let Some(state_db) = self.state_db() else {
             return;
         };
+        // #1952 (D485): mail the stopped turn took but never recorded is gone from this session
+        // (the abort drops the turn's input). Cancel its row, still Submitted under this
+        // session, so that reloading the agent does not hand it over again: mailbox recovery
+        // requeues a Submitted row of a replaced session, which is meant for a session that
+        // died (crash recovery, #1058/#1545) and still is. The transition only moves a row that
+        // is still Submitted. A message this session applied to its history is left as it is
+        // even when its row is still Submitted (its rollout did not flush, or the abort landed
+        // before the row moved on): recovery decides about it, as before.
+        for message_id in unrecorded_message_ids {
+            if self.has_applied_agent_message_id(&message_id).await {
+                continue;
+            }
+            match state_db
+                .transition_agent_message(
+                    &message_id,
+                    codex_state::AgentMailboxPhase::Submitted,
+                    codex_state::AgentMailboxPhase::Cancelled,
+                    crate::turn_timing::now_unix_timestamp_ms(),
+                )
+                .await
+            {
+                Ok(true) => debug!(
+                    %message_id,
+                    "cancelled agent mailbox message an interrupted turn took but never recorded"
+                ),
+                Ok(false) => {}
+                Err(err) => warn!(
+                    %err,
+                    %message_id,
+                    "failed to cancel agent mailbox message an interrupted turn never recorded"
+                ),
+            }
+        }
+        let completed_naturally = matches!(end, MailboxTurnEnd::Completed);
         for message_id in message_ids {
             let result = if completed_naturally {
                 state_db
@@ -1109,28 +1230,75 @@ impl Session {
         }
     }
 
-    async fn handle_task_abort(self: &Arc<Self>, task: RunningTask, reason: TurnAbortReason) {
+    async fn handle_task_abort(self: &Arc<Self>, mut task: RunningTask, reason: TurnAbortReason) {
         let sub_id = task.turn_context.sub_id.clone();
         if task.cancellation_token.is_cancelled() {
             return;
         }
 
         trace!(task_kind = ?task.kind, sub_id, "aborting running task");
+        let cancelled_at = Instant::now();
         task.cancellation_token.cancel();
         task.turn_context
             .turn_metadata_state
             .cancel_git_enrichment_task();
         let session_task = task.task;
 
-        select! {
-            _ = task.done.notified() => {
-            },
+        let hard_aborted = select! {
+            _ = task.done.notified() => false,
             _ = tokio::time::sleep(Duration::from_millis(GRACEFULL_INTERRUPTION_TIMEOUT_MS)) => {
                 warn!("task {sub_id} didn't complete gracefully after {}ms", GRACEFULL_INTERRUPTION_TIMEOUT_MS);
+                true
             }
-        }
+        };
 
         task.handle.abort();
+        if hard_aborted {
+            // The turn did not record its tool outputs in time. Once it has stopped,
+            // record each pending call's output, as the turn would have: the tool's
+            // own output if it finished (D244), else its abort output (#1467).
+            // Joining waits only for the turn's current poll to return, so the turn
+            // cannot record an output after the check below. The join is skipped only
+            // when the turn task aborts itself; aborts from tasks the turn spawned must
+            // run in a detached task (as guardian's does), or the join cancels them.
+            if tokio::task::try_id() != Some(task.handle.abort_handle().id()) {
+                let _ = (&mut task.handle).await;
+            }
+            let mut outputs: Vec<ResponseItem> = task
+                .turn_context
+                .pending_tool_calls
+                .take_unrecorded_outputs(cancelled_at)
+                .into_iter()
+                .map(ResponseItem::from)
+                .collect();
+            self.retain_unrecorded_tool_outputs(&mut outputs).await;
+            if !outputs.is_empty() {
+                self.record_conversation_items(task.turn_context.as_ref(), &outputs)
+                    .await;
+                // A finished call's real output is recorded here instead of by the
+                // turn (D244), so apply the turn's external-context check too.
+                for output in &outputs {
+                    crate::stream_events_utils::mark_thread_memory_mode_polluted_if_external_context(
+                        self,
+                        task.turn_context.as_ref(),
+                        output,
+                    )
+                    .await;
+                }
+            }
+            // D282: the turn did not reach its end, which sends the turn's
+            // file-change summary; send it here.
+            if let Some(tracker) = task.turn_context.pending_tool_calls.turn_diff_tracker() {
+                let unified_diff = tracker.lock().await.get_unified_diff();
+                if let Some(unified_diff) = unified_diff {
+                    self.send_event(
+                        task.turn_context.as_ref(),
+                        EventMsg::TurnDiff(TurnDiffEvent { unified_diff }),
+                    )
+                    .await;
+                }
+            }
+        }
 
         let session_ctx = Arc::new(SessionTaskContext::new(
             Arc::clone(self),

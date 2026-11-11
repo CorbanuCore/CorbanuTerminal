@@ -1,0 +1,19 @@
+╰───────────────────────────────────────╯
+╭───────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)         │
+│                                       │
+│ model:     glm-5.2   /model to change │
+│ directory: ~/runs/…/fixture/workspace │
+╰───────────────────────────────────────╯
+■ Spawn a Troll before creating Orc panes, then choose that Troll as supervisor.
+• Spawned Corbanu Terminal Troll pane Burzum. glm-5.2; no task was started.
+  Spawn Status
+  Nazgul -> Troll -> Orc hierarchy.
+  Search spawned work
+  Nazgul
+› Nazgul: Corbanu Terminal - Main (current)  Root role binding; idle; 01a15d9b-f24f-7b81-9ede-9210f2430239; same user pane listed above.
+  Trolls
+  • Burzum [troll]                           idle; 01a15d9e-0bc9-7250-a583-fa3ba55fa50c
+    Send task to Burzum [troll]              Start a turn in this pane.
+    No Orcs for this Troll yet
+  Press enter to confirm or esc to go back

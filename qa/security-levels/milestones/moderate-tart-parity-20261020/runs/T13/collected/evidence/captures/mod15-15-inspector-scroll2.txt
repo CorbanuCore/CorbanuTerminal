@@ -1,0 +1,45 @@
+• Blocked: under the current Moderate security level, vault access needs approval, and approvals are off (approval_policy = never). You can enable
+  approval prompts via /permissions or by setting approval_policy in config.toml, then run it again.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Run python3 src/notes.py list
+
+
+• Ran python3 src/notes.py list
+  └ buy coffee
+    review budget
+
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• buy coffee
+  review budget
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Security inspector (read only)
+● Protected: Moderate; every required control observed or checked at launch
+Observed 20s ago, policy generation 0.1
+  [on] Untrusted content: labelled; session tainted (4 batches): protected actions need your fresh approval. Taint is kept with the conversation and
+      stays on resume [observed: session]
+  [off] Protected boundary: no preflight applies (protected_mode_preflight off, or not Aggressive) [resolved: launch preflight]
+
+Grants
+  Held: none. Grants are never saved: a restart, level change, revocation or the kill switch ends them [observed: Core policy]
+
+Agents
+  [on] main session: Moderate [observed: Core policy]
+  [set] Nested agents: on macOS and Linux, `corbanu exec` and `review` started by an agent command run with Moderate enforced, also pointed at another
+      Corbanu home; with this Corbanu home, which they cannot write inside the sandbox, they run in a Corbanu home of their own, without your config,
+      sign-in or model keys. Interactive sessions, `app-server`, `mcp-server` and credential commands they start are refused [configured: /security]
+
+Not contained
+  [off] MCP servers: none configured [resolved: config]
+  [not contained] Hooks: run outside the OS sandbox with the environment allowlist; allowed because you configured or started it [resolved: features]
+  [not contained] `!` shell commands: run outside the OS sandbox with the environment allowlist; allowed because you configured or started it [fixed]
+  [not contained] App-server command/exec: runs outside the OS sandbox with the environment allowlist; allowed because you configured or started it
+      [fixed]
+
+12 more lines below · ↑/↓ scroll · r refresh · esc back to /security

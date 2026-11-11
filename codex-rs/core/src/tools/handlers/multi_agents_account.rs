@@ -11,6 +11,7 @@
 use crate::config::Config;
 use crate::config::configured_account_names;
 use crate::config::selected_account_error;
+use crate::config::spawn_default_key_error;
 use crate::config::stamp_provider_account;
 use crate::function_tool::FunctionCallError;
 use crate::security::protected_surface::ask_human_answer;
@@ -21,18 +22,40 @@ use codex_protocol::protocol::AskForApproval;
 use codex_security_policy::SecurityLevel;
 
 /// Applies `requested` to the child's resolved provider. Omitted keeps the
-/// inherited account; `default` selects today's credentials.
+/// inherited account; `default` selects today's credentials. A child whose
+/// connection has no credential of its own is refused before it starts
+/// (#689), and before any approval is asked. `before_approval` checks the
+/// child's provider on the requested account before the human is asked, so
+/// a spawn the caller would refuse anyway asks nothing (#1144).
 pub(crate) async fn apply_spawn_agent_account(
     session: &Session,
     turn: &TurnContext,
     call_id: &str,
     config: &mut Config,
     requested: Option<&str>,
+    before_approval: impl FnOnce(
+        &codex_model_provider_info::ModelProviderInfo,
+    ) -> Result<(), FunctionCallError>,
 ) -> Result<(), FunctionCallError> {
-    let Some(requested) = requested.map(str::trim).filter(|name| !name.is_empty()) else {
-        return Ok(());
-    };
     let refuse = |message: String| Err(FunctionCallError::RespondToModel(message));
+    // The parent's own runtime provider, as the child config is built from it.
+    let parent = turn.provider.info();
+    let default_key_error =
+        |config: &Config, child: &codex_model_provider_info::ModelProviderInfo| {
+            spawn_default_key_error(
+                config,
+                &config.model_provider_id,
+                child,
+                &turn.config.model_provider_id,
+                parent,
+            )
+        };
+    let Some(requested) = requested.map(str::trim).filter(|name| !name.is_empty()) else {
+        return match default_key_error(config, &config.model_provider) {
+            Some(message) => refuse(message),
+            None => Ok(()),
+        };
+    };
     if !config.features.enabled(Feature::NamedAccounts) {
         return refuse(
             "spawn_agent `account` needs the `named_accounts` feature; omit it to use the \
@@ -62,9 +85,13 @@ pub(crate) async fn apply_spawn_agent_account(
              on another account without the user's consent."
         ));
     }
+    if let Some(message) = default_key_error(config, &provider) {
+        return refuse(message);
+    }
     if provider.account == config.model_provider.account {
         return Ok(());
     }
+    before_approval(&provider)?;
     // The level in force, including a stricter one committed during the
     // session or inherited from the parent; an unreadable policy counts as
     // Aggressive.

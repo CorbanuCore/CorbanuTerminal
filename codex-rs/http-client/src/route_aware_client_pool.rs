@@ -25,6 +25,9 @@ use crate::HttpClientBuilder;
 use crate::HttpClientFactory;
 use crate::OutboundProxyPolicy;
 use crate::OutboundProxyRoute;
+use crate::ResolvedAddressFilter;
+use crate::address_filter::DisallowedAddressError;
+use crate::address_filter::find_disallowed_address;
 use crate::route_aware_redirect::MAX_REDIRECTS;
 use crate::route_aware_redirect::insert_referer;
 use crate::route_aware_redirect::is_redirect;
@@ -52,6 +55,7 @@ pub struct RouteAwareClientPool {
     route_class: ClientRouteClass,
     client_builder: HttpClientBuilder,
     custom_ca_fallback: CustomCaFallback,
+    address_filter: Option<Arc<ResolvedAddressFilter>>,
     clients: Arc<Mutex<HashMap<OutboundProxyRoute, HttpClient>>>,
 }
 
@@ -89,6 +93,8 @@ pub enum RouteAwareRequestError {
     TooManyRedirects,
     #[error("route-aware request timed out")]
     Timeout,
+    #[error(transparent)]
+    DisallowedAddress(#[from] DisallowedAddressError),
 }
 
 impl RouteAwareRequestError {
@@ -108,7 +114,8 @@ impl RouteAwareRequestError {
             | Self::Build(_)
             | Self::UnsupportedRedirectScheme(_)
             | Self::TooManyRedirects
-            | Self::Timeout => None,
+            | Self::Timeout
+            | Self::DisallowedAddress(_) => None,
         }
     }
 
@@ -330,6 +337,7 @@ impl RouteAwareClientPool {
             route_class,
             client_builder,
             custom_ca_fallback: CustomCaFallback::Disabled,
+            address_filter: None,
             clients: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -344,6 +352,15 @@ impl RouteAwareClientPool {
             route_class,
             HttpClientBuilder::new().without_request_logging(),
         )
+    }
+
+    /// Restricts every connection, including redirect hops, to addresses `filter` allows.
+    ///
+    /// Redirects are then always followed by the pool so each hop's URL is checked.
+    pub fn with_resolved_address_filter(mut self, filter: ResolvedAddressFilter) -> Self {
+        self.address_filter = Some(Arc::new(filter));
+        self.clients = Arc::new(Mutex::new(HashMap::new()));
+        self
     }
 
     /// Preserves the legacy custom-CA fallback for transport-default proxy routes.
@@ -474,8 +491,9 @@ impl RouteAwareClientPool {
         let request_method = request.method().clone();
         let request_url = request.url().to_string();
         let follows_redirects_manually = self.client_builder.follows_redirects()
-            && self.http_client_factory.outbound_proxy_policy()
-                == OutboundProxyPolicy::RespectSystemProxy;
+            && (self.http_client_factory.outbound_proxy_policy()
+                == OutboundProxyPolicy::RespectSystemProxy
+                || self.address_filter.is_some());
         let timeout_deadline = request
             .timeout()
             .copied()
@@ -484,6 +502,9 @@ impl RouteAwareClientPool {
         let mut previous_route = None;
         loop {
             let current_url = request.url().clone();
+            if let Some(filter) = &self.address_filter {
+                filter.check_url(&current_url)?;
+            }
             let (current_route, client) = match timeout_deadline {
                 Some(timeout_deadline) => tokio::time::timeout_at(
                     timeout_deadline,
@@ -537,6 +558,11 @@ impl RouteAwareClientPool {
                     if follows_redirects_manually {
                         client.log_error_summary(&request_method, &request_url, &error);
                     }
+                    if self.address_filter.is_some()
+                        && let Some(disallowed) = find_disallowed_address(&error)
+                    {
+                        return Err(disallowed.into());
+                    }
                     return Err(error.into());
                 }
             };
@@ -589,20 +615,50 @@ impl RouteAwareClientPool {
         let route = resolve_route(request_url.to_string())
             .await
             .map_err(RouteAwareClientPoolError::Resolve)?;
-        let clients = match self.clients.lock() {
-            Ok(clients) => clients,
+        let cached = match self.clients.lock() {
+            Ok(clients) => clients.get(&route).cloned(),
             Err(error) => panic!("route-aware client cache lock should not be poisoned: {error}"),
         };
-        if let Some(client) = clients.get(&route) {
-            return Ok((route, client.clone()));
+        if let Some(client) = cached {
+            return Ok((route, client));
         }
-        drop(clients);
 
-        let client_builder = match self.http_client_factory.outbound_proxy_policy() {
-            OutboundProxyPolicy::ReqwestDefault => self.client_builder.clone(),
-            OutboundProxyPolicy::RespectSystemProxy => {
+        let mut client_builder = match self.http_client_factory.outbound_proxy_policy() {
+            OutboundProxyPolicy::ReqwestDefault if self.address_filter.is_none() => {
+                self.client_builder.clone()
+            }
+            OutboundProxyPolicy::ReqwestDefault | OutboundProxyPolicy::RespectSystemProxy => {
                 self.client_builder.clone().without_redirects()
             }
+        };
+        if let Some(filter) = &self.address_filter {
+            let filter = ResolvedAddressFilter::clone(filter);
+            let filter = match &route {
+                OutboundProxyRoute::Direct => filter,
+                OutboundProxyRoute::Proxy { url, .. } => filter.exempting_proxies([url.clone()]),
+                OutboundProxyRoute::TransportDefault => {
+                    // The transport may also use the platform's system proxy, whose
+                    // name it resolves through the filter; exempt it as resolved here.
+                    let system_route =
+                        HttpClientFactory::new(OutboundProxyPolicy::RespectSystemProxy)
+                            .resolve_proxy_route_async(request_url.to_string())
+                            .await;
+                    let system_proxy = match system_route {
+                        Ok(OutboundProxyRoute::Proxy { url, .. }) => Some(url),
+                        _ => None,
+                    };
+                    filter
+                        .exempting_env_proxies()
+                        .exempting_proxies(system_proxy)
+                }
+            };
+            client_builder = client_builder.resolved_address_filter(filter);
+        }
+        // The legacy fallback can end in a bare client without the filter.
+        let custom_ca_fallback = if self.address_filter.is_some() {
+            CustomCaFallback::Disabled
+        } else {
+            self.custom_ca_fallback
         };
         #[expect(
             deprecated,
@@ -610,7 +666,7 @@ impl RouteAwareClientPool {
         )]
         let client = match (
             self.http_client_factory.outbound_proxy_policy(),
-            self.custom_ca_fallback,
+            custom_ca_fallback,
         ) {
             (OutboundProxyPolicy::ReqwestDefault, CustomCaFallback::LegacyTransportDefault) => {
                 client_builder.build_with_transport_default_proxy_and_custom_ca_fallback()

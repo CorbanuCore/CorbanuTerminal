@@ -68,8 +68,8 @@ fn pf27_root_session_routing_and_storage() {
     assert_eq!((journal.load(), policy.load_policy()), (Ok(None), Ok(None)));
     let j = Fixture::journal_checkpoint().unwrap();
     let p = Fixture::policy_checkpoint().unwrap();
-    assert_eq!(journal.compare_and_store(None, &j), Ok(()));
-    assert_eq!(policy.compare_policy(None, &p), Ok(()));
+    assert_eq!(journal.compare_and_store(/*expected*/ None, &j), Ok(()));
+    assert_eq!(policy.compare_policy(/*expected*/ None, &p), Ok(()));
     assert_eq!(
         (journal.load(), policy.load_policy()),
         (Ok(Some(j)), Ok(Some(p)))
@@ -252,14 +252,20 @@ fn pf27_root_session_protocol_errors() {
     let (mut session, fixture, mut peers) = ready(Duration::from_secs(10));
     let [journal, policy] = clients(&peers);
     journal
-        .compare_and_store(None, &Fixture::journal_checkpoint().unwrap())
+        .compare_and_store(
+            /*expected*/ None,
+            &Fixture::journal_checkpoint().unwrap(),
+        )
         .unwrap();
     peers[1][1].write_all(b"p").unwrap();
     let mut ack = [0];
     peers[1][1].read_exact(&mut ack).unwrap();
     assert_eq!(ack, *b"k");
     let write = std::thread::spawn(move || {
-        policy.compare_policy(None, &Fixture::policy_checkpoint().unwrap())
+        policy.compare_policy(
+            /*expected*/ None,
+            &Fixture::policy_checkpoint().unwrap(),
+        )
     });
     eventually(|| fixture.stored() == Ok(true));
     peers[1][1].write_all(b"x").unwrap();

@@ -107,6 +107,8 @@ pub(crate) struct ExecCommandRequest {
     pub additional_permissions_preapproved: bool,
     pub justification: Option<String>,
     pub prefix_rule: Option<Vec<String>>,
+    /// #1057: the policy the handler read this request's grants under.
+    pub handler_basis: Option<crate::tools::orchestrator::HandlerBasis>,
 }
 
 #[derive(Debug)]
@@ -175,6 +177,9 @@ struct ProcessEntry {
     network_approval: Option<DeferredNetworkApproval>,
     session: Weak<Session>,
     last_used: tokio::time::Instant,
+    /// #2000: the Windows sandbox of the turn that started the process; a
+    /// sandbox set up later in the session does not confine it.
+    windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel,
 }
 
 pub(crate) fn clamp_yield_time(yield_time_ms: u64) -> u64 {

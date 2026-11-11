@@ -1,0 +1,19 @@
+# Addendum to effective-policy.txt (written after evidence check r1, amended after r2 and r3; effective-policy.txt itself is unchanged since
+# the isolation receipts were written, so the receipts' policy hash still matches)
+
+- The three relay `session_error` read timeouts are not idle connections, as effective-policy.txt says. Each is a
+  connection to the mediator (opened 04:01:01Z, 04:16:18Z and 04:33:06Z, from its connection id) that sent no complete
+  request and was timed out by the relay after about 600 s (04:11:02Z, 04:26:19Z, 04:43:22Z). The relay records no role
+  for them. The one opened at 04:16:18Z coincides with Q02's 10-minute pause (04:16:17Z-04:26:24Z in its report), and
+  the executor's next request followed right after the timeout. The executors' own logs show the first two stalls
+  directly: Q01's call 37 waited 608 s for response headers (runs/Q01/executor.stderr) and Q02's call 13 waited 606 s
+  (runs/Q02/executor.stderr). The third (opened 04:33:06Z) falls after MOD-28 had finished (04:32:05Z): Q02's calls 38 and 40 from about
+  04:33Z ended with "actionable silence timeout" after about 180 s of no output (runs/Q02/executor.stderr), the
+  executor's model stream stalling while it wrote its report. The relay logged no forwarded request on these three
+  connections.
+- Closing (correction): effective-policy.txt says restore.sh left "3 leftover processes of the removed uids, which
+  kill-lane-procs.sh then found gone". They were not gone: kill-lane-procs-end.out lists three live /usr/sbin/distnoted
+  processes (uids 610-612), which kill-lane-procs.sh killed with kill -9; only then did the count read 0.
+- Mediator windows (runs/*/mediator-window.jsonl, cited by the isolation receipts) start 120 s before each executor
+  started, so they overlap: Q01's window includes the gate's smoke request (03:46:49Z), and Q02's includes three Q01
+  executor requests (04:11:51Z-04:12:15Z). Attribute requests by time, not by window.

@@ -447,6 +447,47 @@ impl Vault {
         )
     }
 
+    /// #1311 (D171): rewrites a named account's `chatgpt_auth` sign-in only
+    /// while the account still holds one, reading and writing it under one
+    /// storage lock, so a removal by another process is never undone by a
+    /// save that read the sign-in before it. `change` gets the stored value
+    /// and returns the new one with what it holds (#609). `Ok(false)`,
+    /// writing nothing, when the account holds no sign-in; `change`'s error
+    /// is returned inside, also writing nothing.
+    pub fn update_provider_account_sign_in<E>(
+        &self,
+        provider_id: &str,
+        name: &ProviderAccountName,
+        change: impl FnOnce(&str) -> Result<(Zeroizing<String>, Option<ProviderAccountSignIn>), E>,
+    ) -> Result<Result<bool, E>, VaultError> {
+        let kind = ProviderAccountKind::ChatgptAuth;
+        let label = account_label(provider_id, name, kind)?;
+        self.with_storage_lock(|| {
+            let mut index = self.load_index()?;
+            if !index
+                .credentials
+                .get(&label)
+                .is_some_and(|meta| meta.credential_type == kind.credential_type())
+            {
+                return Ok(Ok(false));
+            }
+            let Some(stored) = self
+                .read_secret(&label)?
+                .filter(|value| !value.trim().is_empty())
+                .map(Zeroizing::new)
+            else {
+                return Ok(Ok(false));
+            };
+            let (value, sign_in) = match change(&stored) {
+                Ok(changed) => changed,
+                Err(error) => return Ok(Err(error)),
+            };
+            Self::check_account_value(&label, kind, &value)?;
+            self.store_locked(&mut index, &label, provider_id, name, kind, &value, sign_in)?;
+            Ok(Ok(true))
+        })
+    }
+
     /// PF-84 (#609): what a named account's `chatgpt_auth` sign-in holds, as
     /// recorded in its metadata; `None` when it holds none or it was not
     /// recorded. Reads the vault index only, never the sign-in.
@@ -511,13 +552,7 @@ impl Vault {
         refuse_if_any: Option<&[String]>,
     ) -> Result<(), VaultError> {
         let label = account_label(provider_id, name, kind)?;
-        if value.trim().is_empty() {
-            return Err(VaultError::EmptySecret);
-        }
-        if kind.is_secret() {
-            crate::ensure_not_error_text(value)?;
-        }
-        crate::protect_stored(&label, kind.credential_type(), value)?;
+        Self::check_account_value(&label, kind, value)?;
         self.with_storage_lock(|| {
             let mut index = self.load_index()?;
             if refuse_if_any.is_some_and(|labels| {
@@ -529,38 +564,68 @@ impl Vault {
                     "{provider_id} already has an account `{name}`"
                 )));
             }
-            let now = Utc::now().timestamp();
-            let created_at = index
-                .credentials
-                .get(&label)
-                .map_or(now, |meta| meta.created_at);
-            index.credentials.insert(
-                label.clone(),
-                VaultCredentialMeta {
-                    label: label.clone(),
-                    credential_type: kind.credential_type(),
-                    provider: Some(provider_id.to_string()),
-                    notes: Some(format!("{provider_id} account {name}")),
-                    revocation_notes: None,
-                    created_at,
-                    updated_at: now,
-                    storage_backend: StorageBackend::EncryptedSecrets,
-                    // Only a sign-in has one.
-                    sign_in: sign_in.filter(|_| kind == ProviderAccountKind::ChatgptAuth),
-                },
-            );
-            let mut updates = vec![
-                (
-                    VAULT_SCOPE.clone(),
-                    secret_name_for(&label)?,
-                    value.to_string(),
-                ),
-                index_secret_entry(&index)?,
-            ];
-            updates.extend(self.missing_fingerprint_salt()?);
-            self.secrets.apply_batch(&updates, &[])?;
-            Ok(())
+            self.store_locked(&mut index, &label, provider_id, name, kind, value, sign_in)
         })
+    }
+
+    /// The checks every stored account value passes.
+    fn check_account_value(
+        label: &str,
+        kind: ProviderAccountKind,
+        value: &str,
+    ) -> Result<(), VaultError> {
+        if value.trim().is_empty() {
+            return Err(VaultError::EmptySecret);
+        }
+        if kind.is_secret() {
+            crate::ensure_not_error_text(value)?;
+        }
+        crate::protect_stored(label, kind.credential_type(), value)
+    }
+
+    /// Writes one kind and the index; the caller holds the storage lock.
+    #[allow(clippy::too_many_arguments)]
+    fn store_locked(
+        &self,
+        index: &mut crate::VaultIndex,
+        label: &str,
+        provider_id: &str,
+        name: &ProviderAccountName,
+        kind: ProviderAccountKind,
+        value: &str,
+        sign_in: Option<ProviderAccountSignIn>,
+    ) -> Result<(), VaultError> {
+        let now = Utc::now().timestamp();
+        let created_at = index
+            .credentials
+            .get(label)
+            .map_or(now, |meta| meta.created_at);
+        index.credentials.insert(
+            label.to_string(),
+            VaultCredentialMeta {
+                label: label.to_string(),
+                credential_type: kind.credential_type(),
+                provider: Some(provider_id.to_string()),
+                notes: Some(format!("{provider_id} account {name}")),
+                revocation_notes: None,
+                created_at,
+                updated_at: now,
+                storage_backend: StorageBackend::EncryptedSecrets,
+                // Only a sign-in has one.
+                sign_in: sign_in.filter(|_| kind == ProviderAccountKind::ChatgptAuth),
+            },
+        );
+        let mut updates = vec![
+            (
+                VAULT_SCOPE.clone(),
+                secret_name_for(label)?,
+                value.to_string(),
+            ),
+            index_secret_entry(index)?,
+        ];
+        updates.extend(self.missing_fingerprint_salt()?);
+        self.secrets.apply_batch(&updates, &[])?;
+        Ok(())
     }
 
     /// Removes every kind of a named account in one transaction. Returns
@@ -694,25 +759,31 @@ impl Vault {
             let Some(salt) = self.account_fingerprint_salt()? else {
                 return Ok(None);
             };
-            let mut hasher = Sha256::new();
-            hasher.update(b"corbanu-provider-account-fingerprint-v1\0");
-            hasher.update(salt.as_bytes());
-            hasher.update(b"\0");
-            hasher.update(provider_id.as_bytes());
-            for (kind, value) in &material {
-                hasher.update(b"\0");
-                hasher.update(kind.as_str().as_bytes());
-                hasher.update(b"\0");
-                hasher.update(value.trim().as_bytes());
-            }
-            let digest = hasher.finalize();
-            Ok(Some(
-                digest
-                    .iter()
-                    .take(6)
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect(),
-            ))
+            Ok(Some(fingerprint_digest(&salt, provider_id, &material)))
+        })
+    }
+
+    /// REG-02: the fingerprint a named account of `provider_id` holding this
+    /// sign-in (`auth.json` contents) has, so the default login can be told
+    /// apart from, or matched with, a named account without showing any part
+    /// of it. Same reads as [`Self::provider_account_fingerprint`]: it never
+    /// writes the vault, and is `Ok(None)` when the vault has no salt yet.
+    pub fn sign_in_fingerprint(
+        &self,
+        provider_id: &str,
+        sign_in: &str,
+    ) -> Result<Option<String>, VaultError> {
+        let identity =
+            Zeroizing::new(sign_in_identity(sign_in).unwrap_or_else(|| sign_in.to_string()));
+        self.with_storage_lock(|| {
+            let Some(salt) = self.account_fingerprint_salt()? else {
+                return Ok(None);
+            };
+            Ok(Some(fingerprint_digest(
+                &salt,
+                provider_id,
+                &[(ProviderAccountKind::ChatgptAuth, identity.clone())],
+            )))
         })
     }
 
@@ -739,6 +810,31 @@ impl Vault {
         );
         Ok(Some((VAULT_SCOPE.clone(), fingerprint_salt_name()?, salt)))
     }
+}
+
+/// The 12-hex salted digest of an account's material.
+fn fingerprint_digest(
+    salt: &str,
+    provider_id: &str,
+    material: &[(ProviderAccountKind, Zeroizing<String>)],
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"corbanu-provider-account-fingerprint-v1\0");
+    hasher.update(salt.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(provider_id.as_bytes());
+    for (kind, value) in material {
+        hasher.update(b"\0");
+        hasher.update(kind.as_str().as_bytes());
+        hasher.update(b"\0");
+        hasher.update(value.trim().as_bytes());
+    }
+    hasher
+        .finalize()
+        .iter()
+        .take(6)
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn fingerprint_salt_name() -> Result<SecretName, VaultError> {

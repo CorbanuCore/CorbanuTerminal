@@ -108,6 +108,21 @@ impl AuthStorageBackend for GatedAuthStorage {
     fn delete(&self) -> std::io::Result<bool> {
         self.inner.delete()
     }
+
+    fn update(
+        &self,
+        change: &mut dyn FnMut(&mut AuthDotJson) -> std::io::Result<()>,
+    ) -> std::io::Result<Option<AuthDotJson>> {
+        self.inner.update(&mut |auth| {
+            self.protect(auth)?;
+            change(auth)?;
+            self.protect(auth)
+        })
+    }
+
+    fn is_named_account(&self) -> bool {
+        self.inner.is_named_account()
+    }
 }
 
 fn auth_values(auth: &AuthDotJson) -> Vec<(&'static str, Zeroizing<String>)> {
@@ -188,6 +203,10 @@ mod tests {
                     .split_once("::")
                     .map_or(module_path!(), |(_, path)| path)
             );
+            // #1201: no provider-auth helper runs while this copy starts.
+            let _no_helpers = crate::TEST_CHILD_PROCESSES
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
                 .args(["--exact", &test_name, "--test-threads=1"])
                 .env(PF28_CHILD_ENV, "1")

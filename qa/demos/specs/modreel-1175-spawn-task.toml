@@ -1,0 +1,170 @@
+# #1175 (#1146, D95): a task the person types in Spawn status reaches the child pane as the person's own input.
+id = "modreel-1175-spawn-task"
+feature = "#1175: a task you send from Spawn status arrives as your own input"
+expected = "Under Moderate, the person spawns a Troll and an Orc, sends the Orc a task from Spawn status, and the Orc's pane shows it as the person's message and does the work (no inter-agent or untrusted label)."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Reply with the single word pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*pong\\W*$"
+timeout = 120
+compress = 2
+[[steps]]
+type = "/spawn"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Create a persistent supervisor agent pane"
+[[steps]]
+key = "Down"
+repeat = 3
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Choose the harness for this Troll pane"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Model and Effort"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Reasoning Level"
+[[steps]]
+key = "Up"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Spawned Corbanu Terminal Troll pane"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/spawn"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Create a persistent executor agent pane"
+[[steps]]
+key = "Down"
+repeat = 4
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Choose the Troll that will supervise this Orc"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Choose the harness for this Orc pane"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Model and Effort"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Reasoning Level"
+[[steps]]
+key = "Up"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Spawned Corbanu Terminal Orc pane"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/spawn"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Create a persistent executor agent pane"
+[[steps]]
+key = "Down"
+repeat = 5
+[[steps]]
+wait = "› Spawn status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Send task to \\S+ \\[orc\\]"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Down"
+repeat = 4
+[[steps]]
+wait = "› +Send task to \\S+ \\[orc\\]"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Describe the work to run in this pane"
+[[steps]]
+type = "Add the line 'checked by the orc' to notes.txt, then run cat notes.txt."
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+run = "for i in $(seq 1 100); do grep -q 'checked by the orc' {workspace}/notes.txt 2>/dev/null && break; sleep 1; done; sleep 8; grep -c 'checked by the orc' {workspace}/notes.txt"
+timeout = 120
+[[steps]]
+type = "/spawn"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Create a persistent executor agent pane"
+[[steps]]
+key = "Down"
+repeat = 5
+[[steps]]
+wait = "› Spawn status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "completed; current task"
+timeout = 60
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Down"
+repeat = 3
+[[steps]]
+wait = "› +•\\s+\\S+ \\[orc\\]"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)› Add the line 'checked by the orc'[\\s\\S]*checked by the orc(?:(?!Working).)*\\n› "
+timeout = 60
+[[steps]]
+pause = 4.0

@@ -1,0 +1,10 @@
+Error loading config.toml:
+/Users/agmx3/runs/agms-T21-agmx3-20261020T171158Z/product-home/config.toml:4:1: missing field `version`
+  |
+4 | [security]
+  | ^^^^^^^^^^
+Error loading config.toml:
+/Users/agmx3/runs/agms-T21-agmx3-20261020T171158Z/product-home/config.toml:4:1: missing field `version`
+  |
+4 | [security]
+  | ^^^^^^^^^^

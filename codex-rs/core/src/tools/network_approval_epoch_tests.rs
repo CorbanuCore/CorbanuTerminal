@@ -151,6 +151,28 @@ impl Fixture {
         }
     }
 
+    /// Waits until another request has joined the open prompt for the host,
+    /// so it is certain to receive that prompt's answer.
+    async fn waiter_joined_open_prompt(&self) {
+        let mut joined = {
+            let approvals = self
+                .session
+                .services
+                .network_approval
+                .pending_host_approvals
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut open = approvals.iter().filter(|(key, _)| key.host.host == HOST);
+            let (_, pending) = open.next().expect("an open prompt for the host");
+            assert!(open.next().is_none(), "one open prompt for the host");
+            pending.joined_waiters.subscribe()
+        };
+        tokio::time::timeout(WAIT, joined.wait_for(|joined| *joined >= 1))
+            .await
+            .expect("a request joined the open prompt")
+            .expect("the open prompt is alive");
+    }
+
     async fn answer(&self, prompt: &ExecApprovalRequestEvent, decision: ReviewDecision) {
         self.session
             .notify_approval(&prompt.effective_approval_id(), decision)
@@ -246,11 +268,8 @@ async fn issue_945_waiters_on_a_stale_prompt_are_decided_again() {
     let shown = fixture.prompt(&mut first).await;
     let mut second = fixture.request();
     // The second request joins the open prompt: no prompt of its own.
-    assert!(
-        tokio::time::timeout(Duration::from_millis(300), fixture.events.recv())
-            .await
-            .is_err()
-    );
+    fixture.waiter_joined_open_prompt().await;
+    assert!(fixture.events.try_recv().is_err(), "no second prompt");
     assert!(!second.is_finished());
 
     fixture.raise_level();
@@ -259,6 +278,10 @@ async fn issue_945_waiters_on_a_stale_prompt_are_decided_again() {
         .await;
     let again = fixture.prompt(&mut first).await;
     assert_ne!(again.call_id, shown.call_id);
+    // #1054: both stale requests are asked again; whichever reaches the new
+    // round second joins the new prompt. Answer only once it has, so a late
+    // waiter cannot miss this answer and ask a third time.
+    fixture.waiter_joined_open_prompt().await;
     fixture.answer(&again, ReviewDecision::denied("no")).await;
     assert_eq!(decided(first).await, denied());
     assert_eq!(

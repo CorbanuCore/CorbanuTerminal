@@ -1,0 +1,45 @@
+• Questions 1/1 answered
+  • Allow `wait_agent_v1`? Security level: this is a tool the security level has not classified after untrusted content entered the session. Approve
+    only if you asked for it; a cached or automatic approval does not count.
+    answer: Allow once
+
+• Waiting for 01a15859-cf62-7e33-a270-31da2506032b
+  └ Wakes on a child report/message, follow-up task, human steering, or timeout.
+
+• Wait ended — child status update
+  └ 01a15859-cf62-7e33-a270-31da2506032b: Completed - The command `echo child-ok` ran successfully (exit code 0) and output: ``` child-ok ```
+
+• Questions 1/1 answered
+  • Allow `close_agent_v1`? Security level: this is a tool the security level has not classified after untrusted content entered the session. Approve
+    only if you asked for it; a cached or automatic approval does not count.
+    answer: Allow once
+
+• Closed 01a15859-cf62-7e33-a270-31da2506032b
+
+• Done. The child agent "Harvey" ran echo child-ok and reported it completed successfully with exit code 0, outputting child-ok. I've closed the child
+  agent.
+
+Security inspector (read only)
+● Protected: Moderate; every required control observed or checked at launch
+Observed 3s ago, policy generation 0.1
+
+Level
+  Saved: Moderate [configured: /security]
+  Core config: Permissive [configured: config layers]
+  [set] Active this run: Moderate: Core's level was Moderate at launch; your own sandbox, approval and network settings apply (runtime controls below
+      show what Core enforces now) [resolved: launch check]
+  [on] Live policy: Moderate in force; next start Moderate; kill switch off; generation 0.1 [observed: Core policy]
+
+This session
+  [set] Sandbox: commands can write to the current folder, /private/tmp, /Users/tester/run/tmp; under Moderate approved and allow-listed
+      commands stay inside the sandbox; permission-request tools are off [resolved: session config]
+  [set] Approvals: on-request (reviewer: you) [resolved: session config]
+  [set] Network: off for agent commands; web search cached [resolved: session config]
+  [set] Vault: the vault store and sign-in file are unreadable (Moderate and secretless_agent_launch, also when you approve a command) to agent
+      commands; only allowlisted environment variables reach agent commands (for example PATH, HOME, locale, terminal, proxy and tool locations;
+      secretless_agent_launch); set others explicitly in shell_environment_policy.set; login profiles and shell snapshots are not used [resolved:
+      session config]
+  [set] Model keys: held by the isolated credential broker (broker_model_auth on) [resolved: session config]
+  [set] Child agents: spawned agents get this session's values [resolved: session config]
+  [set] Sandbox backend: macOS Seatbelt [resolved: platform]
+42 more lines below · ↑/↓ scroll · r refresh · esc back to /security

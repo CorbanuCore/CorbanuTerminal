@@ -140,6 +140,7 @@ fn stdio_mcp_with_args(command: &str, args: &[&str]) -> McpServerConfig {
         supports_parallel_tool_calls: false,
         disabled_reason: None,
         startup_timeout_sec: None,
+        discover_timeout_sec: None,
         tool_timeout_sec: None,
         default_tools_approval_mode: None,
         enabled_tools: None,
@@ -166,6 +167,7 @@ fn http_mcp(url: &str) -> McpServerConfig {
         supports_parallel_tool_calls: false,
         disabled_reason: None,
         startup_timeout_sec: None,
+        discover_timeout_sec: None,
         tool_timeout_sec: None,
         default_tools_approval_mode: None,
         enabled_tools: None,
@@ -506,6 +508,152 @@ async fn load_config_resolves_non_prefixed_mcp_tool_servers() -> std::io::Result
             expected_servers.unwrap_or_default()
         );
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn load_config_rejects_unprefixed_mcp_servers_in_builtin_namespaces() -> std::io::Result<()> {
+    let server = "command = \"echo\"\n";
+    let rejected = [
+        (
+            format!("[features]\nnon_prefixed_mcp_tool_names = true\n[mcp_servers.web]\n{server}"),
+            "`web` is a built-in tool namespace",
+        ),
+        (
+            "[features.non_prefixed_mcp_tool_names]\nenabled = true\nserver_names = [\"skills\"]\n"
+                .to_string(),
+            "remove `skills` from `features.non_prefixed_mcp_tool_names.server_names`",
+        ),
+        (
+            format!(
+                "[features]\nnon_prefixed_mcp_tool_names = true\nmulti_agent_v2 = {{ enabled = true, tool_namespace = \"team\" }}\n[mcp_servers.team]\n{server}"
+            ),
+            "`team` is the multi-agent tool namespace",
+        ),
+        (
+            format!("[features]\nnon_prefixed_mcp_tool_names = true\n[mcp_servers.python]\n{server}"),
+            "`python` is a tool namespace reserved by the Responses API",
+        ),
+        (
+            "[features.non_prefixed_mcp_tool_names]\nenabled = true\nserver_names = [\"functions\"]\n"
+                .to_string(),
+            "`functions` is a tool namespace reserved by the Responses API",
+        ),
+    ];
+    for (config_contents, expected) in rejected {
+        let codex_home = tempdir()?;
+        let config_toml = toml::from_str::<ConfigToml>(&config_contents)
+            .expect("TOML deserialization should succeed");
+        // A pending write sees the same rejection before the config is built.
+        let clashes = non_prefixed_mcp_server_name_clashes_in_config_toml(
+            &config_toml,
+            &ConfigRequirements::default(),
+        )?;
+        let err = Config::load_from_base_config_with_overrides(
+            config_toml,
+            ConfigOverrides::default(),
+            codex_home.abs(),
+        )
+        .await
+        .expect_err(&config_contents);
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(err.to_string().contains(expected), "{err}");
+        assert_eq!(clashes.first(), Some(&err.to_string()), "{config_contents}");
+    }
+
+    let accepted = [
+        format!("[mcp_servers.web]\n{server}"),
+        format!(
+            "[features.non_prefixed_mcp_tool_names]\nenabled = true\nserver_names = [\"history\"]\n[mcp_servers.web]\n{server}"
+        ),
+        format!("[features]\nnon_prefixed_mcp_tool_names = true\n[mcp_servers.web_mcp]\n{server}"),
+        format!(
+            "[features]\nnon_prefixed_mcp_tool_names = true\n[mcp_servers.web]\nenabled = false\n{server}"
+        ),
+    ];
+    for config_contents in accepted {
+        let codex_home = tempdir()?;
+        let config_toml = toml::from_str::<ConfigToml>(&config_contents)
+            .expect("TOML deserialization should succeed");
+        assert_eq!(
+            non_prefixed_mcp_server_name_clashes_in_config_toml(
+                &config_toml,
+                &ConfigRequirements::default(),
+            )?,
+            Vec::<String>::new(),
+            "{config_contents}"
+        );
+        let config = Config::load_from_base_config_with_overrides(
+            config_toml,
+            ConfigOverrides::default(),
+            codex_home.abs(),
+        )
+        .await?;
+        assert_eq!(config.non_prefixed_mcp_server_name_clash("web_mcp"), None);
+        if config_contents.contains("non_prefixed_mcp_tool_names = true") {
+            let message = config
+                .non_prefixed_mcp_server_name_clash("image.gen")
+                .expect("image.gen clashes")
+                .to_string();
+            assert!(message.contains("`image_gen_mcp`"), "{message}");
+        }
+    }
+    Ok(())
+}
+
+/// #1679, #1666: `corbanu mcp add` and skill dependency install word the
+/// clash for a server that isn't configured yet.
+#[tokio::test]
+async fn non_prefixed_mcp_server_name_clash_messages_fit_each_entry_point() -> std::io::Result<()> {
+    let load = |contents: &str| {
+        let config_toml =
+            toml::from_str::<ConfigToml>(contents).expect("TOML deserialization should succeed");
+        async move {
+            let codex_home = tempdir()?;
+            Config::load_from_base_config_with_overrides(
+                config_toml,
+                ConfigOverrides::default(),
+                codex_home.abs(),
+            )
+            .await
+        }
+    };
+
+    let config = load(
+        "[features]\nnon_prefixed_mcp_tool_names = true\nmulti_agent_v2 = { enabled = true, tool_namespace = \"team\" }\n",
+    )
+    .await?;
+    let web = config
+        .non_prefixed_mcp_server_name_clash("web")
+        .expect("web clashes");
+    assert_eq!(
+        web.mcp_add_message(),
+        "MCP server `web` would be exposed without the `mcp__` prefix (`features.non_prefixed_mcp_tool_names`), but `web` is a built-in tool namespace. Choose another name, such as `corbanu mcp add web_mcp ...`."
+    );
+    let team = config
+        .non_prefixed_mcp_server_name_clash("team")
+        .expect("team clashes");
+    assert_eq!(
+        team.skill_dependency_message(),
+        "Skipped installing the skill's MCP server `team`: without the `mcp__` prefix (`features.non_prefixed_mcp_tool_names`), it would take the multi-agent tool namespace (`features.multi_agent_v2.tool_namespace`). To install it, list only other servers in `features.non_prefixed_mcp_tool_names.server_names`, or change `features.multi_agent_v2.tool_namespace`, or turn `features.non_prefixed_mcp_tool_names` off."
+    );
+    // #1681: an external-agent import skipped the server, so there is
+    // nothing to `corbanu mcp remove`.
+    assert_eq!(
+        web.import_message(),
+        "MCP server `web` would be exposed without the `mcp__` prefix (`features.non_prefixed_mcp_tool_names`), but `web` is a built-in tool namespace. It was not imported. Rename it in the other agent's config, or add it here under another name, such as `corbanu mcp add web_mcp ...`."
+    );
+    assert_eq!(
+        team.import_message(),
+        "MCP server `team` would be exposed without the `mcp__` prefix (`features.non_prefixed_mcp_tool_names`), but `team` is the multi-agent tool namespace (`features.multi_agent_v2.tool_namespace`). It was not imported. Rename it in the other agent's config, or add it here under another name, such as `corbanu mcp add team_mcp ...`."
+    );
+    // Config load keeps its wording.
+    assert!(
+        web.to_string().ends_with(
+            "for the global config, `corbanu mcp remove web` then `corbanu mcp add web_mcp ...`)."
+        ),
+        "{web}"
+    );
     Ok(())
 }
 
@@ -2023,6 +2171,7 @@ respect_system_proxy = false
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cli_overrides(vec![(
             "features.respect_system_proxy".to_string(),
             toml::Value::Boolean(true),
@@ -2711,6 +2860,7 @@ async fn workspace_root_glob_none_compiles_to_filesystem_pattern_entry() -> std:
                 .entries
                 .contains(&FileSystemSandboxEntry {
                     path: FileSystemPath::GlobPattern {
+                        scan: None,
                         pattern: expected_pattern,
                     },
                     access: FileSystemAccessMode::Deny,
@@ -5368,6 +5518,7 @@ enabled = true
 
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await?;
     let plugins_manager = PluginsManager::new(codex_home.path().to_path_buf());
@@ -5428,6 +5579,7 @@ enabled = true
 
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -5531,6 +5683,7 @@ enabled = true
 
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -6433,6 +6586,7 @@ async fn replace_mcp_servers_round_trips_entries() -> anyhow::Result<()> {
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: Some(Duration::from_secs(3)),
+            discover_timeout_sec: None,
             tool_timeout_sec: Some(Duration::from_secs(5)),
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -6832,6 +6986,7 @@ async fn replace_mcp_servers_serializes_env_sorted() -> anyhow::Result<()> {
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -6909,6 +7064,7 @@ async fn replace_mcp_servers_serializes_env_vars() -> anyhow::Result<()> {
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -6971,6 +7127,7 @@ async fn replace_mcp_servers_serializes_sourced_env_vars() -> anyhow::Result<()>
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -7024,6 +7181,7 @@ async fn replace_mcp_servers_serializes_cwd() -> anyhow::Result<()> {
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -7079,6 +7237,7 @@ async fn replace_mcp_servers_streamable_http_serializes_bearer_token() -> anyhow
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: Some(Duration::from_secs(2)),
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -7150,6 +7309,7 @@ async fn replace_mcp_servers_streamable_http_serializes_custom_headers() -> anyh
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: Some(Duration::from_secs(2)),
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -7233,6 +7393,7 @@ async fn replace_mcp_servers_streamable_http_removes_optional_sections() -> anyh
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: Some(Duration::from_secs(2)),
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -7269,6 +7430,7 @@ async fn replace_mcp_servers_streamable_http_removes_optional_sections() -> anyh
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -7340,6 +7502,7 @@ async fn replace_mcp_servers_streamable_http_isolates_headers_between_servers() 
                 supports_parallel_tool_calls: false,
                 disabled_reason: None,
                 startup_timeout_sec: Some(Duration::from_secs(2)),
+                discover_timeout_sec: None,
                 tool_timeout_sec: None,
                 default_tools_approval_mode: None,
                 enabled_tools: None,
@@ -7367,6 +7530,7 @@ async fn replace_mcp_servers_streamable_http_isolates_headers_between_servers() 
                 supports_parallel_tool_calls: false,
                 disabled_reason: None,
                 startup_timeout_sec: None,
+                discover_timeout_sec: None,
                 tool_timeout_sec: None,
                 default_tools_approval_mode: None,
                 enabled_tools: None,
@@ -7456,6 +7620,7 @@ async fn replace_mcp_servers_serializes_disabled_flag() -> anyhow::Result<()> {
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -7507,6 +7672,7 @@ async fn replace_mcp_servers_serializes_required_flag() -> anyhow::Result<()> {
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -7558,6 +7724,7 @@ async fn replace_mcp_servers_serializes_tool_filters() -> anyhow::Result<()> {
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: Some(vec!["allowed".to_string()]),
@@ -7613,6 +7780,7 @@ async fn replace_mcp_servers_streamable_http_serializes_oauth_resource() -> anyh
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -7676,6 +7844,7 @@ async fn for_config_writes_selected_user_config_file() -> anyhow::Result<()> {
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .loader_overrides(LoaderOverrides {
             user_config_path: Some(selected_config.abs()),
             user_config_profile: Some("work".parse().expect("profile-v2 name")),
@@ -10356,6 +10525,7 @@ async fn requirements_disallowing_default_sandbox_falls_back_to_required_default
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"allowed_sandbox_modes = ["read-only"]"#,
@@ -10737,6 +10907,7 @@ async fn feature_requirements_normalize_effective_feature_values() -> std::io::R
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -10769,6 +10940,7 @@ async fn feature_requirements_auto_review_disables_guardian_approval() -> std::i
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -10791,6 +10963,7 @@ async fn browser_feature_requirements_are_valid() -> std::io::Result<()> {
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -11015,6 +11188,7 @@ async fn requirements_disallowing_default_approvals_reviewer_falls_back_to_requi
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"allowed_approvals_reviewers = ["guardian_subagent"]"#,
@@ -11771,6 +11945,7 @@ async fn feature_requirements_normalize_runtime_feature_mutations() -> std::io::
 
     let mut config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -11805,6 +11980,7 @@ async fn feature_requirements_warn_on_collab_legacy_alias() -> std::io::Result<(
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -11835,6 +12011,7 @@ async fn feature_requirements_warn_and_ignore_unknown_feature() -> std::io::Resu
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -12885,6 +13062,26 @@ async fn default_provider_does_not_force_the_api_only_login_path() -> std::io::R
         codex_model_provider_info::OPENAI_PROVIDER_ID
     );
     assert_eq!(stale_gpu.forced_login_method, None);
+
+    // #1563: the Corbanu Plan route is set up through its wallet row, so a
+    // chosen Plan keeps the provider picker instead of a pasted-key prompt.
+    let plan = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            model_provider: Some(
+                codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID.to_string(),
+            ),
+            model: Some("z-ai/glm-5.2".to_string()),
+            ..ConfigToml::default()
+        },
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(
+        plan.model_provider_id,
+        codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID
+    );
+    assert_eq!(plan.forced_login_method, None);
 
     // A model that implies an API-key-only provider still forces the API path,
     // because naming that model is a choice of provider by another route. Here

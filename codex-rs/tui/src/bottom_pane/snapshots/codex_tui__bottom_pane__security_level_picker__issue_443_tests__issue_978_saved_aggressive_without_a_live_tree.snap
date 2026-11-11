@@ -3,8 +3,10 @@ source: tui/src/bottom_pane/security_level_picker_issue_443_tests.rs
 expression: "render(&picker, 80)"
 ---
 Saved: Aggressive (nested agents: refuse)
-Restart Corbanu Terminal to activate Aggressive. Until then this session stays
-Permissive.
+Restart Corbanu Terminal to activate the rest of Aggressive. This window's
+session has not started yet: when it starts here before you restart, it takes
+Core's Aggressive protections and approval for every command, and its other
+settings stay Permissive until the restart.
 Approval for every command: from each pane's next turn you approve every command
 that is not known read-only (reviewer: you), now in 2 threads of this Corbanu
 Terminal and in those you start before you restart.

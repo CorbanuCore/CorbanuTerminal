@@ -285,8 +285,8 @@ fn pf_27_s01_pair_real_two_holds_cancel_drop_and_reap() {
         let owner = Reservation::acquire().unwrap();
         assert!(Reservation::acquire().is_err());
         let images = PairImages {
-            journal: static_image("PF27_SYNTHETIC_HOLD", 204),
-            policy: static_image("PF27_SYNTHETIC_HOLD", 204),
+            journal: static_image("PF27_SYNTHETIC_HOLD", /*anchor*/ 204),
+            policy: static_image("PF27_SYNTHETIC_HOLD", /*anchor*/ 204),
         };
         let handle = owner
             .launch_pair(images, deadline())

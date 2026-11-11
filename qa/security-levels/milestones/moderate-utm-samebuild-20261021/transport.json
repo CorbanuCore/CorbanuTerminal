@@ -1,0 +1,125 @@
+{
+    "note": "tools/transport_check.py per run: guest mediator and host relay requests in the tester window (start-120 s .. end+5 s), tunnel log events in the window. The host relay log also holds 2 integrator checks of /models (08:09:50Z, 09:46:34Z), outside every window. Windows overlap (each starts 120 s before its tester), so per-window counts add up to more than the mediator totals (UTM: 313 in windows, 300 in the mediator log).",
+    "runs": {
+        "T09-utm": {
+            "run": "agms-T09-utm-agmx1-20261021T081903Z",
+            "mediator_forwarded": 62,
+            "mediator_non_200": 0,
+            "mediator_session_error": 0,
+            "mediator_by_role": {
+                "product": 14,
+                "executor": 48
+            },
+            "product_median_seconds": 6.074,
+            "relay_requests": 62,
+            "relay_non_200": 0,
+            "tunnel_events_in_window": [],
+            "ok": true
+        },
+        "T17-utm": {
+            "run": "agms-T17-utm-agmx2-20261021T083219Z",
+            "mediator_forwarded": 65,
+            "mediator_non_200": 0,
+            "mediator_session_error": 0,
+            "mediator_by_role": {
+                "product": 4,
+                "executor": 61
+            },
+            "product_median_seconds": 65.146,
+            "relay_requests": 65,
+            "relay_non_200": 0,
+            "tunnel_events_in_window": [],
+            "ok": true
+        },
+        "T18-utm": {
+            "run": "agms-T18-utm-agmx3-20261021T085250Z",
+            "mediator_forwarded": 45,
+            "mediator_non_200": 0,
+            "mediator_session_error": 0,
+            "mediator_by_role": {
+                "product": 7,
+                "executor": 38
+            },
+            "product_median_seconds": 6.562,
+            "relay_requests": 45,
+            "relay_non_200": 0,
+            "tunnel_events_in_window": [],
+            "ok": true
+        },
+        "T21-utm": {
+            "run": "agms-T21-utm-agmx1-20261021T090506Z",
+            "mediator_forwarded": 58,
+            "mediator_non_200": 0,
+            "mediator_session_error": 0,
+            "mediator_by_role": {
+                "product": 10,
+                "executor": 48
+            },
+            "product_median_seconds": 7.304,
+            "relay_requests": 58,
+            "relay_non_200": 0,
+            "tunnel_events_in_window": [],
+            "ok": true
+        },
+        "T17-utm-replay": {
+            "run": "agms-T17-utm-replay-agmx2-20261021T091922Z",
+            "mediator_forwarded": 36,
+            "mediator_non_200": 0,
+            "mediator_session_error": 0,
+            "mediator_by_role": {
+                "product": 2,
+                "executor": 34
+            },
+            "product_median_seconds": 14.004,
+            "relay_requests": 36,
+            "relay_non_200": 0,
+            "tunnel_events_in_window": [],
+            "ok": true
+        },
+        "T18-utm-replay": {
+            "run": "agms-T18-utm-replay-agmx3-20261021T093025Z",
+            "mediator_forwarded": 47,
+            "mediator_non_200": 0,
+            "mediator_session_error": 0,
+            "mediator_by_role": {
+                "product": 7,
+                "executor": 40
+            },
+            "product_median_seconds": 8.602,
+            "relay_requests": 47,
+            "relay_non_200": 0,
+            "tunnel_events_in_window": [],
+            "ok": true
+        },
+        "T09-cur": {
+            "run": "agms-T09-cur-agmx1-20261021T094859Z",
+            "mediator_forwarded": 74,
+            "mediator_non_200": 5,
+            "mediator_session_error": 0,
+            "mediator_by_role": {
+                "product": 16,
+                "executor": 58
+            },
+            "product_median_seconds": 7.53,
+            "relay_requests": 74,
+            "relay_non_200": 5,
+            "tunnel_events_in_window": [],
+            "ok": false
+        },
+        "T17-cur": {
+            "run": "agms-T17-cur-agmx2-20261021T101006Z",
+            "mediator_forwarded": 47,
+            "mediator_non_200": 0,
+            "mediator_session_error": 0,
+            "mediator_by_role": {
+                "product": 9,
+                "executor": 38
+            },
+            "product_median_seconds": 6.628,
+            "relay_requests": 47,
+            "relay_non_200": 0,
+            "tunnel_events_in_window": [],
+            "ok": true
+        }
+    }
+}

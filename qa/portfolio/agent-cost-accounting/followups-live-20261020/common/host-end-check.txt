@@ -1,0 +1,10 @@
+# Host check after the run (integrator, 2026-10-20T05:53:31Z); tart-run.sh down printed 'lock released' to its terminal at 05:30:47Z, outside vm-state-end.txt
+## Tart lock
+ls: /Volumes/CorbanuDrive/Corbanu/.codex-work/workers-20261002/vm-tart.lock: No such file or directory
+## tart list
+Source Name            Disk  Size  Accessed    State  
+local  corbanu-qa-base 50 GB 28 GB 3 hours ago stopped
+## utmctl list
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3

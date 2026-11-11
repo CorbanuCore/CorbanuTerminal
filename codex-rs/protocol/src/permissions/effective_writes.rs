@@ -16,6 +16,7 @@ use super::resolve_candidate_path;
 /// (one filesystem walk each), and its roots reached through a nested link
 /// found, the first time a check needs them instead of once per path. The
 /// filesystem is read then, so build one per check of a set of paths.
+/// The lazy caches use [`OnceCell`], so this view is not [`Sync`].
 pub struct EffectiveWrites<'a> {
     policy: &'a FileSystemSandboxPolicy,
     cwd: PathBuf,

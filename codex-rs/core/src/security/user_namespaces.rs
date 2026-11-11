@@ -10,6 +10,9 @@
 //! a person's fresh approval of a command's request to run outside the
 //! sandbox before untrusted content ([`allows_one_run`]) also lets that one
 //! run create user namespaces, with [`one_run_warning`] in the prompt.
+//! D48 (c) (Travis, 2026-10-20, security sign-off): after untrusted content,
+//! the same, through a fresh prompt with the same warning, but only for a
+//! command whose program is a known tool ([`known_tool::known_tool`]).
 //! Never remembered; Aggressive and an Aggressive launch keep the rule.
 
 use std::collections::VecDeque;
@@ -21,8 +24,15 @@ use codex_protocol::permissions::FileSystemSandboxKind;
 use codex_sandboxing::user_namespaces;
 use codex_security_policy::SecurityLevel;
 
+use crate::security::tainted_action::PostTaintState;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
+
+#[path = "user_namespaces_known_tool.rs"]
+mod known_tool;
+
+pub(crate) use known_tool::Lookup;
+pub(crate) use known_tool::known_tool;
 
 /// Whether agent commands get the user-namespace deny entry: on Linux,
 /// where Core's protected-path level is Moderate or Aggressive, or the
@@ -49,6 +59,11 @@ fn denying_level(
 /// sandbox rules (not an external or disabled sandbox), and under Moderate
 /// whether a person may still allow it for one command ([`allows_one_run`]).
 fn turn_rule(session: &Session, turn: &TurnContext) -> Option<user_namespaces::Rule> {
+    turn_rule_at(session, turn).map(|(rule, _)| rule)
+}
+
+/// [`turn_rule`], with the session's taint generation it was decided at.
+fn turn_rule_at(session: &Session, turn: &TurnContext) -> Option<(user_namespaces::Rule, u64)> {
     if !cfg!(target_os = "linux")
         || turn.config.permissions.file_system_sandbox_policy().kind
             != FileSystemSandboxKind::Restricted
@@ -60,19 +75,21 @@ fn turn_rule(session: &Session, turn: &TurnContext) -> Option<user_namespaces::R
         .model_client()
         .post_taint_state()
         .filter(crate::security::tainted_action::PostTaintState::protected_paths_apply);
-    match denying_level(
+    let generation = state.as_ref().map_or(0, |state| state.taint_generation);
+    let rule = match denying_level(
         state.as_ref().map(|state| state.level),
         turn.config.permissions.launch_enforces_aggressive(),
     )? {
-        "Aggressive" => Some(user_namespaces::Rule::Aggressive),
-        _ => Some(match state {
+        "Aggressive" => user_namespaces::Rule::Aggressive,
+        _ => match state {
             Some(state) if one_command_way(&state) => user_namespaces::Rule::ModerateOneCommand,
             Some(state) if !kill_switch_on(&state) && state.moderate_bound() => {
                 user_namespaces::Rule::ModerateAfterUntrusted
             }
             _ => user_namespaces::Rule::ModerateNotInForce,
-        }),
-    }
+        },
+    };
+    Some((rule, generation))
 }
 
 /// Under Moderate, whether a person's approval of a command's request to
@@ -80,11 +97,18 @@ fn turn_rule(session: &Session, turn: &TurnContext) -> Option<user_namespaces::R
 /// configured and live, no untrusted content in the session (the state under
 /// which that approval lifts Moderate's protected-file rules, #239), and the
 /// kill switch off.
-fn one_command_way(state: &crate::security::tainted_action::PostTaintState) -> bool {
-    state.human_approval_lifts_rules(Some(0)) && !kill_switch_on(state)
+fn one_command_way(state: &PostTaintState) -> bool {
+    still_offered(state, /*warned_at*/ 0)
 }
 
-fn kill_switch_on(state: &crate::security::tainted_action::PostTaintState) -> bool {
+/// Whether a person warned at taint generation `warned_at` may still allow
+/// it: Moderate configured and live, no untrusted content since, and the
+/// kill switch off.
+fn still_offered(state: &PostTaintState, warned_at: u64) -> bool {
+    state.human_approval_lifts_rules(Some(warned_at)) && !kill_switch_on(state)
+}
+
+fn kill_switch_on(state: &PostTaintState) -> bool {
     matches!(
         state.policy,
         crate::security::tainted_action::PolicyBinding::Bound {
@@ -94,37 +118,55 @@ fn kill_switch_on(state: &crate::security::tainted_action::PostTaintState) -> bo
     )
 }
 
-/// D27 (a): whether a person's approval of this command lets its run create
-/// user namespaces: on Linux, `approved_now` (a person was shown
-/// [`one_run_warning`] and approved this command's request to run outside
-/// the sandbox when asked about it now: not a hook, the automatic reviewer,
-/// the approval cache or a saved rule), Core's protected-path level
-/// (`level`) is Moderate, the launch does not enforce Aggressive, and still,
-/// when it is about to run, [`one_command_way`].
+/// D27 (a), D48 (c): whether a person's approval of this command lets its
+/// run create user namespaces: on Linux, `approved_now` (a person approved
+/// this command's request to run outside the sandbox when asked about it
+/// now: not a hook, the automatic reviewer, the approval cache or a saved
+/// rule) in a prompt that showed [`one_run_warning`] at taint generation
+/// `warned_at`, Core's protected-path level (`level`) is Moderate, the
+/// launch does not enforce Aggressive, and still, when it is about to run,
+/// Moderate is configured and live, the kill switch is off and no untrusted
+/// content has arrived since the warning.
 pub(crate) fn allows_one_run(
     session: &Session,
     level: Option<SecurityLevel>,
     launch_enforces_aggressive: bool,
     approved_now: bool,
+    warned_at: Option<u64>,
 ) -> bool {
     cfg!(target_os = "linux")
         && approved_now
         && level == Some(SecurityLevel::Moderate)
         && !launch_enforces_aggressive
-        && session
-            .services
-            .model_client()
-            .post_taint_state()
-            .is_some_and(|state| one_command_way(&state))
+        && warned_at.is_some_and(|warned_at| {
+            session
+                .services
+                .model_client()
+                .post_taint_state()
+                .is_some_and(|state| still_offered(&state, warned_at))
+        })
 }
 
-/// D27 (a): the warning for Moderate's prompt on a command's request to run
-/// outside the sandbox, where approving it lets that run create user
-/// namespaces ([`allows_one_run`]); the orchestrator allows it only where
+/// The warning for Moderate's prompt on a request to run `command` outside
+/// the sandbox, where approving it lets that run create user namespaces
+/// ([`allows_one_run`]), with the taint generation it is shown at: before
+/// untrusted content for any command (D27 (a)), after it only where
+/// `runs_known_tool` says the command's program is a known tool (D48 (c),
+/// [`known_tool`]; asked only then). The orchestrator allows it only where
 /// this was shown.
-pub(crate) fn one_run_warning(session: &Session, turn: &TurnContext) -> Option<String> {
-    (turn_rule(session, turn) == Some(user_namespaces::Rule::ModerateOneCommand))
-        .then(user_namespaces::moderate_one_run_warning)
+pub(crate) fn one_run_warning(
+    session: &Session,
+    turn: &TurnContext,
+    runs_known_tool: &dyn Fn() -> bool,
+) -> Option<(String, u64)> {
+    match turn_rule_at(session, turn)? {
+        (user_namespaces::Rule::ModerateOneCommand, generation) => Some(generation),
+        (user_namespaces::Rule::ModerateAfterUntrusted, generation) if runs_known_tool() => {
+            Some(generation)
+        }
+        _ => None,
+    }
+    .map(|generation| (user_namespaces::moderate_one_run_warning(), generation))
 }
 
 /// The commands (thread, turn and call) whose run a person let create user
@@ -192,7 +234,7 @@ pub(crate) fn denial_explanation(
                     user_namespaces::Rule::ModerateOneCommand
                     | user_namespaces::Rule::ModerateAfterUntrusted,
                 ) => {
-                    "reported refused by the command; Moderate blocks it on Linux, but for one command whose request to run outside the sandbox a person approves before untrusted content (in practice, a new session's first command)"
+                    "reported refused by the command; Moderate blocks it on Linux, but for one command whose request to run outside the sandbox a person approves when asked: before untrusted content any command, after it only one that runs unshare, bwrap, podman, buildah, flatpak or nix"
                 }
                 Some(user_namespaces::Rule::ModerateNotInForce) => {
                     "reported refused by the command; Moderate blocks it on Linux, and with the kill switch on (or Moderate not fully in force) no approval lifts it"

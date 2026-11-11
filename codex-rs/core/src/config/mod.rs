@@ -190,7 +190,10 @@ pub use provider_accounts::apply_recorded_provider_account;
 pub(crate) use provider_accounts::configured_account_names;
 pub use provider_accounts::default_login_restriction_error;
 pub use provider_accounts::other_provider_account_error;
+pub(crate) use provider_accounts::restore_recorded_agent_account;
+pub(crate) use provider_accounts::resume_default_key_error;
 pub use provider_accounts::session_account_error;
+pub(crate) use provider_accounts::spawn_default_key_error;
 pub use provider_accounts::split_account_selection;
 pub(crate) use provider_accounts::stamp_provider_account;
 pub use provider_accounts::subagent_account_error;
@@ -297,7 +300,7 @@ Payload:
 You may also see them addressed as to=/root/..., which indicates your identity is /root/...
 "#;
 const DEFAULT_MULTI_AGENT_V2_MODEL_OVERRIDE_USAGE_HINT_TEXT: &str = "Full-history forks (`fork_turns` omitted or `\"all\"`) inherit the parent model and reasoning effort and do not accept overrides. Only set `model` or `reasoning_effort` when explicitly requested by the user, applicable `AGENTS.md` instructions, or skill instructions; when doing so, set `fork_turns` to `\"none\"` or a positive integer string.";
-const DEFAULT_MULTI_AGENT_V2_TOOL_NAMESPACE: &str = "collaboration";
+pub(crate) const DEFAULT_MULTI_AGENT_V2_TOOL_NAMESPACE: &str = "collaboration";
 const DEFAULT_MULTI_AGENT_V2_SHARED_USAGE_HINT_TEXT: &str = r#"Note that collaboration tools cannot be called from inside `functions.exec`. Call `spawn_agent`, `send_message`, `followup_task`, `wait_agent`, `interrupt_agent`, and `list_agents` only as direct tool calls using the recipient shown in their tool definitions, such as `to=functions.collaboration.spawn_agent`, since they are intentionally absent from the `functions.exec` `tools.*` namespace. Available tools in `functions.exec` are explicitly described with a `tools` namespace in the developer message.
 
 All agents share the same directory. In detail:
@@ -1258,6 +1261,17 @@ pub struct Config {
     /// (#403). A new conversation still does.
     pub skip_reopen_warmup: bool,
 
+    /// When `true`, no conversation sends the startup warm-up request, new or
+    /// reopened (#1045).
+    pub skip_startup_warmup: bool,
+
+    /// #1038: this new conversation continues a saved one whose first
+    /// message the person edited. Its warm-up is a reopen warm-up (#403),
+    /// as when a later message is edited. Set per thread, never from TOML;
+    /// read once at session start. Agents spawned from this config inherit
+    /// it to no effect: only a root session can be a reopen.
+    pub reopened_by_prompt_edit: bool,
+
     /// The currently active project config, resolved by checking if cwd:
     /// is (1) part of a git repo, (2) a git worktree, or (3) just using the cwd
     pub active_project: ProjectConfig,
@@ -2002,6 +2016,13 @@ impl Config {
         self.features.enabled(Feature::NamedAccounts)
     }
 
+    /// PF-84 (#1085): whether this home uses named OpenAI sign-in accounts
+    /// (one is enrolled, or `[provider_accounts]` selects one). Blocking: an
+    /// initialised vault is decrypted to read its account metadata.
+    pub fn uses_named_sign_in_accounts(&self) -> bool {
+        provider_accounts::uses_named_sign_in_accounts(&self.codex_home, &self.model_providers)
+    }
+
     /// Creates the HTTP client factory resolved from the effective feature configuration.
     pub fn http_client_factory(&self) -> HttpClientFactory {
         let outbound_proxy_policy = if self.respect_system_proxy {
@@ -2132,6 +2153,7 @@ impl Config {
             } else {
                 Vec::new()
             },
+            multi_agent_v2_tool_namespace: self.multi_agent_v2.tool_namespace.clone(),
             protocol_mode: self.mcp_protocol_mode(),
             client_elicitation_capability: if self.features.enabled(Feature::AuthElicitation) {
                 ElicitationCapability::new()
@@ -2153,6 +2175,47 @@ impl Config {
     pub(crate) fn prefix_mcp_tool_names(&self) -> bool {
         !self.features.enabled(Feature::NonPrefixedMcpToolNames)
             || self.non_prefixed_mcp_tool_servers.is_some()
+    }
+
+    /// Why an MCP server named `name` can't be used here, if it would be
+    /// exposed without the `mcp__` prefix under a reserved tool namespace
+    /// (#1655, #1666).
+    pub fn non_prefixed_mcp_server_name_clash(
+        &self,
+        name: &str,
+    ) -> Option<NonPrefixedMcpServerNameClash> {
+        non_prefixed_mcp_server_name_clash(
+            self.features.enabled(Feature::NonPrefixedMcpToolNames),
+            self.non_prefixed_mcp_tool_servers.as_deref(),
+            self.multi_agent_v2.tool_namespace.as_deref(),
+            name,
+        )
+    }
+
+    /// Rejects enabled configured servers, and `server_names` entries, that
+    /// would take a reserved tool namespace without the `mcp__` prefix.
+    fn validate_non_prefixed_mcp_server_names(&self) -> std::io::Result<()> {
+        let configured = self
+            .mcp_servers
+            .get()
+            .iter()
+            .filter(|(_, server)| server.enabled)
+            .map(|(name, _)| name.as_str());
+        match non_prefixed_mcp_server_name_clashes(
+            self.features.enabled(Feature::NonPrefixedMcpToolNames),
+            self.non_prefixed_mcp_tool_servers.as_deref(),
+            self.multi_agent_v2.tool_namespace.as_deref(),
+            configured,
+        )
+        .into_iter()
+        .next()
+        {
+            Some(message) => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                message,
+            )),
+            None => Ok(()),
+        }
     }
 
     pub fn mcp_protocol_mode(&self) -> McpProtocolMode {
@@ -2433,6 +2496,200 @@ pub fn deserialize_config_toml_with_base(
     root_value
         .try_into()
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+}
+
+/// The #1655 name check for a config that has not been built into a
+/// [`Config`] yet (for example a pending config write): every message a
+/// config load would reject it with; the load reports the first.
+pub fn non_prefixed_mcp_server_name_clashes_in_config_toml(
+    cfg: &ConfigToml,
+    requirements: &ConfigRequirements,
+) -> std::io::Result<Vec<String>> {
+    let configured_features = Features::from_sources(
+        FeatureConfigSource {
+            features: cfg.features.as_ref(),
+            experimental_use_unified_exec_tool: cfg.experimental_use_unified_exec_tool,
+        },
+        FeatureConfigSource::default(),
+        FeatureOverrides::default(),
+    );
+    let features = ManagedFeatures::from_configured(
+        configured_features,
+        requirements.feature_requirements.clone(),
+    )?;
+    let enabled = features.enabled(Feature::NonPrefixedMcpToolNames);
+    if !enabled {
+        return Ok(Vec::new());
+    }
+    let listed = cfg
+        .features
+        .as_ref()
+        .and_then(|features| features.non_prefixed_mcp_tool_names.as_ref())
+        .and_then(|feature| match feature {
+            FeatureToml::Enabled(_) => None,
+            FeatureToml::Config(config) => config.server_names.clone(),
+        });
+    let mut servers = cfg.mcp_servers.clone();
+    filter_mcp_servers_by_requirements(&mut servers, requirements.mcp_servers.as_ref());
+    let configured = servers
+        .iter()
+        .filter(|(_, server)| server.enabled)
+        .map(|(name, _)| name.as_str());
+    Ok(non_prefixed_mcp_server_name_clashes(
+        enabled,
+        listed.as_deref(),
+        resolve_multi_agent_v2_config(cfg).tool_namespace.as_deref(),
+        configured,
+    ))
+}
+
+/// Why an MCP server name can't be used while
+/// `features.non_prefixed_mcp_tool_names` would expose it without the `mcp__`
+/// prefix under a reserved tool namespace (#1655, #1666). [`Display`] gives the
+/// config-load wording; the other messages fit other entry points.
+///
+/// [`Display`]: std::fmt::Display
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NonPrefixedMcpServerNameClash {
+    name: String,
+    reserved: codex_mcp::ReservedMcpNamespace,
+    /// Whether `name` is listed in `features.non_prefixed_mcp_tool_names.server_names`.
+    listed: bool,
+}
+
+impl NonPrefixedMcpServerNameClash {
+    /// A replacement name that is itself a valid server name and TOML key.
+    fn suggested_name(&self) -> String {
+        self.name
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .chain("_mcp".chars())
+            .collect()
+    }
+
+    fn reason(&self) -> String {
+        let name = &self.name;
+        let reserved = self.reserved.description();
+        format!(
+            "MCP server `{name}` would be exposed without the `mcp__` prefix (`features.non_prefixed_mcp_tool_names`), but `{name}` is {reserved}"
+        )
+    }
+
+    // A config that lists a clashing name in `server_names` doesn't load, so
+    // the clashes below, found on a loaded config, are never listed ones.
+
+    /// The `corbanu mcp add` wording: the name is being added, not renamed
+    /// (a disabled server with that name may already exist).
+    pub fn mcp_add_message(&self) -> String {
+        let reason = self.reason();
+        let suggested = self.suggested_name();
+        format!("{reason}. Choose another name, such as `corbanu mcp add {suggested} ...`.")
+    }
+
+    /// #1681: the external-agent import wording. The server was skipped,
+    /// never written to this config, so there is nothing to remove here.
+    pub fn import_message(&self) -> String {
+        let reason = self.reason();
+        let suggested = self.suggested_name();
+        format!(
+            "{reason}. It was not imported. Rename it in the other agent's config, or add it here under another name, such as `corbanu mcp add {suggested} ...`."
+        )
+    }
+
+    /// The warning when a skill's MCP server dependency is not installed.
+    pub fn skill_dependency_message(&self) -> String {
+        let name = &self.name;
+        let reserved = self.reserved.description();
+        let mut fixes = vec![
+            "list only other servers in `features.non_prefixed_mcp_tool_names.server_names`"
+                .to_string(),
+        ];
+        if self.reserved == codex_mcp::ReservedMcpNamespace::MultiAgentV2 {
+            fixes.push("change `features.multi_agent_v2.tool_namespace`".to_string());
+        }
+        fixes.push("turn `features.non_prefixed_mcp_tool_names` off".to_string());
+        let fixes = fixes.join(", or ");
+        format!(
+            "Skipped installing the skill's MCP server `{name}`: without the `mcp__` prefix (`features.non_prefixed_mcp_tool_names`), it would take {reserved}. To install it, {fixes}."
+        )
+    }
+}
+
+impl std::fmt::Display for NonPrefixedMcpServerNameClash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = &self.name;
+        let reason = self.reason();
+        let suggested = self.suggested_name();
+        let fix = if self.listed {
+            format!(
+                "remove `{name}` from `features.non_prefixed_mcp_tool_names.server_names`, or rename the server"
+            )
+        } else {
+            "rename the server, or list only other servers in `features.non_prefixed_mcp_tool_names.server_names`".to_string()
+        };
+        write!(
+            f,
+            "{reason}. To fix it, {fix}. Rename it where it is configured, to a name such as `{suggested}` (`[mcp_servers.{suggested}]`; for the global config, `corbanu mcp remove {name}` then `corbanu mcp add {suggested} ...`)."
+        )
+    }
+}
+
+/// Why an MCP server named `name` can't be used, if it would be exposed
+/// without the `mcp__` prefix under a reserved tool namespace (#1655).
+fn non_prefixed_mcp_server_name_clash(
+    non_prefixed_enabled: bool,
+    listed: Option<&[String]>,
+    multi_agent_v2_namespace: Option<&str>,
+    name: &str,
+) -> Option<NonPrefixedMcpServerNameClash> {
+    if !non_prefixed_enabled {
+        return None;
+    }
+    if listed.is_some_and(|servers| !servers.iter().any(|server| server == name)) {
+        return None;
+    }
+    let reserved = codex_mcp::unprefixed_mcp_namespace_reservation(name, multi_agent_v2_namespace)?;
+    Some(NonPrefixedMcpServerNameClash {
+        name: name.to_string(),
+        reserved,
+        listed: listed.is_some(),
+    })
+}
+
+/// Every clash among enabled `configured` servers and `server_names`
+/// entries, in name order.
+fn non_prefixed_mcp_server_name_clashes<'a>(
+    non_prefixed_enabled: bool,
+    listed: Option<&'a [String]>,
+    multi_agent_v2_namespace: Option<&str>,
+    configured: impl Iterator<Item = &'a str>,
+) -> Vec<String> {
+    if !non_prefixed_enabled {
+        return Vec::new();
+    }
+    let mut names: Vec<&str> = configured
+        .chain(listed.into_iter().flatten().map(String::as_str))
+        .collect();
+    names.sort_unstable();
+    names.dedup();
+    names
+        .into_iter()
+        .filter_map(|name| {
+            non_prefixed_mcp_server_name_clash(
+                non_prefixed_enabled,
+                listed,
+                multi_agent_v2_namespace,
+                name,
+            )
+        })
+        .map(|clash| clash.to_string())
+        .collect()
 }
 
 /// Validate user-visible feature settings against managed feature requirements.
@@ -2752,6 +3009,40 @@ pub struct AgentRoleConfig {
     pub config_file: Option<PathBuf>,
     /// Candidate nicknames for agents spawned with this role.
     pub nickname_candidates: Option<Vec<String>>,
+    /// Where `config_file` was declared. A project's role file gets the same
+    /// denylist as the project's own config (D512, #1997).
+    pub source: AgentRoleSource,
+}
+
+/// The kind of config that declared an agent role's config file.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum AgentRoleSource {
+    /// Shipped with Corbanu.
+    BuiltIn,
+    /// The person's own config (user config, `~/.codex/agents/`) or launch
+    /// flags.
+    User,
+    /// System, MDM or enterprise-managed config.
+    Managed,
+    /// A trusted project's `.codex` folder: repository contents, so the
+    /// project-config denylist applies. The default, so a role whose origin
+    /// was not recorded gets the denylist.
+    #[default]
+    Project,
+}
+
+impl AgentRoleSource {
+    pub(crate) fn from_layer(source: &ConfigLayerSource) -> Self {
+        match source {
+            ConfigLayerSource::Project { .. } => Self::Project,
+            ConfigLayerSource::User { .. } | ConfigLayerSource::SessionFlags => Self::User,
+            ConfigLayerSource::Mdm { .. }
+            | ConfigLayerSource::System { .. }
+            | ConfigLayerSource::EnterpriseManaged { .. }
+            | ConfigLayerSource::LegacyManagedConfigTomlFromFile { .. }
+            | ConfigLayerSource::LegacyManagedConfigTomlFromMdm => Self::Managed,
+        }
+    }
 }
 
 fn resolve_tool_suggest_config(
@@ -2954,6 +3245,7 @@ fn apply_managed_filesystem_constraints(
         let deny_entry = if deny_read.contains_glob() {
             codex_protocol::permissions::FileSystemSandboxEntry {
                 path: codex_protocol::permissions::FileSystemPath::GlobPattern {
+                    scan: None,
                     pattern: deny_read.as_str().to_string(),
                 },
                 access: codex_protocol::permissions::FileSystemAccessMode::Deny,
@@ -3023,6 +3315,8 @@ pub struct ConfigOverrides {
     /// `provider_account` beats it only when both name the same provider, so
     /// another provider's explicit account never drops it (#425).
     pub inherited_provider_account: Option<String>,
+    /// #1038: see [`Config::reopened_by_prompt_edit`].
+    pub reopened_by_prompt_edit: bool,
 }
 
 fn dedupe_absolute_paths(paths: &mut Vec<AbsolutePathBuf>) {
@@ -3582,22 +3876,6 @@ fn validate_multi_agent_v2_wait_timeout(label: &str, value: i64) -> std::io::Res
 fn validate_multi_agent_v2_tool_namespace(namespace: Option<&str>) -> std::io::Result<()> {
     const LABEL: &str = "features.multi_agent_v2.tool_namespace";
     const MAX_LEN: usize = 64;
-    const RESERVED_RESPONSES_NAMESPACES: &[&str] = &[
-        "api_tool",
-        "browser",
-        "computer",
-        "container",
-        "file_search",
-        "functions",
-        "image_gen",
-        "multi_tool_use",
-        "python",
-        "python_user_visible",
-        "submodel_delegator",
-        "terminal",
-        "tool_search",
-        "web",
-    ];
 
     let Some(namespace) = namespace else {
         return Ok(());
@@ -3631,7 +3909,7 @@ fn validate_multi_agent_v2_tool_namespace(namespace: Option<&str>) -> std::io::R
     }
     if namespace == "mcp"
         || namespace.starts_with("mcp__")
-        || RESERVED_RESPONSES_NAMESPACES.contains(&namespace)
+        || codex_mcp::RESPONSES_RESERVED_NAMESPACES.contains(&namespace)
     {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -3773,6 +4051,7 @@ impl Config {
             workspace_roots: workspace_roots_override,
             provider_account: provider_account_override,
             inherited_provider_account,
+            reopened_by_prompt_edit,
         } = overrides;
         let bypass_hook_trust = bypass_hook_trust.unwrap_or_default();
 
@@ -4007,6 +4286,13 @@ impl Config {
             Some(WindowsSandboxModeToml::Unelevated) => WindowsSandboxLevel::RestrictedToken,
             None => WindowsSandboxLevel::Disabled,
         };
+        // #1976 (D491): say at start why agent commands and file tools will
+        // be refused.
+        if crate::security::windows_unsandboxed::applies(security_level, windows_sandbox_level) {
+            startup_warnings.push(crate::security::windows_unsandboxed::startup_notice(
+                security_level,
+            ));
+        }
         let memories_config: MemoriesConfig = cfg.memories.clone().unwrap_or_default().into();
         let memories_root = memory_root(&codex_home);
 
@@ -4720,9 +5006,13 @@ impl Config {
         // the provider does, and the pair correction above acts on exactly that.
         // Only "nothing was stated at all" should stop forcing.
         let provider_selection_was_stated = model_provider_was_explicit || provider_was_corrected;
+        // #1563: the Corbanu Plan route shares Ambient's normalization, but it
+        // is set up through its wallet row, not a pasted key, so forcing the
+        // API-key prompt for it left onboarding with no way to set it up.
         let forced_login_method = cfg.forced_login_method.or_else(|| {
             (provider_selection_was_stated
-                && (ambient_provider_selected
+                && ((ambient_provider_selected
+                    && model_provider_id != PFTERMINAL_PLAN_PROVIDER_ID)
                     || kimi_code_provider_selected
                     || anthropic_provider_selected
                     || meta_provider_selected
@@ -4745,7 +5035,19 @@ impl Config {
                 })
             })
         });
+        // The legacy GLM 5.2 routes (Z.AI, Ambient and the Corbanu Plan picker row cloned
+        // from Ambient's) advertise Medium as Standard; retain that explicit choice.
+        let legacy_glm_standard_selected = cfg.model_reasoning_effort == Some(ReasoningEffort::Medium)
+            && matches!(
+                (model_provider_id.as_str(), model.as_deref()),
+                (ZAI_PROVIDER_ID, Some("glm-5.2"))
+                    | (
+                        AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID,
+                        Some("z-ai/glm-5.2")
+                    )
+            );
         let model_reasoning_effort = if !exact_catalogue_effort
+            && !legacy_glm_standard_selected
             && ((ambient_provider_selected && !model_without_explicit_provider)
                 || zai_chat_provider_selected)
         {
@@ -4966,6 +5268,17 @@ impl Config {
             profile_workspace_roots,
         )
         .map_err(std::io::Error::from)?;
+        // D424 (#1775): possibly planted `.git` entries in the folders
+        // Windows sandbox commands may write to, and below `cwd`.
+        for warning in crate::windows_sandbox::planted_git_startup_warnings(
+            &effective_file_system_sandbox_policy,
+            &workspace_roots,
+            resolved_cwd.as_path(),
+        ) {
+            if !startup_warnings.contains(&warning) {
+                startup_warnings.push(warning);
+            }
+        }
         let otel = otel::resolve_config(cfg.otel.unwrap_or_default(), &mut startup_warnings);
         let config = Self {
             #[cfg(not(feature = "developer-accounting"))]
@@ -5155,6 +5468,8 @@ impl Config {
                 .suppress_unstable_features_warning
                 .unwrap_or(false),
             skip_reopen_warmup: cfg.skip_reopen_warmup.unwrap_or(false),
+            skip_startup_warmup: cfg.skip_startup_warmup.unwrap_or(false),
+            reopened_by_prompt_edit,
             active_project,
             notices,
             check_for_update_on_startup,
@@ -5225,6 +5540,7 @@ impl Config {
                 .unwrap_or_default(),
             otel,
         };
+        config.validate_non_prefixed_mcp_server_names()?;
         Ok(config)
         })
         .await
@@ -5672,3 +5988,7 @@ mod config_loader_tests;
 #[cfg(test)]
 #[path = "project_security_startup_tests.rs"]
 mod project_security_startup_tests;
+
+#[cfg(test)]
+#[path = "windows_unsandboxed_startup_tests.rs"]
+mod windows_unsandboxed_startup_tests;

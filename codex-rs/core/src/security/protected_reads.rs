@@ -42,6 +42,7 @@ use codex_protocol::protocol::WarningEvent;
 use codex_security_policy::SecurityLevel;
 use codex_utils_absolute_path::AbsolutePathBuf;
 
+use super::launch_contract::KeptFile;
 use super::protected_surface::ReadDenials;
 use super::tainted_action::PolicyBinding;
 use super::tainted_action::USER_PERSISTENCE;
@@ -69,6 +70,98 @@ const DENIAL_MARKERS: [&str; 3] = [
     "read-only file system",
 ];
 
+/// #1296: whether commands run on Windows, where PowerShell and cmd spell
+/// paths (`C:\Users\me`, `$env:USERPROFILE`, `%USERPROFILE%`) and report
+/// denials (`Access is denied.`) their own way.
+const WINDOWS: bool = cfg!(windows);
+
+/// Whether `line` reports a denial (see [`DENIAL_MARKERS`]); `windows`
+/// (#1296) adds Windows' texts: cmd's (Win32's) `Access is denied.` and
+/// PowerShell's (.NET's) `Access to the path '…' is denied.`.
+fn is_denial_line(line: &str, windows: bool) -> bool {
+    let line = line.to_ascii_lowercase();
+    DENIAL_MARKERS.iter().any(|marker| line.contains(marker))
+        || (windows
+            && (line.contains("access is denied")
+                || (line.contains("access to the path") && line.contains("is denied"))))
+}
+
+/// #1296: cmd's bare `Access is denied.` names no path, so the denial is
+/// attributed to the protected path the command names.
+fn names_no_path(line: &str, windows: bool) -> bool {
+    windows
+        && line
+            .trim()
+            .trim_end_matches('.')
+            .eq_ignore_ascii_case("access is denied")
+}
+
+/// The words of `command`, shell scripts split into words. #1296: with
+/// `windows`, a command no POSIX shell runs (PowerShell, cmd) is split as
+/// they split it: `\` is a path separator there, not an escape.
+fn command_words(command: &[String], windows: bool) -> Vec<String> {
+    let posix = !windows || command.first().is_some_and(|program| posix_shell(program));
+    command
+        .iter()
+        .flat_map(|argument| argument_words(argument, posix))
+        .collect()
+}
+
+/// The words of one argument of a command (see [`command_words`]).
+fn argument_words(argument: &str, posix: bool) -> Vec<String> {
+    if posix {
+        shlex::split(argument)
+            .unwrap_or_else(|| argument.split_whitespace().map(str::to_string).collect())
+    } else {
+        windows_words(argument)
+    }
+}
+
+/// #1296: whether `program` is a POSIX shell (Git for Windows' `bash.exe`).
+fn posix_shell(program: &str) -> bool {
+    let name = program
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(program)
+        .to_ascii_lowercase();
+    let name = name.strip_suffix(".exe").unwrap_or(&name);
+    matches!(name, "bash" | "sh" | "zsh" | "dash" | "ksh")
+}
+
+/// #1296: `text` split into words as PowerShell and cmd split it, as far as
+/// paths go: at whitespace outside quotes; `'…'` and `"…"` quote (the quotes
+/// are dropped); `\` is kept.
+fn windows_words(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut started = false;
+    let mut quote = None;
+    for ch in text.chars() {
+        match quote {
+            Some(open) if ch == open => quote = None,
+            Some(_) => word.push(ch),
+            None if ch == '\'' || ch == '"' => {
+                quote = Some(ch);
+                started = true;
+            }
+            None if ch.is_whitespace() => {
+                if started {
+                    words.push(std::mem::take(&mut word));
+                    started = false;
+                }
+            }
+            None => {
+                word.push(ch);
+                started = true;
+            }
+        }
+    }
+    if started {
+        words.push(word);
+    }
+    words
+}
+
 /// How long the path lookups may take before no explanation is given.
 const LOOKUP_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -89,7 +182,15 @@ pub(crate) fn unhurried_lookups_for_tests(enabled: bool) {
 }
 
 pub(crate) fn lookup_timeout() -> Duration {
-    if UNHURRIED_LOOKUPS.load(Ordering::Relaxed) {
+    // #997: this crate's own unit tests get the test bound too; under load
+    // they took over 2 seconds as the integration suites did (#902).
+    // `cfg!(test)` is never set in a build that ships.
+    lookup_timeout_in(/*unit_test*/ cfg!(test))
+}
+
+/// The bound in a unit-test build (`unit_test`) or any other process.
+fn lookup_timeout_in(unit_test: bool) -> Duration {
+    if unit_test || UNHURRIED_LOOKUPS.load(Ordering::Relaxed) {
         TEST_LOOKUP_TIMEOUT
     } else {
         LOOKUP_TIMEOUT
@@ -401,7 +502,12 @@ impl ReadPolicyInputs {
     /// in `.husky`), or may be (a program or path the text does not show:
     /// `npx husky install | tee ../log` keeps the offer).
     fn unliftable_note(&self, command: &[String], cwd: &Path) -> Option<ProtectedNote> {
-        let writes = writes::writes(command);
+        let mut writes = writes::writes(command);
+        if !writes.understood {
+            // #1182: `cd DIR && echo x >> ../notes.txt`. Only ever adds a
+            // note: without it this command is not explained (and offered).
+            writes = writes::writes_following_cd(command);
+        }
         let denials = self.denials();
         let policy = self.base_policy();
         let effective = policy.effective_writes_with_cwd(self.turn_cwd.as_path());
@@ -559,11 +665,18 @@ async fn off_thread<T: Send + 'static>(
         .ok()?
 }
 
-/// The explanation for a command that just failed with a known non-zero
-/// exit, when an output line reports a denial of a protected path the
-/// command names (or the command's folder is itself protected), or of a
-/// protected path the line itself reports (#621: a path the command built
-/// at run time, such as an interpreter's `os.listdir(...)`).
+/// The explanation for a command that just finished with a known exit,
+/// when an output line reports a denial of a protected path the command
+/// names (or the command's folder is itself protected), or of a protected
+/// path the line itself reports (#621: a path the command built at run
+/// time, such as an interpreter's `os.listdir(...)`).
+///
+/// #1312: also when the exit is 0: a later command on the same line
+/// (`echo x >> ../notes.txt; echo "exit=$?"`) can hide the denied one's
+/// failure. Then only a path the command itself names, and a denial line
+/// names too, is explained: output alone (a search printing old denial
+/// lines) proves nothing was denied. The keychain note, which has no denial
+/// line, needs a failed exit.
 ///
 /// #622: a denial explained here is also listed under the inspector's
 /// recent denials.
@@ -575,12 +688,11 @@ pub(crate) async fn denial_explanation(
     exit_code: Option<i32>,
     output: &str,
 ) -> Option<String> {
-    if !matches!(exit_code, Some(code) if code != 0) {
-        return None;
-    }
+    let failed = exit_code? != 0;
     // #736: a keychain command fails without a file denial: the keychain
     // service is out of reach of the sandbox.
-    if keychain_command(command)
+    if failed
+        && keychain_command(command)
         && ReadPolicyInputs::capture(session, turn).is_some_and(|inputs| inputs.keychain_closed)
     {
         super::inspection::record_sandbox_denial(
@@ -591,10 +703,7 @@ pub(crate) async fn denial_explanation(
     }
     let denial_lines: Vec<String> = output
         .lines()
-        .filter(|line| {
-            let line = line.to_ascii_lowercase();
-            DENIAL_MARKERS.iter().any(|marker| line.contains(marker))
-        })
+        .filter(|line| is_denial_line(line, WINDOWS))
         .map(str::to_string)
         .collect();
     if denial_lines.is_empty() {
@@ -605,7 +714,7 @@ pub(crate) async fn denial_explanation(
         // #839: listed under the inspector's recent denials, as under
         // Aggressive (#622).
         let (denied, explanation) =
-            moderate::denial_explanation(inputs, command, cwd, denial_lines).await?;
+            moderate::denial_explanation(inputs, command, cwd, denial_lines, failed).await?;
         let (what, outcome) = denied.inspected();
         super::inspection::record_refusal(session.thread_id(), what, outcome);
         return Some(explanation);
@@ -614,7 +723,9 @@ pub(crate) async fn denial_explanation(
     let (command, cwd) = (command.to_vec(), cwd.to_path_buf());
     let found = off_thread(move || {
         let matcher = inputs.matcher(&cwd)?;
-        if matcher.is_read_denied(&cwd) {
+        // #1312: the steps that go by the output or the folder alone, not
+        // by a path the command names, need a failed command.
+        if failed && matcher.is_read_denied(&cwd) {
             return Some(ProtectedNote::Read(cwd.display().to_string()));
         }
         let word = |denied: &dyn Fn(&Path) -> bool| {
@@ -625,6 +736,7 @@ pub(crate) async fn denial_explanation(
                 &inputs.codex_home,
                 denied,
                 Some(&denial_lines),
+                /*skip_patterns*/ !failed,
             )
         };
         let in_lines = |lines: &[String], accept: &dyn Fn(&Path) -> bool| {
@@ -644,7 +756,8 @@ pub(crate) async fn denial_explanation(
             // folder as `.` or by its name).
             .or_else(|| {
                 let name = cwd.file_name()?.to_str()?.to_string();
-                (matcher.is_listing_denied(&cwd)
+                (failed
+                    && matcher.is_listing_denied(&cwd)
                     && denial_lines.iter().any(|line| {
                         line.contains(&name) || line.contains(" .:") || line.contains("'.'")
                     }))
@@ -653,6 +766,9 @@ pub(crate) async fn denial_explanation(
             // #554: a folder above the home listed recursively (`find ~`,
             // `ls -aR ~`): the denial line names the home below it.
             .or_else(|| {
+                if !failed {
+                    return None;
+                }
                 unlistable_path_in_lines(
                     &command,
                     &cwd,
@@ -726,6 +842,9 @@ pub(crate) async fn denial_explanation(
             // of the command names (built at run time). Bounded: only the
             // first lines are looked at.
             .or_else(|| {
+                if !failed {
+                    return None;
+                }
                 let lines = &denial_lines[..denial_lines.len().min(MAX_REPORTED_LINES)];
                 in_lines(lines, &|path| matcher.is_read_denied(path)).map(ProtectedNote::Read)
             })
@@ -779,12 +898,8 @@ fn path_in_lines(
     }
     let mut bases = vec![cwd.to_path_buf()];
     bases.extend(
-        command
-            .iter()
-            .flat_map(|argument| {
-                shlex::split(argument)
-                    .unwrap_or_else(|| argument.split_whitespace().map(str::to_string).collect())
-            })
+        command_words(command, WINDOWS)
+            .into_iter()
             .map(|word| {
                 word.trim_matches(|c: char| matches!(c, ';' | '|' | '&' | '(' | ')'))
                     .to_string()
@@ -804,8 +919,9 @@ fn path_in_lines(
 }
 
 /// The paths a denial line may name: quoted (`find: ‘/x’: Permission
-/// denied`, `ls: cannot open directory '/x': …`) or between the program and
-/// the reason (`ls: /x: Operation not permitted`).
+/// denied`, `ls: cannot open directory '/x': …`), between the program and
+/// the reason (`ls: /x: Operation not permitted`), or before the reason
+/// when the program's name was split off (#1194).
 fn paths_in_denial_line(line: &str) -> Vec<String> {
     let mut paths = Vec::new();
     for (open, close) in [('‘', '’'), ('\'', '\''), ('"', '"'), ('`', '\'')] {
@@ -822,6 +938,12 @@ fn paths_in_denial_line(line: &str) -> Vec<String> {
     let fields: Vec<&str> = line.split(": ").collect();
     if fields.len() >= 3 {
         paths.push(fields[1..fields.len() - 1].join(": "));
+    } else if fields.len() == 2 {
+        // #1194: BSD `ls` and `find` write `ls: ` and `/x: Operation not
+        // permitted` separately, and unified exec merges stdout and stderr
+        // as they arrive, so output flushed in between can leave the line
+        // without the program's name.
+        paths.push(fields[0].to_string());
     }
     paths.retain(|path| !path.trim().is_empty());
     paths
@@ -933,6 +1055,7 @@ pub(crate) async fn protected_note_in_command(
                 &inputs.codex_home,
                 denied,
                 /*denial_lines*/ None,
+                /*skip_patterns*/ false,
             )
         };
         word(&|path| matcher.is_read_denied(path))
@@ -982,48 +1105,74 @@ pub(crate) async fn protected_note_in_command(
     .await
 }
 
-/// #841: under Moderate with the secretless launch contract, what a person
-/// is told before approving a protected action that reads files the
-/// contract keeps unreadable at every level (Corbanu's sign-in, vault,
-/// config, history): approving runs the command but cannot unlock them.
-pub(crate) const MODERATE_KEPT_READ_NOTE: &str = "Corbanu's own files this command reads (its sign-in, vault, config or history) stay unreadable to agent commands even if you approve (secretless agent launch), so approving cannot unlock them.";
+/// #841, #1077: under Moderate with the secretless launch contract, what a
+/// person is told before approving a protected action that reads a file the
+/// contract keeps unreadable at every level (a CLI token file, the keychains,
+/// the Google Cloud CLI's folder on Windows, or Corbanu's own files such as
+/// its sign-in, vault, config or history): the file, what it is, and that
+/// approving runs the command but cannot unlock it.
+pub(crate) fn moderate_kept_read_note(path: &str, kept: KeptFile) -> String {
+    let what = match kept {
+        KeptFile::CliToken => "is a CLI token file",
+        KeptFile::GoogleCloudCliFolder => {
+            "is the Google Cloud CLI's folder (credentials and config)"
+        }
+        KeptFile::InGoogleCloudCliFolder => {
+            "is in the Google Cloud CLI's folder (credentials and config)"
+        }
+        KeptFile::Keychain => "is part of your keychains",
+        KeptFile::CorbanuOwn => {
+            "is one of Corbanu's own files (such as its sign-in, vault, config or history)"
+        }
+    };
+    format!(
+        "`{}` {what}: secretless agent launch keeps it unreadable to agent commands at every \
+         security level, even if you approve, so approving cannot unlock it. If you approve, \
+         the command runs, but that read fails.",
+        shown_path(path)
+    )
+}
 
-/// #841: whether, under Moderate with the secretless launch contract,
-/// `command` names a path the contract keeps unreadable at every level.
-pub(crate) async fn moderate_kept_read_in_command(
+/// #841: under Moderate with the secretless launch contract, the note for
+/// `command` when it names a path the contract keeps unreadable at every
+/// level ([`moderate_kept_read_note`]).
+pub(crate) async fn moderate_kept_read_note_for_command(
     session: &Session,
     turn: &TurnContext,
     command: &[String],
     cwd: &Path,
-) -> bool {
-    let Some(contract) = super::launch_contract::active() else {
-        return false;
-    };
-    let Some(inputs) = ReadPolicyInputs::capture_at(session, turn, SecurityLevel::Moderate) else {
-        return false;
-    };
+) -> Option<String> {
+    let contract = super::launch_contract::active()?;
+    let inputs = ReadPolicyInputs::capture_at(session, turn, SecurityLevel::Moderate)?;
     let (command, cwd) = (command.to_vec(), cwd.to_path_buf());
-    off_thread(move || Some(kept_read_named(&inputs, contract, &command, &cwd)))
-        .await
-        .is_some_and(|named| named)
+    off_thread(move || kept_read_note(&inputs, contract, &command, &cwd)).await
 }
 
-/// See [`moderate_kept_read_in_command`].
-fn kept_read_named(
+/// See [`moderate_kept_read_note_for_command`]: the first word naming a kept
+/// path, as the command spelled it.
+fn kept_read_note(
     inputs: &ReadPolicyInputs,
     contract: &super::launch_contract::LaunchContract,
     command: &[String],
     cwd: &Path,
-) -> bool {
-    denied_word(
+) -> Option<String> {
+    let found = std::cell::Cell::new(None);
+    let word = denied_word(
         command,
         cwd,
         inputs.user_home.as_deref(),
         &inputs.codex_home,
-        |path| contract.keeps_unreadable(path, cwd),
+        |path| {
+            let kept = contract.kept_file(path, cwd);
+            if kept.is_some() {
+                found.set(kept);
+            }
+            kept.is_some()
+        },
         /*denial_lines*/ None,
-    )
-    .is_some()
+        /*skip_patterns*/ false,
+    )?;
+    Some(moderate_kept_read_note(&word, found.get()?))
 }
 
 /// Issue #245: under Aggressive, the explanation for a request whose own
@@ -1087,6 +1236,108 @@ pub(crate) fn record_permission_refusal(session: &Session) {
     );
 }
 
+/// #1087: the explanation for an in-process file tool's read of `path` (the
+/// image tool's) that the protected-path rules refused where the tool's own
+/// permissions allow it, or that the secretless launch contract keeps
+/// unreadable where the person's own permissions allow it: under Moderate
+/// or Aggressive, it names the level as a refused command does (#442, #748;
+/// a path the contract keeps is attributed to it under Moderate, as there),
+/// and is listed under the inspector's recent denials (#622, #839). `own` is
+/// the tool's sandbox context before the rules (the contract's denials
+/// included), `protected` after them. Explanation only.
+pub(crate) async fn file_tool_denial_explanation(
+    session: &Session,
+    turn: &TurnContext,
+    own: &codex_file_system::FileSystemSandboxContext,
+    protected: &codex_file_system::FileSystemSandboxContext,
+    path: &Path,
+) -> Option<String> {
+    let (level, inputs) = ReadPolicyInputs::capture_at(session, turn, SecurityLevel::Moderate)
+        .map(|inputs| (SecurityLevel::Moderate, inputs))
+        .or_else(|| {
+            ReadPolicyInputs::capture(session, turn)
+                .map(|inputs| (SecurityLevel::Aggressive, inputs))
+        })?;
+    let policy = |context: &codex_file_system::FileSystemSandboxContext| {
+        PermissionProfile::try_from(context.permissions.clone())
+            .ok()
+            .map(|profile| profile.file_system_sandbox_policy())
+    };
+    let (own_policy, protected_policy) = (policy(own)?, policy(protected)?);
+    let cwd = own
+        .cwd
+        .as_ref()
+        .and_then(|cwd| cwd.to_abs_path().ok())
+        .unwrap_or_else(|| inputs.turn_cwd.clone());
+    let contract = super::launch_contract::active();
+    let path = path.to_path_buf();
+    let found = off_thread(move || {
+        explain_file_tool_denial(
+            level,
+            &inputs,
+            contract,
+            &own_policy,
+            &protected_policy,
+            cwd.as_path(),
+            &path,
+        )
+    })
+    .await;
+    let (what, outcome, explanation) = found?;
+    match outcome {
+        Some(outcome) => super::inspection::record_refusal(session.thread_id(), what, outcome),
+        None => super::inspection::record_sandbox_denial(session.thread_id(), what),
+    }
+    Some(explanation)
+}
+
+/// See [`file_tool_denial_explanation`]: what was denied (for the
+/// inspector, with `None` for Aggressive's sandbox-denial outcome) and the
+/// explanation.
+fn explain_file_tool_denial(
+    level: SecurityLevel,
+    inputs: &ReadPolicyInputs,
+    contract: Option<&super::launch_contract::LaunchContract>,
+    own_policy: &FileSystemSandboxPolicy,
+    protected_policy: &FileSystemSandboxPolicy,
+    cwd: &Path,
+    path: &Path,
+) -> Option<(&'static str, Option<&'static str>, String)> {
+    let readable = |policy: &FileSystemSandboxPolicy| {
+        super::protected_surface::readable_under(policy, path, cwd)
+    };
+    // The person's own permissions, without the contract or the rules.
+    let person = moderate::own_profile(inputs).file_system_sandbox_policy();
+    let kept =
+        contract.is_some_and(|contract| contract.keeps_unreadable(path, cwd)) && readable(&person);
+    let refused = !readable(protected_policy) && readable(own_policy);
+    if !kept && !refused {
+        return None;
+    }
+    let shown = path.display().to_string();
+    Some(if level == SecurityLevel::Aggressive {
+        let note = ProtectedNote::Read(shown);
+        (note.inspected(), None, note.explanation())
+    } else if kept {
+        let (what, outcome) = moderate::Denied::KeptRead.inspected();
+        (what, Some(outcome), moderate::kept_read_explanation(&shown))
+    } else if ReadDenials::is_security_file(&inputs.codex_home, inputs.user_home.as_deref(), path) {
+        let (what, outcome) = moderate::Denied::SecurityFile.inspected();
+        (
+            what,
+            Some(outcome),
+            moderate::security_file_explanation(&shown, moderate::WayForward::Permissive),
+        )
+    } else {
+        let (what, outcome) = moderate::Denied::Read.inspected();
+        (
+            what,
+            Some(outcome),
+            moderate::read_explanation(&shown, moderate::WayForward::Permissive),
+        )
+    })
+}
+
 /// Shows `explanation` to the person as a warning beside the failed command.
 pub(crate) async fn notify(session: &Session, turn: &TurnContext, explanation: String) {
     session
@@ -1102,6 +1353,8 @@ pub(crate) async fn notify(session: &Session, turn: &TurnContext, explanation: S
 /// The first word of `command` (shell scripts split into words) that names a
 /// path `denied` reports as unreadable, as the command spelled it. With
 /// `denial_lines`, only a word whose file name one of those lines mentions.
+/// #1323: with `skip_patterns` (the command exited 0), not a search pattern
+/// (`rg ".env" logs/` can print an old denial line naming `.env`).
 pub(super) fn denied_word(
     command: &[String],
     cwd: &Path,
@@ -1109,14 +1362,19 @@ pub(super) fn denied_word(
     codex_home: &Path,
     denied: impl Fn(&Path) -> bool,
     denial_lines: Option<&[String]>,
+    skip_patterns: bool,
 ) -> Option<String> {
-    command
-        .iter()
-        .flat_map(|argument| {
-            shlex::split(argument)
-                .unwrap_or_else(|| argument.split_whitespace().map(str::to_string).collect())
-        })
-        .flat_map(|whole| {
+    let words = command_words(command, WINDOWS);
+    let patterns = if skip_patterns {
+        search_patterns::search_pattern_indices(command, &words, WINDOWS)
+    } else {
+        Default::default()
+    };
+    words
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| !patterns.contains(index))
+        .flat_map(|(_, whole)| {
             // `--file=.env`, `<.env`, `.env;`: the path part of the word.
             let word = whole.trim_matches(|c: char| matches!(c, ';' | '|' | '&' | '(' | ')'));
             let word = word.trim_start_matches(['<', '>']);
@@ -1153,7 +1411,11 @@ pub(super) fn denied_word(
                     .iter()
                     .flatten()
                     .filter_map(|name| name.to_str())
-                    .any(|name| lines.iter().any(|line| line.contains(name)))
+                    .any(|name| {
+                        lines
+                            .iter()
+                            .any(|line| line.contains(name) || names_no_path(line, WINDOWS))
+                    })
             }) && denied(path.as_path())
         })
 }
@@ -1226,8 +1488,34 @@ fn embedded_paths(word: &str) -> Vec<String> {
 }
 
 fn resolve(word: &str, cwd: &Path, user_home: Option<&Path>, codex_home: &Path) -> Option<PathBuf> {
+    expand(word, cwd, user_home, codex_home, WINDOWS).map(|expanded| cwd.join(expanded))
+}
+
+/// `word` with the home variables and `~` expanded; `None` when another
+/// variable is left. #1296: `windows` adds PowerShell's and cmd's spellings
+/// (`$env:USERPROFILE`, `${env:CODEX_HOME}`, `%USERPROFILE%`, in any letter
+/// case) and `~\`.
+fn expand(
+    word: &str,
+    cwd: &Path,
+    user_home: Option<&Path>,
+    codex_home: &Path,
+    windows: bool,
+) -> Option<String> {
     let codex_home = codex_home.to_string_lossy();
     let mut expanded = word.to_string();
+    if windows {
+        let user_home = user_home.map(Path::to_string_lossy);
+        expanded = super::tainted_action::windows_paths::expand(
+            &expanded,
+            &super::tainted_action::windows_paths::Values {
+                codex_home: &codex_home,
+                user_home: user_home.as_deref(),
+                cwd: &cwd.to_string_lossy(),
+                places: false,
+            },
+        );
+    }
     for name in ["CODEX_HOME", "CORBANU_HOME", "PFTERMINAL_HOME"] {
         for spelling in [format!("${{{name}}}"), format!("${name}")] {
             expanded = expanded.replace(&spelling, &codex_home);
@@ -1241,15 +1529,19 @@ fn resolve(word: &str, cwd: &Path, user_home: Option<&Path>, codex_home: &Path) 
             expanded = home.into_owned();
         } else if let Some(rest) = expanded.strip_prefix("~/") {
             expanded = format!("{home}/{rest}");
+        } else if let Some(rest) = expanded.strip_prefix("~\\").filter(|_| windows) {
+            expanded = format!("{home}\\{rest}");
         }
     }
     if expanded.contains('$') || expanded.starts_with('~') {
         return None;
     }
-    Some(cwd.join(expanded))
+    Some(expanded)
 }
 
 mod moderate;
+
+mod search_patterns;
 
 #[cfg(test)]
 #[path = "protected_reads_tests.rs"]

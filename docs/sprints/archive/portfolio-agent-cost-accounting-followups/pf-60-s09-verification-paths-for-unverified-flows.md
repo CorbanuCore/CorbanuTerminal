@@ -2,12 +2,12 @@
 sprint_id: "PF-60-S09"
 title: "Verification paths for unverified flows"
 status: completed
-plan_file: "docs/plans/active/portfolio-agent-cost-accounting-followups.md"
+plan_file: "docs/plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md"
 plan_feature: "PF-60"
 execution_order: 4
 owner: "Codex worker pf60-next; Travis Good accepts"
 parallel_lane: "accounting"
-write_scope: "qa/portfolio/agent-cost-accounting/pf-60-s09/, qa/demos/index/PF-60-S09.md, qa/demos/specs/pf60s09-image-cost.toml, qa/demos/specs/pf60s09-chatgpt-login-cost.toml, docs/sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s09-verification-paths-for-unverified-flows.md, docs/sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s08-cost-page-clarity-and-reopen-warmup.md, docs/plans/active/portfolio-agent-cost-accounting-followups.md, docs/sprints/index.md"
+write_scope: "qa/portfolio/agent-cost-accounting/pf-60-s09/, qa/demos/index/PF-60-S09.md, qa/demos/specs/pf60s09-image-cost.toml, qa/demos/specs/pf60s09-chatgpt-login-cost.toml, docs/sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s09-verification-paths-for-unverified-flows.md, docs/sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s08-cost-page-clarity-and-reopen-warmup.md, docs/plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md, docs/sprints/index.md"
 integration_gate: "One PR to main: each flow run once with captures (PASS, FAIL with an issue, or Travis decision), drivers documented for S10, docs checkers, independent Opus 5.5 High review to APPROVE on the exact head, SOP videos; Travis accepts"
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s09"
 branch: "pf60-s09/verification-paths"
@@ -47,7 +47,7 @@ failure tracked in #824, which he sent for a fix (option (a)). PF-60-S10's isola
 
 ## Plan linkage
 
-- Plan: [Accounting follow-ups after PF-60](../../../plans/active/portfolio-agent-cost-accounting-followups.md); feature `PF-60`.
+- Plan: [Accounting follow-ups after PF-60](../../../plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md); feature `PF-60`.
 - Acceptance advanced: no accounting flow is left unverified without Travis's recorded decision.
 
 ## Code boundaries

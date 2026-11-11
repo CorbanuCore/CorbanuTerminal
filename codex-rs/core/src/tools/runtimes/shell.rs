@@ -232,6 +232,16 @@ impl ToolRuntime<ShellRequest, ExecToolCallOutput> for ShellRuntime {
         req.turn_environment.workspace_roots()
     }
 
+    fn command_cwd(&self, req: &ShellRequest) -> Option<AbsolutePathBuf> {
+        Some(req.cwd.clone())
+    }
+
+    fn local_search_path<'a>(&self, req: &'a ShellRequest) -> Option<&'a str> {
+        (!req.turn_environment.environment.is_remote())
+            .then(|| req.env.get("PATH").map(String::as_str))
+            .flatten()
+    }
+
     fn network_approval_spec(
         &self,
         req: &ShellRequest,
@@ -293,8 +303,12 @@ impl ToolRuntime<ShellRequest, ExecToolCallOutput> for ShellRuntime {
         );
         let managed_network =
             managed_network_for_sandbox_permissions(req.network.as_ref(), sandbox_permissions);
-        let env = exec_env_for_sandbox_permissions(&req.env, sandbox_permissions);
-        let explicit_env_overrides = req.explicit_env_overrides.clone();
+        let mut env = exec_env_for_sandbox_permissions(&req.env, sandbox_permissions);
+        let mut explicit_env_overrides = req.explicit_env_overrides.clone();
+        // D447: no git `ext::` transport after untrusted content.
+        if crate::security::git_ext_guard::applies(&ctx.session) {
+            crate::security::git_ext_guard::apply(&mut env, &mut explicit_env_overrides);
+        }
         #[cfg(unix)]
         let (env, runtime_path_prepends) = {
             let mut env = env;

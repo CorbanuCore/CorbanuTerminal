@@ -75,6 +75,11 @@ enum Screen {
     Done(Outcome),
 }
 
+/// #1094: why "restart now" is not offered after a revocation in a remote or
+/// daemon window. Restarting this terminal doesn't restart those sessions, so
+/// it can't confirm the change holds there.
+pub(crate) const REVOCATION_REMOTE_RESTART_REFUSED: &str = "Restart now is not offered: this window's sessions run in an app server outside this Corbanu Terminal.";
+
 /// Where a commit goes: the session's Corbanu home, its configured level
 /// and thread (as for `LevelBasis::read`).
 #[derive(Clone, Debug)]
@@ -82,6 +87,8 @@ pub(crate) struct RevocationTarget {
     pub(crate) codex_home: PathBuf,
     pub(crate) configured: SecurityLevel,
     pub(crate) thread: Option<codex_protocol::ThreadId>,
+    /// False when the session runs on a remote app server or the local daemon.
+    pub(crate) sessions_in_this_process: bool,
 }
 
 pub(crate) struct RevocationView {
@@ -320,9 +327,16 @@ impl RevocationView {
                                     _ => {}
                                 }
                             }
-                            let message = outcome_line(revocation, &report);
+                            let message = outcome_line(revocation, &report).map(|message| {
+                                if !target.sessions_in_this_process && report.not_saved.is_none() {
+                                    format!("{message} {REVOCATION_REMOTE_RESTART_REFUSED}")
+                                } else {
+                                    message
+                                }
+                            });
                             Outcome {
-                                restartable: message.is_ok()
+                                restartable: target.sessions_in_this_process
+                                    && message.is_ok()
                                     && report.not_saved.is_none()
                                     && super::restart::restart_blocker().is_none(),
                                 message,
@@ -524,14 +538,39 @@ fn outcome_line(choice: HumanRevocation, report: &RevocationReport) -> Result<St
         HumanRevocation::KillSwitchOff => "Kill switch off",
     };
     let level = profile_name(report.in_force);
-    let scope = match (report.live, report.other_sessions) {
-        (true, true) => "in this session and the others of this process",
-        (true, false) => "in this session",
-        (false, true) => "in the other running sessions of this process",
-        (false, false) => "for the next start",
+    // #1035: the scope the review promised. Revoking (and turning the switch
+    // on) reaches every session of this process on the home, so no other
+    // session took it only when none runs; a release reaches only the
+    // sessions that held that very switch.
+    let scope = match (choice, report.live, report.other_sessions) {
+        (_, false, false) => "for the next start",
+        (HumanRevocation::KillSwitchOff, true, true) => {
+            "in this session and the others of this Corbanu Terminal that held it"
+        }
+        (HumanRevocation::KillSwitchOff, true, false) => "in this session",
+        (HumanRevocation::KillSwitchOff, false, true) => {
+            "in the running sessions of this Corbanu Terminal that held it"
+        }
+        (_, true, true) => "in every session of this Corbanu Terminal on this Corbanu home",
+        (_, true, false) => {
+            "in every session of this Corbanu Terminal on this Corbanu home (only this session is running)"
+        }
+        (_, false, true) => {
+            "in every running session of this Corbanu Terminal on this Corbanu home"
+        }
+    };
+    // Only a saved switch reaches the other Corbanu Terminals: they watch
+    // the saved state.
+    let elsewhere = match choice {
+        HumanRevocation::KillSwitchOn | HumanRevocation::KillSwitchOff => {
+            " Other Corbanu Terminals running on this home take it within about a second."
+        }
+        HumanRevocation::AllActiveAuthority => "",
     };
     Ok(match &report.not_saved {
-        None => format!("{what} {scope}. Saved: it holds after a restart. Level: {level}."),
+        None => {
+            format!("{what} {scope}. Saved: it holds after a restart.{elsewhere} Level: {level}.")
+        }
         Some(reason) => format!(
             "{what} {scope}, but it could not be saved ({reason}): it holds until Corbanu Terminal exits. Level: {level}."
         ),

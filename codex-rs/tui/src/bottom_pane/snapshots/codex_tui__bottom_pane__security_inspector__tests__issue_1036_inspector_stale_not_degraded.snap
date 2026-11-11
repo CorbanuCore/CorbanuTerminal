@@ -1,0 +1,7 @@
+---
+source: tui/src/bottom_pane/security_inspector_tests.rs
+expression: "rendered.lines().take(4).collect::<Vec<_>>().join(\"\\n\")"
+---
+Security inspector (read only)
+◌ Aggressive set; this view is stale (status observed 2m ago)
+Observed 120s ago, policy generation 2.1: stale, press r to refresh

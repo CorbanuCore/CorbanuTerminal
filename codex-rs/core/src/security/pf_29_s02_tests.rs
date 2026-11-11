@@ -18,6 +18,7 @@ use super::migration::MigrationPlan;
 use super::migration::journal_path;
 use super::migration::recover;
 use super::migration::run;
+use super::pf_29_s01_tests::clean;
 use super::preflight::ConfigLayerInput;
 use super::preflight::FindingKind;
 use super::preflight::InventorySources;
@@ -170,13 +171,9 @@ fn pf_29_s02_plan_previews_destinations_and_unsupported_items_without_values() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s02_migration_moves_values_rewrites_references_and_reaudits_clean() {
     let machine = Machine::new();
-    assert!(!machine.preflight().is_clean());
+    assert!(!clean(&machine.preflight()));
     let vault = FakeVault::default();
     let outcome = run(
         &machine.corbanu(),
@@ -218,7 +215,7 @@ fn pf_29_s02_migration_moves_values_rewrites_references_and_reaudits_clean() {
     }
     // Re-audit: the references are not secrets.
     let after = machine.preflight();
-    assert!(after.is_clean(), "{:?}", after.blockers());
+    assert!(clean(&after), "{:?}", after.blockers());
     assert_eq!(
         after
             .inventory
@@ -231,10 +228,6 @@ fn pf_29_s02_migration_moves_values_rewrites_references_and_reaudits_clean() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s02_every_interruption_recovers_to_the_same_result_and_locks_until_then() {
     for point in [
         FailPoint::Prepared,
@@ -258,7 +251,7 @@ fn pf_29_s02_every_interruption_recovers_to_the_same_result_and_locks_until_then
                 && matches!(item.state, ReadinessState::Incomplete(_))),
             "{point:?}"
         );
-        assert!(!locked.is_clean());
+        assert!(!clean(&locked));
         // A second migration cannot start over the unfinished one.
         assert_eq!(
             run(
@@ -288,7 +281,7 @@ fn pf_29_s02_every_interruption_recovers_to_the_same_result_and_locks_until_then
             machine.read(&level),
             "version = 1\nlevel = \"permissive\"\n"
         );
-        assert!(machine.preflight().is_clean(), "{point:?}");
+        assert!(clean(&machine.preflight()), "{point:?}");
     }
 }
 

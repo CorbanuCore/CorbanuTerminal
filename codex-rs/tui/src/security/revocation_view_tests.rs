@@ -11,6 +11,7 @@ fn view(home: &TempDir, app_event_tx: Option<AppEventSender>) -> RevocationView 
             codex_home: home.path().to_path_buf(),
             configured: SecurityLevel::Permissive,
             thread: None,
+            sessions_in_this_process: true,
         },
         crate::keymap::RuntimeKeymap::defaults().list,
         app_event_tx,
@@ -125,6 +126,7 @@ fn pf_25_s02_changed_state_is_refused() {
             codex_home: home.path().to_path_buf(),
             configured: SecurityLevel::Permissive,
             thread: None,
+            sessions_in_this_process: true,
         },
         crate::keymap::RuntimeKeymap::defaults().list,
         /*app_event_tx*/ None,
@@ -216,6 +218,7 @@ fn view_with(
             codex_home: home.path().to_path_buf(),
             configured: SecurityLevel::Permissive,
             thread: None,
+            sessions_in_this_process: true,
         },
         crate::keymap::RuntimeKeymap::defaults().list,
         /*app_event_tx*/ None,
@@ -386,6 +389,53 @@ fn pf_25_s02_lost_race_is_reported() {
     );
     assert_eq!(
         message,
-        Ok("Kill switch on in the other running sessions of this process. Saved: it holds after a restart. Level: Aggressive.".to_string())
+        Ok("Kill switch on in every running session of this Corbanu Terminal on this Corbanu home. Saved: it holds after a restart. Other Corbanu Terminals running on this home take it within about a second. Level: Aggressive.".to_string())
+    );
+}
+
+/// #1035: the confirmation names the scope the review promised ("every
+/// session of this Corbanu Terminal on this Corbanu home"), not only "this
+/// session".
+#[test]
+fn issue_1035_revoke_all_confirmation_names_every_session() {
+    let report = RevocationReport {
+        in_force: SecurityLevel::Moderate,
+        kill_switch_active: false,
+        live: true,
+        other_sessions: false,
+        not_saved: None,
+    };
+    let outcome = |report: &RevocationReport| {
+        outcome_line(HumanRevocation::AllActiveAuthority, report).unwrap()
+    };
+    assert_eq!(
+        outcome(&report),
+        "All active authority revoked in every session of this Corbanu Terminal on this Corbanu home (only this session is running). Saved: it holds after a restart. Level: Moderate."
+    );
+    assert_eq!(
+        outcome(&RevocationReport {
+            other_sessions: true,
+            ..report.clone()
+        }),
+        "All active authority revoked in every session of this Corbanu Terminal on this Corbanu home. Saved: it holds after a restart. Level: Moderate."
+    );
+    assert_eq!(
+        outcome(&RevocationReport {
+            other_sessions: true,
+            not_saved: Some("disk full".to_string()),
+            ..report
+        }),
+        "All active authority revoked in every session of this Corbanu Terminal on this Corbanu home, but it could not be saved (disk full): it holds until Corbanu Terminal exits. Level: Moderate."
+    );
+    // A release reaches only the sessions that held that switch.
+    assert_eq!(
+        outcome_line(
+            HumanRevocation::KillSwitchOff,
+            &RevocationReport {
+                other_sessions: true,
+                ..report
+            }
+        ),
+        Ok("Kill switch off in this session and the others of this Corbanu Terminal that held it. Saved: it holds after a restart. Other Corbanu Terminals running on this home take it within about a second. Level: Moderate.".to_string())
     );
 }

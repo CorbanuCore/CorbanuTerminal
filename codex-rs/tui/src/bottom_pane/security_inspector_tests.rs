@@ -113,6 +113,21 @@ fn pf_41_s01_inspector_degraded_and_stale() {
     );
 }
 
+/// #1036: a healthy view observed long ago says it is stale; it does not
+/// call the level degraded.
+#[test]
+fn issue_1036_stale_view_is_not_called_degraded() {
+    let rendered = render(
+        &inspector(healthy(ThreadId::new()), stale_now),
+        /*width*/ 100,
+    );
+    assert!(!rendered.contains("degraded"), "{rendered}");
+    insta::assert_snapshot!(
+        "issue_1036_inspector_stale_not_degraded",
+        rendered.lines().take(4).collect::<Vec<_>>().join("\n")
+    );
+}
+
 #[test]
 fn pf_41_s01_inspector_blocked_by_unreadable_state() {
     let facts = RuntimeFacts {

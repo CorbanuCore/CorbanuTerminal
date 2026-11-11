@@ -1,0 +1,19 @@
+---
+source: tui/src/bottom_pane/mcp_server_elicitation.rs
+expression: "render_snapshot(&overlay, Rect::new(0, 0, 120, 16))"
+---
+                                                                                                                        
+  Field 1/1                                                                                                             
+  Always allowing this tool saves that choice, but under security level Aggressive it applies only until this           
+  session ends or the level changes, because Aggressive keeps it only for connectors and for servers defined only in    
+  your own config. At less strict levels the saved choice applies. Allow the project_server MCP server to run tool      
+  "post_message"?                                                                                                       
+  › 1. Allow                   Run the tool and continue.                                                               
+    2. Allow for this session  Run the tool and remember this choice for this session.                                  
+    3. Always allow            Run the tool and remember this choice for future tool calls.                             
+    4. Cancel                  Cancel this tool call                                                                    
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+  enter to submit | ↑/↓ then enter for options that last beyond this request | esc to cancel

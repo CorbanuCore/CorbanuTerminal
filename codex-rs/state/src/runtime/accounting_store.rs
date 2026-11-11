@@ -45,6 +45,9 @@ pub use writer::WriteOutcome;
 #[path = "accounting_scope.rs"]
 mod scope;
 
+#[path = "accounting_empty_day.rs"]
+mod empty_day;
+
 #[path = "accounting_indexes.rs"]
 mod indexes;
 
@@ -70,6 +73,34 @@ pub struct Inspection {
     /// Same-day attempts of other root conversations, outside every total above.
     /// `None` when this view did not read them (range buckets).
     pub other_conversations: Option<OtherConversations>,
+    /// What the emptiness of the day, or of a range bucket's part of it,
+    /// means when neither this conversation nor a resolved subagent has a
+    /// recorded attempt there. `None` when they have one.
+    pub empty_day: Option<EmptyDay>,
+    /// #314 (D228): accounting failed to record at least one model request of
+    /// this conversation or a thread of its spawn tree on this UTC day
+    /// (`AccountingStore::record_gap`), so the totals above may be
+    /// incomplete: that request was sent and billed but has no record.
+    pub recording_gap: bool,
+}
+
+/// A day on which neither the conversation nor a resolved subagent has a
+/// recorded attempt. Only `BeforeConversation` says there were no requests:
+/// the ledger keeps no record of when a writer ran, and marks only the writes
+/// known to have failed (#314), so an empty day inside the ledger's life
+/// proves nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EmptyDay {
+    /// Proven: the whole UTC day ends before the conversation started, and no
+    /// thread of unresolved ancestry has anything on it. `started_day` is the
+    /// UTC day of the earliest of every spawn-tree thread's UUIDv7 id time, its
+    /// stored creation times and every request recorded for it. As good as the
+    /// clock that stamped them, the same clock that dates every request.
+    BeforeConversation { started_day: i64 },
+    /// Not proven: the day ends before this home's ledger was created.
+    BeforeLedger { ledger_started_day: i64 },
+    /// Not proven: nothing is recorded; collection coverage is unknown.
+    NotRecorded,
 }
 
 /// UTC half-open requested interval and calendar-aligned grouping.
@@ -287,6 +318,60 @@ impl AsOf {
     }
 }
 
+/// #1518: an inspection read at a time behind the ledger's checkpoint. The
+/// ledger is intact; the system clock reads earlier than its newest record, so
+/// the read is refused until the clock catches up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClockBehindLedger {
+    pub behind_ms: i64,
+}
+
+impl std::fmt::Display for ClockBehindLedger {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "backward inspection read: the system clock is {} ms behind the accounting ledger checkpoint",
+            self.behind_ms
+        )
+    }
+}
+
+impl std::error::Error for ClockBehindLedger {}
+
+/// The clock-behind refusal in `error`'s chain, if that is what it is.
+pub fn clock_behind_ledger(error: &anyhow::Error) -> Option<ClockBehindLedger> {
+    error
+        .chain()
+        .find_map(|cause| cause.downcast_ref::<ClockBehindLedger>().copied())
+}
+
+/// #1522: an inspection of a UTC day that starts after the read time, e.g. a
+/// `/cost` view opened while the clock read ahead and refreshed after it was
+/// set back. Still refused; typed so the caller can name the clock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClockBeforeDay {
+    pub behind_ms: i64,
+}
+
+impl std::fmt::Display for ClockBeforeDay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "invalid or future day: the system clock is {} ms before the requested UTC day",
+            self.behind_ms
+        )
+    }
+}
+
+impl std::error::Error for ClockBeforeDay {}
+
+/// The future-day refusal in `error`'s chain, if that is what it is.
+pub fn clock_before_day(error: &anyhow::Error) -> Option<ClockBeforeDay> {
+    error
+        .chain()
+        .find_map(|cause| cause.downcast_ref::<ClockBeforeDay>().copied())
+}
+
 /// Say once per process that the clock is behind the ledger.
 fn warn_clock_behind(behind_ms: i64) {
     static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -366,7 +451,13 @@ impl<'a> AccountingStore<'a> {
         requested: Option<InspectionRange>,
     ) -> anyhow::Result<InspectionDay> {
         let start = utc_day.checked_mul(86_400_000).context("day overflow")?;
-        ensure!(utc_day >= 0 && read_at_ms >= start, "invalid or future day");
+        ensure!(utc_day >= 0, "invalid or future day");
+        if read_at_ms < start {
+            return Err(ClockBeforeDay {
+                behind_ms: start.saturating_sub(read_at_ms),
+            }
+            .into());
+        }
         start.checked_add(86_400_000).context("day end overflow")?;
         let mut tx = runtime.pool.begin().await?;
         if !ledger_exists(&mut tx).await? {
@@ -416,6 +507,53 @@ impl<'a> AccountingStore<'a> {
                 Err(error)
             }
         }
+    }
+
+    /// #314 (D228): durably mark that accounting failed to record at least one
+    /// of `owner`'s model requests sent between `from_ms` and `to_ms` (UTC
+    /// ms, either order), so `/cost` says those days' totals may be
+    /// incomplete. Every UTC day of the span is marked (the first and the 32
+    /// ending on the last, for a longer span), and, when the clock reads
+    /// behind the ledger's checkpoint, the checkpoint's day too: the earliest
+    /// day the true time can be, which retention will not expire at once.
+    /// Upgrades the ledger to format 7 in the same transaction; it
+    /// runs no retention or clock check, since the failure it marks may be
+    /// one. Marking a day twice is one marker. A home with no ledger is left
+    /// without one: its `/cost` already reads unavailable, never complete,
+    /// and an unrecorded request does not install a ledger.
+    pub async fn record_gap(
+        runtime: &StateRuntime,
+        owner: ThreadId,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> anyhow::Result<()> {
+        let (from_ms, to_ms) = (from_ms.min(to_ms), from_ms.max(to_ms));
+        ensure!(from_ms >= 0, "negative gap time");
+        let mut tx = crate::runtime::db_lock::begin_immediate(&runtime.pool).await?;
+        let result = async {
+            if !ledger_exists(&mut tx).await? {
+                return Ok(());
+            }
+            validate_on_connection(&mut tx).await?;
+            require_format_on_connection(&mut tx, super::gap_days::FORMAT).await?;
+            let checkpoint = match super::retention_fixture_on_connection(&mut tx).await? {
+                super::RetentionFixture::Active(checkpoint) => Some(checkpoint),
+                super::RetentionFixture::Staging | super::RetentionFixture::Absent => None,
+            };
+            for day in super::gap_days::days(from_ms, to_ms, checkpoint) {
+                super::gap_days::mark_on_connection(&mut tx, owner, day).await?;
+            }
+            Ok(())
+        }
+        .await;
+        match result {
+            Ok(()) => tx.commit().await?,
+            Err(error) => {
+                tx.rollback().await?;
+                return Err(error);
+            }
+        }
+        Ok(())
     }
 
     /// Refuse a ledger written in a newer format (`NewerLedgerFormat`); a
@@ -740,6 +878,9 @@ pub(super) struct InspectionWork {
     rows: usize,
     visits: usize,
     scan_rows: usize,
+    /// FUP-02: a conversation's start, read once per inspection (a range reads
+    /// it for every empty bucket day).
+    started: Option<(ThreadId, Option<i64>)>,
 }
 
 impl InspectionWork {
@@ -755,6 +896,7 @@ impl InspectionWork {
             rows: 4_000_000usize.saturating_sub(scanned as usize),
             visits: 20_000,
             scan_rows: scanned as usize,
+            started: None,
         })
     }
 
@@ -766,6 +908,14 @@ impl InspectionWork {
         }
         self.rows -= cost;
         true
+    }
+
+    /// One scan when the budget has room for it and `reserve` more. Unlike
+    /// [`Self::scans`], a refusal leaves the budget for the rest of the
+    /// inspection.
+    pub(super) fn spare_scan(&mut self, reserve: usize) -> bool {
+        self.scan_rows.saturating_mul(reserve.saturating_add(1)) <= self.rows
+            && self.scans(/*count*/ 1)
     }
 
     pub(super) fn visit(&mut self) -> bool {
@@ -810,6 +960,21 @@ async fn inspect_tree_window(
     let InspectionDay::Ready(mut view) = first else {
         return Ok(first);
     };
+    // FUP-02: a single day with nothing recorded for the owner. Before the
+    // aggregate floor it stays unavailable, as before, unless the conversation
+    // had not started yet; that is decided here, ahead of the tree.
+    let mut started = None;
+    if window.is_none() && view.totals.attempts == 0 && day < view.coverage.aggregate_day_floor {
+        let early = started_ms(conn, owner, work).await?;
+        if !empty_day::proven_before(day, early) {
+            return Ok(InspectionDay::DetailUnavailable {
+                coverage: view.coverage,
+                read_at_ms,
+                compact: false,
+            });
+        }
+        started = Some(early);
+    }
     if !work.scans(/*count*/ 1) {
         return Ok(InspectionDay::TooLarge);
     }
@@ -834,6 +999,9 @@ async fn inspect_tree_window(
         }
     }
     let mut unrelated = Vec::new();
+    // A thread of unknown ancestry with anything on this UTC day, inside a
+    // range bucket's window or not, may be an unlinked subagent.
+    let mut unknown_on_day = false;
     for candidate in candidates {
         if !work.visit() {
             return Ok(InspectionDay::TooLarge);
@@ -920,6 +1088,7 @@ async fn inspect_tree_window(
             return Ok(InspectionDay::TooLarge);
         }
         ancestry.extend(discovered);
+        unknown_on_day |= relation.is_none();
         let other = Journal::inspect_window_on_connection(
             conn,
             ThreadId::from_string(&candidate)?,
@@ -976,7 +1145,58 @@ async fn inspect_tree_window(
         view.other_conversations =
             Some(scope::other_conversations(conn, unrelated, day, read_at_ms, work).await);
     }
+    // #314 (D228): a request of this tree that day went unrecorded.
+    view.recording_gap = empty_day::gap_recorded(conn, owner, day).await?;
+    // Last, so the start's scan never takes budget the rest of the view needs.
+    // #1196: a range bucket's part of the day is classified the same way.
+    if view.totals.attempts == 0 {
+        let started = match started {
+            Some(started) => started,
+            None => started_ms(conn, owner, work).await?,
+        };
+        let unknown_clear = !unknown_on_day
+            && view.unknown_parent_totals.attempts == 0
+            && view.unknown_parent_unavailable_threads == 0;
+        let empty = empty_day::classify(
+            day,
+            started,
+            empty_day::ledger_started_day(conn).await?,
+            unknown_clear,
+        );
+        if day < view.coverage.aggregate_day_floor
+            && !matches!(empty, EmptyDay::BeforeConversation { .. })
+        {
+            return Ok(InspectionDay::DetailUnavailable {
+                coverage: view.coverage,
+                read_at_ms,
+                compact: false,
+            });
+        }
+        view.empty_day = Some(empty);
+    }
     Ok(InspectionDay::Ready(view))
+}
+
+/// `empty_day::started_ms`, charged to the work budget: one scan of the
+/// accounting rows for the tree's earliest recorded request, once per
+/// inspection. Without budget left for it there is no proof, and the view stays
+/// as it would have been.
+async fn started_ms(
+    conn: &mut SqliteConnection,
+    owner: ThreadId,
+    work: &mut InspectionWork,
+) -> anyhow::Result<Option<i64>> {
+    if let Some((read_for, started)) = work.started
+        && read_for == owner
+    {
+        return Ok(started);
+    }
+    if !work.spare_scan(/*reserve*/ 0) {
+        return Ok(None);
+    }
+    let started = empty_day::started_ms(conn, owner).await?;
+    work.started = Some((owner, started));
+    Ok(started)
 }
 
 // All buckets reuse the already-open deferred snapshot, including ancestry.

@@ -20,6 +20,7 @@ use crate::tools::handlers::resolve_tool_environment;
 use crate::tools::handlers::rewrite_function_string_argument;
 use crate::tools::handlers::updated_hook_command;
 use crate::tools::hook_names::HookToolName;
+use crate::tools::orchestrator::HandlerBasis;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::PostToolUsePayload;
 use crate::tools::registry::PreToolUsePayload;
@@ -275,6 +276,8 @@ impl ExecCommandHandler {
             manager.release_process_id(process_id).await;
             return Err(FunctionCallError::RespondToModel(refusal));
         }
+        // #1057: taken before the grants are read.
+        let handler_basis = HandlerBasis::now(context.session.as_ref());
         let effective_additional_permissions = apply_granted_turn_permissions(
             context.session.as_ref(),
             &turn_environment.environment_id,
@@ -383,6 +386,7 @@ impl ExecCommandHandler {
                         .permissions_preapproved,
                     justification,
                     prefix_rule,
+                    handler_basis: Some(handler_basis),
                 },
                 &context,
             )

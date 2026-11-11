@@ -1,0 +1,3 @@
+ERROR: This conversation ran on openai account `t1` and resumes on it: account `t1` of provider `openai` is not signed in; sign in with `corbanu login --account
+ t1` or pick another with `--account` (see `corbanu account list`)
+TUI-EXIT:1

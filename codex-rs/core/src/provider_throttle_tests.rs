@@ -260,6 +260,7 @@ pub(crate) struct RateLimitedSession {
     pub(crate) session: crate::session::session::Session,
     pub(crate) turn_context: TurnContext,
     pub(crate) home: tempfile::TempDir,
+    pub(crate) cwd: tempfile::TempDir,
 }
 
 impl RateLimitedSession {
@@ -277,7 +278,9 @@ impl RateLimitedSession {
             .mount(&server)
             .await;
         let home = tempfile::tempdir().expect("tempdir");
-        let mut config = crate::session::tests::build_test_config(home.path()).await;
+        let test_cwd = tempfile::tempdir().expect("create test cwd");
+        let mut config =
+            crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
         config.model_provider = ModelProviderInfo {
             request_max_retries: Some(0),
             stream_max_retries: Some(0),
@@ -293,6 +296,7 @@ impl RateLimitedSession {
             session,
             turn_context,
             home,
+            cwd: test_cwd,
         }
     }
 

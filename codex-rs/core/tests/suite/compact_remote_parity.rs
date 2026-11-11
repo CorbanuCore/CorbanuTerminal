@@ -24,6 +24,9 @@ use serde_json::Value;
 use serde_json::json;
 
 const FIXED_CWD: &str = "/tmp/codex_remote_compaction_parity_workspace";
+/// The folder every run's config is built for (its workspace root), so the
+/// runs' environment context matches.
+const FIXED_CONFIG_FOLDER: &str = "/tmp/codex_remote_compaction_parity_root";
 const IMAGE_URL: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 const SUMMARY: &str = "REMOTE_COMPACTION_PARITY_ENCRYPTED_SUMMARY";
 const DUMMY_FUNCTION_NAME: &str = "test_tool";
@@ -508,7 +511,9 @@ async fn build_harness_inner(
     auto_compact_limit: Option<i64>,
 ) -> Result<TestCodexHarness> {
     fs::create_dir_all(FIXED_CWD)?;
+    fs::create_dir_all(FIXED_CONFIG_FOLDER)?;
     let mut builder = test_codex()
+        .with_config_folder(FIXED_CONFIG_FOLDER)
         .with_auth(settings.auth.build())
         .with_pre_build_hook(|home| {
             fs::write(home.join("AGENTS.md"), USER_INSTRUCTIONS)

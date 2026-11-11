@@ -1,0 +1,32 @@
+provider/zai_api_key: 0 files with the key value in runs
+openai-api-key: 0 files with the key value in runs
+kimi_api3: 0 files with the key value in runs
+files scanned in runs: 2103
+provider/zai_api_key: 0 files with the key value in common
+openai-api-key: 0 files with the key value in common
+kimi_api3: 0 files with the key value in common
+files scanned in common: 23
+provider/zai_api_key: 0 files with the key value in shakedown
+openai-api-key: 0 files with the key value in shakedown
+kimi_api3: 0 files with the key value in shakedown
+files scanned in shakedown: 21
+provider/zai_api_key: 0 files with the key value in inspect
+openai-api-key: 0 files with the key value in inspect
+kimi_api3: 0 files with the key value in inspect
+files scanned in inspect: 2314
+provider/zai_api_key: 0 files with the key value in stage
+openai-api-key: 0 files with the key value in stage
+kimi_api3: 0 files with the key value in stage
+files scanned in stage: 34
+provider/zai_api_key: 0 files with the key value in candidate
+openai-api-key: 0 files with the key value in candidate
+kimi_api3: 0 files with the key value in candidate
+files scanned in candidate: 7
+provider/zai_api_key: 0 files with the key value in design
+openai-api-key: 0 files with the key value in design
+kimi_api3: 0 files with the key value in design
+files scanned in design: 56
+provider/zai_api_key: 0 files with the key value in tools
+openai-api-key: 0 files with the key value in tools
+kimi_api3: 0 files with the key value in tools
+files scanned in tools: 17

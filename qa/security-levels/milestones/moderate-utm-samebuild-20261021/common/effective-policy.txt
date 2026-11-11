@@ -1,0 +1,57 @@
+# AGMS harness, utm-par2 (2026-10-21 UTC): effective isolation policy. Part 1 (D93): UTM guest "macOS 3", build 8c73c8ea80.
+# Part 2 (D94/D95): one fresh Tart clone per group, build 2f9d05c51e.
+
+Both parts use the Tart parity run's guest harness unchanged (../harness/ holds every file of
+../../moderate-tart-parity-20261020/harness/, byte for byte, except seal-guest.sh and dns-refuse.py; fixture.tar by
+SHA-256; part 2's seal step copied its assets at run time, outside both freezes: those two from scripts/qa/tart/, with
+the same SHA-256 as the Tart record's copies, and tmux and libevent_core-2.1.7.dylib from host paths, as the Tart run
+did: ../harness-tart/seal-assets.sha256) and its network path (guest mediator -> SSH reverse tunnel -> host relay that adds
+the Z.AI key on the host). Freezes: design/FROZEN.sha256 (part 1) pushed as 552601666c at 2026-10-21T08:09:37Z, before
+"macOS 3" was started (08:09:54Z); design/FROZEN-d94d95.sha256 (part 2) pushed as 04837d4f1a at 09:46:27Z, before the first
+clone (09:46:35Z). No frozen file changed after its freeze. One post-freeze manual step is disclosed below (env manifest).
+
+## Part 1: UTM "macOS 3" (D93)
+
+VM. The existing UTM guest "macOS 3" (agent@192.168.64.3, pinned host key), macOS 26.2 (25C56), SIP enabled, Gatekeeper
+on, 8 CPUs, 16 GiB (utm/vm-start.txt, utm/env-manifest.txt). "macOS 2" stayed stopped and was not touched; no Tart VM ran
+(the driver refuses to start with a Tart VM or the Tart lock present). Lock .codex-work/workers-20261002/vm-macos3.lock
+(holder utm-par2) 08:09:54Z-09:46:18Z. First start 08:09:54Z: the guest's network did not come up (ARP incomplete, SSH
+"Host is down"), so it was power-cycled (shutdown request unanswered for 2 min, then utmctl stop; utm/vm-powercycle.txt),
+as earlier UTM records did; second start 08:16:11Z, SSH in 9 s. Guest and host clocks agreed within 2 s.
+Guest found at baseline (utm/guest-state-start.txt): no ~/agms, /opt/agms, sudoers file, agmx accounts or AGMS pf lines;
+'set skip on lo0' in place; /etc/codex/config.toml present (moved aside by erase-etc-codex.sh, restored at the end); the
+VirtIOFS share mounted (provision.sh unmounts it); the guest's transport key file from earlier UTM runs present at
+/Users/agent/.pf83-auth/zai_api_key. That file was left in place and not read, used or changed (harness-utm/setup-agent-utm.sh);
+the mediator ran in relay mode and read no key file. On Tart the same path holds a synthetic placeholder.
+
+Driver. harness-utm/utm-run.sh (up, tunnel, stage, gate, group, down, verify-boot) and harness-utm/run-utm.sh. Root actions
+through the UTM admin helper (su.exp; the admin password fetched from the vault at use time, never stored or printed).
+Provisioned once (setup-agent-utm.sh, provision.sh, erase-etc-codex.sh), then one gate, then the groups one at a time on
+rotating lanes, each with a lane wipe before and after (the UTM qual method), then the closing below.
+
+Env manifest (post-freeze manual step): utm-run.sh's `up` sent env-manifest.sh to the guest with `ssh -n`, so its output was
+empty; the same script was run once by hand with stdin between 08:16:23Z and 08:16:39Z (utm/env-manifest.txt; the file
+has no time stamp). No guest file changed.
+
+Accounts, network, gate, guard, product: as the Tart parity run (../../moderate-tart-parity-20261020/common/effective-policy.txt):
+executors agmx1-3 (agmx0 = gate lane), per-uid pf allowing only the loopback mediator, 99 probes, smoke turn, relay control,
+guard loop for SecurityAgent, candidate package read-only at /opt/agms/pkg, fresh profile per group. The guest's own seal
+(pf anchor corbanu.pf83 allowing SSH from the host and HTTPS to the pinned api.z.ai addresses; provision.sh suspends
+'set skip on lo0' for the per-user loopback rules) replaces seal-guest.sh. Guest tools: python3 3.9.6, git 2.50.1 (Apple
+Git-155), bash 3.2.57 (Tart base: git 2.54.0, Apple Git-157).
+
+Closing (utm/vm-stop.txt). Mediator log, guard and root policy captured; lane processes killed; every lane home (synthetic
+test data) deleted and checked (0 entries, 0 synthetic credential files; utm/erase-test-data.out); restore.sh (accounts,
+group, sudoers, /opt/agms, per-user pf rules, ~/agms with the mediator's synthetic leaf key, canaries removed; anchor
+identical to the original; lo0 skip back; /etc/codex/config.toml restored); restore-fix.sh remounted the share; live check
+(utm/vm-state-end.txt); tunnel stopped; guest-shutdown-clean.sh removed ~agent/ag-admin and shut down (stopped 09:43:36Z).
+Verification boot (utm/vm-state-end2.txt): every campaign path and ~agent/ag-admin gone, share mounted; it ignored the
+shutdown request for 2 min and was powered off (utmctl stop) at 09:46:18Z, as in earlier UTM records.
+
+## Part 2: Tart (D94/D95)
+
+As the Tart parity run (../../moderate-tart-parity-20261020/common/effective-policy.txt), with harness-tart/tart-run.sh
+(paths, VM name `utm-par2-run` and lock holder changed) and harness-tart/run-cur.sh (refuses to start while a UTM VM runs;
+pauses below 25% free host memory): one fresh clone of corbanu-qa-base per group, seal-guest.sh, synthetic placeholder key
+file, gate, group, closing with the synthetic test data, placeholder key file and leaf key deleted and checked before the
+clone was stopped and deleted (<group>-cur-<UTC>/erase-test-data.out, vm-state-end.txt).

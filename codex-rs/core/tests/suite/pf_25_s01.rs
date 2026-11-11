@@ -3,8 +3,14 @@
 //! (offer key = the approval id the TUI answers, digest at offer = digest at
 //! run). #442: reads of credential files and the Corbanu home are never
 //! granted.
+//!
+//! Each session runs in its own workspace root, as a real session does
+//! (#1098): there the project's `.git`, `.codex` and `.agents` are read-only
+//! (the upstream sandbox's protection) and no grant lifts them, so the hook a
+//! grant writes is in a `core.hooksPath` folder (`.husky`), as the docs say.
 #![cfg(target_os = "macos")]
 
+use std::path::Path;
 use std::sync::Arc;
 
 use codex_core::config::Constrained;
@@ -66,7 +72,7 @@ fn canary_home() -> anyhow::Result<(Arc<TempDir>, String)> {
     std::fs::write(&path, CANARY)?;
     let path = path.to_string_lossy().into_owned();
     let folder = path.len() - "/pf25-notes.txt".len();
-    let (head, tail) = (&path[..folder - 2], &path[folder - 2..folder]);
+    let (head, tail) = super::pf_23_s01::split_home_name(&path[..folder]);
     Ok((
         home,
         format!("cat \"$(printf '{head}%s/pf25-notes.txt' {tail})\""),
@@ -74,10 +80,20 @@ fn canary_home() -> anyhow::Result<(Arc<TempDir>, String)> {
 }
 
 async fn start(home: Arc<TempDir>, steps: Vec<Step>) -> anyhow::Result<(TestCodex, ResponseMock)> {
+    start_in(home, steps, |_| Ok(())).await
+}
+
+/// [`start`], with `project` run on the session's folder before the turn.
+async fn start_in(
+    home: Arc<TempDir>,
+    steps: Vec<Step>,
+    project: impl FnOnce(&Path) -> std::io::Result<()>,
+) -> anyhow::Result<(TestCodex, ResponseMock)> {
     let server = start_mock_server().await;
     let captured = mount_sse_sequence(&server, steps.into_iter().map(sse).collect()).await;
     let test = test_codex()
         .with_home(home)
+        .with_session_cwd_as_workspace_root()
         .with_model("test-gpt-5.1-codex")
         .with_config(|config| {
             config.security_level = SecurityLevel::Aggressive;
@@ -96,6 +112,7 @@ async fn start(home: Arc<TempDir>, steps: Vec<Step>) -> anyhow::Result<(TestCode
         .build_with_auto_env(&server)
         .await?;
     std::mem::forget(server);
+    project(test.cwd_path())?;
     test.codex
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
@@ -109,6 +126,16 @@ async fn start(home: Arc<TempDir>, steps: Vec<Step>) -> anyhow::Result<(TestCode
         })
         .await?;
     Ok((test, captured))
+}
+
+/// A git project whose hooks folder is `.husky` (`core.hooksPath`), with the
+/// project's `.git/hooks`, `.codex` and `.agents` folders.
+fn husky_project(cwd: &Path) -> std::io::Result<()> {
+    for folder in [".git/hooks", ".husky", ".codex", ".agents"] {
+        std::fs::create_dir_all(cwd.join(folder))?;
+    }
+    std::fs::write(cwd.join(".git/HEAD"), "ref: refs/heads/main\n")?;
+    std::fs::write(cwd.join(".git/config"), "[core]\n\thooksPath = .husky\n")
 }
 
 async fn next_approval(test: &TestCodex) -> Option<ExecApprovalRequestEvent> {
@@ -143,28 +170,27 @@ fn output_text(request: &ResponsesRequest, call_id: &str) -> String {
 }
 
 /// The first run, granted "1 run" in the review and approved, writes a git
-/// hook (a write protection); the same command again, only approved, gets
-/// the rules.
+/// hook in the `core.hooksPath` folder (a write protection); the same command
+/// again, only approved, gets the rules.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pf_25_s01_confirmed_grant_lifts_the_write_protections_for_the_approved_run_only()
 -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
     let home = Arc::new(TempDir::new()?);
-    let write = "printf pf25 > .git/hooks/pf25-hook";
-    let (test, captured) = start(
+    let write = "printf pf25 > .husky/pf25-hook";
+    let (test, captured) = start_in(
         home,
         vec![
             shell_step("call-granted", write),
             shell_step("call-again", write),
             done_step(),
         ],
+        husky_project,
     )
     .await?;
     let thread = test.session_configured.thread_id;
-    // Before the command runs (it waits for the approval).
-    let hooks = test.cwd_path().join(".git/hooks");
-    std::fs::create_dir_all(&hooks)?;
+    let hooks = test.cwd_path().join(".husky");
 
     let first = next_approval(&test).await.expect("the write asks first");
     let offer = security_grant::offer(thread, &first.effective_approval_id())
@@ -291,24 +317,24 @@ async fn pf_25_s01_declined_approval_drops_the_confirmed_grant() -> anyhow::Resu
 
 /// #442 (Travis, 2026-10-11): the project's `.codex` and `.agents` stay
 /// read-only under Aggressive even with "Grant once"; the grant still lifts
-/// Core's other write protections (a git hook here) for the same run. This
-/// is Core's layer, under a plain workspace-write profile: the real
-/// Aggressive profile also keeps `.git` read-only, whatever the grant.
+/// Core's other write protections (a `core.hooksPath` hook here) for the same
+/// run.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn issue_442_a_confirmed_grant_never_lifts_codex_or_agents() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
     let home = Arc::new(TempDir::new()?);
-    let write = "printf pf25 > .git/hooks/pf25-hook; echo hook=$?; \
+    let write = "printf pf25 > .husky/pf25-hook; echo hook=$?; \
                  printf pf25 > .codex/pf25.toml; echo codex=$?; \
                  printf pf25 > .agents/pf25.md; echo agents=$?";
-    let (test, captured) =
-        start(home, vec![shell_step("call-granted", write), done_step()]).await?;
+    let (test, captured) = start_in(
+        home,
+        vec![shell_step("call-granted", write), done_step()],
+        husky_project,
+    )
+    .await?;
     let thread = test.session_configured.thread_id;
     let cwd = test.cwd_path();
-    for folder in [".git/hooks", ".codex", ".agents"] {
-        std::fs::create_dir_all(cwd.join(folder))?;
-    }
 
     let approval = next_approval(&test).await.expect("the write asks first");
     let offer = security_grant::offer(thread, &approval.effective_approval_id()).expect("offer");
@@ -322,10 +348,44 @@ async fn issue_442_a_confirmed_grant_never_lifts_codex_or_agents() -> anyhow::Re
     assert!(output.contains("codex=1"), "{output}");
     assert!(output.contains("agents=1"), "{output}");
     assert_eq!(
-        std::fs::read_to_string(cwd.join(".git/hooks/pf25-hook"))?,
+        std::fs::read_to_string(cwd.join(".husky/pf25-hook"))?,
         "pf25"
     );
     assert!(!cwd.join(".codex/pf25.toml").exists());
     assert!(!cwd.join(".agents/pf25.md").exists());
+    Ok(())
+}
+
+/// #740, #1098: in a session's own folder the project's `.git` (its hooks
+/// included) is read-only and no grant lifts it, so none is offered for a
+/// write to `.git/hooks`; the approval prompt says why, and the approved run
+/// writes nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_1098_no_grant_is_offered_for_the_projects_git_hooks() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+    let home = Arc::new(TempDir::new()?);
+    let write = "printf pf25 > .git/hooks/pf25-hook; echo hook=$?";
+    let (test, captured) = start_in(
+        home,
+        vec![shell_step("call-hook", write), done_step()],
+        husky_project,
+    )
+    .await?;
+    let thread = test.session_configured.thread_id;
+    let approval = next_approval(&test).await.expect("the write asks first");
+    assert!(security_grant::offer(thread, &approval.effective_approval_id()).is_none());
+    let reason = approval.reason.clone().unwrap_or_default();
+    assert!(reason.contains("as the project's .git folder"), "{reason}");
+    assert!(
+        reason.contains("cannot be granted, not even once"),
+        "{reason}"
+    );
+    approve(&test, &approval).await?;
+    assert!(next_approval(&test).await.is_none());
+    let requests = captured.requests();
+    let output = output_text(&requests[requests.len() - 1], "call-hook");
+    assert!(output.contains("hook=1"), "{output}");
+    assert!(!test.cwd_path().join(".git/hooks/pf25-hook").exists());
     Ok(())
 }

@@ -1,0 +1,55 @@
+# #1185 (D77): /cost says "no requests recorded" for a past day only when the records prove it.
+id = "modreel-1185-cost-proven"
+feature = "#1185: /cost says \"no requests recorded\" only when proven"
+expected = "/cost for a day before the conversation started says no requests recorded and why; in a new conversation with nothing recorded today, /cost says nothing recorded and that this does not show there were no requests."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Reply with the single word pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*pong\\W*$"
+timeout = 120
+compress = 2
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/cost 2026-10-01"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "No conversation of unknown ancestry"
+[[steps]]
+pause = 6.0
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "/new"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "To continue this session"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "That does not show there were no requests"
+[[steps]]
+pause = 6.0

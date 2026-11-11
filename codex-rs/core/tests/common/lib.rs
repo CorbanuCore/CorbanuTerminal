@@ -211,27 +211,28 @@ pub fn fetch_dotslash_file(
     Ok(fetched_path)
 }
 
-/// Returns a default `Config` whose on-disk state is confined to the provided
-/// temporary directory. Using a per-test directory keeps tests hermetic and
-/// avoids clobbering a developer’s real `~/.codex`.
-pub async fn load_default_config_for_test(codex_home: &TempDir) -> Config {
-    load_default_config_for_test_with_cloud_config_bundle(
-        codex_home,
-        CloudConfigBundleLoader::default(),
-    )
-    .await
-}
-
-/// Returns a default `Config` with test-provided cloud bundle requirements applied.
-/// during config construction.
-pub async fn load_default_config_for_test_with_cloud_config_bundle(
+/// Returns a default `Config` whose on-disk state is confined to the temporary
+/// `codex_home` (never a developer's real `~/.codex`), with the test-provided
+/// cloud bundle requirements applied, built for the working folder `cwd`.
+///
+/// `cwd` becomes the session's folder and its workspace root, a writable root
+/// of sandboxed commands, as for a real session started there. Pass a
+/// temporary folder. There is deliberately no variant without one: the config
+/// would then be built for the test process's own working folder (the crate's
+/// source tree, e.g. `codex-rs/core`), and sandboxed commands could write into
+/// it (#1120).
+pub async fn load_default_config_for_test_in(
     codex_home: &TempDir,
     cloud_config_bundle: CloudConfigBundleLoader,
+    cwd: &Path,
 ) -> Config {
     ConfigBuilder::default()
         .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
         .codex_home(codex_home.path().to_path_buf())
-        .harness_overrides(default_test_overrides())
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(cwd.to_path_buf()),
+            ..default_test_overrides()
+        })
         .cloud_config_bundle(cloud_config_bundle)
         .build()
         .await
@@ -472,6 +473,44 @@ pub fn format_with_current_shell_display_non_login(command: &str) -> String {
 
 pub fn stdio_server_bin() -> Result<String, CargoBinError> {
     codex_utils_cargo_bin::cargo_bin("test_stdio_server").map(|p| p.to_string_lossy().to_string())
+}
+
+/// #1967: on Windows, runs the session's agent commands in the elevated
+/// (default) Windows sandbox, which Moderate and Aggressive need there (#691,
+/// #783); without it Windows refuses most commands before any security level
+/// rule is reached. The first sandboxed command runs the elevated setup, so
+/// every test calling this is in the `windows_sandbox_legacy_sessions`
+/// nextest group (#1873) and, for `cargo test`'s threads, marked
+/// `#[serial(codex_home)]` like the other elevated tests. Does nothing
+/// elsewhere.
+pub fn use_elevated_windows_sandbox(config: &mut Config) {
+    #[cfg(windows)]
+    {
+        stage_windows_sandbox_helpers();
+        config.permissions.windows_sandbox_mode =
+            Some(codex_config::types::WindowsSandboxModeToml::Elevated);
+    }
+    #[cfg(not(windows))]
+    let _ = config;
+}
+
+/// Copies the elevated sandbox's helpers to `codex-resources` next to the test
+/// binary, where Core looks for them.
+#[cfg(windows)]
+fn stage_windows_sandbox_helpers() {
+    let exe = std::env::current_exe().expect("test binary");
+    let resources = exe.parent().expect("test dir").join("codex-resources");
+    std::fs::create_dir_all(&resources).expect("resources dir");
+    for helper in ["codex-windows-sandbox-setup", "codex-command-runner"] {
+        let source = codex_utils_cargo_bin::cargo_bin(helper).expect("sandbox helper built");
+        let destination = resources.join(format!("{helper}.exe"));
+        // A helper from an earlier test may still be running; keep its copy.
+        if let Err(error) = std::fs::copy(&source, &destination)
+            && !destination.exists()
+        {
+            panic!("stage {helper}: {error}");
+        }
+    }
 }
 
 pub mod fs_wait {

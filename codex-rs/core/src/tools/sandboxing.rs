@@ -336,10 +336,13 @@ pub(crate) fn sandbox_override_for_first_attempt(
 /// Denied reads only exist inside the sandbox. If a policy contains any
 /// denied-read paths, bypassing the sandbox would silently grant those reads,
 /// so escalation must keep the command sandboxed with the denied reads intact.
+/// #807: so does keeping the macOS keychain services away (#758), by itself
+/// (it denies no file read).
 pub(crate) fn unsandboxed_execution_allowed(
     file_system_sandbox_policy: &FileSystemSandboxPolicy,
 ) -> bool {
     !file_system_sandbox_policy.has_denied_read_restrictions()
+        && !(cfg!(target_os = "macos") && file_system_sandbox_policy.denies_keychain_services())
 }
 
 pub(crate) fn sandbox_permissions_preserving_denied_reads(
@@ -489,6 +492,19 @@ pub(crate) trait ToolRuntime<Req, Out>: Approvable<Req> + Sandboxable {
     }
 
     fn sandbox_cwd<'a>(&self, _req: &'a Req) -> Option<&'a PathUri> {
+        None
+    }
+
+    /// #943 item 11: the folder the command itself runs in (the model's
+    /// `workdir`), for the post-command `.git` check only.
+    fn command_cwd(&self, _req: &Req) -> Option<codex_utils_absolute_path::AbsolutePathBuf> {
+        None
+    }
+
+    /// D48 (c): the `PATH` the command runs with, where it runs on this host
+    /// (a program named without a folder is looked up there); `None` where
+    /// unknown or remote.
+    fn local_search_path<'a>(&self, _req: &'a Req) -> Option<&'a str> {
         None
     }
 
@@ -643,12 +659,16 @@ impl<'a> SandboxAttempt<'a> {
                 )?;
             } else {
                 // #300: the unelevated backend cannot block reads, so a
-                // profile that denies some is refused, as in
-                // `process_exec_tool_call`, rather than run with its
-                // protected files readable.
-                codex_sandboxing::refuse_unenforceable_windows_read_restrictions(
+                // profile that denies some is refused rather than run with
+                // its protected files readable. D331: so is a writable folder
+                // in a read-only one, as `process_exec_tool_call` refuses it.
+                // The backend applies the profile's read-only paths itself
+                // (#1686), so no overrides are resolved here.
+                codex_sandboxing::refuse_unenforceable_windows_restricted_token_profile(
                     exec_request.sandbox,
                     &exec_request.permission_profile,
+                    &sandbox_cwd,
+                    exec_request.windows_sandbox_level,
                 )
                 .map_err(CodexErr::UnsupportedOperation)?;
             }
@@ -717,6 +737,7 @@ impl<'a> SandboxAttempt<'a> {
                 windows_sandbox_private_desktop: self.windows_sandbox_private_desktop,
                 windows_sandbox_proxy_settings_mode: None,
                 use_legacy_landlock: self.use_legacy_landlock,
+                unsandboxed_refusal: None,
             });
             exec_request.exec_server_enforce_managed_network = self.enforce_managed_network;
         }

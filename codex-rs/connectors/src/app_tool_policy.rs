@@ -55,6 +55,49 @@ impl<'a> AppToolPolicyEvaluator<'a> {
         app_tool_policy_from_apps_config(self.apps_config.as_ref(), input, managed_approval)
     }
 
+    /// The approval mode the tool would have without any `approve` setting:
+    /// the next setting in the same order, else Auto (#1001 D52).
+    pub fn approval_without_approve(&self, input: AppToolPolicyInput<'_>) -> AppToolApproval {
+        let not_approve = |mode: &AppToolApproval| *mode != AppToolApproval::Approve;
+        let managed = managed_app_tool_approval(
+            self.requirements_apps_config,
+            input.connector_id,
+            input.tool_name,
+        )
+        .filter(not_approve);
+        let Some(apps_config) = self.apps_config.as_ref() else {
+            return managed.unwrap_or(AppToolApproval::Auto);
+        };
+        let app = input
+            .connector_id
+            .and_then(|connector_id| apps_config.apps.get(connector_id));
+        let tools = app.and_then(|app| app.tools.as_ref());
+        let tool_config = tools.and_then(|tools| {
+            tools
+                .tools
+                .get(input.tool_name)
+                .or_else(|| input.tool_title.and_then(|title| tools.tools.get(title)))
+        });
+        managed
+            .or_else(|| {
+                tool_config
+                    .and_then(|tool| tool.approval_mode)
+                    .filter(not_approve)
+            })
+            .or_else(|| {
+                app.and_then(|app| app.default_tools_approval_mode)
+                    .filter(not_approve)
+            })
+            .or_else(|| {
+                input
+                    .connector_id
+                    .and(apps_config.default.as_ref())
+                    .and_then(|defaults| defaults.default_tools_approval_mode)
+                    .filter(not_approve)
+            })
+            .unwrap_or(AppToolApproval::Auto)
+    }
+
     /// Returns the effective local and managed enablement for one connector.
     pub fn app_enabled(&self, connector_id: &str) -> bool {
         self.apps_config

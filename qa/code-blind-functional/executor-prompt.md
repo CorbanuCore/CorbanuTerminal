@@ -9,6 +9,9 @@ confinement or a fixture is missing, stop that case as blocked. Execute literal
 actions through real keys/native controls; send prompt text and Enter separately.
 Record requested versus actual actions, positive visible checkpoints, timestamps,
 state/profile and evidence. Missing completion or a timeout is not a pass.
+While a turn is running, check the screen about every 30 seconds rather than in
+one long wait; after each check, answer any prompt that has appeared as the case
+says, and note the time against the case's time limits (D114).
 Preserve partial observations and report ambiguities without inventing behavior.
 Do not bypass permissions or operate live accounts outside explicit test scope.
 Return the actual outcome for every assigned case; do not claim human acceptance.

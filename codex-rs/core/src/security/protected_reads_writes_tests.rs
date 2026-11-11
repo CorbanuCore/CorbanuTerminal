@@ -3,6 +3,7 @@
 
 use super::writes::Writes;
 use super::writes::writes;
+use super::writes::writes_following_cd;
 use super::*;
 use pretty_assertions::assert_eq;
 
@@ -90,6 +91,17 @@ fn issue_737_740_config_writers_and_understood_commands() {
         ("sed -n = notes.txt", &[]),
         ("sed -n -e '$!N' -e 1d notes.txt", &[]),
         ("sed --quiet --expression=5q notes.txt", &[]),
+        // #1182: curl without an option that writes a file, and `command
+        // -v`.
+        ("curl -sS -I https://example.com", &[]),
+        (
+            "curl -fsSL -H 'Accept: x' -X POST -d @body.json https://x",
+            &[],
+        ),
+        ("curl -sSHx --max-time 5 https://x", &[]),
+        ("curl -sS https://x > /tmp/probe1.out", &["/tmp/probe1.out"]),
+        ("command -v corbanu", &[]),
+        ("command -V git && command -pv ls", &[]),
     ] {
         assert_eq!(of(script), known(expected), "{script}");
     }
@@ -147,9 +159,44 @@ fn issue_737_740_config_writers_and_understood_commands() {
         "HOME=. git config --global a.b c",
         "GIT_CONFIG_GLOBAL=x git config --global a.b c",
         "NPM_CONFIG_USERCONFIG=x npm config set a b",
+        // #1182: curl options that write or may (output files, headers,
+        // cookie jars, a config file, an upload to `file://`, a `-w` that
+        // writes or comes from a file, traces), `--name=value`, `--`, or
+        // ones it does not know; `command -p` runs its program.
+        "curl -o out.html https://x",
+        "curl -s -o /dev/null https://x",
+        "curl -sSo out https://x",
+        "curl --output out https://x",
+        "curl -O https://x/f",
+        "curl -sSO https://x/f",
+        "curl --remote-name https://x/f",
+        "curl --create-dirs https://x",
+        "curl -D headers.txt https://x",
+        "curl -c jar https://x",
+        "curl -K cfg https://x",
+        "curl -T f file:///tmp/x",
+        "curl --stderr log https://x",
+        "curl --libcurl code.c https://x",
+        "curl --output-dir d https://x",
+        "curl -w '%output{x}%{http_code}' https://x",
+        "curl -w @fmt https://x",
+        "curl --trace t https://x",
+        "curl --max-time=5 https://x",
+        "curl --no-silent https://x",
+        "curl -H",
+        "curl -- -o x",
+        "command -p touch notes.txt",
+        "command -x foo",
     ] {
         assert!(!of(script).understood, "{script}: {:?}", of(script));
     }
+    // #1182: not through a shell, a `-w` format is read as curl reads it.
+    let argv = |words: &[&str]| words.iter().map(ToString::to_string).collect::<Vec<_>>();
+    assert_eq!(
+        writes(&argv(&["curl", "-sS", "-w", "%{http_code}", "https://x"])),
+        known(&[])
+    );
+    assert!(!writes(&argv(&["curl", "-w", "%output{a}", "https://x"])).understood);
     // Not through a shell, `>` in a value is text.
     assert_eq!(
         writes(&[
@@ -161,6 +208,71 @@ fn issue_737_740_config_writers_and_understood_commands() {
         ]),
         known(&["~/.gitconfig"])
     );
+}
+
+/// #1182: [`writes`] never follows a `cd`; [`writes_following_cd`] spells
+/// the writes after `cd DIR &&` from `DIR`, and only when the folder is
+/// certain.
+#[test]
+fn issue_1182_writes_following_cd() {
+    for script in ["cd /p && echo x > y", "cd .husky && printf x > pre-commit"] {
+        assert!(!writes(&shell(script)).understood, "{script}");
+    }
+    let of = |script: &str| writes_following_cd(&shell(script));
+    for (script, expected) in [
+        (
+            "cd /p/project && echo x >> ../outside-notes.txt",
+            &["/p/project/../outside-notes.txt"][..],
+        ),
+        (
+            "cd sub && printf 'x\\n' >> ../outside-notes.txt && cat ../outside-notes.txt",
+            &["sub/../outside-notes.txt"],
+        ),
+        ("cd .husky && printf x > pre-commit", &[".husky/pre-commit"]),
+        // #1212: quotes without a separator in them.
+        ("cd sub && printf 'a b' > \"c d\"", &["sub/c d"]),
+        ("cd a && cd b && touch x ~/y", &["a/b/x", "~/y"]),
+        ("cd -P sub && echo x | tee out", &["sub/out"]),
+        ("cd && echo x > notes", &["~/notes"]),
+        ("cd ~/w && echo x > notes", &["~/w/notes"]),
+        ("cd /tmp 2>/dev/null && ls", &["/dev/null"]),
+        ("echo x > a && cd sub", &["a"]),
+        ("echo x > a; cat b", &["a"]),
+    ] {
+        assert_eq!(of(script), known(expected), "{script}");
+    }
+    // Where the rest runs depends on whether `cd` worked, or it runs in a
+    // subshell, or its folder is one a shell expands, or not known.
+    for script in [
+        "cd x; echo y > z",
+        "cd x || exit; echo y > z",
+        "cd x && echo a; echo b > c",
+        "cd x && echo a || echo b > c",
+        "cd x && sleep 1 & echo b > c",
+        "true || cd .husky && echo x > .codex/x",
+        "true | cd .husky && echo x > .codex/x",
+        "echo a; cd x && echo b > c",
+        "cd x | tee y",
+        "cd sub && cd - && echo x > .codex/config.toml",
+        "cd \"$PWD\" && echo x > .codex/config.toml",
+        "cd $HOME && echo x > y",
+        "cd ~other && echo x > y",
+        "cd '' && echo x > y",
+        "cd * && echo y > z",
+        "cd a b && echo y > z",
+        "X=1 cd sub && echo y > z",
+        "cd x && pushd y && echo z > w",
+        "bash -c 'cd sub && echo x > y'",
+        // #1212: a quoted or escaped separator; zsh's folder stack.
+        "echo '&&' cd x && printf y > .husky/pre-commit",
+        "echo \\&\\& cd x && printf y > z",
+        "echo 'a;' cd x && printf y > z",
+        "cd x && echo \"|\" tee ../y",
+        "cd +0 && echo y > z",
+        "cd -P +1 && echo y > z",
+    ] {
+        assert!(!of(script).understood, "{script}: {:?}", of(script));
+    }
 }
 
 /// #736: the macOS keychain commands, also inside a script; not other
@@ -290,6 +402,25 @@ fn issue_740_unliftable_notes() {
         note("git config core.hooksPath /tmp"),
         Some(read_only_in_folder_explanation(".git/config"))
     );
+    // #1182: a write outside the folder after `cd` (AGG-20 F06, F18), and
+    // a curl writing outside it.
+    let work_shown = work.display();
+    assert_eq!(
+        note(&format!(
+            "cd {work_shown} && echo x >> ../outside-notes.txt"
+        )),
+        Some(outside_folder_explanation(&format!(
+            "{work_shown}/../outside-notes.txt"
+        )))
+    );
+    assert_eq!(
+        note("cd .husky && printf 'x\\n' >> ../../outside-notes.txt"),
+        Some(outside_folder_explanation(".husky/../../outside-notes.txt"))
+    );
+    assert_eq!(
+        note("curl -sS https://example.com > /tmp/probe1.out"),
+        Some(outside_folder_explanation("/tmp/probe1.out"))
+    );
     for script in [
         "ln -s notes.txt notes-link.txt && cat notes-link.txt",
         // #789: the commands of AGG-R14's child agent and parent.
@@ -299,6 +430,11 @@ fn issue_740_unliftable_notes() {
         "cat .codex/notes.md",
         "echo x > notes.txt 2>/dev/null",
         "git config --global --get user.name",
+        // #1182: AGG-20's network probe and lookup, and a write inside the
+        // folder after `cd`.
+        "curl -sS -I https://example.com",
+        "command -v corbanu",
+        "cd .husky && cat pre-commit > ../notes.txt",
     ] {
         assert_eq!(note(script), Some(NOTHING_TO_LIFT.to_string()), "{script}");
     }
@@ -311,6 +447,13 @@ fn issue_740_unliftable_notes() {
         "./install-hooks.sh",
         "printf x > $DIR/pre-commit",
         "echo x > notes.txt && npm install",
+        // #1182: a grant lifts it; a `cd` not followed; curl writing a file.
+        "cd .husky && printf x > pre-commit",
+        "cd sub; printf x > .husky/pre-commit",
+        "cd \"$PWD\" && echo x > .codex/config.toml",
+        "curl -s -o /dev/null https://example.com",
+        // #1212: the `&&` before `cd` is quoted; the hook is `./.husky`'s.
+        "echo '&&' cd x && printf y > .husky/pre-commit",
     ] {
         assert_eq!(note(script), None, "{script}");
     }

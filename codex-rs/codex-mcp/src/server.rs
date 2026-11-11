@@ -253,6 +253,18 @@ impl McpServerMetadata {
             .or(self.default_tools_approval_mode)
             .unwrap_or_default()
     }
+
+    /// The mode `tool_name` would have without any `approve` setting: the
+    /// next setting in the same order, else the default (#1001 D52).
+    pub fn tool_approval_mode_without_approve(&self, tool_name: &str) -> AppToolApproval {
+        let not_approve = |mode: &AppToolApproval| *mode != AppToolApproval::Approve;
+        self.tool_approval_modes
+            .get(tool_name)
+            .copied()
+            .filter(not_approve)
+            .or(self.default_tools_approval_mode.filter(not_approve))
+            .unwrap_or_default()
+    }
 }
 
 impl From<&EffectiveMcpServer> for McpServerMetadata {

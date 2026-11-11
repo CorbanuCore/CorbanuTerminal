@@ -343,9 +343,9 @@ fn security_transition_downgrade_of_the_record_sets_the_next_start() {
 #[test]
 fn issue_978_aggressive_without_a_live_tree_requires_approval_in_this_process() {
     let home = TempDir::new().unwrap();
-    assert!(!sessions_run_here(home.path()));
+    assert!(!sessions_run_here(home.path(), /*thread*/ None));
     let (other, _) = live_tree(&home, SecurityLevel::Permissive);
-    assert!(sessions_run_here(home.path()));
+    assert!(sessions_run_here(home.path(), /*thread*/ None));
     assert!(!super::super::confirmed_approvals::confirmed_here(
         home.path()
     ));
@@ -369,6 +369,72 @@ fn issue_978_aggressive_without_a_live_tree_requires_approval_in_this_process() 
     assert!(
         super::super::confirmed_approvals::confirmed_here(home.path()),
         "sessions started here later start with approval for every command"
+    );
+}
+
+/// #1015: the review's "other sessions take it" sentence counts only the
+/// trees a commit reaches: initialized ones (`propagate` skips the rest),
+/// and not the tree of the session the person confirms in.
+#[test]
+fn issue_1015_sessions_run_here_counts_only_trees_a_commit_reaches() {
+    let home = TempDir::new().unwrap();
+    let starting = EffectivePolicyView::default();
+    starting.register_home(home.path());
+    assert!(
+        !sessions_run_here(home.path(), /*thread*/ None),
+        "a tree whose policy is not initialized yet takes no commit"
+    );
+    let (_own, root) = live_tree(&home, SecurityLevel::Permissive);
+    assert!(sessions_run_here(home.path(), /*thread*/ None));
+    assert!(
+        !sessions_run_here(home.path(), Some(root)),
+        "the confirming session's own tree is not another session"
+    );
+    let (_other, _) = live_tree(&home, SecurityLevel::Permissive);
+    assert!(sessions_run_here(home.path(), Some(root)));
+}
+
+/// #807: the strictest level in force in the live trees of this process on
+/// the home, for contained Claude panes: none without an initialized tree,
+/// a stricter level an agent is bound to, and a level confirmed for the live
+/// session now (before any restart).
+#[test]
+fn issue_807_strictest_live_level_follows_the_live_trees_on_the_home() {
+    let home = TempDir::new().unwrap();
+    let starting = EffectivePolicyView::default();
+    starting.register_home(home.path());
+    assert_eq!(strictest_live_level(home.path()), None);
+
+    let (permissive, root) = live_tree(&home, SecurityLevel::Permissive);
+    assert_eq!(
+        strictest_live_level(home.path()),
+        Some(SecurityLevel::Permissive)
+    );
+    permissive
+        .inherit_child(root, ThreadId::new(), "task", SecurityLevel::Moderate)
+        .unwrap();
+    assert_eq!(
+        strictest_live_level(home.path()),
+        Some(SecurityLevel::Moderate),
+        "a child agent bound to Moderate"
+    );
+    let (_moderate, _) = live_tree(&home, SecurityLevel::Moderate);
+    let elsewhere = TempDir::new().unwrap();
+    let (_other_home, _) = live_tree(&elsewhere, SecurityLevel::Aggressive);
+    assert_eq!(
+        strictest_live_level(home.path()),
+        Some(SecurityLevel::Moderate),
+        "a tree on another home does not count"
+    );
+
+    let report = commit_in(&home, Some(root), SecurityLevel::Aggressive, Probes::Passed).unwrap();
+    assert_eq!(
+        (report.kind, report.live),
+        (LevelChangeKind::Stricter, true)
+    );
+    assert_eq!(
+        strictest_live_level(home.path()),
+        Some(SecurityLevel::Aggressive)
     );
 }
 

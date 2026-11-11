@@ -108,21 +108,25 @@ impl Probe {
     }
 }
 
-impl Approvable<()> for Probe {
+/// The request: the additional permissions it carries (as a handler adds
+/// granted ones).
+type Req = Option<codex_protocol::models::AdditionalPermissionProfile>;
+
+impl Approvable<Req> for Probe {
     type ApprovalKey = String;
 
     fn additional_permissions<'a>(
         &self,
-        _req: &'a (),
+        req: &'a Req,
     ) -> Option<&'a codex_protocol::models::AdditionalPermissionProfile> {
-        None
+        req.as_ref()
     }
 
-    fn approval_keys(&self, _req: &()) -> Vec<Self::ApprovalKey> {
+    fn approval_keys(&self, _req: &Req) -> Vec<Self::ApprovalKey> {
         vec!["issue-1001-probe".to_string()]
     }
 
-    fn exec_approval_requirement(&self, _req: &()) -> Option<ExecApprovalRequirement> {
+    fn exec_approval_requirement(&self, _req: &Req) -> Option<ExecApprovalRequirement> {
         Some(self.requirement.clone())
     }
 
@@ -132,7 +136,7 @@ impl Approvable<()> for Probe {
 
     fn start_approval_async<'a>(
         &'a mut self,
-        _req: &'a (),
+        _req: &'a Req,
         ctx: ApprovalCtx<'a>,
     ) -> futures::future::BoxFuture<'a, ReviewDecision> {
         // A person is shown the prompt (not a remembered answer).
@@ -145,7 +149,11 @@ impl Approvable<()> for Probe {
         Box::pin(async { ReviewDecision::Approved })
     }
 
-    fn approval_action(&self, _req: &(), ctx: &ApprovalCtx<'_>) -> std::io::Result<ApprovalAction> {
+    fn approval_action(
+        &self,
+        _req: &Req,
+        ctx: &ApprovalCtx<'_>,
+    ) -> std::io::Result<ApprovalAction> {
         Ok(ApprovalAction::Shell {
             id: ctx.call_id.to_string(),
             environment_id: codex_exec_server::LOCAL_ENVIRONMENT_ID.to_string(),
@@ -165,14 +173,14 @@ impl crate::tools::sandboxing::Sandboxable for Probe {
     }
 }
 
-impl ToolRuntime<(), ()> for Probe {
-    fn workspace_roots<'a>(&self, _req: &'a ()) -> &'a [PathUri] {
+impl ToolRuntime<Req, ()> for Probe {
+    fn workspace_roots<'a>(&self, _req: &'a Req) -> &'a [PathUri] {
         &[]
     }
 
     async fn run(
         &mut self,
-        _req: &(),
+        _req: &Req,
         _attempt: &SandboxAttempt<'_>,
         _ctx: &ToolCtx,
     ) -> Result<(), ToolError> {
@@ -208,6 +216,16 @@ struct Case {
     while_running: Vec<Transition>,
     sandbox_denies: Vec<bool>,
     approval_policy: AskForApproval,
+    additional: Option<codex_protocol::models::AdditionalPermissionProfile>,
+    /// #1057: the request is prepared as a tool handler does: a session
+    /// grant of network access (when `granted`) is read into it, then
+    /// `after_handler` is committed before the orchestrator starts.
+    handler: Option<Handler>,
+}
+
+struct Handler {
+    granted: bool,
+    after_handler: Option<Transition>,
 }
 
 impl Default for Case {
@@ -218,6 +236,8 @@ impl Default for Case {
             while_running: Vec::new(),
             sandbox_denies: Vec::new(),
             approval_policy: AskForApproval::OnRequest,
+            additional: None,
+            handler: None,
         }
     }
 }
@@ -244,10 +264,55 @@ async fn run_probe(case: Case) -> (Probe, Result<(), String>) {
         call_id: "call-1001".to_string(),
         tool_name: codex_tools::ToolName::plain("issue_1001_probe"),
     };
+    let mut additional = case.additional;
+    let mut handler_basis = None;
+    if let Some(handler) = case.handler {
+        if handler.granted {
+            session
+                .record_granted_request_permissions_for_turn(
+                    &codex_protocol::request_permissions::RequestPermissionsResponse {
+                        permissions:
+                            codex_protocol::request_permissions::RequestPermissionProfile {
+                                network: Some(codex_protocol::models::NetworkPermissions {
+                                    enabled: Some(true),
+                                }),
+                                ..Default::default()
+                            },
+                        scope: codex_protocol::request_permissions::PermissionGrantScope::Session,
+                        strict_auto_review: false,
+                    },
+                    codex_exec_server::LOCAL_ENVIRONMENT_ID,
+                    /*originating_turn_state*/ None,
+                    session.services.authority_marker(),
+                )
+                .await;
+        }
+        handler_basis = Some(HandlerBasis::now(&session));
+        #[allow(deprecated)]
+        let cwd = turn.cwd.clone();
+        let effective = crate::tools::handlers::apply_granted_turn_permissions(
+            &session,
+            codex_exec_server::LOCAL_ENVIRONMENT_ID,
+            cwd.as_path(),
+            crate::sandboxing::SandboxPermissions::UseDefault,
+            additional,
+        )
+        .await;
+        assert_eq!(
+            effective.permissions_preapproved, handler.granted,
+            "the grant is read"
+        );
+        additional = effective.additional_permissions;
+        // The gap between the handler's read and the orchestrator's start.
+        if let Some(transition) = handler.after_handler {
+            probe.apply(transition);
+        }
+    }
     let result = ToolOrchestrator::new()
+        .with_handler_basis(handler_basis)
         .run(
             &mut probe,
-            &(),
+            &additional,
             &tool_ctx,
             turn.as_ref(),
             case.approval_policy,
@@ -367,4 +432,121 @@ async fn issue_1001_unprompted_retry_after_a_transition_is_not_run() {
     assert_eq!(result, Ok(()));
     assert_eq!(probe.asked, vec![None]);
     assert_eq!(probe.runs, 2);
+}
+
+/// D51 (#1001): a request carrying additional permissions (a handler adds
+/// granted ones before the run is decided) approved before a transition is
+/// refused instead of decided again: the transition ended those grants.
+#[tokio::test]
+async fn issue_1001_stale_approval_with_permissions_is_refused() {
+    let network = codex_protocol::models::AdditionalPermissionProfile {
+        network: Some(codex_protocol::models::NetworkPermissions {
+            enabled: Some(true),
+        }),
+        ..Default::default()
+    };
+    let (probe, result) = run_probe(Case {
+        while_asked: vec![Transition::Revoke],
+        additional: Some(network.clone()),
+        ..Case::default()
+    })
+    .await;
+    assert_eq!(result, Err(STALE_PERMISSIONS_REFUSAL.to_string()));
+    assert_eq!(probe.asked.len(), 1);
+    assert_eq!(probe.runs, 0, "nothing ran");
+
+    // Without a transition it runs as before.
+    let (probe, result) = run_probe(Case {
+        additional: Some(network),
+        ..Case::default()
+    })
+    .await;
+    assert_eq!(result, Ok(()));
+    assert_eq!(probe.runs, 1);
+}
+
+/// #1057: a preapproved request (a session grant covers what it adds), so
+/// nobody is asked.
+fn preapproved() -> ExecApprovalRequirement {
+    ExecApprovalRequirement::Skip {
+        bypass_sandbox: false,
+        proposed_execpolicy_amendment: None,
+    }
+}
+
+/// #1057: a transition committed after the handler read the grants but
+/// before the orchestrator started ended those grants: the request carrying
+/// them is refused, and nothing runs on them.
+#[tokio::test]
+async fn issue_1057_grants_read_before_a_transition_are_not_used() {
+    for transition in [
+        Transition::Revoke,
+        Transition::Commit(SecurityLevel::Moderate),
+    ] {
+        let (probe, result) = run_probe(Case {
+            requirement: preapproved(),
+            handler: Some(Handler {
+                granted: true,
+                after_handler: Some(transition),
+            }),
+            ..Case::default()
+        })
+        .await;
+        assert_eq!(
+            result,
+            Err(PREPARED_PERMISSIONS_REFUSAL.to_string()),
+            "{transition:?}"
+        );
+        assert_eq!(probe.asked, Vec::<Option<String>>::new(), "nobody asked");
+        assert_eq!(probe.runs, 0, "nothing ran on the ended grant");
+    }
+}
+
+/// #1057: the exec-policy decision the handler made before Aggressive was
+/// switched on is stale: refused, before anyone is asked.
+#[tokio::test]
+async fn issue_1057_aggressive_switched_on_after_the_handler_is_refused() {
+    let (probe, result) = run_probe(Case {
+        requirement: preapproved(),
+        handler: Some(Handler {
+            granted: false,
+            after_handler: Some(Transition::SwitchAggressiveOn),
+        }),
+        ..Case::default()
+    })
+    .await;
+    assert_eq!(result, Err(PREPARED_BEFORE_AGGRESSIVE_REFUSAL.to_string()));
+    assert_eq!(probe.asked, Vec::<Option<String>>::new());
+    assert_eq!(probe.runs, 0);
+}
+
+/// #1057: without a transition the grant is used as before; with one but
+/// no grant (nothing read went stale) the run is decided under the new
+/// level, the person asked once and without the "asked again" note.
+#[tokio::test]
+async fn issue_1057_handler_window_controls() {
+    let (probe, result) = run_probe(Case {
+        requirement: preapproved(),
+        handler: Some(Handler {
+            granted: true,
+            after_handler: None,
+        }),
+        ..Case::default()
+    })
+    .await;
+    assert_eq!(result, Ok(()));
+    assert_eq!(probe.asked, Vec::<Option<String>>::new());
+    assert_eq!(probe.runs, 1);
+
+    let (probe, result) = run_probe(Case {
+        handler: Some(Handler {
+            granted: false,
+            after_handler: Some(Transition::Commit(SecurityLevel::Moderate)),
+        }),
+        ..Case::default()
+    })
+    .await;
+    assert_eq!(result, Ok(()));
+    assert_eq!(probe.asked, vec![None]);
+    assert_eq!(probe.runs, 1);
 }

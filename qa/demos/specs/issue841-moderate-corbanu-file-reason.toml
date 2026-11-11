@@ -1,7 +1,8 @@
 # Issue #841 (MOD-30): under Moderate, after untrusted content, a read of Corbanu's own config names Corbanu's own files and says approving cannot unlock them.
 id = "issue841-moderate-corbanu-file-reason"
 feature = "Moderate names Corbanu's own files and says approval cannot unlock them"
-expected = "Under Moderate, after README.md was read, the agent asks to cat Corbanu's config.toml. The prompt's Reason names access to Corbanu's own files (not a security policy change) and says approving cannot unlock its sign-in, vault, config or history."
+# #1091 (#1077): the note now names the file and says what it is ("is one of Corbanu's own files (such as ...)") instead of "Corbanu's own files this command reads".
+expected = "Under Moderate, after README.md was read, the agent asks to cat Corbanu's config.toml. The prompt's Reason names access to Corbanu's own files (not a security policy change), and its note names config.toml as one of Corbanu's own files (such as its sign-in, vault, config or history), says approving cannot unlock it, and that if you approve the command runs but that read fails."
 model = "glm-5.3-flash"
 provider = "zai"
 config = """
@@ -44,7 +45,7 @@ type = "Run exactly this shell command: cat {home}/config.toml"
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = "Corbanu's own files this command reads"
+wait = "is\\s+one\\s+of\\s+Corbanu's\\s+own\\s+files\\s+\\(such\\s+as"
 timeout = 180
 compress = 3
 [[steps]]

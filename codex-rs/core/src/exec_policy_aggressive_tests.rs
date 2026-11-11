@@ -340,12 +340,10 @@ async fn issue_626_note_names_only_suspended_rules() {
 }
 
 /// #626 (review r1): where prompts are rejected (approval policy never),
-/// the rejection says a remembered approval was suspended.
+/// the rejection says a remembered approval was suspended. On Windows the
+/// default (elevated) Windows sandbox is set up, as Aggressive requires
+/// there (#691): without it a read-only command is refused for that first.
 #[tokio::test]
-#[cfg_attr(
-    windows,
-    ignore = "without a Windows sandbox the read-only command is refused for that first, before the suspended rule is named (#691)"
-)]
 async fn issue_626_rejection_names_the_suspended_rule() {
     let home = TempDir::new().expect("home");
     let project = TempDir::new().expect("project");
@@ -366,7 +364,11 @@ async fn issue_626_rejection_names_the_suspended_rule() {
                 command: &command,
                 approval_policy: AskForApproval::Never,
                 permission_profile: PermissionProfile::read_only(),
-                windows_sandbox_level: WindowsSandboxLevel::Disabled,
+                windows_sandbox_level: if cfg!(windows) {
+                    WindowsSandboxLevel::Elevated
+                } else {
+                    WindowsSandboxLevel::Disabled
+                },
                 sandbox_permissions: SandboxPermissions::UseDefault,
                 prefix_rule: None,
             },
@@ -412,4 +414,140 @@ fn manager_without_rules_suspends_nothing_outside_aggressive() {
             .decision,
         Decision::Prompt
     );
+}
+
+fn network_rule(host: &str, decision: &str, justification: Option<&str>) -> String {
+    match justification {
+        Some(justification) => format!(
+            "network_rule(host={host:?}, protocol=\"https\", decision={decision:?}, justification={justification:?})"
+        ),
+        None => format!("network_rule(host={host:?}, protocol=\"https\", decision={decision:?})"),
+    }
+}
+
+fn allowed_hosts(policy: &codex_execpolicy::Policy) -> Vec<String> {
+    let (mut allowed, _) = policy.compiled_network_domains();
+    allowed.sort();
+    allowed
+}
+
+/// D52 (#1001): under Aggressive, network allow rules saved outside it are
+/// suspended; deny rules, and allow rules the Corbanu home marks as saved
+/// under Aggressive, apply. Outside Aggressive every rule applies as before.
+#[tokio::test]
+async fn issue_1001_network_allow_rules_saved_outside_aggressive_are_suspended_there() {
+    let home = TempDir::new().expect("home");
+    let project = TempDir::new().expect("project");
+    write_rules(
+        home.path(),
+        &[
+            network_rule("permissive.example", "allow", Some("Allowed by you")),
+            network_rule(
+                "aggressive.example",
+                "allow",
+                Some(APPROVED_UNDER_AGGRESSIVE),
+            ),
+            network_rule("denied.example", "deny", /*justification*/ None),
+        ],
+    );
+    // A project's rules file cannot claim the mark.
+    write_rules(
+        project.path(),
+        &[network_rule(
+            "project.example",
+            "allow",
+            Some(APPROVED_UNDER_AGGRESSIVE),
+        )],
+    );
+    let manager = ExecPolicyManager::load(
+        &stack(home.path(), project.path()),
+        /*strict_rules*/ false,
+    )
+    .await
+    .expect("load");
+
+    assert_eq!(
+        allowed_hosts(&manager.current_for(/*live_aggressive*/ false)),
+        vec![
+            "aggressive.example".to_string(),
+            "permissive.example".to_string(),
+            "project.example".to_string(),
+        ]
+    );
+    let aggressive = manager.current_for(/*live_aggressive*/ true);
+    assert_eq!(
+        allowed_hosts(&aggressive),
+        vec!["aggressive.example".to_string()]
+    );
+    assert_eq!(
+        aggressive.compiled_network_domains().1,
+        vec!["denied.example".to_string()],
+        "deny rules apply"
+    );
+}
+
+/// D52: a host allowed while Aggressive is in force is marked in the Corbanu
+/// home's rules file and applies under Aggressive, now and after a restart;
+/// one allowed under a less strict level applies only outside it.
+#[tokio::test]
+async fn issue_1001_network_allow_rule_saved_under_aggressive_applies_there() {
+    let home = TempDir::new().expect("home");
+    let project = TempDir::new().expect("project");
+    let manager = ExecPolicyManager::load(
+        &stack(home.path(), project.path()),
+        /*strict_rules*/ false,
+    )
+    .await
+    .expect("load");
+    for (host, approved_under) in [
+        ("aggressive.example", ApprovedUnder::Aggressive),
+        ("permissive.example", ApprovedUnder::LessStrict),
+    ] {
+        manager
+            .append_network_rule_and_update(
+                home.path(),
+                host,
+                codex_execpolicy::NetworkRuleProtocol::Https,
+                Decision::Allow,
+                Some("Allowed by you".to_string()),
+                approved_under,
+            )
+            .await
+            .expect("saved");
+    }
+    let rules = std::fs::read_to_string(home.path().join("rules/default.rules")).expect("rules");
+    assert_eq!(
+        rules,
+        [
+            network_rule(
+                "aggressive.example",
+                "allow",
+                Some(APPROVED_UNDER_AGGRESSIVE)
+            ),
+            network_rule("permissive.example", "allow", Some("Allowed by you")),
+        ]
+        .join("\n")
+            + "\n"
+    );
+    let check = |manager: &ExecPolicyManager| {
+        (
+            allowed_hosts(&manager.current_for(/*live_aggressive*/ true)),
+            allowed_hosts(&manager.current_for(/*live_aggressive*/ false)),
+        )
+    };
+    let expected = (
+        vec!["aggressive.example".to_string()],
+        vec![
+            "aggressive.example".to_string(),
+            "permissive.example".to_string(),
+        ],
+    );
+    assert_eq!(check(&manager), expected);
+    let later = ExecPolicyManager::load(
+        &stack(home.path(), project.path()),
+        /*strict_rules*/ false,
+    )
+    .await
+    .expect("load");
+    assert_eq!(check(&later), expected, "after a restart");
 }

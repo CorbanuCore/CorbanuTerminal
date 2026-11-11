@@ -273,10 +273,16 @@ pub enum ExecPolicyUpdateError {
     JoinBlockingTask { source: tokio::task::JoinError },
 
     #[error("failed to update in-memory rules: {source}")]
-    AddRule {
-        #[from]
-        source: ExecPolicyRuleError,
-    },
+    AddRule { source: ExecPolicyRuleError },
+}
+
+// Written by hand: thiserror's `#[from]` on this named field expands to
+// `AddRule { source: source }`, which clippy 1.99 reports as
+// `redundant_field_names` at the field's span.
+impl From<ExecPolicyRuleError> for ExecPolicyUpdateError {
+    fn from(source: ExecPolicyRuleError) -> Self {
+        Self::AddRule { source }
+    }
 }
 
 /// #626: the level a person approved a remembered approval under.
@@ -297,6 +303,9 @@ pub(crate) struct ExecPolicyManager {
     /// active, the only `allow` prefix rules that apply under Aggressive
     /// (see [`aggressive`]).
     aggressive_approved: ArcSwap<Vec<Vec<String>>>,
+    /// D52 (#1001): the hosts whose network `allow` rules a person saved
+    /// while Aggressive was active, the only ones that apply under it.
+    aggressive_approved_hosts: ArcSwap<Vec<String>>,
 }
 
 pub(crate) struct ExecApprovalRequest<'a> {
@@ -315,6 +324,7 @@ impl ExecPolicyManager {
             update_lock: Semaphore::new(/*permits*/ 1),
             strict_rules: false,
             aggressive_approved: ArcSwap::from_pointee(Vec::new()),
+            aggressive_approved_hosts: ArcSwap::from_pointee(Vec::new()),
         }
     }
 
@@ -338,9 +348,11 @@ impl ExecPolicyManager {
             }
             Self::new(Arc::new(policy))
         };
+        let (approved, approved_hosts) = aggressive::load_approved(config_stack).await;
+        manager.aggressive_approved.store(Arc::new(approved));
         manager
-            .aggressive_approved
-            .store(Arc::new(aggressive::load_approved(config_stack).await));
+            .aggressive_approved_hosts
+            .store(Arc::new(approved_hosts));
         Ok(manager)
     }
 
@@ -352,15 +364,19 @@ impl ExecPolicyManager {
     /// Core's level for the session is Aggressive (also right after a person
     /// confirms it in `/security`, before the restart that loads the rules
     /// file), the Aggressive vault rule is part of it, and (#626) remembered
-    /// approvals not saved under Aggressive are suspended (see
-    /// [`aggressive`]).
+    /// approvals not saved under Aggressive are suspended, and (D52, #1001)
+    /// so are network allow rules (see [`aggressive`]).
     pub(crate) fn current_for(&self, live_aggressive: bool) -> Arc<Policy> {
         let current = self.current();
         if live_aggressive {
             let approved = self.aggressive_approved.load();
+            let approved_hosts = self.aggressive_approved_hosts.load();
             Arc::new(
-                aggressive::suspend_unapproved(&current, &approved)
-                    .merge_overlay(aggressive_vault_policy()),
+                aggressive::suspend_unapproved_network(
+                    &aggressive::suspend_unapproved(&current, &approved),
+                    &approved_hosts,
+                )
+                .merge_overlay(aggressive_vault_policy()),
             )
         } else {
             current
@@ -644,6 +660,9 @@ impl ExecPolicyManager {
         Ok(scope)
     }
 
+    /// Saves a network rule. D52 (#1001): an `allow` rule approved while
+    /// Aggressive was active is marked so that it applies under Aggressive
+    /// too (its justification is the mark).
     pub(crate) async fn append_network_rule_and_update(
         &self,
         codex_home: &Path,
@@ -651,7 +670,14 @@ impl ExecPolicyManager {
         protocol: NetworkRuleProtocol,
         decision: Decision,
         justification: Option<String>,
+        approved_under: ApprovedUnder,
     ) -> Result<(), ExecPolicyUpdateError> {
+        let marked = approved_under == ApprovedUnder::Aggressive && decision == Decision::Allow;
+        let justification = if marked {
+            Some(aggressive::APPROVED_UNDER_AGGRESSIVE.to_string())
+        } else {
+            justification
+        };
         let _update_guard =
             self.update_lock
                 .acquire()
@@ -686,6 +712,16 @@ impl ExecPolicyManager {
 
         let mut updated_policy = self.current().as_ref().clone();
         updated_policy.add_network_rule(&host, protocol, decision, justification)?;
+        if marked {
+            let mut approved = self.aggressive_approved_hosts.load().as_ref().clone();
+            // The policy normalized the host; record it as written there.
+            if let Some(rule) = updated_policy.network_rules().last()
+                && !approved.contains(&rule.host)
+            {
+                approved.push(rule.host.clone());
+                self.aggressive_approved_hosts.store(Arc::new(approved));
+            }
+        }
         self.policy.store(Arc::new(updated_policy));
         Ok(())
     }

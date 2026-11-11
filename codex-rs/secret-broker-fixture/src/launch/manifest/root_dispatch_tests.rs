@@ -34,8 +34,8 @@ pub(super) fn listening(lifetime: Duration) -> (PairHandle, [UnixListener; 2]) {
         .unwrap()
         .launch_admitting_pair(
             PairImages {
-                journal: static_image("PF27_DISPATCH_RELAY", 204),
-                policy: static_image("PF27_DISPATCH_RELAY", 204),
+                journal: static_image("PF27_DISPATCH_RELAY", /*anchor*/ 204),
+                policy: static_image("PF27_DISPATCH_RELAY", /*anchor*/ 204),
             },
             AdmissionSpec {
                 generation: NonZeroU64::new(9).unwrap(),
@@ -111,8 +111,8 @@ fn pf27_root_dispatch_actual_namespaces_and_duplicate() {
     assert_eq!((journal.load(), policy.load_policy()), (Ok(None), Ok(None)));
     let j = Fixture::journal_checkpoint().unwrap();
     let p = Fixture::policy_checkpoint().unwrap();
-    assert_eq!(journal.compare_and_store(None, &j), Ok(()));
-    assert_eq!(policy.compare_policy(None, &p), Ok(()));
+    assert_eq!(journal.compare_and_store(/*expected*/ None, &j), Ok(()));
+    assert_eq!(policy.compare_policy(/*expected*/ None, &p), Ok(()));
     assert_eq!(
         (journal.load(), policy.load_policy()),
         (Ok(Some(j)), Ok(Some(p)))
@@ -176,14 +176,20 @@ fn pf27_root_dispatch_lost_reply() {
     let mut run = start(&fixture, pair, &peers);
     let [journal, policy] = clients(&peers);
     journal
-        .compare_and_store(None, &Fixture::journal_checkpoint().unwrap())
+        .compare_and_store(
+            /*expected*/ None,
+            &Fixture::journal_checkpoint().unwrap(),
+        )
         .unwrap();
     peers[1][2].write_all(b"p").unwrap();
     let mut ack = [0];
     peers[1][2].read_exact(&mut ack).unwrap();
     assert_eq!(ack, *b"k");
     let write = std::thread::spawn(move || {
-        let result = policy.compare_policy(None, &Fixture::policy_checkpoint().unwrap());
+        let result = policy.compare_policy(
+            /*expected*/ None,
+            &Fixture::policy_checkpoint().unwrap(),
+        );
         (result, policy.load_policy())
     });
     eventually(|| fixture.stored() == Ok(true));

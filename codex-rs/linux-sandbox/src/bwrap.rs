@@ -28,6 +28,7 @@ use crate::linux_run_main::RegistryLock;
 use crate::linux_run_main::synthetic_mount_registry_root;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result;
+use codex_protocol::permissions::FileSystemDenyGlob;
 use codex_protocol::permissions::PinnedWritableRoot;
 use codex_protocol::permissions::credential_glob_exempts_templates;
 use codex_protocol::permissions::credential_rule_roots;
@@ -244,8 +245,10 @@ impl SyntheticMountTarget {
 
     /// #562: whether the file or folder found when the arguments were built
     /// is still the one at the path. Another run's cleanup may have removed
-    /// it since; bubblewrap then makes a new mount target, which is this
-    /// run's own placeholder.
+    /// it before this run registered it; the mount target made then is this
+    /// run's own placeholder. #607: once registered, a change is the
+    /// person's (or a mount target bubblewrap made again after the path
+    /// vanished in between, which is not told apart): left in place.
     pub(crate) fn pre_existing_path_is_unchanged(&self) -> bool {
         let Some(identity) = self.pre_existing_path else {
             return true;
@@ -309,7 +312,7 @@ pub(crate) fn create_bwrap_command_args(
     options: BwrapOptions,
 ) -> Result<BwrapArgs> {
     let unreadable_globs =
-        file_system_sandbox_policy.get_unreadable_globs_with_cwd(sandbox_policy_cwd);
+        file_system_sandbox_policy.get_unreadable_glob_scans_with_cwd(sandbox_policy_cwd);
     // Full disk write normally skips bwrap, but unreadable glob patterns still
     // need concrete bwrap masks for the matches expanded below, an
     // unlistable directory (#506) its own mount, and a path that may not be
@@ -477,7 +480,7 @@ fn create_filesystem_args_with_pins(
     glob_scan_max_depth: Option<usize>,
     pins: Option<WritableRootPins>,
 ) -> Result<BwrapArgs> {
-    let unreadable_globs = file_system_sandbox_policy.get_unreadable_globs_with_cwd(cwd);
+    let unreadable_globs = file_system_sandbox_policy.get_unreadable_glob_scans_with_cwd(cwd);
     // #536: for a session's command, no writable root held by another may
     // lead outside every root holding it, including the roots computed here.
     let checked = match pins {
@@ -548,7 +551,7 @@ fn create_filesystem_args_with_pins(
     // to the existing matches we can see before constructing the mount overlay;
     // core tool helpers still evaluate the original patterns directly at read time.
     unreadable_roots.extend(
-        expand_unreadable_globs_with_ripgrep(&unreadable_globs, cwd, glob_scan_max_depth)?
+        expand_unreadable_globs(&unreadable_globs, cwd, glob_scan_max_depth, ripgrep_files)?
             .into_iter()
             .map(AbsolutePathBuf::into_path_buf),
     );
@@ -1071,6 +1074,13 @@ fn create_filesystem_args_with_pins(
             bwrap_args.args.push(path_to_string(registry_mount));
             bwrap_args.args.push(path_to_string(registry_mount));
         }
+        // #348: the same for the placeholder record kept in the Corbanu
+        // home, so the command cannot forge a record a later run acts on.
+        if let Some(record_mount) = crate::placeholder_journal::record_dir_mount(mount_root) {
+            bwrap_args.args.push("--ro-bind".to_string());
+            bwrap_args.args.push(path_to_string(&record_mount));
+            bwrap_args.args.push(path_to_string(&record_mount));
+        }
         for unreadable_root in nested_unreadable_roots {
             if snapshot_covered.contains(&unreadable_root) {
                 // Hidden by the snapshot above, also if it is created later.
@@ -1412,10 +1422,16 @@ fn append_metadata_path_masks_for_writable_root(
     }
 }
 
-fn expand_unreadable_globs_with_ripgrep(
-    patterns: &[String],
+type GlobFileScanner = fn(&Path, &[String], Option<usize>) -> Result<Vec<AbsolutePathBuf>>;
+/// Search root, credential rule, depth, and whether it is a database-entry
+/// scan (#732).
+type ScanGroup = (AbsolutePathBuf, bool, Option<usize>, bool);
+
+fn expand_unreadable_globs(
+    patterns: &[FileSystemDenyGlob],
     cwd: &Path,
     max_depth: Option<usize>,
+    scan_files: GlobFileScanner,
 ) -> Result<Vec<AbsolutePathBuf>> {
     if patterns.is_empty() || max_depth == Some(0) {
         return Ok(Vec::new());
@@ -1427,16 +1443,27 @@ fn expand_unreadable_globs_with_ripgrep(
     // The whole credential rule's globs are scanned apart: their matches
     // leave out the template names (#442, Travis 2026-10-12), which other
     // globs still cover.
-    let rule_roots = credential_rule_roots(patterns);
-    let mut patterns_by_search_root: BTreeMap<(AbsolutePathBuf, bool), Vec<String>> =
-        BTreeMap::new();
+    let plain_patterns: Vec<String> = patterns.iter().map(|glob| glob.pattern.clone()).collect();
+    let rule_roots = credential_rule_roots(&plain_patterns);
+    // #732: depth is part of the group identity. A generic glob sharing this
+    // root (even the identical pattern text) retains its own recursive scan.
+    // #732 (D226): a database-entry scan lists only its folder's own entries.
+    let mut patterns_by_search_root: BTreeMap<ScanGroup, Vec<String>> = BTreeMap::new();
     for pattern in patterns {
-        if let Some((search_root, glob)) = split_pattern_for_ripgrep(pattern, cwd)
+        let database_directory = pattern
+            .database_entries_directory()
+            .map_err(|message| CodexErr::Fatal(message.to_string()))?;
+        let scan = match database_directory {
+            Some(directory) => Some((directory.clone(), "*.sqlite*".to_string(), Some(1), true)),
+            None => split_pattern_for_ripgrep(&pattern.pattern, cwd)
+                .map(|(root, glob)| (root, glob, max_depth, false)),
+        };
+        if let Some((search_root, glob, depth, database)) = scan
             && search_root.as_path().is_dir()
         {
-            let credential = credential_glob_exempts_templates(pattern, &rule_roots);
+            let credential = credential_glob_exempts_templates(&pattern.pattern, &rule_roots);
             patterns_by_search_root
-                .entry((search_root, credential))
+                .entry((search_root, credential, depth, database))
                 .or_default()
                 .push(glob);
         }
@@ -1446,8 +1473,12 @@ fn expand_unreadable_globs_with_ripgrep(
     // overlay needs the resolved target to prevent a readable symlink path from
     // bypassing an unreadable glob match.
     let mut expanded_paths = BTreeSet::new();
-    for ((search_root, credential), globs) in patterns_by_search_root {
-        for path in ripgrep_files(search_root.as_path(), &globs, max_depth)? {
+    for ((search_root, credential, depth, database), globs) in patterns_by_search_root {
+        // #732 (D226): ripgrep still opens each subfolder at `--max-depth 1`
+        // (ripgrep 14.1), so an unreadable one failed the scan; listing the
+        // folder itself never opens a subfolder.
+        let scan: GlobFileScanner = if database { glob_files } else { scan_files };
+        for path in scan(search_root.as_path(), &globs, depth)? {
             if credential
                 && path
                     .as_path()
@@ -2077,7 +2108,9 @@ fn append_unreadable_root_args(
 /// `~/Library/Keychains`) is held as one (masked and registered, so that
 /// run's cleanup cannot remove it from under this one); any other file in a
 /// writable root is bound read-only where it is (a mount point cannot be
-/// removed or renamed). Returns whether `missing` needs nothing more.
+/// removed or renamed). #745: a folder there that is another run's empty
+/// placeholder is held too ([`hold_placeholder_folder_above_missing_path`]).
+/// Returns whether `missing` needs nothing more.
 fn hold_file_above_missing_path(
     bwrap_args: &mut BwrapArgs,
     missing: &Path,
@@ -2086,7 +2119,18 @@ fn hold_file_above_missing_path(
     let Some(parent) = missing.parent() else {
         return Ok(false);
     };
-    if !fs::symlink_metadata(parent).is_ok_and(|metadata| metadata.file_type().is_file()) {
+    let Ok(metadata) = fs::symlink_metadata(parent) else {
+        return Ok(false);
+    };
+    if metadata.file_type().is_dir() {
+        return Ok(hold_placeholder_folder_above_missing_path(
+            bwrap_args,
+            parent,
+            &metadata,
+            allowed_write_paths,
+        ));
+    }
+    if !metadata.file_type().is_file() {
         return Ok(false);
     }
     if has_synthetic_mount_target(bwrap_args, parent) || has_read_only_bind(bwrap_args, parent) {
@@ -2100,6 +2144,36 @@ fn hold_file_above_missing_path(
         bwrap_args.args.push(path_to_string(parent));
     }
     Ok(true)
+}
+
+/// #745: the folder `missing` would go in (`folder`) is another run's empty
+/// placeholder folder (a protected `.git` it made, which this run's policy
+/// took for a repository's). A placeholder made in it would change it, so
+/// that its maker could not remove it, and it was left behind for good. It
+/// is held read-only instead, as when it is a protected path itself: the
+/// command cannot create `missing` (or anything) in it, as it could not
+/// create the folder without the other run. Whether `missing` needs nothing
+/// more.
+fn hold_placeholder_folder_above_missing_path(
+    bwrap_args: &mut BwrapArgs,
+    folder: &Path,
+    metadata: &Metadata,
+    allowed_write_paths: &[PathBuf],
+) -> bool {
+    // Held already in this pass: its read-only mount covers `missing`.
+    if has_synthetic_mount_target(bwrap_args, folder) {
+        return true;
+    }
+    if !is_within_allowed_write_paths(folder, allowed_write_paths)
+        || allowed_write_paths.iter().any(|root| root == folder)
+        || !directory_is_empty(folder)
+        || !(crate::linux_run_main::is_live_placeholder(folder)
+            || crate::placeholder_journal::recorded_by_another_run(folder))
+    {
+        return false;
+    }
+    append_existing_empty_directory_args(bwrap_args, folder, metadata);
+    true
 }
 
 fn has_read_only_bind(bwrap_args: &BwrapArgs, path: &Path) -> bool {
@@ -2308,7 +2382,10 @@ mod tests {
 
     fn unreadable_glob_entry(pattern: String) -> FileSystemSandboxEntry {
         FileSystemSandboxEntry {
-            path: FileSystemPath::GlobPattern { pattern },
+            path: FileSystemPath::GlobPattern {
+                pattern,
+                scan: None,
+            },
             access: FileSystemAccessMode::Deny,
             missing_path_behavior: None,
         }
@@ -4501,7 +4578,14 @@ mod tests {
             std::fs::write(root.join(name), "x").expect("write");
         }
         let expand = |globs: Vec<String>| {
-            expand_unreadable_globs_with_ripgrep(&globs, root, /*max_depth*/ None)
+            let globs: Vec<FileSystemDenyGlob> = globs
+                .into_iter()
+                .map(|pattern| FileSystemDenyGlob {
+                    pattern,
+                    scan: None,
+                })
+                .collect();
+            expand_unreadable_globs(&globs, root, /*max_depth*/ None, ripgrep_files)
                 .expect("expand")
                 .into_iter()
                 .map(|path| path.as_path().file_name().expect("name").to_os_string())
@@ -5283,3 +5367,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "database_glob_tests.rs"]
+mod database_glob_tests;

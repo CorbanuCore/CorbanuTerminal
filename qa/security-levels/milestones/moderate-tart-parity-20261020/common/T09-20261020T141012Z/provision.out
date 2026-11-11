@@ -1,0 +1,153 @@
+PF83BEGIN
+/etc/sudoers.d/agms-codeblind: parsed OK
+pfctl: Use of -f option, could result in flushing of rules
+present in the main ruleset added by the system at startup.
+See /etc/pf.conf for further details.
+
+No ALTQ support in kernel
+ALTQ related functions disabled
+pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port = 18443 user = 610 flags S/SA keep state
+pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port = 18443 user = 611 flags S/SA keep state
+pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port = 18443 user = 612 flags S/SA keep state
+pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port = 18443 user = 613 flags S/SA keep state
+block drop out log quick proto tcp all user = 610
+block drop out log quick proto tcp all user = 611
+block drop out log quick proto tcp all user = 612
+block drop out log quick proto tcp all user = 613
+block drop out log quick proto udp all user = 610
+block drop out log quick proto udp all user = 611
+block drop out log quick proto udp all user = 612
+block drop out log quick proto udp all user = 613
+pass in quick on en0 inet proto tcp from 192.168.64.1 to (en0) port = 22 flags any keep state
+pass out quick on en0 inet proto tcp from (en0) port = 22 to 192.168.64.1 flags any keep state
+pass out quick on en0 inet proto udp from any port = 68 to 192.168.64.1 port = 67 keep state
+pass out quick on en0 inet proto tcp from (en0) to 47.251.69.60 port = 443 flags S/SA keep state
+pass out quick on en0 inet proto tcp from (en0) to 47.251.169.173 port = 443 flags S/SA keep state
+pass in quick on en0 inet proto icmp from 192.168.64.1 to (en0) icmp-type echoreq keep state
+block drop log quick on en0 all
+[provision] lo0: lo0
+[provision] users: uid=610(agmx0) gid=610(agmsexec) groups=610(agmsexec),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),100(_lpoperator);uid=611(agmx1) gid=610(agmsexec) groups=610(agmsexec),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),100(_lpoperator);uid=612(agmx2) gid=610(agmsexec) groups=610(agmsexec),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),100(_lpoperator);uid=613(agmx3) gid=610(agmsexec) groups=610(agmsexec),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),100(_lpoperator);
+[provision] staff member check: no agmx1 is NOT a member of staff
+/Users/neo 700 neo:staff
+/Users/neo_1 700 neo2:staff
+/opt/homebrew 755 neo2:admin
+/opt/homebrew/bin 750 neo2:admin
+/opt/agms 755 root:wheel
+/opt/agms/pkg 555 root:wheel
+/opt/agms/pkg/bin/corbanu 555 root:wheel
+0
+e2b1fa2a7271aa2a91b9f0beeb3ebe068516212a0318a6980b8a2c690c3f029b  pkg/bin/codex-code-mode-host
+15cb32e9407cc346286d39f24514bb391027db10d2aceb12c1c2798e482c4ae6  pkg/bin/corbanu
+4cdad55ba2ca028947b0543f357a84bf47a964201ee726b2cf44cf314b92c0c6  pkg/bin/corbanu-acp
+bea2975c7796c42ebb20c613ce7ec3203fe70ea9cfc41e6ba48c77d1b52e3cea  pkg/bin/corbanu-walletd
+f55316140650614bc0e0717cba7a343138771453b4cba71ac29ca5151b083302  pkg/codex-package.json
+a326a1fb48074202e9ad41e4cd1e389eeea372c8c6f7d7e80da81176d5d9430e  pkg/codex-path/rg
+94e3706786495a29882454105caf6ef32978bf362fcaa0eae8faee9f25409f62  pkg/codex-resources/telegram/dist/AGENTS.md.template
+7b2486a9fb015dc0864851fd6095b7fdd75a57ca9587a3a7d0540513ff05128b  pkg/codex-resources/telegram/dist/corbanu-terminal-telegram.service
+ece6bb7f40216ac0af6eeb0ec433264d4bcf868e39b5d65a06337c6138bf69d6  pkg/codex-resources/telegram/dist/org.corbanu.terminal.telegram.plist
+a5467b26fdadc62e34b0bfd2f73725fda579ad934ba273951cd02f21b94e0645  pkg/codex-resources/telegram/install-telegram-task.ps1
+a40a2e714fa8efb80fee4c348c5f5ac439106d836ad77aaf9646b5d692d6ca8b  pkg/codex-resources/telegram/setup-telegram.sh
+db6fe1a78eaceaff3b0f0cde25fc25afe466d61b0bf76b4ebe35812e4bc8dd71  pkg/codex-resources/zsh/bin/zsh
+74e8dfd980994d57078cce6aae3442b58cc8c459e73b6d153bca3ddb7800191e  bin/agms-launch
+1337d6c303acd56754f69254803c9354771bea37f6e0f987111702ecbda197de  bin/agms-mcp-notes
+79bdf8ed31e66b085ead4ce8e2cd07f8224eda9fbb5a35c00e5bbb4074a3462f  bin/agms-probe
+8c2803ffd610fa900e677277cf94ce6e3295b36fec21296152c50ce4ae291a74  bin/agms-product
+20f941bd305e3e08fdb57c232dd1ee786cfe47317113268e2ddaad6d4fd0eea4  bin/agms-tui
+02c365ffc7b2b3870b06f0ece8e847df7a8a60ddb2ae9f7547c1106e5f47d12e  bin/tmux
+946584b2bda8c0fb8fb0b1384be346eddef607a0b7d18f7bd3a1e9ce6b11c992  etc/expected.json
+038bad2e59fcdc5ccec0803a1212051a1dad8e5bf58ffc31776552effdbbd96e  etc/fixture.tar
+2334cc8ae76e913283426fec07077937bdac83791ad3ac36020e18497d0ecea7  etc/mediation-ca.pem
+9676b6852bcbad1cfb26fd14ae2e52f17ff7c50e645d7c3fd41483c2088dc1d9  etc/product-config.toml
+a0f824f720159d0da7f3d7f4a1e8844229a6a84d54cf280a094a1ffb08c2b3e2  etc/tmux.conf
+a09bc3d4080a27e225b7f5e9cb594a50f5929aa24b8f9b8789c0550f257dfafe  /opt/agms/packet/screens-v3/10-corbanu-config.txt
+8db994a28ca6f807d41b0ac7c8ef8ef97f04b6ff3c8b9135fcfff1a200097377  /opt/agms/packet/screens-v3/07-outside-prompt.txt
+420ae176de55b6dcd3d63e74ca4a00ddf65ed00c0bd2831048ff16908c106655  /opt/agms/packet/screens-v3/09-mcp-post-prompt.txt
+20c94287a76578c8d72d6a0136931088c7b305c357c4f1307451980604fead48  /opt/agms/packet/screens-v3/01-picker.txt
+e2927248f8886e331bcf0dc6f37b278e3325171725264311df8234644ec4e0eb  /opt/agms/packet/screens-v3/04-after-restart.txt
+72070b15d08b9eafeec9cc191a1686e2aa754526b2ca1f5bfe1c80ed928ef6e0  /opt/agms/packet/screens-v3/12-permissive-outside.txt
+9d1f7c7756c09b02857f3a6a47f69c5c1d1f397be573fc7b9922c7863e08d0dd  /opt/agms/packet/screens-v3/02-moderate-review.txt
+edbd0519889000ea16e42ddf50afbba74b73c68df82f48d3b0cb5104586908fd  /opt/agms/packet/screens-v3/05-grants.txt
+156da8e9519204ceb575c2346f7847534b7ddcea79a1bef9e5a45364bc6242be  /opt/agms/packet/screens-v3/11-corbanu-config-approved.txt
+8786feb468492092ff1998e4e251d99973fcec3697d8139579f6dfea1f3fbee4  /opt/agms/packet/screens-v3/README.md
+16fca1b847e364996d545d876353f72454b54eedc87f7ec6b3e73d249e0e6548  /opt/agms/packet/screens-v3/00-start.txt
+7d67f2ade0f0099f509012134bd5fc408a6458cb1f9292b84e0d7aa78596b70e  /opt/agms/packet/screens-v3/03-moderate-saved.txt
+76036673a57fd7493713314d42327d1d07eec9b80dcca760966bbe65db2dc75c  /opt/agms/packet/screens-v3/06-revoke-review.txt
+780159df739e718875ddbe19eed5a6295df15a0cef18341ecb4260f90fdb683d  /opt/agms/packet/screens-v4/09-mcp-post-prompt.txt
+20c94287a76578c8d72d6a0136931088c7b305c357c4f1307451980604fead48  /opt/agms/packet/screens-v4/01-picker.txt
+e7f06827d3ed9743bf6507e4b1050e5cc7a727f263e5bdabd02af7a42781d77f  /opt/agms/packet/screens-v4/04-after-restart.txt
+9d1f7c7756c09b02857f3a6a47f69c5c1d1f397be573fc7b9922c7863e08d0dd  /opt/agms/packet/screens-v4/02-moderate-review.txt
+edbd0519889000ea16e42ddf50afbba74b73c68df82f48d3b0cb5104586908fd  /opt/agms/packet/screens-v4/05-grants.txt
+57bba0ee79211cb89031a73448399e899212ebba3dec7230228a926c6dc34a4c  /opt/agms/packet/screens-v4/README.md
+16fca1b847e364996d545d876353f72454b54eedc87f7ec6b3e73d249e0e6548  /opt/agms/packet/screens-v4/00-start.txt
+7d67f2ade0f0099f509012134bd5fc408a6458cb1f9292b84e0d7aa78596b70e  /opt/agms/packet/screens-v4/03-moderate-saved.txt
+3cd20e55653afc72ea9e8317b8b4aec291be77ce72692fe7d503bc057357a620  /opt/agms/packet/screens-v4/07-mcp-start.txt
+085ca6102ae73c7f994951cbfe061503d484809edb0209cdb0b786b6cb146fde  /opt/agms/packet/screens-v4/09b-mcp-post-cancelled.txt
+1c43fdd68783efeaa875109630d6d90969189ae099a1aff95480c528ffa3e55e  /opt/agms/packet/screens-v4/08-mcp-read-prompt.txt
+76036673a57fd7493713314d42327d1d07eec9b80dcca760966bbe65db2dc75c  /opt/agms/packet/screens-v4/06-revoke-review.txt
+5284891374793aa4ed4bd296f9b536f3668b3eb9e400509ace993a75ca47db04  /opt/agms/packet/navigation.md
+8ebf87cbddcfa2f67d7399aee4ff06ee7304b6835059f7fde2a31ed8db7bd4d3  /opt/agms/packet/amendments-v3.md
+a2e44403ee7018b8c81a2d4c3b485a74a494ce3e9d232719324c5ab79e795bb8  /opt/agms/packet/screens/06-after-restart.txt
+892ffd35f11523e0f0bdb92f75192d74b4cc23a03429f713ce50a73418852013  /opt/agms/packet/screens/14b-credential-read-approved-result.txt
+1679b2fcd386168732efab4f1efd603bc73fec907ebeb6895ebce2240ea1f794  /opt/agms/packet/screens/09-grants-killswitch.txt
+a34ab8e59366a93c724cb993bc46f088400dd969dd5eb824c682e1792d4f6783  /opt/agms/packet/screens/21-killswitch-review-moderate.txt
+298cc91592c8f2428b33a57cdffb9e15fb4c7020a76b4b120a8a7898d0d8875c  /opt/agms/packet/screens/E2b-broker-refusal.txt
+48ecbe5309765a19642bb3bb0427a8d61fbc30704d755ca7ed5f09c6ea60340a  /opt/agms/packet/screens/07-picker-moderate-active.txt
+6f8cac991386e2cd99f44986b84e00917156cf8e0145b78f6f0460c9bb030156  /opt/agms/packet/screens/08-inspector-moderate.txt
+c88fb850f13dc0286bf09951f78fc20101ad28e57bdfc341525fc27a129daad3  /opt/agms/packet/screens/17-review-permissive-from-moderate.txt
+ae4aadc2d74fdd44a9c068a8f8c5ffd0691d544a54141a1a7895b4fd06dd8573  /opt/agms/packet/screens/15a-corbanu-config-read.txt
+182c36b63e5f1dee38e5074ee9b26b63be5dd4f3aa9a1c81eae87fce543e7dbe  /opt/agms/packet/screens/03-picker-moderate-highlight.txt
+888ddb8a88e4fe66a7a77a1188fdc2a231f4fb4c2c7793411cf35864617a8ea1  /opt/agms/packet/screens/16-review-aggressive-from-moderate.txt
+fe6e91aaafcb693673445f0179c93a3362e0d405f6564e732967a9798be67c4f  /opt/agms/packet/screens/16b-esc.txt
+a2106730f7ca5615befd4a7c599ebca7af2c77f511f738509c40a9493ffc5f06  /opt/agms/packet/screens/13a-protected-after-untrusted-prompt.txt
+b2411c8f9ca2fa45fe195213fa654e9e4e669b0ce507d34e5f251d3594d7cea8  /opt/agms/packet/screens/04-moderate-review.txt
+b1fbfb6b1fd766ec7b40869841020e93db030e537ce25e73de34e9af152b0fcc  /opt/agms/packet/screens/11a-escalation-prompt.txt
+d157eea700a46f94422d4b477ac64ab92c9972809e2f7c83bdde04d5f975b536  /opt/agms/packet/screens/01-fresh-start.txt
+d7814108e6a9d2762f542cbd55677619e49824de8e76f582d9bce05ca1cf93de  /opt/agms/packet/screens/08c-inspector-moderate-bottom.txt
+182c36b63e5f1dee38e5074ee9b26b63be5dd4f3aa9a1c81eae87fce543e7dbe  /opt/agms/packet/screens/E1a-moderate-highlight-no-labels.txt
+e5dd71017d777b1cbf03186bcb476ac3350065457c26c6b872ae3e934f29da88  /opt/agms/packet/screens/12-read-readme.txt
+da98cece10c93ab8dd433258d0f0f3770cc0dfa7cca238444710e103b953fe7b  /opt/agms/packet/screens/19-model-connections.txt
+02a07f0e2c3e9fac3a0e7fab559e7ff5d8ae6e6bc76086004a58623191782a5c  /opt/agms/packet/screens/02-security-picker-permissive.txt
+bee95d022a96c1560afdb501290f923191aa0943d0e10f5905b4821ce87af2c4  /opt/agms/packet/screens/README.md
+5144a26f851bee899d94f7e070927608e1fb7ebaaf19ddb6a49cb6db5410f30d  /opt/agms/packet/screens/18-permissive-saved-from-moderate.txt
+cdc2e86ff1881a7a9444c4ab3d468c3bfe1d11adf1110b35bd9fd694786116ec  /opt/agms/packet/screens/10-outside-write.txt
+49c54564bcf78079b15db9213adaa12101f9a90da4ff50216f998af04d99f3cc  /opt/agms/packet/screens/00-start.txt
+877828dfe9b760f55767323ea1b93bc5c57a8e76b1a29ab8e1dbf00c77c7c018  /opt/agms/packet/screens/22-relaunch-moderate-ordinary-command.txt
+7fae49f28945460152fbd3b9e270b294a106a7d9286e0ed2415ff6a27cf58462  /opt/agms/packet/screens/05-moderate-saved.txt
+d648b17eaa777bd05834c4d21998d6976ebc523120db8a1518cf804476a60dcf  /opt/agms/packet/screens/15b-corbanu-config-read-result.txt
+236ec23c15819137b04222da437a39c3b32eb792f352157da0aa383e1666010e  /opt/agms/packet/screens/13b-protected-after-untrusted-result.txt
+f316e14570288d79949d22fbf37d5c2518937e5dff9dfb538bc894d2a8a40765  /opt/agms/packet/screens/E1b-moderate-no-labels.txt
+6f0da62b9c07ce6c0480ff81a4a4ba5035553e623be1745075bea314cbd4b218  /opt/agms/packet/screens/08b-inspector-moderate-scrolled.txt
+b5d8f88b357e0563656738b114fd9e3d9f64e034ea20d511c7363863ce24b96d  /opt/agms/packet/screens/11b-escalation-approved-result.txt
+4b70fe4b444d82f2844e7ea27cdb759b770190a972ade868eff4d4708fe9cb92  /opt/agms/packet/screens/14a-credential-read-prompt.txt
+3cf05dc37298218d9522b0fbcef39401d4539066db6609284ffa39cb84166eee  /opt/agms/packet/screens/E2a-start-plain-http.txt
+b378112f9cb0ad8761ec0be500238e2565f842c4363785c1c9309fcef879f0ae  /opt/agms/packet/amendments-v4.md
+64ecf9c951f89d645e0b2eb3243dd422c80436f24fadb4d9283a5daa97239c23  /opt/agms/packet/design-cases.md
+be7392540deef126346f125f6239b6944034fc3a13af6bc45fed750f837286bb  /opt/agms/packet/prompts/T11.md
+01b362f85faaffddd9e5aea007a67ef057e5991262eb7837e31638fbaa4cd979  /opt/agms/packet/prompts/T25.md
+dc8bc30051f3be59394de0af2858a610e7a6cc319436adc19dfb19cc011e0e0a  /opt/agms/packet/prompts/T01.md
+a34a57ba576a8850060c2277b8e9c84f70818a7b586bb5a7a38e91a7f7c38d1c  /opt/agms/packet/prompts/T21.md
+237c149fafd196ea996d632248ff3df5cc7cc542d275eeb5413ba97bd998172a  /opt/agms/packet/prompts/T15.md
+894a35a0ee42c46a13b145ded9cab889f93913df51f9265c658083b86df43cd4  /opt/agms/packet/prompts/T05.md
+371775149dc68c7007473f855a9156ecf37985259dbc721b6731042b0544bc1a  /opt/agms/packet/prompts/T20.md
+0dfc1ed893b19b145e598c32d036dca8196d34a8da21370a2b27a0639512d6ca  /opt/agms/packet/prompts/T14.md
+83efbafb5460dff80600f957c1dd9525c30809fee75cbd75c2d758cfb63c2f5b  /opt/agms/packet/prompts/T04.md
+653a243e6910a5e248926362d8930ecb2a97ccce8ecdbbb537264d9d8882579e  /opt/agms/packet/prompts/T10.md
+27ab6fbe67adec33c2ec978c92ac76d5d8c512dc3e45a0860dc31a6c0eeb8730  /opt/agms/packet/prompts/T24.md
+a13e2f7fa092f291dc452bfd6ef32fb8c0c8acaa75a1e3acb8e3bfd00abbd0e0  /opt/agms/packet/prompts/T23.md
+0c7450ef5dd029f5101a4647559ed41364c83b95f245e1cd48e7a664c9483c6e  /opt/agms/packet/prompts/T17.md
+24bf9eb44021586b6cfe2de0765356a445d753f2f033fd011667a7ff04fd8f0e  /opt/agms/packet/prompts/T07.md
+17c38346684d79b18cc629617bf95de1e5758e0221c97c39eb1a5d57f58e3c50  /opt/agms/packet/prompts/T13.md
+51ced5796a44231f7e502b243d81b964f8bd6180a93cabad8a507682c84a1924  /opt/agms/packet/prompts/T03.md
+5d432256afedc16dbba6f9bafc50af58d804e974cd129f0633bd7289db037dc0  /opt/agms/packet/prompts/T12.md
+c0a9e4b1103d5669e8bba22474f8c6e8fde3ed606aa14b492a24c0c5c1d158dd  /opt/agms/packet/prompts/T26.md
+f9cfd2ed2c4e62c71bbad40733f8715a5180e37b2c00aead96404a89ae316763  /opt/agms/packet/prompts/T02.md
+93f497b6817e49acc0e9032e21876e175b0fe1286ebf0655aac9988cea7df8c8  /opt/agms/packet/prompts/T22.md
+a07013c1d570cf58120d62021e2ba7e8047c2a6a8a73643cb7ef0bd83137b45b  /opt/agms/packet/prompts/T16.md
+5a73af111c34b82e94ba4b3c214b8afb53ffa478d3fc74a17e1ba9fe5b3cd53e  /opt/agms/packet/prompts/T06.md
+60ad89c8552179ad333a0e6faa357917d9495f2cd764a9ffd4948bd68e88b9ce  /opt/agms/packet/prompts/T19.md
+6de9d7ef2c46a5a6db49a54c583b2ba3395a1a92e549e4d173956a6fab539b16  /opt/agms/packet/prompts/T09.md
+0ae8c5769d541e8be50b57896307bae57a9d4c382531200776d387a7bed6153a  /opt/agms/packet/prompts/T18.md
+d5bfcbd2065b2fe0ca3d9fc062c47661c2deb1443b64332b2f37ec83a9e127e8  /opt/agms/packet/prompts/T08.md
+991e5804e4b598b31f51301fc17a7cdea3e89161663c862ceef7a88c017ba983  /opt/agms/packet/executor-prompt.md
+203685710b74d3cf864ed00e35a5c6e30e10296ea82ec60ab707b09b53da02d1  /opt/agms/packet/amendments.md
+[provision] done

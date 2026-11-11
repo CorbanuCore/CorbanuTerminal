@@ -1,0 +1,5 @@
+commit 8bf182de43
+version 0.1.48
+corbanu sha256 95ee54cb7ce1bcd3566da613cb415e8677227cb5e11baac63d5a1bbfecf9e509
+packet /Volumes/CorbanuDrive/Corbanu/.codex-work/qwen-1052-20261020/packet-v5
+staged 2026-10-20T08:28:41Z

@@ -147,38 +147,61 @@ impl ViewImageHandler {
             ))
         })?;
         let model_visible_path = path_uri.inferred_native_path_string();
+        let own_sandbox = turn
+            .file_system_sandbox_context(/*additional_permissions*/ None, turn_environment);
         let sandbox = crate::security::protected_surface::protect_file_tool_context(
             &session,
             &turn,
-            turn.file_system_sandbox_context(
-                /*additional_permissions*/ None,
-                turn_environment,
-            ),
+            own_sandbox.clone(),
         );
         let fs = turn_environment.environment.get_filesystem();
+        // #1087: a read the protected-path rules refused says so, naming the
+        // level, to the person and to the model.
+        let explain_error = |message: String| async {
+            let explanation = match path_uri.to_abs_path() {
+                Ok(path) if !turn_environment.environment.is_remote() => {
+                    crate::security::protected_reads::file_tool_denial_explanation(
+                        &session,
+                        &turn,
+                        &own_sandbox,
+                        &sandbox,
+                        path.as_path(),
+                    )
+                    .await
+                }
+                _ => None,
+            };
+            let Some(explanation) = explanation else {
+                return FunctionCallError::RespondToModel(message);
+            };
+            crate::security::protected_reads::notify(&session, &turn, explanation.clone()).await;
+            FunctionCallError::RespondToModel(format!("{message}\n{explanation}"))
+        };
 
-        let metadata = fs
-            .get_metadata(&path_uri, Some(&sandbox))
-            .await
-            .map_err(|error| {
-                FunctionCallError::RespondToModel(format!(
+        let metadata = match fs.get_metadata(&path_uri, Some(&sandbox)).await {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                return Err(explain_error(format!(
                     "unable to locate image at `{model_visible_path}`: {error}"
                 ))
-            })?;
+                .await);
+            }
+        };
 
         if !metadata.is_file {
             return Err(FunctionCallError::RespondToModel(format!(
                 "image path `{model_visible_path}` is not a file"
             )));
         }
-        let file_bytes = fs
-            .read_file(&path_uri, Some(&sandbox))
-            .await
-            .map_err(|error| {
-                FunctionCallError::RespondToModel(format!(
+        let file_bytes = match fs.read_file(&path_uri, Some(&sandbox)).await {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                return Err(explain_error(format!(
                     "unable to read image at `{model_visible_path}`: {error}"
                 ))
-            })?;
+                .await);
+            }
+        };
 
         let can_request_original_detail = can_request_original_image_detail(&turn.model_info);
         let use_original_detail =

@@ -1,0 +1,5 @@
+# thread | turn | provider | model | dispatched (UTC) | request_id | attempt_id (integrator's read of draft_accounting_attempts after the run)
+01a157aa-f4e8-7a30-912f-ff0a77e356bf | 01a157ab-3d46-7f73-94b7-a8bb058b0791 | kimi | kimi-k3 | 2026-10-20T04:56:42Z | f1ce3efa-f9ce-4fbc-8f7e-bb56a2da646c | 5c5f9dfb-4f3a-4f7e-a4da-3d11460937ce
+01a157aa-f4e8-7a30-912f-ff0a77e356bf | 01a157ad-52bf-75f3-929a-d1c0843bac45 | kimi | kimi-k3 | 2026-10-20T04:58:59Z | 5e4045e7-17e9-47a9-90d9-a7a18f5564b2 | d43624bd-2117-4278-b660-4be6dba644b1
+01a157b5-8e01-79c1-a96b-3f5979078d7f | 01a157b5-ccc0-7922-8f6c-26a8f6574214 | kimi | kimi-k2.7-code | 2026-10-20T05:08:15Z | ffedb5d4-c294-42e5-8911-c4f666313511 | 43b97aad-c95c-4095-8f77-02ea419ed081
+01a157b5-8e01-79c1-a96b-3f5979078d7f | 01a157b6-f4ab-7881-acbe-0ec04be05395 | kimi | kimi-k2.7-code | 2026-10-20T05:09:30Z | 4522925f-4f12-4ed6-afd5-60802778eca7 | 3ea30594-fd94-4ec6-ab23-f4b9df3fdc64

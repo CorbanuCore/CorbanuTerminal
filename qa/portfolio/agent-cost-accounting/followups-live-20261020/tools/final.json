@@ -1,0 +1,127 @@
+{
+ "FUP-01": {
+  "d": "passed",
+  "run": "Z",
+  "s": "Z.AI turn: /cost first page, request page and technical page as expected; component arithmetic 0.0011844 (noncached input) + 0.00001728 (cache read) + 0 (cache write) + 0.0000015 (output) = 0.00120318 matches; three Esc presses step back one level each."
+ },
+ "FUP-02": {
+  "d": "blocked",
+  "run": "Z",
+  "s": "Advisory; the 'no requests recorded' branch was not reached. For 2026-01-01 the product says 'Request detail unavailable for this whole UTC day — day touches expired detail or aggregate history. No total shown.' and names 2026-10-20 as the oldest recorded day: no invented spend, but it does not say no requests were recorded, because it treats the day as outside its request-detail history (the same screen says daily totals are kept since 2025-10-21, yet shows no total) (as S10's ACC-22 branch was not reached). Today's page matches FUP-01; 2026-13-40 gives the usage line, no crash. Raw verdict 'passed'."
+ },
+ "FUP-03": {
+  "d": "passed",
+  "run": "Z",
+  "s": "D25 / ACC-06 re-check: '/review' (uncommitted changes) started and finished; conversation Y rose from 1 to 5 requests, the 4 review requests each with 'Turn: code-review:' under Y's Thread; the exact sum of Y's 5 requests (1 turn + 4 review) is 0.00351237, equal to the product's subtotal (the 4 review requests alone 0.00223062). The S10 failure (#898) is fixed."
+ },
+ "FUP-04": {
+  "d": "passed",
+  "run": "Z",
+  "s": "X unchanged after the review in Y (1 request, same Request ID and cost, no review prefix); each conversation lists the other's requests only under 'Other conversations'."
+ },
+ "FUP-05": {
+  "d": "passed",
+  "run": "Z",
+  "s": "D25 / ACC-15 re-check: one /side turn raised X by exactly one request; its technical page, captured in group-Z/fup05-r2-attempt-40.txt (in group-Z.tar.gz; also screens.jsonl from 02:30:16Z), shows Thread X and 'Turn: side:01a15723-...'; exact subtotal 0.00242508."
+ },
+ "FUP-06": {
+  "d": "failed",
+  "run": "Z",
+  "s": "Advisory. '/review' inside /side sent no request (X stayed at 2 requests). The product wrote a refusal ('/review' is unavailable in side conversations...) to the terminal (pty.raw), but the screen was cleared and redrawn at once, and only the glyph remained on screen for 6 minutes, so the user sees no clear refusal. The executor reported 'inconclusive' and marked it failed. Filed as #1039."
+ },
+ "FUP-07": {
+  "d": "passed",
+  "run": "Z",
+  "s": "After a restart on X both earlier Request IDs are present once with the same exact costs; one new turn adds exactly one request (Request 3). The executor's first turn attempt did not reach the composer and sent nothing (disclosed)."
+ },
+ "FUP-08": {
+  "d": "passed",
+  "run": "Z",
+  "s": "Z.AI reopen: no warm-up notice and no 'Reopen warm-up' line before or after the turn."
+ },
+ "FUP-09": {
+  "d": "passed",
+  "run": "O",
+  "s": "OpenAI gpt-6-luna: a new conversation shows no warm-up line or notice; after resume --last the notice names skip_reopen_warmup, /cost shows 'Reopen warm-up: 1 request', and the warm-up request (14,650 input tokens, $0.001465) is labelled on its link, request page and technical page (prewarm:reopen:)."
+ },
+ "FUP-10": {
+  "d": "passed",
+  "run": "O",
+  "s": "D25 / ACC-11/14/18 re-check: the final audit (03:47:30-04:04:09Z) opened all 14 T1 requests, each listed once with no duplicate ID, and 5 warm-ups labelled. Request IDs read before later reopens were re-read unchanged in the audit: R1, R2 and R3 (first read 03:10-03:14Z, before four more reopens) and R10 (03:34Z); screens.jsonl. Costs unchanged from the per-case pages. The executor's 'failed' is its own arithmetic slip: it gave Request 1 as 0.001465 instead of 0.0014646. Request 1's exact cost is on no screen; it follows from screens: its technical page (FUP-09) shows Input: 14646 with every other count 0, the same model's noncached rate is 0.1 USD/M (warm-up technical page, FUP-09-33), and the product's 03:10Z subtotal 0.003695025 (FUP-09-06) minus Request 2's exact 0.002230425 is 0.0014646. With that, the sum is 0.01630897, equal to the product's subtotal. Executor deviation: amendment 12's intermediate audits after FUP-12 and FUP-14 were not done; R4-R9 and R11-R13 IDs were first read in the final audit; R1-R10's link costs before 03:50Z match the audit, and R11-R13 were first seen in it. The executor's recovery restart in FUP-14 added warm-up R11; that is a reopen, so 'new entries only after a turn or a reopen' holds."
+ },
+ "FUP-11": {
+  "d": "passed",
+  "run": "O",
+  "s": "resume <T1>: notice shown, warm-up count 1 -> 2, one turn added; earlier IDs and costs stable (FUP-10 audit). A first /cost read showed '1 attempt had incomplete usage' and was complete on reopening (ledger lag, amendment 1)."
+ },
+ "FUP-12": {
+  "d": "passed",
+  "run": "O",
+  "s": "/new (T2) then /resume back to T1: T1's notice and warm-up count 2 -> 3; T2 holds only its own 2 requests."
+ },
+ "FUP-13": {
+  "d": "passed",
+  "run": "O",
+  "s": "/side in T1 adds one labelled warm-up (Reopen warm-up, side:prewarm:reopen: in the ledger) and the side turn with 'Turn: side:01a1575f-...'; both under T1."
+ },
+ "FUP-14": {
+  "d": "failed",
+  "run": "O",
+  "s": "Editing the earliest message continued 'from this point in a new conversation' and the reply arrived; rolled-back T1 requests stayed listed once with the same IDs and costs. But the new conversation's warm-up is an ordinary new-conversation warm-up (ledger 'prewarm:', not 'prewarm:reopen:'): no 'Reopen warm-up' line and no skip_reopen_warmup notice. Filed as #1038; the cause given there (the cut leaves no history, so the product starts a new conversation) is the integrator's reading of the code after the run, not evidence. (Editing a later message passed in S10 ACC-16.) The executor first opened an edit from the end by mistake and recovered with a restart; disclosed."
+ },
+ "FUP-15": {
+  "d": "blocked",
+  "run": "O",
+  "s": "Advisory; not exercised. The executor picked the row it took for T1, but it opened the abandoned fork from FUP-14's mistaken first edit: the screen says 'Thread forked from <T1>', and /cost shows 1 request, a Reopen warm-up (the fork's ID 01a15763-...2395dd and its 03:38:05Z warm-up are the integrator's ledger read) while T1's requests are counted under 'Other conversations ... 15 requests in 3 conversations'. So resuming the open conversation (the 'Already viewing' path) was never tried. Consistent with skip_reopen_warmup=true, which the run started with: no new warm-up at 03:43 (ledger) and no notice."
+ },
+ "FUP-16": {
+  "d": "passed",
+  "run": "O",
+  "s": "-c skip_reopen_warmup=true resume <T1>: no notice; warm-up count stays 5; only the main and side turns added (11 -> 13); exact sum through R13 0.01611938 (the executor's 0.01611978 carries the same Request 1 slip as FUP-10)."
+ },
+ "FUP-17": {
+  "d": "blocked",
+  "run": "M",
+  "s": "Real kimi-k3 turn on provider kimi: the request page shows 'Provider: kimi', 'Model: kimi-k3', 'Billing: Pay per use', $0.036201, and nothing is marked unknown or a lower bound. The executor did not reach the request's technical page: on K3 Request 1 it pressed Down 30, 30, 1 and 10 times (the selection wraps, so it passed the link without a capture), and on K3 Request 2 and both K2.7 request pages it pressed none (actions.jsonl). So the per-request rates (3 / 0.3 / 3 / 15) and components are on no screen. That the link exists ('—— Open —— → Technical details (attempt 1)') is the integrator's read of pty.raw, not a captured screen. The conversation totals on screen reconcile at the published rates: (275x3 + 11,776x0.30 + 11,776x3 + 52x15)/1e6 = 0.0404658, the product's 'Known subtotal exact USD'. Supplementary (integrator, not the basis of the disposition): the relay's log of Moonshot's own reported usage gives per-request counts that reproduce each request page's cost exactly at the published rates (common/mediator-final.jsonl.gz)."
+ },
+ "FUP-18": {
+  "d": "blocked",
+  "run": "M",
+  "s": "D3: a real Moonshot cache read happened. The conversation's /cost shows 'Cache read: 11,776', and its exact subtotal reconciles exactly at the published rates, cache read at $0.30/M (see FUP-17). Request 2's page shows $0.004265 and both Request IDs and costs were unchanged when re-read (FUP-20). Blocked, not passed: Request 2's technical page was not opened, so the per-request cache-read count and its cost are on no screen. Supplementary (integrator, not the basis): Moonshot's reported usage in the relay log gives request 2 cached_tokens 11,776, (159x3 + 11,776x0.30 + 17x15)/1e6 = 0.0042648."
+ },
+ "FUP-19": {
+  "d": "blocked",
+  "run": "M",
+  "s": "Real kimi-k2.7-code conversation, two turns: the conversation shows 'Cache read: 11,264' > 0 and 'Known subtotal exact USD: 0.01332051' = (11,693x0.95 + 11,264x0.19 + 0x0.95 + 18x4)/1e6 exactly at the published rates. Blocked: neither technical page was opened (no Down presses on either request page; FUP-17), so the rates and Turn 2's own cache read are on no screen. Supplementary (integrator, not the basis): Moonshot's reported usage gives turn 2 cached_tokens 11,264, and both requests' counts reproduce their page costs exactly."
+ },
+ "FUP-20": {
+  "d": "passed",
+  "run": "M",
+  "s": "Each Kimi conversation lists only its own 2 requests; each shows the other's total ($0.040466 / $0.013321) under 'Other conversations'; no cost field or total is incomplete, unavailable or a lower bound; all four Request IDs and costs re-read unchanged after restarts."
+ },
+ "FUP-21": {
+  "d": "passed",
+  "run": "R",
+  "s": "D16: one real realtime session (gpt-realtime-1.5, reply OK, 04:24:34-37Z). /cost shows 'Realtime: 1 session; token counts and cost unknown, not zero', the link 'Request 2 · Realtime session · ... · no price available', start and end times inside the window, 'tokens not reported', and the technical page's 'Turn: realtime:ws:' with every amount unknown. The thread's separate warm-up is GPT-6 Sol (the app-server's default model), labelled 'Turn: prewarm:' on its technical page; $0.029290."
+ },
+ "FUP-22": {
+  "d": "passed",
+  "run": "R",
+  "s": "From a new Z.AI conversation, the realtime conversation appears under 'Other conversations' with 'no price available' and 'at least $0.029290 (1 attempt had no price)': no $0 for the session."
+ },
+ "FUP-23": {
+  "d": "passed",
+  "run": "R",
+  "s": "After a restart on TR: still 1 session, same Request ID 2dbec071-... and the same start/end times; no second warm-up."
+ },
+ "FUP-24": {
+  "d": "passed",
+  "run": "M",
+  "s": "No credential or key material in any group's saved screens or command output: each executor searched its own group (Z, O, R, M) and found only probe names containing 'api_key', SHA-256 digests and the fixture's labelled synthetic .env value (shown by agms-tui fixture, not by the product). Integrator's key scan of the record: the three real keys are in 0 files (keyscan-record.txt)."
+ },
+ "FUP-25": {
+  "d": "passed",
+  "run": "O",
+  "s": "skip_reopen_warmup = true in config.toml, restart with resume <T1> and no -c: no notice, warm-up count unchanged, one turn added (13 -> 14)."
+ }
+}

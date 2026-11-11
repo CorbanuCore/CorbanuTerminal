@@ -1,0 +1,2 @@
+outside-the-project: synthetic file
+perm rule

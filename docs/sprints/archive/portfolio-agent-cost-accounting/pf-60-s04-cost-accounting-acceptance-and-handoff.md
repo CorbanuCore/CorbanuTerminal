@@ -46,7 +46,7 @@ integration owner.
 - PRs: #382 (`bda1b29d90`, activation), #383 (`be411b5ed7`, slice A), #385 (`1e9cd464b9`, slice B), #393
   (`b1e20a8ec6`, qualification and demos), #397 (`d5004cfedf`, independent acceptance).
 
-**Known limits (carried, not discharged), each in a [follow-up sprint](../../../plans/active/portfolio-agent-cost-accounting-followups.md#sprint-execution-map):**
+**Known limits (carried, not discharged), each in a [follow-up sprint](../../../plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md#sprint-execution-map):**
 
 | Limit | Issue | Follow-up |
 | --- | --- | --- |

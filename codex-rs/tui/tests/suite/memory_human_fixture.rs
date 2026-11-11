@@ -1,4 +1,5 @@
 //! Opt-in, bounded synthetic operator fixtures. Never point these at a personal home.
+use crate::support::chat_ready::wait_session_configured;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
 use crate::support::tmux::TerminalSize;
@@ -288,6 +289,10 @@ log_dir = {:?}
 sqlite = true
 memories = true
 code_mode_host = false
+# No curated plugin sync (#1198): its `git fetch` from github.com runs in its
+# own process group, outlives a TUI killed at startup (the Timeout case) and
+# writes into this home while it is being removed.
+plugins = false
 [memories]
 generate_memories = true
 min_rollout_idle_hours = 0
@@ -396,9 +401,7 @@ animations = false
         .current_dir(&repo)
     };
     let mut session = tmux.new_session(spec("memory-human"))?;
-    session
-        .primary_pane()
-        .wait_stable_contains("Corbanu Terminal", READY)?;
+    wait_session_configured(session.primary_pane(), READY)?;
     publish_attachment(&session, root, home.path(), artifacts)?;
     let mut keys = Vec::new();
     let start = Instant::now();
@@ -512,9 +515,7 @@ animations = false
             if driver == Driver::Rehearsal || root.join("restart").exists() {
                 session = tmux.new_session(spec("memory-restart"))?;
                 restarted = true;
-                session
-                    .primary_pane()
-                    .wait_stable_contains("Corbanu Terminal", READY)?;
+                wait_session_configured(session.primary_pane(), READY)?;
                 publish_attachment(&session, root, home.path(), artifacts)?;
                 if driver == Driver::Rehearsal {
                     submit(session.primary_pane(), "/status", &mut keys)?;

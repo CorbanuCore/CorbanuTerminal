@@ -1,0 +1,18 @@
+2026-10-20T02:02:23Z
+Source Name            Disk  Size  Accessed       State  
+local  corbanu-qa-base 50 GB 28 GB 11 minutes ago stopped
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3
+2026-10-20T02:02:24Z slot ok (guests running: 0; UTM: 0; Tart: 0)
+tart run pid 64084
+ssh ready 2026-10-20T02:02:35Z 192.168.64.41
+ProductName:		macOS
+ProductVersion:		26.6.2
+BuildVersion:		25G83
+ 2:02  up 9 secs, 0 users, load averages: 1.38 0.30 0.10
+System Integrity Protection status: enabled.
+assessments enabled
+Source Name            Disk  Size  Accessed       State  
+local  acc-tart1-run   50 GB 27 GB 8 seconds ago  running
+local  corbanu-qa-base 50 GB 28 GB 11 seconds ago stopped

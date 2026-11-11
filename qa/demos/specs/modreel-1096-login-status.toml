@@ -1,0 +1,32 @@
+# #1096 (REG-02, D80): `corbanu login status` shows no part of an API key.
+id = "modreel-1096-login-status"
+feature = "#1096: corbanu login status shows no part of the key"
+expected = "After an API-key login with a synthetic key, `corbanu login status` says an API key is configured and prints no part of it (before #1096 it showed the first 8 and last 5 characters)."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+cli_auth_credentials_store = "file"
+"""
+
+setup = "printf 'fake-key-1096-canary-0001' | {bin} login --with-api-key && echo 'logged in with a synthetic API key'"
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "!{bin} login status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "API key configured"
+timeout = 60
+[[steps]]
+pause = 4.0

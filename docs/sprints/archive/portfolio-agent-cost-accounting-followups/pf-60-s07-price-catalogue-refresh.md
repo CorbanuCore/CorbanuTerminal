@@ -2,12 +2,12 @@
 sprint_id: "PF-60-S07"
 title: "Price catalogue refresh (#368)"
 status: completed
-plan_file: "docs/plans/active/portfolio-agent-cost-accounting-followups.md"
+plan_file: "docs/plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md"
 plan_feature: "PF-60"
 execution_order: 2
 owner: "Codex worker pf60-next; Travis Good accepts"
 parallel_lane: "accounting"
-write_scope: "codex-rs/core/src/config/mod.rs, codex-rs/core/src/accounting.rs, codex-rs/core/src/accounting_prices.rs, codex-rs/core/src/accounting_chat.rs, codex-rs/core/src/accounting_transport.rs, codex-rs/core/src/accounting_basis_tests.rs, codex-rs/core/src/accounting_chat_tests.rs, codex-rs/core/tests/suite/accounting_chat.rs, codex-rs/core/tests/suite/accounting_chat_recovery.rs, codex-rs/tui/src/chatwidget/tokens.rs, codex-rs/tui/src/chatwidget/tokens/charge.rs, codex-rs/tui/src/chatwidget/tokens/charge_tests.rs, docs/provider-accounts.md, docs/sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s07-price-catalogue-refresh.md, docs/sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s06-side-and-fork-attribution.md, docs/plans/active/portfolio-agent-cost-accounting-followups.md, qa/portfolio/agent-cost-accounting/issue-368/, qa/portfolio/agent-cost-accounting/pf-60-s07/, qa/demos/index/PF-60-S07.md, qa/demos/specs/"
+write_scope: "codex-rs/core/src/config/mod.rs, codex-rs/core/src/accounting.rs, codex-rs/core/src/accounting_prices.rs, codex-rs/core/src/accounting_chat.rs, codex-rs/core/src/accounting_transport.rs, codex-rs/core/src/accounting_basis_tests.rs, codex-rs/core/src/accounting_chat_tests.rs, codex-rs/core/tests/suite/accounting_chat.rs, codex-rs/core/tests/suite/accounting_chat_recovery.rs, codex-rs/tui/src/chatwidget/tokens.rs, codex-rs/tui/src/chatwidget/tokens/charge.rs, codex-rs/tui/src/chatwidget/tokens/charge_tests.rs, docs/provider-accounts.md, docs/sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s07-price-catalogue-refresh.md, docs/sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s06-side-and-fork-attribution.md, docs/plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md, qa/portfolio/agent-cost-accounting/issue-368/, qa/portfolio/agent-cost-accounting/pf-60-s07/, qa/demos/index/PF-60-S07.md, qa/demos/specs/"
 integration_gate: "One PR to main: fail-before/pass-after tests, focused just test with and without developer-accounting, macOS and Linux clippy -D warnings, independent Opus 5.5 High review to APPROVE on the exact head, tmux check in a disposable home, SOP video; Travis accepts"
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s07"
 branch: "pf60-s07/moonshot-route-pricing"
@@ -51,7 +51,7 @@ Completed. Travis accepted S07 on 2026-10-15 (20:55Z, "1-6 as recommended"; comm
 
 ## Plan linkage
 
-- Plan: [Accounting follow-ups after PF-60](../../../plans/active/portfolio-agent-cost-accounting-followups.md); feature `PF-60`.
+- Plan: [Accounting follow-ups after PF-60](../../../plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md); feature `PF-60`.
 - Acceptance advanced: no request shows a stale or guessed price.
 
 ## Code boundaries

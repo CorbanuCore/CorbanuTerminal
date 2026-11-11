@@ -828,7 +828,9 @@ fn parse_notify_entries(bytes: &[u8]) -> Option<Vec<(u32, String)>> {
         let start = at.checked_add(12)?;
         let name = bytes.get(start..start.checked_add(name_len)?)?;
         let units: Vec<u16> = name
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
             .collect();
         entries.push((action, String::from_utf16_lossy(&units)));

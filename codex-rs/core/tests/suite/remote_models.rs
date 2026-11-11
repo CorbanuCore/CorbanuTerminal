@@ -23,7 +23,7 @@ use codex_protocol::protocol::ExecCommandSource;
 use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use core_test_support::TempDirExt;
-use core_test_support::load_default_config_for_test;
+use core_test_support::load_default_config_for_test_in;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
@@ -90,7 +90,8 @@ async fn remote_models_get_model_info_uses_longest_matching_prefix() -> Result<(
     .await;
 
     let codex_home = TempDir::new()?;
-    let config = load_default_config_for_test(&codex_home).await;
+    let cwd = TempDir::new()?;
+    let config = load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
 
     let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
     let provider = ModelProviderInfo {

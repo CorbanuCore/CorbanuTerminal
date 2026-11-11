@@ -12,6 +12,11 @@
 //! which remembered approval was not applied, and under Permissive the rules
 //! apply as before. `prompt` and `forbidden` rules always apply.
 //!
+//! D52 (#1001, Travis 2026-10-20): network `allow` rules ("allow this host
+//! always", which widen a managed network proxy's allowlist) are suspended
+//! the same way: only one saved while Aggressive was in force, marked the
+//! same way in the same file, applies under Aggressive. `deny` rules apply.
+//!
 //! The mark means "the Corbanu home's rules file says so": anything that can
 //! write that file outside Aggressive (a person, a command run with full
 //! access) can add one. That is no weaker than before, when every rule in it
@@ -35,29 +40,38 @@ use codex_execpolicy::RuleMatch;
 pub(crate) const APPROVED_UNDER_AGGRESSIVE: &str =
     "Remembered while security level Aggressive was active.";
 
-/// The prefixes the Corbanu home's `rules/default.rules` records as approved
-/// while Aggressive was active (the only file trusted to say so). A file that
-/// is missing or does not parse records none.
-pub(crate) async fn load_approved(config_stack: &ConfigLayerStack) -> Vec<Vec<String>> {
-    if config_stack.ignore_user_and_project_exec_policy_rules() {
-        return Vec::new();
+/// The prefixes (and, D52, the hosts of network `allow` rules) the Corbanu
+/// home's `rules/default.rules` records as approved while Aggressive was
+/// active (the only file trusted to say so), from one read. A file that is
+/// missing or does not parse records none.
+pub(crate) async fn load_approved(
+    config_stack: &ConfigLayerStack,
+) -> (Vec<Vec<String>>, Vec<String>) {
+    match read_home_rules(config_stack).await {
+        Some((path, contents)) => (
+            approved_in(&path, &contents),
+            approved_hosts_in(&path, &contents),
+        ),
+        None => (Vec::new(), Vec::new()),
     }
-    let Some(folder) = config_stack
+}
+
+/// The Corbanu home's `rules/default.rules`, when rules are read at all.
+async fn read_home_rules(config_stack: &ConfigLayerStack) -> Option<(std::path::PathBuf, String)> {
+    if config_stack.ignore_user_and_project_exec_policy_rules() {
+        return None;
+    }
+    let folder = config_stack
         .get_layers(
             ConfigLayerStackOrdering::LowestPrecedenceFirst,
             /*include_disabled*/ false,
         )
         .into_iter()
         .filter(|layer| matches!(layer.name, ConfigLayerSource::User { .. }))
-        .find_map(codex_config::ConfigLayerEntry::config_folder)
-    else {
-        return Vec::new();
-    };
+        .find_map(codex_config::ConfigLayerEntry::config_folder)?;
     let path = crate::exec_policy::default_policy_path(folder.as_path());
-    match tokio::fs::read_to_string(&path).await {
-        Ok(contents) => approved_in(&path, &contents),
-        Err(_) => Vec::new(),
-    }
+    let contents = tokio::fs::read_to_string(&path).await.ok()?;
+    Some((path, contents))
 }
 
 /// The prefixes of `contents`' `allow` prefix rules marked
@@ -83,6 +97,55 @@ pub(crate) fn approved_in(path: &Path, contents: &str) -> Vec<Vec<String>> {
     approved.sort();
     approved.dedup();
     approved
+}
+
+/// D52: the hosts of `contents`' network `allow` rules marked
+/// [`APPROVED_UNDER_AGGRESSIVE`].
+pub(crate) fn approved_hosts_in(path: &Path, contents: &str) -> Vec<String> {
+    let mut parser = PolicyParser::new();
+    if parser
+        .parse(&path.to_string_lossy(), contents)
+        .inspect_err(|err| {
+            tracing::warn!("network rules approved under Aggressive not read: {err}")
+        })
+        .is_err()
+    {
+        return Vec::new();
+    }
+    let mut hosts: Vec<String> = parser
+        .build()
+        .network_rules()
+        .iter()
+        .filter(|rule| network_rule_marked(rule.decision, rule.justification.as_deref()))
+        .map(|rule| rule.host.clone())
+        .collect();
+    hosts.sort();
+    hosts.dedup();
+    hosts
+}
+
+fn network_rule_marked(decision: Decision, justification: Option<&str>) -> bool {
+    decision == Decision::Allow && justification == Some(APPROVED_UNDER_AGGRESSIVE)
+}
+
+/// D52: `policy` without its network `allow` rules, except those marked
+/// [`APPROVED_UNDER_AGGRESSIVE`] whose host is in `approved_hosts`.
+pub(crate) fn suspend_unapproved_network(policy: &Policy, approved_hosts: &[String]) -> Policy {
+    let network_rules = policy
+        .network_rules()
+        .iter()
+        .filter(|rule| {
+            rule.decision != Decision::Allow
+                || (network_rule_marked(rule.decision, rule.justification.as_deref())
+                    && approved_hosts.contains(&rule.host))
+        })
+        .cloned()
+        .collect();
+    Policy::from_parts(
+        policy.rules().clone(),
+        network_rules,
+        policy.host_executables().clone(),
+    )
 }
 
 fn marked(rule: &PrefixRule) -> bool {

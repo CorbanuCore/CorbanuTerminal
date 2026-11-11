@@ -1,0 +1,13 @@
+{
+  "built_at": "2026-10-21T12:20:00Z",
+  "commit": "9750861c2a",
+  "branch": "main",
+  "what_is_new": "Main at #1211 (green): #1192 /status account line (D86), #1183/#1195 grammar phases 1-2, #1199/#1200 flakes, #1206 live check record, #1207 contributing/no CLA, #1209 plugin-sync git dies with TUI, #1211 Grant-once offers, contributor #1167 #1105 #1079 #1123 #1122, #1204/#1213/#1216 records.",
+  "signing_identity": "Developer ID Application: Travis Good (K5N2T25C23)",
+  "launcher_target": "/Volumes/CorbanuDrive/Corbanu/.codex-work/integration-build-20260922a/integration-package-dev/bin/corbanu",
+  "corbanu_sha256": "0de41e09da09c934fcf6db917e95a9948e107a918b02d804b1c0fa2d263cb5d7",
+  "developer_marker": true,
+  "build_target_dir": "/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/target-dev-active",
+  "previous_binary": "integration-package-dev/bin/corbanu.prev-2f9d05c51e",
+  "toolchain": "1.99.1"
+}

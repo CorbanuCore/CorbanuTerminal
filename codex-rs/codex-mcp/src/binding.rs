@@ -236,6 +236,12 @@ impl PreparedMcpCall {
             .tool_approval_mode(&self.tool_info.tool.name)
     }
 
+    /// The tool's approval mode without any `approve` setting (#1001 D52).
+    pub fn tool_approval_mode_without_approve(&self) -> AppToolApproval {
+        self.server_metadata
+            .tool_approval_mode_without_approve(&self.tool_info.tool.name)
+    }
+
     pub fn plugin_id(&self) -> Option<&str> {
         self.plugin_id.as_deref()
     }

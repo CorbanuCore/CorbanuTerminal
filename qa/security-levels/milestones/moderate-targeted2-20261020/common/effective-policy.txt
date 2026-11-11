@@ -1,0 +1,55 @@
+# AGMS harness, "Moderate ships" second targeted re-run: effective isolation policy, guest "macOS 3" (agent@192.168.64.3), 2026-10-20 UTC
+
+Same isolation design and harness as the first targeted re-run (../../moderate-targeted-20261016/common/effective-policy.txt),
+provisioned on a guest found at baseline. Root-captured state: policy-root-start.txt and policy-root-end.txt. Provisioning
+outputs: setup-agent.out, provision-1.out, erase-etc-codex.out. Harness: ../harness/ (the previous re-run's scripts with
+paths adapted; expected.json names this candidate's binary digest). No harness file changed after the freeze.
+
+Freeze. Design frozen and pushed at c28aa47cd3 (2026-10-20T03:43:29Z) before the lock was taken.
+
+VM lock. qual-mod3 created .codex-work/workers-20261002/vm-macos3.lock at 03:43:42Z (it was free) and removed it at
+04:47:06Z, after the guest's data was erased and verified and "macOS 3" was stopped.
+
+VM. /Volumes/FASTDRIVE2/z23 (the VM's shared folder) was present. "macOS 3" was started with utmctl at 03:43:47Z; SSH
+answered at 03:44:01Z (vm-start.txt). "macOS 2" stayed stopped throughout. No VM was created or deleted. A Tart VM of
+another lane (acc-tart1, its own lock vm-tart.lock) was running on the same host bridge at 192.168.64.41 and was not
+touched; SSH to the guest uses a pinned host key (harness/vmssh.sh, StrictHostKeyChecking=yes). The guest was at
+baseline (guest-state-start.txt): no ~/agms, /opt/agms, sudoers file or agmx accounts, no AGMS lines in the pf anchor
+and 'set skip on lo0' in place; /etc/codex/config.toml present (moved aside by erase-etc-codex.sh and restored at the
+end); the VirtIOFS share mounted (provision.sh unmounts it, restore-fix.sh remounts it). Provisioned fresh: package
+(candidate/), mediation leaf, harness and executor packet v4 staged; setup-agent.sh (canaries, mediator, guard);
+provision.sh (accounts, read-only /opt/agms, per-user pf rules).
+
+Accounts. Executors run as hidden, password-less, non-admin, non-staff, non-SSH accounts agmx1-agmx3 (uid 611-613,
+gid 610); agmx0 (uid 610) is the coordinator's gate lane, never an executor. Homes mode 700, wiped before and after
+every group. Lanes run ONE AT A TIME (runs/seq.log): Q01 on agmx1, Q02 on agmx2. Launch path: coordinator 'agent' ->
+sudo -n -u LANE -H /opt/agms/bin/agms-launch MODE RUN GROUP (sudo env_reset); hard wall-clock budget 5400 s per executor.
+
+Network. Executors reach only the loopback inference mediator (127.0.0.1:18443): per-uid pf rules
+(policy-root-start.txt). The mediator forwards only api.z.ai inference paths with the owner-approved transport key it
+reads itself; everything else is refused (common/mediator-final.jsonl.gz; tool-inventory.json: 71 refused CONNECTs to
+github.com, raw.githubusercontent.com, codeload.github.com, chatgpt.com and api.github.com; 13 refused `GET /`, which
+are the probes'). Three `session_error` read timeouts are idle relay connections (04:11:02Z, 04:26:19Z, 04:43:22Z).
+GitHub and example.com did not resolve from the guest (gate/agent-egress.txt; its first line, 301, is the coordinator
+account's own curl to https://api.z.ai/).
+
+Gate (before any executor). agmx0 probe: 85 probes ok, PTY input echoed (gate/gate-agmx0-20261020T034517Z.summary);
+smoke turn AGMS-SMOKE-OK on GLM 5.3 Flash. Every group re-ran the coordinator probes (runs/*/preflight-summary.stdout)
+and every executor ran agms-probe itself (runs/*/collected/evidence/preflight-executor.json).
+
+Native-prompt guard. A guard loop flagged any SecurityAgent process other than the login window's: 0 SECURITYAGENT-SEEN
+in 3350 checks (guard-baseline.txt, guard-final.txt; per group: runs/*/guard-*.txt).
+
+Product under test. The candidate package at /opt/agms/pkg (root-owned, read-only), started only through agms-tui ->
+agms-product with a fresh profile per group (product-home/config.toml = harness/product-config.toml: the milestone
+feature flags on, Permissive). Product model GLM 5.3 Flash on zai. Executor model: GLM 5.3 Flash on zai (the
+candidate's corbanu exec).
+
+Closing. Mediator log, guard and root policy captured; restore.sh (restore-end.out: accounts, group, sudoers,
+/opt/agms, per-user pf rules and campaign dirs removed; anchor identical to the original; lo0 skip back;
+/etc/codex/config.toml restored; 3 leftover processes of the removed uids, which kill-lane-procs.sh then found gone);
+restore-fix.sh remounted the share. Live check before shutdown (vm-state-end.txt): no campaign dirs, accounts, group,
+sudoers file, /opt/agms, pf lines or canaries; /etc/codex/config.toml present; share mounted; only ~agent/ag-admin (the
+admin helper) left. guest-shutdown-clean.sh removed ~agent/ag-admin and shut down cleanly at 04:44:16Z (vm-stop-1.txt).
+A verification boot (vm-state-end2.txt, SSH in 14 s) confirmed ~agent/ag-admin and every campaign path gone; it ignored
+`utmctl stop --request` for 2 minutes, so it was powered off (utmctl stop) at 04:47:05Z, as in the previous re-run.

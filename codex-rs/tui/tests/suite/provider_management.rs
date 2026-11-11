@@ -9,8 +9,6 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::ensure;
 use core_test_support::responses;
-use sha2::Digest;
-use sha2::Sha256;
 use tempfile::tempdir;
 use uuid::Uuid;
 use wiremock::Mock;
@@ -19,6 +17,8 @@ use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
+use crate::support::chat_ready::session_configured;
+use crate::support::file_hash::sha256_file;
 use crate::support::secret_scan;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
@@ -90,6 +90,7 @@ async fn tmux_astra_selection_cancel_restart_and_request() -> Result<()> {
         let pane = session.primary_pane();
         wait_chat_ready(pane)?;
         if !restart {
+            wait_session_configured(pane)?;
             let before = fs::read_to_string(&config_path)?;
             open_model_picker(pane)?;
             pane.wait_stable_contains("GPT-5.6-Sol", READY_TIMEOUT)?;
@@ -221,6 +222,7 @@ async fn tmux_ambient_model_picker_offers_only_glm() -> Result<()> {
     ))?;
     let pane = session.primary_pane();
     wait_chat_ready(pane)?;
+    wait_session_configured(pane)?;
     for _ in 0..2 {
         open_model_picker(pane)?;
         pane.wait_stable_contains("[Ambient]", READY_TIMEOUT)?;
@@ -469,6 +471,7 @@ async fn tmux_noncurrent_deactivate_reactivate_restart_retains_request_credentia
     let first = tmux.new_session(fixture.session("pf54-retention-first"))?;
     let pane = first.primary_pane();
     wait_chat_ready(pane)?;
+    wait_session_configured(pane)?;
     configure_managed_provider(pane, fixture.home.path(), &canary)?;
     open_manager(pane)?;
     select_label(pane, "PF54 Managed")?;
@@ -487,6 +490,7 @@ async fn tmux_noncurrent_deactivate_reactivate_restart_retains_request_credentia
     let second = tmux.new_session(fixture.session("pf54-retention-reactivate"))?;
     let pane = second.primary_pane();
     wait_chat_ready(pane)?;
+    wait_session_configured(pane)?;
     open_manager(pane)?;
     inspect_provider(pane, "PF54 Managed", "Inactive")?;
     open_model_picker(pane)?;
@@ -879,6 +883,20 @@ fn wait_chat_ready(pane: &TmuxPane<'_>) -> Result<()> {
     Ok(())
 }
 
+/// The footer `wait_chat_ready` accepts is drawn before the session is configured, and a
+/// `/model` entered in that window is either refused ("disabled until startup completes") or
+/// queued, depending on keystroke timing (#1748). Before the first `/model`, wait for the
+/// header to show the configured model; call this right after startup, while the header is
+/// still in the viewport.
+fn wait_session_configured(pane: &TmuxPane<'_>) -> Result<()> {
+    pane.wait_stable_until(
+        "configured session header",
+        READY_TIMEOUT,
+        session_configured,
+    )?;
+    Ok(())
+}
+
 fn chat_footer_visible(capture: &str) -> bool {
     capture
         .lines()
@@ -1086,7 +1104,7 @@ fn register_evidence(tmux: &TmuxServer, home: &Path, binary: &Path) -> Result<()
         .modified()?
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
-    let hash = format!("{:x}", Sha256::digest(fs::read(binary)?));
+    let hash = sha256_file(binary)?;
     fs::write(
         home.join("binary.sha256"),
         format!("{hash}  {}\n", binary.display()),

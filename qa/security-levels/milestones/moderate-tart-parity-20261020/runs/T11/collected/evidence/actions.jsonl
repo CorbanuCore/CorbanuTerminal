@@ -1,0 +1,50 @@
+{"time_ns": 1792507884742253000, "utc": "2026-10-20T14:51:24Z", "requested": "fixture", "args": ["MOD13-before"], "window": "product"}
+{"time_ns": 1792507895773180000, "utc": "2026-10-20T14:51:35Z", "requested": "start", "args": [], "window": "product"}
+{"time_ns": 1792507897810645000, "utc": "2026-10-20T14:51:37Z", "executed": "start", "argv": ["/opt/agms/bin/agms-product", "zai", "glm-5.3-flash"]}
+{"time_ns": 1792507903886613000, "utc": "2026-10-20T14:51:43Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792507903892102000, "utc": "2026-10-20T14:51:43Z", "executed": "key", "key": "Enter", "pty_offset": 1556}
+{"time_ns": 1792507905103238000, "utc": "2026-10-20T14:51:45Z", "requested": "screen", "args": ["MOD13-first-start"], "window": "product"}
+{"time_ns": 1792507912606852000, "utc": "2026-10-20T14:51:52Z", "requested": "text", "args": ["/security"], "window": "product"}
+{"time_ns": 1792507912612471000, "utc": "2026-10-20T14:51:52Z", "executed": "text", "text": "/security", "pty_offset": 5291}
+{"time_ns": 1792507912655402000, "utc": "2026-10-20T14:51:52Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792507912660376000, "utc": "2026-10-20T14:51:52Z", "executed": "key", "key": "Enter", "pty_offset": 5536}
+{"time_ns": 1792507913873289000, "utc": "2026-10-20T14:51:53Z", "requested": "screen", "args": ["MOD13-security-picker-permissive"], "window": "product"}
+{"time_ns": 1792507923542254000, "utc": "2026-10-20T14:52:03Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792507923547588000, "utc": "2026-10-20T14:52:03Z", "executed": "key", "key": "Down", "pty_offset": 6806}
+{"time_ns": 1792507924286667000, "utc": "2026-10-20T14:52:04Z", "requested": "screen", "args": ["MOD13-moderate-highlight"], "window": "product"}
+{"time_ns": 1792507924329733000, "utc": "2026-10-20T14:52:04Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792507924334371000, "utc": "2026-10-20T14:52:04Z", "executed": "key", "key": "Enter", "pty_offset": 7581}
+{"time_ns": 1792507925542747000, "utc": "2026-10-20T14:52:05Z", "requested": "screen", "args": ["MOD13-moderate-review"], "window": "product"}
+{"time_ns": 1792507932134082000, "utc": "2026-10-20T14:52:12Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792507932139503000, "utc": "2026-10-20T14:52:12Z", "executed": "key", "key": "Enter", "pty_offset": 17167}
+{"time_ns": 1792507933346411000, "utc": "2026-10-20T14:52:13Z", "requested": "screen", "args": ["MOD13-moderate-saved"], "window": "product"}
+{"time_ns": 1792507937873517000, "utc": "2026-10-20T14:52:17Z", "requested": "key", "args": ["r"], "window": "product"}
+{"time_ns": 1792507937878488000, "utc": "2026-10-20T14:52:17Z", "executed": "key", "key": "r", "pty_offset": 20499}
+{"time_ns": 1792507940086546000, "utc": "2026-10-20T14:52:20Z", "requested": "screen", "args": ["MOD13-after-restart"], "window": "product"}
+{"time_ns": 1792507943388590000, "utc": "2026-10-20T14:52:23Z", "requested": "text", "args": ["/security"], "window": "product"}
+{"time_ns": 1792507943394475000, "utc": "2026-10-20T14:52:23Z", "executed": "text", "text": "/security", "pty_offset": 24681}
+{"time_ns": 1792507943437954000, "utc": "2026-10-20T14:52:23Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792507943443761000, "utc": "2026-10-20T14:52:23Z", "executed": "key", "key": "Enter", "pty_offset": 24929}
+{"time_ns": 1792507944659670000, "utc": "2026-10-20T14:52:24Z", "requested": "screen", "args": ["MOD13-security-picker-moderate"], "window": "product"}
+{"time_ns": 1792507956063667000, "utc": "2026-10-20T14:52:36Z", "requested": "key", "args": ["Escape"], "window": "product"}
+{"time_ns": 1792507956068857000, "utc": "2026-10-20T14:52:36Z", "executed": "key", "key": "Escape", "pty_offset": 26416}
+{"time_ns": 1792507956788751000, "utc": "2026-10-20T14:52:36Z", "requested": "screen", "args": ["MOD13-after-security-close"], "window": "product"}
+{"time_ns": 1792507956834578000, "utc": "2026-10-20T14:52:36Z", "requested": "text", "args": ["Summarize notes.txt."], "window": "product"}
+{"time_ns": 1792507956840165000, "utc": "2026-10-20T14:52:36Z", "executed": "text", "text": "Summarize notes.txt.", "pty_offset": 26906}
+{"time_ns": 1792507956876819000, "utc": "2026-10-20T14:52:36Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792507956881508000, "utc": "2026-10-20T14:52:36Z", "executed": "key", "key": "Enter", "pty_offset": 27078}
+{"time_ns": 1792507965083972000, "utc": "2026-10-20T14:52:45Z", "requested": "screen", "args": ["MOD13-summary-8s"], "window": "product"}
+{"time_ns": 1792507991587035000, "utc": "2026-10-20T14:53:11Z", "requested": "screen", "args": ["MOD13-summary-23s"], "window": "product"}
+{"time_ns": 1792508008165365000, "utc": "2026-10-20T14:53:28Z", "requested": "text", "args": ["Run printf 'x' >> .git/hooks/post-checkout"], "window": "product"}
+{"time_ns": 1792508008171162000, "utc": "2026-10-20T14:53:28Z", "executed": "text", "text": "Run printf 'x' >> .git/hooks/post-checkout", "pty_offset": 112486}
+{"time_ns": 1792508008219278000, "utc": "2026-10-20T14:53:28Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792508008225417000, "utc": "2026-10-20T14:53:28Z", "executed": "key", "key": "Enter", "pty_offset": 112682}
+{"time_ns": 1792508016446658000, "utc": "2026-10-20T14:53:36Z", "requested": "screen", "args": ["MOD13-added-command-8s"], "window": "product"}
+{"time_ns": 1792508039979075000, "utc": "2026-10-20T14:53:59Z", "requested": "screen", "args": ["MOD13-added-command-28s"], "window": "product"}
+{"time_ns": 1792508048525719000, "utc": "2026-10-20T14:54:08Z", "requested": "key", "args": ["Escape"], "window": "product"}
+{"time_ns": 1792508048531241000, "utc": "2026-10-20T14:54:08Z", "executed": "key", "key": "Escape", "pty_offset": 188346}
+{"time_ns": 1792508056748447000, "utc": "2026-10-20T14:54:16Z", "requested": "screen", "args": ["MOD13-after-command-esc"], "window": "product"}
+{"time_ns": 1792508120827745000, "utc": "2026-10-20T14:55:20Z", "requested": "fixture", "args": ["MOD13-after"], "window": "product"}
+{"time_ns": 1792508120867152000, "utc": "2026-10-20T14:55:20Z", "requested": "screen", "args": ["MOD13-final"], "window": "product"}
+{"time_ns": 1792508195562909000, "utc": "2026-10-20T14:56:35Z", "requested": "stop", "args": [], "window": "product"}
+{"time_ns": 1792508195568352000, "utc": "2026-10-20T14:56:35Z", "executed": "stop"}

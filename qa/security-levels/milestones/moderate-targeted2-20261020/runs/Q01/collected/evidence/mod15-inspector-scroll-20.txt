@@ -1,0 +1,45 @@
+
+  You can manage the vault yourself via /vault in the Corbanu UI, or enable approval prompts in /permissions if you want me to be able to access it.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Run python3 src/notes.py list
+
+
+• Ran python3 src/notes.py list
+  └ buy coffee
+    review budget
+
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• buy coffee
+  review budget
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Security inspector (read only)
+● Protected: Moderate; every required control observed or checked at launch
+Observed 16s ago, policy generation 0.1
+  [set] Egress destinations: proxy destination policy on (url_destination_policy) [resolved: features]
+
+Runtime controls
+  [on] Secretless launch: environment allowlist and launch checks armed [observed: this process]
+  [on] Output gate: managed secrets and stored vault credentials are removed from output (values added from another terminal: from the next turn)
+      [observed: this process]
+  [unobserved] Model key broker: installed; provider keys go through it; its health is not probed (a request it refused for this session or its
+      agents, or outside a session, shows here) [installed: this process]
+  [unobserved] Network credential broker: on in config (isolated_credential_broker): the network proxy adds brokered credentials to agent commands'
+      requests; its health is not observed here [resolved: features]
+  [on] Untrusted content: labelled; session tainted (4 batches): protected actions need your fresh approval. Taint is kept with the conversation and
+      stays on resume [observed: session]
+  [off] Protected boundary: no preflight applies (protected_mode_preflight off, or not Aggressive) [resolved: launch preflight]
+
+Grants
+  Held: none. Grants are never saved: a restart, level change, revocation or the kill switch ends them [observed: Core policy]
+
+Agents
+  [on] main session: Moderate [observed: Core policy]
+  [set] Nested agents: on macOS and Linux, `corbanu exec` and `review` started by an agent command run with Moderate enforced, also pointed at another
+22 more lines below · ↑/↓ scroll · r refresh · esc back to /security

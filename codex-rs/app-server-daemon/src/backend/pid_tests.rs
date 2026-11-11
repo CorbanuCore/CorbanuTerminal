@@ -1,4 +1,7 @@
 use std::process::Stdio;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use pretty_assertions::assert_eq;
@@ -84,15 +87,27 @@ async fn stop_waits_for_live_reservation_to_resolve() {
         .await
         .expect("open pid lock file");
     assert!(try_lock_file(&reservation).expect("lock reservation"));
-    let cleanup = tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        drop(reservation);
-        tokio::fs::remove_file(pid_file)
-            .await
-            .expect("remove pid file");
+    let released = Arc::new(AtomicBool::new(false));
+    let cleanup = tokio::spawn({
+        let released = Arc::clone(&released);
+        async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            // #349: the starter gives up its reservation: it removes the pid
+            // file while it still holds the lock, then releases it. (Released
+            // first, `stop` itself could remove the then stale empty pid file.)
+            tokio::fs::remove_file(pid_file)
+                .await
+                .expect("remove pid file");
+            released.store(true, Ordering::SeqCst);
+            drop(reservation);
+        }
     });
 
     backend.stop().await.expect("stop");
+    assert!(
+        released.load(Ordering::SeqCst),
+        "stop returned while the reservation was live"
+    );
     cleanup.await.expect("cleanup task");
 }
 

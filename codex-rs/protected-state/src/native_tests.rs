@@ -360,7 +360,7 @@ fn pf27_root_compat_both_entries_cas_and_death() {
         let client = NativeAnchorClient::from_authenticated_stream(client).unwrap();
         assert_eq!(client.load(), Ok(None));
         let next = relay_checkpoint();
-        client.compare_and_store(None, &next).unwrap();
+        client.compare_and_store(/*expected*/ None, &next).unwrap();
         assert_eq!(client.load(), Ok(Some(next.clone())));
         control.write_all(b"x").unwrap();
         assert!(worker.join().unwrap().is_err());

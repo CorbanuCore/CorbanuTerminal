@@ -7,6 +7,8 @@ Travis's named sign-off.**
 
 ## Result
 
+- **Update 2026-10-20:** MOD-15 and MOD-28 were re-run and the owner's decisions D39, D41 and D43 applied in
+  [../moderate-targeted2-20261020/](../moderate-targeted2-20261020/), which has the current totals for all 34 cases.
 - **This run, 17 cases:** 12 passed, 2 failed, 3 blocked ([dispositions.md](dispositions.md), [results.json](results.json)).
 - **All 34 combined** (this run where re-run, the first run otherwise): **28 passed, 2 failed, 3 blocked, 1 pending
   owner decision** (MOD-11; MOD-06's git-commit part is pending too). Blockers: 22 passed, 1 failed, 2 blocked, 1 pending

@@ -1,0 +1,39 @@
+$ corbanu exec --account t1 (default model gpt-6-sol)
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: <L>/work
+model: gpt-6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: none
+reasoning summaries: none
+session id: 01a15d9e-d6dc-7af3-9798-0845cee8645f
+--------
+user
+Reply with exactly: PF84-LIVE-OK
+ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'gpt-6-sol' model is not supported when using Codex with a ChatGPT account."}}
+ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'gpt-6-sol' model is not supported when using Codex with a ChatGPT account."}}
+
+$ corbanu exec --account t1 -m gpt-5.6-luna
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: <L>/work
+model: gpt-5.6-luna
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: none
+reasoning summaries: none
+session id: 01a15d9f-346e-7373-933b-2e71fdd9d1d0
+--------
+user
+Reply with exactly: PF84-LIVE-OK
+corbanu
+PF84-LIVE-OK
+tokens used
+12,111
+[stdout]
+PF84-LIVE-OK

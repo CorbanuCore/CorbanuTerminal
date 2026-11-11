@@ -65,10 +65,28 @@ A reviewable pull request includes:
 - a focused explanation of the user outcome;
 - final-tree test results;
 - true-TUI and live-repository evidence when required;
-- documentation changes; and
+- documentation changes;
+- a release-note fragment for a change users will notice (see below); and
 - any release blocker that remains.
 
+### Release notes
+
+Add a fragment file under `qa/release/unreleased/notes/`, named
+`<pr-or-issue-number>-<short-slug>.md`, that starts with a `## ` section
+heading (copy an existing heading to add to that section). Don't edit a
+shared release-notes file: there isn't one, and CI fails if
+`qa/release/unreleased/RELEASE_NOTES.md` comes back. Details and the checker:
+[`qa/release/unreleased/README.md`](../qa/release/unreleased/README.md).
+
 Do not mark work complete while required evidence is missing.
+
+## Licence of contributions
+
+Corbanu Terminal is licensed under [Apache-2.0](license.md), and contributions
+come in under the same licence: anything you submit for inclusion is licensed
+under Apache-2.0 unless you explicitly say otherwise (section 5 of the
+licence). There is no contributor licence agreement (CLA) to sign, and a DCO
+`Signed-off-by` line is not required.
 
 ## Security reports
 

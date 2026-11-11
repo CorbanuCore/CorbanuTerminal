@@ -368,6 +368,9 @@ impl ChatWidget {
             SlashCommand::Security => {
                 let core = crate::bottom_pane::security_level_picker::CoreLevels {
                     thread: self.thread_id(),
+                    // #1047: a remote app server (or the local daemon) runs
+                    // this window's sessions in its own process.
+                    sessions_in_this_process: self.remote_connection.is_none(),
                     configured: crate::legacy_core::security_level_change::configured_level(
                         &self.config,
                     ),
@@ -411,6 +414,10 @@ impl ChatWidget {
                     ))
                     .with_before_restart(|| crate::security::current::before_restart(&self.config))
                     .with_windows_sandbox_steps(windows_sandbox_steps)
+                    .with_aggressive_home_link(crate::security::home_link::aggressive_blocker(
+                        &self.config.codex_home,
+                        self.config.cwd.as_path(),
+                    ))
                     .with_inspector(|| {
                         crate::security::inspector::InspectorInput::from_config(
                             &self.config,

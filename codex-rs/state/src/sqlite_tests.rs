@@ -359,9 +359,6 @@ async fn a_leftover_read_only_placeholder_becomes_the_lock() -> anyhow::Result<(
 #[tokio::test]
 async fn the_init_lock_is_released_while_a_forked_child_holds_its_descriptor() -> anyhow::Result<()>
 {
-    use std::io::Read;
-    use std::io::Write;
-    use std::os::unix::process::CommandExt;
     let sqlite_home = crate::runtime::test_support::unique_temp_dir();
     tokio::fs::create_dir_all(&sqlite_home).await?;
     let _cleanup = scopeguard::guard(sqlite_home.clone(), |sqlite_home| {
@@ -372,23 +369,8 @@ async fn the_init_lock_is_released_while_a_forked_child_holds_its_descriptor() -
     assert!(held._file.is_some(), "the lock is held");
 
     // A child forked now has a copy of every descriptor, the lock's too, until
-    // it starts its program; this one waits 2 s first and reports the fork.
-    let (mut forked, mut forked_tx) = std::io::pipe()?;
-    let spawner = std::thread::spawn(move || {
-        let mut command = std::process::Command::new("/bin/sh");
-        command.args(["-c", "exit 0"]);
-        // SAFETY: the hook only writes to a pipe and sleeps, both safe after fork.
-        unsafe {
-            command.pre_exec(move || {
-                forked_tx.write_all(b"f")?;
-                std::thread::sleep(Duration::from_secs(2));
-                Ok(())
-            });
-        }
-        command.status()
-    });
-    let mut byte = [0; 1];
-    forked.read_exact(&mut byte)?;
+    // it starts its program; this one keeps its copy open until `release`.
+    let (release, spawner) = crate::runtime::test_support::fork_child_holding_descriptors()?;
 
     let other = std::fs::OpenOptions::new()
         .read(true)
@@ -400,6 +382,7 @@ async fn the_init_lock_is_released_while_a_forked_child_holds_its_descriptor() -
         other.try_lock().is_ok(),
         "the dropped lock is still held through the forked child's copy"
     );
+    drop(release);
     let status = spawner.join().expect("spawner thread")?;
     assert!(status.success(), "{status:?}");
     Ok(())

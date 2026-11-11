@@ -36,6 +36,23 @@ fn unified_exec_env_overrides_existing_values() {
     assert_eq!(env.get("PATH"), Some(&"/usr/bin".to_string()));
 }
 
+/// #1805: Windows names ignore case, so an inherited `Pager` must not stay
+/// beside the `PAGER` unified exec sets.
+#[cfg(windows)]
+#[test]
+fn unified_exec_env_replaces_other_spellings_on_windows() {
+    let base = HashMap::from([
+        ("Pager".to_string(), "less".to_string()),
+        ("Path".to_string(), "C:\\tools".to_string()),
+    ]);
+
+    let env = apply_unified_exec_env(base);
+
+    assert_eq!(env.get("PAGER"), Some(&"cat".to_string()));
+    assert_eq!(env.get("Pager"), None);
+    assert_eq!(env.get("Path"), Some(&"C:\\tools".to_string()));
+}
+
 #[test]
 fn env_overlay_for_exec_server_keeps_runtime_changes_only() {
     let local_policy_env = HashMap::from([
@@ -272,7 +289,7 @@ async fn output_collection_stays_bounded_across_repeated_drains() {
         Instant::now() + Duration::from_secs(5),
     );
     let produce = async {
-        for byte in [b'a', b'b', b'c'] {
+        for byte in *b"abc" {
             output_buffer.lock().await.push_chunk(
                 vec![byte; crate::unified_exec::UNIFIED_EXEC_OUTPUT_MAX_BYTES],
             );
@@ -297,7 +314,7 @@ async fn output_collection_stays_bounded_across_repeated_drains() {
 
     let (collected, ()) = tokio::join!(collect, produce);
     let mut expected = HeadTailBuffer::default();
-    for byte in [b'a', b'b', b'c'] {
+    for byte in *b"abc" {
         expected.push_chunk(vec![
             byte;
             crate::unified_exec::UNIFIED_EXEC_OUTPUT_MAX_BYTES
@@ -401,6 +418,7 @@ async fn failed_initial_end_for_unstored_process_uses_fallback_output() {
         additional_permissions_preapproved: false,
         justification: None,
         prefix_rule: None,
+        handler_basis: None,
     };
 
     let transcript = Arc::new(tokio::sync::Mutex::new(HeadTailBuffer::default()));
@@ -563,6 +581,7 @@ async fn pruning_does_not_evict_live_process_while_exited_process_is_finalizing(
                 } else {
                     now
                 },
+                windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
             },
         );
     }

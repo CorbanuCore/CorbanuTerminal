@@ -115,3 +115,68 @@ async fn the_session_manager_follows_the_sessions_and_never_falls_back_to_the_de
     base.register_configured_sign_in(SessionSignIn::Default);
     assert!(Arc::ptr_eq(&base.for_session().expect("default"), &base));
 }
+
+/// #1085: a server that starts on the default login because its home had no
+/// named account holds requests outside a conversation for good once a
+/// session on a named account (one enrolled while it runs) registers, so
+/// leaving that session never falls back to the default login.
+#[tokio::test]
+async fn a_server_held_once_named_never_falls_back_after_a_named_session() {
+    let home = tempfile::tempdir().expect("home");
+    login_named_account_with_api_key(home.path(), &account("work"), "sk-canary-work")
+        .expect("sign-in");
+    let base = AuthManager::from_auth_for_testing_with_home(
+        CodexAuth::from_api_key("sk-canary-default"),
+        home.path().to_path_buf(),
+    );
+    base.register_configured_sign_in(SessionSignIn::Default);
+    base.hold_configured_sign_in_once_named();
+    // No named session yet: the default login, as with named accounts off.
+    assert_eq!(
+        key(base.for_session()).await.as_deref(),
+        Some("sk-canary-default")
+    );
+    // A session on the default login does not hold.
+    let default_pane = base.register_session_sign_in(SessionSignIn::Default);
+    drop(default_pane);
+    assert_eq!(
+        key(base.for_session()).await.as_deref(),
+        Some("sk-canary-default")
+    );
+
+    let work = base.register_session_sign_in(SessionSignIn::Named(account("work")));
+    assert_eq!(
+        key(base.for_session()).await.as_deref(),
+        Some("sk-canary-work")
+    );
+    // Left: nothing, never the default login.
+    work.set_attached(/*attached*/ false);
+    assert!(base.for_session().is_none());
+    drop(work);
+    assert!(base.session_account_unknown());
+
+    // A mid-session switch to a named account holds too.
+    let other = tempfile::tempdir().expect("home");
+    let other_base = AuthManager::from_auth_for_testing_with_home(
+        CodexAuth::from_api_key("sk-canary-default"),
+        other.path().to_path_buf(),
+    );
+    other_base.register_configured_sign_in(SessionSignIn::Default);
+    other_base.hold_configured_sign_in_once_named();
+    let pane = other_base.register_session_sign_in(SessionSignIn::Default);
+    pane.update(SessionSignIn::Named(account("work")));
+    drop(pane);
+    assert!(other_base.session_account_unknown());
+
+    // Held after a named session already registered: it holds at once.
+    let late = tempfile::tempdir().expect("home");
+    let late_base = AuthManager::from_auth_for_testing_with_home(
+        CodexAuth::from_api_key("sk-canary-default"),
+        late.path().to_path_buf(),
+    );
+    late_base.register_configured_sign_in(SessionSignIn::Default);
+    let named = late_base.register_session_sign_in(SessionSignIn::Named(account("work")));
+    late_base.hold_configured_sign_in_once_named();
+    drop(named);
+    assert!(late_base.session_account_unknown());
+}

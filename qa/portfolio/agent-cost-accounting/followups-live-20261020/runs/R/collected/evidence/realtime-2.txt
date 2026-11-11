@@ -1,0 +1,14 @@
+argv: ['/opt/agms/bin/agms-product', '--realtime', 'openai', 'gpt-6-luna', 'Reply with the single word OK.']
+exit: 0
+--- stdout
+[agms] API-key sign-in with the synthetic placeholder (exit 0); output in evidence/realtime-sign-in.txt
+start: thread/realtime/started
+item: {"id": "item_EavgrozV47wOSyEW7VuEP", "type": "message", "status": "completed", "role": "user", "content": [{"type": "input_text", "text": "[BACKEND] Reply with the single word OK."}]}
+item: {"id": "item_EavgrKcBMjkoKzOJqPYxV", "type": "message", "status": "in_progress", "role": "assistant", "content": []}
+reply end: thread/realtime/transcript/done
+reply text: OK
+thread: 01a1578d-d2d0-75d2-9eba-03a3b89ed294
+methods seen: ['remoteControl/status/changed', 'thread/realtime/closed', 'thread/realtime/itemAdded', 'thread/realtime/started', 'thread/realtime/transcript/delta', 'thread/realtime/transcript/done', 'thread/started']
+
+--- stderr
+

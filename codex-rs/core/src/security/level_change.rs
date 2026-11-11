@@ -130,9 +130,18 @@ impl LevelBasis {
 /// #978: whether sessions of this process run on `codex_home`, so a
 /// confirmation reaches them now even when the confirming session's own
 /// policy does not run here (no thread yet). False with a
-/// remote app server: its sessions run in another process.
-pub fn sessions_run_here(codex_home: &Path) -> bool {
-    super::transition::trees_run_on(codex_home)
+/// remote app server: its sessions run in another process. #1015: sessions
+/// other than `thread`'s, whose policy is initialized.
+pub fn sessions_run_here(codex_home: &Path, thread: Option<ThreadId>) -> bool {
+    super::transition::trees_run_on(codex_home, thread)
+}
+
+/// #807: the strictest level in force now in the live policy of the
+/// sessions of this process on `codex_home` (also right after a person
+/// confirms a level in `/security`); `None` when none runs here (no session
+/// yet, or a remote app server).
+pub fn strictest_live_level(codex_home: &Path) -> Option<SecurityLevel> {
+    super::transition::strictest_live_level(codex_home)
 }
 
 /// Whether a downgrade to `target` rewrites `[security] level` in the user's

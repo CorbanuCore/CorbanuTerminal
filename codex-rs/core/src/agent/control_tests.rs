@@ -79,6 +79,7 @@ async fn test_config_with_cli_overrides(
     }
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cli_overrides(cli_overrides)
         .build()
         .await
@@ -1023,6 +1024,27 @@ async fn wait_for_subagent_notification(parent_thread: &Arc<CodexThread>) -> boo
     timeout(Duration::from_secs(10), wait).await.is_ok()
 }
 
+/// Waits until a spawned child's initial turn has fully ended (status settled, active turn
+/// cleared). A still-running turn drains queued mailbox mail and applies it concurrently with
+/// a test that drives mailbox phases by hand.
+async fn wait_for_initial_turn_to_finish(thread: &Arc<CodexThread>) {
+    let wait = async {
+        loop {
+            let settled = !matches!(
+                thread.agent_status().await,
+                AgentStatus::PendingInit | AgentStatus::Running
+            );
+            if settled && thread.session.active_turn.lock().await.is_none() {
+                return;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+    };
+    timeout(Duration::from_secs(10), wait)
+        .await
+        .expect("child's initial turn should finish");
+}
+
 async fn persist_thread_for_tree_resume(thread: &Arc<CodexThread>, message: &str) {
     thread
         .inject_user_message_without_turn(message.to_string())
@@ -1464,6 +1486,891 @@ async fn durable_agent_mailbox_deduplicates_and_completes_after_rollout_flush() 
     );
 }
 
+/// A turn that runs until it is cancelled, so mail handed to its thread meanwhile is applied
+/// inside it.
+#[derive(Clone, Copy)]
+struct Issue1058RunningTurn;
+
+impl crate::tasks::SessionTask for Issue1058RunningTurn {
+    fn kind(&self) -> crate::state::TaskKind {
+        crate::state::TaskKind::Regular
+    }
+
+    fn span_name(&self) -> &'static str {
+        "session_task.issue_1058_running_turn"
+    }
+
+    async fn run(
+        self: Arc<Self>,
+        _session: Arc<crate::tasks::SessionTaskContext>,
+        _ctx: Arc<crate::session::turn_context::TurnContext>,
+        _input: Vec<crate::session::TurnInput>,
+        cancellation_token: tokio_util::sync::CancellationToken,
+    ) -> crate::tasks::SessionTaskResult {
+        cancellation_token.cancelled().await;
+        Ok(None)
+    }
+}
+
+/// #1058: a running turn can apply agent mail as soon as the mail is handed to its thread. The
+/// sender is held at its hand-off (`send_op` locks the captured-ops log right before it submits
+/// the op) while the running turn applies the message, then released. The message must not be
+/// left `Submitted` while the turn runs it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn issue1058_mail_applied_by_a_running_turn_is_not_left_submitted() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::Sqlite);
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (thread_id, thread) = harness.start_thread().await;
+    let session = Arc::clone(&thread.codex.session);
+    let turn_context = session.new_default_turn().await;
+    session
+        .spawn_task(Arc::clone(&turn_context), Vec::new(), Issue1058RunningTurn)
+        .await;
+    let communication = InterAgentCommunication::new(
+        AgentPath::root(),
+        AgentPath::try_from("/root/worker").expect("agent path"),
+        Vec::new(),
+        "applied by the running turn".to_string(),
+        /*trigger_turn*/ false,
+    );
+    let message_id = communication.message_id.clone().expect("stable message id");
+    let state_db = harness.state_db.clone().expect("state db");
+    let phase = async |state_db: &StateDbHandle| {
+        state_db
+            .get_agent_message(&message_id)
+            .await
+            .expect("mailbox lookup")
+            .map(|row| row.phase)
+    };
+
+    let ops_log = harness
+        .manager
+        .ops_log_for_tests()
+        .expect("the test thread manager captures ops");
+    let (held_tx, held_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+    let holder = std::thread::spawn(move || {
+        let _hand_off = ops_log
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        held_tx.send(()).expect("report the hand-off held");
+        let _ = release_rx.recv();
+    });
+    held_rx.recv().expect("hand-off held");
+
+    let control = harness.control.clone();
+    let sent = communication.clone();
+    let send = tokio::spawn(async move {
+        control
+            .send_inter_agent_communication(
+                thread_id,
+                sent,
+                AgentCommunicationContext::new(AgentCommunicationKind::Message, thread_id),
+                /*parent_turn_id*/ None,
+            )
+            .await
+    });
+
+    // The sender cannot pass the hand-off, so its delivery attempt stays reserved here.
+    timeout(Duration::from_secs(10), async {
+        while !matches!(
+            phase(&state_db).await,
+            Some(
+                codex_state::AgentMailboxPhase::Submitting
+                    | codex_state::AgentMailboxPhase::Submitted
+            )
+        ) {
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the sender reserves its delivery attempt");
+    // The sender marks the message Submitted before its hand-off; wait for that write.
+    timeout(Duration::from_secs(5), async {
+        while phase(&state_db).await != Some(codex_state::AgentMailboxPhase::Submitted) {
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the sender marks the message Submitted before its hand-off");
+
+    // The running turn applies the message inside the send, then the sender goes on.
+    session
+        .record_inter_agent_communication(turn_context.as_ref(), communication.clone())
+        .await;
+    assert!(session.has_applied_agent_message_id(&message_id).await);
+    release_tx.send(()).expect("release the hand-off");
+    holder.join().expect("hand-off holder");
+    send.await
+        .expect("send task")
+        .expect("send_inter_agent_communication should succeed");
+
+    assert_eq!(
+        phase(&state_db).await,
+        Some(codex_state::AgentMailboxPhase::ProviderRunning),
+        "mail the running turn applied must not be left Submitted"
+    );
+    session.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+/// #1375 follow-up: the sender writes `Submitted` before it hands the message over (#1058), so a
+/// row still `Submitting` at recovery is an attempt that was reserved but never handed over.
+/// Recovery sends it again instead of quarantining it, unless the rollout already applied it.
+#[tokio::test]
+async fn recovery_resends_a_reserved_message_that_was_never_handed_over() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::Sqlite);
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (thread_id, thread) = harness.start_thread().await;
+    let state_db = harness.state_db.clone().expect("state db");
+    let mail = |body: &str| {
+        InterAgentCommunication::new(
+            AgentPath::root(),
+            AgentPath::try_from("/root/worker").expect("agent path"),
+            Vec::new(),
+            body.to_string(),
+            /*trigger_turn*/ false,
+        )
+    };
+    let captured = |communication: &InterAgentCommunication| {
+        harness
+            .manager
+            .captured_ops()
+            .iter()
+            .filter(|(captured_thread_id, op)| {
+                *captured_thread_id == thread_id
+                    && matches!(
+                        op,
+                        Op::InterAgentCommunication { communication: captured }
+                            if captured == communication
+                    )
+            })
+            .count()
+    };
+
+    // Reserved, never handed over: the sender stopped between the reservation and the
+    // `Submitted` write (a crash, or a database error on that write).
+    let reserved = mail("reserved, never handed over");
+    let reserved_id = reserved.message_id.clone().expect("stable message id");
+    harness
+        .control
+        .admit_inter_agent_communication(thread_id, &reserved)
+        .await
+        .expect("admit the reserved message");
+    assert!(
+        state_db
+            .begin_agent_message_submission(
+                &reserved_id,
+                codex_state::AgentMailboxPhase::Ready,
+                "reserved-attempt",
+                /*now_ms*/ 1_000,
+            )
+            .await
+            .expect("reserve the delivery attempt")
+    );
+
+    // Reserved and already in the recipient's rollout (an older build marked Submitted only
+    // after the hand-off): the provider outcome is unknown, so it is not sent again.
+    let applied = mail("reserved, already applied");
+    let applied_id = applied.message_id.clone().expect("stable message id");
+    harness
+        .control
+        .admit_inter_agent_communication(thread_id, &applied)
+        .await
+        .expect("admit the applied message");
+    let turn_context = thread.codex.session.new_default_turn().await;
+    thread
+        .codex
+        .session
+        .record_inter_agent_communication(turn_context.as_ref(), applied.clone())
+        .await;
+    assert!(
+        state_db
+            .transition_agent_message(
+                &applied_id,
+                codex_state::AgentMailboxPhase::Completed,
+                codex_state::AgentMailboxPhase::Submitting,
+                /*now_ms*/ 1_001,
+            )
+            .await
+            .expect("leave the applied message reserved")
+    );
+
+    harness
+        .control
+        .recover_inter_agent_communications(thread_id)
+        .await
+        .expect("mailbox recovery");
+
+    let reserved_phase = state_db
+        .get_agent_message(&reserved_id)
+        .await
+        .expect("mailbox lookup")
+        .expect("reserved mailbox row")
+        .phase;
+    assert!(
+        matches!(
+            reserved_phase,
+            codex_state::AgentMailboxPhase::Submitted
+                | codex_state::AgentMailboxPhase::ProviderRunning
+                | codex_state::AgentMailboxPhase::Completed
+        ),
+        "a reserved message that was never handed over is sent again, not quarantined; \
+         phase after recovery: {reserved_phase:?}"
+    );
+    assert_eq!(
+        captured(&reserved),
+        1,
+        "recovery hands the reserved message over once"
+    );
+    assert_eq!(
+        state_db
+            .get_agent_message(&applied_id)
+            .await
+            .expect("mailbox lookup")
+            .expect("applied mailbox row")
+            .phase,
+        codex_state::AgentMailboxPhase::UnknownOutcome,
+        "a reserved message the rollout already applied keeps an unknown outcome"
+    );
+    assert_eq!(
+        captured(&applied),
+        0,
+        "an applied message is not sent again"
+    );
+}
+
+/// Plays another owner's write on `message_id` inside the statement that reserves it for any
+/// attempt other than `owner_attempt`, so the write lands between that reservation and the
+/// reserving sender's `Submitting -> Submitted` write, without sleeps or test hooks in the code
+/// under test. Drop the returned trigger with `DROP TRIGGER interleave_after_reservation`.
+async fn interleave_after_reservation(
+    state_db: &StateDbHandle,
+    message_id: &str,
+    owner_attempt: &str,
+    other_owner_write: &str,
+) -> sqlx::SqlitePool {
+    let writer = state_db
+        .sqlite()
+        .open_read_write_pool(&state_db.sqlite().state_db_path())
+        .await
+        .expect("open a second writer on the state db");
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "CREATE TRIGGER interleave_after_reservation AFTER UPDATE OF phase ON agent_mailbox_messages \
+         WHEN NEW.phase = 'submitting' AND NEW.message_id = '{message_id}' \
+         AND NEW.attempt_id IS NOT '{owner_attempt}' \
+         BEGIN UPDATE agent_mailbox_messages SET {other_owner_write} \
+         WHERE message_id = NEW.message_id; END"
+    )))
+    .execute(&writer)
+    .await
+    .expect("install the interleaving trigger");
+    writer
+}
+
+#[tokio::test]
+async fn issue1452_a_sender_that_loses_its_submitting_write_is_not_an_error() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::Sqlite);
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (thread_id, _thread) = harness.start_thread().await;
+    let state_db = harness.state_db.clone().expect("state db");
+    let mail = |body: &str| {
+        InterAgentCommunication::new(
+            AgentPath::root(),
+            AgentPath::try_from("/root/worker").expect("agent path"),
+            Vec::new(),
+            body.to_string(),
+            /*trigger_turn*/ false,
+        )
+    };
+    let captured = |communication: &InterAgentCommunication| {
+        harness
+            .manager
+            .captured_ops()
+            .iter()
+            .filter(|(captured_thread_id, op)| {
+                *captured_thread_id == thread_id
+                    && matches!(
+                        op,
+                        Op::InterAgentCommunication { communication: captured }
+                            if captured == communication
+                    )
+            })
+            .count()
+    };
+    let phase = async |message_id: &str| {
+        state_db
+            .get_agent_message(message_id)
+            .await
+            .expect("mailbox lookup")
+            .expect("mailbox row")
+            .phase
+    };
+
+    // Interleaving 1: recovery requeues the row (Submitting -> Ready) between the live sender's
+    // reservation and its Submitted write. The live sender's write loses; recovery delivers it.
+    let requeued = mail("requeued by recovery while the live sender held it");
+    let requeued_id = requeued.message_id.clone().expect("stable message id");
+    harness
+        .control
+        .admit_inter_agent_communication(thread_id, &requeued)
+        .await
+        .expect("admit the requeued message");
+    let writer = interleave_after_reservation(
+        &state_db,
+        &requeued_id,
+        /*owner_attempt*/ "recovery-attempt",
+        "phase = 'ready'",
+    )
+    .await;
+    let live_result = harness
+        .control
+        .send_persisted_inter_agent_communication(
+            thread_id,
+            requeued.clone(),
+            /*parent_turn_id*/ None,
+        )
+        .await;
+    sqlx::query("DROP TRIGGER interleave_after_reservation")
+        .execute(&writer)
+        .await
+        .expect("drop the interleaving trigger");
+    assert_eq!(
+        live_result.as_deref().map_err(ToString::to_string),
+        Ok(requeued_id.as_str()),
+        "a live sender that loses its Submitting -> Submitted write to another owner is not \
+         failed: that owner delivers the message"
+    );
+    assert_eq!(
+        captured(&requeued),
+        0,
+        "the losing live sender does not hand the message over"
+    );
+    assert_eq!(
+        phase(&requeued_id).await,
+        codex_state::AgentMailboxPhase::Ready
+    );
+    harness
+        .control
+        .recover_inter_agent_communications(thread_id)
+        .await
+        .expect("mailbox recovery");
+    assert_eq!(
+        captured(&requeued),
+        1,
+        "the owner that requeued the message hands it over once"
+    );
+
+    // Interleaving 2: recovery requeues and reserves the row again between the live sender's
+    // reservation and its Submitted write. The Submitted write checks the attempt (#1545), so the
+    // live sender's write loses and it does not hand the message over; recovery's own write then
+    // wins under recovery's attempt, and the stored attempt names the side that delivers.
+    let stolen = mail("re-reserved by recovery while the live sender held it");
+    let stolen_id = stolen.message_id.clone().expect("stable message id");
+    harness
+        .control
+        .admit_inter_agent_communication(thread_id, &stolen)
+        .await
+        .expect("admit the re-reserved message");
+    let writer = interleave_after_reservation(
+        &state_db,
+        &stolen_id,
+        /*owner_attempt*/ "recovery-attempt",
+        "phase = 'submitting', attempt_id = 'recovery-attempt'",
+    )
+    .await;
+    let live_result = harness
+        .control
+        .send_persisted_inter_agent_communication(
+            thread_id,
+            stolen.clone(),
+            /*parent_turn_id*/ None,
+        )
+        .await;
+    sqlx::query("DROP TRIGGER interleave_after_reservation")
+        .execute(&writer)
+        .await
+        .expect("drop the interleaving trigger");
+    assert_eq!(
+        live_result.as_deref().map_err(ToString::to_string),
+        Ok(stolen_id.as_str()),
+        "a live sender whose reservation another attempt replaced is not failed"
+    );
+    assert_eq!(
+        captured(&stolen),
+        0,
+        "a live sender whose reservation another attempt replaced does not hand it over"
+    );
+    assert_eq!(
+        phase(&stolen_id).await,
+        codex_state::AgentMailboxPhase::Submitting,
+        "the row stays reserved for recovery's attempt"
+    );
+    assert!(
+        state_db
+            .transition_agent_message(
+                &stolen_id,
+                codex_state::AgentMailboxPhase::Submitting,
+                codex_state::AgentMailboxPhase::Submitted,
+                /*now_ms*/ 2_000,
+            )
+            .await
+            .expect("recovery's Submitted write"),
+        "recovery's own Submitted write wins, so recovery is the side that hands it over"
+    );
+    assert_eq!(
+        state_db
+            .get_agent_message(&stolen_id)
+            .await
+            .expect("mailbox lookup")
+            .expect("mailbox row")
+            .attempt_id
+            .as_deref(),
+        Some("recovery-attempt"),
+        "the stored attempt names the side that delivers"
+    );
+}
+
+#[tokio::test]
+async fn issue1452_recovery_continues_past_a_message_a_live_sender_hands_over() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::Sqlite);
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (thread_id, _thread) = harness.start_thread().await;
+    let state_db = harness.state_db.clone().expect("state db");
+    let mail = |body: &str| {
+        InterAgentCommunication::new(
+            AgentPath::root(),
+            AgentPath::try_from("/root/worker").expect("agent path"),
+            Vec::new(),
+            body.to_string(),
+            /*trigger_turn*/ false,
+        )
+    };
+    let captured = |communication: &InterAgentCommunication| {
+        harness
+            .manager
+            .captured_ops()
+            .iter()
+            .filter(|(captured_thread_id, op)| {
+                *captured_thread_id == thread_id
+                    && matches!(
+                        op,
+                        Op::InterAgentCommunication { communication: captured }
+                            if captured == communication
+                    )
+            })
+            .count()
+    };
+
+    // The first row is held by a live sender ("live-attempt"); its Submitted write lands between
+    // recovery's reservation and recovery's own Submitted write, so the live sender hands it
+    // over and recovery's write loses.
+    let contested = mail("held by a live sender during recovery");
+    let contested_id = contested.message_id.clone().expect("stable message id");
+    harness
+        .control
+        .admit_inter_agent_communication(thread_id, &contested)
+        .await
+        .expect("admit the contested message");
+    assert!(
+        state_db
+            .begin_agent_message_submission(
+                &contested_id,
+                codex_state::AgentMailboxPhase::Ready,
+                "live-attempt",
+                /*now_ms*/ 1_000,
+            )
+            .await
+            .expect("the live sender's reservation")
+    );
+    // A second, ordinary queued row that recovery reaches only after the contested one.
+    let queued = mail("queued behind the contested message");
+    let queued_id = queued.message_id.clone().expect("stable message id");
+    harness
+        .control
+        .admit_inter_agent_communication(thread_id, &queued)
+        .await
+        .expect("admit the queued message");
+    let writer = interleave_after_reservation(
+        &state_db,
+        &contested_id,
+        /*owner_attempt*/ "live-attempt",
+        "phase = 'submitted'",
+    )
+    .await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "UPDATE agent_mailbox_messages SET created_at_ms = created_at_ms + 60000 \
+         WHERE message_id = '{queued_id}'"
+    )))
+    .execute(&writer)
+    .await
+    .expect("order the queued row after the contested one");
+
+    let recovery = harness
+        .control
+        .recover_inter_agent_communications(thread_id)
+        .await;
+    sqlx::query("DROP TRIGGER interleave_after_reservation")
+        .execute(&writer)
+        .await
+        .expect("drop the interleaving trigger");
+    assert_eq!(
+        recovery.map_err(|err| err.to_string()),
+        Ok(()),
+        "a row another owner delivers does not stop or fail recovery"
+    );
+    assert_eq!(
+        captured(&contested),
+        0,
+        "recovery leaves the contested message to the live sender that won the write"
+    );
+    assert_eq!(
+        state_db
+            .get_agent_message(&contested_id)
+            .await
+            .expect("mailbox lookup")
+            .expect("contested mailbox row")
+            .phase,
+        codex_state::AgentMailboxPhase::Submitted
+    );
+    assert_eq!(
+        captured(&queued),
+        1,
+        "recovery goes on to hand the remaining message over once"
+    );
+}
+
+/// #1545: a live sender writes `Submitted` before its hand-off (#1058), and the recipient moves the
+/// row on only when it applies the message. Recovery that lists the row in between must not
+/// requeue and send it again: the message would be delivered twice under the same message id.
+#[tokio::test]
+async fn issue1545_recovery_skips_a_message_a_live_sender_handed_over() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::Sqlite);
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (thread_id, _thread) = harness.start_thread().await;
+    let state_db = harness.state_db.clone().expect("state db");
+    let communication = InterAgentCommunication::new(
+        AgentPath::root(),
+        AgentPath::try_from("/root/worker").expect("agent path"),
+        Vec::new(),
+        "handed over by a live sender".to_string(),
+        /*trigger_turn*/ false,
+    );
+    let message_id = communication.message_id.clone().expect("stable message id");
+    let captured = || {
+        harness
+            .manager
+            .captured_ops()
+            .iter()
+            .filter(|(captured_thread_id, op)| {
+                *captured_thread_id == thread_id
+                    && matches!(
+                        op,
+                        Op::InterAgentCommunication { communication: captured }
+                            if captured == &communication
+                    )
+            })
+            .count()
+    };
+    let row = async || {
+        state_db
+            .get_agent_message(&message_id)
+            .await
+            .expect("mailbox lookup")
+            .expect("mailbox row")
+    };
+
+    // Step 1 of the issue: the live sender writes Submitted and hands the message over. The
+    // recipient has not applied it yet, so the row is still Submitted.
+    harness
+        .control
+        .send_persisted_inter_agent_communication(
+            thread_id,
+            communication.clone(),
+            /*parent_turn_id*/ None,
+        )
+        .await
+        .expect("live sender");
+    assert_eq!(captured(), 1, "the live sender hands the message over once");
+    let handed_over = row().await;
+    assert_eq!(handed_over.phase, codex_state::AgentMailboxPhase::Submitted);
+
+    // Steps 2-3: recovery lists the row as Submitted before the recipient moves it on.
+    harness
+        .control
+        .recover_inter_agent_communications(thread_id)
+        .await
+        .expect("mailbox recovery");
+    assert_eq!(
+        captured(),
+        1,
+        "recovery does not hand over again a message a live sender in this process handed over"
+    );
+    let after_recovery = row().await;
+    assert_eq!(
+        after_recovery.phase,
+        codex_state::AgentMailboxPhase::Submitted
+    );
+    assert_eq!(
+        after_recovery.attempt_id, handed_over.attempt_id,
+        "the stored attempt is still the live sender's, the side that delivered"
+    );
+}
+
+/// #1545: a `Submitted` row whose attempt names no session of this process (an earlier process
+/// crashed after the `Submitted` write, before the recipient applied it) is still recovered,
+/// exactly once.
+#[tokio::test]
+async fn issue1545_recovery_resends_a_submitted_message_from_an_earlier_process_once() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::Sqlite);
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (thread_id, _thread) = harness.start_thread().await;
+    let state_db = harness.state_db.clone().expect("state db");
+    let communication = InterAgentCommunication::new(
+        AgentPath::root(),
+        AgentPath::try_from("/root/worker").expect("agent path"),
+        Vec::new(),
+        "left Submitted by an earlier process".to_string(),
+        /*trigger_turn*/ false,
+    );
+    let message_id = communication.message_id.clone().expect("stable message id");
+    let captured = || {
+        harness
+            .manager
+            .captured_ops()
+            .iter()
+            .filter(|(captured_thread_id, op)| {
+                *captured_thread_id == thread_id
+                    && matches!(
+                        op,
+                        Op::InterAgentCommunication { communication: captured }
+                            if captured == &communication
+                    )
+            })
+            .count()
+    };
+    harness
+        .control
+        .admit_inter_agent_communication(thread_id, &communication)
+        .await
+        .expect("admit the message");
+    assert!(
+        state_db
+            .begin_agent_message_submission(
+                &message_id,
+                codex_state::AgentMailboxPhase::Ready,
+                "earlier-process-attempt",
+                /*now_ms*/ 1_000,
+            )
+            .await
+            .expect("the earlier process reserves the attempt")
+    );
+    assert!(
+        state_db
+            .transition_agent_message(
+                &message_id,
+                codex_state::AgentMailboxPhase::Submitting,
+                codex_state::AgentMailboxPhase::Submitted,
+                /*now_ms*/ 1_001,
+            )
+            .await
+            .expect("the earlier process writes Submitted, then stops")
+    );
+
+    harness
+        .control
+        .recover_inter_agent_communications(thread_id)
+        .await
+        .expect("first recovery");
+    assert_eq!(
+        captured(),
+        1,
+        "recovery sends the earlier process's message again"
+    );
+    let recovered = state_db
+        .get_agent_message(&message_id)
+        .await
+        .expect("mailbox lookup")
+        .expect("mailbox row");
+    assert_eq!(recovered.phase, codex_state::AgentMailboxPhase::Submitted);
+    assert_ne!(
+        recovered.attempt_id.as_deref(),
+        Some("earlier-process-attempt"),
+        "the stored attempt is recovery's, the side that delivered"
+    );
+
+    // A second recovery while the same recipient session is still live (no reload in between)
+    // finds recovery's own hand-off to that session, which the session moves on.
+    harness
+        .control
+        .recover_inter_agent_communications(thread_id)
+        .await
+        .expect("second recovery, same live recipient session");
+    assert_eq!(captured(), 1, "the recovered message is delivered once");
+}
+
+/// #1545 review: a session receives a hand-off, shuts down without applying it, and is reloaded
+/// in the same process. Its in-memory queue was dropped with it, so recovery at the reload must
+/// send the message again, once, to the new session; recovery on that live session must not.
+#[tokio::test]
+async fn issue1545_a_hand_off_to_a_session_replaced_by_an_in_process_reload_is_resent_once() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::MultiAgentV2);
+    let _ = config.features.enable(Feature::Sqlite);
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (parent_thread_id, _parent_thread) = harness.start_paginated_thread().await;
+    let agent_path = AgentPath::try_from("/root/worker").expect("agent path");
+    let mut child_config = harness.config.clone();
+    child_config.model_provider = child_config
+        .model_providers
+        .get("openrouter")
+        .cloned()
+        .expect("OpenRouter provider");
+    child_config.model_provider_id = "openrouter".to_string();
+    child_config.model = Some("x-ai/grok-4.5".to_string());
+    let child_id = harness
+        .control
+        .spawn_agent_with_metadata(
+            child_config,
+            text_input("hello child"),
+            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id,
+                depth: 1,
+                agent_path: Some(agent_path.clone()),
+                agent_nickname: None,
+                agent_role: None,
+                agent_class: None,
+            })),
+            SpawnAgentOptions {
+                parent_thread_id: Some(parent_thread_id),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("spawn_agent should succeed")
+        .thread_id;
+    let first_session = harness.manager.get_thread(child_id).await.expect("child");
+    wait_for_initial_turn_to_finish(&first_session).await;
+    first_session
+        .inject_response_items(vec![assistant_message(
+            "child persisted",
+            Some(MessagePhase::FinalAnswer),
+        )])
+        .await
+        .expect("child rollout should persist with v2 metadata");
+    let state_db = harness.state_db.clone().expect("state db");
+    let communication = InterAgentCommunication::new(
+        AgentPath::root(),
+        agent_path,
+        Vec::new(),
+        "handed to a session that is then replaced".to_string(),
+        /*trigger_turn*/ false,
+    );
+    let message_id = communication.message_id.clone().expect("stable message id");
+    let captured = || {
+        harness
+            .manager
+            .captured_ops()
+            .iter()
+            .filter(|(captured_thread_id, op)| {
+                *captured_thread_id == child_id
+                    && matches!(
+                        op,
+                        Op::InterAgentCommunication { communication: captured }
+                            if captured == &communication
+                    )
+            })
+            .count()
+    };
+    let row = async || {
+        state_db
+            .get_agent_message(&message_id)
+            .await
+            .expect("mailbox lookup")
+            .expect("mailbox row")
+    };
+
+    // A live sender hands the message to the idle child (trigger_turn = false), so it waits in
+    // the session's input queue; the row is Submitted.
+    harness
+        .control
+        .send_persisted_inter_agent_communication(
+            child_id,
+            communication.clone(),
+            /*parent_turn_id*/ None,
+        )
+        .await
+        .expect("live sender");
+    assert_eq!(captured(), 1, "the live sender hands the message over once");
+    let handed_over = row().await;
+    assert_eq!(handed_over.phase, codex_state::AgentMailboxPhase::Submitted);
+
+    // The session shuts down without applying it and is unloaded.
+    first_session
+        .shutdown_and_wait()
+        .await
+        .expect("child thread should shut down");
+    assert!(harness.manager.remove_thread(&child_id).await.is_some());
+    assert!(
+        !first_session
+            .codex
+            .session
+            .has_applied_agent_message_id(&message_id)
+            .await,
+        "the first session never applied the message"
+    );
+    assert_eq!(
+        row().await.phase,
+        codex_state::AgentMailboxPhase::Submitted,
+        "the row is still Submitted for the session that was replaced"
+    );
+
+    // Reloaded in the same process: recovery sends it to the new session, once.
+    harness
+        .control
+        .ensure_v2_agent_loaded(harness.config.clone(), child_id)
+        .await
+        .expect("known v2 agent should reload");
+    let second_session = harness
+        .manager
+        .get_thread(child_id)
+        .await
+        .expect("reloaded child");
+    assert_ne!(
+        second_session.codex.session.mailbox_incarnation,
+        first_session.codex.session.mailbox_incarnation,
+        "the reload gives the thread a new session incarnation"
+    );
+    assert_eq!(
+        captured(),
+        2,
+        "after the reload the message is delivered exactly once, to the new session"
+    );
+    let resent = row().await;
+    assert_eq!(resent.phase, codex_state::AgentMailboxPhase::Submitted);
+    assert_ne!(
+        resent.attempt_id, handed_over.attempt_id,
+        "the stored attempt is the one that handed the message to the new session"
+    );
+
+    // Recovery on the live, non-reloaded new session leaves its hand-off alone.
+    harness
+        .control
+        .recover_inter_agent_communications(child_id)
+        .await
+        .expect("recovery on the live session");
+    assert_eq!(
+        captured(),
+        2,
+        "the hand-off to the current session is not sent again"
+    );
+}
+
 #[tokio::test]
 async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
     let (home, mut config) = test_config().await;
@@ -1505,6 +2412,8 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
         .get_thread(spawned_agent.thread_id)
         .await
         .expect("child thread should exist");
+    // Below, only this test may apply the applied-crash message and set its mailbox phase.
+    wait_for_initial_turn_to_finish(&child_thread).await;
     child_thread
         .inject_response_items(vec![assistant_message(
             "child persisted",
@@ -1524,19 +2433,21 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
         .admit_inter_agent_communication(spawned_agent.thread_id, &recovery_communication)
         .await
         .expect("durable mailbox admission");
-    let ambiguous_communication = InterAgentCommunication::new(
+    // Reserved (Submitting) but never handed over: the sender writes Submitted before it hands
+    // the message over, so recovery sends it again.
+    let reserved_communication = InterAgentCommunication::new(
         AgentPath::root(),
         agent_path.clone(),
         Vec::new(),
-        "do not replay this ambiguous message".to_string(),
-        /*trigger_turn*/ true,
+        "replay this reserved message that was never handed over".to_string(),
+        /*trigger_turn*/ false,
     );
     harness
         .control
-        .admit_inter_agent_communication(spawned_agent.thread_id, &ambiguous_communication)
+        .admit_inter_agent_communication(spawned_agent.thread_id, &reserved_communication)
         .await
-        .expect("ambiguous mailbox admission");
-    let ambiguous_message_id = ambiguous_communication
+        .expect("reserved mailbox admission");
+    let reserved_message_id = reserved_communication
         .message_id
         .as_deref()
         .expect("message id");
@@ -1546,7 +2457,7 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
             .as_ref()
             .expect("state db")
             .transition_agent_message(
-                ambiguous_message_id,
+                reserved_message_id,
                 codex_state::AgentMailboxPhase::Ready,
                 codex_state::AgentMailboxPhase::Submitting,
                 /*now_ms*/ 1_000,
@@ -1795,23 +2706,11 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
             .count(),
         1
     );
-    assert_eq!(
-        harness
-            .manager
-            .captured_ops()
-            .iter()
-            .filter(|(thread_id, op)| {
-                *thread_id == spawned_agent.thread_id
-                    && matches!(
-                        op,
-                        Op::InterAgentCommunication { communication }
-                            if communication == &ambiguous_communication
-                    )
-            })
-            .count(),
-        0
-    );
-    for communication in [&submitted_communication, &retryable_communication] {
+    for communication in [
+        &reserved_communication,
+        &submitted_communication,
+        &retryable_communication,
+    ] {
         assert_eq!(
             harness
                 .manager
@@ -1864,19 +2763,18 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
         1,
         "the original local submission is captured once; recovery must not submit it again"
     );
-    let ambiguous_row = harness
-        .state_db
-        .as_ref()
-        .expect("state db")
-        .list_recoverable_agent_messages(spawned_agent.thread_id)
-        .await
-        .expect("recoverable mailbox")
-        .into_iter()
-        .find(|message| message.communication.message_id.as_deref() == Some(ambiguous_message_id))
-        .expect("ambiguous mailbox row");
-    assert_eq!(
-        ambiguous_row.phase,
-        codex_state::AgentMailboxPhase::UnknownOutcome
+    assert_ne!(
+        harness
+            .state_db
+            .as_ref()
+            .expect("state db")
+            .get_agent_message(reserved_message_id)
+            .await
+            .expect("mailbox lookup")
+            .expect("reserved mailbox row")
+            .phase,
+        codex_state::AgentMailboxPhase::UnknownOutcome,
+        "a reserved message that was never handed over is not ambiguous"
     );
     let provider_running_row = harness
         .state_db
@@ -1944,6 +2842,622 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
         .into_iter()
         .find(|entry| *entry == expected);
     assert_eq!(captured, Some(expected));
+}
+
+/// #1074: reloading a stored V2 agent (to resume it or deliver a message)
+/// goes through the #689 check: on a connection whose default key is nowhere
+/// while a sibling connection with the same key variable runs on a named
+/// account, it is refused before it starts; with a stored default key it
+/// reloads.
+#[tokio::test]
+async fn ensure_v2_agent_loaded_refuses_a_connection_without_its_own_credential() {
+    const KEY: &str = "CORBANU_TEST_1074_V2_ZAI_KEY";
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::MultiAgentV2);
+    let _ = config.features.enable(Feature::Sqlite);
+    let mut zai = codex_model_provider_info::ModelProviderInfo::create_zai_provider();
+    zai.env_key = Some(KEY.to_string());
+    crate::config::stamp_provider_account("zai", &mut zai, "work").expect("stamp");
+    let mut anthropic =
+        codex_model_provider_info::ModelProviderInfo::create_zai_anthropic_provider();
+    anthropic.env_key = Some(KEY.to_string());
+    config.model_providers.insert("zai".to_string(), zai);
+    config
+        .model_providers
+        .insert("zai-anthropic".to_string(), anthropic.clone());
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (parent_thread_id, _parent_thread) = harness.start_paginated_thread().await;
+    let mut child_config = harness.config.clone();
+    child_config.model_provider = anthropic;
+    child_config.model_provider_id = "zai-anthropic".to_string();
+    child_config.model = Some("glm-5.2".to_string());
+    let spawned_agent = harness
+        .control
+        .spawn_agent_with_metadata(
+            child_config,
+            text_input("hello child"),
+            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id,
+                depth: 1,
+                agent_path: Some(AgentPath::try_from("/root/worker").expect("agent path")),
+                agent_nickname: None,
+                agent_role: None,
+                agent_class: None,
+            })),
+            SpawnAgentOptions {
+                parent_thread_id: Some(parent_thread_id),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("spawn_agent should succeed");
+    let child_thread = harness
+        .manager
+        .get_thread(spawned_agent.thread_id)
+        .await
+        .expect("child thread should exist");
+    wait_for_initial_turn_to_finish(&child_thread).await;
+    child_thread
+        .inject_response_items(vec![assistant_message(
+            "child persisted",
+            Some(MessagePhase::FinalAnswer),
+        )])
+        .await
+        .expect("child rollout should persist with v2 metadata");
+    child_thread
+        .shutdown_and_wait()
+        .await
+        .expect("child thread should shut down");
+    assert!(
+        harness
+            .manager
+            .remove_thread(&spawned_agent.thread_id)
+            .await
+            .is_some()
+    );
+
+    let error = harness
+        .control
+        .ensure_v2_agent_loaded(harness.config.clone(), spawned_agent.thread_id)
+        .await
+        .expect_err("the reload should be refused");
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "Resuming this agent: `zai-anthropic` would run on its default account, which has \
+             no credential (`{KEY}` is not set and no default key is stored); accounts are \
+             selected per connection, and account `work` is selected for `zai` only. Ask the \
+             user to add a default `{KEY}` (`/providers`) before resuming it, or do the work \
+             without this agent. Do not retry on another account without the user's consent."
+        )
+    );
+    assert!(
+        harness
+            .manager
+            .get_thread(spawned_agent.thread_id)
+            .await
+            .is_err()
+    );
+
+    // With a stored default key it reloads.
+    codex_login::login_with_provider_api_key(
+        &harness.config.codex_home,
+        KEY,
+        "canary-1074-default",
+        codex_login::AuthCredentialsStoreMode::File,
+        codex_login::AuthKeyringBackendKind::default(),
+    )
+    .expect("store default key");
+    harness
+        .control
+        .ensure_v2_agent_loaded(harness.config.clone(), spawned_agent.thread_id)
+        .await
+        .expect("the agent should reload");
+    assert_eq!(
+        harness
+            .manager
+            .get_thread(spawned_agent.thread_id)
+            .await
+            .expect("reloaded child thread should exist")
+            .config_snapshot()
+            .await
+            .model_provider_id,
+        "zai-anthropic"
+    );
+}
+
+/// #1129: a `zai` connection that never reaches the network, with an
+/// account `work` configured in `home` and its default account selected.
+fn issue1129_zai_with_work_account(
+    codex_home: &std::path::Path,
+) -> codex_model_provider_info::ModelProviderInfo {
+    codex_vault::Vault::new(codex_home.to_path_buf())
+        .write_provider_account(
+            "zai",
+            &codex_vault::ProviderAccountName::parse("work").expect("name"),
+            codex_vault::ProviderAccountKind::ApiKey,
+            "canary-1129-work",
+        )
+        .expect("write account");
+    let mut zai = codex_model_provider_info::ModelProviderInfo::create_zai_provider();
+    zai.base_url = Some("http://127.0.0.1:9/v1".to_string());
+    zai.env_key = Some("CORBANU_TEST_1129_ZAI_KEY".to_string());
+    zai.request_max_retries = Some(0);
+    zai.stream_max_retries = Some(0);
+    zai
+}
+
+fn issue1129_remove_work_account(codex_home: &std::path::Path) {
+    let removed = codex_vault::Vault::new(codex_home.to_path_buf())
+        .remove_provider_account(
+            "zai",
+            &codex_vault::ProviderAccountName::parse("work").expect("name"),
+        )
+        .expect("remove account");
+    assert!(removed);
+}
+
+const ISSUE1129_REFUSAL: &str = "Resuming this agent: it ran on account `work` of `zai`, and \
+     account `work` of provider `zai` is not configured";
+
+/// Shuts `thread_id` down and unloads it, as residency eviction does.
+async fn issue1129_unload(harness: &AgentControlHarness, thread_id: ThreadId) {
+    let thread = harness
+        .manager
+        .get_thread(thread_id)
+        .await
+        .expect("thread should be loaded");
+    thread.shutdown_and_wait().await.expect("shut down");
+    assert!(harness.manager.remove_thread(&thread_id).await.is_some());
+}
+
+async fn issue1129_loaded_account(
+    harness: &AgentControlHarness,
+    thread_id: ThreadId,
+) -> Option<String> {
+    harness
+        .manager
+        .get_thread(thread_id)
+        .await
+        .expect("thread should be loaded")
+        .config_snapshot()
+        .await
+        .provider_account
+}
+
+/// #1129: a V2 agent spawned on account `work` while `zai` selects its
+/// default account is reloaded on `work`; once `work` is gone the reload is
+/// refused instead of moving the agent to the default account.
+#[tokio::test]
+async fn issue1129_v2_reload_restores_the_recorded_account_or_refuses() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::MultiAgentV2);
+    let _ = config.features.enable(Feature::Sqlite);
+    let _ = config.features.enable(Feature::NamedAccounts);
+    let zai = issue1129_zai_with_work_account(config.codex_home.as_path());
+    config
+        .model_providers
+        .insert("zai".to_string(), zai.clone());
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (parent_thread_id, _parent_thread) = harness.start_paginated_thread().await;
+    let mut child_config = harness.config.clone();
+    child_config.model_provider = zai;
+    crate::config::stamp_provider_account("zai", &mut child_config.model_provider, "work")
+        .expect("stamp");
+    child_config.model_provider_id = "zai".to_string();
+    child_config.model = Some("glm-5.2".to_string());
+    let child = harness
+        .control
+        .spawn_agent_with_metadata(
+            child_config,
+            text_input("hello child"),
+            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id,
+                depth: 1,
+                agent_path: Some(AgentPath::try_from("/root/worker").expect("agent path")),
+                agent_nickname: None,
+                agent_role: None,
+                agent_class: None,
+            })),
+            SpawnAgentOptions {
+                parent_thread_id: Some(parent_thread_id),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("spawn_agent should succeed")
+        .thread_id;
+    let child_thread = harness.manager.get_thread(child).await.expect("child");
+    wait_for_initial_turn_to_finish(&child_thread).await;
+    child_thread
+        .inject_response_items(vec![assistant_message(
+            "child persisted",
+            Some(MessagePhase::FinalAnswer),
+        )])
+        .await
+        .expect("child rollout should persist with v2 metadata");
+    assert_eq!(
+        issue1129_loaded_account(&harness, child).await,
+        Some("zai:work".to_string())
+    );
+    issue1129_unload(&harness, child).await;
+
+    harness
+        .control
+        .ensure_v2_agent_loaded(harness.config.clone(), child)
+        .await
+        .expect("the agent should reload");
+    assert_eq!(
+        issue1129_loaded_account(&harness, child).await,
+        Some("zai:work".to_string())
+    );
+
+    issue1129_unload(&harness, child).await;
+    issue1129_remove_work_account(harness.config.codex_home.as_path());
+    let error = harness
+        .control
+        .ensure_v2_agent_loaded(harness.config.clone(), child)
+        .await
+        .expect_err("the reload should be refused");
+    assert!(error.to_string().starts_with(ISSUE1129_REFUSAL), "{error}");
+    assert!(harness.manager.get_thread(child).await.is_err());
+}
+
+/// Spawns a V2 child of a new root on `child_provider` (runtime provider
+/// `child_provider_id`), lets its first turn record its account, and unloads
+/// it.
+async fn issue1129_spawn_and_unload_v2_child(
+    harness: &AgentControlHarness,
+    child_provider_id: &str,
+    child_provider: codex_model_provider_info::ModelProviderInfo,
+) -> ThreadId {
+    let (parent_thread_id, _parent_thread) = harness.start_paginated_thread().await;
+    let mut child_config = harness.config.clone();
+    child_config.model_provider = child_provider;
+    child_config.model_provider_id = child_provider_id.to_string();
+    child_config.model = Some("glm-5.2".to_string());
+    let child = harness
+        .control
+        .spawn_agent_with_metadata(
+            child_config,
+            text_input("hello child"),
+            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id,
+                depth: 1,
+                agent_path: Some(AgentPath::try_from("/root/worker").expect("agent path")),
+                agent_nickname: None,
+                agent_role: None,
+                agent_class: None,
+            })),
+            SpawnAgentOptions {
+                parent_thread_id: Some(parent_thread_id),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("spawn_agent should succeed")
+        .thread_id;
+    let child_thread = harness.manager.get_thread(child).await.expect("child");
+    wait_for_initial_turn_to_finish(&child_thread).await;
+    child_thread
+        .inject_response_items(vec![assistant_message(
+            "child persisted",
+            Some(MessagePhase::FinalAnswer),
+        )])
+        .await
+        .expect("child rollout should persist with v2 metadata");
+    issue1129_unload(harness, child).await;
+    child
+}
+
+/// #1129 review: a child on `zai-anthropic` running on account `work` of
+/// `zai` (borrowed: both use the same API key) is reloaded on `zai:work`,
+/// not on an account `work` of `zai-anthropic`; when the two no longer share
+/// the key the reload is refused.
+#[tokio::test]
+async fn issue1129_v2_reload_restores_a_borrowed_account_or_refuses() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::MultiAgentV2);
+    let _ = config.features.enable(Feature::Sqlite);
+    let _ = config.features.enable(Feature::NamedAccounts);
+    let zai = issue1129_zai_with_work_account(config.codex_home.as_path());
+    let mut anthropic =
+        codex_model_provider_info::ModelProviderInfo::create_zai_anthropic_provider();
+    anthropic.base_url = zai.base_url.clone();
+    anthropic.env_key = zai.env_key.clone();
+    anthropic.request_max_retries = Some(0);
+    anthropic.stream_max_retries = Some(0);
+    config.model_providers.insert("zai".to_string(), zai);
+    config
+        .model_providers
+        .insert("zai-anthropic".to_string(), anthropic.clone());
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let mut borrowed = anthropic;
+    borrowed.account = Some(codex_model_provider_info::NamedProviderAccount {
+        provider_id: "zai".to_string(),
+        name: "work".to_string(),
+    });
+    let child = issue1129_spawn_and_unload_v2_child(&harness, "zai-anthropic", borrowed).await;
+
+    harness
+        .control
+        .ensure_v2_agent_loaded(harness.config.clone(), child)
+        .await
+        .expect("the agent should reload");
+    assert_eq!(
+        issue1129_loaded_account(&harness, child).await,
+        Some("zai:work".to_string())
+    );
+
+    issue1129_unload(&harness, child).await;
+    let mut config = harness.config.clone();
+    if let Some(provider) = config.model_providers.get_mut("zai-anthropic") {
+        provider.env_key = Some("CORBANU_TEST_1129_OTHER_KEY".to_string());
+    }
+    let error = harness
+        .control
+        .ensure_v2_agent_loaded(config, child)
+        .await
+        .expect_err("the reload should be refused");
+    assert!(
+        error.to_string().starts_with(
+            "Resuming this agent: it ran on account `zai:work` of `zai-anthropic`, and \
+             `zai-anthropic` no longer uses the API key of `zai`"
+        ),
+        "{error}"
+    );
+    assert!(harness.manager.get_thread(child).await.is_err());
+}
+
+/// #1129 review: a child that ran on the default account while `zai` now
+/// selects account `work` is reloaded on the default account.
+#[tokio::test]
+async fn issue1129_v2_reload_restores_a_recorded_default_account() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::MultiAgentV2);
+    let _ = config.features.enable(Feature::Sqlite);
+    let _ = config.features.enable(Feature::NamedAccounts);
+    let zai = issue1129_zai_with_work_account(config.codex_home.as_path());
+    codex_login::login_with_provider_api_key(
+        &config.codex_home,
+        "CORBANU_TEST_1129_ZAI_KEY",
+        "canary-1129-default",
+        codex_login::AuthCredentialsStoreMode::File,
+        codex_login::AuthKeyringBackendKind::default(),
+    )
+    .expect("store default key");
+    config
+        .model_providers
+        .insert("zai".to_string(), zai.clone());
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let child = issue1129_spawn_and_unload_v2_child(&harness, "zai", zai).await;
+
+    let mut config = harness.config.clone();
+    if let Some(provider) = config.model_providers.get_mut("zai") {
+        crate::config::stamp_provider_account("zai", provider, "work").expect("stamp");
+    }
+    harness
+        .control
+        .ensure_v2_agent_loaded(config, child)
+        .await
+        .expect("the agent should reload");
+    assert_eq!(
+        issue1129_loaded_account(&harness, child).await,
+        Some("zai:default".to_string())
+    );
+}
+
+/// #1129: a V1 child spawned on account `work` of its parent's provider is
+/// resumed on `work`, not on the parent's default account; once `work` is
+/// gone the resume is refused.
+#[tokio::test]
+async fn issue1129_v1_resume_restores_the_recorded_account_or_refuses() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::NamedAccounts);
+    let zai = issue1129_zai_with_work_account(config.codex_home.as_path());
+    config
+        .model_providers
+        .insert("zai".to_string(), zai.clone());
+    config.model_provider = zai;
+    config.model_provider_id = "zai".to_string();
+    config.model = Some("glm-5.2".to_string());
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let mut child_config = harness.config.clone();
+    crate::config::stamp_provider_account("zai", &mut child_config.model_provider, "work")
+        .expect("stamp");
+    let child = harness
+        .control
+        .spawn_agent(
+            child_config,
+            text_input("hello child"),
+            /*session_source*/ None,
+        )
+        .await
+        .expect("child spawn should succeed");
+    let child_thread = harness.manager.get_thread(child).await.expect("child");
+    wait_for_initial_turn_to_finish(&child_thread).await;
+    persist_thread_for_tree_resume(&child_thread, "persist before resume").await;
+    let _ = harness
+        .control
+        .shutdown_live_agent(child)
+        .await
+        .expect("child shutdown should succeed");
+
+    let resumed = harness
+        .control
+        .resume_agent_from_rollout(harness.config.clone(), child, SessionSource::Exec)
+        .await
+        .expect("resume should succeed");
+    assert_eq!(
+        issue1129_loaded_account(&harness, resumed).await,
+        Some("zai:work".to_string())
+    );
+    let _ = harness
+        .control
+        .shutdown_live_agent(resumed)
+        .await
+        .expect("resumed child shutdown should succeed");
+
+    issue1129_remove_work_account(harness.config.codex_home.as_path());
+    let error = harness
+        .control
+        .resume_agent_from_rollout(harness.config.clone(), child, SessionSource::Exec)
+        .await
+        .expect_err("the resume should be refused");
+    assert!(error.to_string().starts_with(ISSUE1129_REFUSAL), "{error}");
+    assert!(harness.manager.get_thread(child).await.is_err());
+}
+
+/// #1144: a V1 child on `zai-anthropic` running on account `work` of `zai`
+/// (borrowed: both use the same API key) is resumed on `zai:work`, not on an
+/// account `work` of `zai-anthropic`; when the two no longer share the key
+/// the resume is refused.
+#[tokio::test]
+async fn issue1144_v1_resume_restores_a_borrowed_account_or_refuses() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::NamedAccounts);
+    let zai = issue1129_zai_with_work_account(config.codex_home.as_path());
+    let mut anthropic =
+        codex_model_provider_info::ModelProviderInfo::create_zai_anthropic_provider();
+    anthropic.base_url = zai.base_url.clone();
+    anthropic.env_key = zai.env_key.clone();
+    anthropic.request_max_retries = Some(0);
+    anthropic.stream_max_retries = Some(0);
+    config.model_providers.insert("zai".to_string(), zai);
+    config
+        .model_providers
+        .insert("zai-anthropic".to_string(), anthropic.clone());
+    config.model_provider = anthropic;
+    config.model_provider_id = "zai-anthropic".to_string();
+    config.model = Some("glm-5.2".to_string());
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let mut child_config = harness.config.clone();
+    child_config.model_provider.account = Some(codex_model_provider_info::NamedProviderAccount {
+        provider_id: "zai".to_string(),
+        name: "work".to_string(),
+    });
+    let child = harness
+        .control
+        .spawn_agent(
+            child_config,
+            text_input("hello child"),
+            /*session_source*/ None,
+        )
+        .await
+        .expect("child spawn should succeed");
+    let child_thread = harness.manager.get_thread(child).await.expect("child");
+    wait_for_initial_turn_to_finish(&child_thread).await;
+    persist_thread_for_tree_resume(&child_thread, "persist before resume").await;
+    let _ = harness
+        .control
+        .shutdown_live_agent(child)
+        .await
+        .expect("child shutdown should succeed");
+
+    let resumed = harness
+        .control
+        .resume_agent_from_rollout(harness.config.clone(), child, SessionSource::Exec)
+        .await
+        .expect("resume should succeed");
+    assert_eq!(
+        issue1129_loaded_account(&harness, resumed).await,
+        Some("zai:work".to_string())
+    );
+    let _ = harness
+        .control
+        .shutdown_live_agent(resumed)
+        .await
+        .expect("resumed child shutdown should succeed");
+
+    let mut config = harness.config.clone();
+    config.model_provider.env_key = Some("CORBANU_TEST_1144_OTHER_KEY".to_string());
+    if let Some(provider) = config.model_providers.get_mut("zai-anthropic") {
+        provider.env_key = config.model_provider.env_key.clone();
+    }
+    let error = harness
+        .control
+        .resume_agent_from_rollout(config, child, SessionSource::Exec)
+        .await
+        .expect_err("the resume should be refused");
+    assert!(
+        error.to_string().starts_with(
+            "Resuming this agent: it ran on account `zai:work` of `zai-anthropic`, and \
+             `zai-anthropic` no longer uses the API key of `zai`"
+        ),
+        "{error}"
+    );
+    assert!(harness.manager.get_thread(child).await.is_err());
+}
+
+/// #1144: resuming a V1 agent whose open child is refused (its recorded
+/// account is gone) still resumes the agent, and reports the child with the
+/// refusal instead of only logging it.
+#[tokio::test]
+async fn issue1144_v1_tree_resume_reports_a_refused_descendant() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::NamedAccounts);
+    let zai = issue1129_zai_with_work_account(config.codex_home.as_path());
+    config
+        .model_providers
+        .insert("zai".to_string(), zai.clone());
+    config.model_provider = zai;
+    config.model_provider_id = "zai".to_string();
+    config.model = Some("glm-5.2".to_string());
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (parent_thread_id, parent_thread) = harness.start_thread().await;
+    let mut child_config = harness.config.clone();
+    crate::config::stamp_provider_account("zai", &mut child_config.model_provider, "work")
+        .expect("stamp");
+    let child = harness
+        .control
+        .spawn_agent(
+            child_config,
+            text_input("hello child"),
+            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id,
+                depth: 1,
+                agent_path: None,
+                agent_nickname: None,
+                agent_role: None,
+                agent_class: None,
+            })),
+        )
+        .await
+        .expect("child spawn should succeed");
+    let child_thread = harness.manager.get_thread(child).await.expect("child");
+    wait_for_initial_turn_to_finish(&child_thread).await;
+    persist_thread_for_tree_resume(&parent_thread, "parent persisted").await;
+    persist_thread_for_tree_resume(&child_thread, "child persisted").await;
+    wait_for_live_thread_spawn_children(&harness.control, parent_thread_id, &[child]).await;
+    let report = harness
+        .manager
+        .shutdown_all_threads_bounded(Duration::from_secs(5))
+        .await;
+    assert_eq!(report.submit_failed, Vec::<ThreadId>::new());
+    assert_eq!(report.timed_out, Vec::<ThreadId>::new());
+    issue1129_remove_work_account(harness.config.codex_home.as_path());
+
+    let (resumed, refused_descendants) = harness
+        .control
+        .resume_agent_tree_from_rollout(
+            harness.config.clone(),
+            parent_thread_id,
+            SessionSource::Exec,
+        )
+        .await
+        .expect("the parent should resume");
+    assert_eq!(resumed, parent_thread_id);
+    let refused: Vec<_> = refused_descendants
+        .iter()
+        .map(|(id, error)| (*id, error.starts_with(ISSUE1129_REFUSAL)))
+        .collect();
+    assert_eq!(refused, vec![(child, true)], "{refused_descendants:?}");
+    assert!(harness.manager.get_thread(child).await.is_err());
+    let _ = harness
+        .control
+        .shutdown_live_agent(parent_thread_id)
+        .await
+        .expect("parent shutdown should succeed");
 }
 
 #[tokio::test]
@@ -4273,6 +5787,7 @@ async fn spawn_thread_subagent_uses_role_specific_nickname_candidates() {
             description: Some("Research role".to_string()),
             config_file: None,
             nickname_candidates: Some(vec!["Atlas".to_string()]),
+            source: crate::config::AgentRoleSource::User,
         },
     );
     let (parent_thread_id, _parent_thread) = harness.start_thread().await;

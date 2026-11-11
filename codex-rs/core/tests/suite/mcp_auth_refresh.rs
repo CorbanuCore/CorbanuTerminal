@@ -68,8 +68,14 @@ async fn codex_apps_401_without_challenge_identifies_only_attached_account() -> 
         {
             *bearer_token_env_var = None;
         }
+        // #1157: built for a temporary folder, not the test process's own.
+        let cwd = TempDir::new()?;
         let config = ConfigBuilder::default()
             .codex_home(home.path().into())
+            .harness_overrides(codex_core::config::ConfigOverrides {
+                cwd: Some(cwd.path().to_path_buf()),
+                ..Default::default()
+            })
             .build()
             .await?;
         let plugins = codex_core_plugins::PluginsManager::new(home.path().into());
@@ -174,8 +180,14 @@ async fn hosted_plugin_runtime_ps_mcp_tool_calls_use_current_auth_manager_token(
         CODEX_APPS_MCP_SERVER_NAME.to_string(),
         EffectiveMcpServer::configured(hosted_plugin_runtime_config),
     )]);
+    // #1157: built for a temporary folder, not the test process's own.
+    let cwd = TempDir::new()?;
     let mut config = ConfigBuilder::default()
         .codex_home(home.path().to_path_buf())
+        .harness_overrides(codex_core::config::ConfigOverrides {
+            cwd: Some(cwd.path().to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await?;
     config.permissions.approval_policy = Constrained::allow_any(AskForApproval::Never);

@@ -1,0 +1,12 @@
+{
+ "note": "What an executor could use. The relay logs host/path/model/usage (and realtime response.done usage), not tool names, so model-visible tool sets were not logged (limit, as in PF-60-S10). Executor and product requests share the relay; per-run windows are in runs/*/mediator-window.jsonl.",
+ "executor_process": "/opt/agms/pkg/bin/corbanu exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -m glm-5.3-flash -c model_provider=\"zai\" (the candidate's own tools: shell exec and its standard tool set), as an unprivileged lane account",
+ "executor_path": "/opt/agms/bin:/usr/bin:/bin:/usr/sbin:/sbin (Homebrew bin/sbin mode 750, not listable)",
+ "harness_commands": {
+  "agms-tui": ["start [--route R] [--model M] [--provider-name N] [--env NAME=synthetic] [PRODUCT ARGS]", "text", "key", "screen", "wait", "fixture", "stop", "exec [--route R] [--model M] [--provider-name N] [EXEC ARGS] prompt", "config 'key = value'", "realtime 'text' (new in acc-tart1: one realtime session through the product's app server, openai route, capped by the relay)", "standin chatgpt-image (unused)", "standin no-charge on|off (unused)", "--term 2 (unused)"],
+  "agms-probe": ["all", "negatives"],
+  "agms-product": "called by agms-tui only",
+  "agms-realtime-driver": "called by agms-product --realtime only"
+ },
+ "network": "127.0.0.1:18443 only (the relay); hosts and paths as in effective-policy.txt"
+}

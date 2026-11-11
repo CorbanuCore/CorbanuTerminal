@@ -587,12 +587,31 @@ pub(crate) fn live_controller(home: &Path, thread: ThreadId) -> Option<TrustedSe
 }
 
 /// #978: whether a policy tree of this process runs on `home` (a session of
-/// this process uses it; not one of a remote app server).
-pub(crate) fn trees_run_on(home: &Path) -> bool {
+/// this process uses it; not one of a remote app server). #1015: only an
+/// initialized tree counts, as only those take a commit (`propagate`), and
+/// not the one holding `except` (the confirming session's own).
+pub(crate) fn trees_run_on(home: &Path, except: Option<ThreadId>) -> bool {
     let home = canonical(home);
-    let mut trees = TREES.lock().unwrap_or_else(PoisonError::into_inner);
-    trees.retain(|(_, tree)| tree.strong_count() > 0);
-    trees.iter().any(|(tree_home, _)| *tree_home == home)
+    let trees: Vec<Arc<SharedEffectivePolicy>> = {
+        let mut trees = TREES.lock().unwrap_or_else(PoisonError::into_inner);
+        trees.retain(|(_, tree)| tree.strong_count() > 0);
+        trees
+            .iter()
+            .filter(|(tree_home, _)| *tree_home == home)
+            .filter_map(|(_, tree)| tree.upgrade())
+            .collect()
+    };
+    trees.iter().any(|tree| {
+        tree.state
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+            .is_some_and(|state| {
+                except.is_none_or(|thread| {
+                    state.root_agent_id != thread && !state.agents.contains_key(&thread)
+                })
+            })
+    })
 }
 
 /// #507: whether a person's kill switch is on in a policy tree of this
@@ -616,6 +635,36 @@ pub(crate) fn live_kill_switch(home: &Path) -> Option<bool> {
         }
     }
     on
+}
+
+/// #807: the strictest level in force in the initialized policy trees of
+/// this process on `home`: a tree's own level, or a stricter one an agent of
+/// it is bound to, and Aggressive for a tree whose state cannot be read (as
+/// for an agent's snapshot). `None` when no initialized tree runs on `home`.
+pub(crate) fn strictest_live_level(home: &Path) -> Option<SecurityLevel> {
+    let home = canonical(home);
+    let trees: Vec<Arc<SharedEffectivePolicy>> = {
+        let mut trees = TREES.lock().unwrap_or_else(PoisonError::into_inner);
+        trees.retain(|(_, tree)| tree.strong_count() > 0);
+        trees
+            .iter()
+            .filter(|(tree_home, _)| *tree_home == home)
+            .filter_map(|(_, tree)| tree.upgrade())
+            .collect()
+    };
+    trees
+        .iter()
+        .filter_map(|tree| match tree.state.read() {
+            Ok(state) => state.as_ref().map(|state| {
+                state
+                    .agents
+                    .values()
+                    .map(|agent| agent.minimum_level)
+                    .fold(state.persisted.settings.level, SecurityLevel::max)
+            }),
+            Err(_) => Some(SecurityLevel::Aggressive),
+        })
+        .max()
 }
 
 /// Swap in a level and revocation state: the epoch moves and every grant of
