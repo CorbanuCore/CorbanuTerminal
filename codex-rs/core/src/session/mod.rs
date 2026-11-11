@@ -213,6 +213,7 @@ mod code_mode_warning;
 mod config_lock;
 mod confirmed_aggressive;
 pub(crate) mod context_window;
+mod detached_agent_config;
 mod extension_metrics;
 mod handlers;
 mod inject;
@@ -5669,5 +5670,13 @@ mod home_access_session_tests;
 mod stale_approval_tests;
 
 #[cfg(test)]
+#[path = "stale_poll_mail_tests.rs"]
+mod stale_poll_mail_tests;
+
+#[cfg(test)]
 #[path = "withdrawn_approval_tests.rs"]
 mod withdrawn_approval_tests;
+
+#[cfg(test)]
+#[path = "windows_sandbox_settings_tests.rs"]
+mod windows_sandbox_settings_tests;

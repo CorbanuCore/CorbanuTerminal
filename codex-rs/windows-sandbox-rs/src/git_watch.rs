@@ -238,27 +238,32 @@ fn in_roots(path: &Path, roots: &[PathBuf]) -> bool {
 /// opening a share can send the person's credentials to it and opening a
 /// device can block.
 pub(crate) fn is_remote_or_device(path: &Path) -> bool {
-    const DEVICES: [&str; 8] = [
-        "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", "CLOCK$", "CONFIG$",
-    ];
     let text = path.as_os_str().to_string_lossy();
     let prefixed = ["\\\\", "//", "\\/", "/\\", "\\??\\", "/??/"]
         .iter()
         .any(|prefix| text.starts_with(prefix));
+    prefixed || has_device_name(path)
+}
+
+/// A component of `path` is a device name (`CON`, `NUL`, `COM1` ...).
+pub(crate) fn has_device_name(path: &Path) -> bool {
+    const DEVICES: [&str; 8] = [
+        "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", "CLOCK$", "CONFIG$",
+    ];
+    let text = path.as_os_str().to_string_lossy();
     // Split on both separators, as Windows does.
-    prefixed
-        || text.split(['\\', '/']).any(|name| {
-            let stem = name
-                .split('.')
-                .next()
-                .unwrap_or_default()
-                .trim_end_matches([' ', ':'])
-                .to_ascii_uppercase();
-            DEVICES.contains(&stem.as_str())
-                || ((stem.starts_with("COM") || stem.starts_with("LPT"))
-                    && stem.len() == 4
-                    && stem.as_bytes()[3].is_ascii_digit())
-        })
+    text.split(['\\', '/']).any(|name| {
+        let stem = name
+            .split('.')
+            .next()
+            .unwrap_or_default()
+            .trim_end_matches([' ', ':'])
+            .to_ascii_uppercase();
+        DEVICES.contains(&stem.as_str())
+            || ((stem.starts_with("COM") || stem.starts_with("LPT"))
+                && stem.len() == 4
+                && stem.as_bytes()[3].is_ascii_digit())
+    })
 }
 
 /// `path` with `.` and `..` resolved by name (as Windows resolves them), so
@@ -636,23 +641,6 @@ pub(crate) fn file_print(path: &Path) -> String {
     unfollowed_print(path)
 }
 
-/// #1909: [`file_print`], but a link is recorded by its target only and
-/// never read through: `link to <target>`.
-pub(crate) fn unfollowed_file_print(path: &Path) -> String {
-    let Ok(metadata) = std::fs::symlink_metadata(path) else {
-        return "unreadable".to_string();
-    };
-    if metadata.file_type().is_symlink() {
-        let target =
-            std::fs::read_link(path).map_or_else(|_| "?".to_string(), |t| t.display().to_string());
-        return format!("link to {target}");
-    }
-    if metadata.is_dir() {
-        return "dir".to_string();
-    }
-    unfollowed_print(path)
-}
-
 /// The content hash of the file at `path` itself (with ` hard link` when
 /// it has more than one name), or `unreadable`, also when it has become a
 /// link or a folder since the caller looked (#1909): a process a command
@@ -676,6 +664,54 @@ fn unfollowed_print(path: &Path) -> String {
         text.push_str(" hard link");
     }
     text
+}
+
+/// #1909: [`unfollowed_print`] of the entry `name`, at `path`, of the open
+/// folder `dir`, with nothing looked up by path: the file is opened (and its
+/// names counted) relative to `dir`. `allow` gets the open file's size and
+/// says whether to read it; if not, or if the file holds more than that
+/// size by the time it is read (it grew), it differs every time.
+#[cfg(windows)]
+pub(crate) fn unfollowed_print_at(
+    dir: windows_sys::Win32::Foundation::HANDLE,
+    name: &[u16],
+    #[cfg_attr(not(test), allow(unused_variables))] path: &Path,
+    allow: impl FnOnce(u64) -> bool,
+) -> String {
+    #[cfg(test)]
+    tests::before_read(path);
+    let (file, links) = match crate::acl::open_unfollowed_at(dir, name) {
+        crate::acl::Unfollowed::File(file, links) => (file, links),
+        // Marked as before when the name has others (or can't be counted).
+        crate::acl::Unfollowed::Refused
+            if crate::acl::link_count_at(dir, name).is_none_or(|count| count > 1) =>
+        {
+            return "unreadable hard link".to_string();
+        }
+        crate::acl::Unfollowed::Refused => return "unreadable".to_string(),
+        crate::acl::Unfollowed::Unsure => return truncated(),
+    };
+    let Ok(size) = file.metadata().map(|metadata| metadata.len()) else {
+        return "unreadable".to_string();
+    };
+    if !allow(size) {
+        return truncated();
+    }
+    let Some(mut text) = hash_at_most(file, size) else {
+        return truncated();
+    };
+    if links > 1 {
+        text.push_str(" hard link");
+    }
+    text
+}
+
+/// [`hash`] of `file`, `None` when it holds more than `size` bytes.
+#[cfg(windows)]
+fn hash_at_most(file: std::fs::File, size: u64) -> Option<String> {
+    let mut limited = file.take(size.saturating_add(1));
+    let text = hash_read(&mut limited);
+    (limited.limit() > 0).then_some(text)
 }
 
 /// What [`open_unfollowed`] found.
@@ -731,6 +767,11 @@ fn content_print(path: &Path) -> String {
 
 /// The SHA-256 of what `file` holds, or `unreadable`.
 fn hash(mut file: std::fs::File) -> String {
+    hash_read(&mut file)
+}
+
+/// The SHA-256 of what `reader` gives, or `unreadable`.
+fn hash_read(file: &mut impl std::io::Read) -> String {
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 8192];
     loop {

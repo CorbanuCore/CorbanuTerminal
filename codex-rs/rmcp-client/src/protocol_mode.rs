@@ -4,6 +4,9 @@ use std::io;
 use rmcp::model::ProtocolVersion;
 use rmcp::service::ClientLifecycleMode;
 
+/// Protocol version a 2026-07-28 client sends in its legacy `initialize` fallback.
+pub(crate) const LEGACY_FALLBACK_PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion::V_2025_06_18;
+
 /// MCP compatibility policy selected once when a Codex session is created.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum McpProtocolMode {
@@ -28,7 +31,7 @@ impl McpProtocolMode {
             Self::Legacy => ClientLifecycleMode::Initialize,
             Self::V20260728 => ClientLifecycleMode::Auto {
                 preferred_versions: vec![ProtocolVersion::V_2026_07_28],
-                legacy_version: Some(ProtocolVersion::V_2025_06_18),
+                legacy_version: Some(LEGACY_FALLBACK_PROTOCOL_VERSION),
             },
         }
     }

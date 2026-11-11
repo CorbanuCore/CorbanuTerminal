@@ -52,7 +52,8 @@ without them Corbanu refuses every model request under Moderate, so
   first turn hasn't begun gets the interrupt, which stops that first turn,
   but no notice that would start another (D435). A first turn held back by
   the agent limit, the kill switch or a signed-out account is not cancelled
-  and runs later.
+  and runs later; the interrupt can also cancel that agent's MCP server
+  startup, so that turn may run without its MCP tools.
   Where approving can't unlock a file, the prompt names it and says what it
   is: under `secretless_agent_launch`, Corbanu's own
   files (such as its sign-in, vault, config and history), CLI tokens (`~/.aws/credentials`, `~/.netrc`,
@@ -154,6 +155,39 @@ first, with or without command output on the line:
 - substitutions (`$(...)`, `<(...)`, `>(...)`) nested more than 32 deep
   (#1020).
 
+## git's `ext::` transport after untrusted content
+
+Git's `ext::` transport runs a program named in a remote's URL. After
+untrusted content, each new agent command (`shell_command`, and
+`exec_command` when it starts a command) also gets git's
+`protocol.ext.allow=never` setting through the `GIT_CONFIG_*` environment
+variables, after any you set, and `ext` is taken out of a
+`GIT_ALLOW_PROTOCOL` list (D447, #1876). So an `ext::` remote stored in
+`.git/config` or `.gitmodules`, or one built where the checks above can't
+see it, doesn't run. This needs git 2.31 or later. It is an extra layer
+under the checks above, not a replacement: `git remote-ext` and
+`--upload-pack` run a program without the `ext` transport, and settings given
+on git's command line (`-c`, `--config-env`) or in `GIT_CONFIG_PARAMETERS`
+come after it.
+
+Known limits (D476):
+
+- Git settings that only your shell start-up files set (such as `~/.zshrc`
+  or `~/.bashrc`), or a remote executor's own environment, aren't seen. A
+  `GIT_ALLOW_PROTOCOL` exported there that lists `ext` keeps allowing it,
+  since git then follows that list, and this setting may take the place of
+  a `GIT_CONFIG_*` entry set there. Start-up files the command's shell
+  reads after the setting is added can also remove it, by setting
+  `GIT_CONFIG_COUNT` or its entries: `~/.zshenv` for every zsh command,
+  `$BASH_ENV` for bash, and the login files (`~/.zprofile`,
+  `~/.bash_profile`, `~/.profile`) when a command runs without the shell
+  snapshot, for example in a folder other than the turn's. Don't set
+  `GIT_ALLOW_PROTOCOL` or `GIT_CONFIG_*` in your start-up files.
+- A command session started before the untrusted content (one the agent
+  still writes to with `write_stdin`) keeps the environment it started
+  with, so git run in it later doesn't get this setting. Commands started
+  after the untrusted content do.
+
 ## Choosing, restarting and going back
 
 When you confirm Moderate, Core's rules (the sandbox, protected files and
@@ -185,6 +219,9 @@ The kill switch (`/security` → `g`) works under every level.
 
 ## Limits
 
+- On Windows, Moderate needs a Windows sandbox: without one, every agent
+  command and file tool access is refused, with the steps to set the default
+  sandbox up (#1976; see `docs/sandbox.md`).
 - If your own settings turn the sandbox off (full access), commands that the
   protected-file rules don't cover run without one. Choose a sandbox in your
   settings to keep every command in it.
