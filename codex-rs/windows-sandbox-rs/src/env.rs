@@ -1,5 +1,6 @@
 use anyhow::Result;
 use anyhow::anyhow;
+use codex_protocol::shell_environment::set_env_var;
 use dirs_next::home_dir;
 use std::collections::HashMap;
 use std::env;
@@ -31,23 +32,37 @@ pub fn ensure_non_interactive_pager(env_map: &mut HashMap<String, String>) {
     env_map.entry("LESS".into()).or_insert_with(|| "".into());
 }
 
+/// The value `env_map` holds for `name`, which Windows reads ignoring case
+/// (#1805): a caller may pass `Path`, as `std::env::vars()` spells it on
+/// Windows. Of several spellings, the one [`crate::process::make_env_block`]
+/// keeps (the one that sorts first).
+pub(crate) fn get_ignoring_case<'a>(
+    env_map: &'a HashMap<String, String>,
+    name: &str,
+) -> Option<&'a String> {
+    env_map
+        .iter()
+        .filter(|(key, _)| key.eq_ignore_ascii_case(name))
+        .min_by(|a, b| a.0.cmp(b.0))
+        .map(|(_, value)| value)
+}
+
 // Keep PATH and PATHEXT stable for callers that rely on inheriting the parent process env.
+// A caller's own value, in any spelling, wins over the parent's (#1805).
 pub fn inherit_path_env(env_map: &mut HashMap<String, String>) {
-    if !env_map.contains_key("PATH")
-        && let Ok(path) = env::var("PATH")
-    {
-        env_map.insert("PATH".into(), path);
-    }
-    if !env_map.contains_key("PATHEXT")
-        && let Ok(pathext) = env::var("PATHEXT")
-    {
-        env_map.insert("PATHEXT".into(), pathext);
+    for name in ["PATH", "PATHEXT"] {
+        if get_ignoring_case(env_map, name).is_none()
+            && let Ok(value) = env::var(name)
+        {
+            env_map.insert(name.into(), value);
+        }
     }
 }
 
+/// Prepends `prefix` to the caller's `PATH` (any spelling, else the
+/// parent's), stored as `PATH` in place of every other spelling (#1805).
 fn prepend_path(env_map: &mut HashMap<String, String>, prefix: &str) {
-    let existing = env_map
-        .get("PATH")
+    let existing = get_ignoring_case(env_map, "PATH")
         .cloned()
         .or_else(|| env::var("PATH").ok())
         .unwrap_or_default();
@@ -65,12 +80,11 @@ fn prepend_path(env_map: &mut HashMap<String, String>, prefix: &str) {
         new_path.push(';');
         new_path.push_str(&existing);
     }
-    env_map.insert("PATH".into(), new_path);
+    set_env_var(env_map, "PATH", new_path);
 }
 
 fn reorder_pathext_for_stubs(env_map: &mut HashMap<String, String>) {
-    let default = env_map
-        .get("PATHEXT")
+    let default = get_ignoring_case(env_map, "PATHEXT")
         .cloned()
         .or_else(|| env::var("PATHEXT").ok())
         .unwrap_or(".COM;.EXE;.BAT;.CMD".to_string());
@@ -99,7 +113,7 @@ fn reorder_pathext_for_stubs(env_map: &mut HashMap<String, String>) {
     let mut combined = Vec::new();
     combined.extend(front);
     combined.extend(rest);
-    env_map.insert("PATHEXT".into(), combined.join(";"));
+    set_env_var(env_map, "PATHEXT", combined.join(";"));
 }
 
 fn ensure_denybin(tools: &[&str], denybin_dir: Option<&Path>) -> Result<PathBuf> {
@@ -124,6 +138,24 @@ fn ensure_denybin(tools: &[&str], denybin_dir: Option<&Path>) -> Result<PathBuf>
 }
 
 pub fn apply_no_network_to_env(env_map: &mut HashMap<String, String>) -> Result<()> {
+    apply_no_network_env_vars(env_map);
+
+    let base = ensure_denybin(&["ssh", "scp"], /*denybin_dir*/ None)?;
+    for tool in ["curl", "wget"] {
+        for ext in [".bat", ".cmd"] {
+            let p = base.join(format!("{tool}{ext}"));
+            if p.exists() {
+                let _ = fs::remove_file(&p);
+            }
+        }
+    }
+    prepend_path(env_map, &base.to_string_lossy());
+    reorder_pathext_for_stubs(env_map);
+    Ok(())
+}
+
+/// The no-network environment variables, without the deny stubs.
+fn apply_no_network_env_vars(env_map: &mut HashMap<String, String>) {
     env_map.insert("SBX_NONET_ACTIVE".into(), "1".into());
     env_map
         .entry("HTTP_PROXY".into())
@@ -158,20 +190,13 @@ pub fn apply_no_network_to_env(env_map: &mut HashMap<String, String>) -> Result<
     env_map
         .entry("GIT_SSH_COMMAND".into())
         .or_insert_with(|| "cmd /c exit 1".into());
-    env_map
-        .entry("GIT_ALLOW_PROTOCOLS".into())
-        .or_insert_with(|| "".into());
-
-    let base = ensure_denybin(&["ssh", "scp"], /*denybin_dir*/ None)?;
-    for tool in ["curl", "wget"] {
-        for ext in [".bat", ".cmd"] {
-            let p = base.join(format!("{tool}{ext}"));
-            if p.exists() {
-                let _ = fs::remove_file(&p);
-            }
-        }
-    }
-    prepend_path(env_map, &base.to_string_lossy());
-    reorder_pathext_for_stubs(env_map);
-    Ok(())
+    // D475 (#1921): git allows only its local `file` transport, so it refuses
+    // network transports and `ext` before connecting or running anything.
+    // Set over any value the caller passed, in any spelling (names ignore case
+    // on Windows). This was `GIT_ALLOW_PROTOCOLS`, a name git doesn't read.
+    set_env_var(env_map, "GIT_ALLOW_PROTOCOL", "file".into());
 }
+
+#[cfg(test)]
+#[path = "env_tests.rs"]
+mod tests;

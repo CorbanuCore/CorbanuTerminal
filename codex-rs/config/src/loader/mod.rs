@@ -57,9 +57,10 @@ const SYSTEM_CONFIG_TOML_FILE_UNIX: &str = "/etc/codex/config.toml";
 const DEFAULT_PROGRAM_DATA_DIR_WINDOWS: &str = r"C:\ProgramData";
 
 // Project-local config comes from repository contents, so it should not get to
-// choose where a user's credentials are sent or which local commands are run.
-// These settings are still supported from user, system, managed, and runtime
-// config layers.
+// choose where a user's credentials are sent, which local commands are run, or
+// where Corbanu keeps its state databases and logs (`sqlite_home`, `log_dir`:
+// D483, #1945). These settings are still supported from user, system, managed,
+// and runtime config layers.
 const PROJECT_LOCAL_CONFIG_DENYLIST: &[&str] = &[
     "openai_base_url",
     "openrouter_provider",
@@ -73,6 +74,8 @@ const PROJECT_LOCAL_CONFIG_DENYLIST: &[&str] = &[
     "experimental_realtime_webrtc_call_base_url",
     "experimental_realtime_ws_base_url",
     "otel",
+    "sqlite_home",
+    "log_dir",
 ];
 
 async fn first_layer_config_error_from_entries(layers: &[ConfigLayerEntry]) -> Option<ConfigError> {
@@ -955,7 +958,12 @@ fn project_layer_entry(
     entry.with_hooks_config_folder_override(hooks_config_folder_override)
 }
 
-fn sanitize_project_config(config: &mut TomlValue) -> Vec<String> {
+/// Removes the settings a project's repository contents may not choose
+/// (`PROJECT_LOCAL_CONFIG_DENYLIST`, `features.respect_system_proxy`,
+/// `debug.config_lockfile`) and returns the dotted names of those it removed.
+/// Applied to a project's `.codex/config.toml` and to agent role files a
+/// project declares (D512, #1997).
+pub fn sanitize_project_config(config: &mut TomlValue) -> Vec<String> {
     let Some(table) = config.as_table_mut() else {
         return Vec::new();
     };
@@ -970,6 +978,14 @@ fn sanitize_project_config(config: &mut TomlValue) -> Vec<String> {
         && features.remove("respect_system_proxy").is_some()
     {
         ignored_keys.push("features.respect_system_proxy".to_string());
+    }
+    // D483 (#1945): a config lock to replay (`load_path`) replaces the whole
+    // config, this denylist included, and `export_dir` chooses where Corbanu
+    // writes the effective config.
+    if let Some(debug) = table.get_mut("debug").and_then(TomlValue::as_table_mut)
+        && debug.remove("config_lockfile").is_some()
+    {
+        ignored_keys.push("debug.config_lockfile".to_string());
     }
 
     ignored_keys
@@ -1310,7 +1326,20 @@ async fn load_project_layers(
 
     let mut layers = Vec::new();
     let mut startup_warnings = Vec::new();
+    // #1506 item 2 (D262): folders a sandboxed command may have planted.
+    let planted = crate::planted_project_metadata();
     for dir in dirs {
+        // D332 (#1682): a `.git` that appeared or changed in a session.
+        let dot_git = dir.join(".git");
+        if std::fs::symlink_metadata(dot_git.as_path()).is_ok()
+            && let Some(warning) = planted.git_warning(dot_git.as_path())
+        {
+            startup_warnings.push(warning);
+        }
+        let dot_agents = dir.join(".agents");
+        if dot_agents.as_path().is_dir() && planted.contains(dot_agents.as_path()) {
+            startup_warnings.push(planted.reason(dot_agents.as_path()));
+        }
         let dot_codex_abs = dir.join(".codex");
         let dot_codex_uri = PathUri::from_abs_path(&dot_codex_abs);
         if !fs
@@ -1323,8 +1352,21 @@ async fn load_project_layers(
         }
 
         let decision = trust_context.decision_for_dir(&dir);
-        let disabled_reason = trust_context.disabled_reason_for_decision(&decision);
+        let mut disabled_reason = trust_context.disabled_reason_for_decision(&decision);
         let hooks_config_folder_override = trust_context.root_checkout_hooks_folder_for_dir(&dir);
+        // The root checkout's `.codex` a linked worktree takes hooks from
+        // counts too.
+        if let Some(planted_folder) = [Some(&dot_codex_abs), hooks_config_folder_override.as_ref()]
+            .into_iter()
+            .flatten()
+            .find(|folder| planted.contains(folder.as_path()))
+        {
+            let reason = planted.reason(planted_folder.as_path());
+            startup_warnings.push(reason.clone());
+            disabled_reason = Some(reason);
+        }
+        // Trusted, and not possibly planted.
+        let loads_project_config = disabled_reason.is_none();
         let dot_codex_normalized =
             normalize_path(dot_codex_abs.as_path()).unwrap_or_else(|_| dot_codex_abs.to_path_buf());
         if dot_codex_abs == codex_home_abs || dot_codex_normalized == codex_home_normalized {
@@ -1345,7 +1387,7 @@ async fn load_project_layers(
                 let config: TomlValue = match toml::from_str(&contents) {
                     Ok(config) => config,
                     Err(e) => {
-                        if decision.is_trusted() {
+                        if loads_project_config {
                             let config_file_display = config_file.as_path().display();
                             return Err(io::Error::new(
                                 io::ErrorKind::InvalidData,
@@ -1386,7 +1428,7 @@ async fn load_project_layers(
                     fs,
                     config,
                     hooks_config_folder_override.as_ref(),
-                    decision.is_trusted(),
+                    loads_project_config,
                 )
                 .await?;
                 if disabled_reason.is_none() && !ignored_project_config_keys.is_empty() {
@@ -1412,7 +1454,7 @@ async fn load_project_layers(
                         fs,
                         TomlValue::Table(toml::map::Map::new()),
                         hooks_config_folder_override.as_ref(),
-                        decision.is_trusted(),
+                        loads_project_config,
                     )
                     .await?;
                     layers.push(project_layer_entry(

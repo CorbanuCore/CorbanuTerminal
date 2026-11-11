@@ -12,6 +12,7 @@ use anyhow::Result;
 use codex_rmcp_client::ElicitationAction;
 use codex_rmcp_client::ElicitationResponse;
 use codex_rmcp_client::LocalStdioServerLauncher;
+use codex_rmcp_client::McpProtocolMode;
 use codex_rmcp_client::RmcpClient;
 use futures::FutureExt as _;
 use rmcp::model::ClientCapabilities;
@@ -177,4 +178,82 @@ async fn shutdown_kills_initialized_stdio_server_with_in_flight_operation() -> R
     wait_for_process_exit(server_pid).await?;
     let _ = tokio::time::timeout(Duration::from_secs(5), call_task).await?;
     Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn opted_in_legacy_fallback_leaves_one_stdio_server_process() -> Result<()> {
+    let temp_dir = tempfile::tempdir()?;
+    let pid_log = temp_dir.path().join("server.pids");
+    let overlap_log = temp_dir.path().join("overlap.pids");
+    let server = codex_utils_cargo_bin::cargo_bin("test_mcp_2026_stdio_server")?;
+
+    let client = RmcpClient::new_stdio_client_with_protocol_mode(
+        OsString::from("/bin/sh"),
+        vec![
+            OsString::from("-c"),
+            OsString::from(
+                "if [ -s \"$PID_LOG\" ] && kill -0 \"$(head -n 1 \"$PID_LOG\")\" 2>/dev/null; \
+                 then head -n 1 \"$PID_LOG\" >> \"$OVERLAP_LOG\"; fi; \
+                 echo $$ >> \"$PID_LOG\"; exec \"$SERVER\" legacy-fallback",
+            ),
+        ],
+        Some(HashMap::from([
+            (
+                OsString::from("CODEX_MCP_PROTOCOL_VERSION"),
+                OsString::from("2026-07-28"),
+            ),
+            (OsString::from("PID_LOG"), pid_log.clone().into_os_string()),
+            (
+                OsString::from("OVERLAP_LOG"),
+                overlap_log.clone().into_os_string(),
+            ),
+            (OsString::from("SERVER"), server.into_os_string()),
+        ])),
+        &[],
+        /*cwd*/ None,
+        Arc::new(LocalStdioServerLauncher::new(std::env::current_dir()?)),
+        McpProtocolMode::V20260728,
+    )
+    .await?;
+
+    client
+        .initialize(
+            init_params(),
+            Some(Duration::from_secs(5)),
+            Box::new(|_, _| {
+                async {
+                    Ok(ElicitationResponse {
+                        action: ElicitationAction::Decline,
+                        content: None,
+                        meta: None,
+                    })
+                }
+                .boxed()
+            }),
+        )
+        .await?;
+
+    let pids = fs::read_to_string(&pid_log)?
+        .lines()
+        .map(str::parse::<u32>)
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    assert_eq!(
+        pids.len(),
+        2,
+        "discover and the legacy initialize each start one server: {pids:?}"
+    );
+    assert!(
+        !overlap_log.exists(),
+        "the fallback server started while the first server was still running: {:?}",
+        fs::read_to_string(&overlap_log)
+    );
+    wait_for_process_exit(pids[0]).await?;
+    assert!(
+        process_exists(pids[1]),
+        "expected the legacy MCP server process {} to keep running",
+        pids[1]
+    );
+
+    client.shutdown().await;
+    wait_for_process_exit(pids[1]).await
 }

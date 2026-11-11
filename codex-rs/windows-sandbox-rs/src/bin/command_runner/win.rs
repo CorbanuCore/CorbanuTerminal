@@ -22,7 +22,9 @@ use codex_windows_sandbox::FramedMessage;
 use codex_windows_sandbox::IPC_PROTOCOL_VERSION;
 use codex_windows_sandbox::LocalSid;
 use codex_windows_sandbox::Message;
+use codex_windows_sandbox::OUTPUT_DRAIN_TIMEOUT;
 use codex_windows_sandbox::OutputPayload;
+use codex_windows_sandbox::OutputPipeReader;
 use codex_windows_sandbox::OutputStream;
 use codex_windows_sandbox::PipeSpawnHandles;
 use codex_windows_sandbox::ResizePayload;
@@ -36,11 +38,13 @@ use codex_windows_sandbox::create_readonly_token_with_caps_and_user_from;
 use codex_windows_sandbox::create_workspace_write_token_with_caps_and_user_from;
 use codex_windows_sandbox::decode_bytes;
 use codex_windows_sandbox::encode_bytes;
+use codex_windows_sandbox::finish_output_readers;
 use codex_windows_sandbox::get_current_token_for_restriction;
 use codex_windows_sandbox::hide_current_user_profile_dir;
 use codex_windows_sandbox::log_note;
 use codex_windows_sandbox::read_frame;
-use codex_windows_sandbox::read_handle_loop;
+use codex_windows_sandbox::restrict_current_default_dacl;
+use codex_windows_sandbox::restrict_current_token_access;
 use codex_windows_sandbox::spawn_process_with_pipes;
 use codex_windows_sandbox::to_wide;
 use codex_windows_sandbox::token_mode_for_permission_profile;
@@ -54,6 +58,7 @@ use std::path::PathBuf;
 use std::ptr;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
+use std::sync::mpsc::SyncSender;
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 use windows_sys::Win32::Foundation::GetLastError;
@@ -64,6 +69,7 @@ use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_READ;
 use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_WRITE;
 use windows_sys::Win32::Storage::FileSystem::OPEN_EXISTING;
 use windows_sys::Win32::System::Console::COORD;
+use windows_sys::Win32::System::Console::FreeConsole;
 use windows_sys::Win32::System::Console::ResizePseudoConsole;
 use windows_sys::Win32::System::Threading::GetExitCodeProcess;
 use windows_sys::Win32::System::Threading::GetProcessId;
@@ -74,9 +80,6 @@ use windows_sys::Win32::System::Threading::PROCESS_INFORMATION;
 use windows_sys::Win32::System::Threading::TerminateProcess;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
-// Kept in sync with codex_exec_server::CODEX_FS_HELPER_ARG1 without introducing
-// a dependency cycle.
-const FS_HELPER_ARG: &str = "--codex-run-as-fs-helper";
 const READ_ACL_MUTEX_NAME: &str = "Local\\CodexSandboxReadAcl";
 const TERMINATION_WAIT_MS: u32 = 5_000;
 const WAIT_TIMEOUT: u32 = 0x0000_0102;
@@ -235,7 +238,54 @@ fn effective_cwd(req_cwd: &Path, log_dir: Option<&Path>) -> PathBuf {
     }
 }
 
-fn spawn_ipc_process(req: &SpawnRequest) -> Result<IpcSpawnedProcess> {
+/// D324 (#1648): keeps this runner's commands, and every other elevated
+/// command, from writing to it. They all run as the sandbox account this
+/// runner runs as, which is a restricting SID of their tokens, and this
+/// process, its threads and its token gave that account full access: a
+/// command could start a child under the runner, with its unrestricted
+/// token, or write the runner's memory, threads or token. Afterwards the
+/// account may only query this process and its threads (and wait for
+/// them) and query its token, and objects the runner creates without
+/// explicit security (threads Windows starts in it, pipes, the console
+/// host) give the commands no write right and no `TOKEN_DUPLICATE` either.
+/// Runs first thing in `main`. Core starts the runner suspended and, before
+/// it runs, gives its process and main thread a DACL that only SYSTEM may
+/// open (and its default DACL this one, where Core may), but from the
+/// secondary logon service creating it until then, any elevated command
+/// could open it (#1721).
+/// Returns the token the command's token is made from, opened first: the
+/// runner can't open its own token for that afterwards.
+fn harden_runner() -> Result<OwnedWinHandle> {
+    // A console host started before this would carry the logon's default
+    // DACL, which gives the sandbox account full access: a command could
+    // start a child under it. The runner is a GUI-subsystem binary, so
+    // Windows starts none; this only leaves a console the runner got anyway
+    // (#1721).
+    // SAFETY: no arguments; a failure means there was no console.
+    unsafe { FreeConsole() };
+    let base = unsafe { get_current_token_for_restriction() }.map(OwnedWinHandle::new);
+    // The token first: Core started this process with a DACL nobody but
+    // SYSTEM may open, and the process DACL set last lets the sandbox account
+    // query it, which is enough to open its token.
+    // Every step runs even if an earlier one failed: the runner lives on
+    // until it has reported the error.
+    let steps = [
+        restrict_current_default_dacl().context("restrict the runner's default DACL"),
+        restrict_current_token_access().context("restrict access to the runner's token"),
+        codex_process_hardening::restrict_current_process_access()
+            .context("restrict access to the runner's process and threads"),
+    ];
+    let errors: Vec<String> = steps
+        .into_iter()
+        .filter_map(|step| step.err().map(|err| format!("{err:#}")))
+        .collect();
+    if !errors.is_empty() {
+        anyhow::bail!("harden the runner: {}", errors.join("; "));
+    }
+    base
+}
+
+fn spawn_ipc_process(req: &SpawnRequest, base: &OwnedWinHandle) -> Result<IpcSpawnedProcess> {
     let log_dir = req.codex_home.clone();
     hide_current_user_profile_dir(req.codex_home.as_path());
     let token_mode = token_mode_for_permission_profile(
@@ -270,7 +320,6 @@ fn spawn_ipc_process(req: &SpawnRequest) -> Result<IpcSpawnedProcess> {
         .iter()
         .map(LocalSid::as_ptr)
         .collect();
-    let base = OwnedWinHandle::new(unsafe { get_current_token_for_restriction()? });
     let h_token = OwnedWinHandle::new(unsafe {
         match token_mode {
             WindowsSandboxTokenMode::ReadOnlyCapability => {
@@ -357,11 +406,10 @@ fn spawn_ipc_process(req: &SpawnRequest) -> Result<IpcSpawnedProcess> {
             &req.env,
             stdin_mode,
             StderrMode::Separate,
-            if req.command.get(1).is_some_and(|arg| arg == FS_HELPER_ARG) {
-                ConsoleMode::NoWindow
-            } else {
-                ConsoleMode::Inherit
-            },
+            // D324: the runner has no console to inherit (see
+            // `harden_runner`), so each command gets a hidden one of its own,
+            // whose host it starts with its own token.
+            ConsoleMode::NoWindow,
             req.use_private_desktop,
             Some(log_dir.as_path()),
         )?;
@@ -389,31 +437,58 @@ fn spawn_ipc_process(req: &SpawnRequest) -> Result<IpcSpawnedProcess> {
     })
 }
 
-/// Stream stdout/stderr from the child into Output frames.
-fn spawn_output_reader(
+/// Chunks the output readers have read, waiting for [`spawn_output_writer`].
+/// Bounded, so a parent that reads slowly slows the command down rather than
+/// the runner's memory growing. The drain after the command exits counts
+/// time a reader waits here, so a parent more than about 2 s behind could
+/// miss the command's last output; Core reads the frames as they come.
+const OUTPUT_CHUNKS_IN_FLIGHT: usize = 8;
+
+/// Writes the chunks the output readers send as Output frames. #1830: only
+/// this thread writes them, so cancelling a reader's read never cuts a frame
+/// short; it ends once every reader has ended.
+fn spawn_output_writer(
     writer: Arc<StdMutex<File>>,
+    log_dir: Option<PathBuf>,
+) -> (
+    SyncSender<(OutputStream, Vec<u8>)>,
+    std::thread::JoinHandle<()>,
+) {
+    let (chunks_tx, chunks_rx) =
+        std::sync::mpsc::sync_channel::<(OutputStream, Vec<u8>)>(OUTPUT_CHUNKS_IN_FLIGHT);
+    let thread = std::thread::spawn(move || {
+        for (stream, chunk) in chunks_rx {
+            let msg = FramedMessage {
+                version: IPC_PROTOCOL_VERSION,
+                message: Message::Output {
+                    payload: OutputPayload {
+                        data_b64: encode_bytes(&chunk),
+                        stream,
+                    },
+                },
+            };
+            if let Ok(mut guard) = writer.lock()
+                && let Err(err) = write_frame(&mut *guard, &msg)
+            {
+                log_note(
+                    &format!("runner output write failed: {err}"),
+                    log_dir.as_deref(),
+                );
+            }
+        }
+    });
+    (chunks_tx, thread)
+}
+
+/// Reads one of the child's output pipes, handing each chunk to the writer.
+fn spawn_output_reader(
+    chunks_tx: SyncSender<(OutputStream, Vec<u8>)>,
     handle: HANDLE,
     stream: OutputStream,
-    log_dir: Option<PathBuf>,
-) -> std::thread::JoinHandle<()> {
-    read_handle_loop(handle, move |chunk| {
-        let msg = FramedMessage {
-            version: IPC_PROTOCOL_VERSION,
-            message: Message::Output {
-                payload: OutputPayload {
-                    data_b64: encode_bytes(chunk),
-                    stream,
-                },
-            },
-        };
-        if let Ok(mut guard) = writer.lock()
-            && let Err(err) = write_frame(&mut *guard, &msg)
-        {
-            log_note(
-                &format!("runner output write failed: {err}"),
-                log_dir.as_deref(),
-            );
-        }
+) -> OutputPipeReader<()> {
+    OutputPipeReader::spawn_with(handle, (), move |_, chunk| {
+        // The writer only ends after every reader has.
+        let _ = chunks_tx.send((stream, chunk.to_vec()));
     })
 }
 
@@ -560,6 +635,8 @@ pub fn main() -> Result<()> {
     if std::env::args().nth(1).as_deref() == Some(codex_windows_sandbox::WINDOW_ACCESS_REAPER_ARG) {
         return codex_windows_sandbox::run_window_access_reaper();
     }
+    // Before anything else (see `harden_runner`).
+    let base = harden_runner();
     // Core gave this logon its desktop access; the runner can't change it.
     codex_windows_sandbox::mark_as_command_runner();
     let mut pipe_in = None;
@@ -602,14 +679,14 @@ pub fn main() -> Result<()> {
         }
     };
 
-    let ipc_spawn = match spawn_ipc_process(&req) {
+    let ipc_spawn = match base.and_then(|base| spawn_ipc_process(&req, &base)) {
         Ok(value) => value,
         Err(err) => {
             let _ = send_error(
                 &pipe_write,
                 ErrorStage::SpawnChild,
                 windows_error_code(&err),
-                err.to_string(),
+                format!("{err:#}"),
             );
             return Err(err);
         }
@@ -646,22 +723,19 @@ pub fn main() -> Result<()> {
         return Err(err);
     }
     let log_dir_owned = log_dir.map(Path::to_path_buf);
-    let out_thread = spawn_output_reader(
-        Arc::clone(&pipe_write),
-        stdout_handle,
-        OutputStream::Stdout,
-        log_dir_owned.clone(),
-    );
+    let (chunks_tx, output_writer) =
+        spawn_output_writer(Arc::clone(&pipe_write), log_dir_owned.clone());
+    let out_thread = spawn_output_reader(chunks_tx.clone(), stdout_handle, OutputStream::Stdout);
     let err_thread = if stderr_handle != windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE {
         Some(spawn_output_reader(
-            Arc::clone(&pipe_write),
+            chunks_tx.clone(),
             stderr_handle,
             OutputStream::Stderr,
-            log_dir_owned.clone(),
         ))
     } else {
         None
     };
+    drop(chunks_tx);
 
     let _input_thread = spawn_input_loop(
         pipe_read,
@@ -720,13 +794,26 @@ pub fn main() -> Result<()> {
     drop(conpty_owner.take());
 
     if child_stopped {
-        if out_thread.join().is_err() {
+        // #1830: a process the command left running may hold the output
+        // pipes; read what is left for a bounded time, not until it exits.
+        let [out, err] = match err_thread {
+            Some(err_thread) => {
+                finish_output_readers([out_thread, err_thread], OUTPUT_DRAIN_TIMEOUT)
+            }
+            None => {
+                let [out] = finish_output_readers([out_thread], OUTPUT_DRAIN_TIMEOUT);
+                [out, Ok(())]
+            }
+        };
+        if out.is_err() {
             log_note("runner stdout reader thread panicked", log_dir);
         }
-        if let Some(thread) = err_thread
-            && thread.join().is_err()
-        {
+        if err.is_err() {
             log_note("runner stderr reader thread panicked", log_dir);
+        }
+        // The readers have ended: write what they sent before the Exit frame.
+        if output_writer.join().is_err() {
+            log_note("runner output writer thread panicked", log_dir);
         }
     }
 

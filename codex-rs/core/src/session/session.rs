@@ -34,6 +34,9 @@ pub(crate) struct Session {
     pub(super) tx_sub: Sender<Submission>,
     pub(super) tx_event: Sender<Event>,
     pub(super) agent_status: watch::Sender<AgentStatus>,
+    /// Set when `spawn_agent` created this session and queued its first turn
+    /// (D435). A session reloaded later is a new one, so this stays false.
+    pub(crate) spawned_with_first_turn: std::sync::atomic::AtomicBool,
     pub(super) state: Mutex<SessionState>,
     /// Serializes rebuild/apply cycles for the running proxy; each cycle
     /// rebuilds from the current SessionState while holding this lock.
@@ -59,6 +62,10 @@ pub(crate) struct Session {
     /// This is seeded from persisted rollout items on resume so a crash between rollout flush
     /// and mailbox acknowledgement cannot apply the same message to local history twice.
     pub(crate) applied_agent_message_ids: Mutex<HashSet<String>>,
+    /// #1545: names this session, as opposed to the thread, which a reload or a resume in the
+    /// same process gives a new session. A mailbox delivery attempt records the incarnation of
+    /// the recipient session it was reserved for.
+    pub(crate) mailbox_incarnation: String,
     pub(crate) guardian_review_session: GuardianReviewSessionManager,
     pub(crate) services: SessionServices,
     pub(super) git_enrichment_policy: GitEnrichmentPolicy,
@@ -384,6 +391,30 @@ impl SessionConfiguration {
             next_configuration.try_require_approval_for_every_command()?;
         }
         if let Some(windows_sandbox_level) = updates.windows_sandbox_level {
+            // #2000: mid-session the Windows sandbox only gets stronger (a
+            // set-up sandbox applies at once); a weaker one waits for a new
+            // session, so nothing can lower it under a running session.
+            if crate::windows_sandbox::windows_sandbox_strength(windows_sandbox_level)
+                < crate::windows_sandbox::windows_sandbox_strength(self.windows_sandbox_level)
+            {
+                return Err(ConstraintError::InvalidValue {
+                    field_name: "windows_sandbox_level",
+                    candidate: format!("{windows_sandbox_level:?}"),
+                    allowed: format!(
+                        "this session's Windows sandbox ({:?}) or a stronger one; a weaker one \
+                         applies from the next session",
+                        self.windows_sandbox_level
+                    ),
+                    requirement_source: codex_config::RequirementSource::Unknown,
+                });
+            }
+            if windows_sandbox_level != next_configuration.windows_sandbox_level {
+                // What reads the session's config (agents reloaded later,
+                // the memory agent) gets the raised sandbox too.
+                let mut config = (*next_configuration.original_config_do_not_use).clone();
+                crate::windows_sandbox::raise_windows_sandbox(&mut config, windows_sandbox_level);
+                next_configuration.original_config_do_not_use = Arc::new(config);
+            }
             next_configuration.windows_sandbox_level = windows_sandbox_level;
         }
 
@@ -1376,6 +1407,7 @@ impl Session {
                 tx_sub,
                 tx_event: tx_event.clone(),
                 agent_status,
+                spawned_with_first_turn: Default::default(),
                 state: Mutex::new(state),
                 managed_network_proxy_refresh_lock: Semaphore::new(/*permits*/ 1),
                 features: config.features.clone(),
@@ -1391,6 +1423,7 @@ impl Session {
                 active_turn: Mutex::new(None),
                 input_queue: InputQueue::new(),
                 applied_agent_message_ids: Mutex::new(applied_agent_message_ids),
+                mailbox_incarnation: uuid::Uuid::now_v7().to_string(),
                 guardian_review_session: GuardianReviewSessionManager::default(),
                 services,
                 git_enrichment_policy,
