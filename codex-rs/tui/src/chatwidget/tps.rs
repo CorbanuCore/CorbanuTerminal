@@ -329,7 +329,12 @@ mod tests {
                 );
             }
         }
-        assert_eq!(generated_tokens_for_usage(&usage(-1, 30)), 0);
+        assert_eq!(
+            generated_tokens_for_usage(&usage(
+                /*output_tokens*/ -1, /*reasoning_output_tokens*/ 30,
+            )),
+            0,
+        );
     }
 
     #[test]
