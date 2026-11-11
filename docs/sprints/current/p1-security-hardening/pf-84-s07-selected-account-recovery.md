@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-84-S07"
 title: "Selected-account inference and credential recovery"
-status: in_progress
+status: draft
 plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-84"
 execution_order: 77
@@ -18,6 +18,22 @@ updated: 2026-11-11
 ---
 
 # PF-84-S07 — Selected-account recovery
+
+## Integration handoff — 2026-11-11
+
+The coordinator returns this reservation to `draft` while serially integrating
+PF-23-S04. Both records share one real owner and the plan/index write boundary;
+renaming an owner or omitting shared paths would not make them independent.
+Stage A is preserved at `0fa06783eda5157ddbbc129ebc82abc9425636f2` in #2115,
+with independent review, isolated API242/Core10/Core-integration8 passes, a later
+five-case command-fixture replay, and synthetic native-Windows fixture evidence.
+Final CI is still pending; no functional acceptance or release is claimed.
+Stage B remains blocked on owner decision 88-B, and independent functional
+execution needs the requested Opus runtime restored. The original preservation
+contract is not waived. Coordinates remain recorded for reallocation; before
+further implementation, the integration owner must reactivate this reservation
+with disjoint ownership or after the chroot handoff, then run both checkers.
+No provider executor is running during this serialized integration.
 
 ## Execution mandate
 

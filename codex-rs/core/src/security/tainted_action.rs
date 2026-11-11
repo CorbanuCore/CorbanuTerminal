@@ -2563,7 +2563,55 @@ impl Classifier {
         let finder_sudo = indirect::finder_exec_commands(words)
             .into_iter()
             .any(|(start, end)| indirect::sudo_runs_helper(simple, &words[..end], start));
-        if finder_sudo
+        // #1808: a chroot's command (`chroot / ./x`) is judged as a command
+        // line of its own, besides this line as read before (chroot stays
+        // its command word, so every check on it is kept). A chroot whose
+        // command cannot be judged (another root, an unseen root, or none)
+        // asks.
+        let chroot_lines = indirect::chroot_commands(simple, words, /*from*/ 0)
+            .into_iter()
+            .chain(
+                operands
+                    .into_iter()
+                    .flat_map(|from| indirect::chroot_commands(simple, words, from)),
+            )
+            .collect::<Vec<_>>();
+        for (start, skip_chdir) in chroot_lines {
+            work::step();
+            if indirect::chroot_reads_code_input(simple, words, start) {
+                self.note(ProtectedActionKind::UnseenCode);
+            }
+            let (run, run_unseen) = (&words[start..], unseen.get(start..).unwrap_or_default());
+            // The line-level unseen-code checks, on the chroot's command:
+            // an unseen command word (`chroot / $X`) or inline code holding
+            // an unseen value (`chroot / sh -c "$(cat f)"`).
+            let inline_unseen = indirect::invocation(run).is_some_and(|invocation| {
+                matches!(invocation.code, Code::Inline(Some(code))
+                    if run
+                        .iter()
+                        .position(|word| word.ends_with(code))
+                        .is_some_and(|at| run_unseen[at..].iter().any(|unseen| *unseen)))
+            });
+            if self.rebuilt == 0
+                && (run_unseen.first().copied().unwrap_or_default() || inline_unseen)
+            {
+                self.note(ProtectedActionKind::UnseenCode);
+            }
+            // chroot runs the command in `/` of the new root unless
+            // `--skip-chdir` (`chroot / cp x home/u/.zshrc` writes
+            // `/home/u/.zshrc`); it is judged there, and in the current
+            // folder too.
+            if !skip_chdir {
+                // Keep the drive under Windows path rules; a bare "/" cwd
+                // would lose it before resolving the child's relative paths.
+                let root = self.homes.resolve("/", &folders.cwd);
+                self.command(run, &root, depth + 1);
+            }
+            self.command(run, &folders.cwd, depth + 1);
+        }
+        if indirect::chroot_runs_unjudged(simple, words, /*from*/ 0)
+            || operands.is_some_and(|from| indirect::chroot_runs_unjudged(simple, words, from))
+            || finder_sudo
             || indirect::redirect_hides_command(simple, words, /*from*/ 0)
             || indirect::sudo_runs_helper(simple, words, /*from*/ 0)
             || operands.is_some_and(|from| {
