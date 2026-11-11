@@ -1,6 +1,7 @@
 //! dns using the [`hickory_resolver`] crate
 
 use std::{
+    collections::HashSet,
     net::{Ipv4Addr, Ipv6Addr},
     sync::Arc,
 };
@@ -9,8 +10,9 @@ pub use hickory_resolver as resolver;
 use hickory_resolver::{
     TokioResolver,
     config::{CLOUDFLARE, GOOGLE, QUAD9, ResolverConfig},
+    lookup::Lookup,
     net::{NetError, runtime::TokioRuntimeProvider},
-    proto::rr::{Name, RData},
+    proto::rr::{Name, RData, RecordType},
 };
 
 use rama_core::error::{ErrorContext, OpaqueError};
@@ -183,21 +185,110 @@ impl HickoryDns {
     }
 }
 
+impl HickoryDns {
+    async fn lookup_records(
+        &self,
+        domain: Domain,
+        record_type: RecordType,
+    ) -> Result<Vec<RData>, OpaqueError> {
+        let resolver = self.resolver()?;
+        let mut name = fqdn_from_domain(domain)?;
+        let mut visited = HashSet::new();
+        // Normally Hickory has already followed the complete chain. If a caller
+        // disables preserve_intermediates, a cached response can lack the CNAME
+        // evidence linking the original query to its answer. Resolve that link
+        // explicitly instead of accepting records with an unverified owner.
+        for _ in 0..32 {
+            if !visited.insert(name.clone()) {
+                return Err(OpaqueError::from_display("cyclic DNS alias"));
+            }
+            let lookup = resolver
+                .lookup(name.clone(), record_type)
+                .await
+                .context("resolve DNS record")?;
+            let records = matching_records(&lookup)?;
+            if !records.is_empty() {
+                return Ok(records);
+            }
+            let aliases = resolver
+                .lookup(name.clone(), RecordType::CNAME)
+                .await
+                .context("resolve DNS alias")?;
+            let target = canonical_name(&aliases)?;
+            if target == name {
+                return Err(OpaqueError::from_display(
+                    "DNS answer has no matching owner",
+                ));
+            }
+            name = target;
+        }
+        Err(OpaqueError::from_display(
+            "DNS alias chain exceeds lookup limit",
+        ))
+    }
+}
+
+// Hickory 0.26 preserves complete response sections. Rama's old typed lookup
+// exposed only records for the query or its terminal CNAME owner, in the query
+// class. Never treat unrelated answers or glue as connection candidates.
+fn canonical_name(lookup: &Lookup) -> Result<Name, OpaqueError> {
+    let mut name = lookup.query().name.clone();
+    let mut visited = HashSet::new();
+    loop {
+        if !visited.insert(name.clone()) {
+            return Err(OpaqueError::from_display("cyclic DNS alias"));
+        }
+        let next = lookup.answers().iter().find_map(|record| {
+            if record.name == name
+                && record.dns_class == lookup.query().query_class
+                && let RData::CNAME(target) = &record.data
+            {
+                return Some(target.0.clone());
+            }
+            None
+        });
+        match next {
+            Some(target) => name = target,
+            None => return Ok(name),
+        }
+    }
+}
+
+fn matching_records(lookup: &Lookup) -> Result<Vec<RData>, OpaqueError> {
+    let query = lookup.query();
+    let target = canonical_name(lookup)?;
+    let mut records = Vec::new();
+    for record in lookup
+        .answers()
+        .iter()
+        .chain(lookup.additionals()) // codespell:ignore additionals
+        .chain(lookup.authorities())
+    {
+        if record.dns_class == query.query_class
+            && record.record_type() == query.query_type
+            && (record.name == query.name || record.name == target)
+        {
+            // With intermediates disabled, Hickory may copy a matching
+            // additional record into ANSWER while retaining the original.
+            if !records.contains(&record.data) {
+                records.push(record.data.clone());
+            }
+        }
+    }
+    Ok(records)
+}
+
 impl DnsResolver for HickoryDns {
     type Error = OpaqueError;
 
     async fn txt_lookup(&self, domain: Domain) -> Result<Vec<Vec<u8>>, Self::Error> {
-        let name = fqdn_from_domain(domain)?;
-
         let mut results = vec![];
         for txt in self
-            .resolver()?
-            .txt_lookup(name)
+            .lookup_records(domain, RecordType::TXT)
             .await
             .context("lookup TXT entry")?
-            .answers()
-            .iter()
-            .filter_map(|record| match &record.data {
+            .into_iter()
+            .filter_map(|data| match data {
                 RData::TXT(txt) => Some(txt),
                 _ => None,
             })
@@ -210,15 +301,12 @@ impl DnsResolver for HickoryDns {
     }
 
     async fn ipv4_lookup(&self, domain: Domain) -> Result<Vec<Ipv4Addr>, Self::Error> {
-        let name = fqdn_from_domain(domain)?;
         Ok(self
-            .resolver()?
-            .ipv4_lookup(name)
+            .lookup_records(domain, RecordType::A)
             .await
             .context("lookup IPv4 address(es)")?
-            .answers()
-            .iter()
-            .filter_map(|record| match &record.data {
+            .into_iter()
+            .filter_map(|data| match data {
                 RData::A(ip) => Some(ip.0),
                 _ => None,
             })
@@ -226,15 +314,12 @@ impl DnsResolver for HickoryDns {
     }
 
     async fn ipv6_lookup(&self, domain: Domain) -> Result<Vec<Ipv6Addr>, Self::Error> {
-        let name = fqdn_from_domain(domain)?;
         Ok(self
-            .resolver()?
-            .ipv6_lookup(name)
+            .lookup_records(domain, RecordType::AAAA)
             .await
             .context("lookup IPv6 address(es)")?
-            .answers()
-            .iter()
-            .filter_map(|record| match &record.data {
+            .into_iter()
+            .filter_map(|data| match data {
                 RData::AAAA(ip) => Some(ip.0),
                 _ => None,
             })
