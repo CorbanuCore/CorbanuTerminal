@@ -51,7 +51,9 @@ class Table:
         return Table(self.name, list(self.columns), kept)
 
     def project(self, *columns: str) -> "Table":
-        projected = [{column: row.get(column) for column in columns} for row in self.rows]
+        projected = [
+            {column: row.get(column) for column in columns} for row in self.rows
+        ]
         return Table(self.name, list(columns), projected)
 
     def join(self, other: "Table", left_key: str, right_key: str) -> "Table":

@@ -1,4 +1,5 @@
 """Replay final regression cases against frozen base modules, without checkout edits."""
+
 import importlib
 from pathlib import Path
 import subprocess
@@ -8,8 +9,9 @@ BASE = "d778cba2aedc3dac21e71266e23c346895afac2c"
 for name in ("decision_feed", "attention", "owner_daemon"):
     module = importlib.import_module(name)
     path = Path(module.__file__).resolve().relative_to(Path.cwd())
-    source = subprocess.run(["git", "show", f"{BASE}:{path}"],
-                            capture_output=True, check=True, text=True).stdout
+    source = subprocess.run(
+        ["git", "show", f"{BASE}:{path}"], capture_output=True, check=True, text=True
+    ).stdout
     exec(compile(source, str(path), "exec"), module.__dict__)
 
 cases = [

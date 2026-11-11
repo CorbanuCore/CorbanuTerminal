@@ -1,5 +1,6 @@
 """Copy each clone's evidence folder into the record's common/ (mediator logs gzipped, the clone's IP dropped) and
 write common/tool-inventory.json and common/clones.json.   usage: make_common.py WORK_DIR RECORD_DIR"""
+
 import collections
 import gzip
 import json
@@ -24,7 +25,10 @@ for c in sorted((work / "common").glob("T*")):
         rel = f.relative_to(c)
         (dst / rel).parent.mkdir(parents=True, exist_ok=True)
         if f.name == "mediator-final.jsonl":
-            with open(f, "rb") as i, gzip.GzipFile(dst / (str(rel) + ".gz"), "wb", mtime=0) as o:
+            with (
+                open(f, "rb") as i,
+                gzip.GzipFile(dst / (str(rel) + ".gz"), "wb", mtime=0) as o,
+            ):
                 shutil.copyfileobj(i, o)
         else:
             shutil.copy2(f, dst / rel)
@@ -43,17 +47,43 @@ for c in sorted((work / "common").glob("T*")):
         elif e.get("event") == "session_error":
             errs += 1
         elif e.get("event") == "denied_proxy_request":
-            refused[e.get("request_line", "").split(" ")[1] if " " in e.get("request_line", "") else "?"] += 1
+            refused[
+                e.get("request_line", "").split(" ")[1]
+                if " " in e.get("request_line", "")
+                else "?"
+            ] += 1
     tunnel = (c / "tunnel.log").read_text() if (c / "tunnel.log").exists() else ""
-    clones.append({"clone": c.name, "forwarded": fwd, "non_200": non200, "session_error": errs,
-                   "tunnel_connects": tunnel.count(" connect agent@"), "tunnel_ssh_exits": tunnel.count("ssh exited")})
-(out / "tool-inventory.json").write_text(json.dumps({
-    "note": "Model-visible tool sets observed by the guest mediators over the whole run (all clones), by request role "
+    clones.append(
+        {
+            "clone": c.name,
+            "forwarded": fwd,
+            "non_200": non200,
+            "session_error": errs,
+            "tunnel_connects": tunnel.count(" connect agent@"),
+            "tunnel_ssh_exits": tunnel.count("ssh exited"),
+        }
+    )
+(out / "tool-inventory.json").write_text(
+    json.dumps(
+        {
+            "note": "Model-visible tool sets observed by the guest mediators over the whole run (all clones), by request role "
             "(executor = the tester's corbanu exec; product = the TUI under test). Names only; no bodies or headers. "
             "Per-clone logs: common/<clone>/mediator-final.jsonl.gz; per-run windows: runs/*/mediator-window.jsonl.",
-    "observed_tool_sets": [{"role": r, "tools": list(t), "requests": n} for (r, t), n in sorted(sets.items())],
-    "refused_connects": dict(sorted(refused.items())),
-}, indent=1) + "\n")
+            "observed_tool_sets": [
+                {"role": r, "tools": list(t), "requests": n}
+                for (r, t), n in sorted(sets.items())
+            ],
+            "refused_connects": dict(sorted(refused.items())),
+        },
+        indent=1,
+    )
+    + "\n"
+)
 (out / "clones.json").write_text(json.dumps(clones, indent=1) + "\n")
-print(len(clones), sum(c["forwarded"] for c in clones), sum(c["non_200"] for c in clones),
-      sum(c["session_error"] for c in clones), sum(c["tunnel_ssh_exits"] for c in clones))
+print(
+    len(clones),
+    sum(c["forwarded"] for c in clones),
+    sum(c["non_200"] for c in clones),
+    sum(c["session_error"] for c in clones),
+    sum(c["tunnel_ssh_exits"] for c in clones),
+)

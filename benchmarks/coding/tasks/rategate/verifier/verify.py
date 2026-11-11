@@ -32,7 +32,9 @@ class HiddenContractTests(unittest.TestCase):
             rate=1,
             capacity=3,
         )
-        self.assertEqual([d["allowed"] for d in result["decisions"]], [True, False, True, True])
+        self.assertEqual(
+            [d["allowed"] for d in result["decisions"]], [True, False, True, True]
+        )
         self.assertEqual(result["decisions"][-1]["tokens_remaining"], 1.0)
 
     def test_token_bucket_rejected_requests_do_not_consume(self) -> None:
@@ -45,7 +47,9 @@ class HiddenContractTests(unittest.TestCase):
             rate=1,
             capacity=2,
         )
-        self.assertEqual([d["allowed"] for d in result["decisions"]], [True, False, True])
+        self.assertEqual(
+            [d["allowed"] for d in result["decisions"]], [True, False, True]
+        )
         self.assertEqual(result["decisions"][2]["tokens_remaining"], 0.0)
 
     def test_sliding_window_half_open_boundary(self) -> None:
@@ -58,7 +62,9 @@ class HiddenContractTests(unittest.TestCase):
             limit=1,
             window_seconds=10,
         )
-        self.assertEqual([d["allowed"] for d in result["decisions"]], [True, True, False])
+        self.assertEqual(
+            [d["allowed"] for d in result["decisions"]], [True, True, False]
+        )
         self.assertEqual([d["window_count"] for d in result["decisions"]], [1, 1, 1])
 
     def test_iso_timestamps_sort_before_input_order_ties(self) -> None:
@@ -71,7 +77,9 @@ class HiddenContractTests(unittest.TestCase):
             limit=10,
             window_seconds=60,
         )
-        self.assertEqual([d["id"] for d in result["decisions"]], ["early", "late", "tie"])
+        self.assertEqual(
+            [d["id"] for d in result["decisions"]], ["early", "late", "tie"]
+        )
 
     def test_invalid_requests_are_diagnostics_and_rejections(self) -> None:
         result = token_bucket(
@@ -83,7 +91,9 @@ class HiddenContractTests(unittest.TestCase):
             rate=1,
             capacity=2,
         )
-        self.assertEqual([d["allowed"] for d in result["decisions"]], [False, False, False])
+        self.assertEqual(
+            [d["allowed"] for d in result["decisions"]], [False, False, False]
+        )
         codes = [d["code"] for d in result["diagnostics"]]
         self.assertIn("missing_key", codes)
         self.assertIn("invalid_cost", codes)
@@ -94,7 +104,9 @@ class HiddenContractTests(unittest.TestCase):
         env = os.environ.copy()
         env["PYTHONPATH"] = str(repo / "src")
         code = "from rategate import token_bucket; print(token_bucket([{'key':'x','ts':0}], 1, 1)['decisions'][0]['allowed'])"
-        out = subprocess.check_output([sys.executable, "-c", code], cwd=repo, env=env, text=True)
+        out = subprocess.check_output(
+            [sys.executable, "-c", code], cwd=repo, env=env, text=True
+        )
         self.assertEqual(out.strip(), "True")
 
 
@@ -126,7 +138,12 @@ def main() -> int:
 def internal_run() -> int:
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(HiddenContractTests)
     result = unittest.TextTestRunner(verbosity=2).run(suite)
-    summary = {"ok": result.wasSuccessful(), "tests_run": result.testsRun, "failures": len(result.failures), "errors": len(result.errors)}
+    summary = {
+        "ok": result.wasSuccessful(),
+        "tests_run": result.testsRun,
+        "failures": len(result.failures),
+        "errors": len(result.errors),
+    }
     print("HIDDEN_VERIFIER_SUMMARY", json.dumps(summary, sort_keys=True))
     return 0 if result.wasSuccessful() else 1
 

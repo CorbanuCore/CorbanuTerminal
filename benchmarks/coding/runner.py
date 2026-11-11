@@ -66,7 +66,9 @@ def read_json(path: Path) -> Any:
 
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def sha256(path: Path) -> str:
@@ -123,7 +125,9 @@ def resolve_binary(raw: str) -> str | None:
     return shutil.which(expanded)
 
 
-def load_specs(config_path: Path) -> tuple[dict[str, Any], list[TaskSpec], list[AgentSpec], Path]:
+def load_specs(
+    config_path: Path,
+) -> tuple[dict[str, Any], list[TaskSpec], list[AgentSpec], Path]:
     config_path = config_path.resolve()
     config = read_json(config_path)
     base = config_path.parent
@@ -165,8 +169,12 @@ def load_specs(config_path: Path) -> tuple[dict[str, Any], list[TaskSpec], list[
                 model=str(raw.get("model") or ""),
                 lane=str(raw.get("lane") or raw.get("provider") or raw["name"]),
                 required_env=tuple(str(item) for item in raw.get("required_env") or []),
-                command=tuple(str(item) for item in raw["command"]) if raw.get("command") else None,
-                stdin_prompt=bool(raw["stdin_prompt"]) if "stdin_prompt" in raw else None,
+                command=tuple(str(item) for item in raw["command"])
+                if raw.get("command")
+                else None,
+                stdin_prompt=bool(raw["stdin_prompt"])
+                if "stdin_prompt" in raw
+                else None,
             )
         )
 
@@ -196,13 +204,21 @@ def validate_inputs(
         if require_binaries and resolve_binary(agent.binary) is None:
             errors.append(f"agent {agent.name}: binary not found: {agent.binary}")
         if paid:
-            missing = [name for name in agent.required_env if not os.environ.get(name, "").strip()]
+            missing = [
+                name
+                for name in agent.required_env
+                if not os.environ.get(name, "").strip()
+            ]
             if missing:
-                errors.append(f"agent {agent.name}: missing required environment: {', '.join(missing)}")
+                errors.append(
+                    f"agent {agent.name}: missing required environment: {', '.join(missing)}"
+                )
     return errors
 
 
-def schedule(tasks: list[TaskSpec], agents: list[AgentSpec], waves: int) -> dict[str, list[tuple[TaskSpec, AgentSpec, int]]]:
+def schedule(
+    tasks: list[TaskSpec], agents: list[AgentSpec], waves: int
+) -> dict[str, list[tuple[TaskSpec, AgentSpec, int]]]:
     lanes: dict[str, list[AgentSpec]] = {}
     for agent in agents:
         lanes.setdefault(agent.lane, []).append(agent)
@@ -288,7 +304,9 @@ def template_values(run: RunSpec, binary: str) -> dict[str, str]:
     }
 
 
-def build_command(run: RunSpec, prompt: str) -> tuple[list[str], dict[str, str], str | None]:
+def build_command(
+    run: RunSpec, prompt: str
+) -> tuple[list[str], dict[str, str], str | None]:
     binary = resolve_binary(run.agent.binary)
     if binary is None:
         raise RuntimeError(f"binary not found: {run.agent.binary}")
@@ -308,7 +326,9 @@ def build_command(run: RunSpec, prompt: str) -> tuple[list[str], dict[str, str],
         codex_home.mkdir(parents=True, exist_ok=True)
         env["CODEX_HOME"] = str(codex_home)
         env["CORBANU_TRACE_STREAM_TIMING"] = "1"
-        env["CORBANU_DUMP_CHAT_REQUEST"] = str(run.result_dir / "corbanu.chat.request.json")
+        env["CORBANU_DUMP_CHAT_REQUEST"] = str(
+            run.result_dir / "corbanu.chat.request.json"
+        )
         env["CORBANU_DUMP_ANTHROPIC_REQUEST"] = str(
             run.result_dir / "corbanu.anthropic.request.json"
         )
@@ -445,9 +465,10 @@ def run_process(
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
     started_at = utc_now()
     started = time.monotonic()
-    with stdout_path.open("w", encoding="utf-8") as stdout, stderr_path.open(
-        "w", encoding="utf-8"
-    ) as stderr:
+    with (
+        stdout_path.open("w", encoding="utf-8") as stdout,
+        stderr_path.open("w", encoding="utf-8") as stderr,
+    ):
         process = subprocess.Popen(
             command,
             cwd=cwd,
@@ -494,7 +515,11 @@ def file_map(root: Path) -> dict[str, str]:
 def test_integrity(task: TaskSpec, workspace: Path) -> dict[str, Any]:
     expected = file_map(task.baseline / "tests")
     actual = file_map(workspace / "tests")
-    modified = sorted(path for path in expected.keys() & actual.keys() if expected[path] != actual[path])
+    modified = sorted(
+        path
+        for path in expected.keys() & actual.keys()
+        if expected[path] != actual[path]
+    )
     missing = sorted(expected.keys() - actual.keys())
     extra = sorted(actual.keys() - expected.keys())
     return {
@@ -509,7 +534,9 @@ def render_command(parts: tuple[str, ...], values: dict[str, str]) -> list[str]:
     return [part.format_map(values) for part in parts]
 
 
-def run_check(command: list[str], cwd: Path, output: Path, timeout_seconds: int) -> dict[str, Any]:
+def run_check(
+    command: list[str], cwd: Path, output: Path, timeout_seconds: int
+) -> dict[str, Any]:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(cwd / "src")
     started = time.monotonic()
@@ -636,7 +663,9 @@ def route_and_usage(run: RunSpec) -> dict[str, Any]:
     costs = [
         float(value)
         for item in values
-        for value in collect_named_values(item, {"total_cost_usd", "cost_usd", "sumcost"})
+        for value in collect_named_values(
+            item, {"total_cost_usd", "cost_usd", "sumcost"}
+        )
         if isinstance(value, (int, float))
     ]
     expected = run.agent.model
@@ -660,9 +689,13 @@ def run_one(
     workspace = run_root / "workspaces" / task.name / agent.name / f"wave-{wave:03d}"
     result_dir = run_root / "results" / task.name / agent.name / f"wave-{wave:03d}"
     if result_dir.exists():
-        raise RuntimeError(f"refusing to reuse benchmark result directory: {result_dir}")
+        raise RuntimeError(
+            f"refusing to reuse benchmark result directory: {result_dir}"
+        )
     result_dir.mkdir(parents=True)
-    run = RunSpec(task=task, agent=agent, wave=wave, workspace=workspace, result_dir=result_dir)
+    run = RunSpec(
+        task=task, agent=agent, wave=wave, workspace=workspace, result_dir=result_dir
+    )
     source_before = expected_source_digest or source_tree_digest()
     baseline = prepare_workspace(task, workspace)
     prompt = task.prompt.read_text(encoding="utf-8")
@@ -765,7 +798,9 @@ def run_campaign(
     max_runs = int((config.get("caps") or {}).get("max_total_runs") or 100)
     total = len(tasks) * len(agents) * waves
     if total > max_runs:
-        raise RuntimeError(f"planned runs {total} exceed caps.max_total_runs {max_runs}")
+        raise RuntimeError(
+            f"planned runs {total} exceed caps.max_total_runs {max_runs}"
+        )
     if run_root.exists() and any(run_root.iterdir()):
         raise RuntimeError(f"refusing to reuse nonempty run root: {run_root}")
     run_root.mkdir(parents=True, exist_ok=True)
@@ -827,7 +862,13 @@ def main() -> int:
         raise SystemExit("\n".join(errors))
 
     if args.command == "plan":
-        print(json.dumps(plan_payload(args.config, tasks, agents, run_root, waves), indent=2, default=str))
+        print(
+            json.dumps(
+                plan_payload(args.config, tasks, agents, run_root, waves),
+                indent=2,
+                default=str,
+            )
+        )
         return 0
     if args.command == "report":
         print(write_report(run_root))

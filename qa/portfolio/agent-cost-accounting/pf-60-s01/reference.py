@@ -50,25 +50,45 @@ def normalize(wire, usage):
     if wire == "responses":
         inputs = usage.get("input_tokens_details", {})
         outputs = usage.get("output_tokens_details", {})
-        values = [usage.get("input_tokens"), inputs.get("cached_tokens"),
-                  inputs.get("cache_write_tokens"), usage.get("output_tokens"),
-                  outputs.get("reasoning_tokens"), usage.get("total_tokens")]
+        values = [
+            usage.get("input_tokens"),
+            inputs.get("cached_tokens"),
+            inputs.get("cache_write_tokens"),
+            usage.get("output_tokens"),
+            outputs.get("reasoning_tokens"),
+            usage.get("total_tokens"),
+        ]
     elif wire == "chat":
         inputs = usage.get("prompt_tokens_details", {})
         outputs = usage.get("completion_tokens_details", {})
         # Native ChatUsage conversion assigns cache-write zero without a wire
         # field. Preserve unknown here; this is not provider-reported zero.
-        values = [usage.get("prompt_tokens"), inputs.get("cached_tokens"), None,
-                  usage.get("completion_tokens"), outputs.get("reasoning_tokens"),
-                  usage.get("total_tokens")]
+        values = [
+            usage.get("prompt_tokens"),
+            inputs.get("cached_tokens"),
+            None,
+            usage.get("completion_tokens"),
+            outputs.get("reasoning_tokens"),
+            usage.get("total_tokens"),
+        ]
     elif wire == "anthropic":
         # Explicitly native Anthropic noncached-input dialect, not its compatible
         # providers' cumulative-input heuristic. Unknown dialects are rejected.
-        parts = [count(usage.get(name)) for name in
-                 ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")]
+        parts = [
+            count(usage.get(name))
+            for name in (
+                "input_tokens",
+                "cache_read_input_tokens",
+                "cache_creation_input_tokens",
+            )
+        ]
         input_count = sum(parts) if all(v is not None for v in parts) else None
         output = usage.get("output_tokens")
-        total = input_count + output if input_count is not None and output is not None else None
+        total = (
+            input_count + output
+            if input_count is not None and output is not None
+            else None
+        )
         values = [input_count, parts[1], parts[2], output, None, total]
     else:
         raise ValueError("unsupported wire dialect")
@@ -78,7 +98,9 @@ def normalize(wire, usage):
         # This is not inclusive input and must not enter rows or token totals.
         result["_noncached_input"] = parts[0]
     if result["input"] is not None:
-        known_cache = sum(result[key] for key in ("read", "write") if result[key] is not None)
+        known_cache = sum(
+            result[key] for key in ("read", "write") if result[key] is not None
+        )
         if known_cache > result["input"]:
             raise ValueError("cache exceeds inclusive input")
     if result["reasoning"] is not None and result["output"] is not None:
@@ -108,7 +130,9 @@ def select_price(attempt, prices):
         for rate in price["rates"].values():
             if rate is not None:
                 exact(rate)
-        if all(price[key] == attempt[key] for key in ("provider", "account_scope", "model")):
+        if all(
+            price[key] == attempt[key] for key in ("provider", "account_scope", "model")
+        ):
             if at is not None and start <= at and (end is None or at < end):
                 matches.append(price)
     if len(matches) > 1:
@@ -125,7 +149,11 @@ def estimate(usage, price, status):
         buckets["input"] = usage["_noncached_input"]
     else:
         parts = [usage[key] for key in ("input", "read", "write")]
-        buckets["input"] = parts[0] - parts[1] - parts[2] if all(v is not None for v in parts) else None
+        buckets["input"] = (
+            parts[0] - parts[1] - parts[2]
+            if all(v is not None for v in parts)
+            else None
+        )
     rates = price["rates"] if price else {}
     known = Fraction(0)
     unknown = []
@@ -140,8 +168,12 @@ def estimate(usage, price, status):
             known += tokens * exact(rates[name]) / 1_000_000
     if status != "completed":
         unknown.append("attempt_not_complete")
-    return {"known_cost": known, "cost": None if unknown else known,
-            "unknown_reasons": unknown, "price_id": price["price_id"] if price else None}
+    return {
+        "known_cost": known,
+        "cost": None if unknown else known,
+        "unknown_reasons": unknown,
+        "price_id": price["price_id"] if price else None,
+    }
 
 
 def validate_threads(threads):
@@ -182,7 +214,10 @@ class Replay:
                     raise ValueError("invalid retry chain")
                 seen.add(previous)
                 parent = self.attempts[previous]
-                if any(parent[key] != attempt[key] for key in ("request_id", "thread_id", "turn_id")):
+                if any(
+                    parent[key] != attempt[key]
+                    for key in ("request_id", "thread_id", "turn_id")
+                ):
                     raise ValueError("retry changes logical request")
                 previous = parent["retry_of"]
         self.events = {}
@@ -196,11 +231,23 @@ class Replay:
                 raise ValueError("unknown attempt")
             if type(event["revision"]) is not int or event["revision"] < 1:
                 raise ValueError("invalid revision")
-            if event["status"] not in {"streaming", "completed", "interrupted", "failed", "cancelled"}:
+            if event["status"] not in {
+                "streaming",
+                "completed",
+                "interrupted",
+                "failed",
+                "cancelled",
+            }:
                 raise ValueError("invalid status")
             if not event["provenance"]:
                 raise ValueError("missing observation provenance")
-            if set(event) != {"attempt_id", "revision", "status", "provenance", "usage"}:
+            if set(event) != {
+                "attempt_id",
+                "revision",
+                "status",
+                "provenance",
+                "usage",
+            }:
                 raise ValueError("immutable identity cannot be patched")
             merge_patch({}, event["usage"])
             key = (event["attempt_id"], event["revision"])
@@ -224,11 +271,17 @@ class Replay:
             usage = normalize(attempt["wire"], raw)
             billed = attempt["billed"]
             if billed is not None:
-                if billed["currency"] != "USD" or not billed["line_id"] or not billed["provenance"]:
+                if (
+                    billed["currency"] != "USD"
+                    or not billed["line_id"]
+                    or not billed["provenance"]
+                ):
                     raise ValueError("invalid billed evidence")
-            rows[key] = {**{field: usage[field] for field in FIELDS},
-                         **estimate(usage, select_price(attempt, prices), status),
-                         "billed": exact(billed["amount"]) if billed is not None else None}
+            rows[key] = {
+                **{field: usage[field] for field in FIELDS},
+                **estimate(usage, select_price(attempt, prices), status),
+                "billed": exact(billed["amount"]) if billed is not None else None,
+            }
         return rows
 
     def aggregate(self, root, prices):
@@ -236,22 +289,48 @@ class Replay:
             raise ValueError("unknown root")
         descendants = {root}
         while True:
-            more = {child for child, parent in self.threads.items() if parent in descendants}
+            more = {
+                child for child, parent in self.threads.items() if parent in descendants
+            }
             if more <= descendants:
                 break
             descendants |= more
         rows = self.rows(prices)
-        keys = [key for key, attempt in self.attempts.items() if attempt["thread_id"] in descendants]
-        result = {"attempts": len(keys), "requests": len({self.attempts[key]["request_id"] for key in keys})}
+        keys = [
+            key
+            for key, attempt in self.attempts.items()
+            if attempt["thread_id"] in descendants
+        ]
+        result = {
+            "attempts": len(keys),
+            "requests": len({self.attempts[key]["request_id"] for key in keys}),
+        }
         for field in FIELDS:
-            known = sum(rows[key][field] for key in keys if rows[key][field] is not None)
+            known = sum(
+                rows[key][field] for key in keys if rows[key][field] is not None
+            )
             unknown = sum(rows[key][field] is None for key in keys)
-            result[field] = {"known": known, "unknown": unknown, "total": None if unknown else known}
-        lines = [self.attempts[key]["billed"]["line_id"] for key in keys if self.attempts[key]["billed"]]
+            result[field] = {
+                "known": known,
+                "unknown": unknown,
+                "total": None if unknown else known,
+            }
+        lines = [
+            self.attempts[key]["billed"]["line_id"]
+            for key in keys
+            if self.attempts[key]["billed"]
+        ]
         if len(lines) != len(set(lines)):
             raise ValueError("invoice line allocated twice")
         for field, subtotal in (("cost", "known_cost"), ("billed", "billed")):
-            known = sum((rows[key][subtotal] for key in keys if rows[key][subtotal] is not None), Fraction(0))
+            known = sum(
+                (
+                    rows[key][subtotal]
+                    for key in keys
+                    if rows[key][subtotal] is not None
+                ),
+                Fraction(0),
+            )
             unknown = sum(rows[key][field] is None for key in keys)
             result["known_" + field] = known
             result["unknown_" + field + "_attempts"] = unknown

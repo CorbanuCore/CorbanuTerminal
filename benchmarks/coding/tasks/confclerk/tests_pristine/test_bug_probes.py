@@ -12,11 +12,16 @@ class BugProbeTests(unittest.TestCase):
         self.assertEqual(config["features"]["extra"], False)
 
     def test_probe_bug2_replace_marker_replaces_nested_map(self) -> None:
-        merged = merge_dicts({"service": {"headers": {"a": "1", "b": "2"}}}, {"service": {"headers": {REPLACE: True, "c": "3"}}})
+        merged = merge_dicts(
+            {"service": {"headers": {"a": "1", "b": "2"}}},
+            {"service": {"headers": {REPLACE: True, "c": "3"}}},
+        )
         self.assertEqual(merged["service"]["headers"], {"c": "3"})
 
     def test_probe_bug3_delete_marker_removes_stale_secret(self) -> None:
-        merged = merge_dicts({"secrets": {"old": "x", "new": "y"}}, {"secrets": {"old": DELETE}})
+        merged = merge_dicts(
+            {"secrets": {"old": "x", "new": "y"}}, {"secrets": {"old": DELETE}}
+        )
         self.assertEqual(merged["secrets"], {"new": "y"})
 
 

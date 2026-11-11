@@ -4,6 +4,7 @@ server; refuses every other host. Logs hosts only.
 
 usage: proxy.py <listen port> <target port> <host> [<host>...]
 """
+
 import asyncio
 import json
 import sys

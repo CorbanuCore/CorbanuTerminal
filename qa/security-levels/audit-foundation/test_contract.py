@@ -17,7 +17,9 @@ class DurableAuditContractTests(unittest.TestCase):
         self.assertIs(self.contract["runtime_activation"], False)
         self.assertEqual(self.contract["producer_registrations"], [])
         self.assertEqual(self.contract["consumer_adapters"], [])
-        self.assertIs(self.contract["identity_contract"]["reusable_capabilities"], False)
+        self.assertIs(
+            self.contract["identity_contract"]["reusable_capabilities"], False
+        )
 
     def test_cross_store_commit_acknowledges_last(self) -> None:
         self.assertEqual(

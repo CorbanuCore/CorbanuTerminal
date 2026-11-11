@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import unittest
 
-from queuecraft.clock import FrozenClock, epoch_to_datetime, parse_duration, window_bounds
+from queuecraft.clock import (
+    FrozenClock,
+    epoch_to_datetime,
+    parse_duration,
+    window_bounds,
+)
 from queuecraft.models import Job, build_stats
 from queuecraft.priority import PriorityPolicy, bucket_priority
 
@@ -24,7 +29,10 @@ class ClockPriorityModelTests(unittest.TestCase):
 
     def test_priority_aging(self) -> None:
         job = Job("a", priority=1, created_at=0)
-        self.assertEqual(PriorityPolicy(aging_seconds=10, aging_boost=2).effective_priority(job, 25), 5)
+        self.assertEqual(
+            PriorityPolicy(aging_seconds=10, aging_boost=2).effective_priority(job, 25),
+            5,
+        )
 
     def test_bucket_priority(self) -> None:
         self.assertEqual(bucket_priority(100), "critical")

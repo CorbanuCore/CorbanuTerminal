@@ -63,7 +63,10 @@ class Handler(BaseHTTPRequestHandler):
             content = message.get("content")
             if message.get("role") == "user" and not (
                 isinstance(content, list)
-                and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content)
+                and any(
+                    isinstance(b, dict) and b.get("type") == "tool_result"
+                    for b in content
+                )
             ):
                 last_prompt = index
         calls = sum(
@@ -76,7 +79,9 @@ class Handler(BaseHTTPRequestHandler):
         prompt = text_of(messages[last_prompt].get("content")) if messages else ""
         session = hashlib.sha1(prompt.encode()).hexdigest()[:10]
         tools = [t.get("name") for t in body.get("tools") or [] if isinstance(t, dict)]
-        tool = next((n for n in ("exec_command", "shell_command", "shell") if n in tools), None)
+        tool = next(
+            (n for n in ("exec_command", "shell_command", "shell") if n in tools), None
+        )
         self.send_response(200)
         self.send_header("content-type", "text/event-stream")
         self.send_header("cache-control", "no-cache")
@@ -132,7 +137,10 @@ class Handler(BaseHTTPRequestHandler):
                 {
                     "type": "content_block_delta",
                     "index": 0,
-                    "delta": {"type": "input_json_delta", "partial_json": json.dumps(args)},
+                    "delta": {
+                        "type": "input_json_delta",
+                        "partial_json": json.dumps(args),
+                    },
                 },
             )
             stop = "tool_use"

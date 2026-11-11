@@ -5,23 +5,63 @@ and prints, per needle class, the files that contain it (paths relative to $S or
 
 usage: REAL_1=... REAL_2=... leakscan.py <root> [<root> ...]
 """
+
 import os, sys
 
 S = os.environ["S"]
 EV = os.environ.get("EV", "")
 real = {k: v for k, v in os.environ.items() if k.startswith("REAL_") and v}
 for k, v in list(real.items()):
-    for name, off in (("frag@8", 8), ("frag@mid", len(v) // 2 - 6), ("frag@end", len(v) - 12)):
-        real[f"{k} {name} (12 chars)"] = v[off:off + 12]
+    for name, off in (
+        ("frag@8", 8),
+        ("frag@mid", len(v) // 2 - 6),
+        ("frag@end", len(v) - 12),
+    ):
+        real[f"{k} {name} (12 chars)"] = v[off : off + 12]
 synthetic = {
-    "named/default OpenAI API-key canaries (sk-canary-*, sk-fake-*, sk-tuiadd-*)": (b"sk-canary-", b"sk-fake-", b"sk-tuiadd-"),
-    "env decoys (sk-envdecoy-, sk-codexenv-, CODEX_ACCESS_TOKEN JWT header eyJhbGciOiAibm9uZSJ9)": (b"sk-envdecoy-", b"sk-codexenv-", b"eyJhbGciOiAibm9uZSJ9"),
-    "ChatGPT refresh tokens of NAMED accounts (rt.<user>.<gen>)": tuple(b"rt.%s." % u for u in (
-        b"work", b"play", b"bad", b"named", b"namedo@ws=other", b"tuiwork", b"tuiwork2", b"devz", b"fpx", b"fpy", b"play2",
-        b"work~2", b"deflt~2", b"play2~2", b"tuiwork~2", b"dmnamed", b"r1", b"r2")),
-    "ChatGPT refresh tokens of DEFAULT logins (rt.deflt./rt.legacy./rt.tuidefault.)": (b"rt.deflt.", b"rt.legacy.", b"rt.tuidefault."),
+    "named/default OpenAI API-key canaries (sk-canary-*, sk-fake-*, sk-tuiadd-*)": (
+        b"sk-canary-",
+        b"sk-fake-",
+        b"sk-tuiadd-",
+    ),
+    "env decoys (sk-envdecoy-, sk-codexenv-, CODEX_ACCESS_TOKEN JWT header eyJhbGciOiAibm9uZSJ9)": (
+        b"sk-envdecoy-",
+        b"sk-codexenv-",
+        b"eyJhbGciOiAibm9uZSJ9",
+    ),
+    "ChatGPT refresh tokens of NAMED accounts (rt.<user>.<gen>)": tuple(
+        b"rt.%s." % u
+        for u in (
+            b"work",
+            b"play",
+            b"bad",
+            b"named",
+            b"namedo@ws=other",
+            b"tuiwork",
+            b"tuiwork2",
+            b"devz",
+            b"fpx",
+            b"fpy",
+            b"play2",
+            b"work~2",
+            b"deflt~2",
+            b"play2~2",
+            b"tuiwork~2",
+            b"dmnamed",
+            b"r1",
+            b"r2",
+        )
+    ),
+    "ChatGPT refresh tokens of DEFAULT logins (rt.deflt./rt.legacy./rt.tuidefault.)": (
+        b"rt.deflt.",
+        b"rt.legacy.",
+        b"rt.tuidefault.",
+    ),
     "mock JWT header (eyJhbGciOiAibm9uZSIs), in any token": b"eyJhbGciOiAibm9uZSIs",
-    "fake AWS secrets / bearer env canary (fakesecret-, fakebearer-env-)": (b"fakesecret-", b"fakebearer-env-"),
+    "fake AWS secrets / bearer env canary (fakesecret-, fakebearer-env-)": (
+        b"fakesecret-",
+        b"fakebearer-env-",
+    ),
 }
 
 

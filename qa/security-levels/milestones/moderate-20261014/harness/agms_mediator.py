@@ -5,6 +5,7 @@ campaign-local synthetic CA, forwards only allowlisted inference paths to the
 real endpoint, and injects the transport credential that executors never see.
 Logs method/path/status/model/tool names only: no headers, no bodies, no key.
 """
+
 import argparse
 import json
 import socket
@@ -16,9 +17,19 @@ import time
 ALLOWED_TARGET = "api.z.ai:443"
 UPSTREAM = ("api.z.ai", 443)
 ALLOWED_PREFIXES = ("/api/paas/v4/", "/api/coding/paas/v4/", "/api/anthropic/")
-DROP = {"authorization", "x-api-key", "proxy-authorization", "proxy-connection",
-        "connection", "keep-alive", "transfer-encoding", "content-length", "host", "te",
-        "upgrade"}
+DROP = {
+    "authorization",
+    "x-api-key",
+    "proxy-authorization",
+    "proxy-connection",
+    "connection",
+    "keep-alive",
+    "transfer-encoding",
+    "content-length",
+    "host",
+    "te",
+    "upgrade",
+}
 LOCK = threading.Lock()
 
 
@@ -79,16 +90,31 @@ class Handler(socketserver.StreamRequestHandler):
             return
         parts = head[0].split()
         if len(parts) != 3 or parts[0] != "CONNECT" or parts[1] != ALLOWED_TARGET:
-            log(cfg.log, {"event": "denied_proxy_request", "conn": conn_id,
-                          "request_line": head[0][:200]})
-            self.wfile.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            log(
+                cfg.log,
+                {
+                    "event": "denied_proxy_request",
+                    "conn": conn_id,
+                    "request_line": head[0][:200],
+                },
+            )
+            self.wfile.write(
+                b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
             return
         self.wfile.write(b"HTTP/1.1 200 Connection established\r\n\r\n")
         self.wfile.flush()
         try:
             tls = cfg.server_ctx.wrap_socket(self.connection, server_side=True)
         except Exception as exc:
-            log(cfg.log, {"event": "client_tls_error", "conn": conn_id, "error": repr(exc)[:200]})
+            log(
+                cfg.log,
+                {
+                    "event": "client_tls_error",
+                    "conn": conn_id,
+                    "error": repr(exc)[:200],
+                },
+            )
             return
         writer = tls.makefile("wb", buffering=0)
         reader = tls.makefile("rb")
@@ -103,16 +129,31 @@ class Handler(socketserver.StreamRequestHandler):
                     key, _, value = line.partition(":")
                     headers[key.strip().lower()] = value.strip()
                 body = read_body(reader, headers)
-                if not path.startswith(ALLOWED_PREFIXES) or method not in ("POST", "GET"):
-                    log(cfg.log, {"event": "denied_path", "conn": conn_id, "method": method,
-                                  "path": path[:200]})
-                    writer.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                if not path.startswith(ALLOWED_PREFIXES) or method not in (
+                    "POST",
+                    "GET",
+                ):
+                    log(
+                        cfg.log,
+                        {
+                            "event": "denied_path",
+                            "conn": conn_id,
+                            "method": method,
+                            "path": path[:200],
+                        },
+                    )
+                    writer.write(
+                        b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    )
                     return
                 self.forward(cfg, conn_id, method, path, head, body, writer)
                 # Upstream was asked to close; its response tells the client the same.
                 return
         except Exception as exc:
-            log(cfg.log, {"event": "session_error", "conn": conn_id, "error": repr(exc)[:200]})
+            log(
+                cfg.log,
+                {"event": "session_error", "conn": conn_id, "error": repr(exc)[:200]},
+            )
         finally:
             try:
                 tls.close()
@@ -133,7 +174,8 @@ class Handler(socketserver.StreamRequestHandler):
         out.append("Connection: close")
         raw = ("\r\n".join(out) + "\r\n\r\n").encode("latin-1") + body
         upstream = cfg.client_ctx.wrap_socket(
-            socket.create_connection(UPSTREAM, timeout=600), server_hostname=UPSTREAM[0])
+            socket.create_connection(UPSTREAM, timeout=600), server_hostname=UPSTREAM[0]
+        )
         status = None
         total = 0
         try:
@@ -150,12 +192,21 @@ class Handler(socketserver.StreamRequestHandler):
                 writer.write(chunk)
         finally:
             upstream.close()
-        row = {"event": "forwarded", "conn": conn_id, "method": method, "path": path,
-               "status": status, "response_bytes": total, "request_bytes": len(body),
-               "seconds": round(time.time() - started, 3)}
+        row = {
+            "event": "forwarded",
+            "conn": conn_id,
+            "method": method,
+            "path": path,
+            "status": status,
+            "response_bytes": total,
+            "request_bytes": len(body),
+            "seconds": round(time.time() - started, 3),
+        }
         row.update(summarize(body))
         # Attribution (moderate-first): executor prompts carry the executor role sentence; product requests don't.
-        row["role"] = "executor" if b"independent functional executor" in body else "product"
+        row["role"] = (
+            "executor" if b"independent functional executor" in body else "product"
+        )
         log(cfg.log, row)
 
 
@@ -188,8 +239,15 @@ def main():
     cfg.client_ctx.set_alpn_protocols(["http/1.1"])
     server = Server(("127.0.0.1", args.port), Handler)
     server.cfg = cfg
-    log(cfg.log, {"event": "started", "port": args.port, "allowed_target": ALLOWED_TARGET,
-                  "allowed_prefixes": list(ALLOWED_PREFIXES)})
+    log(
+        cfg.log,
+        {
+            "event": "started",
+            "port": args.port,
+            "allowed_target": ALLOWED_TARGET,
+            "allowed_prefixes": list(ALLOWED_PREFIXES),
+        },
+    )
     server.serve_forever()
 
 

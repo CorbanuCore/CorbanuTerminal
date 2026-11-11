@@ -61,7 +61,16 @@ class HiddenContractTests(unittest.TestCase):
 
     def test_02_cross_currency_imbalance_rejected_per_currency(self) -> None:
         engine = self.make_engine()
-        good = engine.post_transaction(txn("seed", "2026-07-02T10:00:00Z", [leg("cash", "USD", "debit", "10.00"), leg("equity", "USD", "credit", "10.00")]))
+        good = engine.post_transaction(
+            txn(
+                "seed",
+                "2026-07-02T10:00:00Z",
+                [
+                    leg("cash", "USD", "debit", "10.00"),
+                    leg("equity", "USD", "credit", "10.00"),
+                ],
+            )
+        )
         self.assertTrue(good["ok"])
         bad = engine.post_transaction(
             txn(
@@ -83,7 +92,16 @@ class HiddenContractTests(unittest.TestCase):
             wal = Path(tmp) / "ledger.wal"
             engine = ChronoLedgerEngine(wal)
             before_size = wal.stat().st_size if wal.exists() else 0
-            result = engine.post_transaction(txn("bad", "2026-07-02T10:00:00Z", [leg("cash", "USD", "debit", "NaN"), leg("equity", "USD", "credit", "NaN")]))
+            result = engine.post_transaction(
+                txn(
+                    "bad",
+                    "2026-07-02T10:00:00Z",
+                    [
+                        leg("cash", "USD", "debit", "NaN"),
+                        leg("equity", "USD", "credit", "NaN"),
+                    ],
+                )
+            )
             after_size = wal.stat().st_size if wal.exists() else 0
             self.assertFalse(result["ok"])
             self.assertEqual(result["error"], "invalid_amount")
@@ -94,48 +112,153 @@ class HiddenContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             wal = Path(tmp) / "ledger.wal"
             engine = ChronoLedgerEngine(wal)
-            first = engine.post_transaction(txn("txn-1", "2026-07-02T10:00:00Z", [leg("cash", "USD", "debit", "11.00"), leg("equity", "USD", "credit", "11.00")], "client-a"))
-            second = engine.post_transaction(txn("txn-different", "2026-07-02T11:00:00Z", [leg("cash", "USD", "debit", "99.00"), leg("equity", "USD", "credit", "99.00")], "client-a"))
+            first = engine.post_transaction(
+                txn(
+                    "txn-1",
+                    "2026-07-02T10:00:00Z",
+                    [
+                        leg("cash", "USD", "debit", "11.00"),
+                        leg("equity", "USD", "credit", "11.00"),
+                    ],
+                    "client-a",
+                )
+            )
+            second = engine.post_transaction(
+                txn(
+                    "txn-different",
+                    "2026-07-02T11:00:00Z",
+                    [
+                        leg("cash", "USD", "debit", "99.00"),
+                        leg("equity", "USD", "credit", "99.00"),
+                    ],
+                    "client-a",
+                )
+            )
             self.assertTrue(first["ok"])
             self.assertTrue(second["ok"])
             self.assertTrue(second["duplicate"])
             self.assertEqual(second["txn_id"], first["txn_id"])
             self.assertEqual(engine.balance_as_of("cash", "USD"), "11.00")
             restarted = ChronoLedgerEngine(wal)
-            third = restarted.post_transaction(txn("third", "2026-07-02T12:00:00Z", [leg("cash", "USD", "debit", "7.00"), leg("equity", "USD", "credit", "7.00")], "client-a"))
+            third = restarted.post_transaction(
+                txn(
+                    "third",
+                    "2026-07-02T12:00:00Z",
+                    [
+                        leg("cash", "USD", "debit", "7.00"),
+                        leg("equity", "USD", "credit", "7.00"),
+                    ],
+                    "client-a",
+                )
+            )
             self.assertTrue(third["duplicate"])
             self.assertEqual(restarted.balance_as_of("cash", "USD"), "11.00")
 
     def test_05_duplicate_txn_id_without_idempotency_rejected(self) -> None:
         engine = self.make_engine()
-        self.assertTrue(engine.post_transaction(txn("dup", "2026-07-02T10:00:00Z", [leg("cash", "USD", "debit", "1.00"), leg("equity", "USD", "credit", "1.00")]))["ok"])
-        rejected = engine.post_transaction(txn("dup", "2026-07-02T10:01:00Z", [leg("cash", "USD", "debit", "2.00"), leg("equity", "USD", "credit", "2.00")]))
+        self.assertTrue(
+            engine.post_transaction(
+                txn(
+                    "dup",
+                    "2026-07-02T10:00:00Z",
+                    [
+                        leg("cash", "USD", "debit", "1.00"),
+                        leg("equity", "USD", "credit", "1.00"),
+                    ],
+                )
+            )["ok"]
+        )
+        rejected = engine.post_transaction(
+            txn(
+                "dup",
+                "2026-07-02T10:01:00Z",
+                [
+                    leg("cash", "USD", "debit", "2.00"),
+                    leg("equity", "USD", "credit", "2.00"),
+                ],
+            )
+        )
         self.assertFalse(rejected["ok"])
         self.assertEqual(rejected["error"], "duplicate_txn_id")
         self.assertEqual(engine.balance_as_of("cash", "USD"), "1.00")
 
     def test_06_as_of_boundary_inclusive_and_future_excluded(self) -> None:
         engine = self.make_engine()
-        engine.post_transaction(txn("before", "2026-07-02T09:59:59Z", [leg("cash", "USD", "debit", "1.00"), leg("equity", "USD", "credit", "1.00")]))
-        engine.post_transaction(txn("at", "2026-07-02T10:00:00Z", [leg("cash", "USD", "debit", "2.00"), leg("equity", "USD", "credit", "2.00")]))
-        engine.post_transaction(txn("after", "2026-07-02T10:00:01Z", [leg("cash", "USD", "debit", "4.00"), leg("equity", "USD", "credit", "4.00")]))
-        self.assertEqual(engine.balance_as_of("cash", "USD", "2026-07-02T09:59:59Z"), "1.00")
-        self.assertEqual(engine.balance_as_of("cash", "USD", "2026-07-02T10:00:00Z"), "3.00")
-        self.assertEqual(engine.balance_as_of("cash", "USD", "2026-07-02T10:00:00.500000Z"), "3.00")
+        engine.post_transaction(
+            txn(
+                "before",
+                "2026-07-02T09:59:59Z",
+                [
+                    leg("cash", "USD", "debit", "1.00"),
+                    leg("equity", "USD", "credit", "1.00"),
+                ],
+            )
+        )
+        engine.post_transaction(
+            txn(
+                "at",
+                "2026-07-02T10:00:00Z",
+                [
+                    leg("cash", "USD", "debit", "2.00"),
+                    leg("equity", "USD", "credit", "2.00"),
+                ],
+            )
+        )
+        engine.post_transaction(
+            txn(
+                "after",
+                "2026-07-02T10:00:01Z",
+                [
+                    leg("cash", "USD", "debit", "4.00"),
+                    leg("equity", "USD", "credit", "4.00"),
+                ],
+            )
+        )
+        self.assertEqual(
+            engine.balance_as_of("cash", "USD", "2026-07-02T09:59:59Z"), "1.00"
+        )
+        self.assertEqual(
+            engine.balance_as_of("cash", "USD", "2026-07-02T10:00:00Z"), "3.00"
+        )
+        self.assertEqual(
+            engine.balance_as_of("cash", "USD", "2026-07-02T10:00:00.500000Z"), "3.00"
+        )
         self.assertEqual(engine.balance_as_of("cash", "USD"), "7.00")
 
     def test_07_reversal_posts_inverse_at_reversal_timestamp(self) -> None:
         engine = self.make_engine()
-        engine.post_transaction(txn("sale", "2026-07-02T10:00:00Z", [leg("cash", "USD", "debit", "50.00"), leg("revenue", "USD", "credit", "50.00")]))
+        engine.post_transaction(
+            txn(
+                "sale",
+                "2026-07-02T10:00:00Z",
+                [
+                    leg("cash", "USD", "debit", "50.00"),
+                    leg("revenue", "USD", "credit", "50.00"),
+                ],
+            )
+        )
         rev = engine.reverse("sale", ts="2026-07-03T00:00:00Z")
         self.assertTrue(rev["ok"])
-        self.assertEqual(engine.balance_as_of("cash", "USD", "2026-07-02T23:59:59Z"), "50.00")
-        self.assertEqual(engine.balance_as_of("cash", "USD", "2026-07-03T00:00:00Z"), "0.00")
+        self.assertEqual(
+            engine.balance_as_of("cash", "USD", "2026-07-02T23:59:59Z"), "50.00"
+        )
+        self.assertEqual(
+            engine.balance_as_of("cash", "USD", "2026-07-03T00:00:00Z"), "0.00"
+        )
         self.assertEqual(engine.balance_as_of("revenue", "USD"), "0.00")
 
     def test_08_double_reversal_rejected(self) -> None:
         engine = self.make_engine()
-        engine.post_transaction(txn("sale", "2026-07-02T10:00:00Z", [leg("cash", "USD", "debit", "5.00"), leg("revenue", "USD", "credit", "5.00")]))
+        engine.post_transaction(
+            txn(
+                "sale",
+                "2026-07-02T10:00:00Z",
+                [
+                    leg("cash", "USD", "debit", "5.00"),
+                    leg("revenue", "USD", "credit", "5.00"),
+                ],
+            )
+        )
         self.assertTrue(engine.reverse("sale", ts="2026-07-03T00:00:00Z")["ok"])
         rejected = engine.reverse("sale", ts="2026-07-04T00:00:00Z")
         self.assertFalse(rejected["ok"])
@@ -143,20 +266,67 @@ class HiddenContractTests(unittest.TestCase):
 
     def test_09_rounding_only_at_reporting_boundary_bankers_rounding(self) -> None:
         engine = self.make_engine()
-        engine.post_transaction(txn("round-a", "2026-07-02T10:00:00Z", [leg("cash", "USD", "debit", "10.005"), leg("equity", "USD", "credit", "10.005")]))
+        engine.post_transaction(
+            txn(
+                "round-a",
+                "2026-07-02T10:00:00Z",
+                [
+                    leg("cash", "USD", "debit", "10.005"),
+                    leg("equity", "USD", "credit", "10.005"),
+                ],
+            )
+        )
         self.assertEqual(engine.raw_balance_as_of("cash", "USD"), "10.005")
         self.assertEqual(engine.balance_as_of("cash", "USD"), "10.00")
-        engine.post_transaction(txn("round-b", "2026-07-02T10:01:00Z", [leg("cash2", "USD", "debit", "10.015"), leg("equity2", "USD", "credit", "10.015")]))
+        engine.post_transaction(
+            txn(
+                "round-b",
+                "2026-07-02T10:01:00Z",
+                [
+                    leg("cash2", "USD", "debit", "10.015"),
+                    leg("equity2", "USD", "credit", "10.015"),
+                ],
+            )
+        )
         self.assertEqual(engine.balance_as_of("cash2", "USD"), "10.02")
 
     def test_10_wal_cold_start_replays_state_and_indexes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             wal = Path(tmp) / "ledger.wal"
             engine = ChronoLedgerEngine(wal)
-            first = engine.post_transaction(txn("a", "2026-07-02T10:00:00Z", [leg("cash", "USD", "debit", "3.00"), leg("equity", "USD", "credit", "3.00")], "key-a"))
-            engine.post_transaction(txn("b", "2026-07-02T11:00:00Z", [leg("cash", "USD", "debit", "4.00"), leg("equity", "USD", "credit", "4.00")]))
+            first = engine.post_transaction(
+                txn(
+                    "a",
+                    "2026-07-02T10:00:00Z",
+                    [
+                        leg("cash", "USD", "debit", "3.00"),
+                        leg("equity", "USD", "credit", "3.00"),
+                    ],
+                    "key-a",
+                )
+            )
+            engine.post_transaction(
+                txn(
+                    "b",
+                    "2026-07-02T11:00:00Z",
+                    [
+                        leg("cash", "USD", "debit", "4.00"),
+                        leg("equity", "USD", "credit", "4.00"),
+                    ],
+                )
+            )
             restarted = ChronoLedgerEngine(wal)
-            replay = restarted.post_transaction(txn("new-id", "2026-07-02T12:00:00Z", [leg("cash", "USD", "debit", "999.00"), leg("equity", "USD", "credit", "999.00")], "key-a"))
+            replay = restarted.post_transaction(
+                txn(
+                    "new-id",
+                    "2026-07-02T12:00:00Z",
+                    [
+                        leg("cash", "USD", "debit", "999.00"),
+                        leg("equity", "USD", "credit", "999.00"),
+                    ],
+                    "key-a",
+                )
+            )
             self.assertEqual(restarted.balance_as_of("cash", "USD"), "7.00")
             self.assertEqual(replay["txn_id"], first["txn_id"])
             self.assertTrue(replay["duplicate"])
@@ -165,12 +335,32 @@ class HiddenContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             wal = Path(tmp) / "ledger.wal"
             engine = ChronoLedgerEngine(wal)
-            engine.post_transaction(txn("good", "2026-07-02T10:00:00Z", [leg("cash", "USD", "debit", "8.00"), leg("equity", "USD", "credit", "8.00")]))
+            engine.post_transaction(
+                txn(
+                    "good",
+                    "2026-07-02T10:00:00Z",
+                    [
+                        leg("cash", "USD", "debit", "8.00"),
+                        leg("equity", "USD", "credit", "8.00"),
+                    ],
+                )
+            )
             with wal.open("ab") as f:
-                f.write(b'{"kind":"transaction","txn_id":"torn","ts":"2026-07-02T10:01:00Z","legs":[')
+                f.write(
+                    b'{"kind":"transaction","txn_id":"torn","ts":"2026-07-02T10:01:00Z","legs":['
+                )
             restarted = ChronoLedgerEngine(wal)
             self.assertEqual(restarted.balance_as_of("cash", "USD"), "8.00")
-            ok = restarted.post_transaction(txn("after", "2026-07-02T10:02:00Z", [leg("cash", "USD", "debit", "2.00"), leg("equity", "USD", "credit", "2.00")]))
+            ok = restarted.post_transaction(
+                txn(
+                    "after",
+                    "2026-07-02T10:02:00Z",
+                    [
+                        leg("cash", "USD", "debit", "2.00"),
+                        leg("equity", "USD", "credit", "2.00"),
+                    ],
+                )
+            )
             self.assertTrue(ok["ok"])
             self.assertEqual(restarted.balance_as_of("cash", "USD"), "10.00")
 
@@ -186,7 +376,9 @@ class HiddenContractTests(unittest.TestCase):
             "print(e.post_transaction({'txn_id':'x','ts':'2026-01-01T00:00:00Z','legs':[{'account':'a','currency':'USD','side':'debit','amount':'1.00'},{'account':'b','currency':'USD','side':'credit','amount':'1.00'}]})['ok']); "
             "print(e.balance_as_of('a','USD'))"
         )
-        out = subprocess.check_output([sys.executable, "-c", code], cwd=repo, env=env, text=True)
+        out = subprocess.check_output(
+            [sys.executable, "-c", code], cwd=repo, env=env, text=True
+        )
         self.assertEqual(out.strip().splitlines(), ["True", "1.00"])
 
 
@@ -202,7 +394,13 @@ def main() -> int:
     repo = Path(args.repo).resolve()
     if not (repo / "src" / "chronoledger").exists():
         print(json.dumps({"ok": False, "error": f"not a chronoledger repo: {repo}"}))
-        print("HIDDEN_VERIFIER_SUMMARY", json.dumps({"ok": False, "passed": 0, "total": 12, "failures": 0, "errors": 1}, sort_keys=True))
+        print(
+            "HIDDEN_VERIFIER_SUMMARY",
+            json.dumps(
+                {"ok": False, "passed": 0, "total": 12, "failures": 0, "errors": 1},
+                sort_keys=True,
+            ),
+        )
         return 2
     target = repo / ".hidden_verify.py"
     target.write_text(Path(__file__).read_text(encoding="utf-8"), encoding="utf-8")

@@ -15,14 +15,18 @@ class LoaderTests(unittest.TestCase):
         self.assertIs(parse_scalar("0"), False)
 
     def test_env_nested_paths(self) -> None:
-        data = env_overrides({"CONFCLERK__APP__PORT": "8080", "CONFCLERK__APP__DEBUG": "false"})
+        data = env_overrides(
+            {"CONFCLERK__APP__PORT": "8080", "CONFCLERK__APP__DEBUG": "false"}
+        )
         self.assertEqual(data, {"app": {"port": 8080, "debug": False}})
 
     def test_load_two_files_and_env(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "base.json"
             overlay = Path(tmp) / "overlay.json"
-            base.write_text(json.dumps({"app": {"name": "a", "port": 1}}), encoding="utf-8")
+            base.write_text(
+                json.dumps({"app": {"name": "a", "port": 1}}), encoding="utf-8"
+            )
             overlay.write_text(json.dumps({"app": {"port": 2}}), encoding="utf-8")
             loaded = load_config([base, overlay], env={"CONFCLERK__APP__DEBUG": "true"})
         self.assertEqual(loaded["app"], {"name": "a", "port": 2, "debug": True})

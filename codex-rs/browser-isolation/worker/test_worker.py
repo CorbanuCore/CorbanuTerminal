@@ -1,4 +1,5 @@
 """Protocol regressions only; these do not certify a container or Chromium."""
+
 import base64
 import importlib.util
 import io
@@ -10,7 +11,9 @@ import unittest
 from unittest.mock import patch
 from unittest.mock import mock_open
 
-spec = importlib.util.spec_from_file_location("worker", Path(__file__).with_name("worker.py"))
+spec = importlib.util.spec_from_file_location(
+    "worker", Path(__file__).with_name("worker.py")
+)
 worker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)
 
@@ -38,16 +41,30 @@ class Page:
 
 class WorkerTests(unittest.TestCase):
     def test_kernel_confinement_rejects_disabled_filters_caps_and_missing_fields(self):
-        status = {"Uid": "65532 65532 65532 65532", "Gid": "65532 65532 65532 65532",
-                  "NoNewPrivs": "1", "Seccomp": "2",
-                  **{key: "0000000000000000" for key in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb")}}
+        status = {
+            "Uid": "65532 65532 65532 65532",
+            "Gid": "65532 65532 65532 65532",
+            "NoNewPrivs": "1",
+            "Seccomp": "2",
+            **{
+                key: "0000000000000000"
+                for key in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb")
+            },
+        }
+
         def verify(fields):
             contents = "\n".join(f"{key}:\t{value}" for key, value in fields.items())
             with patch("builtins.open", mock_open(read_data=contents)):
                 worker.verify_process_confinement()
+
         verify(status)
-        for key, invalid in [("Seccomp", "0"), ("Seccomp", "1"), ("NoNewPrivs", "0"),
-                             ("Uid", "0 0 0 0"), ("Gid", "0 0 0 0")]:
+        for key, invalid in [
+            ("Seccomp", "0"),
+            ("Seccomp", "1"),
+            ("NoNewPrivs", "0"),
+            ("Uid", "0 0 0 0"),
+            ("Gid", "0 0 0 0"),
+        ]:
             with self.subTest(key=key, value=invalid), self.assertRaises(ValueError):
                 verify({**status, key: invalid})
         for key in status:
@@ -59,10 +76,18 @@ class WorkerTests(unittest.TestCase):
 
     def test_confinement_failure_precedes_every_worker_mode(self):
         for mode in ["idle", "probe", "acquire"]:
-            with patch.object(sys, "argv", ["worker.py", mode]), patch.object(worker.signal, "alarm"), \
-                    patch.object(worker, "verify_process_confinement", side_effect=ValueError("confinement")), \
-                    patch.object(worker, "probe") as probe, patch.object(worker, "acquire") as acquire, \
-                    patch.object(worker.time, "sleep") as sleep:
+            with (
+                patch.object(sys, "argv", ["worker.py", mode]),
+                patch.object(worker.signal, "alarm"),
+                patch.object(
+                    worker,
+                    "verify_process_confinement",
+                    side_effect=ValueError("confinement"),
+                ),
+                patch.object(worker, "probe") as probe,
+                patch.object(worker, "acquire") as acquire,
+                patch.object(worker.time, "sleep") as sleep,
+            ):
                 with self.assertRaises(ValueError):
                     worker.main()
                 probe.assert_not_called()
@@ -72,7 +97,10 @@ class WorkerTests(unittest.TestCase):
     def run_acquisition(self, page):
         def fetch(url, **options):
             self.assertEqual(options["retries"], 1)
-            self.assertEqual(options["additional_args"], {"service_workers": "block", "accept_downloads": False})
+            self.assertEqual(
+                options["additional_args"],
+                {"service_workers": "block", "accept_downloads": False},
+            )
             # Match pinned Scrapling's callback-error handling.
             for callback in [options["page_setup"], options["page_action"]]:
                 try:
@@ -83,8 +111,14 @@ class WorkerTests(unittest.TestCase):
         fetchers = types.ModuleType("scrapling.fetchers")
         fetchers.DynamicFetcher = types.SimpleNamespace(fetch=fetch)
         wire = io.StringIO()
-        stdin = types.SimpleNamespace(buffer=io.BytesIO(b'{"url":"https://example.com/"}\n'))
-        with patch.dict(sys.modules, {"scrapling.fetchers": fetchers}), patch.object(sys, "stdin", stdin), patch.object(worker, "WIRE", wire):
+        stdin = types.SimpleNamespace(
+            buffer=io.BytesIO(b'{"url":"https://example.com/"}\n')
+        )
+        with (
+            patch.dict(sys.modules, {"scrapling.fetchers": fetchers}),
+            patch.object(sys, "stdin", stdin),
+            patch.object(worker, "WIRE", wire),
+        ):
             worker.acquire()
         return json.loads(wire.getvalue())
 
@@ -93,15 +127,24 @@ class WorkerTests(unittest.TestCase):
         result = self.run_acquisition(page)
         self.assertIsNotNone(page.handler)
         self.assertIsNotNone(page.websocket_handler)
-        self.assertEqual(result, {"type": "result", "url": page.url, "body": base64.b64encode(page.content().encode()).decode()})
+        self.assertEqual(
+            result,
+            {
+                "type": "result",
+                "url": page.url,
+                "body": base64.b64encode(page.content().encode()).decode(),
+            },
+        )
 
     def test_swallowed_scrapling_setup_error_cannot_be_a_success(self):
         with self.assertRaises(ValueError):
             self.run_acquisition(Page(broken_setup=True))
 
     def test_receiver_rejects_missing_newline_and_non_object(self):
-        for line in [b'{}', b'[]\n', b'x' * (worker.MAX_LINE + 1)]:
-            with patch.object(sys, "stdin", types.SimpleNamespace(buffer=io.BytesIO(line))):
+        for line in [b"{}", b"[]\n", b"x" * (worker.MAX_LINE + 1)]:
+            with patch.object(
+                sys, "stdin", types.SimpleNamespace(buffer=io.BytesIO(line))
+            ):
                 with self.assertRaises(ValueError):
                     worker.receive()
 

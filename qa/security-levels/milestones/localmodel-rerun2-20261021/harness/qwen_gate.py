@@ -8,6 +8,7 @@ loopback; the Tart guest reaches it only through an SSH reverse tunnel. It:
   - drops Authorization / API-key headers (the server needs none; the guest only sends a placeholder);
   - logs method, path, status, bytes, seconds, model, tool names and token usage. No bodies, no headers.
 """
+
 import argparse
 import json
 import re
@@ -18,8 +19,19 @@ import threading
 import time
 
 ALLOWED = {("GET", "/v1/models"), ("POST", "/v1/chat/completions")}
-DROP = {"authorization", "x-api-key", "proxy-authorization", "proxy-connection", "connection",
-        "keep-alive", "transfer-encoding", "content-length", "host", "te", "upgrade"}
+DROP = {
+    "authorization",
+    "x-api-key",
+    "proxy-authorization",
+    "proxy-connection",
+    "connection",
+    "keep-alive",
+    "transfer-encoding",
+    "content-length",
+    "host",
+    "te",
+    "upgrade",
+}
 MODEL_LOCK = threading.Lock()
 LOG_LOCK = threading.Lock()
 
@@ -33,8 +45,12 @@ def log(path, row):
 
 def free_pct():
     try:
-        out = subprocess.run(["/usr/bin/memory_pressure", "-Q"], capture_output=True, text=True,
-                             timeout=20).stdout
+        out = subprocess.run(
+            ["/usr/bin/memory_pressure", "-Q"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        ).stdout
         match = re.search(r"free percentage:\s*(\d+)%", out)
         return int(match.group(1)) if match else None
     except Exception:
@@ -79,8 +95,12 @@ def summarize(body):
         if isinstance(tool, dict):
             fn = tool.get("function") if isinstance(tool.get("function"), dict) else {}
             tools.append(fn.get("name") or tool.get("name") or tool.get("type"))
-    return {"model": data.get("model"), "tools": tools, "stream": data.get("stream"),
-            "messages": len(data.get("messages") or [])}
+    return {
+        "model": data.get("model"),
+        "tools": tools,
+        "stream": data.get("stream"),
+        "messages": len(data.get("messages") or []),
+    }
 
 
 def usage_from(tail):
@@ -110,8 +130,13 @@ class Handler(socketserver.StreamRequestHandler):
             headers[key.strip().lower()] = value.strip()
         body = read_body(self.rfile, headers)
         if (method, path) not in ALLOWED:
-            log(cfg.log, {"event": "denied", "conn": conn, "method": method, "path": path[:200]})
-            self.wfile.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            log(
+                cfg.log,
+                {"event": "denied", "conn": conn, "method": method, "path": path[:200]},
+            )
+            self.wfile.write(
+                b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
             return
         queued = time.time()
         with MODEL_LOCK:
@@ -121,14 +146,20 @@ class Handler(socketserver.StreamRequestHandler):
                 if pct is None or pct >= cfg.min_free:
                     break
                 if not logged_pause:
-                    log(cfg.log, {"event": "paused_memory", "conn": conn, "free_pct": pct})
+                    log(
+                        cfg.log,
+                        {"event": "paused_memory", "conn": conn, "free_pct": pct},
+                    )
                     logged_pause = True
                 time.sleep(30)
             self.forward(cfg, conn, method, path, head, body, queued, pct)
 
     def forward(self, cfg, conn, method, path, head, body, queued, pct):
         started = time.time()
-        out = ["%s %s HTTP/1.1" % (method, path), "Host: 127.0.0.1:%d" % cfg.upstream_port]
+        out = [
+            "%s %s HTTP/1.1" % (method, path),
+            "Host: 127.0.0.1:%d" % cfg.upstream_port,
+        ]
         for line in head[1:]:
             if line.partition(":")[0].strip().lower() not in DROP:
                 out.append(line)
@@ -137,7 +168,9 @@ class Handler(socketserver.StreamRequestHandler):
         raw = ("\r\n".join(out) + "\r\n\r\n").encode("latin-1") + body
         status, total, tail, error = None, 0, b"", None
         try:
-            upstream = socket.create_connection(("127.0.0.1", cfg.upstream_port), timeout=1800)
+            upstream = socket.create_connection(
+                ("127.0.0.1", cfg.upstream_port), timeout=1800
+            )
             try:
                 upstream.sendall(raw)
                 while True:
@@ -160,13 +193,24 @@ class Handler(socketserver.StreamRequestHandler):
         except OSError as exc:
             error = repr(exc)[:200]
             try:
-                self.wfile.write(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                self.wfile.write(
+                    b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                )
             except OSError:
                 pass
-        row = {"event": "forwarded", "conn": conn, "method": method, "path": path, "status": status,
-               "request_bytes": len(body), "response_bytes": total,
-               "queued_seconds": round(started - queued, 3), "seconds": round(time.time() - started, 3),
-               "free_pct_at_start": pct, "usage": usage_from(tail)}
+        row = {
+            "event": "forwarded",
+            "conn": conn,
+            "method": method,
+            "path": path,
+            "status": status,
+            "request_bytes": len(body),
+            "response_bytes": total,
+            "queued_seconds": round(started - queued, 3),
+            "seconds": round(time.time() - started, 3),
+            "free_pct_at_start": pct,
+            "usage": usage_from(tail),
+        }
         if error:
             row["error"] = error
         row.update(summarize(body))
@@ -187,10 +231,17 @@ def main():
     cfg = parser.parse_args()
     server = Server(("127.0.0.1", cfg.port), Handler)
     server.cfg = cfg
-    log(cfg.log, {"event": "started", "listen": "127.0.0.1:%d" % cfg.port,
-                  "upstream": "127.0.0.1:%d" % cfg.upstream_port,
-                  "allowed": sorted(" ".join(a) for a in ALLOWED),
-                  "min_free_pct": cfg.min_free, "free_pct": free_pct()})
+    log(
+        cfg.log,
+        {
+            "event": "started",
+            "listen": "127.0.0.1:%d" % cfg.port,
+            "upstream": "127.0.0.1:%d" % cfg.upstream_port,
+            "allowed": sorted(" ".join(a) for a in ALLOWED),
+            "min_free_pct": cfg.min_free,
+            "free_pct": free_pct(),
+        },
+    )
     server.serve_forever()
 
 

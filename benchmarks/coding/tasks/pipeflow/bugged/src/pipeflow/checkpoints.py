@@ -28,11 +28,17 @@ class JsonCheckpointStore:
             raise CheckpointError("checkpoint completed must be an object")
         return completed
 
-    def save_task(self, task_name: str, output: Any, attempts: int, order_index: int) -> None:
+    def save_task(
+        self, task_name: str, output: Any, attempts: int, order_index: int
+    ) -> None:
         if self.path is None:
             return
         data = {"completed": self.load()}
-        data["completed"][task_name] = {"output": output, "attempts": attempts, "order_index": order_index}
+        data["completed"][task_name] = {
+            "output": output,
+            "attempts": attempts,
+            "order_index": order_index,
+        }
         self._atomic_write(data)
 
     def clear(self) -> None:
@@ -43,5 +49,7 @@ class JsonCheckpointStore:
         assert self.path is not None
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        tmp.write_text(
+            json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         os.replace(tmp, self.path)

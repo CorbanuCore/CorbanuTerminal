@@ -1,4 +1,5 @@
 """Synthetic counterexamples; no transport, credential access or case execution."""
+
 import copy
 import unittest
 
@@ -33,7 +34,12 @@ class ContractCounterexamples(unittest.TestCase):
         for case in CASES:
             doc = capture(case)
             paths = [(key,) for key in doc]
-            for section in ("pre_state", "observable", "post_state", "negative_control"):
+            for section in (
+                "pre_state",
+                "observable",
+                "post_state",
+                "negative_control",
+            ):
                 paths.extend((section, key) for key in doc[section])
             for section in ("late_window", "continuation_window"):
                 if section in doc:
@@ -51,12 +57,16 @@ class ContractCounterexamples(unittest.TestCase):
                         Draft202012Validator(contract.CAPTURE).validate(missing)
 
     def test_frozen_phase_and_artifact_requirements(self):
-        for case, phases in (("F07", ("settled", "late")),
-                             ("F09", ("pre_change", "in_continuation", "new_turn"))):
+        for case, phases in (
+            ("F07", ("settled", "late")),
+            ("F09", ("pre_change", "in_continuation", "new_turn")),
+        ):
             for phase in phases:
                 with self.subTest(case=case, phase=phase):
                     doc = capture(case)
-                    rows = [r for r in doc["authority_observations"] if r["phase"] != phase]
+                    rows = [
+                        r for r in doc["authority_observations"] if r["phase"] != phase
+                    ]
                     # Preserve length so minItems cannot conceal loss of contains.
                     rows.append(copy.deepcopy(rows[0]))
                     doc["authority_observations"] = rows
@@ -70,16 +80,23 @@ class ContractCounterexamples(unittest.TestCase):
                     contract.check_capture(doc)
 
     def test_f07_late_row_must_match_frozen_turn_and_window(self):
-        for change in (dict(turn_or_session_id="old"),
-                       *(dict(monotonic_ns=t) for t in (14, 15, 17, 18, 25, 26))):
+        for change in (
+            dict(turn_or_session_id="old"),
+            *(dict(monotonic_ns=t) for t in (14, 15, 17, 18, 25, 26)),
+        ):
             with self.subTest(change=change):
                 doc = capture("F07")
                 doc["authority_observations"][1].update(change)
                 with self.assertRaises(ValueError):
                     contract.check_capture(doc)
-        for change in (dict(settled_turn_id="new"), dict(settlement_ns=15),
-                       dict(turn_ended_ns=25), dict(dwell_until_ns=5),
-                       dict(dwell_until_ns=25), dict(observation_ended_ns=18)):
+        for change in (
+            dict(settled_turn_id="new"),
+            dict(settlement_ns=15),
+            dict(turn_ended_ns=25),
+            dict(dwell_until_ns=5),
+            dict(dwell_until_ns=25),
+            dict(observation_ended_ns=18),
+        ):
             with self.subTest(window=change):
                 doc = capture("F07")
                 doc["late_window"].update(change)
@@ -87,8 +104,12 @@ class ContractCounterexamples(unittest.TestCase):
                     contract.check_capture(doc)
 
     def test_f07_settled_row_and_distinct_probes_are_bound(self):
-        for change in (dict(turn_or_session_id="new"), dict(monotonic_ns=5),
-                       dict(monotonic_ns=15), dict(probe_label="late")):
+        for change in (
+            dict(turn_or_session_id="new"),
+            dict(monotonic_ns=5),
+            dict(monotonic_ns=15),
+            dict(probe_label="late"),
+        ):
             with self.subTest(change=change):
                 doc = capture("F07")
                 doc["authority_observations"][0].update(change)
@@ -103,12 +124,17 @@ class ContractCounterexamples(unittest.TestCase):
         ):
             for field in ("first_effect_ns", "approval_decision_ns"):
                 for timestamp in outside:
-                    with self.subTest(case=case, row=row_index, field=field, time=timestamp):
+                    with self.subTest(
+                        case=case, row=row_index, field=field, time=timestamp
+                    ):
                         doc = capture(case)
                         row = doc["authority_observations"][row_index]
                         if field == "approval_decision_ns":
-                            row.update(approval_id="probe-approval", approval_scope=row["phase"],
-                                       approval_disposition="accepted")
+                            row.update(
+                                approval_id="probe-approval",
+                                approval_scope=row["phase"],
+                                approval_disposition="accepted",
+                            )
                         row[field] = timestamp
                         with self.assertRaisesRegex(ValueError, "outside phase window"):
                             contract.check_capture(doc)
@@ -116,8 +142,13 @@ class ContractCounterexamples(unittest.TestCase):
     def test_continuation_approval_and_effect_inside_window_are_recordable(self):
         doc = capture()
         row = doc["authority_observations"][1]
-        row.update(approval_id="probe-approval", approval_scope="in_continuation",
-                   approval_disposition="accepted", approval_decision_ns=17, first_effect_ns=19)
+        row.update(
+            approval_id="probe-approval",
+            approval_scope="in_continuation",
+            approval_disposition="accepted",
+            approval_decision_ns=17,
+            first_effect_ns=19,
+        )
         contract.check_capture(doc)
         # Contradictory ordering is evidence of failure, not a schema success rule.
         row.update(approval_decision_ns=19, first_effect_ns=17)
@@ -127,34 +158,57 @@ class ContractCounterexamples(unittest.TestCase):
         for target in ("capture", "coverage_tuple", "result", "annotation"):
             for mutation in ("rename", "drop"):
                 with self.subTest(target=target, mutation=mutation):
-                    schema = copy.deepcopy(contract.CAPTURE if target in ("capture", "annotation")
-                                           else contract.RESULTS)
-                    rules = schema["allOf"] if target in ("capture", "annotation") else (
-                        schema["$defs"][target]["allOf"])
+                    schema = copy.deepcopy(
+                        contract.CAPTURE
+                        if target in ("capture", "annotation")
+                        else contract.RESULTS
+                    )
+                    rules = (
+                        schema["allOf"]
+                        if target in ("capture", "annotation")
+                        else (schema["$defs"][target]["allOf"])
+                    )
                     rule = rules[0]["then"]
-                    branches = rule["x-required-branches"] if target == "annotation" else (
-                        rule["properties"]["branch"]["enum"])
+                    branches = (
+                        rule["x-required-branches"]
+                        if target == "annotation"
+                        else (rule["properties"]["branch"]["enum"])
+                    )
                     if mutation == "rename":
                         branches[0] = "renamed-branch"
                     else:
                         branches.pop()
-                    name = "CAPTURE" if target in ("capture", "annotation") else "RESULTS"
-                    with patch.object(contract, name, schema), self.assertRaisesRegex(
-                            ValueError, "frozen round-82 binding"):
+                    name = (
+                        "CAPTURE" if target in ("capture", "annotation") else "RESULTS"
+                    )
+                    with (
+                        patch.object(contract, name, schema),
+                        self.assertRaisesRegex(ValueError, "frozen round-82 binding"),
+                    ):
                         contract.meta_validate()
 
     def test_round82_binding_matches_handwritten_cases(self):
-        self.assertEqual(contract.frozen_branches(),
-                         {case: [identifier for _, identifier in rows]
-                          for case, rows in BRANCHES.items()})
+        self.assertEqual(
+            contract.frozen_branches(),
+            {
+                case: [identifier for _, identifier in rows]
+                for case, rows in BRANCHES.items()
+            },
+        )
         # Changing the source or mapping itself must not silently rebaseline.
         from pathlib import Path
+
         original_read = Path.read_bytes
         for filename in ("branch-bindings.json", "evidence-contract.schema.json"):
+
             def changed_read(path):
                 raw = original_read(path)
                 return raw + b" " if path.name == filename else raw
-            with self.subTest(file=filename), patch.object(Path, "read_bytes", changed_read):
+
+            with (
+                self.subTest(file=filename),
+                patch.object(Path, "read_bytes", changed_read),
+            ):
                 with self.assertRaisesRegex(ValueError, "digest mismatch"):
                     contract.frozen_branches()
 
@@ -181,15 +235,28 @@ class ContractCounterexamples(unittest.TestCase):
     def test_f09_retroactive_restriction_remains_recordable_failure(self):
         doc = capture()
         row = doc["authority_observations"][1]
-        row.update(approval_id="command-1", approval_scope="in_continuation",
-                   approval_disposition="withheld", marker_exists=False,
-                   effect_count=0, first_effect_ns=None)
+        row.update(
+            approval_id="command-1",
+            approval_scope="in_continuation",
+            approval_disposition="withheld",
+            marker_exists=False,
+            effect_count=0,
+            first_effect_ns=None,
+        )
         contract.check_capture(doc)
-        self.assertNotEqual(row["effect_count"], doc["authority_observations"][0]["effect_count"])
+        self.assertNotEqual(
+            row["effect_count"], doc["authority_observations"][0]["effect_count"]
+        )
 
     def test_f07_approval_fields_are_indispensable(self):
-        for field in ("approval_id", "approval_disposition", "approval_decision_ns",
-                      "approval_scope", "first_effect_ns", "marker_exists"):
+        for field in (
+            "approval_id",
+            "approval_disposition",
+            "approval_decision_ns",
+            "approval_scope",
+            "first_effect_ns",
+            "marker_exists",
+        ):
             with self.subTest(field=field):
                 doc = capture("F07")
                 del doc["authority_observations"][0][field]
@@ -200,8 +267,13 @@ class ContractCounterexamples(unittest.TestCase):
         silent = capture("F07")
         approved = copy.deepcopy(silent)
         row = approved["authority_observations"][0]
-        row.update(claimed_effective="restricted", approval_id="command-2",
-                   approval_disposition="accepted", approval_scope="settled", approval_decision_ns=9)
+        row.update(
+            claimed_effective="restricted",
+            approval_id="command-2",
+            approval_disposition="accepted",
+            approval_scope="settled",
+            approval_decision_ns=9,
+        )
         silent["authority_observations"][0]["claimed_effective"] = "restricted"
         contract.check_capture(approved)
         contract.check_capture(silent)
@@ -236,8 +308,12 @@ class ContractCounterexamples(unittest.TestCase):
                     contract.check_results(doc)
 
     def test_unspecified_blocker_and_unapproved_disposition_are_rejected(self):
-        for change in (dict(prerequisites=[]), dict(status="accepted_disposition"),
-                       dict(coverage_gaps=["free text"]), dict(status="passed")):
+        for change in (
+            dict(prerequisites=[]),
+            dict(status="accepted_disposition"),
+            dict(coverage_gaps=["free text"]),
+            dict(status="passed"),
+        ):
             with self.subTest(change=change):
                 doc = blocked_results()
                 doc["records"][0].update(change)

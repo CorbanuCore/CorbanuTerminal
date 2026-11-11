@@ -15,7 +15,9 @@ TOOLCHAIN = "570656042681cfd8795403a455baf9a33035331a07db0645e866bbcea89a3d64"
 SHA = "ed5d83a71fc4307b0ddcfe2a052b4848c01a890f"
 
 
-def entry(id: int, key: str, created_at: str, ref: str = "refs/heads/main") -> CacheEntry:
+def entry(
+    id: int, key: str, created_at: str, ref: str = "refs/heads/main"
+) -> CacheEntry:
     return CacheEntry(id=id, key=key, ref=ref, size_in_bytes=1, created_at=created_at)
 
 
@@ -53,31 +55,78 @@ class FamilyTest(unittest.TestCase):
 
 class PlanDeletionsTest(unittest.TestCase):
     def test_keeps_newest_copy_per_family(self) -> None:
-        old = entry(1, f"sccache-core-security-macos-15-{LOCK}-38660201097", "2026-10-15T00:38:45Z")
-        other_lock = entry(2, f"sccache-core-security-macos-15-{TOOLCHAIN}-38660201154", "2026-10-15T00:39:44Z")
-        newest = entry(3, f"sccache-core-security-macos-15-{LOCK}-38660949984", "2026-10-15T00:47:28Z")
-        other = entry(4, "sccache-tmux-smoke-Linux-ad92baf5dbb36bcc-38646905550", "2026-10-14T22:48:37Z")
-        self.assertEqual(plan_deletions([newest, old, other, other_lock]), [other_lock, old])
+        old = entry(
+            1,
+            f"sccache-core-security-macos-15-{LOCK}-38660201097",
+            "2026-10-15T00:38:45Z",
+        )
+        other_lock = entry(
+            2,
+            f"sccache-core-security-macos-15-{TOOLCHAIN}-38660201154",
+            "2026-10-15T00:39:44Z",
+        )
+        newest = entry(
+            3,
+            f"sccache-core-security-macos-15-{LOCK}-38660949984",
+            "2026-10-15T00:47:28Z",
+        )
+        other = entry(
+            4,
+            "sccache-tmux-smoke-Linux-ad92baf5dbb36bcc-38646905550",
+            "2026-10-14T22:48:37Z",
+        )
+        self.assertEqual(
+            plan_deletions([newest, old, other, other_lock]), [other_lock, old]
+        )
 
     def test_ignores_other_refs_and_unscoped_keys(self) -> None:
         entries = [
-            entry(1, "sccache-tmux-smoke-Linux-ad92baf5dbb36bcc-38646905550", "2026-10-14T00:00:00Z", ref="refs/pull/1/merge"),
-            entry(2, "sccache-tmux-smoke-Linux-ad92baf5dbb36bcc-38646905551", "2026-10-15T00:00:00Z"),
-            entry(3, f"cargo-home-macos-dev-{LOCK}-{TOOLCHAIN}", "2026-10-14T00:00:00Z"),
-            entry(4, f"cargo-home-macos-dev-{TOOLCHAIN}-{LOCK}", "2026-10-15T00:00:00Z"),
+            entry(
+                1,
+                "sccache-tmux-smoke-Linux-ad92baf5dbb36bcc-38646905550",
+                "2026-10-14T00:00:00Z",
+                ref="refs/pull/1/merge",
+            ),
+            entry(
+                2,
+                "sccache-tmux-smoke-Linux-ad92baf5dbb36bcc-38646905551",
+                "2026-10-15T00:00:00Z",
+            ),
+            entry(
+                3, f"cargo-home-macos-dev-{LOCK}-{TOOLCHAIN}", "2026-10-14T00:00:00Z"
+            ),
+            entry(
+                4, f"cargo-home-macos-dev-{TOOLCHAIN}-{LOCK}", "2026-10-15T00:00:00Z"
+            ),
         ]
         self.assertEqual(plan_deletions(entries), [])
 
     def test_orders_by_time_not_by_text(self) -> None:
         # Fractional seconds vary in precision; text order would pick `a`.
-        a = entry(1, "sccache-tmux-smoke-Linux-ad92baf5dbb36bcc-38646905550", "2026-10-15T00:47:28.9Z")
-        b = entry(2, "sccache-tmux-smoke-Linux-ad92baf5dbb36bcc-38646905551", "2026-10-15T00:47:28.95Z")
+        a = entry(
+            1,
+            "sccache-tmux-smoke-Linux-ad92baf5dbb36bcc-38646905550",
+            "2026-10-15T00:47:28.9Z",
+        )
+        b = entry(
+            2,
+            "sccache-tmux-smoke-Linux-ad92baf5dbb36bcc-38646905551",
+            "2026-10-15T00:47:28.95Z",
+        )
         self.assertEqual(plan_deletions([a, b]), [a])
 
 
 class MainTest(unittest.TestCase):
-    OLD = entry(1, "sccache-tmux-smoke-Linux-ad92baf5dbb36bcc-38646905550", "2026-10-14T00:00:00Z")
-    NEW = entry(2, "sccache-tmux-smoke-Linux-ad92baf5dbb36bcc-38646905551", "2026-10-15T00:00:00Z")
+    OLD = entry(
+        1,
+        "sccache-tmux-smoke-Linux-ad92baf5dbb36bcc-38646905550",
+        "2026-10-14T00:00:00Z",
+    )
+    NEW = entry(
+        2,
+        "sccache-tmux-smoke-Linux-ad92baf5dbb36bcc-38646905551",
+        "2026-10-15T00:00:00Z",
+    )
 
     def run_main(self, delete_error: str | None) -> int:
         def gh_api(*args: str) -> str:
@@ -86,15 +135,23 @@ class MainTest(unittest.TestCase):
             return ""
 
         with (
-            mock.patch.object(prune_actions_caches, "list_main_caches", return_value=[self.OLD, self.NEW]),
-            mock.patch.object(prune_actions_caches, "gh_api", side_effect=gh_api) as api,
+            mock.patch.object(
+                prune_actions_caches,
+                "list_main_caches",
+                return_value=[self.OLD, self.NEW],
+            ),
+            mock.patch.object(
+                prune_actions_caches, "gh_api", side_effect=gh_api
+            ) as api,
             mock.patch("sys.argv", ["prune", "--repo", "o/r"]),
             redirect_stdout(io.StringIO()),
             redirect_stderr(io.StringIO()),
         ):
             code = prune_actions_caches.main()
         if delete_error is None:
-            api.assert_called_once_with("--method", "DELETE", "repos/o/r/actions/caches/1")
+            api.assert_called_once_with(
+                "--method", "DELETE", "repos/o/r/actions/caches/1"
+            )
         return code
 
     def test_deletes_older_copy(self) -> None:

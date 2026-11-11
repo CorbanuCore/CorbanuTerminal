@@ -13,8 +13,16 @@ class SchedulerTests(unittest.TestCase):
         config = {
             "tasks": {
                 "a": {"uses": "identity", "params": {"value": 2}},
-                "b": {"uses": "multiply", "deps": ["a"], "params": {"input": "$a", "factor": 3}},
-                "c": {"uses": "sum", "deps": ["a", "b"], "params": {"items": ["$a", "$b", 4]}},
+                "b": {
+                    "uses": "multiply",
+                    "deps": ["a"],
+                    "params": {"input": "$a", "factor": 3},
+                },
+                "c": {
+                    "uses": "sum",
+                    "deps": ["a", "b"],
+                    "params": {"items": ["$a", "$b", 4]},
+                },
             }
         }
         result = PipelineRunner(config).run()
@@ -24,7 +32,12 @@ class SchedulerTests(unittest.TestCase):
     def test_retry_flaky_task_succeeds_on_second_attempt(self) -> None:
         config = {
             "retry": {"max_attempts": 2},
-            "tasks": {"flaky": {"uses": "flaky", "params": {"failures": 1, "value": "ok", "key": "x"}}},
+            "tasks": {
+                "flaky": {
+                    "uses": "flaky",
+                    "params": {"failures": 1, "value": "ok", "key": "x"},
+                }
+            },
         }
         result = PipelineRunner(config).run()
         self.assertEqual(result["outputs"]["flaky"], "ok")
@@ -32,7 +45,10 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["tasks"]["flaky"]["failures"], 1)
 
     def test_retry_exhaustion_wraps_task_error_in_scheduler_error(self) -> None:
-        config = {"retry": {"max_attempts": 2}, "tasks": {"bad": {"uses": "explode", "params": {"message": "nope"}}}}
+        config = {
+            "retry": {"max_attempts": 2},
+            "tasks": {"bad": {"uses": "explode", "params": {"message": "nope"}}},
+        }
         with self.assertRaises(PipelineError) as ctx:
             PipelineRunner(config).run()
         self.assertIn("scheduler", str(ctx.exception))
@@ -44,7 +60,11 @@ class SchedulerTests(unittest.TestCase):
                 "checkpoint": {"path": str(path), "resume": False},
                 "tasks": {
                     "extract": {"uses": "identity", "params": {"value": "raw"}},
-                    "transform": {"uses": "concat", "deps": ["extract"], "params": {"items": ["$extract", "-clean"]}},
+                    "transform": {
+                        "uses": "concat",
+                        "deps": ["extract"],
+                        "params": {"items": ["$extract", "-clean"]},
+                    },
                 },
             }
             PipelineRunner(first).run()
@@ -58,24 +78,47 @@ class SchedulerTests(unittest.TestCase):
     def test_resume_partial_checkpoint_allows_downstream_require(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "checkpoint.json"
-            path.write_text('{"completed":{"extract":{"output":"raw","attempts":1,"order_index":0}}}', encoding="utf-8")
+            path.write_text(
+                '{"completed":{"extract":{"output":"raw","attempts":1,"order_index":0}}}',
+                encoding="utf-8",
+            )
             config = {
                 "checkpoint": {"path": str(path), "resume": True},
                 "tasks": {
                     "extract": {"uses": "identity", "params": {"value": "should-skip"}},
-                    "validate": {"uses": "require", "deps": ["extract"], "params": {"task": "extract"}},
+                    "validate": {
+                        "uses": "require",
+                        "deps": ["extract"],
+                        "params": {"task": "extract"},
+                    },
                 },
             }
             result = PipelineRunner(config).run()
         self.assertEqual(result["outputs"]["validate"], "raw")
 
     def test_disabled_task_omitted_from_order(self) -> None:
-        result = PipelineRunner({"tasks": {"off": {"enabled": False}, "on": {"uses": "identity", "params": {"value": 1}}}}).run()
+        result = PipelineRunner(
+            {
+                "tasks": {
+                    "off": {"enabled": False},
+                    "on": {"uses": "identity", "params": {"value": 1}},
+                }
+            }
+        ).run()
         self.assertEqual(result["order"], ["on"])
 
     def test_concat_resolves_context_outputs(self) -> None:
         result = PipelineRunner(
-            {"tasks": {"a": {"uses": "identity", "params": {"value": "A"}}, "b": {"uses": "concat", "deps": ["a"], "params": {"items": ["$a", "B"]}}}}
+            {
+                "tasks": {
+                    "a": {"uses": "identity", "params": {"value": "A"}},
+                    "b": {
+                        "uses": "concat",
+                        "deps": ["a"],
+                        "params": {"items": ["$a", "B"]},
+                    },
+                }
+            }
         ).run()
         self.assertEqual(result["outputs"]["b"], "AB")
 

@@ -3,6 +3,7 @@ coordinator's answers, the design screens, neutral navigation and one prompt per
 
 usage: python3 tools/make_packet.py RUN_DIR REPO_DIR OUT_DIR CANDIDATE_SHA
 """
+
 import hashlib
 import json
 import pathlib
@@ -14,11 +15,19 @@ CANDIDATE = sys.argv[4]
 design = run / "design"
 GROUPS = json.loads((run / "tools/groups.json").read_text())
 NOTES = json.loads((run / "tools/standing-notes.json").read_text())
-REPLAYS = json.loads((run / "tools/replays.json").read_text()) if (run / "tools/replays.json").exists() else {}
+REPLAYS = (
+    json.loads((run / "tools/replays.json").read_text())
+    if (run / "tools/replays.json").exists()
+    else {}
+)
 amend = json.loads((design / "amendments-v2.json").read_text())
 proposal = json.loads((design / "original-proposal-cases.json").read_text())
-all_ids = [c["id"] for c in proposal["cases"]] + [a["case"] for a in amend["amendments"] if a["kind"] == "new"]
-assert sorted(sum(GROUPS.values(), [])) == sorted(all_ids), "every case in exactly one group"
+all_ids = [c["id"] for c in proposal["cases"]] + [
+    a["case"] for a in amend["amendments"] if a["kind"] == "new"
+]
+assert sorted(sum(GROUPS.values(), [])) == sorted(all_ids), (
+    "every case in exactly one group"
+)
 
 out.mkdir(parents=True, exist_ok=True)
 text = (design / "original-proposal.md").read_text()
@@ -26,10 +35,14 @@ body = text.split("## 3.", 1)[0].rstrip() + "\n"
 (out / "design-cases.md").write_text(
     "# Frozen functional cases: Corbanu Terminal, Moderate security level\n\n"
     "Verbatim from the designer's proposal (sections 1 and 2; section 3 repeated the same cases as JSON). The\n"
-    "amendments in `amendments.md` govern where they differ.\n\n" + body)
+    "amendments in `amendments.md` govern where they differ.\n\n" + body
+)
 qa = (design / "questions-and-answers.md").read_text().split("\n", 2)[2]
-(out / "amendments.md").write_text((design / "amendments-v2.md").read_text().rstrip() + "\n\n"
-                                   "## Coordinator answers to the designer's questions, and test-machine facts\n\n" + qa)
+(out / "amendments.md").write_text(
+    (design / "amendments-v2.md").read_text().rstrip() + "\n\n"
+    "## Coordinator answers to the designer's questions, and test-machine facts\n\n"
+    + qa
+)
 (out / "screens").mkdir(exist_ok=True)
 for f in sorted((design / "packet/screens").iterdir()):
     shutil.copy2(f, out / "screens" / f.name)
@@ -64,17 +77,23 @@ request, record its words verbatim; you may resubmit the same case wording uncha
 (out / "navigation.md").write_text(navigation)
 (out / "executor-prompt.md").write_text(executor_prompt)
 (out / "prompts").mkdir(exist_ok=True)
-ASSIGN = [(g, ids, NOTES.get(g, "")) for g, ids in GROUPS.items()] + \
-         [(label, r["cases"], (NOTES.get(r["group"], "") + " " if NOTES.get(r["group"]) else "") +
-           "Replay assignment (fresh executor; earlier attempts are kept separately): " + r["note"])
-          for label, r in REPLAYS.items()]
+ASSIGN = [(g, ids, NOTES.get(g, "")) for g, ids in GROUPS.items()] + [
+    (
+        label,
+        r["cases"],
+        (NOTES.get(r["group"], "") + " " if NOTES.get(r["group"]) else "")
+        + "Replay assignment (fresh executor; earlier attempts are kept separately): "
+        + r["note"],
+    )
+    for label, r in REPLAYS.items()
+]
 for group, ids, note in ASSIGN:
     note = f"\n- Note for this group: {note}" if note else ""
     prompt = f"""{executor_prompt}
 {navigation}
 ## Assignment: group {group}
 
-- Cases, in order: {', '.join(ids)}.
+- Cases, in order: {", ".join(ids)}.
 - Candidate: Corbanu Terminal 0.1.48 package, read-only at `/opt/agms/pkg`; the program is
   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `{CANDIDATE}`.
 - Frozen cases file SHA-256: `{cases_sha}`. Amendments file SHA-256: `{amend_sha}`.

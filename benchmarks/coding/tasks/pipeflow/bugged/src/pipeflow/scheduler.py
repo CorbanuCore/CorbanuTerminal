@@ -47,7 +47,9 @@ class PipelineRunner:
 
     def _load_checkpoint_outputs(self) -> None:
         completed = self.checkpoints.load()
-        for name, row in sorted(completed.items(), key=lambda item: item[1].get("order_index", 0)):
+        for name, row in sorted(
+            completed.items(), key=lambda item: item[1].get("order_index", 0)
+        ):
             if name in self.tasks:
                 self.completed_from_checkpoint.add(name)
 
@@ -61,9 +63,19 @@ class PipelineRunner:
             self.metrics.record_attempt(name)
             try:
                 fn = resolve_task(impl_name)
-                output = fn(params, {"outputs": self.outputs, "state": self.state, "task": name, "attempt": attempt})
+                output = fn(
+                    params,
+                    {
+                        "outputs": self.outputs,
+                        "state": self.state,
+                        "task": name,
+                        "attempt": attempt,
+                    },
+                )
                 self.metrics.record_duration(name, monotonic() - started)
-                self.checkpoints.save_task(name, output, attempt, self.order.index(name))
+                self.checkpoints.save_task(
+                    name, output, attempt, self.order.index(name)
+                )
                 return output
             except BaseException as exc:  # noqa: BLE001 - benchmark engine must wrap task errors
                 last_error = exc
@@ -72,10 +84,14 @@ class PipelineRunner:
                 if not self.retry.should_retry(attempt):
                     break
                 self.retry.sleep_before_retry(attempt)
-        raise PipelineError(f"task {name!r} failed in scheduler after {self.retry.max_attempts} attempts") from last_error
+        raise PipelineError(
+            f"task {name!r} failed in scheduler after {self.retry.max_attempts} attempts"
+        ) from last_error
 
 
-def run_pipeline(config: str | dict[str, Any], env: dict[str, str] | None = None) -> dict[str, Any]:
+def run_pipeline(
+    config: str | dict[str, Any], env: dict[str, str] | None = None
+) -> dict[str, Any]:
     try:
         return PipelineRunner(config, env=env).run()
     except GraphError as exc:

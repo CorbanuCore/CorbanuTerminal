@@ -10,10 +10,11 @@ product may legitimately bucket by admission or by completion.
 Prices: Z.AI published USD/1M: input 1.40, cached input 0.26, output 4.40.
 usage: buckets.py GRAIN(hour|day|week|month) FILE.err ...
 """
+
 import datetime as dt, json, re, sys, collections
 from decimal import Decimal as D
 
-LINE = re.compile(r'^(\S+Z)\s.*Chat completions SSE event: (\{.*\})\s*$')
+LINE = re.compile(r"^(\S+Z)\s.*Chat completions SSE event: (\{.*\})\s*$")
 
 
 def ts(s):
@@ -21,15 +22,24 @@ def ts(s):
 
 
 def bucket(t, g):
-    if g == "hour": return t.strftime("%Y-%m-%dT%H:00Z")
-    if g == "day": return t.strftime("%Y-%m-%d")
-    if g == "week": y, w, _ = t.isocalendar(); return f"{y}-W{w:02d}"
-    if g == "month": return t.strftime("%Y-%m")
+    if g == "hour":
+        return t.strftime("%Y-%m-%dT%H:00Z")
+    if g == "day":
+        return t.strftime("%Y-%m-%d")
+    if g == "week":
+        y, w, _ = t.isocalendar()
+        return f"{y}-W{w:02d}"
+    if g == "month":
+        return t.strftime("%Y-%m")
 
 
 def cost(u):
     c = (u.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0
-    return (D(u["prompt_tokens"] - c) * D("1.40") + D(c) * D("0.26") + D(u["completion_tokens"]) * D("4.40")) / D(10**6)
+    return (
+        D(u["prompt_tokens"] - c) * D("1.40")
+        + D(c) * D("0.26")
+        + D(u["completion_tokens"]) * D("4.40")
+    ) / D(10**6)
 
 
 g = sys.argv[1]
@@ -40,19 +50,32 @@ for f in sys.argv[2:]:
         s = line.strip()
         m = LINE.match(s)
         if m:
-            o = json.loads(m.group(2)); i = o.get("id")
+            o = json.loads(m.group(2))
+            i = o.get("id")
             first.setdefault(i, ts(m.group(1)))
-            if o.get("usage"): usage[i] = o["usage"]; uts[i] = ts(m.group(1))
+            if o.get("usage"):
+                usage[i] = o["usage"]
+                uts[i] = ts(m.group(1))
         elif '"corbanu_call_metrics"' in s:
-            o = json.loads(s[s.index("{"):])
+            o = json.loads(s[s.index("{") :])
             lat[o.get("generation_id")] = o.get("ms_to_first_sse_byte") or 0
     for i, u in usage.items():
         sent = first[i] - dt.timedelta(milliseconds=lat.get(i, 0))
         b, b2 = bucket(sent, g), bucket(uts[i], g)
-        flag = "" if b == b2 else f"  AMBIGUOUS sent={sent.isoformat()[:23]} usage={uts[i].isoformat()[:23]} ({b} vs {b2})"
-        a = agg[b]; a[0] += 1; a[1] += u["total_tokens"]; a[2] += cost(u)
-        if flag: print(f"{f.split('/')[-1]} {i}{flag} usd={cost(u)}")
+        flag = (
+            ""
+            if b == b2
+            else f"  AMBIGUOUS sent={sent.isoformat()[:23]} usage={uts[i].isoformat()[:23]} ({b} vs {b2})"
+        )
+        a = agg[b]
+        a[0] += 1
+        a[1] += u["total_tokens"]
+        a[2] += cost(u)
+        if flag:
+            print(f"{f.split('/')[-1]} {i}{flag} usd={cost(u)}")
 print(f"grain={g} (bucketed by request start)")
 for b in sorted(agg):
     print(f"  {b}: {agg[b][0]} requests, {agg[b][1]} tokens, exact USD {agg[b][2]}")
-print(f"  ALL: {sum(a[0] for a in agg.values())} requests, {sum(a[1] for a in agg.values())} tokens, exact USD {sum((a[2] for a in agg.values()), D(0))}")
+print(
+    f"  ALL: {sum(a[0] for a in agg.values())} requests, {sum(a[1] for a in agg.values())} tokens, exact USD {sum((a[2] for a in agg.values()), D(0))}"
+)

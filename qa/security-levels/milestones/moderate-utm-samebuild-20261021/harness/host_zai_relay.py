@@ -6,6 +6,7 @@ api.z.ai over TLS. The key comes from the environment at start (ZAI_RELAY_KEY, f
 by the command that starts this process) and is removed from the environment at once.
 Logs method/path/status/bytes/model/tool names only: no headers, no bodies, no key.
 """
+
 import argparse
 import json
 import os
@@ -17,8 +18,19 @@ import time
 
 UPSTREAM = ("api.z.ai", 443)
 ALLOWED_PREFIXES = ("/api/paas/v4/", "/api/coding/paas/v4/", "/api/anthropic/")
-DROP = {"authorization", "x-api-key", "proxy-authorization", "proxy-connection", "connection",
-        "keep-alive", "transfer-encoding", "content-length", "host", "te", "upgrade"}
+DROP = {
+    "authorization",
+    "x-api-key",
+    "proxy-authorization",
+    "proxy-connection",
+    "connection",
+    "keep-alive",
+    "transfer-encoding",
+    "content-length",
+    "host",
+    "te",
+    "upgrade",
+}
 LOG_LOCK = threading.Lock()
 
 
@@ -68,7 +80,12 @@ def summarize(body):
             fn = tool.get("function") if isinstance(tool.get("function"), dict) else {}
             tools.append(fn.get("name") or tool.get("name") or tool.get("type"))
     role = "executor" if b"independent functional executor" in body else "product"
-    return {"model": data.get("model"), "tools": tools, "stream": data.get("stream"), "role": role}
+    return {
+        "model": data.get("model"),
+        "tools": tools,
+        "stream": data.get("stream"),
+        "role": role,
+    }
 
 
 class Handler(socketserver.StreamRequestHandler):
@@ -88,8 +105,18 @@ class Handler(socketserver.StreamRequestHandler):
             headers[key.strip().lower()] = value.strip()
         body = read_body(self.rfile, headers)
         if method not in ("GET", "POST") or not path.startswith(ALLOWED_PREFIXES):
-            log(cfg.log, {"event": "denied_path", "conn": conn, "method": method, "path": path[:200]})
-            self.wfile.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            log(
+                cfg.log,
+                {
+                    "event": "denied_path",
+                    "conn": conn,
+                    "method": method,
+                    "path": path[:200],
+                },
+            )
+            self.wfile.write(
+                b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
             return
         started = time.time()
         out = ["%s %s HTTP/1.1" % (method, path), "Host: api.z.ai"]
@@ -104,8 +131,10 @@ class Handler(socketserver.StreamRequestHandler):
         raw = ("\r\n".join(out) + "\r\n\r\n").encode("latin-1") + body
         status, total, error = None, 0, None
         try:
-            upstream = cfg.client_ctx.wrap_socket(socket.create_connection(UPSTREAM, timeout=600),
-                                                  server_hostname=UPSTREAM[0])
+            upstream = cfg.client_ctx.wrap_socket(
+                socket.create_connection(UPSTREAM, timeout=600),
+                server_hostname=UPSTREAM[0],
+            )
             try:
                 upstream.sendall(raw)
                 del raw
@@ -122,8 +151,16 @@ class Handler(socketserver.StreamRequestHandler):
                 upstream.close()
         except OSError as exc:
             error = repr(exc)[:200]
-        row = {"event": "forwarded", "conn": conn, "method": method, "path": path, "status": status,
-               "request_bytes": len(body), "response_bytes": total, "seconds": round(time.time() - started, 3)}
+        row = {
+            "event": "forwarded",
+            "conn": conn,
+            "method": method,
+            "path": path,
+            "status": status,
+            "request_bytes": len(body),
+            "response_bytes": total,
+            "seconds": round(time.time() - started, 3),
+        }
         if error:
             row["error"] = error
         row.update(summarize(body))
@@ -147,7 +184,14 @@ def main():
     cfg.client_ctx.set_alpn_protocols(["http/1.1"])
     server = Server(("127.0.0.1", cfg.port), Handler)
     server.cfg = cfg
-    log(cfg.log, {"event": "started", "listen": "127.0.0.1:%d" % cfg.port, "allowed_prefixes": list(ALLOWED_PREFIXES)})
+    log(
+        cfg.log,
+        {
+            "event": "started",
+            "listen": "127.0.0.1:%d" % cfg.port,
+            "allowed_prefixes": list(ALLOWED_PREFIXES),
+        },
+    )
     server.serve_forever()
 
 

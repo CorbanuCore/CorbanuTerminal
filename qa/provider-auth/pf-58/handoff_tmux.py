@@ -270,7 +270,9 @@ def run(candidate, repo, evidence, stream_cancel_key="Escape"):
                 deadline = time.monotonic() + 15
                 while time.monotonic() < deadline:
                     viewport = tmux("capture-pane", "-p", "-t", name).stdout
-                    if re.search(re.escape(label) + r"\s+Enabled\s*·\s*configured", viewport):
+                    if re.search(
+                        re.escape(label) + r"\s+Enabled\s*·\s*configured", viewport
+                    ):
                         return viewport
                     time.sleep(0.15)
                 (evidence / "setup-incomplete.txt").write_text(viewport)
@@ -402,7 +404,14 @@ def run(candidate, repo, evidence, stream_cancel_key="Escape"):
                 tmux("resize-window", "-t", name, "-x", "120", "-y", "50")
                 # Store a synthetic token through the actual masked form. Never
                 # send it to a provider: this fixture tests setup/catalog only.
-                tmux("send-keys", "-t", name, "-l", "--", "synthetic-picker-managed-token")
+                tmux(
+                    "send-keys",
+                    "-t",
+                    name,
+                    "-l",
+                    "--",
+                    "synthetic-picker-managed-token",
+                )
                 wait(name, "••")
                 tmux("send-keys", "-t", name, "Enter")
                 wait(name, "Configure providers and control")
@@ -421,7 +430,11 @@ def run(candidate, repo, evidence, stream_cancel_key="Escape"):
                         time.sleep(0.15)
                     else:
                         raise AssertionError("Claude Plan tab missing " + phase)
-                    for model in ("claude-opus-5-plan", "claude-fable-5-plan", "claude-fable-5-1-plan"):
+                    for model in (
+                        "claude-opus-5-plan",
+                        "claude-fable-5-plan",
+                        "claude-fable-5-1-plan",
+                    ):
                         assert "Model: " + model + "." in viewport, viewport
                     expected_current = 0 if phase == "after-setup" else 1
                     assert viewport.count("(current)") == expected_current, viewport
@@ -440,10 +453,22 @@ def run(candidate, repo, evidence, stream_cancel_key="Escape"):
                             tmux("send-keys", "-t", name, "Escape")
                         send(name, "/exit")
                         deadline = time.monotonic() + 30
-                        while tmux("has-session", "-t", name, check=False).returncode == 0:
+                        while (
+                            tmux("has-session", "-t", name, check=False).returncode == 0
+                        ):
                             assert time.monotonic() < deadline, "exit hung"
                             time.sleep(0.15)
-                        tmux("new-session", "-d", "-s", name, "-x", "120", "-y", "50", commands[name])
+                        tmux(
+                            "new-session",
+                            "-d",
+                            "-s",
+                            name,
+                            "-x",
+                            "120",
+                            "-y",
+                            "50",
+                            commands[name],
+                        )
                         wait(name, "Corbanu Terminal")
                         send(name, "/providers")
                         wait(name, "Configure providers and control")
@@ -458,7 +483,14 @@ def run(candidate, repo, evidence, stream_cancel_key="Escape"):
                 wait(name, "Set up with API key")
                 choose(name, "Set up with API key")
                 wait(name, "API key — masked")
-                tmux("send-keys", "-t", name, "-l", "--", "synthetic-picker-anthropic-key")
+                tmux(
+                    "send-keys",
+                    "-t",
+                    name,
+                    "-l",
+                    "--",
+                    "synthetic-picker-anthropic-key",
+                )
                 wait(name, "••")
                 tmux("send-keys", "-t", name, "Enter")
                 wait(name, "Configure providers and control")
@@ -474,7 +506,9 @@ def run(candidate, repo, evidence, stream_cancel_key="Escape"):
                     tmux("send-keys", "-t", name, "Right")
                     time.sleep(0.15)
                 else:
-                    raise AssertionError("Anthropic tab missing after its API-key setup")
+                    raise AssertionError(
+                        "Anthropic tab missing after its API-key setup"
+                    )
                 for model in ("claude-opus-5", "claude-fable-5", "claude-fable-5-1"):
                     assert "Model: " + model + "." in viewport, viewport
                 assert "(current)" not in viewport, viewport
@@ -523,7 +557,9 @@ def main():
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--repo", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
-    parser.add_argument("--stream-cancel-key", choices=("Escape", "C-c"), default="Escape")
+    parser.add_argument(
+        "--stream-cancel-key", choices=("Escape", "C-c"), default="Escape"
+    )
     args = parser.parse_args()
     print(
         json.dumps(

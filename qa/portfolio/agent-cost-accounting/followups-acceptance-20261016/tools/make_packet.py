@@ -5,6 +5,7 @@ amendments as applied), design/answers-final.md (environment facts), design/pack
 tools/groups.json ({group: [case ids]}), tools/group-notes.json ({group: note}), tools/navigation.md,
 the repository's qa/code-blind-functional/executor-prompt.md (copied to tools/executor-prompt.md).
 """
+
 import hashlib, json, pathlib, shutil, sys
 
 w2, out = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
@@ -19,11 +20,15 @@ shutil.copytree(w2 / "design/packet/screens", out / "screens", dirs_exist_ok=Tru
 executor_prompt = (w2 / "tools/executor-prompt.md").read_text()
 navigation = (w2 / "tools/navigation.md").read_text()
 import os
+
 if os.environ.get("NAV_NOTE"):
     navigation += pathlib.Path(os.environ["NAV_NOTE"]).read_text()
 (out / "executor-prompt.md").write_text(executor_prompt)
 (out / "navigation.md").write_text(navigation)
-sha = {n: hashlib.sha256((out / n).read_bytes()).hexdigest() for n in ("design-cases.md", "amendments.md", "answers.md")}
+sha = {
+    n: hashlib.sha256((out / n).read_bytes()).hexdigest()
+    for n in ("design-cases.md", "amendments.md", "answers.md")
+}
 
 ENV = """## Environment
 
@@ -69,11 +74,11 @@ for group, ids in groups.items():
     prompt = f"""{executor_prompt}
 {navigation}
 ## Assignment: group {group}
-- Cases, in order: {', '.join(ids)}.
+- Cases, in order: {", ".join(ids)}.
 - Candidate: Corbanu Terminal {VERSION} developer build, read-only at `/opt/agms/pkg`; the program is
   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `{CANDIDATE}`.
-- Frozen design SHA-256 `{sha['design-cases.md']}`; amendments `{sha['amendments.md']}`; environment answers
-  `{sha['answers.md']}`.
+- Frozen design SHA-256 `{sha["design-cases.md"]}`; amendments `{sha["amendments.md"]}`; environment answers
+  `{sha["answers.md"]}`.
 - Coordinator isolation preflight for this run: `$AGMS_RUN/evidence/preflight-summary.json` and the two
   `preflight-*.json` files beside it. Before anything else, run
   `agms-probe all > $AGMS_RUN/evidence/preflight-executor.json; echo rc=$?` yourself and check that it reports

@@ -10,7 +10,9 @@ from collections.abc import Iterable
 from typing import Any
 
 
-def token_bucket(requests: Iterable[dict[str, Any]], rate: float, capacity: float) -> dict[str, Any]:
+def token_bucket(
+    requests: Iterable[dict[str, Any]], rate: float, capacity: float
+) -> dict[str, Any]:
     """Evaluate per-key token buckets.
 
     This stub only exists so imports work before the benchmark agent starts.

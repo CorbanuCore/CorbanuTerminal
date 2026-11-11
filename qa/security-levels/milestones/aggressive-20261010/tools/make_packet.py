@@ -2,6 +2,7 @@
 
 usage: python3 tools/make_packet.py RECORD_DIR OUT_DIR
 """
+
 import hashlib
 import json
 import pathlib
@@ -11,29 +12,44 @@ root, out = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
 design = json.loads((root / "design.json").read_text())
 cases = {c["id"]: c for c in design["cases"]}
 GROUPS = json.loads((root / "tools/groups.json").read_text())
-assert sorted(sum(GROUPS.values(), [])) == sorted(cases), "every case in exactly one group"
+assert sorted(sum(GROUPS.values(), [])) == sorted(cases), (
+    "every case in exactly one group"
+)
 CANDIDATE = "181ad0299d238accbf936512531c90988e8d15cb02a50ea8241f8566b2372a4a"
 
-lines = ["# Frozen functional cases: Corbanu Terminal, Aggressive security level", "",
-         "Verbatim from the frozen design (`design.json`). Shorthand used by the cases:", "",
-         "- **S0:** fresh profile, `ledger-notes` folder trusted, level Permissive, `zai` route, synthetic test data in place.",
-         "- **S1:** S0, then Aggressive saved and Corbanu Terminal restarted with `r`. `/security` shows \"Active in this session: Aggressive\".",
-         "",
-         "For every case: no macOS Keychain or system password prompt may appear, and the synthetic token value must "
-         "never appear unless the case explicitly grants it.", ""]
+lines = [
+    "# Frozen functional cases: Corbanu Terminal, Aggressive security level",
+    "",
+    "Verbatim from the frozen design (`design.json`). Shorthand used by the cases:",
+    "",
+    "- **S0:** fresh profile, `ledger-notes` folder trusted, level Permissive, `zai` route, synthetic test data in place.",
+    '- **S1:** S0, then Aggressive saved and Corbanu Terminal restarted with `r`. `/security` shows "Active in this session: Aggressive".',
+    "",
+    "For every case: no macOS Keychain or system password prompt may appear, and the synthetic token value must "
+    "never appear unless the case explicitly grants it.",
+    "",
+]
 for cid, case in cases.items():
-    lines += [f"### {cid} ({case['priority']})", "", f"- Starting conditions: {case['starting_conditions']}", "- Actions:"]
+    lines += [
+        f"### {cid} ({case['priority']})",
+        "",
+        f"- Starting conditions: {case['starting_conditions']}",
+        "- Actions:",
+    ]
     lines += [f"  {n}. {a}" for n, a in enumerate(case["actions"], 1)]
     lines += ["- Expected:"] + [f"  - {e}" for e in case["expected"]] + [""]
 out.mkdir(parents=True, exist_ok=True)
 import shutil
+
 (out / "screens").mkdir(exist_ok=True)
 for txt in sorted((root / "design/packet/screens").glob("*.txt")):
     shutil.copy2(txt, out / "screens" / txt.name)
 (out / "design-cases.md").write_text("\n".join(lines))
 packet_sha = hashlib.sha256((out / "design-cases.md").read_bytes()).hexdigest()
 
-executor_prompt = (root.parents[3] / "qa/code-blind-functional/executor-prompt.md").read_text()
+executor_prompt = (
+    root.parents[3] / "qa/code-blind-functional/executor-prompt.md"
+).read_text()
 navigation = """# Neutral navigation
 
 Read your assigned case headings in `/opt/agms/packet/design-cases.md`. Cases that mention a screen by number
@@ -57,20 +73,26 @@ if replays_path.exists():
     REPLAYS = json.loads(replays_path.read_text())
     for label, spec in REPLAYS.items():
         assert set(spec["cases"]) <= set(cases), label
-ASSIGNMENTS = [(g, ids, None) for g, ids in GROUPS.items()] + \
-              [(label, spec["cases"], spec["note"]) for label, spec in REPLAYS.items()]
+ASSIGNMENTS = [(g, ids, None) for g, ids in GROUPS.items()] + [
+    (label, spec["cases"], spec["note"]) for label, spec in REPLAYS.items()
+]
 for group, ids, replay_note in ASSIGNMENTS:
     fixture_note = ""
     if replay_note:
-        fixture_note += "\n- Replay assignment (fresh executor; earlier attempts are kept separately): " + replay_note
+        fixture_note += (
+            "\n- Replay assignment (fresh executor; earlier attempts are kept separately): "
+            + replay_note
+        )
     if group.startswith("G21"):
-        fixture_note = ("\n- Coordinator fixture for this group: the system-wide file `/etc/codex/config.toml` that was "
-                        "present when screen E2 was captured has been put back (root-owned; you cannot change it).")
+        fixture_note = (
+            "\n- Coordinator fixture for this group: the system-wide file `/etc/codex/config.toml` that was "
+            "present when screen E2 was captured has been put back (root-owned; you cannot change it)."
+        )
     prompt = f"""{executor_prompt}
 {navigation}
 ## Assignment: group {group}
 
-- Cases, in order: {', '.join(ids)} (headings in `/opt/agms/packet/design-cases.md`).
+- Cases, in order: {", ".join(ids)} (headings in `/opt/agms/packet/design-cases.md`).
 - Candidate: Corbanu Terminal 0.1.48 package, read-only at `/opt/agms/pkg`; the program is
   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `{CANDIDATE}`.
 - Frozen cases file SHA-256: `{packet_sha}`.

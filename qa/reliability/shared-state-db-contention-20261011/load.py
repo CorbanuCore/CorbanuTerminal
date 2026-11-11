@@ -216,7 +216,11 @@ trust_level = "trusted"
                         "turn": turn,
                         "exit": proc.returncode,
                         "seconds": round(elapsed, 2),
-                        "bad": [line for line in proc.stderr.splitlines() if BAD.search(line)],
+                        "bad": [
+                            line
+                            for line in proc.stderr.splitlines()
+                            if BAD.search(line)
+                        ],
                     }
                 )
             if session_id is None:
@@ -234,7 +238,9 @@ trust_level = "trusted"
         holder["to"] = time.time()
         con.close()
 
-    threads = [threading.Thread(target=session, args=(i,)) for i in range(args.sessions)]
+    threads = [
+        threading.Thread(target=session, args=(i,)) for i in range(args.sessions)
+    ]
     if args.hold_seconds > 0:
         threads.append(threading.Thread(target=hold))
     for thread in threads:
@@ -253,7 +259,10 @@ trust_level = "trusted"
         items.sort(key=lambda r: r["arrived"])
         for previous, current in zip(items, items[1:]):
             # Only gaps inside one turn: the next request after a tool call.
-            if previous["stop"] == "tool_use" and current["calls"] == previous["calls"] + 1:
+            if (
+                previous["stop"] == "tool_use"
+                and current["calls"] == previous["calls"] + 1
+            ):
                 gaps.append((current["arrived"] - previous["done"]) * 1000)
 
     waits: list[float] = []
@@ -291,7 +300,9 @@ trust_level = "trusted"
         "bad_stderr_lines": len(bad_lines),
         "bad_examples": sorted(set(line[:300] for line in bad_lines))[:10],
         "exec_seconds": summary([r["seconds"] for r in results]),
-        "lock_held_by_another_process_s": round(holder["to"] - holder["from"], 1) if holder else 0,
+        "lock_held_by_another_process_s": round(holder["to"] - holder["from"], 1)
+        if holder
+        else 0,
         "ledger_attempts_recorded": ledger_attempts(home) - recorded_before,
         "records_still_saved_for_a_later_writer": len(
             list((home / "accounting-pending").glob("*.json"))

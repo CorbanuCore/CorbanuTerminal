@@ -1,4 +1,5 @@
 """Replay the assigned base regression and supported recovery in a disposable store."""
+
 import json
 import subprocess
 import types
@@ -8,7 +9,9 @@ import slack_transport as current
 from test_slack_transport import TransportTests, ui_evidence
 
 BASE = "bc4493331f390801ef14016caeceae5c2ca94bab"
-source = subprocess.check_output(["git", "show", BASE + ":scripts/initiative_control/slack_transport.py"])
+source = subprocess.check_output(
+    ["git", "show", BASE + ":scripts/initiative_control/slack_transport.py"]
+)
 prior = types.ModuleType("owner_assurance_109_prior_transport")
 exec(compile(source, BASE + ":slack_transport.py", "exec"), prior.__dict__)
 case = TransportTests("test_invalid_review_does_not_pin_healthy_quiet_journal")
@@ -38,7 +41,9 @@ try:
         raise AssertionError("current accepted invalid review")
     except d.Invalid:
         result["current_invalid_review_rejected"] = True
-    result["current_rejection_preserves_journal"] = (case.root / "transport.json").read_bytes() == before
+    result["current_rejection_preserves_journal"] = (
+        case.root / "transport.json"
+    ).read_bytes() == before
     assert result["current_rejection_preserves_journal"]
     result["live_store_accessed"] = False
     print(json.dumps(result, sort_keys=True))

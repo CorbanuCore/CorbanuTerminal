@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Read-only checks for this fixed draft portfolio; complements lifecycle checkers."""
+
 import argparse
 import hashlib
 import json
@@ -45,7 +46,9 @@ for path in plans:
     body = path.read_text(encoding="utf-8")
     heading = re.search(r'^  heading: "(.*)"$', body, re.M)
     excerpt = re.search(r'^  requirement_excerpt: "(.*)"$', body, re.M)
-    if heading is None or not re.search(r"^#+ " + re.escape(heading.group(1)) + r"$", spec, re.M):
+    if heading is None or not re.search(
+        r"^#+ " + re.escape(heading.group(1)) + r"$", spec, re.M
+    ):
         errors.append(f"{path}: missing exact spec heading")
     if excerpt is None or excerpt.group(1) not in spec:
         errors.append(f"{path}: nonverbatim spec excerpt")
@@ -59,7 +62,14 @@ for path in sprints:
     ids.add(sid or "")
     if len(body.splitlines()) > 100:
         errors.append(f"{path}: over 100 lines")
-    for key in ("worktree", "branch", "base_commit", "write_scope", "parallel_lane", "integration_gate"):
+    for key in (
+        "worktree",
+        "branch",
+        "base_commit",
+        "write_scope",
+        "parallel_lane",
+        "integration_gate",
+    ):
         if field(body, key) != "UNALLOCATED":
             errors.append(f"{path}: unexpected {key} reservation")
     plan = ROOT / (field(body, "plan_file") or "missing-plan")
@@ -69,7 +79,11 @@ for path in sprints:
 for path in files:
     body = path.read_text(encoding="utf-8")
     if path.name == "portfolio-2026-09-09.md":
-        if "/Downloads/" in body or ".m4a" in body or "artifacts/transcription/" in body:
+        if (
+            "/Downloads/" in body
+            or ".m4a" in body
+            or "artifacts/transcription/" in body
+        ):
             errors.append("portfolio overview contains a private source path")
     for link in re.findall(r"\[[^\]\n]+\]\(([^)\n]+)\)", body):
         target = link.split("#", 1)[0]
@@ -82,13 +96,27 @@ if len(plans) != 16 or len(sprints) != args.expected_sprints:
 if {sid[:5] for sid in ids} != {f"PF-{n}" for n in range(60, 76)}:
     errors.append("unexpected feature IDs")
 manifest = [
-    {"path": str(path.relative_to(ROOT)), "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-     "bytes": path.stat().st_size}
+    {
+        "path": str(path.relative_to(ROOT)),
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "bytes": path.stat().st_size,
+    }
     for path in sorted(files)
 ]
-print(json.dumps({
-    "plans": len(plans), "sprints": len(sprints),
-    "max_sprint_lines": max((len(p.read_text(encoding="utf-8").splitlines()) for p in sprints), default=0),
-    "scope_files": len(files), "errors": errors, "manifest": manifest,
-}, indent=2))
+print(
+    json.dumps(
+        {
+            "plans": len(plans),
+            "sprints": len(sprints),
+            "max_sprint_lines": max(
+                (len(p.read_text(encoding="utf-8").splitlines()) for p in sprints),
+                default=0,
+            ),
+            "scope_files": len(files),
+            "errors": errors,
+            "manifest": manifest,
+        },
+        indent=2,
+    )
+)
 raise SystemExit(bool(errors))

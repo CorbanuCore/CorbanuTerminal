@@ -3,6 +3,7 @@
 
 usage: python3 tools/make_packet4.py RUN4_DIR RUN3_RECORD_DIR OUT_DIR CANDIDATE_SHA VERSION
 """
+
 import hashlib, json, pathlib, shutil, sys
 
 run4, rec3, out = (pathlib.Path(a) for a in sys.argv[1:4])
@@ -20,22 +21,41 @@ ns4 = run4 / "design4/packet/new-screens-4"
 if ns4.is_dir():
     shutil.copytree(ns4, out / "new-screens-4", dirs_exist_ok=True)
 
+
 def cell(v):
     return [f"  - {v}"] if isinstance(v, str) else [f"  - {e}" for e in v]
 
-L = [(v4 / "amendments-and-new-cases.md").read_text().rstrip("\n"), "", "## Part 5: amendments of 2026-10-14", "",
-     amend4["packet_intro"], ""]
+
+L = [
+    (v4 / "amendments-and-new-cases.md").read_text().rstrip("\n"),
+    "",
+    "## Part 5: amendments of 2026-10-14",
+    "",
+    amend4["packet_intro"],
+    "",
+]
 for r in amend4["amendments"]:
     L += [f"### {r['case']} (amended; decisions {'; '.join(r['decisions'])})", ""]
-    for k, lab in (("starting_conditions", "Starting conditions"), ("actions", "Actions"), ("expected", "Expected")):
+    for k, lab in (
+        ("starting_conditions", "Starting conditions"),
+        ("actions", "Actions"),
+        ("expected", "Expected"),
+    ):
         if k in r["new"]:
             L += [f"- {lab}:"] + cell(r["new"][k])
     L.append("")
 if amend4.get("facts"):
-    L += ["## Coordinator answers and test-environment facts (2026-10-14)", "", amend4["facts"], ""]
+    L += [
+        "## Coordinator answers and test-environment facts (2026-10-14)",
+        "",
+        amend4["facts"],
+        "",
+    ]
 (out / "amendments-and-new-cases.md").write_text("\n".join(L) + "\n")
 frozen_sha = hashlib.sha256((out / "design-cases.md").read_bytes()).hexdigest()
-amend_sha = hashlib.sha256((out / "amendments-and-new-cases.md").read_bytes()).hexdigest()
+amend_sha = hashlib.sha256(
+    (out / "amendments-and-new-cases.md").read_bytes()
+).hexdigest()
 
 executor_prompt = (v4 / "executor-prompt.md").read_text()
 navigation = """# Neutral navigation
@@ -66,18 +86,28 @@ request, record its words verbatim; you may resubmit the same case wording uncha
 (out / "navigation.md").write_text(navigation)
 (out / "executor-prompt.md").write_text(executor_prompt)
 (out / "prompts").mkdir(exist_ok=True)
-REPLAYS = json.loads((run4 / "tools/replays4.json").read_text()) if (run4 / "tools/replays4.json").exists() else {}
-ASSIGN = [(g, ids, NOTES.get(g, "")) for g, ids in GROUPS.items()] + \
-         [(label, r["cases"], (NOTES.get(r["group"], "") + " " if NOTES.get(r["group"]) else "") +
-           "Replay assignment (fresh executor; earlier attempts are kept separately): " + r["note"])
-          for label, r in REPLAYS.items()]
+REPLAYS = (
+    json.loads((run4 / "tools/replays4.json").read_text())
+    if (run4 / "tools/replays4.json").exists()
+    else {}
+)
+ASSIGN = [(g, ids, NOTES.get(g, "")) for g, ids in GROUPS.items()] + [
+    (
+        label,
+        r["cases"],
+        (NOTES.get(r["group"], "") + " " if NOTES.get(r["group"]) else "")
+        + "Replay assignment (fresh executor; earlier attempts are kept separately): "
+        + r["note"],
+    )
+    for label, r in REPLAYS.items()
+]
 for group, ids, note in ASSIGN:
     note = f"\n- Note for this group: {note}" if note else ""
     prompt = f"""{executor_prompt}
 {navigation}
 ## Assignment: group {group}
 
-- Cases, in order: {', '.join(ids)}.
+- Cases, in order: {", ".join(ids)}.
 - Candidate: Corbanu Terminal {VERSION} package, read-only at `/opt/agms/pkg`; the program is
   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `{CANDIDATE}`.
 - Frozen cases file SHA-256: `{frozen_sha}`. Amendments and new cases file SHA-256: `{amend_sha}`.

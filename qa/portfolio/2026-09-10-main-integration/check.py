@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Fixed-baseline publication checks, not a waiver of global sprint errors."""
+
 import json
 import re
 import subprocess
@@ -13,7 +14,10 @@ HERE = Path(__file__).resolve().parent
 def run_json(path, *args):
     result = subprocess.run(
         [sys.executable, str(ROOT / path), *args],
-        cwd=ROOT, text=True, capture_output=True, check=False,
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
     )
     if result.returncode not in (0, 1):
         raise RuntimeError(result.stderr or result.stdout)
@@ -36,12 +40,14 @@ if sprints["archive_count"] != baseline["archive_count"]:
     errors.append("archive inventory changed")
 reserved = [
     {key: row[key] for key in ("sprint_id", "status", "owner", "plan_file")}
-    for row in sprints["sprints"] if row["status"] in ("in_progress", "blocked")
+    for row in sprints["sprints"]
+    if row["status"] in ("in_progress", "blocked")
 ]
 if reserved != baseline["reserved"]:
     errors.append("reserved sprint inventory changed")
 new_ids = {
-    row["sprint_id"] for row in sprints["sprints"]
+    row["sprint_id"]
+    for row in sprints["sprints"]
     if row["path"].startswith("docs/sprints/current/portfolio-")
 }
 if new_ids & set(baseline["existing_sprint_ids"]):
@@ -60,17 +66,22 @@ for path in files:
     if "/Downloads/" in body or ".m4a" in body:
         errors.append(f"{path.relative_to(ROOT)}: private recording location")
 
-print(json.dumps({
-    "ok": not errors,
-    "baseline": baseline["base_commit"],
-    "portfolio_plans": portfolio["plans"],
-    "portfolio_sprints": portfolio["sprints"],
-    "max_sprint_lines": portfolio["max_sprint_lines"],
-    "current_count": sprints["current_count"],
-    "archive_count": sprints["archive_count"],
-    "inherited_global_errors": len(sprints["errors"]),
-    "global_sprint_checker_ok": sprints["ok"],
-    "reserved_sprints": [row["sprint_id"] for row in reserved],
-    "errors": errors,
-}, indent=2))
+print(
+    json.dumps(
+        {
+            "ok": not errors,
+            "baseline": baseline["base_commit"],
+            "portfolio_plans": portfolio["plans"],
+            "portfolio_sprints": portfolio["sprints"],
+            "max_sprint_lines": portfolio["max_sprint_lines"],
+            "current_count": sprints["current_count"],
+            "archive_count": sprints["archive_count"],
+            "inherited_global_errors": len(sprints["errors"]),
+            "global_sprint_checker_ok": sprints["ok"],
+            "reserved_sprints": [row["sprint_id"] for row in reserved],
+            "errors": errors,
+        },
+        indent=2,
+    )
+)
 raise SystemExit(bool(errors))

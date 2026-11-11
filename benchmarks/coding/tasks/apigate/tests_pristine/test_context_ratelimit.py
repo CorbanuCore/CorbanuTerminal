@@ -10,7 +10,9 @@ from apigate.types import APIError, Request
 
 
 def issue_token(app, user_id: str, now: datetime) -> str:
-    response = app.handle(Request("POST", "/auth/issue", body={"user_id": user_id}, now=now))
+    response = app.handle(
+        Request("POST", "/auth/issue", body={"user_id": user_id}, now=now)
+    )
     return response["json"]["data"]["access_token"]
 
 
@@ -39,13 +41,22 @@ class ContextAndRateLimitTests(unittest.TestCase):
         app = create_demo_app()
         token = issue_token(app, "user", self.now)
 
-        first = app.handle(Request("GET", "/widgets/me", headers={"authorization": f"Bearer {token}"}, now=self.now))
+        first = app.handle(
+            Request(
+                "GET",
+                "/widgets/me",
+                headers={"authorization": f"Bearer {token}"},
+                now=self.now,
+            )
+        )
         self.assertEqual(first["status"], 200)
 
         with self.assertRaises(RuntimeError):
             get_context()
 
-    def test_rate_limiter_blocks_after_policy_limit_and_recovers_after_window(self) -> None:
+    def test_rate_limiter_blocks_after_policy_limit_and_recovers_after_window(
+        self,
+    ) -> None:
         limiter = RateLimiter()
         limiter.set_policy("writes", limit=2, window_seconds=60)
 

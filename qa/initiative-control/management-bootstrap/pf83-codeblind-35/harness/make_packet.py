@@ -1,13 +1,18 @@
 """Build the read-only executor packet: frozen cases, executor prompt, neutral navigation, per-case assignment."""
+
 import hashlib
 import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[5]
-FROZEN = pathlib.Path("/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/normalized/original-F01-F11.md")
+FROZEN = pathlib.Path(
+    "/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/normalized/original-F01-F11.md"
+)
 FROZEN_SHA = "c97bf701cd7aff2e26f08884f35dbc9a4fc33b1eef14eee6328d2ea1f1411726"
 EXECUTOR = ROOT / "qa/code-blind-functional/executor-prompt.md"
-NAVIGATION = ROOT / "qa/initiative-control/management-bootstrap/pf83-handoff-70/navigation.md"
+NAVIGATION = (
+    ROOT / "qa/initiative-control/management-bootstrap/pf83-handoff-70/navigation.md"
+)
 
 ASSIGNMENT = """
 ## Assignment: {case}
@@ -68,7 +73,9 @@ def main(out):
     preamble = EXECUTOR.read_text() + "\n" + NAVIGATION.read_text()
     for n in range(1, 12):
         case = "F%02d" % n
-        (out / "prompts" / (case + ".md")).write_text(preamble + ASSIGNMENT.format(case=case))
+        (out / "prompts" / (case + ".md")).write_text(
+            preamble + ASSIGNMENT.format(case=case)
+        )
     for path in sorted(out.rglob("*")):
         if path.is_file():
             print(sha(path), path.relative_to(out))

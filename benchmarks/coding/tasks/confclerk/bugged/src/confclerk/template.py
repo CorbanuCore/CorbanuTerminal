@@ -26,7 +26,9 @@ class TemplateRenderer:
 
     def render(self, template: str, context: Mapping[str, Any]) -> str:
         expanded = self._expand_includes(template, context)
-        return TOKEN.sub(lambda match: self._resolve_expr(match.group(1), context), expanded)
+        return TOKEN.sub(
+            lambda match: self._resolve_expr(match.group(1), context), expanded
+        )
 
     def _expand_includes(self, template: str, context: Mapping[str, Any]) -> str:
         def repl(match: re.Match[str]) -> str:
@@ -34,6 +36,7 @@ class TemplateRenderer:
             if name not in self.partials:
                 raise TemplateRenderError(f"missing partial: {name}")
             return self.render(self.partials[name], context)
+
         return re.sub(r"{%\s*include\s+([a-zA-Z0-9_.-]+)\s*%}", repl, template)
 
     def _resolve_expr(self, expr: str, context: Mapping[str, Any]) -> str:
@@ -53,7 +56,9 @@ class TemplateRenderer:
         return str(value)
 
 
-def render_config(config: Mapping[str, Any], templates: Mapping[str, str]) -> dict[str, str]:
+def render_config(
+    config: Mapping[str, Any], templates: Mapping[str, str]
+) -> dict[str, str]:
     renderer = TemplateRenderer(templates)
     out: dict[str, str] = {}
     for name, template in templates.items():

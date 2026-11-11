@@ -11,7 +11,9 @@ from apigate.types import APIError, Request, Response
 
 class SerializationAndAppTests(unittest.TestCase):
     def test_serialize_response_normalizes_tuples_and_sorts_json_keys(self) -> None:
-        response = serialize_response(Response(status=201, body={"b": (1, 2), "a": True}))
+        response = serialize_response(
+            Response(status=201, body={"b": (1, 2), "a": True})
+        )
 
         self.assertEqual(response["status"], 201)
         self.assertEqual(response["json"], {"a": True, "b": [1, 2]})
@@ -19,10 +21,14 @@ class SerializationAndAppTests(unittest.TestCase):
 
     def test_serializer_rejects_unsupported_datetime_objects(self) -> None:
         with self.assertRaises(TypeError):
-            serialize_response(Response(body={"expires_at": datetime(2026, 7, 2, tzinfo=timezone.utc)}))
+            serialize_response(
+                Response(body={"expires_at": datetime(2026, 7, 2, tzinfo=timezone.utc)})
+            )
 
     def test_serialize_error_uses_stable_error_shape(self) -> None:
-        response = serialize_error(APIError(403, "forbidden", "missing permission", {"permission": "x"}))
+        response = serialize_error(
+            APIError(403, "forbidden", "missing permission", {"permission": "x"})
+        )
 
         self.assertEqual(response["status"], 403)
         self.assertEqual(response["json"]["ok"], False)

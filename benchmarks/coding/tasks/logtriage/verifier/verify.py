@@ -39,8 +39,13 @@ class HiddenContractTests(unittest.TestCase):
 
     def test_parse_mixed_formats_sorting_and_aliases(self) -> None:
         parsed = parse_logs(LOGS_COMPLEX)
-        self.assertEqual([e["id"] for e in parsed["entries"][:4]], ["e1", "w1", "w2", "e2"])
-        self.assertEqual([e["severity"] for e in parsed["entries"][:4]], ["INFO", "WARNING", "CRITICAL", "ERROR"])
+        self.assertEqual(
+            [e["id"] for e in parsed["entries"][:4]], ["e1", "w1", "w2", "e2"]
+        )
+        self.assertEqual(
+            [e["severity"] for e in parsed["entries"][:4]],
+            ["INFO", "WARNING", "CRITICAL", "ERROR"],
+        )
         self.assertEqual(parsed["duplicate_count"], 1)
 
     def test_diagnostics_are_stable_and_nonfatal(self) -> None:
@@ -52,11 +57,19 @@ class HiddenContractTests(unittest.TestCase):
         self.assertIn("missing_field", codes)
 
     def test_query_window_is_start_inclusive_end_exclusive(self) -> None:
-        rows = query_window(LOGS_COMPLEX, "2026-07-02T10:01:00Z", "2026-07-02T10:02:00Z")
+        rows = query_window(
+            LOGS_COMPLEX, "2026-07-02T10:01:00Z", "2026-07-02T10:02:00Z"
+        )
         self.assertEqual([row["id"] for row in rows], ["w1", "w2"])
 
     def test_query_filters_normalize_severity_and_service(self) -> None:
-        rows = query_window(LOGS_COMPLEX, "2026-07-02T10:00:00Z", "2026-07-02T10:03:00Z", severity="err", service="api")
+        rows = query_window(
+            LOGS_COMPLEX,
+            "2026-07-02T10:00:00Z",
+            "2026-07-02T10:03:00Z",
+            severity="err",
+            service="api",
+        )
         self.assertEqual([row["message"] for row in rows], ["db down"])
 
     def test_summary_rollups_top_messages_and_bounds(self) -> None:
@@ -69,7 +82,10 @@ class HiddenContractTests(unittest.TestCase):
         self.assertEqual(summary["total"], 3)
         self.assertEqual(summary["by_severity"], {"ERROR": 2, "WARNING": 1})
         self.assertEqual(summary["by_service"], {"api": 2, "worker": 1})
-        self.assertEqual(summary["top_messages"], [{"message": "failed", "count": 2}, {"message": "slow", "count": 1}])
+        self.assertEqual(
+            summary["top_messages"],
+            [{"message": "failed", "count": 2}, {"message": "slow", "count": 1}],
+        )
         self.assertEqual(summary["first_ts"], "2026-07-02T10:00:00Z")
         self.assertEqual(summary["last_ts"], "2026-07-02T10:00:02Z")
 
@@ -78,7 +94,9 @@ class HiddenContractTests(unittest.TestCase):
         env = os.environ.copy()
         env["PYTHONPATH"] = str(repo / "src")
         code = "from logtriage import summarize_logs; print(summarize_logs(['2026-07-02T00:00:00Z | INFO | api | ok'])['total'])"
-        out = subprocess.check_output([sys.executable, "-c", code], cwd=repo, env=env, text=True)
+        out = subprocess.check_output(
+            [sys.executable, "-c", code], cwd=repo, env=env, text=True
+        )
         self.assertEqual(out.strip(), "1")
 
 
@@ -110,7 +128,12 @@ def main() -> int:
 def internal_run() -> int:
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(HiddenContractTests)
     result = unittest.TextTestRunner(verbosity=2).run(suite)
-    summary = {"ok": result.wasSuccessful(), "tests_run": result.testsRun, "failures": len(result.failures), "errors": len(result.errors)}
+    summary = {
+        "ok": result.wasSuccessful(),
+        "tests_run": result.testsRun,
+        "failures": len(result.failures),
+        "errors": len(result.errors),
+    }
     print("HIDDEN_VERIFIER_SUMMARY", json.dumps(summary, sort_keys=True))
     return 0 if result.wasSuccessful() else 1
 

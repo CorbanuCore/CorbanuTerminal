@@ -1,4 +1,5 @@
 """Verify identical page artifacts without inferring session populations."""
+
 import gzip
 import hashlib
 import json
@@ -6,7 +7,9 @@ from pathlib import Path
 
 here = Path(__file__).resolve().parent
 repo = here.parents[4]
-binding = json.loads((here.parent / "acct-receipt-66/capture-bindings.json").read_text())
+binding = json.loads(
+    (here.parent / "acct-receipt-66/capture-bindings.json").read_text()
+)
 captures = binding["captures"]
 for row in captures:
     for kind in ("selected", "viewport"):
@@ -20,8 +23,9 @@ equal = {}
 for kind in ("selected", "viewport"):
     left, right = [(repo / row[kind]).read_bytes() for row in captures]
     assert left == right
-    equal[kind] = dict(byte_identical=True, bytes=len(left),
-                       sha256=hashlib.sha256(left).hexdigest())
+    equal[kind] = dict(
+        byte_identical=True, bytes=len(left), sha256=hashlib.sha256(left).hexdigest()
+    )
 assert equal["viewport"]["bytes"] == 1249
 store_paths = [
     "acct-readers-61/reader-run-05/native-bindings.json",
@@ -30,10 +34,14 @@ store_paths = [
     "acct-scope-62/scope-run-01/store-during-fresh-reader.json",
 ]
 report = dict(
-    equality=equal, note=binding["note"],
+    equality=equal,
+    note=binding["note"],
     retracted_claim="They remain distinct captures/attempt populations",
     store_readback_sources=[
-        dict(path=path, sha256=hashlib.sha256((here.parent / path).read_bytes()).hexdigest())
+        dict(
+            path=path,
+            sha256=hashlib.sha256((here.parent / path).read_bytes()).hexdigest(),
+        )
         for path in store_paths
     ],
     limitation="Store read-backs separate the datasets; the identical pages do not bind which root or attempts either session resolved at capture time.",

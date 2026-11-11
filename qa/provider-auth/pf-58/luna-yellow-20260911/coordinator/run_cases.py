@@ -1,4 +1,5 @@
 """Run independent Luna Max test executors serially; coordinator-only."""
+
 import hashlib
 import argparse
 import json
@@ -10,44 +11,82 @@ import subprocess
 import time
 from pilot import ROOT, PACKET, prepare
 
-SCRIPT = Path(__file__).parent / 'pilot.py'
+SCRIPT = Path(__file__).parent / "pilot.py"
 NUMBERS = [1, 2, 3, 5, 6, 7, 11, 12, 15, 20, 24, 26]
+
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--from-case', type=int, default=1)
-    parser.add_argument('--only', type=int)
-    parser.add_argument('--cases', help='Comma-separated frozen case numbers, executed in listed order')
-    parser.add_argument('--suffix', default='')
+    parser.add_argument("--from-case", type=int, default=1)
+    parser.add_argument("--only", type=int)
+    parser.add_argument(
+        "--cases", help="Comma-separated frozen case numbers, executed in listed order"
+    )
+    parser.add_argument("--suffix", default="")
     args = parser.parse_args()
-    ledger = json.loads((ROOT / 'ledger.json').read_text()) if (ROOT / 'ledger.json').exists() else []
-    selected = [int(n) for n in args.cases.split(',')] if args.cases else NUMBERS
+    ledger = (
+        json.loads((ROOT / "ledger.json").read_text())
+        if (ROOT / "ledger.json").exists()
+        else []
+    )
+    selected = [int(n) for n in args.cases.split(",")] if args.cases else NUMBERS
     if len(set(selected)) != len(selected) or any(n not in NUMBERS for n in selected):
-        raise ValueError('Cases must be unique frozen case numbers')
-    for number in [n for n in selected if n >= args.from_case and (args.only is None or args.only == n)]:
-        name = f'case-{number:02}' + args.suffix
+        raise ValueError("Cases must be unique frozen case numbers")
+    for number in [
+        n
+        for n in selected
+        if n >= args.from_case and (args.only is None or args.only == n)
+    ]:
+        name = f"case-{number:02}" + args.suffix
         root, env = prepare(name)
-        subprocess.run(['python3', str(SCRIPT), name], check=True, stdout=subprocess.DEVNULL)
-        probe = json.loads((ROOT / (name + '-isolation.json')).read_text())
-        if not probe['passed']:
-            raise RuntimeError('Isolation preflight failed: ' + name)
-        instruction = next(PACKET.glob(f'{number:02}-*.md')).read_text()
-        target = root / 'package/bin/corbanu'
-        sock = root / 'tmp/t'
-        launch = shlex.join(['env', 'CORBANU_HOME=' + str(root / 'target-home'),
-                            'CODEX_HOME=' + str(root / 'target-home'),
-                            'PFTERMINAL_HOME=' + str(root / 'target-home'),
-                            'CORBANU_TEST_NO_NATIVE_KEYRING=1', 'RUST_LOG=warn',
-                            str(target), '--no-alt-screen', '-C', str(root / 'work'),
-                            '-c', 'log_dir="' + str(root / 'target-home/log') + '"'])
-        (root / 'start-target.sh').write_text('#!/bin/sh\nexec ' + launch + '\n')
-        start_command = shlex.join(['/opt/homebrew/bin/tmux', '-S', str(sock), 'new-session', '-d', '-s', 'target', '-x', '150', '-y', '48', '/bin/sh ' + str(root / 'start-target.sh')])
-        guide = f'''You are an independent black-box functional TEST EXECUTOR, not a code reviewer or test designer. Execute the supplied human acceptance instructions verbatim where possible, on the supplied compiled application. Do not inspect any source, binary internals, old reports, test implementations, credential files, project policies, or filesystem outside this scratch run. Do not fetch code or guidance online. Do not spawn more agents. You are Luna at Max effort, with no prior task history.
+        subprocess.run(
+            ["python3", str(SCRIPT), name], check=True, stdout=subprocess.DEVNULL
+        )
+        probe = json.loads((ROOT / (name + "-isolation.json")).read_text())
+        if not probe["passed"]:
+            raise RuntimeError("Isolation preflight failed: " + name)
+        instruction = next(PACKET.glob(f"{number:02}-*.md")).read_text()
+        target = root / "package/bin/corbanu"
+        sock = root / "tmp/t"
+        launch = shlex.join(
+            [
+                "env",
+                "CORBANU_HOME=" + str(root / "target-home"),
+                "CODEX_HOME=" + str(root / "target-home"),
+                "PFTERMINAL_HOME=" + str(root / "target-home"),
+                "CORBANU_TEST_NO_NATIVE_KEYRING=1",
+                "RUST_LOG=warn",
+                str(target),
+                "--no-alt-screen",
+                "-C",
+                str(root / "work"),
+                "-c",
+                'log_dir="' + str(root / "target-home/log") + '"',
+            ]
+        )
+        (root / "start-target.sh").write_text("#!/bin/sh\nexec " + launch + "\n")
+        start_command = shlex.join(
+            [
+                "/opt/homebrew/bin/tmux",
+                "-S",
+                str(sock),
+                "new-session",
+                "-d",
+                "-s",
+                "target",
+                "-x",
+                "150",
+                "-y",
+                "48",
+                "/bin/sh " + str(root / "start-target.sh"),
+            ]
+        )
+        guide = f"""You are an independent black-box functional TEST EXECUTOR, not a code reviewer or test designer. Execute the supplied human acceptance instructions verbatim where possible, on the supplied compiled application. Do not inspect any source, binary internals, old reports, test implementations, credential files, project policies, or filesystem outside this scratch run. Do not fetch code or guidance online. Do not spawn more agents. You are Luna at Max effort, with no prior task history.
 
 This task uses the Corbanu development/TUI-testing workflow, overridden explicitly by the user to forbid reading repository instructions or code. Use raw TMUX actual-key interactions, not `corbanu exec` as a substitute for the user interface. A human checklist is not evidence that behavior passes. Do not fix anything. Record blocked rather than inventing prerequisites. Keep conclusions bounded to what you actually observe. You have up to 8 minutes, not an obligation to spend that long.
 
-Your working directory: {root / 'work'}
-Evidence directory: {root / 'evidence'}
+Your working directory: {root / "work"}
+Evidence directory: {root / "evidence"}
 Compiled candidate: {target}
 Candidate SHA-256: {hashlib.sha256(target.read_bytes()).hexdigest()}
 Platform: macOS arm64. No Linux inference is permitted.
@@ -83,28 +122,49 @@ At completion, exit ONLY the target session you created; never kill another serv
 HUMAN INSTRUCTIONS BEGIN
 {instruction}
 HUMAN INSTRUCTIONS END
-'''
-        prompt = root / 'instructions.md'
+"""
+        prompt = root / "instructions.md"
         prompt.write_text(guide)
         began = time.time()
-        process = subprocess.Popen(['python3', str(SCRIPT), name, '--prompt', str(prompt)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
-        (ROOT / 'running.json').write_text(json.dumps({'case': number, 'pid': process.pid, 'started': began}))
+        process = subprocess.Popen(
+            ["python3", str(SCRIPT), name, "--prompt", str(prompt)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        (ROOT / "running.json").write_text(
+            json.dumps({"case": number, "pid": process.pid, "started": began})
+        )
         try:
             stdout, stderr = process.communicate(timeout=600)
             exit_code = process.returncode
         except subprocess.TimeoutExpired:
             os.killpg(process.pid, signal.SIGTERM)
             stdout, stderr = process.communicate(timeout=20)
-            exit_code = 'timeout'
-        ledger.append({'case': number, 'run_name': name, 'started': began, 'ended': time.time(), 'exit_code': exit_code,
-                       'stdout': stdout, 'stderr': stderr,
-                       'report_exists': (root / 'evidence/report.md').exists(),
-                       'results_exist': (root / 'evidence/results.json').exists()})
-        (ROOT / 'ledger.json').write_text(json.dumps(ledger, indent=2))
+            exit_code = "timeout"
+        ledger.append(
+            {
+                "case": number,
+                "run_name": name,
+                "started": began,
+                "ended": time.time(),
+                "exit_code": exit_code,
+                "stdout": stdout,
+                "stderr": stderr,
+                "report_exists": (root / "evidence/report.md").exists(),
+                "results_exist": (root / "evidence/results.json").exists(),
+            }
+        )
+        (ROOT / "ledger.json").write_text(json.dumps(ledger, indent=2))
         print(json.dumps(ledger[-1]), flush=True)
         # Ensure the agent's dedicated target cannot carry over to another case.
-        subprocess.run(['/opt/homebrew/bin/tmux', '-S', str(sock), 'kill-server'], capture_output=True)
-    (ROOT / 'running.json').write_text(json.dumps({'complete': True}))
+        subprocess.run(
+            ["/opt/homebrew/bin/tmux", "-S", str(sock), "kill-server"],
+            capture_output=True,
+        )
+    (ROOT / "running.json").write_text(json.dumps({"complete": True}))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

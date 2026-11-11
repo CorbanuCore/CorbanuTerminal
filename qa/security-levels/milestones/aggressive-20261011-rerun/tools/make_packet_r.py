@@ -2,13 +2,19 @@
 
 usage: python3 tools/make_packet_r.py RUN_DIR FIRST_RECORD_DIR OUT_DIR CANDIDATE_SHA
 """
+
 import hashlib
 import json
 import pathlib
 import shutil
 import sys
 
-run, first, out, CANDIDATE = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]), sys.argv[4]
+run, first, out, CANDIDATE = (
+    pathlib.Path(sys.argv[1]),
+    pathlib.Path(sys.argv[2]),
+    pathlib.Path(sys.argv[3]),
+    sys.argv[4],
+)
 frozen = json.loads((first / "design.json").read_text())
 old_ids = [c["id"] for c in frozen["cases"]]
 amend = json.loads((run / "design-r/amendments.json").read_text())
@@ -16,45 +22,74 @@ new = json.loads((run / "design-r/new-cases.json").read_text())
 GROUPS = json.loads((run / "tools/groups.json").read_text())
 NOTES = json.loads((run / "tools/standing-notes.json").read_text())
 all_ids = old_ids + [c["id"] for c in new["cases"]]
-executed = [i for i in all_ids if i != "AGG-R06"]  # AGG-R06 needs Claude Code, not installed in the guest
-assert sorted(sum(GROUPS.values(), [])) == sorted(executed), "every executed case in exactly one group"
+executed = [
+    i for i in all_ids if i != "AGG-R06"
+]  # AGG-R06 needs Claude Code, not installed in the guest
+assert sorted(sum(GROUPS.values(), [])) == sorted(executed), (
+    "every executed case in exactly one group"
+)
 
 out.mkdir(parents=True, exist_ok=True)
 shutil.copy2(first / "executor-packet/v2/design-cases.md", out / "design-cases.md")
-for sub, src in (("screens", first / "design/packet/screens"), ("new-screens", run / "design-r/packet/new-screens")):
+for sub, src in (
+    ("screens", first / "design/packet/screens"),
+    ("new-screens", run / "design-r/packet/new-screens"),
+):
     (out / sub).mkdir(exist_ok=True)
     for txt in sorted(src.glob("*.txt")):
         shutil.copy2(txt, out / sub / txt.name)
 
+
 def j(x):
     return x if isinstance(x, str) else None
 
-L = ["# Re-run: amendments to the frozen cases, and new cases", "",
-     "The frozen cases in `design-cases.md` are unchanged. The product owner's decisions of 2026-10-11 changed what some",
-     "of them expect; for those cases the amendment below governs where it differs from the frozen text. New cases",
-     "cover behaviour the decisions added. Screen copies of the new candidate are in `new-screens/`.", "",
-     "## Amendments", ""]
+
+L = [
+    "# Re-run: amendments to the frozen cases, and new cases",
+    "",
+    "The frozen cases in `design-cases.md` are unchanged. The product owner's decisions of 2026-10-11 changed what some",
+    "of them expect; for those cases the amendment below governs where it differs from the frozen text. New cases",
+    "cover behaviour the decisions added. Screen copies of the new candidate are in `new-screens/`.",
+    "",
+    "## Amendments",
+    "",
+]
 for r in amend["amendments"]:
     if r.get("no_change"):
         continue
     L += [f"### {r['case']} (amended; decisions {', '.join(r['decisions'])})", ""]
-    for k, lab in (("starting_conditions", "Starting conditions"), ("actions", "Actions"), ("expected", "Expected")):
+    for k, lab in (
+        ("starting_conditions", "Starting conditions"),
+        ("actions", "Actions"),
+        ("expected", "Expected"),
+    ):
         if k in r["new"]:
             v = r["new"][k]
-            L += [f"- {lab}:"] + ([f"  - {v}"] if isinstance(v, str) else [f"  - {e}" for e in v])
+            L += [f"- {lab}:"] + (
+                [f"  - {v}"] if isinstance(v, str) else [f"  - {e}" for e in v]
+            )
     L.append("")
 L += ["## New cases", "", "Shorthand S0/S1 as in `design-cases.md`.", ""]
 for c in new["cases"]:
-    L += [f"### {c['id']} ({c['priority']})", "", f"- Starting conditions: {c['starting_conditions']}", "- Actions:"]
+    L += [
+        f"### {c['id']} ({c['priority']})",
+        "",
+        f"- Starting conditions: {c['starting_conditions']}",
+        "- Actions:",
+    ]
     L += [f"  {n}. {a}" for n, a in enumerate(c["actions"], 1)]
     L += ["- Expected:"] + [f"  - {e}" for e in c["expected"]] + [""]
 qa = (run / "design-r/questions-and-answers.md").read_text()
 L += ["## Coordinator answers and test-environment facts", "", qa.split("\n", 2)[2]]
 (out / "amendments-and-new-cases.md").write_text("\n".join(L))
 frozen_sha = hashlib.sha256((out / "design-cases.md").read_bytes()).hexdigest()
-amend_sha = hashlib.sha256((out / "amendments-and-new-cases.md").read_bytes()).hexdigest()
+amend_sha = hashlib.sha256(
+    (out / "amendments-and-new-cases.md").read_bytes()
+).hexdigest()
 
-executor_prompt = (first.parents[3] / "qa/code-blind-functional/executor-prompt.md").read_text()
+executor_prompt = (
+    first.parents[3] / "qa/code-blind-functional/executor-prompt.md"
+).read_text()
 navigation = """# Neutral navigation
 
 Read your assigned case headings in `/opt/agms/packet/design-cases.md` (frozen cases) and in
@@ -83,7 +118,7 @@ for group, ids in GROUPS.items():
 {navigation}
 ## Assignment: group {group}
 
-- Cases, in order: {', '.join(ids)}.
+- Cases, in order: {", ".join(ids)}.
 - Candidate: Corbanu Terminal 0.1.48 package, read-only at `/opt/agms/pkg`; the program is
   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `{CANDIDATE}`.
 - Frozen cases file SHA-256: `{frozen_sha}`. Amendments and new cases file SHA-256: `{amend_sha}`.

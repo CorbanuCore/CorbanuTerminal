@@ -1,4 +1,5 @@
 """Execute the documented preparation/migration on disposable state only."""
+
 import copy
 from pathlib import Path
 import unittest
@@ -23,7 +24,9 @@ class Preflight98Tests(unittest.TestCase):
     def test_documented_adapter_emits_gate_record_and_preserves_frozen_inputs(self):
         self.prepare()
         source = Path(__file__).with_name("owner-preflight-98.md").read_text()
-        block = source.split("```python\n# owner-preflight-98: worked preparation adapter\n", 1)[1]
+        block = source.split(
+            "```python\n# owner-preflight-98: worked preparation adapter\n", 1
+        )[1]
         block = block.split("```", 1)[0]
         namespace = {}
         exec(compile(block, "owner-preflight-98.md", "exec"), namespace)
@@ -31,8 +34,12 @@ class Preflight98Tests(unittest.TestCase):
         original = copy.deepcopy(before["actions"]["old"]["inputs"])
         record = self.manifest["preparation"]
         frozen, preparation = namespace["prepare_for_registration"](
-            original, provider=record["provider"], policy=record["policy"],
-            authority=record["authority"], adoption=record["adoption"])
+            original,
+            provider=record["provider"],
+            policy=record["policy"],
+            authority=record["authority"],
+            adoption=record["adoption"],
+        )
         self.assertEqual(record, preparation)
         self.assertEqual(before["actions"]["new"]["inputs"], frozen)
         self.assertEqual(before["actions"]["old"]["inputs"], original)
@@ -43,16 +50,22 @@ class Preflight98Tests(unittest.TestCase):
         Path(record["adoption"]["path"]).write_text("changed fixture evidence")
         with self.assertRaisesRegex(f.LaunchError, "evidence_digest_mismatch"):
             namespace["prepare_for_registration"](
-                original, provider=record["provider"], policy=record["policy"],
-                authority=record["authority"], adoption=record["adoption"])
+                original,
+                provider=record["provider"],
+                policy=record["policy"],
+                authority=record["authority"],
+                adoption=record["adoption"],
+            )
 
     def test_missing_sidecar_can_be_added_after_real_fixture_replacement(self):
         self.prepare()
         before = self.c.snapshot()
         replacement = self.manifest.pop("replacements")
         result = self.evaluate()
-        self.assertEqual("replacement_evidence_for_each_action_required",
-                         result["results"][1]["reason"])
+        self.assertEqual(
+            "replacement_evidence_for_each_action_required",
+            result["results"][1]["reason"],
+        )
         self.manifest["replacements"] = replacement
         self.assertTrue(self.evaluate()["ok"])
         self.assertEqual(before, self.c.snapshot())
@@ -70,7 +83,9 @@ class Preflight98Tests(unittest.TestCase):
         state["actions"]["new"]["inputs"].pop("worker")
         context = (None, None, None, {"worktrees": [str(self.root)]}, self.c)
         with patch.object(self.c, "snapshot", return_value=state):
-            with self.assertRaisesRegex(f.LaunchError, "action_not_bound_by_authorized_bridge"):
+            with self.assertRaisesRegex(
+                f.LaunchError, "action_not_bound_by_authorized_bridge"
+            ):
                 gate.allocations(self.manifest, context, ["new"])
         self.assertEqual(before, self.c.snapshot())
 

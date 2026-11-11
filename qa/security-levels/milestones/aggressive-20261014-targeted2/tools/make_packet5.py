@@ -3,6 +3,7 @@ amendments parts 1-5, new cases, screens) plus part 6 (amendment 5 of 2026-10-14
 
 usage: python3 tools/make_packet5.py RUN_DIR V5_PACKET_DIR OUT_DIR CANDIDATE_SHA VERSION
 """
+
 import hashlib, json, pathlib, shutil, sys
 
 run, v5, out = (pathlib.Path(a) for a in sys.argv[1:4])
@@ -15,34 +16,58 @@ out.mkdir(parents=True, exist_ok=True)
 shutil.copy2(v5 / "design-cases.md", out / "design-cases.md")
 for sub in ("screens", "new-screens", "new-screens-3", "new-screens-4"):
     shutil.copytree(v5 / sub, out / sub, dirs_exist_ok=True)
-shutil.copytree(run / "design5/new-screens-5", out / "new-screens-5", dirs_exist_ok=True)
+shutil.copytree(
+    run / "design5/new-screens-5", out / "new-screens-5", dirs_exist_ok=True
+)
 shutil.copytree(run / "design5/drivers", out / "drivers", dirs_exist_ok=True)
+
 
 def cell(v):
     return [f"  - {v}"] if isinstance(v, str) else [f"  - {e}" for e in v]
 
-L = [(v5 / "amendments-and-new-cases.md").read_text().rstrip("\n"), "", "## Part 6: amendments of 2026-10-14 (second round)", "",
-     amend["packet_intro"], ""]
+
+L = [
+    (v5 / "amendments-and-new-cases.md").read_text().rstrip("\n"),
+    "",
+    "## Part 6: amendments of 2026-10-14 (second round)",
+    "",
+    amend["packet_intro"],
+    "",
+]
 for r in amend["amendments"]:
     L += [f"### {r['case']} (amended; decisions {'; '.join(r['decisions'])})", ""]
-    for k, lab in (("starting_conditions", "Starting conditions"), ("start_and_actions", "Starting conditions and actions"),
-                   ("actions", "Actions"), ("expected", "Expected")):
+    for k, lab in (
+        ("starting_conditions", "Starting conditions"),
+        ("start_and_actions", "Starting conditions and actions"),
+        ("actions", "Actions"),
+        ("expected", "Expected"),
+    ):
         if k in r["new"]:
             L += [f"- {lab}:"] + cell(r["new"][k])
     L.append("")
 (out / "amendments-and-new-cases.md").write_text("\n".join(L) + "\n")
 frozen_sha = hashlib.sha256((out / "design-cases.md").read_bytes()).hexdigest()
-amend_sha = hashlib.sha256((out / "amendments-and-new-cases.md").read_bytes()).hexdigest()
-drivers = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted((out / "drivers").glob("*.json"))}
+amend_sha = hashlib.sha256(
+    (out / "amendments-and-new-cases.md").read_bytes()
+).hexdigest()
+drivers = {
+    p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+    for p in sorted((out / "drivers").glob("*.json"))
+}
 
 executor_prompt = (v5 / "executor-prompt.md").read_text()
 navigation = (v5 / "navigation.md").read_text()
 navigation = navigation.replace(
     "(amendments to some frozen cases, in three rounds, and new cases\n`AGG-R..` and `AGG-T..`). For an amended case, the latest amendment governs where it differs from earlier text: the\n2026-10-14 amendment (part 5) over the 2026-10-13 one (part 3), and that over the 2026-10-11 one (part 1);",
-    "(amendments to some frozen cases, in four rounds, and new cases\n`AGG-R..` and `AGG-T..`). For an amended case, the latest amendment governs where it differs from earlier text: the\nsecond 2026-10-14 amendment (part 6) over the first (part 5), that over the 2026-10-13 one (part 3), and that over\nthe 2026-10-11 one (part 1);")
-navigation = navigation.replace("`new-screens/`,\n`new-screens-3/` and `new-screens-4/` hold screens of later candidates.",
-                                "`new-screens/`,\n`new-screens-3/`, `new-screens-4/` and `new-screens-5/` (this candidate) hold screens of later candidates.")
-assert "part 6" in navigation and "new-screens-5" in navigation, "navigation text not updated"
+    "(amendments to some frozen cases, in four rounds, and new cases\n`AGG-R..` and `AGG-T..`). For an amended case, the latest amendment governs where it differs from earlier text: the\nsecond 2026-10-14 amendment (part 6) over the first (part 5), that over the 2026-10-13 one (part 3), and that over\nthe 2026-10-11 one (part 1);",
+)
+navigation = navigation.replace(
+    "`new-screens/`,\n`new-screens-3/` and `new-screens-4/` hold screens of later candidates.",
+    "`new-screens/`,\n`new-screens-3/`, `new-screens-4/` and `new-screens-5/` (this candidate) hold screens of later candidates.",
+)
+assert "part 6" in navigation and "new-screens-5" in navigation, (
+    "navigation text not updated"
+)
 navigation += """
 Where a case's part 6 amendment says its actions are performed by a keystroke driver, start that driver with
 `agms-drive start <case id>` (for example `agms-drive start AGG-R14`) and follow it with `agms-drive wait <case id> 50`,
@@ -59,18 +84,27 @@ where it stopped.
 v5_prompt = (v5 / "prompts/Q01.md").read_text()
 env_start = v5_prompt.index("## Environment")
 tail = v5_prompt[env_start:]
-tail = tail.replace("  - `agms-tui text '...'` types text", "  - `agms-drive` plays a frozen keystroke driver (run `agms-drive` for its usage); only where a case's amendment\n    says so.\n  - `agms-tui text '...'` types text")
+tail = tail.replace(
+    "  - `agms-tui text '...'` types text",
+    "  - `agms-drive` plays a frozen keystroke driver (run `agms-drive` for its usage); only where a case's amendment\n    says so.\n  - `agms-tui text '...'` types text",
+)
 assert "agms-drive" in tail
 for group, ids in GROUPS.items():
     note = NOTES.get(group, "")
     note = f"\n- Note for this group: {note}" if note else ""
-    drv = [f"`drivers/{c}.json` SHA-256 `{drivers[c + '.json']}`" for c in ids if c + ".json" in drivers]
-    drv = ("\n- Keystroke driver for this group: " + ", ".join(drv) + ".") if drv else ""
+    drv = [
+        f"`drivers/{c}.json` SHA-256 `{drivers[c + '.json']}`"
+        for c in ids
+        if c + ".json" in drivers
+    ]
+    drv = (
+        ("\n- Keystroke driver for this group: " + ", ".join(drv) + ".") if drv else ""
+    )
     prompt = f"""{executor_prompt}
 {navigation}
 ## Assignment: group {group}
 
-- Cases, in order: {', '.join(ids)}.
+- Cases, in order: {", ".join(ids)}.
 - Candidate: Corbanu Terminal {VERSION} package, read-only at `/opt/agms/pkg`; the program is
   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `{CANDIDATE}`.
 - Frozen cases file SHA-256: `{frozen_sha}`. Amendments and new cases file SHA-256: `{amend_sha}`.{drv}

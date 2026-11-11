@@ -17,15 +17,30 @@ class VisibleContractTests(unittest.TestCase):
                     "ts": "2026-07-02T10:00:00Z",
                     "idempotency_key": "client-1",
                     "legs": [
-                        {"account": "cash", "currency": "USD", "side": "debit", "amount": "125.00"},
-                        {"account": "revenue", "currency": "USD", "side": "credit", "amount": "125.00"},
+                        {
+                            "account": "cash",
+                            "currency": "USD",
+                            "side": "debit",
+                            "amount": "125.00",
+                        },
+                        {
+                            "account": "revenue",
+                            "currency": "USD",
+                            "side": "credit",
+                            "amount": "125.00",
+                        },
                     ],
                 }
             )
 
             self.assertTrue(result["ok"])
-            self.assertEqual(engine.balance_as_of("cash", "USD", "2026-07-02T10:00:00Z"), "125.00")
-            self.assertEqual(engine.balance_as_of("revenue", "USD", "2026-07-02T10:00:00Z"), "-125.00")
+            self.assertEqual(
+                engine.balance_as_of("cash", "USD", "2026-07-02T10:00:00Z"), "125.00"
+            )
+            self.assertEqual(
+                engine.balance_as_of("revenue", "USD", "2026-07-02T10:00:00Z"),
+                "-125.00",
+            )
 
 
 if __name__ == "__main__":

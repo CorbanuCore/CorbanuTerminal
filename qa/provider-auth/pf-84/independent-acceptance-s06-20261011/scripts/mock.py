@@ -18,6 +18,7 @@ Control: POST /_ctl {"next_user": "...", "ttl": <access ttl s>, "refresh_ttl": <
 A user written "name~2" is the same ChatGPT person as "name" (same email and user id).
 Fake values only. Secret halves of keys and signatures are never logged.
 """
+
 import argparse, base64, hashlib, http.server, json, re, threading, time, urllib.parse
 
 LOCK = threading.Lock()
@@ -49,11 +50,23 @@ def tokens(user, gen, ttl):
     now = int(time.time())
     p = person(user)
     ws = "ws-" + (user.split("@ws=")[1] if "@ws=" in user else "main")
-    idt = jwt({"sub": "sub-" + p, "email": p + "@example.com", "exp": now + 86400,
-               "https://api.openai.com/auth": {"chatgpt_user_id": "cu-" + p, "chatgpt_account_id": ws,
-                                               "chatgpt_plan_type": "pro" if p.startswith("pro") else "plus"}})
-    return {"id_token": idt, "access_token": jwt({"user": user, "gen": gen, "exp": now + ttl}),
-            "refresh_token": "rt.%s.%d" % (user, gen)}
+    idt = jwt(
+        {
+            "sub": "sub-" + p,
+            "email": p + "@example.com",
+            "exp": now + 86400,
+            "https://api.openai.com/auth": {
+                "chatgpt_user_id": "cu-" + p,
+                "chatgpt_account_id": ws,
+                "chatgpt_plan_type": "pro" if p.startswith("pro") else "plus",
+            },
+        }
+    )
+    return {
+        "id_token": idt,
+        "access_token": jwt({"user": user, "gen": gen, "exp": now + ttl}),
+        "refresh_token": "rt.%s.%d" % (user, gen),
+    }
 
 
 def main():
@@ -77,7 +90,11 @@ def main():
             pass
 
         def send(self, code, body=None, ctype="application/json"):
-            data = b"" if body is None else (body if isinstance(body, bytes) else json.dumps(body).encode())
+            data = (
+                b""
+                if body is None
+                else (body if isinstance(body, bytes) else json.dumps(body).encode())
+            )
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
@@ -86,18 +103,34 @@ def main():
 
         def ident(self):
             auth = self.headers.get("authorization", "")
-            m = re.search(r"Credential=([A-Z0-9]+)/\d+/([a-z0-9-]+)/([a-z0-9-]+)/", auth)
+            m = re.search(
+                r"Credential=([A-Z0-9]+)/\d+/([a-z0-9-]+)/([a-z0-9-]+)/", auth
+            )
             if m:
-                return {"scheme": "sigv4", "akid": m.group(1), "region": m.group(2), "service": m.group(3),
-                        "session_token": bool(self.headers.get("x-amz-security-token"))}
+                return {
+                    "scheme": "sigv4",
+                    "akid": m.group(1),
+                    "region": m.group(2),
+                    "service": m.group(3),
+                    "session_token": bool(self.headers.get("x-amz-security-token")),
+                }
             if auth.lower().startswith("bearer "):
                 t = auth[7:]
                 c = claims(t)
                 if c and "user" in c:
-                    return {"scheme": "chatgpt", "user": c["user"], "gen": c["gen"], "expired": c["exp"] < time.time()}
+                    return {
+                        "scheme": "chatgpt",
+                        "user": c["user"],
+                        "gen": c["gen"],
+                        "expired": c["exp"] < time.time(),
+                    }
                 if t in BEARER_CANARIES:
                     return {"scheme": "bearer", "canary": BEARER_CANARIES[t]}
-                return {"scheme": "bearer", "canary": "UNKNOWN", "sha8": hashlib.sha256(t.encode()).hexdigest()[:8]}
+                return {
+                    "scheme": "bearer",
+                    "canary": "UNKNOWN",
+                    "sha8": hashlib.sha256(t.encode()).hexdigest()[:8],
+                }
             return {"scheme": "none"}
 
         def body(self):
@@ -123,21 +156,48 @@ def main():
                 if path.endswith("/security-credentials/"):
                     return self.send(200, b"role", "text/plain")
                 if "/security-credentials/" in path:
-                    return self.send(200, {"Code": "Success", "AccessKeyId": "AKIDIMDSFALLBACK",
-                                           "SecretAccessKey": "x", "Token": "t",
-                                           "Expiration": "2099-01-01T00:00:00Z"})
+                    return self.send(
+                        200,
+                        {
+                            "Code": "Success",
+                            "AccessKeyId": "AKIDIMDSFALLBACK",
+                            "SecretAccessKey": "x",
+                            "Token": "t",
+                            "Expiration": "2099-01-01T00:00:00Z",
+                        },
+                    )
                 return self.send(200, b"", "text/plain")
             if path.startswith("/ecs-creds"):
                 log(ev="aws-ecs", path=path)
-                return self.send(200, {"AccessKeyId": "AKIDECSFALLBACK", "SecretAccessKey": "x", "Token": "t",
-                                       "Expiration": "2099-01-01T00:00:00Z"})
+                return self.send(
+                    200,
+                    {
+                        "AccessKeyId": "AKIDECSFALLBACK",
+                        "SecretAccessKey": "x",
+                        "Token": "t",
+                        "Expiration": "2099-01-01T00:00:00Z",
+                    },
+                )
             if path == "/federation/credentials":
                 q = dict(urllib.parse.parse_qsl(urllib.parse.urlparse(self.path).query))
                 has_tok = bool(self.headers.get("x-amz-sso_bearer_token"))
-                log(ev="aws-sso", role=q.get("role_name"), account=q.get("account_id"), bearer=has_tok)
-                return self.send(200, {"roleCredentials": {"accessKeyId": "ASIASSOPROFILE", "secretAccessKey": "x",
-                                                           "sessionToken": "sso-session",
-                                                           "expiration": int((time.time() + 3600) * 1000)}})
+                log(
+                    ev="aws-sso",
+                    role=q.get("role_name"),
+                    account=q.get("account_id"),
+                    bearer=has_tok,
+                )
+                return self.send(
+                    200,
+                    {
+                        "roleCredentials": {
+                            "accessKeyId": "ASIASSOPROFILE",
+                            "secretAccessKey": "x",
+                            "sessionToken": "sso-session",
+                            "expiration": int((time.time() + 3600) * 1000),
+                        }
+                    },
+                )
             log(ev="get", path=path, who=self.ident())
             if path.endswith("/models"):
                 return self.send(200, {"models": [], "data": []})
@@ -147,26 +207,57 @@ def main():
             raw, b = self.body()
             path = self.path.split("?")[0]
             if path == "/_ctl":
-                ST.update({k: v for k, v in b.items() if k in ("next_user", "ttl", "refresh_ttl")})
+                ST.update(
+                    {
+                        k: v
+                        for k, v in b.items()
+                        if k in ("next_user", "ttl", "refresh_ttl")
+                    }
+                )
                 return self.send(200, {})
             if b.get("Action") in ("AssumeRole", "AssumeRoleWithWebIdentity"):
-                log(ev="aws-sts", action=b.get("Action"), role=b.get("RoleArn"), who=self.ident())
-                x = ("<{a}Response><{a}Result><Credentials><AccessKeyId>ASIAROLECHAIN</AccessKeyId>"
-                     "<SecretAccessKey>x</SecretAccessKey><SessionToken>role-session</SessionToken>"
-                     "<Expiration>2099-01-01T00:00:00Z</Expiration></Credentials>"
-                     "<AssumedRoleUser><Arn>arn:aws:sts::1:assumed-role/r/s</Arn><AssumedRoleId>X:s</AssumedRoleId>"
-                     "</AssumedRoleUser></{a}Result></{a}Response>").format(a=b.get("Action"))
+                log(
+                    ev="aws-sts",
+                    action=b.get("Action"),
+                    role=b.get("RoleArn"),
+                    who=self.ident(),
+                )
+                x = (
+                    "<{a}Response><{a}Result><Credentials><AccessKeyId>ASIAROLECHAIN</AccessKeyId>"
+                    "<SecretAccessKey>x</SecretAccessKey><SessionToken>role-session</SessionToken>"
+                    "<Expiration>2099-01-01T00:00:00Z</Expiration></Credentials>"
+                    "<AssumedRoleUser><Arn>arn:aws:sts::1:assumed-role/r/s</Arn><AssumedRoleId>X:s</AssumedRoleId>"
+                    "</AssumedRoleUser></{a}Result></{a}Response>"
+                ).format(a=b.get("Action"))
                 return self.send(200, x.encode(), "text/xml")
             if path.endswith("/deviceauth/usercode"):
                 log(ev="device-usercode")
-                return self.send(200, {"device_auth_id": "dev-1", "user_code": "MOCK-0001", "interval": "0"})
+                return self.send(
+                    200,
+                    {
+                        "device_auth_id": "dev-1",
+                        "user_code": "MOCK-0001",
+                        "interval": "0",
+                    },
+                )
             if path.endswith("/deviceauth/token"):
-                return self.send(200, {"authorization_code": "code." + ST["next_user"], "code_challenge": "c",
-                                       "code_verifier": "v"})
+                return self.send(
+                    200,
+                    {
+                        "authorization_code": "code." + ST["next_user"],
+                        "code_challenge": "c",
+                        "code_verifier": "v",
+                    },
+                )
             if path == "/oauth/revoke":
                 t = b.get("token", "")
-                log(ev="revoke", user=t.split(".")[1] if t.startswith("rt.") else ("access" if claims(t) else "?"),
-                    kind=b.get("token_type_hint"))
+                log(
+                    ev="revoke",
+                    user=t.split(".")[1]
+                    if t.startswith("rt.")
+                    else ("access" if claims(t) else "?"),
+                    kind=b.get("token_type_hint"),
+                )
                 return self.send(200, {})
             if path == "/oauth/token":
                 if b.get("grant_type") == "authorization_code":
@@ -181,12 +272,34 @@ def main():
                 user, gen = (parts[1], int(parts[2])) if len(parts) == 3 else ("?", -1)
                 if user.startswith("bad"):
                     log(ev="refresh-rejected", user=user, why="expired")
-                    return self.send(401, {"error": {"code": "refresh_token_expired", "message": "expired"}})
+                    return self.send(
+                        401,
+                        {
+                            "error": {
+                                "code": "refresh_token_expired",
+                                "message": "expired",
+                            }
+                        },
+                    )
                 with LOCK:
                     cur = ST["gen"].get(user)
                     if cur is None or gen != cur:
-                        log(ev="refresh-rejected", user=user, why="reused", presented=gen, current=cur)
-                        return self.send(401, {"error": {"code": "refresh_token_reused", "message": "reused"}})
+                        log(
+                            ev="refresh-rejected",
+                            user=user,
+                            why="reused",
+                            presented=gen,
+                            current=cur,
+                        )
+                        return self.send(
+                            401,
+                            {
+                                "error": {
+                                    "code": "refresh_token_reused",
+                                    "message": "reused",
+                                }
+                            },
+                        )
                     ST["gen"][user] = cur + 1
                 log(ev="refresh", user=user, frm=cur, to=cur + 1)
                 return self.send(200, tokens(user, cur + 1, int(ST["refresh_ttl"])))
@@ -195,22 +308,53 @@ def main():
                 model = b.get("model")
                 if who.get("scheme") == "chatgpt" and who.get("expired"):
                     log(ev="responses-401", path=path, who=who, model=model)
-                    return self.send(401, {"error": {"code": "token_expired", "message": "expired access token"}})
-                if who.get("scheme") == "bearer" and who.get("canary", "").startswith("fake"):
+                    return self.send(
+                        401,
+                        {
+                            "error": {
+                                "code": "token_expired",
+                                "message": "expired access token",
+                            }
+                        },
+                    )
+                if who.get("scheme") == "bearer" and who.get("canary", "").startswith(
+                    "fake"
+                ):
                     log(ev="responses-401", path=path, who=who, model=model)
-                    return self.send(401, {"error": {"code": "invalid_api_key", "message": "Incorrect API key"}})
+                    return self.send(
+                        401,
+                        {
+                            "error": {
+                                "code": "invalid_api_key",
+                                "message": "Incorrect API key",
+                            }
+                        },
+                    )
                 log(ev="responses", path=path, who=who, model=model)
                 if who["scheme"] == "sigv4":
-                    text = "mock: sigv4 %s %s%s" % (who["akid"], who["region"], " +session" if who["session_token"] else "")
+                    text = "mock: sigv4 %s %s%s" % (
+                        who["akid"],
+                        who["region"],
+                        " +session" if who["session_token"] else "",
+                    )
                 elif who["scheme"] == "chatgpt":
                     text = "mock: chatgpt %s gen%s" % (who["user"], who["gen"])
                 else:
                     text = "mock: %s %s" % (who["scheme"], who.get("canary", ""))
                 rid = "resp_%d" % int(time.time() * 1000)
-                item = {"type": "message", "role": "assistant", "id": "msg_" + rid,
-                        "content": [{"type": "output_text", "text": text}]}
-                usage = {"input_tokens": 120, "input_tokens_details": {"cached_tokens": 0}, "output_tokens": 9,
-                         "output_tokens_details": {"reasoning_tokens": 0}, "total_tokens": 129}
+                item = {
+                    "type": "message",
+                    "role": "assistant",
+                    "id": "msg_" + rid,
+                    "content": [{"type": "output_text", "text": text}],
+                }
+                usage = {
+                    "input_tokens": 120,
+                    "input_tokens_details": {"cached_tokens": 0},
+                    "output_tokens": 9,
+                    "output_tokens_details": {"reasoning_tokens": 0},
+                    "total_tokens": 129,
+                }
                 pct = str(len(who.get("user", "x")) * 7 % 100)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
@@ -218,11 +362,26 @@ def main():
                 self.send_header("x-codex-primary-window-minutes", "300")
                 self.send_header("Connection", "close")
                 self.end_headers()
-                for name, d in [("response.created", {"type": "response.created", "response": {"id": rid}}),
-                                ("response.output_item.done", {"type": "response.output_item.done", "item": item}),
-                                ("response.completed", {"type": "response.completed",
-                                                        "response": {"id": rid, "usage": usage}})]:
-                    self.wfile.write(("event: %s\ndata: %s\n\n" % (name, json.dumps(d))).encode())
+                for name, d in [
+                    (
+                        "response.created",
+                        {"type": "response.created", "response": {"id": rid}},
+                    ),
+                    (
+                        "response.output_item.done",
+                        {"type": "response.output_item.done", "item": item},
+                    ),
+                    (
+                        "response.completed",
+                        {
+                            "type": "response.completed",
+                            "response": {"id": rid, "usage": usage},
+                        },
+                    ),
+                ]:
+                    self.wfile.write(
+                        ("event: %s\ndata: %s\n\n" % (name, json.dumps(d))).encode()
+                    )
                     self.wfile.flush()
                 return
             log(ev="post-unhandled", path=path, who=self.ident())

@@ -9,8 +9,15 @@ from confclerk.template import dotted_get
 
 class SchemaUtilsTests(unittest.TestCase):
     def test_schema_validation(self) -> None:
-        schema = Schema([FieldRule("app.name", str), FieldRule("app.port", int, required=False, default=80)])
-        self.assertEqual(schema.validate({"app": {"name": "x"}}), {"app.name": "x", "app.port": 80})
+        schema = Schema(
+            [
+                FieldRule("app.name", str),
+                FieldRule("app.port", int, required=False, default=80),
+            ]
+        )
+        self.assertEqual(
+            schema.validate({"app": {"name": "x"}}), {"app.name": "x", "app.port": 80}
+        )
 
     def test_dotted_get_set(self) -> None:
         data = {}

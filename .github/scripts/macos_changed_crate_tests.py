@@ -95,7 +95,9 @@ def main(argv: list[str]) -> int:
     if argv[1:] == ["packages", "--all"]:
         selected = list(MACOS_PACKAGES)
     elif len(argv) == 4 and argv[1] == "packages":
-        selected = changed_packages(changed_files(argv[2], argv[3]), cargo_packages(ROOT))
+        selected = changed_packages(
+            changed_files(argv[2], argv[3]), cargo_packages(ROOT)
+        )
     elif len(argv) == 3 and argv[1] in ("filter", "summary"):
         entries = load(LIST)
         if argv[1] == "filter":

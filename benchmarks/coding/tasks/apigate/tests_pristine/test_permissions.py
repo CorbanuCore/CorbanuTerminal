@@ -43,7 +43,9 @@ class PermissionTests(unittest.TestCase):
         self.assertEqual(raised.exception.status, 401)
         self.assertEqual(raised.exception.code, "missing_user")
 
-    def test_require_rejects_missing_permission_without_leaking_other_user(self) -> None:
+    def test_require_rejects_missing_permission_without_leaking_other_user(
+        self,
+    ) -> None:
         cache = PermissionCache(PermissionStore())
         cache.grant("admin", "widgets:read")
 

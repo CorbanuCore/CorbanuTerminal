@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Rehearse the ignored fixture entry using a frozen runner; synthetic input only."""
+
 import argparse
 import json
 import os
@@ -34,18 +35,30 @@ def validate_completion(code, case, finished):
 
 def run_case(args, case):
     evidence = args.evidence / case
-    env = dict(os.environ, CORBANU_MEMORY_HUMAN_OPT_IN="1",
-               CORBANU_MEMORY_HUMAN_CASE="startup",
-               CORBANU_MEMORY_HUMAN_EVIDENCE=str(evidence),
-               CORBANU_MEMORY_CANDIDATE_SHA256=args.sha256,
-               CARGO_BIN_EXE_codex=str(args.candidate), CORBANU_TMUX_REQUIRED="1")
+    env = dict(
+        os.environ,
+        CORBANU_MEMORY_HUMAN_OPT_IN="1",
+        CORBANU_MEMORY_HUMAN_CASE="startup",
+        CORBANU_MEMORY_HUMAN_EVIDENCE=str(evidence),
+        CORBANU_MEMORY_CANDIDATE_SHA256=args.sha256,
+        CARGO_BIN_EXE_codex=str(args.candidate),
+        CORBANU_TMUX_REQUIRED="1",
+    )
     with (args.evidence / f"{case}.log").open("x") as log:
         process = subprocess.Popen(
-            [str(args.runner), "--ignored", "--exact",
-             "suite::memory_human_fixture::human_memory_fixture", "--nocapture"],
-            env=env, stdout=log, stderr=subprocess.STDOUT,
+            [
+                str(args.runner),
+                "--ignored",
+                "--exact",
+                "suite::memory_human_fixture::human_memory_fixture",
+                "--nocapture",
+            ],
+            env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
         )
         try:
+
             def ready_or_error():
                 if process.poll() is not None:
                     raise RuntimeError(f"fixture exited early: {process.returncode}")
@@ -67,7 +80,9 @@ def run_case(args, case):
 
             def tmux(*arguments):
                 return subprocess.check_output(
-                    prefix + list(arguments), env=tmux_env, text=True,
+                    prefix + list(arguments),
+                    env=tmux_env,
+                    text=True,
                     stderr=subprocess.STDOUT,
                 )
 
@@ -78,7 +93,14 @@ def run_case(args, case):
 
             if case == "startup":
                 send("HUMAN_FOREGROUND synthetic fixture")
-                until(lambda: (read_json(evidence / "status.json") or {}).get("source_outputs") == 1)
+                until(
+                    lambda: (
+                        (read_json(evidence / "status.json") or {}).get(
+                            "source_outputs"
+                        )
+                        == 1
+                    )
+                )
                 send("/exit")
             else:
                 (evidence / "cancel").touch(exist_ok=False)
@@ -109,7 +131,9 @@ def main():
     args.evidence.mkdir()
     for case in ("startup", "cancel"):
         run_case(args, case)
-    print("Pinned ignored entry: startup and cancellation passed; no human acceptance claimed.")
+    print(
+        "Pinned ignored entry: startup and cancellation passed; no human acceptance claimed."
+    )
 
 
 if __name__ == "__main__":

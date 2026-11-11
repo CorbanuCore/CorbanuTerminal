@@ -3,6 +3,7 @@ verbatim, amendment v3 (reviewed), both screen sets, neutral navigation and one 
 
 usage: python3 tools/make_packet3.py RUN_DIR REPO_DIR OUT_DIR CANDIDATE_SHA
 """
+
 import hashlib
 import json
 import pathlib
@@ -13,7 +14,11 @@ run, repo, out = (pathlib.Path(a) for a in sys.argv[1:4])
 CANDIDATE = sys.argv[4]
 GROUPS = json.loads((run / "tools/groups.json").read_text())
 NOTES = json.loads((run / "tools/standing-notes.json").read_text())
-REPLAYS = json.loads((run / "tools/replays.json").read_text()) if (run / "tools/replays.json").exists() else {}
+REPLAYS = (
+    json.loads((run / "tools/replays.json").read_text())
+    if (run / "tools/replays.json").exists()
+    else {}
+)
 first = run / "design/designer-packet"
 out.mkdir(parents=True, exist_ok=True)
 shutil.copy2(first / "design-cases.md", out / "design-cases.md")
@@ -24,8 +29,12 @@ for sub, dst in (("screens-v1", "screens"), ("screens", "screens-v3")):
     for f in sorted((first / sub).iterdir()):
         shutil.copy2(f, out / dst / f.name)
 readme = out / "screens-v3" / "README.md"
-readme.write_text(readme.read_text().replace("`screens-v1/` holds the first run's design-time screens",
-                                             "`screens/` holds the first run's design-time screens"))
+readme.write_text(
+    readme.read_text().replace(
+        "`screens-v1/` holds the first run's design-time screens",
+        "`screens/` holds the first run's design-time screens",
+    )
+)
 cases_sha = hashlib.sha256((out / "design-cases.md").read_bytes()).hexdigest()
 amend_sha = hashlib.sha256((out / "amendments.md").read_bytes()).hexdigest()
 v3_sha = hashlib.sha256((out / "amendments-v3.md").read_bytes()).hexdigest()
@@ -60,17 +69,23 @@ request, record its words verbatim; you may resubmit the same case wording uncha
 (out / "navigation.md").write_text(navigation)
 (out / "executor-prompt.md").write_text(executor_prompt)
 (out / "prompts").mkdir(exist_ok=True)
-ASSIGN = [(g, ids, NOTES.get(g, "")) for g, ids in GROUPS.items()] + \
-         [(label, r["cases"], (NOTES.get(r["group"], "") + " " if NOTES.get(r["group"]) else "") +
-           "Replay assignment (fresh executor; earlier attempts are kept separately): " + r["note"])
-          for label, r in REPLAYS.items()]
+ASSIGN = [(g, ids, NOTES.get(g, "")) for g, ids in GROUPS.items()] + [
+    (
+        label,
+        r["cases"],
+        (NOTES.get(r["group"], "") + " " if NOTES.get(r["group"]) else "")
+        + "Replay assignment (fresh executor; earlier attempts are kept separately): "
+        + r["note"],
+    )
+    for label, r in REPLAYS.items()
+]
 for group, ids, note in ASSIGN:
     note = f"\n- Note for this group: {note}" if note else ""
     prompt = f"""{executor_prompt}
 {navigation}
 ## Assignment: group {group}
 
-- Cases, in order: {', '.join(ids)}.
+- Cases, in order: {", ".join(ids)}.
 - Candidate: Corbanu Terminal 0.1.48 package, read-only at `/opt/agms/pkg`; the program is
   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `{CANDIDATE}`.
 - Frozen cases file SHA-256: `{cases_sha}`. Amendments file SHA-256: `{amend_sha}`. Amendment v3 file SHA-256:

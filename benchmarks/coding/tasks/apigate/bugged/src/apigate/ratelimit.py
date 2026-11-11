@@ -19,14 +19,21 @@ class RateLimiter:
     def check(self, policy: str | None, key: str, now: datetime | None = None) -> None:
         if policy is None:
             return
-        limit, window = self.policies.get(policy, (self.default_limit, self.window_seconds))
+        limit, window = self.policies.get(
+            policy, (self.default_limit, self.window_seconds)
+        )
         ts = self._timestamp(now)
         bucket = self._events[(policy, key)]
         boundary = ts - window
         while bucket and bucket[0] <= boundary:
             bucket.popleft()
         if len(bucket) >= limit:
-            raise APIError(429, "rate_limited", "rate limit exceeded", {"limit": limit, "window_seconds": window})
+            raise APIError(
+                429,
+                "rate_limited",
+                "rate limit exceeded",
+                {"limit": limit, "window_seconds": window},
+            )
         bucket.append(ts)
 
     @staticmethod

@@ -150,9 +150,7 @@ class SprintCheckerTests(unittest.TestCase):
     def test_renumber_requires_matching_filename(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo, root, sprint = self.make_repo(temporary)
-            sprint.write_text(
-                sprint_text().replace("PF-01", "PF-02"), encoding="utf-8"
-            )
+            sprint.write_text(sprint_text().replace("PF-01", "PF-02"), encoding="utf-8")
             plan = repo / "docs/plans/proposed/plan.md"
             plan.write_text(
                 plan.read_text(encoding="utf-8").replace("PF-01", "PF-02"),
@@ -160,7 +158,9 @@ class SprintCheckerTests(unittest.TestCase):
             )
             result = checker.check_sprints(root, repo)
             self.assertEqual(len(result["errors"]), 1, result["errors"])
-            self.assertIn("filename must contain lowercase sprint id", result["errors"][0])
+            self.assertIn(
+                "filename must contain lowercase sprint id", result["errors"][0]
+            )
 
     def test_cross_plan_collision_repair_preserves_archived_dependency(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -307,7 +307,9 @@ class SprintCheckerTests(unittest.TestCase):
                 path.write_text(value)
             result = checker.check_sprints(root, repo)
             self.assertFalse(result["ok"])
-            self.assertTrue(any("requires parallel_lanes" in e for e in result["errors"]))
+            self.assertTrue(
+                any("requires parallel_lanes" in e for e in result["errors"])
+            )
             plan.write_text(
                 plan.read_text().replace(
                     "parallel_sprint_limit: 3\n",
@@ -466,7 +468,8 @@ class ParallelAllocationTests(unittest.TestCase):
                     "parallel_sprint_limit": "1",
                     "integration_owner": "Alex",
                     **values,
-                } for name in ({r["plan_file"] for r in records} or {"plan.md"})
+                }
+                for name in ({r["plan_file"] for r in records} or {"plan.md"})
             },
         )
 
@@ -496,7 +499,10 @@ class ParallelAllocationTests(unittest.TestCase):
         self.assertEqual(checker.check_parallel(records, plans), [])
         records[2]["parallel_lane"] = "lane-9"
         self.assertTrue(
-            any("not a declared lane" in e for e in checker.check_parallel(records, plans))
+            any(
+                "not a declared lane" in e
+                for e in checker.check_parallel(records, plans)
+            )
         )
         records = self.records(4)
         for record in records:

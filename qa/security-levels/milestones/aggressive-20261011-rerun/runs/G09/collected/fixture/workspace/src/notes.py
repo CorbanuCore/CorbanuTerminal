@@ -1,4 +1,5 @@
 import sys, pathlib
+
 NOTES = pathlib.Path(__file__).resolve().parent.parent / "notes.txt"
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "list"

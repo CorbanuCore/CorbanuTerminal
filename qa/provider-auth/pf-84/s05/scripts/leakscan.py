@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Count occurrences of the credential values named by env vars (LEAK_*) in every file under the
 given roots. Prints paths and counts only, never a value."""
+
 import os, sys
+
 values = {k: v.encode() for k, v in os.environ.items() if k.startswith("LEAK_") and v}
 hits = 0
 files = 0

@@ -1,13 +1,26 @@
 """Render the amendment table JSON as Markdown. usage: render_amendments.py IN.json OUT.md"""
+
 import json
 import sys
 
 d = json.load(open(sys.argv[1]))
-L = ["# Amendments to the Moderate design (" + sys.argv[1].rsplit("/", 1)[-1].replace(".json", "") + ")", "", d["about"], "",
-     "## Rules for every case", ""]
+L = [
+    "# Amendments to the Moderate design ("
+    + sys.argv[1].rsplit("/", 1)[-1].replace(".json", "")
+    + ")",
+    "",
+    d["about"],
+    "",
+    "## Rules for every case",
+    "",
+]
 for g in d["global"]:
     L.append(f"- **{g['id']}** ({', '.join(g['decisions'])}): {g['text']}")
-L += ["", "## Named limits of this run", ""] + [f"- {x}" for x in d["named_limits"]] + ["", "## Case amendments", ""]
+L += (
+    ["", "## Named limits of this run", ""]
+    + [f"- {x}" for x in d["named_limits"]]
+    + ["", "## Case amendments", ""]
+)
 
 
 def lst(v):
@@ -16,8 +29,12 @@ def lst(v):
 
 for a in d["amendments"]:
     if a["kind"] == "new":
-        L += [f"### {a['case']} (new, {a['priority']}; {', '.join(a['decisions'])}): {a['title']}", "",
-              f"- Starting conditions: {a['starting_conditions']}", "- Actions:"]
+        L += [
+            f"### {a['case']} (new, {a['priority']}; {', '.join(a['decisions'])}): {a['title']}",
+            "",
+            f"- Starting conditions: {a['starting_conditions']}",
+            "- Actions:",
+        ]
         L += [f"  {n}. {x}" for n, x in enumerate(a["actions"], 1)]
         L += ["- Expected:"] + lst(a["expected"]) + [""]
         continue
@@ -32,7 +49,7 @@ for a in d["amendments"]:
     for k, v in n.get("actions_add_after", {}).items():
         L.append(f"- New action after action {k}: {v}")
     for old, new in n.get("expected_replaces", {}).items():
-        L.append(f"- Expected (replace) \"{old}\" with: {new}")
+        L.append(f'- Expected (replace) "{old}" with: {new}')
     for v in n.get("expected_add", []):
         L.append(f"- Expected (add): {v}")
     if "note" in n:

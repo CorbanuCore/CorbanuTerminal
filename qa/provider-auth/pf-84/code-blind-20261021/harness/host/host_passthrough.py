@@ -5,6 +5,7 @@ and copies bytes both ways without opening TLS: the test account's tokens stay e
 and OpenAI and never exist on the host in clear. Logs host, time and byte counts only.
 usage: host_passthrough.py --port 11248 --log FILE
 """
+
 import argparse
 import json
 import socket
@@ -35,15 +36,26 @@ class Handler(socketserver.StreamRequestHandler):
         parts = line.split()
         if len(parts) != 3 or parts[0] != "CONNECT" or parts[1] not in ALLOWED:
             log(cfg.log, {"event": "refused", "request_line": line[:200]})
-            self.connection.sendall(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
+            self.connection.sendall(
+                b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"
+            )
             return
         host, port = parts[1].rsplit(":", 1)
         started = time.time()
         try:
             up = socket.create_connection((host, int(port)), timeout=30)
         except Exception as exc:
-            log(cfg.log, {"event": "connect_error", "target": parts[1], "error": repr(exc)[:200]})
-            self.connection.sendall(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n")
+            log(
+                cfg.log,
+                {
+                    "event": "connect_error",
+                    "target": parts[1],
+                    "error": repr(exc)[:200],
+                },
+            )
+            self.connection.sendall(
+                b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n"
+            )
             return
         up.settimeout(None)
         self.connection.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
@@ -70,8 +82,16 @@ class Handler(socketserver.StreamRequestHandler):
         pump(up, self.connection, "down")
         t.join(timeout=5)
         up.close()
-        log(cfg.log, {"event": "passthrough", "target": parts[1], "bytes_up": counts["up"],
-                      "bytes_down": counts["down"], "seconds": round(time.time() - started, 3)})
+        log(
+            cfg.log,
+            {
+                "event": "passthrough",
+                "target": parts[1],
+                "bytes_up": counts["up"],
+                "bytes_down": counts["down"],
+                "seconds": round(time.time() - started, 3),
+            },
+        )
 
 
 class Server(socketserver.ThreadingTCPServer):
