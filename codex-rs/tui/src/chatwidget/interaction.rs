@@ -20,7 +20,13 @@ impl ChatWidget {
             let should_pause_active_goal = self
                 .bottom_pane
                 .active_view_will_interrupt_turn_on_key_event(key_event);
+            let previous_view = self.bottom_pane.active_view_id();
             self.bottom_pane.handle_key_event(key_event);
+            if self.bottom_pane.active_view_id() != previous_view {
+                // A provider refresh may have arrived while a reasoning dialog
+                // covered the model picker. Reconcile it when the child closes.
+                self.refresh_open_model_picker();
+            }
             if should_pause_active_goal {
                 self.pause_active_goal_for_interrupt();
             }
@@ -55,6 +61,7 @@ impl ChatWidget {
                 ..
             } if modifiers.contains(KeyModifiers::CONTROL) && c.eq_ignore_ascii_case(&'c') => {
                 self.on_ctrl_c();
+                self.refresh_open_model_picker();
                 return;
             }
             KeyEvent {

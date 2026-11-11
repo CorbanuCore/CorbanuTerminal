@@ -27,6 +27,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/aggressive-ms-20261010"
     branch: "qa/aggressive-milestone-20261010"
     base_commit: "9ead7a57558f8f0639511cc5cbcc8ec726756ed3"
+  - path: "/Volumes/CorbanuDrive/Corbanu/.codex-work/contrib-1111-88"
+    branch: "maint/contrib-88-1111"
+    base_commit: "5c7d8ed06095fabf6aa41d496996082c3dfa4384"
 ---
 
 # P1 security hardening
@@ -71,6 +74,46 @@ Open when P0 closed on 2026-10-08. Nothing here is done; each item names where i
 | PF-27-S06/S07 Windows follow-ups | [S06](../../sprints/archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md), [S07](../../sprints/archive/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md) (archived 2026-10-08, accepted with known limits) | #300 decided fail closed, being implemented; #301/#304 decided rule-driven removal, draft PR #326; #323 open; #307 and #320 fixed (PRs #321, #327); PF-27-S08/S09 planned |
 | PF-27-S09 follow-ups | [PF-27-S09](../../sprints/archive/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) (archived 2026-10-10, accepted with known limits) | #389 passed with limits (PR #395); #390 fixed (PR #399); #391: `broker_model_auth` is on by default under Aggressive on macOS, Linux and Windows, an explicit setting wins, and it fails closed ([evidence](../../../qa/security/issue-391/README.md)). The flag stays default off for Permissive and Moderate, a separate later decision |
 | PF-27-S08 follow-ups | [PF-27-S08](../../sprints/archive/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md) (archived 2026-10-09, accepted with known limits) | PF-27-S09 (stored-key reader, model auth) completed and archived 2026-10-10; Core creates `secrets/.vault.lock` and the broker locks it read-only (PR #363) |
+
+## Approved credential-recovery follow-up (November 11)
+
+Travis approved revising and incorporating contributor #88, then asked to finish
+its larger follow-ups. Carry **PF-84-S07** into this security plan: selected-account
+recovery only, not reopening the completed onboarding initiative or removing its
+flag. This is a product initiative because refresh can change protected credential
+state. No fourth plan is activated. Product citation: **Shipping MVP — LIVE**,
+“Anthropic/Claude Plan” and “operational credential use without placing raw values
+in chat”; **Required trust boundaries**, “Credentials are referenced by label and
+resolved only inside a trusted execution boundary.”
+
+Contract: retry signed-thinking history rejection once before substantive output;
+do not refresh credentials for genuine plan-entitlement failures; preserve the
+selected file-backed login if a refresh damages it, including timeout. Preserve
+selected source, named-account identity, unknown fields and native Keychain
+ownership. Never silently fall back, resurrect deliberately revoked credentials,
+overwrite a concurrent valid login, disclose credentials or replay delivered output.
+No installer, billing, vault schema or default-account migration changes.
+
+Allocation: coordinator owns the otherwise free **windows-host** lane for this
+cross-platform credential-recovery increment. PF-23-S04's pending broker-lane
+allocation in #1837 remains separate; neither its code nor qualification is
+superseded. Upstream S1 auth adapters are serialized at their receiving boundary;
+this work lands on main first, then is explicitly reconciled during the next sync.
+
+| Upstream-touch field | PF-84-S07 record |
+| --- | --- |
+| Baseline | https://github.com/openai/codex.git; local upstream/main verified at b6d93b4cbadd6f449395d326f72465a5823f1492, merge-base 413492cd6c3a4d4f8dff6f406247ccda5a9d88aa. Fork base 5c7d8ed06095fabf6aa41d496996082c3dfa4384. |
+| Footprint and boundary | Exact sprint scope; thin Core stream adapter with private recovery module, CLI selected-store adapter, existing API error classification. Coordinator integrates; no new authority system. |
+| Compatibility | No wire/schema changes; no persisted history rewrite; bounded request-only retry before output. Preserve selected account/source, cancellation, resume and secret isolation. |
+| Verification | Isolated just test for changed crates and Core Anthropic integration tests; synthetic timeout/corruption/race fixtures. Independent exact-head review, code-blind isolated functional execution, TUI/demo and applicable TensorCash/Isometric Game evidence remain required. |
+| Upgrade handling | Target rust-v0.167.0 = 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a. Port narrow adapters at S1/S2 integration, inspect current credential resolution and stream lifecycle, rerun combined tests. No upstream qualification claimed yet. |
+
+Deliver as separately reviewed stream/error and credential-storage stages under
+one feature. Frozen independent cases and raw failed attempts are retained.
+Implementation/source integration is not functional qualification or release;
+no personal Keychain or live profile is a fixture. Independent Opus execution is
+currently unavailable; qualification stays open rather than waived. Evidence
+lives under qa/provider-auth/pf-84/s07/; review budget and grants on #2106.
 
 ## User pain
 
@@ -135,6 +178,7 @@ as work starts; each executable record's coordinates must appear in front matter
 
 | Feature | Contract (one line) |
 | --- | --- |
+| PF-84 | S07 only: approved #88 selected-account inference and credential-recovery follow-up; no account feature activation or installer replay. |
 | PF-13 | S07 only: integrated credential boundary qualification, carried forward from P0 on 2026-10-08. |
 | PF-27 | Windows only: broker and secretless launch (S06, moved from P0 on 2026-10-06), its hardening follow-ups (S07), the broker's own token (S08) and model-client auth through the broker (S09), added 2026-10-08 when Travis approved fixing S06's four documented limits. |
 | PF-23 | S04: owner-approved #1837 chroot protected-action classification repair, preserving current finder/sudo and brace protections; carry forward the archived PF-23-S01 boundary, not a new security level or grant. |
@@ -194,6 +238,8 @@ archived except PF-13-S07, which now lives here.
 | 74 | [PF-26-S04](../../sprints/current/p1-security-hardening/pf-26-s04-final-automated-qualification.md) | Final integrated automated security qualification | PF-26-S01, PF-13-S07, PF-21-S02, PF-23-S03, PF-25-S02, PF-36-S02, PF-41-S02 |
 | 75 | [PF-26-S02](../../sprints/current/p1-security-hardening/pf-26-s02-true-tui-and-live-repository-qualification.md) | True-TUI and live-repository qualification | PF-26-S04 |
 | 76 | [PF-26-S03](../../sprints/current/p1-security-hardening/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | Human acceptance, finished docs, and release evidence | PF-26-S02 |
+
+| 77 | [PF-84-S07](../../sprints/current/p1-security-hardening/pf-84-s07-selected-account-recovery.md) | Selected-account inference and credential recovery, coordinator on windows-host lane | PF-84-S06 |
 
 PF-35-S01 keeps its external-campaign status: DeepSeek API generation through
 Corbanu Terminal (Travis, 2026-09-11), fine-tuning on the RTX PRO 6000, offline

@@ -16,4 +16,5 @@ with their dependencies, lanes and worktrees.
 - PF-27-S09: completed 2026-10-10, accepted by Travis with known limits, and archived
   ([S09](../../archive/p1-security-hardening/pf-27-s09-windows-model-client-auth.md)).
 - [PF-23-S04](pf-23-s04-chroot-classification.md): `in_progress`; coordinator integrates the owner-approved chroot contribution #1837 in the broker lane. Functional qualification and demo remain outstanding.
+- [PF-84-S07](pf-84-s07-selected-account-recovery.md): `in_progress`; approved #88 selected-account recovery, coordinator on the free windows-host lane. Functional qualification remains open.
 - Everything else: `draft` until allocated.

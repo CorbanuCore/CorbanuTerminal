@@ -646,12 +646,42 @@ fn mount_points_for_processes(
     Some(points)
 }
 
+/// Read the process root's identity without requesting a filesystem sync.
+/// An unavailable inode is not a deduplication key: its mount view is scanned.
+fn cached_root_identity(root: &Path) -> Option<(u64, u64)> {
+    let root = CString::new(root.as_os_str().as_bytes()).ok()?;
+    let mut status = std::mem::MaybeUninit::<rustix::fs::Statx>::zeroed();
+    // Use the portable statx layout, but call the kernel directly so an old
+    // libc cannot emulate an unsupported statx with a synchronizing stat.
+    // SAFETY: root is NUL-terminated and status points to a full writable
+    // statx buffer. Only the known INO mask is requested.
+    if unsafe {
+        libc::syscall(
+            libc::SYS_statx,
+            libc::AT_FDCWD,
+            root.as_ptr(),
+            rustix::fs::AtFlags::STATX_DONT_SYNC.bits(),
+            rustix::fs::StatxFlags::INO.bits(),
+            status.as_mut_ptr(),
+        )
+    } != 0
+    {
+        return None;
+    }
+    // SAFETY: the buffer was zero-initialized and statx completed successfully.
+    let status = unsafe { status.assume_init() };
+    (status.stx_mask & rustix::fs::StatxFlags::INO.bits() != 0).then_some((
+        rustix::fs::makedev(status.stx_dev_major, status.stx_dev_minor),
+        status.stx_ino,
+    ))
+}
+
 /// The mount namespace and root of the process at `dir`, which together
 /// decide what its `mountinfo` lists, or `None` when either is unavailable.
 fn view_identity(dir: &Path) -> Option<(PathBuf, u64, u64)> {
     let namespace = std::fs::read_link(dir.join("ns/mnt")).ok()?;
-    let root = std::fs::metadata(dir.join("root")).ok()?;
-    Some((namespace, root.dev(), root.ino()))
+    let (device, inode) = cached_root_identity(&dir.join("root"))?;
+    Some((namespace, device, inode))
 }
 
 /// A mount point as `mountinfo` writes it (space, tab, newline and

@@ -616,6 +616,15 @@ async fn a_non_durable_legacy_seed_stays_in_this_process() -> anyhow::Result<()>
             /*now_ms*/ 2_500,
         )
         .await;
+    let persisted_cooldown_until_ms: i64 = sqlx::query_scalar(
+        "SELECT cooldown_until_ms FROM provider_request_state WHERE provider_id = ? AND model = ? AND key_fingerprint = ?",
+    )
+    .bind(&salted.provider_id)
+    .bind(&salted.model)
+    .bind(&salted.key_fingerprint)
+    .fetch_one(process.pool.as_ref())
+    .await?;
+    assert_eq!(persisted_cooldown_until_ms, 0);
     assert_eq!(
         check_reason(
             &process
@@ -656,7 +665,7 @@ async fn a_legacy_row_moves_to_its_salted_key() -> anyhow::Result<()> {
     // may keep a failed write only in this process, and adjusts timestamps by
     // elapsed time. Neither belongs to this migration fixture.
     sqlx::query(
-        "INSERT INTO provider_request_state (provider_id, model, key_fingerprint, cooldown_until_ms, last_status, updated_at_ms) VALUES (?, ?, ?, 62000, 429, 2000)",
+        "INSERT INTO provider_request_state (provider_id, model, key_fingerprint, cooldown_until_ms, consecutive_429_count, last_status, last_request_id, updated_at_ms) VALUES (?, ?, ?, 62000, 1, 429, 'req-1', 2000)",
     )
     .bind(&legacy.provider_id)
     .bind(&legacy.model)
