@@ -876,6 +876,29 @@ pub(super) fn chroot_commands(
         .collect()
 }
 
+/// A chroot child still receives the enclosing command's input. Rebuilding
+/// just its argv loses that connection, so conservatively ask when it consumes
+/// inherited input as code. Held redirection words are not child arguments.
+pub(super) fn chroot_reads_code_input(
+    simple: &SimpleCommand,
+    words: &[String],
+    from: usize,
+) -> bool {
+    let fed = simple.pipe_from.is_some()
+        || !simple.stdin_from.is_empty()
+        || !simple.here_string.is_empty()
+        || simple.reads_outer_output;
+    if !fed {
+        return false;
+    }
+    let unheld = unredirected(simple, words, from);
+    let run = unheld
+        .as_deref()
+        .unwrap_or_else(|| words.get(from..).unwrap_or_default());
+    invocation(run)
+        .is_some_and(|invocation| matches!(invocation.code, Code::Stdin | Code::Inline(None)))
+}
+
 /// #1482 item 4: whether a sudo among the programs of these words runs an
 /// askpass helper, an editor named by the environment, or code inside a
 /// chroot (`sudo -A`, `sudo -e`, `--askpass`, `--edit`, `sudoedit`,

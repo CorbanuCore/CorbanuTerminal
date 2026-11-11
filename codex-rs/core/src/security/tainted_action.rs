@@ -2578,6 +2578,9 @@ impl Classifier {
             .collect::<Vec<_>>();
         for (start, skip_chdir) in chroot_lines {
             work::step();
+            if indirect::chroot_reads_code_input(simple, words, start) {
+                self.note(ProtectedActionKind::UnseenCode);
+            }
             let (run, run_unseen) = (&words[start..], unseen.get(start..).unwrap_or_default());
             // The line-level unseen-code checks, on the chroot's command:
             // an unseen command word (`chroot / $X`) or inline code holding

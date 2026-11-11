@@ -7,7 +7,7 @@ plan_feature: "PF-23"
 execution_order: 19
 owner: "Contributor integration coordinator"
 parallel_lane: "broker"
-write_scope: "codex-rs/core/src/security/tainted_action.rs, codex-rs/core/src/security/tainted_action/indirect.rs, codex-rs/core/src/security/tainted_action_chroot_tests.rs, codex-rs/core/src/security/tainted_action_tests.rs, docs/plans/active/p1-security-hardening.md, docs/sprints/current/p1-security-hardening/pf-23-s04-chroot-classification.md, docs/sprints/current/p1-security-hardening/index.md, qa/release/unreleased/notes/1837-chroot-classification.md"
+write_scope: "codex-rs/core/src/security/tainted_action.rs, codex-rs/core/src/security/tainted_action/indirect.rs, codex-rs/core/src/security/tainted_action_chroot_tests.rs, codex-rs/core/src/security/tainted_action_tests.rs, docs/plans/active/p1-security-hardening.md, docs/sprints/current/p1-security-hardening/pf-23-s04-chroot-classification.md, docs/sprints/current/p1-security-hardening/index.md, qa/security-levels/sprints/PF-23-S04/, qa/release/unreleased/notes/1837-chroot-classification.md"
 integration_gate: "Coordinator serializes #1837 against #1393 and #1055; preserve finder/sudo, brace readings and depth cap; exact-head Astra High security review, complete green CI, final combined classifier tests and blob-size check. Functional qualification and demo remain explicit unfinished gates, not inferred from unit tests."
 worktree: "/Volumes/CorbanuDrive/Corbanu/.codex-work/contrib-1111-1837"
 branch: "maint/contrib-1837-1111"
@@ -56,11 +56,13 @@ finder/exec launcher coverage, authentication recovery and other contributor fea
 ## Done
 
 - [x] Bounded mandate and allocation recorded before implementation.
+- [x] Preserved contributor ancestry while reconciling finder/sudo and brace checks.
+- [x] Frozen independent [code-blind design](../../../../qa/security-levels/sprints/PF-23-S04/codeblind-design.md) before functional execution; all eleven cases remain unexecuted.
+- [x] Initial integrated classifier: 404/404 passed; independent review nevertheless found inherited script-input loss. New regression reproduced it; repair and final qualification remain in progress.
 
 ## Remaining
 
-- [ ] Preserve contributor ancestry while reconciling main's finder/sudo and brace checks.
-- [ ] Freeze independent code-blind functional cases before exposing implementation evidence.
+- [ ] Close inherited script-input review finding with red/green tests and authorized delta review.
 - [ ] Format and run final-tree focused chroot and full classifier tests.
 - [ ] Verify no verdict becomes quieter on the recorded comparison corpus.
 - [ ] Independent exact-head security review and all CI complete green.
@@ -74,6 +76,7 @@ finder/exec launcher coverage, authentication recovery and other contributor fea
 - [ ] True-TUI tests use synthetic state, no host chroot execution or live credentials.
 - [ ] Functional evidence independently reviewed; no mock/unit run represented as TUI acceptance.
 - [ ] Release/live-repository and human acceptance remain separate gates.
+
 ## Exit evidence
 
 - [ ] Contributor credit names @citadelculture; Task Node provenance factual, no invented task id.
@@ -86,3 +89,10 @@ Coordinator authorizes two additional bounded review passes for this integration
 one fresh code-blind test design and one exact-head code/security review after
 main reconciliation. No self-authorized retries or erased findings. A later
 functional evidence review needs its own recorded allocation.
+
+The initial exact-head review found inherited script-input metadata lost when
+reclassifying the chroot child. Coordinator authorized one additional narrow
+repair/delta review in #2106 and #1837 on 2026-11-11; prior rounds are retained.
+The new regression fails on the pre-repair production code. The repair asks
+conservatively when a child consumes inherited input as code; data-only child
+commands retain their existing handling. No functional/TUI pass is claimed.

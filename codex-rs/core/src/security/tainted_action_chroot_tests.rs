@@ -136,6 +136,42 @@ fn issue1808_chroot_judges_its_command() {
     assert_eq!(wrong, Vec::<String>::new());
 }
 
+/// A chroot child inherits the enclosing command's script input, even when
+/// redirection operands precede the wrapper or are not child arguments.
+#[test]
+fn issue1808_chroot_inherited_script_input_asks() {
+    let asks = [
+        "cat payload | chroot / sh",
+        "chroot / sh -s <payload",
+        "chroot / sh <payload",
+        "<payload chroot / sh",
+        "cat payload | chroot / python3",
+        "cat payload | chroot / chroot / sh",
+        "chroot / bash <<< 'echo hello'",
+        "cat payload > >(chroot / sh)",
+    ];
+    let quiet = [
+        "cat payload | chroot / cat",
+        "chroot / cat <payload",
+        "chroot / sh -c 'echo ok' <payload",
+        "echo text | chroot / true",
+    ];
+    let mut wrong = Vec::new();
+    for shell in ["/bin/bash", "/bin/zsh"] {
+        for command in asks {
+            if kind(&[shell, "-lc", command]).is_none() {
+                wrong.push(format!("inherited input must ask {shell}: {command}"));
+            }
+        }
+        for command in quiet {
+            if kind(&[shell, "-lc", command]).is_some() {
+                wrong.push(format!("data-only input stays quiet {shell}: {command}"));
+            }
+        }
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+}
+
 /// #1808: chroot reading stays linear, with chained chroots and long
 /// option runs.
 #[test]
