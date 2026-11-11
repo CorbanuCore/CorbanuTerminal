@@ -160,7 +160,7 @@ Example with notification opt-out:
 - `thread/searchOccurrences` — experimental; find literal, case-insensitive matches in visible user messages and summary-selected final assistant messages within one paginated thread.
 - `thread/metadata/update` — patch stored thread metadata in sqlite; supports updating persisted `gitInfo` fields and returns the refreshed `thread`.
 - `thread/section/move` — atomically move a thread into the section identified by `sectionId`, before another thread or at the end when `beforeThreadId` is `null`. Reordering within the same section preserves `sectionEnteredAt`; entering a different section resets it. Set `sectionId` to `null` to remove the thread from its section. Returns `{}` on success.
-- `thread/settings/update` — experimental; queue a partial update to a loaded thread’s settings without starting a turn or adding transcript items. Omitted fields leave settings unchanged; `serviceTier: null` clears the tier; deprecated `multiAgentMode` is ignored, while Ultra reasoning effort enables proactive multi-agent behavior; `sandboxPolicy` and `permissions` cannot be combined. By default returns the legacy acceptance-only `{}`. With `confirm: true`, returns `{"outcome":"applied"}` only after this operation's Core success, including unchanged or empty updates. Validation/Core rejection returns a request-correlated error. Listener replacement, disconnect, shutdown, submission loss or a 10-second deadline can leave the effect unknown: a reachable client receives `{"outcome":"uncertain"}`; transport loss is also uncertain. Never retry automatically after an uncertain effect. Older servers may ignore `confirm` and return `{}` or reject the method: neither confirms application. Existing command turns and pending approvals retain their authority; subsequent turns use the session settings. Shared-service refresh behavior (including MCP) is unchanged. `thread/settings/updated` carries the observed effective snapshot only when it changes; it is not a confirmation or a snapshot attributed to the confirming request. `turn/start` settings overrides emit the same notification when they change stored settings.
+- `thread/settings/update` — experimental; queue a partial update to a loaded thread’s settings without starting a turn or adding transcript items. Omitted fields leave settings unchanged; `serviceTier: null` clears the tier; deprecated `multiAgentMode` is ignored, while Ultra reasoning effort enables proactive multi-agent behavior; `sandboxPolicy` and `permissions` cannot be combined. `refreshWindowsSandbox: true` (#2000) applies the Windows sandbox mode the server's own config now selects (after `windowsSandbox/setupStart` and a config write) to subsequent turns; the client never names the level, the default (elevated) sandbox is rejected until its setup is complete, and a mode weaker than the thread's current one is rejected (it applies from the next thread); it has no effect on other platforms. By default returns the legacy acceptance-only `{}`. With `confirm: true`, returns `{"outcome":"applied"}` only after this operation's Core success, including unchanged or empty updates. Validation/Core rejection returns a request-correlated error. Listener replacement, disconnect, shutdown, submission loss or a 10-second deadline can leave the effect unknown: a reachable client receives `{"outcome":"uncertain"}`; transport loss is also uncertain. Never retry automatically after an uncertain effect. Older servers may ignore `confirm` and return `{}` or reject the method: neither confirms application. Existing command turns and pending approvals retain their authority; subsequent turns use the session settings. Shared-service refresh behavior (including MCP) is unchanged. `thread/settings/updated` carries the observed effective snapshot only when it changes; it is not a confirmation or a snapshot attributed to the confirming request. `turn/start` settings overrides emit the same notification when they change stored settings.
 - `thread/memoryMode/set` — experimental; set a thread’s persisted memory eligibility to `"enabled"` or `"disabled"` for either a loaded thread or a stored rollout; returns `{}` on success.
 - `memory/reset` — experimental; clear the current `CODEX_HOME/memories` directory and reset persisted memory stage data in sqlite while preserving existing thread memory modes; returns `{}` on success.
 - `thread/goal/set` — create or update the single persisted goal for a materialized thread; returns the current goal and emits `thread/goal/updated`.
@@ -952,7 +952,7 @@ Use `thread/inject_items` to append prebuilt Responses API items to a loaded thr
 { "id": 36, "result": {} }
 ```
 
-### Realtime-only threads: pass `model` on `thread/start`
+### Realtime-only threads: skip the warm-up on `thread/start`
 
 `thread/start` warms up the thread's text model when its provider uses a
 WebSocket connection, as the built-in OpenAI provider does: one paid request
@@ -963,14 +963,17 @@ to Codex) and, where it's enabled, the end-of-session transcript turn. When a
 session makes few or no handoffs, the warm-up on the default model can cost
 several times the realtime session itself (#1045).
 
-Clients that start a thread only for realtime should pass a small, cheap text
-`model` on `thread/start`. The warm-up is then priced for that model. Handoffs
-also run on it, so this trades away handoff quality. Keep the thread's provider:
-realtime connects through it, so moving the thread to a provider without a
-WebSocket connection (which would skip the warm-up) also moves realtime there.
+Clients that start a thread only for realtime should skip the warm-up with
+`config: {"skip_startup_warmup": true}` on `thread/start`: the thread then sends
+no warm-up request, and a later text turn's first reply may be slower. A client
+that also wants cheaper handoffs can pass a small, cheap text `model` on
+`thread/start`; without `skip_startup_warmup` the warm-up is then priced for
+that model. Handoffs also run on it, so this trades away handoff quality. Keep
+the thread's provider: realtime connects through it, so moving the thread to a
+provider without a WebSocket connection (which would skip the warm-up) also
+moves realtime there.
 The `model` on `thread/realtime/start` selects the realtime model only; it
-doesn't change the warm-up. Skipping the warm-up for realtime-only threads is a
-possible later change (#1045).
+doesn't change the warm-up (#1045).
 
 ### Example: Start realtime with WebRTC
 
@@ -1185,6 +1188,8 @@ Example request/response:
 ```
 
 For a detached review, use `"delivery": "detached"`. The response is the same shape, but `reviewThreadId` will be the id of the new review thread (different from the original `threadId`). The server also emits a `thread/started` notification for that new thread before streaming the review turn. Internally, this is a normal forked thread and turn whose prompt mentions the bundled `$review-agent` skill, so normal turn steering, tool, permission, and item-stream behavior applies.
+
+The review thread runs with the parent thread's current settings (permissions, approval policy, Windows sandbox and security level, including changes made since the parent started), not with the config the server started with; `review_model`, when set, picks its model.
 
 Detached review is unsupported when the parent thread is paginated.
 

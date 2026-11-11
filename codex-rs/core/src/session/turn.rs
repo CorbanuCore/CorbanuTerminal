@@ -360,6 +360,9 @@ pub(crate) async fn run_turn(
     let turn_diff_tracker = Arc::new(tokio::sync::Mutex::new(
         TurnDiffTracker::with_environment_display_roots(display_roots),
     ));
+    turn_context
+        .pending_tool_calls
+        .set_turn_diff_tracker(&turn_diff_tracker);
 
     // `ModelClientSession` is turn-scoped and caches WebSocket + sticky routing state, so we reuse
     // one instance across retries within this turn.
@@ -392,7 +395,7 @@ pub(crate) async fn run_turn(
         // may support this, the model might not.
         let pending_input = if can_drain_pending_input {
             sess.input_queue
-                .get_pending_input(&sess.active_turn)
+                .get_pending_input_for_running_task(&sess.active_turn, &turn_context.sub_id)
                 .await
                 .0
         } else {
@@ -2377,6 +2380,7 @@ pub(super) fn realtime_text_for_event(msg: &EventMsg) -> Option<(String, Option<
         | EventMsg::ImageGenerationEnd(_)
         | EventMsg::ViewImageToolCall(_)
         | EventMsg::ExecApprovalRequest(_)
+        | EventMsg::ExecApprovalRequestWithdrawn(_)
         | EventMsg::RequestPermissions(_)
         | EventMsg::RequestUserInput(_)
         | EventMsg::DynamicToolCallRequest(_)
@@ -2731,15 +2735,28 @@ async fn drain_in_flight(
     while let Some(res) = in_flight.next().await {
         match res {
             Ok(Ok(response_input)) => {
+                let call_id = match &response_input {
+                    ResponseInputItem::FunctionCallOutput { call_id, .. }
+                    | ResponseInputItem::McpToolCallOutput { call_id, .. }
+                    | ResponseInputItem::CustomToolCallOutput { call_id, .. }
+                    | ResponseInputItem::ToolSearchOutput { call_id, .. } => Some(call_id.clone()),
+                    ResponseInputItem::Message { .. } => None,
+                };
                 let response_item = response_input.into();
-                sess.record_conversation_items(&turn_context, std::slice::from_ref(&response_item))
-                    .await;
+                // Check before recording (#1536): a turn killed after recording
+                // the output would skip it, and the abort path skips outputs
+                // already in history.
                 mark_thread_memory_mode_polluted_if_external_context(
                     sess.as_ref(),
                     turn_context.as_ref(),
                     &response_item,
                 )
                 .await;
+                sess.record_conversation_items(&turn_context, std::slice::from_ref(&response_item))
+                    .await;
+                if let Some(call_id) = call_id {
+                    turn_context.pending_tool_calls.complete(&call_id);
+                }
             }
             Ok(Err(err)) if matches!(err.details(), CodexErrorDetails::Fatal(_)) => {
                 fatal.get_or_insert(err);

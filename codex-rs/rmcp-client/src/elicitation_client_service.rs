@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use rmcp::RoleClient;
-use rmcp::model::ClientInfo;
+use rmcp::model::ClientConfig;
 use rmcp::model::ClientResult;
 use rmcp::model::CustomRequest;
 use rmcp::model::CustomResult;
@@ -50,7 +50,7 @@ pub(crate) struct ElicitationClientService {
 
 impl ElicitationClientService {
     pub(crate) fn new(
-        client_info: ClientInfo,
+        client_info: ClientConfig,
         send_elicitation: SendElicitation,
         pause_state: ElicitationPauseState,
     ) -> Self {
@@ -69,6 +69,12 @@ impl ElicitationClientService {
             send_elicitation,
             pause_state,
         }
+    }
+
+    /// The same service, sending `protocol_version` in its `initialize` request.
+    pub(crate) fn with_protocol_version(mut self, protocol_version: ProtocolVersion) -> Self {
+        self.handler.set_protocol_version(protocol_version);
+        self
     }
 
     async fn create_elicitation(
@@ -168,7 +174,7 @@ impl Service<RoleClient> for ElicitationClientService {
         .await
     }
 
-    fn get_info(&self) -> ClientInfo {
+    fn get_info(&self) -> ClientConfig {
         <LoggingClientHandler as Service<RoleClient>>::get_info(&self.handler)
     }
 }

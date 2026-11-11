@@ -2,10 +2,10 @@
 
 use super::*;
 
-/// Explains the non-admin sandbox's known limitation (#158) next to the option that selects it.
+/// Names the non-admin sandbox's main gaps next to the option that selects it.
 #[cfg(any(target_os = "windows", test))]
 const LEGACY_SANDBOX_OPTION_DESCRIPTION: &str =
-    "Commands can delete or move files outside your workspace";
+    "Doesn't block reading your files; its network block can be bypassed";
 
 impl ChatWidget {
     #[cfg(any(target_os = "windows", test))]
@@ -359,7 +359,7 @@ impl ChatWidget {
                 "You can still use Corbanu Terminal in a non-admin sandbox. It carries greater risk if prompt injected."
             ]);
             lines.push(line![
-                "In the non-admin sandbox, commands can delete or move files outside your workspace in folders you own, such as most of your user profile.".bold()
+                "The non-admin sandbox blocks writes and deletes outside your workspace except in low-integrity folders, but it can't stop commands from reading your files and its network block can be bypassed.".bold()
             ]);
         } else {
             lines.push(line![
@@ -516,4 +516,232 @@ impl ChatWidget {
 
     #[cfg(not(target_os = "windows"))]
     pub(crate) fn clear_windows_sandbox_setup_status(&mut self) {}
+
+    /// #1506 item 2 (D262): at startup, asks whether to load the `.codex` or
+    /// `.agents` folders of this project that appeared while a Windows
+    /// sandbox command ran. Until confirmed, Core ignores them. D332: the
+    /// same for a `.git` that appeared or changed, which Core warns about.
+    pub(crate) fn maybe_prompt_planted_project_metadata(&mut self) {
+        // #1877 item 5 (D486): read first, so a path recorded again while
+        // (or before) the lists are read counts as recorded after it was
+        // shown, and confirming it asks again.
+        let stamps = codex_config::planted_stamps();
+        // Unreadable records can't be confirmed; the startup warning says so.
+        let codex_config::PlantedProjectMetadata::Known(planted) =
+            codex_config::planted_project_metadata()
+        else {
+            return;
+        };
+        let here = planted_to_ask_about(planted, &self.config);
+        // D420 (#1775): repositories that appeared or changed, same scope as
+        // a `.git`.
+        let git_changes = git_changes_to_ask_about(&self.config);
+        if !here.is_empty() || !git_changes.is_empty() {
+            self.open_planted_prompt(here, git_changes, stamps);
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn open_planted_project_metadata_prompt(&mut self, paths: Vec<PathBuf>) {
+        self.open_planted_prompt(paths, Vec::new(), std::collections::BTreeMap::new());
+    }
+
+    /// The startup prompt for `paths` (recorded folders) and (D420)
+    /// `git_changes`; (#1877 item 5) `stamps`, read before them, say when
+    /// each was recorded, so confirming covers only what is shown.
+    pub(crate) fn open_planted_prompt(
+        &mut self,
+        mut paths: Vec<PathBuf>,
+        git_changes: Vec<codex_config::PlantedGitChange>,
+        stamps: std::collections::BTreeMap<PathBuf, u64>,
+    ) {
+        use ratatui_macros::line;
+
+        // D332 (#1682): a `.git` isn't loaded by Corbanu Terminal, but git
+        // runs its hooks and config outside the sandbox.
+        let (git_dirs, folders): (Vec<&PathBuf>, Vec<&PathBuf>) = paths
+            .iter()
+            .partition(|path| codex_config::is_git_dir(path));
+        let git_dirs: Vec<String> = git_dirs
+            .iter()
+            .map(|path| path.display().to_string())
+            .chain(
+                git_changes
+                    .iter()
+                    .map(codex_config::PlantedGitChange::describe),
+            )
+            .collect();
+        let mut lines = vec![line!["Possibly planted project folders".bold()]];
+        if !folders.is_empty() {
+            lines.push(line![""]);
+            lines.push(line![
+                "These folders appeared while a Windows sandbox command ran, so a command may have planted them. Corbanu Terminal isn't loading their config, hooks or skills:"
+            ]);
+            for path in &folders {
+                lines.push(line![format!("  {}", path.display()).cyan()]);
+            }
+        }
+        // D283: a recorded folder that isn't `.codex`/`.agents` is one the
+        // sandbox couldn't list when a command ended.
+        let unlisted = folders.iter().any(|path| {
+            !path.file_name().is_some_and(|name| {
+                name.eq_ignore_ascii_case(".codex") || name.eq_ignore_ascii_case(".agents")
+            })
+        });
+        if unlisted {
+            lines.push(line![
+                "A folder other than .codex or .agents couldn't be listed when a command ended, so nothing below it is loaded; make it readable and check it first."
+            ]);
+        }
+        if !git_dirs.is_empty() {
+            lines.push(line![""]);
+            lines.push(line![
+                "These git folders appeared or changed while a Windows sandbox command ran, so a command may have planted them. Git runs their hooks and config outside the sandbox whenever you run git there:"
+            ]);
+            // At most 20, as the startup warning (rule 4).
+            for item in git_dirs.iter().take(20) {
+                lines.push(line![format!("  {item}").cyan()]);
+            }
+            if git_dirs.len() > 20 {
+                lines.push(line![format!("  and {} more", git_dirs.len() - 20).cyan()]);
+            }
+        }
+        let git_only = folders.is_empty();
+        lines.push(if git_only {
+            line!["Check their hooks and config before you confirm them.".bold()]
+        } else if git_dirs.is_empty() {
+            line!["Check their contents before you load them.".bold()]
+        } else {
+            line![
+                "Check their contents (for a .git, its hooks and config) before you load or confirm them."
+                    .bold()
+            ]
+        });
+        // Confirming covers the changed repositories too.
+        paths.extend(git_changes.into_iter().map(|change| change.path));
+        // #1877 item 5: each once (a folder can be both).
+        paths.sort();
+        paths.dedup();
+        let mut header = ColumnRenderable::new();
+        header.push(*Box::new(Paragraph::new(lines).wrap(Wrap { trim: false })));
+
+        let (keep, confirm, confirm_description, confirmed) = if git_only {
+            (
+                "Keep warning me",
+                "Confirm them",
+                "I checked them; stop warning about them",
+                "Confirmed.",
+            )
+        } else {
+            (
+                "Keep ignoring them",
+                "Load them",
+                "I checked them; load them from the next start",
+                "Confirmed. Restart Corbanu Terminal to load them.",
+            )
+        };
+        let items = vec![
+            SelectionItem {
+                name: keep.to_string(),
+                description: Some("Ask again next time".to_string()),
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: confirm.to_string(),
+                description: Some(confirm_description.to_string()),
+                actions: vec![Box::new(move |tx| {
+                    let refused = confirm_planted_project_metadata(&paths, &stamps);
+                    let message = if refused.is_empty() {
+                        confirmed.to_string()
+                    } else if refused.len() < paths.len() {
+                        format!("{confirmed} Except: {}", refused.join("; "))
+                    } else {
+                        format!("Couldn't confirm them: {}", refused.join("; "))
+                    };
+                    tx.send(AppEvent::InsertHistoryCell(Box::new(
+                        crate::history_cell::new_info_event(message, /*hint*/ None),
+                    )));
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+        ];
+        self.bottom_pane.show_selection_view(SelectionViewParams {
+            title: None,
+            footer_hint: Some(standard_popup_hint_line()),
+            items,
+            header: Box::new(header),
+            ..Default::default()
+        });
+    }
+}
+
+/// D420 (#1775): the repositories that appeared or changed that the startup
+/// prompt asks about, in the scope of [`planted_to_ask_about`]'s `.git`s.
+fn git_changes_to_ask_about(config: &Config) -> Vec<codex_config::PlantedGitChange> {
+    let changes = codex_config::planted_git_changes();
+    if changes.is_empty() {
+        return changes;
+    }
+    let cwd = config.cwd.as_path();
+    let writable = codex_windows_sandbox::legacy_writable_roots(
+        &config.permissions.file_system_sandbox_policy(),
+        config.permissions.workspace_roots(),
+        cwd,
+    );
+    codex_config::git_changes_to_show(changes, &writable, cwd)
+}
+
+/// The recorded folders the startup prompt asks about: those in the working
+/// folder or a folder above it (where Core loads `.codex`/`.agents` from),
+/// and (D424, #1775) any `.git` below the working folder or in a folder
+/// Windows sandbox commands may write to, since git runs anywhere.
+pub(super) fn planted_to_ask_about(planted: Vec<PathBuf>, config: &Config) -> Vec<PathBuf> {
+    let cwd = config.cwd.as_path();
+    let writable = codex_windows_sandbox::legacy_writable_roots(
+        &config.permissions.file_system_sandbox_policy(),
+        config.permissions.workspace_roots(),
+        cwd,
+    );
+    let git_dirs = codex_config::PlantedProjectMetadata::Known(planted.clone())
+        .git_dirs_to_show(&writable, cwd);
+    let cwd = dunce::canonicalize(cwd).unwrap_or_else(|_| cwd.into());
+    planted
+        .into_iter()
+        .filter(|path| {
+            git_dirs.contains(path)
+                || path.parent().is_some_and(|parent| {
+                    let parent = dunce::canonicalize(parent).unwrap_or_else(|_| parent.into());
+                    cwd.starts_with(&parent)
+                })
+        })
+        .collect()
+}
+
+/// Confirms each of `paths` as shown (#1877 item 5: with its stamp from
+/// `stamps`) and says why each that can't be (recorded again since, or a
+/// command that may change it still runs) wasn't; those stay recorded and
+/// are asked about again, and the others are still confirmed.
+#[cfg(target_os = "windows")]
+fn confirm_planted_project_metadata(
+    paths: &[PathBuf],
+    stamps: &std::collections::BTreeMap<PathBuf, u64>,
+) -> Vec<String> {
+    paths
+        .iter()
+        .filter_map(|path| {
+            codex_windows_sandbox::confirm_planted_project_metadata(path, stamps.get(path).copied())
+                .err()
+                .map(|err| format!("{err:#}"))
+        })
+        .collect()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn confirm_planted_project_metadata(
+    _paths: &[PathBuf],
+    _stamps: &std::collections::BTreeMap<PathBuf, u64>,
+) -> Vec<String> {
+    Vec::new()
 }

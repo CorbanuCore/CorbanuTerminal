@@ -21,6 +21,7 @@ use tokio::sync::oneshot;
 use crate::agent::control::AgentExecutionGuard;
 use crate::agent::control::NativeAutoTurnGuard;
 use crate::mcp_tool_call::McpToolApprovalMetadata;
+use crate::session::TurnInput;
 use crate::session::TurnInputQueue;
 use crate::session::turn_context::TurnContext;
 use crate::tasks::AnySessionTask;
@@ -109,6 +110,8 @@ pub(crate) struct TurnState {
     pub(crate) has_memory_citation: bool,
     pub(crate) token_usage_at_turn_start: TokenUsage,
     mailbox_message_ids: HashSet<String>,
+    /// #1952 (D485): mailbox messages handed to this turn as input, recorded or not.
+    taken_mailbox_message_ids: HashSet<String>,
 }
 
 /// An open approval prompt. #945: it remembers the policy marker (epoch
@@ -134,6 +137,37 @@ impl TurnState {
 
     pub(crate) fn take_mailbox_message_ids(&mut self) -> Vec<String> {
         self.mailbox_message_ids.drain().collect()
+    }
+
+    /// #1952 (D485): notes the mailbox messages among `inputs`, which this turn has taken off
+    /// the mailbox queue. Call it in the same step as the take, with no await in between.
+    pub(crate) fn track_taken_mailbox_messages<'a>(
+        &mut self,
+        inputs: impl IntoIterator<Item = &'a TurnInput>,
+    ) {
+        self.taken_mailbox_message_ids
+            .extend(inputs.into_iter().filter_map(|input| match input {
+                TurnInput::InterAgentCommunication(communication) => {
+                    communication.message_id.clone()
+                }
+                TurnInput::UserInput { .. } | TurnInput::ResponseItem(_) => None,
+            }));
+    }
+
+    /// #1952 (D485): the mailbox messages this turn took but never recorded (`recorded` holds
+    /// those it did), leaving out any still deferred to re-admission, which outlives the turn.
+    pub(crate) fn take_unrecorded_mailbox_message_ids(
+        &mut self,
+        recorded: &[String],
+    ) -> Vec<String> {
+        let taken = std::mem::take(&mut self.taken_mailbox_message_ids);
+        taken
+            .into_iter()
+            .filter(|message_id| {
+                !recorded.contains(message_id)
+                    && !self.pending_input.defers_mailbox_message(message_id)
+            })
+            .collect()
     }
 
     pub(crate) fn insert_pending_approval(

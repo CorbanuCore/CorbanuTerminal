@@ -178,3 +178,36 @@ fn flat_name_for_matches_the_offered_name_without_collisions() {
         "exec_command"
     );
 }
+
+/// #688: a call of a tool this request does not offer replays under a name no
+/// offered tool has, even when an offered tool took its preferred name.
+#[test]
+fn unoffered_tool_name_never_matches_an_offered_tool() {
+    let orders = ToolName::namespaced("mcp__orders", "lookup");
+    assert_eq!(
+        unoffered_flat_tool_name(&orders, &HashSet::from(["lookup"])),
+        "mcp__orders__lookup"
+    );
+
+    let hashed = unoffered_flat_tool_name(&orders, &HashSet::from(["mcp__orders__lookup"]));
+    assert_ne!(hashed, "mcp__orders__lookup");
+    assert!(is_portable_tool_name(&hashed), "{hashed}");
+
+    // Even the first hashed form is skipped when an offered tool has it.
+    let offered = HashSet::from(["mcp__orders__lookup", hashed.as_str()]);
+    let next = unoffered_flat_tool_name(&orders, &offered);
+    assert!(
+        !offered.contains(next.as_str()) && is_portable_tool_name(&next),
+        "{next}"
+    );
+}
+
+#[test]
+fn builtin_namespaces_include_core_defaults() {
+    for namespace in [
+        crate::tools::handlers::multi_agents_spec::MULTI_AGENT_V1_NAMESPACE,
+        crate::config::DEFAULT_MULTI_AGENT_V2_TOOL_NAMESPACE,
+    ] {
+        assert!(BUILTIN_TOOL_NAMESPACES.contains(&namespace), "{namespace}");
+    }
+}
