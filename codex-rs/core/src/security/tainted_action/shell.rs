@@ -835,6 +835,7 @@ impl Lexer {
             _ => {}
         }
         for &index in &finished.fed_by {
+            work::step();
             self.feeds_finished[index] = true;
         }
         self.feeds_finished.push(false);
