@@ -155,6 +155,7 @@ unbuilt controls read "not available".
 | --- | --- | --- | --- | --- |
 | Jim Ricketts (qualification lane) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf13-s07-20261007` | `feat/pf-13-s07-qualification-20261007` | `64137b71894f` | PF-13-S07 (`ready`) |
 | Contributor integration coordinator (broker lane) | `/Volumes/CorbanuDrive/Corbanu/.codex-work/contrib-1111-1837` | `maint/contrib-1837-1111` | `2cfd034860f7` | PF-23-S04 (`in_progress`), approved contributor integration #2106 |
+| Contributor integration coordinator (reservation returned) | `/Volumes/CorbanuDrive/Corbanu/.codex-work/contrib-1111-88` | `maint/contrib-88-1111` | `5c7d8ed06095f` | PF-84-S07 (`draft`); Stage A preserved in #2115, explicit handoff in sprint; reactivate only after serialized chroot integration or a genuinely disjoint allocation |
 | Windows-host gate owner | released | released | released | PF-27-S06 completed and archived 2026-10-08 |
 | broker lane worker | released | released | released | PF-27-S07 completed and archived 2026-10-08 |
 | broker lane worker (2026-10-08) | released | released | released | PF-27-S08 completed and archived 2026-10-09 |

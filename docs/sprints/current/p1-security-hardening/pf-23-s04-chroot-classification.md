@@ -60,9 +60,10 @@ finder/exec launcher coverage, authentication recovery and other contributor fea
 - [x] Frozen independent [code-blind design](../../../../qa/security-levels/sprints/PF-23-S04/codeblind-design.md) before functional execution; all eleven cases remain unexecuted.
 - [x] Initial integrated classifier: 404/404 passed; independent review nevertheless found inherited script-input loss. New regression reproduced it; repair and final qualification remain in progress.
 
+- [x] Closed inherited script-input finding with red/green tests and independent repair review; pre-reconciliation classifier406/406 passed. Recorded corpus:5397 cases/10794 verdicts,62 new asks,0 quieter outcomes,0 kind changes or panics. Combined current-main replay remains required below.
+
 ## Remaining
 
-- [ ] Close inherited script-input review finding with red/green tests and authorized delta review.
 - [ ] Format and run final-tree focused chroot and full classifier tests.
 - [ ] Verify no verdict becomes quieter on the recorded comparison corpus.
 - [ ] Independent exact-head security review and all CI complete green.
