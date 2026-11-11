@@ -13,6 +13,9 @@ mod issue_1309_line_writes;
 #[path = "issue_1704_code_tables_tests.rs"]
 mod issue_1704_code_tables;
 
+#[path = "issue_1901_disguised_stat_load_tests.rs"]
+mod issue_1901_disguised_stat_load;
+
 #[path = "issue_1276_to_1620_tests.rs"]
 mod issue_1276_to_1620;
 
@@ -1077,6 +1080,10 @@ async fn pf_30_s03_orchestrator_rechecks_after_the_prompt() {
                 .features
                 .enable(codex_features::Feature::SourceEnvelopes)
                 .expect("source envelopes");
+            // #1976: a Windows machine with its sandbox set up (the probe
+            // runs nothing), so Moderate does not refuse the run up front.
+            config.permissions.windows_sandbox_mode =
+                Some(codex_config::types::WindowsSandboxModeToml::Elevated);
         })
         .await
         .expect("session");
@@ -5202,10 +5209,11 @@ fn issue_1268_git_given_input_words_asks() {
             "printf 'core.pager sh\\n' | xargs -i sh -c 'cd . && git config {}'",
             UnseenCode,
         ),
-        ("xargs -i sh -c 'cd . && git config {}' < keys", UnseenCode),
+        // #1975: retaining the placeholder exposes the input-fed config write.
+        ("xargs -i sh -c 'cd . && git config {}' < keys", Persistence),
         (
             "xargs --replace sh -c 'cd . && git config {}' < keys",
-            UnseenCode,
+            Persistence,
         ),
         (
             "printf 'core.pager\\nsh\\n' | parallel -N2 'cd . && git config'",
@@ -11606,6 +11614,94 @@ fn issue1845_short_loop_walk_is_linear() {
     ] {
         work::assert_linear(label, |scale| {
             let _ = script(&format!("if {}read -A arr", unit.repeat(100 * scale)));
+        });
+    }
+}
+
+/// #1821: a sudo that a finder's exec option starts gets the same helper and
+/// chroot checks as one at the start of the line (`sudo_runs_helper`, with
+/// #1773's chroot reading), in bash and zsh, for `-exec`, `-execdir`, `-ok`
+/// and `-okdir`, under `find` and `bfs`. Only adds prompts.
+#[test]
+fn issue1821_finder_exec_sudo_gets_line_start_checks() {
+    use ProtectedActionKind::UnseenCode;
+    let mut wrong = Vec::new();
+    let mut asks = Vec::new();
+    for start in ["-exec", "-execdir", "-ok", "-okdir"] {
+        for sudo in [
+            "sudo -R ./root true",
+            "sudo --chroot=./root true",
+            "sudo --chroot ./root true",
+            "sudo -A ./x",
+            "sudo --askpass ./x",
+            "sudo -e f",
+            "sudoedit f",
+        ] {
+            asks.push(format!("find . {start} {sudo} ';'"));
+        }
+    }
+    asks.extend(
+        [
+            "bfs . -exec sudo -A ./x ';'",
+            "find . -exec sudo -A ./x {} +",
+            "find . -name x -exec true ';' -exec sudo -e f ';'",
+            "nice find . -exec sudo --chroot=./root true ';'",
+            // Review round 1: a later exec option after another word.
+            "find . -exec true \\; -o -exec sudo -A ./x \\;",
+            "find . -exec true ';' ! -exec sudo -e f ';'",
+            "find . -exec true \\; -a -exec sudoedit f \\;",
+            "find . -exec echo {} + -exec sudo -e f \\;",
+            "find . -name '*.sh' -exec chmod +x {} + -exec sudo -A ./install {} +",
+            // Any finder spelling.
+            "gfind . -exec sudo -e f \\;",
+        ]
+        .map(String::from),
+    );
+    // Controls: unchanged must-ask lines, and finder lines that run no
+    // helper or chroot.
+    let line_start = [
+        "sudo -R ./root true",
+        "sudo --chroot=./root true",
+        "sudo -A ./x",
+        "sudo -e f",
+        "sudoedit f",
+    ];
+    let quiet = [
+        "find . -name x -exec sudo true ';'",
+        "find . -exec sudo -u root true ';'",
+        "find . -exec true ';'",
+        "find . -exec grep -e x {} ';'",
+        "find . -exec ls -R ';'",
+        "find . -name '*.rs' -print",
+        "grep -e x -exec f",
+    ];
+    for shell in ["/bin/bash", "/bin/zsh"] {
+        for command in asks.iter().map(String::as_str).chain(line_start) {
+            if kind(&[shell, "-lc", command]) != Some(UnseenCode) {
+                wrong.push(format!("asks {shell}: {command}"));
+            }
+        }
+        for command in quiet {
+            if kind(&[shell, "-lc", command]).is_some() {
+                wrong.push(format!("quiet {shell}: {command}"));
+            }
+        }
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+}
+
+/// #1821: the finder exec reading stays linear, also with many exec
+/// commands and long sudo option runs.
+#[test]
+fn issue1821_finder_exec_sudo_is_linear() {
+    for (label, unit) in [
+        ("exec commands", "-exec sudo -p x true ';' "),
+        ("option runs", "-exec sudo -u a -g b -p c -C 3 true ';' "),
+        // Review: a `;` the lexer keeps, so one command holds many ranges.
+        ("ranges in one command", "-exec sudo -p x true $';' "),
+    ] {
+        work::assert_linear(label, |scale| {
+            let _ = script(&format!("find . {}", unit.repeat(100 * scale)));
         });
     }
 }

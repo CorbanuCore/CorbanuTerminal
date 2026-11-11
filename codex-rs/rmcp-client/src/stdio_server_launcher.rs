@@ -25,7 +25,6 @@ use std::sync::atomic::Ordering;
 use std::thread::sleep;
 #[cfg(unix)]
 use std::thread::spawn;
-#[cfg(unix)]
 use std::time::Duration;
 
 use anyhow::Result;
@@ -40,6 +39,8 @@ use codex_utils_path_uri::LegacyAppPathString;
 use codex_utils_path_uri::PathUri;
 #[cfg(unix)]
 use codex_utils_pty::process_group::kill_process_group;
+#[cfg(unix)]
+use codex_utils_pty::process_group::process_group_exists;
 #[cfg(unix)]
 use codex_utils_pty::process_group::terminate_process_group;
 use futures::FutureExt;
@@ -215,6 +216,13 @@ impl StdioServerLauncher for LocalStdioServerLauncher {
 
 #[cfg(unix)]
 const PROCESS_GROUP_TERM_GRACE_PERIOD: Duration = Duration::from_secs(2);
+
+/// How long the legacy fallback waits for a terminated server to exit before starting
+/// another one.
+pub(crate) const TERMINATED_SERVER_EXIT_WAIT: Duration = Duration::from_secs(2);
+
+#[cfg(unix)]
+const EXIT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 #[cfg(unix)]
 struct LocalProcessTerminator {
@@ -411,6 +419,25 @@ impl StdioServerProcessHandle {
             }),
         }
     }
+
+    /// Waits up to `limit` for a terminated local server's process group to exit. Remote
+    /// servers and other platforms return at once: the executor owns remote processes, and
+    /// `taskkill /F` on Windows has already waited.
+    #[cfg(unix)]
+    pub(crate) async fn wait_for_exit(&self, limit: Duration) {
+        let StdioServerProcessKind::Local(Some(terminator)) = &self.inner.kind else {
+            return;
+        };
+        let deadline = tokio::time::Instant::now() + limit;
+        while matches!(process_group_exists(terminator.process_group_id), Ok(true))
+            && tokio::time::Instant::now() < deadline
+        {
+            tokio::time::sleep(EXIT_POLL_INTERVAL).await;
+        }
+    }
+
+    #[cfg(not(unix))]
+    pub(crate) async fn wait_for_exit(&self, _limit: Duration) {}
 
     pub(crate) async fn terminate(&self) -> io::Result<()> {
         if self.inner.terminated.swap(true, Ordering::AcqRel) {

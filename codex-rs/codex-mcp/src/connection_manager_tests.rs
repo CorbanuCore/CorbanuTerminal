@@ -66,7 +66,7 @@ use rmcp::model::NumberOrString;
 use rmcp::model::PaginatedRequestParams;
 use rmcp::model::ProtocolVersion;
 use rmcp::model::ServerCapabilities;
-use rmcp::model::ServerInfo;
+use rmcp::model::ServerConfig;
 use rmcp::model::Tool;
 use rmcp::service::RequestContext;
 use std::collections::HashMap;
@@ -239,8 +239,8 @@ struct RefreshTestTransportFactory {
 }
 
 impl ServerHandler for RefreshTestTransportFactory {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
     }
 
     async fn list_tools(
@@ -287,8 +287,8 @@ struct MutableToolsServer {
 }
 
 impl ServerHandler for MutableToolsServer {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
     }
 
     async fn list_tools(
@@ -2918,6 +2918,7 @@ async fn no_local_runtime_fails_local_stdio_but_keeps_local_http_server() {
                 supports_parallel_tool_calls: false,
                 disabled_reason: None,
                 startup_timeout_sec: None,
+                discover_timeout_sec: None,
                 tool_timeout_sec: None,
                 default_tools_approval_mode: None,
                 enabled_tools: None,
@@ -2944,6 +2945,7 @@ async fn no_local_runtime_fails_local_stdio_but_keeps_local_http_server() {
                 supports_parallel_tool_calls: false,
                 disabled_reason: None,
                 startup_timeout_sec: None,
+                discover_timeout_sec: None,
                 tool_timeout_sec: None,
                 default_tools_approval_mode: None,
                 enabled_tools: None,
@@ -3039,6 +3041,7 @@ async fn pending_http_startup_manager() -> (
         supports_parallel_tool_calls: false,
         disabled_reason: None,
         startup_timeout_sec: Some(Duration::from_secs(30)),
+        discover_timeout_sec: None,
         tool_timeout_sec: None,
         default_tools_approval_mode: None,
         enabled_tools: None,
@@ -3183,6 +3186,7 @@ fn mcp_init_error_display_prompts_for_github_pat() {
         supports_parallel_tool_calls: false,
         disabled_reason: None,
         startup_timeout_sec: None,
+        discover_timeout_sec: None,
         tool_timeout_sec: None,
         default_tools_approval_mode: None,
         enabled_tools: None,
@@ -3274,6 +3278,7 @@ fn mcp_init_error_display_reports_generic_errors() {
         supports_parallel_tool_calls: false,
         disabled_reason: None,
         startup_timeout_sec: None,
+        discover_timeout_sec: None,
         tool_timeout_sec: None,
         default_tools_approval_mode: None,
         enabled_tools: None,
@@ -3325,6 +3330,7 @@ fn reusable_server_config(url: &str) -> McpServerConfig {
         supports_parallel_tool_calls: false,
         disabled_reason: None,
         startup_timeout_sec: None,
+        discover_timeout_sec: None,
         tool_timeout_sec: None,
         default_tools_approval_mode: None,
         enabled_tools: None,

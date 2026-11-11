@@ -363,8 +363,22 @@ async fn d447_shell_command_after_untrusted_content_gets_the_entry() {
                 crate::tools::handlers::ExecCommandHandler::default()
                     .handle(invocation)
                     .await
+            };
+            // #1976 (D491): on Windows without its sandbox (as here), Moderate
+            // refuses the command before it runs.
+            if cfg!(windows) {
+                let message = match &response {
+                    Err(err) => format!("{err:?}"),
+                    Ok(_) => String::new(),
+                };
+                assert!(
+                    message.contains("Security level Moderate refused this command"),
+                    "{tool} tainted={tainted}: {message}"
+                );
+                continue;
             }
-            .unwrap_or_else(|err| panic!("{tool} tainted={tainted}: {err:?}"));
+            let response =
+                response.unwrap_or_else(|err| panic!("{tool} tainted={tainted}: {err:?}"));
             let text = match response.to_response_item(
                 "call-git",
                 &ToolPayload::Function {
