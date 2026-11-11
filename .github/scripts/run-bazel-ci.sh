@@ -91,29 +91,31 @@ esac
 
 resolve_bazel_testlogs_dir() {
   local -a bazel_info_args=(info)
-  if [[ -n "${BUILDBUDDY_API_KEY:-}" ]]; then
-    # `bazel info` needs the same CI config as the failed test invocation so
-    # platform-specific output roots match. On Windows, omitting `ci-windows`
-    # would point at `local_windows-fastbuild` even when the test ran with the
-    # MSVC host platform under `local_windows_msvc-fastbuild`.
-    bazel_info_args+=("--config=${ci_config}")
-  fi
-
-  # Only pass flags that affect Bazel's output-root selection or repository
-  # lookup. Test/build-only flags such as execution logs or remote download
-  # mode can make `bazel info` fail, which would hide the real test log path.
-  if (( ${#post_config_bazel_args[@]} > 0 )); then
-    for arg in "${post_config_bazel_args[@]}"; do
-      case "$arg" in
-        --host_platform=* | --repo_contents_cache=* | --repository_cache=*)
-          bazel_info_args+=("$arg")
-          ;;
-      esac
-    done
-  fi
-
+  local -a root_startup_args=(--noexperimental_remote_repo_contents_cache)
+  local value_option=""
+  local arg
+  # Use the effective invocation, including caller options, not only the
+  # wrapper's appended flags. Never forward test-only flags to "info".
+  for arg in "${bazel_run_args[@]}"; do
+    if [[ -n "$value_option" ]]; then
+      bazel_info_args+=("$value_option" "$arg")
+      value_option=""
+      continue
+    fi
+    case "$arg" in
+      -c | --compilation_mode | --cpu | --platforms | --host_platform | --config | --define | --features)
+        value_option="$arg"
+        ;;
+      --output_base=* | --output_user_root=*)
+        root_startup_args+=("$arg")
+        ;;
+      --compilation_mode=* | --cpu=* | --platforms=* | --host_platform=* | --config=* | --define=* | --features=* | --platform_suffix=* | --repo_contents_cache=* | --repository_cache=*)
+        bazel_info_args+=("$arg")
+        ;;
+    esac
+  done
   run_bazel_with_startup_args \
-    --noexperimental_remote_repo_contents_cache \
+    "${root_startup_args[@]}" \
     "${bazel_info_args[@]}" \
     bazel-testlogs 2>/dev/null
 }
@@ -442,14 +444,17 @@ for bazel_attempt in 1 2; do
   # A crash retry is a separate invocation. Capture the previous report before
   # Bazel can replace its test logs, and never reuse its BEP file or UUID.
   if [[ -n "$named_evidence_dir" ]]; then
-    if evidence_invocation="$(python3 -c 'import uuid; print(uuid.uuid4())' 2>/dev/null)"; then
+    if { (set -o noclobber; : > "${named_evidence_dir}/events-${bazel_attempt}.json"); } 2>/dev/null \
+      && evidence_invocation="$(python3 -c 'import uuid; print(uuid.uuid4())' 2>/dev/null)"; then
       attempt_args+=(
         "--build_event_json_file=${named_evidence_dir}/events-${bazel_attempt}.json"
+        --nobuild_event_json_file_path_conversion
         "--invocation_id=${evidence_invocation}"
         "--build_metadata=CORBANU_CHECKOUT_SHA=${evidence_checkout}"
       )
     else
-      echo "::warning::Named evidence ID unavailable; tests will still run." >&2
+      evidence_invocation=""
+      echo "::warning::Named evidence destination or ID unavailable; tests will still run." >&2
     fi
   fi
   set +e
@@ -465,6 +470,10 @@ for bazel_attempt in 1 2; do
     2>&1 | tee "$bazel_console_log"
   bazel_status=${PIPESTATUS[0]}
   set -e
+  if [[ $bazel_status -eq $bazel_server_crash_status ]]; then
+    # Any subsequent Bazel command can restart the server and truncate jvm.out.
+    print_bazel_server_log_tails "$bazel_console_log" >&2
+  fi
   if [[ -n "$evidence_invocation" ]]; then
     root_file="${named_evidence_dir}/testlogs-root-${bazel_attempt}.txt"
     if ! { resolve_bazel_testlogs_dir > "$root_file"; } 2>/dev/null; then
@@ -486,7 +495,6 @@ for bazel_attempt in 1 2; do
   if [[ $bazel_status -ne $bazel_server_crash_status ]]; then
     break
   fi
-  print_bazel_server_log_tails "$bazel_console_log" >&2
   if [[ $bazel_attempt -eq 1 ]]; then
     echo "::warning::The Bazel server crashed (exit ${bazel_server_crash_status}); retrying once (#1787)." >&2
   else

@@ -10,21 +10,27 @@ import unittest
 
 
 class NamedWorkflowTest(unittest.TestCase):
-    def run_wrapper(self, codes, enabled=True, corrupt=False):
+    def run_wrapper(self, codes, enabled=True, corrupt=False, blocked=False, optimized=False):
         script = Path(__file__).with_name("run-bazel-ci.sh").resolve()
         with TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             logs = root / "logs"
             logs.mkdir()
+            (root / "logs-opt").mkdir()
+            (root / "server").mkdir()
             evidence = root / "evidence"
             evidence.mkdir()
+            if blocked:
+                (evidence / "events-1.json").mkdir()
             fake = root / "bazel"
             fake.write_text("#!" + sys.executable + "\n" + """
 import json, os, sys
 from pathlib import Path
 root = Path(os.environ["FIXTURE_ROOT"])
+log_root = root / ("logs-opt" if "-c" in sys.argv and sys.argv[sys.argv.index("-c") + 1] == "opt" else "logs")
 if "info" in sys.argv:
-    print(root / "logs")
+    (root / "server" / "jvm.out").write_text("new server")
+    print(log_root)
     sys.exit(0)
 counter = root / "calls"
 attempt = int(counter.read_text()) + 1 if counter.exists() else 1
@@ -33,7 +39,7 @@ codes = json.loads(os.environ["FIXTURE_CODES"])
 code = codes[min(attempt, len(codes)) - 1]
 args = dict(arg[2:].split("=", 1) for arg in sys.argv[1:] if arg.startswith("--") and "=" in arg)
 if "build_event_json_file" in args:
-    log = root / "logs" / "test.log"
+    log = log_root / "test.log"
     status = "FAILED" if code else "ok"
     log.write_text(f"running 1 test\\ntest attempt{attempt} ... {status}\\n"
                    f"test result: {status}. {int(code == 0)} passed; {int(code != 0)} failed; 0 ignored; 0 measured\\n")
@@ -42,7 +48,7 @@ if "build_event_json_file" in args:
         {"buildMetadata": {"metadata": {"CORBANU_CHECKOUT_SHA": args["build_metadata"].split("=", 1)[1]}}},
         {"id": {"testResult": {"label": "//codex-rs/core:unit-tests", "configuration": {"id": "test"}}},
          "testResult": {"status": "FAILED" if code else "PASSED",
-                        "testActionOutput": [{"name": "test.log", "uri": log.as_uri()}]}},
+                        "testActionOutput": [{"name": "test.log", "uri": log.as_uri() if "--nobuild_event_json_file_path_conversion" in sys.argv else "bytestream://fixture/log"}]}},
     ]
     if code != 37:
         events.append({"finished": {"exitCode": {"code": code}}, "lastMessage": True})
@@ -50,6 +56,10 @@ if "build_event_json_file" in args:
     if os.environ.get("CORRUPT"):
         payload = "private malformed BEP"
     Path(args["build_event_json_file"]).write_text(payload)
+if code == 37:
+    crash = root / "server" / "jvm.out"
+    crash.write_text("original crash evidence")
+    print(f"Server terminated abruptly (log file: '{crash}')")
 sys.exit(code)
 """, encoding="utf-8")
             fake.chmod(0o755)
@@ -64,7 +74,10 @@ sys.exit(code)
             args = ["bash", str(script)]
             if enabled:
                 args += ["--named-evidence-dir", str(evidence)]
-            args += ["--", "test", "--", "//codex-rs/core/..."]
+            args += ["--", "test"]
+            if optimized:
+                args += ["-c", "opt"]
+            args += ["--", "//codex-rs/core/..."]
             result = subprocess.run(args, cwd=script.parents[2], env=env,
                                     capture_output=True, text=True, timeout=20)
             reports = [json.loads(path.read_text()) for path in sorted(evidence.glob("report-*.json"))]
@@ -85,6 +98,7 @@ sys.exit(code)
         result, reports, calls = self.run_wrapper([37, 0])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(calls, 2)
+        self.assertIn("original crash evidence", result.stderr)
         self.assertEqual(len(reports), 2)
         self.assertNotEqual(reports[0]["invocationId"], reports[1]["invocationId"])
         self.assertEqual(reports[0]["captureStatus"], "incomplete")
@@ -105,6 +119,16 @@ sys.exit(code)
         self.assertEqual(calls, 1)
         self.assertEqual(reports[0]["issues"], ["malformed_bep"])
         self.assertNotIn("private malformed BEP", result.stdout + result.stderr + json.dumps(reports))
+
+    def test_unavailable_destination_does_not_prevent_tests(self):
+        result, reports, calls = self.run_wrapper([3], blocked=True)
+        self.assertEqual((result.returncode, reports, calls), (3, [], 1))
+        self.assertIn("tests will still run", result.stderr)
+
+    def test_caller_compilation_mode_selects_matching_log_root(self):
+        result, reports, calls = self.run_wrapper([0], optimized=True)
+        self.assertEqual((result.returncode, calls), (0, 1))
+        self.assertEqual(reports[0]["captureStatus"], "complete")
 
     def test_disabled_capture_leaves_existing_wrapper_contract(self):
         result, reports, calls = self.run_wrapper([0], enabled=False)
