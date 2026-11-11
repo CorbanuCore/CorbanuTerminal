@@ -152,6 +152,7 @@ fn issue1808_chroot_inherited_script_input_asks() {
     ];
     let quiet = [
         "cat payload | chroot / cat",
+        "cat payload | chroot / chroot / cat",
         "chroot / cat <payload",
         "chroot / sh -c 'echo ok' <payload",
         "echo text | chroot / true",
@@ -180,6 +181,7 @@ fn issue1808_chroot_reading_is_linear() {
     // `eval`), and option runs.
     for (label, unit, tail) in [
         ("nested chroots", "chroot / ", "true"),
+        ("nested with input", "chroot / ", "sh"),
         ("nested through eval", "eval chroot / ", "true"),
         (
             "option runs",
@@ -190,6 +192,8 @@ fn issue1808_chroot_reading_is_linear() {
         work::assert_linear(label, |scale| {
             let line = if label == "option runs" {
                 format!("chroot {}{tail}", unit.repeat(100 * scale))
+            } else if label == "nested with input" {
+                format!("cat payload | {}{tail}", unit.repeat(100 * scale))
             } else {
                 format!("{}{tail}", unit.repeat(100 * scale))
             };

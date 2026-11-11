@@ -891,6 +891,13 @@ pub(super) fn chroot_reads_code_input(
     if !fed {
         return false;
     }
+    // Nested chroots inherit the same input; walk forward without rebuilding
+    // argv and losing the outer pipe/redirection again.
+    let mut from = from;
+    while let Some((next, _)) = chroot_commands(simple, words, from).into_iter().next() {
+        work::step();
+        from = next;
+    }
     let unheld = unredirected(simple, words, from);
     let run = unheld
         .as_deref()
