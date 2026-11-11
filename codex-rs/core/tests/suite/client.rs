@@ -1432,6 +1432,63 @@ async fn provider_auth_command_refreshes_after_401() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn provider_auth_command_does_not_refresh_plan_entitlement_401() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = MockServer::start().await;
+    let auth_fixture = ProviderAuthCommandFixture::new(&["first-token", "second-token"])?;
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .respond_with(ResponseTemplate::new(401).set_body_json(json!({
+            "error": {"type": "invalid_request_error", "message": "context tokens exceed this plan"}
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let provider = ModelProviderInfo {
+        base_url: Some(format!("{}/v1", server.uri())),
+        auth: Some(auth_fixture.auth()),
+        env_key: None,
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        ..ModelProviderInfo::create_anthropic_provider()
+    };
+    let test = test_codex()
+        .with_config(move |config| {
+            config.model = Some("claude-opus-5".to_owned());
+            config.model_provider_id = "anthropic".to_owned();
+            config.model_provider = provider;
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    test.codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "hello".to_owned(),
+                text_elements: vec![],
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        })
+        .await?;
+    let mut saw_entitlement_error = false;
+    loop {
+        match test.codex.next_event().await?.msg {
+            EventMsg::Error(error) => {
+                assert!(error.message.contains("plan"), "expected plan guidance");
+                saw_entitlement_error = true;
+            }
+            EventMsg::TurnComplete(_) => break,
+            _ => {}
+        }
+    }
+    assert!(saw_entitlement_error);
+    assert_eq!(auth_fixture.refresh_signals(), ["0"]);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn amazon_bedrock_proxy_uses_command_auth_and_custom_headers() {
     skip_if_no_network!();
 
