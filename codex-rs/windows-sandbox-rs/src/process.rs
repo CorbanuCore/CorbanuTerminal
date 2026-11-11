@@ -48,6 +48,20 @@ pub enum ConsoleMode {
     NoWindow,
 }
 
+/// The environment block for `CreateProcess*`: sorted, each name once.
+///
+/// Windows names ignore case, so `Path` and `PATH` are one variable, and a
+/// block holding both breaks programs that read it into a case-insensitive
+/// table (Windows PowerShell's `Start-Process` fails with "Item has already
+/// been added", #1805). Of several spellings of one name the block keeps the
+/// one that sorts first (by its upper-case form, then ordinally: `PATH`
+/// before `Path` before `path`); the block was already in that order, and
+/// only the later spellings go. The product spells the variables it sets in
+/// capitals, so its own values win, and it replaces the other spellings of
+/// `PATH` and `PATHEXT` when it changes them (`env.rs`). Lower-case twins
+/// the product sets on purpose (the managed proxy's `http_proxy`, say) go
+/// too: Windows programs read the capitals, but a program that reads only
+/// the lower-case name (MSYS2 `curl`) no longer sees it.
 pub fn make_env_block(env: &HashMap<String, String>) -> Vec<u16> {
     let mut items: Vec<(String, String)> =
         env.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
@@ -56,6 +70,7 @@ pub fn make_env_block(env: &HashMap<String, String>) -> Vec<u16> {
             .cmp(&b.0.to_uppercase())
             .then(a.0.cmp(&b.0))
     });
+    items.dedup_by(|later, kept| later.0.to_uppercase() == kept.0.to_uppercase());
     let mut w: Vec<u16> = Vec::new();
     for (k, v) in items {
         let mut s = to_wide(format!("{k}={v}"));
@@ -84,6 +99,15 @@ unsafe fn ensure_inheritable_stdio(si: &mut STARTUPINFOW) -> Result<()> {
     Ok(())
 }
 
+/// The job a sandboxed command runs in. Its members can't break away
+/// (#733 for the legacy backend, whose writable roots stay labelled Low only
+/// while its integrity lease is held; D256/#1507 for the elevated backend's
+/// runner), so none of a command's descendants outlives the job that
+/// cancellation, timeouts and the lease release act on.
+pub(crate) fn sandbox_job() -> std::io::Result<JobObject> {
+    JobObject::create_without_breakaway()
+}
+
 /// # Safety
 /// Caller must provide a valid primary token handle (`h_token`) with appropriate access,
 /// and the `argv`, `cwd`, and `env_map` must remain valid for the duration of the call.
@@ -107,7 +131,7 @@ pub unsafe fn create_process_as_user(
         crate::integrity::token_is_low_integrity(h_token),
         logs_base_dir,
     )?;
-    let job = Arc::new(JobObject::create().context("create process job")?);
+    let job = Arc::new(sandbox_job().context("create process job")?);
     let mut pi: PROCESS_INFORMATION = std::mem::zeroed();
     let cwd_wide = to_wide(cwd);
     let env_block_len = env_block.len();

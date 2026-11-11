@@ -146,7 +146,7 @@ const SAFE_GIT_KEYS: &[&str] = &[
 ];
 const SAFE_GIT_KEY_PREFIXES: &[&str] = &["color.", "advice."];
 /// git options before the subcommand that take the next word as their value.
-const GIT_VALUE_OPTIONS: &[&str] = &[
+pub(super) const GIT_VALUE_OPTIONS: &[&str] = &[
     "-C",
     "--git-dir",
     "--work-tree",
@@ -332,10 +332,19 @@ pub(super) fn sets_code_variable(
         && words[start..]
             .iter()
             .any(|word| word.starts_with('-') && !word.starts_with("--") && word.contains('n'));
+    // #1774: the written positions marked once, not looked up in `writes_to`
+    // (one index per output redirection) for each word (`export >a >a …`).
+    let mut writes_here = vec![false; words.len()];
+    for at in &simple.writes_to {
+        work::step();
+        if let Some(written) = writes_here.get_mut(*at) {
+            *written = true;
+        }
+    }
     let redirect = |at: usize| {
-        simple.stdin_from == Some(at)
-            || simple.here_string == Some(at)
-            || simple.writes_to.contains(&at)
+        simple.stdin_from.binary_search(&at).is_ok()
+            || simple.here_string.binary_search(&at).is_ok()
+            || writes_here.get(at).copied().unwrap_or(false)
     };
     // A name the classifier cannot see, or one in any case when it came
     // from a variable: a value given the uppercase attribute (`declare -u
@@ -448,6 +457,15 @@ fn names_in_any_case(operand: &str) -> bool {
     })
 }
 
+/// Whether a lowercase Git key is known never to name a command.
+/// Shared by command-line overrides and persistent local configuration.
+pub(super) fn safe_git_key(key: &str) -> bool {
+    SAFE_GIT_KEYS.contains(&key)
+        || SAFE_GIT_KEY_PREFIXES
+            .iter()
+            .any(|prefix| key.starts_with(prefix))
+}
+
 /// Whether git's options before its subcommand (`args`, as written) set a
 /// config key that may name a command (`-c core.pager=x`, `--config-env`)
 /// or point git at other programs (`--exec-path=dir`), or may do so through
@@ -489,10 +507,7 @@ fn git_runs_code_until(args: &[String], raw: &[String], other_git_names_stop: bo
             .split_once('=')
             .map_or(setting, |(key, _)| key)
             .to_ascii_lowercase();
-        !(SAFE_GIT_KEYS.contains(&key.as_str())
-            || SAFE_GIT_KEY_PREFIXES
-                .iter()
-                .any(|prefix| key.starts_with(prefix)))
+        !safe_git_key(&key)
     };
     let unseen_text = |word: &str| word.contains('$') || word.contains(shell::UNSEEN_OUTPUT);
     // An expansion, as written too (a known value may be cut short: `a=(…)`,
@@ -503,9 +518,11 @@ fn git_runs_code_until(args: &[String], raw: &[String], other_git_names_stop: bo
             || raw.get(at).is_some_and(|word| unseen_text(word))
     };
     // #1159: `git.exe` too (a dashed helper takes no git options, so it
-    // does not end them).
+    // does not end them). #1515: and zsh's `=git`, whose own scan reads on
+    // from there, so a line of many stays linear.
     let is_git = |word: &str| {
         shell::basename(word).eq_ignore_ascii_case("git")
+            || super::indirect::equals_git(word)
             || (other_git_names_stop && super::git_helpers::git_name(word) == Some(None))
     };
     // Past the first word that is not an option: only settings with a
@@ -579,6 +596,220 @@ fn git_runs_code_until(args: &[String], raw: &[String], other_git_names_stop: bo
         index += 1;
     }
     false
+}
+
+/// #932 measuring: which reading of `sets_code_variable` holds, as a short
+/// tag (the variable, the form that set it, the class of its value and the
+/// command), for the local measuring harness. Never holds a line's text
+/// beyond a command name and a value from a fixed list.
+#[cfg(test)]
+pub(super) fn sets_code_variable_why(
+    simple: &SimpleCommand,
+    words: &[String],
+    command: Option<&(usize, String)>,
+    foreign: bool,
+) -> String {
+    let (index, cmd) = command.map_or((words.len(), "-"), |(index, name)| (*index, name.as_str()));
+    let cmd = short_name(cmd);
+    let raw = &simple.words;
+    let found = raw
+        .iter()
+        .enumerate()
+        .map(|(at, word)| (at, word, "raw"))
+        .chain(
+            words
+                .iter()
+                .enumerate()
+                .map(|(at, word)| (at, word, "subst")),
+        )
+        .find(|(_, word, _)| names_code_variable(word));
+    let Some((at, word, view)) = found else {
+        let why = unseen_name_why(simple, words, index, &cmd);
+        return format!("codevar sub=unseen {why} cmd={cmd} foreign={foreign}");
+    };
+    let pos = match at.cmp(&index) {
+        std::cmp::Ordering::Less => "leading",
+        std::cmp::Ordering::Equal => "command",
+        std::cmp::Ordering::Greater => "operand",
+    };
+    let (sub, name, value) = names_code_variable_how(word);
+    format!(
+        "codevar sub={sub} name={name} value={value} pos={pos} view={view} cmd={cmd} foreign={foreign}"
+    )
+}
+
+/// #932 measuring: which reading of a name `sets_code_variable` cannot
+/// see (or of a set-only variable) holds: the branch and the shape of the
+/// name (`$1`, `$x`, `$(…)`), approximately.
+#[cfg(test)]
+fn unseen_name_why(simple: &SimpleCommand, words: &[String], index: usize, cmd: &str) -> String {
+    let raw = &simple.words;
+    let shape = |name: &str| -> &'static str {
+        if name.contains(shell::UNSEEN_OUTPUT) {
+            "output"
+        } else if let Some(rest) = name.split_once('$').map(|(_, rest)| rest) {
+            let rest = rest.trim_start_matches('{');
+            if rest.starts_with(|ch: char| ch.is_ascii_digit()) {
+                "positional"
+            } else if rest.starts_with(['@', '*', '#', '?', '!', '$', '-']) {
+                "special"
+            } else if rest.starts_with('(') {
+                "substitution"
+            } else {
+                "variable"
+            }
+        } else if name.contains(['*', '?', '[']) {
+            "pattern"
+        } else {
+            "literal"
+        }
+    };
+    let name_of = |word: &str| {
+        word.split_once('=')
+            .map_or(word, |(name, _)| name)
+            .to_string()
+    };
+    let mut leading = true;
+    for at in 0..index.min(words.len()) {
+        work::step();
+        leading &= words[at]
+            .split_once('=')
+            .is_some_and(|(name, _)| assignment_form(name));
+        for word in [words.get(at), raw.get(at)].into_iter().flatten() {
+            work::step();
+            if word.starts_with('-') || !word.contains('=') {
+                continue;
+            }
+            let name = name_of(word);
+            let base = name.split(['+', '[']).next().unwrap_or(&name).to_string();
+            if is_set_only(&base) {
+                return format!("why=set_only:{base} leading={leading}");
+            }
+            if name.contains('$') || name.contains(shell::UNSEEN_OUTPUT) {
+                return format!(
+                    "why=before_command shape={} leading={leading}",
+                    shape(&name)
+                );
+            }
+            if !leading && word.contains(['*', '?', '[']) {
+                return "why=before_command shape=pattern leading=false".to_string();
+            }
+        }
+    }
+    if raw.iter().any(|word| {
+        let lower = word.to_ascii_lowercase();
+        lower.starts_with("$env:") || lower.starts_with("${env:")
+    }) {
+        return "why=powershell".to_string();
+    }
+    if matches!(cmd, "set" | "setx") {
+        return "why=windows_set".to_string();
+    }
+    let operand = words.iter().skip(index + 1).find_map(|word| {
+        let name = name_of(word);
+        let base = name.split(['+', '[']).next().unwrap_or(&name).to_string();
+        if is_set_only(&base) {
+            Some(format!("set_only:{base}"))
+        } else if name.contains('$')
+            || name.contains(shell::UNSEEN_OUTPUT)
+            || name.contains(['*', '?', '['])
+        {
+            Some(format!("shape={}", shape(&name)))
+        } else {
+            None
+        }
+    });
+    format!(
+        "why=builtin_operand {}",
+        operand.unwrap_or_else(|| "any_case_or_other".to_string())
+    )
+}
+
+/// The first 24 characters of a command's basename.
+#[cfg(test)]
+fn short_name(name: &str) -> String {
+    shell::basename(name).chars().take(24).collect()
+}
+
+/// #932 measuring: how `names_code_variable` matched `word`: the branch,
+/// the variable and, for an assignment, the class of its value.
+#[cfg(test)]
+fn names_code_variable_how(word: &str) -> (&'static str, String, String) {
+    /// Values a pager or editor variable is commonly set to that run one
+    /// known program with no shell text of their own.
+    const PLAIN: &[&str] = &["", "cat", "less", "more", "true", ":", "head", "tail", "-"];
+    let token_at = |word: &str| -> Option<(usize, usize)> {
+        let mut start = None;
+        for (at, ch) in word
+            .char_indices()
+            .chain(std::iter::once((word.len(), ' ')))
+        {
+            work::step();
+            if is_name_char(ch) {
+                start.get_or_insert(at);
+                continue;
+            }
+            if let Some(from) = start.take()
+                && is_code_variable(&word[from..at])
+            {
+                let before = &word[..from];
+                if !(before.ends_with('$') || (before.ends_with("${") && ch == '}')) {
+                    return Some((from, at));
+                }
+            }
+        }
+        None
+    };
+    if word.match_indices('$').any(|(at, _)| {
+        let rest = &word[at + 1..];
+        let rest = rest.strip_prefix('{').unwrap_or(rest);
+        let end = rest
+            .find(|ch: char| !is_name_char(ch))
+            .unwrap_or(rest.len());
+        is_set_only(&rest[..end]) && rest[end..].trim_start_matches(':').starts_with('=')
+    }) {
+        return ("default_expansion", "set_only".into(), "-".into());
+    }
+    let lower = word.to_ascii_lowercase();
+    if lower.starts_with("$env:") || lower.starts_with("env:") {
+        return ("powershell", "-".into(), "-".into());
+    }
+    if word.starts_with('-') && !word.starts_with("--") && token_at(word).is_none() {
+        return ("attached_option", "-".into(), "-".into());
+    }
+    let Some((from, to)) = token_at(word) else {
+        return ("other", "-".into(), "-".into());
+    };
+    let name = word[from..to].to_string();
+    let Some(value) = word[to..].strip_prefix('=') else {
+        let form = if from == 0 && to == word.len() {
+            "bare_name"
+        } else {
+            "mention"
+        };
+        return (form, name, "-".into());
+    };
+    let form = if from == 0 {
+        "assignment"
+    } else {
+        "embedded_assignment"
+    };
+    let unquoted: String = value
+        .chars()
+        .filter(|ch| !matches!(ch, '\'' | '"'))
+        .collect();
+    let value = if PLAIN.contains(&unquoted.trim()) {
+        format!("plain:{}", unquoted.trim())
+    } else if unquoted.contains('$') || unquoted.contains(shell::UNSEEN_OUTPUT) {
+        "expansion".into()
+    } else if unquoted.split_whitespace().next().is_some_and(|program| {
+        ["less", "cat", "more", "delta", "bat"].contains(&shell::basename(program))
+    }) {
+        "plain_with_options".into()
+    } else {
+        "other_literal".into()
+    };
+    (form, name, value)
 }
 
 #[cfg(test)]

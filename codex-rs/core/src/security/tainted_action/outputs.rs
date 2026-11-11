@@ -21,21 +21,23 @@ const OUTPUT_OPTIONS: &[(&str, &str, char)] = &[
 /// #1159: programs whose output-file options do not group with other
 /// letters: each option word takes the next word (`-o FILE`, `-out FILE`),
 /// a long one its value attached too (`--output=FILE`), and a two-letter
-/// one an attached value (`-oFILE`).
+/// one, or #1449 `-MF`, an attached value (`-oFILE`, `-MFdeps.d`). #1449:
+/// the compilers' `-MF` dependency file, and rustc's `--out-dir` (a folder
+/// it writes files in) and `--emit` (`link=FILE,obj=FILE`).
 const SINGLE_OUTPUT_OPTIONS: &[(&str, &[&str])] = &[
-    ("cc", &["-o", "--output"]),
-    ("gcc", &["-o", "--output"]),
-    ("g++", &["-o", "--output"]),
-    ("c++", &["-o", "--output"]),
-    ("clang", &["-o", "--output"]),
-    ("clang++", &["-o", "--output"]),
-    ("tcc", &["-o"]),
+    ("cc", &["-o", "--output", "-MF"]),
+    ("gcc", &["-o", "--output", "-MF"]),
+    ("g++", &["-o", "--output", "-MF"]),
+    ("c++", &["-o", "--output", "-MF"]),
+    ("clang", &["-o", "--output", "-MF"]),
+    ("clang++", &["-o", "--output", "-MF"]),
+    ("tcc", &["-o", "-MF"]),
     ("ld", &["-o", "--output"]),
     ("ld.lld", &["-o", "--output"]),
     ("ld64.lld", &["-o", "--output"]),
     ("lld", &["-o", "--output"]),
     ("as", &["-o"]),
-    ("rustc", &["-o"]),
+    ("rustc", &["-o", "--out-dir", "--emit"]),
     ("openssl", &["-out", "-keyout"]),
     ("csplit", &["-f", "--prefix"]),
 ];
@@ -153,23 +155,63 @@ fn other_output_files(name: &str, args: &[String]) -> Option<Vec<String>> {
     let mut files = Vec::new();
     for (index, word) in args.iter().enumerate() {
         work::step();
-        let value = if options.contains(&word.as_str()) {
-            args.get(index + 1).cloned()
+        // #1449: a compiler's options for its preprocessor or linker
+        // (`-Wp,-MD,FILE`, `-Wl,-o,FILE`).
+        if options.contains(&"-MF")
+            && let Some(passed) = word
+                .strip_prefix("-Wp,")
+                .or_else(|| word.strip_prefix("-Wl,"))
+        {
+            let parts: Vec<&str> = passed.split(',').collect();
+            for (at, part) in parts.iter().enumerate() {
+                work::step();
+                let file = if matches!(
+                    *part,
+                    "-MD" | "-MMD" | "-MF" | "-o" | "--output" | "-Map" | "--Map"
+                ) {
+                    parts.get(at + 1).copied()
+                } else {
+                    part.strip_prefix("--output=")
+                        .or_else(|| part.strip_prefix("-Map="))
+                        .or_else(|| part.strip_prefix("--Map="))
+                        .or_else(|| part.strip_prefix("--out-implib="))
+                        .or_else(|| part.strip_prefix("--dependency-file="))
+                        .or_else(|| part.strip_prefix("-MF").filter(|file| !file.is_empty()))
+                        .or_else(|| part.strip_prefix("-o").filter(|file| !file.is_empty()))
+                };
+                if let Some(file) = file {
+                    found = true;
+                    files.push(file.to_string());
+                }
+            }
+            continue;
+        }
+        let (option, value) = if options.contains(&word.as_str()) {
+            (word.as_str(), args.get(index + 1).cloned())
         } else if let Some((option, value)) = word.split_once('=')
             && option.starts_with("--")
             && options.contains(&option)
         {
-            Some(value.to_string())
-        } else if let Some(option) = options
-            .iter()
-            .find(|option| option.len() == 2 && word.len() > 2 && word.starts_with(**option))
-        {
-            Some(word[option.len()..].to_string())
+            (option, Some(value.to_string()))
+        } else if let Some(option) = options.iter().find(|option| {
+            (option.len() == 2 || **option == "-MF")
+                && word.len() > option.len()
+                && word.starts_with(**option)
+        }) {
+            (*option, Some(word[option.len()..].to_string()))
         } else {
             continue;
         };
         found = true;
-        files.extend(value);
+        match (option, value) {
+            ("--out-dir", Some(folder)) => files.push(format!("{folder}/")),
+            // `--emit=link=FILE,obj`: the files after `=`.
+            ("--emit", Some(kinds)) => files.extend(kinds.split(',').filter_map(|kind| {
+                work::step();
+                kind.split_once('=').map(|(_, file)| file.to_string())
+            })),
+            (_, value) => files.extend(value),
+        }
     }
     if name == "csplit" {
         let folders: Vec<String> = files.iter().map(|file| prefix_folder(file)).collect();
@@ -252,6 +294,14 @@ pub(super) fn unseen_place(word: &str) -> bool {
         && word
             .replace(super::shell::ARITHMETIC_OUTPUT, "0")
             .contains(super::shell::UNSEEN_OUTPUT)
+}
+
+/// #1573 (1): whether zsh reads a written word as the full path of a
+/// program on `PATH` (`=mytool`, the `EQUALS` option, on by default; also
+/// for redirection targets: `echo x >> =mytool` appends to the installed
+/// `mytool`). A bare `=` stays a file name.
+pub(super) fn zsh_program_path(word: &str) -> bool {
+    word.strip_prefix('=').is_some_and(|name| !name.is_empty())
 }
 
 /// #1159: whether git (`name`, with the words after it, `args`) runs a
@@ -361,7 +411,7 @@ pub(super) fn joins_names(name: &str, args: &[String]) -> bool {
 /// The folder a path prefix writes in, ending with `/`: itself when it ends
 /// with `/`, else the folder that holds it (`./` when it names none).
 fn prefix_folder(prefix: &str) -> String {
-    match prefix.rfind('/') {
+    match work::rfind(prefix, "/") {
         Some(at) => prefix[..=at].to_string(),
         None => "./".to_string(),
     }
@@ -369,7 +419,7 @@ fn prefix_folder(prefix: &str) -> String {
 
 /// git config options that take the next word as their value (`-zf FILE`
 /// too).
-const GIT_CONFIG_VALUES: &[&str] = &[
+pub(super) const GIT_CONFIG_VALUES: &[&str] = &[
     "-f",
     "--file",
     "--blob",
@@ -380,7 +430,7 @@ const GIT_CONFIG_VALUES: &[&str] = &[
     "--url",
 ];
 /// git config options that take no value (others may take the next word).
-const GIT_CONFIG_FLAGS: &[&str] = &[
+pub(super) const GIT_CONFIG_FLAGS: &[&str] = &[
     "--global",
     "--system",
     "--local",
@@ -401,7 +451,7 @@ const GIT_CONFIG_FLAGS: &[&str] = &[
     "--no-type",
 ];
 /// git config options that make it read, not write.
-const GIT_CONFIG_READS: &[&str] = &[
+pub(super) const GIT_CONFIG_READS: &[&str] = &[
     "--get",
     "--get-all",
     "--get-regexp",
@@ -635,6 +685,27 @@ mod tests {
                 .map(|at| git_config_reads(&words[at..]))
                 .collect();
             assert_eq!(each, alone, "{line}");
+        }
+    }
+
+    #[test]
+    fn config_null_flag_keeps_read_options_distinct_from_values() {
+        // Keep the shared parser at main's unknown-option handling for `-z`.
+        // Only the local write detector recognizes it as a no-value flag.
+        for (line, expected) in [
+            ("-z --get pager.log", false),
+            ("--null --get pager.log", true),
+            ("-z --list", false),
+            ("-z --comment note --get pager.log", false),
+            ("-z --comment --get pager.log x", true),
+            ("-z --comm --get pager.log x", true),
+            ("-z --file --get pager.log x", true),
+            ("-z -- --get pager.log", true),
+            ("-z pager.log --get", false),
+        ] {
+            let words: Vec<String> = line.split(' ').map(str::to_string).collect();
+            assert_eq!(git_config_reads(&words), expected, "{line}");
+            assert_eq!(git_config_reads_each(&words)[0], expected, "{line}");
         }
     }
 

@@ -1,6 +1,5 @@
 use crate::acl::add_deny_write_ace;
 use crate::acl::path_mask_allows;
-use crate::cap::cap_sid_file;
 use crate::cap::load_or_create_cap_sids;
 use crate::cap::workspace_write_cap_sid_for_root;
 use crate::cap::workspace_write_root_contains_path;
@@ -62,8 +61,7 @@ fn gather_candidates(cwd: &Path, env: &std::collections::HashMap<String, String>
         unique_push(&mut set, &mut out, PathBuf::from(pubp));
     }
     // 4) PATH entries (best-effort)
-    if let Some(path) = env
-        .get("PATH")
+    if let Some(path) = crate::env::get_ignoring_case(env, "PATH")
         .cloned()
         .or_else(|| std::env::var("PATH").ok())
     {
@@ -255,10 +253,8 @@ fn apply_capability_denies_for_world_writable_for_permissions(
     if flagged.is_empty() {
         return Ok(());
     }
-    std::fs::create_dir_all(codex_home)?;
-    let cap_path = cap_sid_file(codex_home);
+    // Records (and so writes) them if there are none yet.
     let caps = load_or_create_cap_sids(codex_home)?;
-    std::fs::write(&cap_path, serde_json::to_string(&caps)?)?;
     if !permissions.is_enforceable_by_windows_sandbox() {
         return Ok(());
     }

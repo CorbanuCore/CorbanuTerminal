@@ -343,6 +343,7 @@ pub struct TurnContext {
     pub(crate) explicit_tool_budget_state: Arc<ExplicitToolBudgetState>,
     pub(crate) malformed_tool_call_state: Arc<MalformedToolCallState>,
     pub(crate) repeated_tool_call_state: Arc<RepeatedToolCallState>,
+    pub(crate) pending_tool_calls: Arc<crate::tools::parallel::PendingToolCalls>,
     pub(crate) server_model_warning_emitted: AtomicBool,
     pub(crate) provider_cache_pressure_warning_emitted: AtomicBool,
     pub(crate) model_verification_emitted: AtomicBool,
@@ -607,6 +608,7 @@ impl TurnContext {
             explicit_tool_budget_state: Arc::clone(&self.explicit_tool_budget_state),
             malformed_tool_call_state: Arc::clone(&self.malformed_tool_call_state),
             repeated_tool_call_state: Arc::clone(&self.repeated_tool_call_state),
+            pending_tool_calls: Arc::clone(&self.pending_tool_calls),
             server_model_warning_emitted: AtomicBool::new(
                 self.server_model_warning_emitted.load(Ordering::Relaxed),
             ),
@@ -651,6 +653,14 @@ impl TurnContext {
                 .windows_sandbox_private_desktop,
             windows_sandbox_proxy_settings_mode: None,
             use_legacy_landlock: self.config.features.use_legacy_landlock(),
+            // #1976 (D491): refused where the host has no platform sandbox.
+            unsandboxed_refusal: crate::security::windows_unsandboxed::applies(
+                self.config.security_level,
+                self.windows_sandbox_level,
+            )
+            .then(|| {
+                crate::security::windows_unsandboxed::file_refusal(self.config.security_level)
+            }),
         }
     }
 
@@ -807,6 +817,13 @@ impl Session {
             );
         }
         per_turn_config.features = config.features.clone();
+        // #2000: a Windows sandbox set up during the session (it only gets
+        // stronger) is the one for everything started from this config, such
+        // as child agents, not the one the session started with.
+        crate::windows_sandbox::raise_windows_sandbox(
+            &mut per_turn_config,
+            session_configuration.windows_sandbox_level,
+        );
         per_turn_config
     }
 
@@ -950,6 +967,7 @@ impl Session {
             explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
             malformed_tool_call_state: Arc::new(MalformedToolCallState::default()),
             repeated_tool_call_state: Arc::new(RepeatedToolCallState::default()),
+            pending_tool_calls: Arc::default(),
             server_model_warning_emitted: AtomicBool::new(false),
             provider_cache_pressure_warning_emitted: AtomicBool::new(false),
             model_verification_emitted: AtomicBool::new(false),
