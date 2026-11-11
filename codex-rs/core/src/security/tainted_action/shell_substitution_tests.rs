@@ -66,6 +66,10 @@ fn cache_matches_reference_across_readings_and_depth_boundary() {
 
 #[test]
 #[ignore = "manual membership microbenchmark; not an end-to-end latency claim"]
+#[allow(
+    clippy::print_stderr,
+    reason = "explicitly invoked test-only benchmark reports its synthetic timings"
+)]
 fn membership_microbenchmark() {
     use std::hint::black_box;
     use std::time::Instant;
