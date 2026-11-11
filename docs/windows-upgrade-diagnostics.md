@@ -80,11 +80,13 @@ authoritative. A target that still exists may keep an old binary runnable, so
 successful command execution alone does not establish that the upgrade took
 effect.
 
-Compare the text using the home override exactly as it was set. The installer
-trims trailing backslashes from the expected prefix but does not otherwise
-normalize paths. Relative paths or forward slashes may not match the recorded
-target even when they appear to name the same location. A text-prefix match
-alone does not establish that the target is inside the expected directory.
+Compare the recorded target with the expected prefix constructed by the
+installer, not with the home override alone. The installer uses `Join-Path` to
+build `packages\standalone` and its `releases` directory under the selected home.
+The junction writer stores its target using `Path.GetFullPath`. The ownership
+guard trims trailing backslashes from the constructed prefix and compares it
+with the recorded target using an ordinal, case-insensitive text-prefix check.
+That check alone does not establish directory containment.
 
 Keep the ownership guard in place. Do not delete the junction, edit PATH, or move
 credential/state directories as part of these diagnostics. Ask the maintainer for
