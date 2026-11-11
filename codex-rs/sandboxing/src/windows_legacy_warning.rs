@@ -1,11 +1,18 @@
 //! User-facing warning for sessions whose sandboxed commands run under the
 //! legacy (non-admin, restricted-token) Windows sandbox backend.
 //!
-//! That backend cannot stop a sandboxed command from deleting or moving files
-//! outside its writable roots when the parent folder grants the user
-//! `FILE_DELETE_CHILD`, which covers most of the user profile (issue #158).
-//! The elevated backend is not affected, so the warning tells users how to
-//! switch to it. It never changes how commands are sandboxed.
+//! Since #705 that backend runs commands at Low integrity, so they can't
+//! create, change, delete or move files outside their writable roots except
+//! where objects are labelled Low (`AppData\LocalLow`, objects the user
+//! labelled Low, and roots another legacy session is using at that moment).
+//! It still can't stop a command from reading files, its network block is
+//! only proxy and tool settings, some process-launch routes leave the
+//! command's job (#1507), and concurrent commands of different projects can
+//! borrow each other's token (#1560, D291; the elevated backend too, #1648:
+//! D324 closed most of its other process routes, not this one).
+//! The elevated backend protects more, so the warning tells users how to
+//! switch to it. It never changes how commands are
+//! sandboxed.
 
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::PermissionProfile;
@@ -16,8 +23,15 @@ use crate::permission_profile_supports_windows_restricted_token_sandbox;
 /// The link points at the shipped guidance in `docs/sandbox.md`.
 pub const LEGACY_WINDOWS_SANDBOX_WARNING: &str = concat!(
     "Corbanu Terminal is using the non-admin Windows sandbox. ",
-    "In this mode, sandboxed commands can delete or move files outside your workspace ",
-    "in folders you own, such as most of your user profile. ",
+    "It blocks sandboxed commands from creating, changing, deleting or moving files ",
+    "outside the folders they may write to, except in places marked low-integrity ",
+    "(such as AppData\\LocalLow) and in folders another non-admin sandbox session is using. ",
+    "It does not stop commands from reading your files, its network block is only proxy ",
+    "and tool settings that a program can ignore, and a few ways of starting programs ",
+    "get partly outside it. ",
+    "Commands running at the same time in different projects aren't kept apart: one can ",
+    "borrow another's access and write in its folders (the default sandbox doesn't prevent ",
+    "this yet either), so avoid running commands in several projects at once. ",
     "Switch to the default sandbox (one-time Administrator setup) by running ",
     "/setup-default-sandbox, or set `sandbox = \"elevated\"` under `[windows]` in config.toml. ",
     "Learn more: ",

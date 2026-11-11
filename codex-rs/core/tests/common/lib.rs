@@ -475,6 +475,44 @@ pub fn stdio_server_bin() -> Result<String, CargoBinError> {
     codex_utils_cargo_bin::cargo_bin("test_stdio_server").map(|p| p.to_string_lossy().to_string())
 }
 
+/// #1967: on Windows, runs the session's agent commands in the elevated
+/// (default) Windows sandbox, which Moderate and Aggressive need there (#691,
+/// #783); without it Windows refuses most commands before any security level
+/// rule is reached. The first sandboxed command runs the elevated setup, so
+/// every test calling this is in the `windows_sandbox_legacy_sessions`
+/// nextest group (#1873) and, for `cargo test`'s threads, marked
+/// `#[serial(codex_home)]` like the other elevated tests. Does nothing
+/// elsewhere.
+pub fn use_elevated_windows_sandbox(config: &mut Config) {
+    #[cfg(windows)]
+    {
+        stage_windows_sandbox_helpers();
+        config.permissions.windows_sandbox_mode =
+            Some(codex_config::types::WindowsSandboxModeToml::Elevated);
+    }
+    #[cfg(not(windows))]
+    let _ = config;
+}
+
+/// Copies the elevated sandbox's helpers to `codex-resources` next to the test
+/// binary, where Core looks for them.
+#[cfg(windows)]
+fn stage_windows_sandbox_helpers() {
+    let exe = std::env::current_exe().expect("test binary");
+    let resources = exe.parent().expect("test dir").join("codex-resources");
+    std::fs::create_dir_all(&resources).expect("resources dir");
+    for helper in ["codex-windows-sandbox-setup", "codex-command-runner"] {
+        let source = codex_utils_cargo_bin::cargo_bin(helper).expect("sandbox helper built");
+        let destination = resources.join(format!("{helper}.exe"));
+        // A helper from an earlier test may still be running; keep its copy.
+        if let Err(error) = std::fs::copy(&source, &destination)
+            && !destination.exists()
+        {
+            panic!("stage {helper}: {error}");
+        }
+    }
+}
+
 pub mod fs_wait {
     use anyhow::Result;
     use anyhow::anyhow;

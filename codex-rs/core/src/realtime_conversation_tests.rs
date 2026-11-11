@@ -742,6 +742,9 @@ enum StandInEnd {
     ClientCloses,
     /// Drops the connection after the client's first message.
     ServerDrops,
+    /// Sends these server events after the client's first message, then
+    /// keeps the session open until the client closes it.
+    Replies(&'static [&'static str]),
 }
 
 /// A local stand-in for the realtime WebSocket endpoint: accepts sessions at
@@ -761,6 +764,18 @@ async fn realtime_stand_in(end: StandInEnd) -> anyhow::Result<String> {
                 match end {
                     StandInEnd::ClientCloses => while let Some(Ok(_)) = ws.next().await {},
                     StandInEnd::ServerDrops => drop(ws),
+                    StandInEnd::Replies(events) => {
+                        use futures::SinkExt;
+                        for event in events {
+                            let message = tokio_tungstenite::tungstenite::Message::Text(
+                                (*event).to_string().into(),
+                            );
+                            if ws.send(message).await.is_err() {
+                                return;
+                            }
+                        }
+                        while let Some(Ok(_)) = ws.next().await {}
+                    }
                 }
             });
         }
@@ -1008,6 +1023,108 @@ async fn pf_824_websocket_realtime_session_is_one_request_with_tokens_unknown() 
 
     let (attempts, observations) = realtime_ledger_settled(&db, /*count*/ 1).await?;
     assert_one_unknown_session(&attempts, &observations, before);
+    Ok(())
+}
+
+/// #889 D223 (Travis, 2026-10-28): a WebSocket session records the token
+/// counts OpenAI reports at the end of each response - input, cached input,
+/// output and total, as running sums - and its end after them. Its cost stays
+/// unknown: no rate is bound, even for a configured model the catalogue
+/// prices, so its tokens never read as a text model's dollar figure.
+#[tokio::test]
+async fn pf_889_d223_websocket_session_records_reported_tokens_with_no_price() -> anyhow::Result<()>
+{
+    const EVENTS: &[&str] = &[
+        r#"{"type":"response.done","response":{"id":"resp_1","usage":{"total_tokens":253,"input_tokens":132,"output_tokens":121,"input_token_details":{"text_tokens":119,"audio_tokens":13,"cached_tokens":64},"output_token_details":{"text_tokens":30,"audio_tokens":91}}}}"#,
+        // A response that reports no usage adds nothing.
+        r#"{"type":"response.done","response":{"id":"resp_2"}}"#,
+        r#"{"type":"response.done","response":{"id":"resp_3","usage":{"total_tokens":230,"input_tokens":200,"output_tokens":30,"input_token_details":{"cached_tokens":150}}}}"#,
+    ];
+    let endpoint = realtime_stand_in(StandInEnd::Replies(EVENTS)).await?;
+    let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
+    // API-key rates from the catalogue: a priced text model would bind them.
+    let (owner, db) = realtime_ledger_session(
+        home.path(),
+        test_cwd.path(),
+        &endpoint,
+        crate::config::AccountingMode::DirectOpenAiResponses {
+            scope: uuid::Uuid::new_v4(),
+            approved_endpoint: endpoint.clone(),
+        },
+    )
+    .await?;
+    let mut params = realtime_websocket_params();
+    params.model = Some("gpt-5.6-sol".into());
+    super::handle_start(&owner, "fixture-sub".into(), params).await?;
+    let (_, observations) = realtime_ledger_settled(&db, /*count*/ 2).await?;
+    assert_eq!(observations.len(), 2, "{observations:#?}");
+    super::handle_close(&owner, "fixture-sub".into()).await;
+
+    let (attempts, observations) = realtime_ledger_settled(&db, /*count*/ 3).await?;
+    assert_eq!(attempts.len(), 1, "one request: {attempts:#?}");
+    assert_eq!(observations.len(), 3, "{observations:#?}");
+    let revisions: Vec<i64> = observations
+        .iter()
+        .map(|observation| observation["revision"].as_i64().expect("revision"))
+        .collect();
+    assert_eq!(revisions, vec![1, 2, 3]);
+    let patch = |index: usize| observations[index]["patch"].clone();
+    assert_eq!(
+        patch(0),
+        serde_json::json!({"input": 132, "read": 64, "output": 121, "total": 253})
+    );
+    assert_eq!(
+        patch(1),
+        serde_json::json!({"input": 332, "read": 214, "output": 151, "total": 483})
+    );
+    let ended = patch(2)["session_ended_at_ms"].as_i64().expect("end time");
+    assert_eq!(patch(2).as_object().map(serde_json::Map::len), Some(1));
+    assert!(ended >= attempts[0]["dispatched_at_ms"].as_i64().expect("start"));
+
+    let now = chrono::Utc::now().timestamp_millis();
+    let codex_state::accounting::InspectionDay::Ready(view) =
+        codex_state::accounting::AccountingStore::inspect_day(
+            &db,
+            owner.thread_id,
+            now / 86_400_000,
+            now,
+        )
+        .await?
+    else {
+        panic!("expected the day");
+    };
+    let quotes: Vec<&codex_state::accounting::ObservationQuote> =
+        view.requests.values().flatten().collect();
+    assert_eq!(quotes.len(), 1);
+    let quote = quotes[0];
+    assert_eq!(quote.attempt.model, "gpt-5.6-sol");
+    assert_eq!(
+        (
+            quote.usage.input,
+            quote.usage.read,
+            quote.usage.output,
+            quote.usage.total
+        ),
+        (Some(332), Some(214), Some(151), Some(483))
+    );
+    assert_eq!(quote.usage.session_ended_at_ms, Some(ended));
+    let snapshot = quote.snapshot.as_ref().expect("a basis-only record");
+    assert_eq!(snapshot.basis, codex_state::accounting::Basis::Billed);
+    assert_eq!(snapshot.rates, codex_state::accounting::Rates::default());
+    assert!(
+        !quote
+            .buckets
+            .iter()
+            .any(|bucket| matches!(bucket, codex_state::accounting::BucketQuote::Priced(_))),
+        "{:?}",
+        quote.buckets
+    );
+    assert_eq!(
+        view.totals.known_usd,
+        codex_state::accounting::Decimal::default()
+    );
+    assert_eq!(view.totals.per_use_unknown(), 1, "cost unknown, not zero");
     Ok(())
 }
 

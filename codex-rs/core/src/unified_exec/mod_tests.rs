@@ -115,6 +115,7 @@ async fn exec_command_with_tty(
                 &request,
                 codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
                 /*network_policy_decider*/ None,
+                /*network_denial_observer*/ None,
                 tty,
                 Box::new(NoopSpawnLifecycle),
                 turn.environments
@@ -141,6 +142,7 @@ async fn exec_command_with_tty(
             network_approval: None,
             session: Arc::downgrade(session),
             last_used: started_at,
+            windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
         };
         manager
             .process_store
@@ -625,6 +627,7 @@ async fn terminating_initial_exec_command_rechecks_initial_response_state() -> a
             network_approval: None,
             session: Arc::downgrade(&session),
             last_used: Instant::now(),
+            windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
         },
     );
 
@@ -699,6 +702,7 @@ async fn terminating_during_stdin_poll_returns_exited_response() -> anyhow::Resu
             network_approval: None,
             session: Arc::downgrade(&session),
             last_used,
+            windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
         },
     );
 
@@ -759,6 +763,7 @@ async fn completed_pipe_commands_preserve_exit_code() -> anyhow::Result<()> {
             &request,
             codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
             /*network_policy_decider*/ None,
+            /*network_denial_observer*/ None,
             /*tty*/ false,
             Box::new(NoopSpawnLifecycle),
             &environment,
@@ -801,6 +806,7 @@ async fn unified_exec_uses_remote_exec_server_when_configured() -> anyhow::Resul
             &request,
             codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
             /*network_policy_decider*/ None,
+            /*network_denial_observer*/ None,
             /*tty*/ true,
             Box::new(NoopSpawnLifecycle),
             remote_test_env.environment(),
@@ -861,6 +867,7 @@ async fn remote_exec_server_rejects_inherited_fd_launches() -> anyhow::Result<()
             &request,
             codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
             /*network_policy_decider*/ None,
+            /*network_denial_observer*/ None,
             /*tty*/ true,
             Box::new(TestSpawnLifecycle {
                 inherited_fds: vec![42],
