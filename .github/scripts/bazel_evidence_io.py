@@ -69,7 +69,10 @@ def local_log(uri, root, remaining_bytes):
     decoded = unquote(parsed.path)
     if "\x00" in decoded or ".." in decoded.replace("\\", "/").split("/"):
         raise EvidenceError("path_escape")
-    path = Path(url2pathname(parsed.path))
+    try:
+        path = Path(url2pathname(parsed.path))
+    except (OSError, ValueError):
+        raise EvidenceError("invalid_reference") from None
     if not path.is_absolute():
         raise EvidenceError("invalid_reference")
     try:
@@ -82,12 +85,12 @@ def local_log(uri, root, remaining_bytes):
         raise EvidenceError("unavailable_local_root") from None
     if not relative.parts:
         raise EvidenceError("invalid_reference")
-    current = root
-    for part in relative.parts:
-        current = current / part
-        if is_link(current):
-            raise EvidenceError("symlink_rejected")
     try:
+        current = root
+        for part in relative.parts:
+            current = current / part
+            if is_link(current):
+                raise EvidenceError("symlink_rejected")
         path.resolve(strict=True).relative_to(root)
     except ValueError:
         raise EvidenceError("path_escape") from None

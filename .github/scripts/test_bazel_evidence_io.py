@@ -64,6 +64,12 @@ class EvidenceIOTest(unittest.TestCase):
                 self.rejected(category, local_log, uri, self.logs, 100)
                 opened.assert_not_called()
 
+    def test_conversion_and_component_errors_are_sanitized(self):
+        with patch("bazel_evidence_io.url2pathname", side_effect=OSError("private URI")):
+            self.rejected("invalid_reference", local_log, "file:///1:/private/test.log", self.logs, 100)
+        with patch("bazel_evidence_io.is_link", side_effect=PermissionError("private component")):
+            self.rejected("missing_local_file", local_log, self.log.as_uri(), self.logs, 100)
+
     def test_sibling_prefix_and_missing_roots(self):
         outside = self.root / "testlogs-other"
         outside.mkdir()
