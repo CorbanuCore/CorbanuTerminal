@@ -3552,7 +3552,20 @@ async fn token_count_includes_rate_limits_snapshot() {
                 "spend_control_reached": null,
                 "plan_type": null,
                 "rate_limit_reached_type": null
-            }
+            },
+            // PF-84: named accounts are on by default; usage per account.
+            "account_usage": [{
+                "provider_id": "openai",
+                "account": "default",
+                "usage": {
+                    "input_tokens": 123,
+                    "cached_input_tokens": 0,
+                    "cache_write_input_tokens": 0,
+                    "output_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_tokens": 123
+                }
+            }]
         })
     );
     let usage = final_payload

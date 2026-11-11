@@ -13,6 +13,7 @@ use codex_protocol::protocol::RolloutItem;
 use codex_protocol::protocol::RolloutLine;
 use codex_protocol::protocol::ThreadHistoryMode;
 use codex_protocol::protocol::ThreadSettingsAppliedEvent;
+use codex_protocol::protocol::TokenCountEvent;
 use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
@@ -117,6 +118,7 @@ async fn fork_thread_twice_drops_to_first_message() {
     expected_after_first.push(thread_settings_applied_item(
         codex_fork1.config_snapshot().await,
     ));
+    expected_after_first.push(fork_account_usage_marker());
 
     // GetHistory on fork1 flushed; the file is ready.
     let fork1_items = read_rollout_items(&fork1_path);
@@ -152,11 +154,22 @@ async fn fork_thread_twice_drops_to_first_message() {
     expected_after_second.push(thread_settings_applied_item(
         codex_fork2.config_snapshot().await,
     ));
+    expected_after_second.push(fork_account_usage_marker());
     let fork2_items = read_rollout_items(&fork2_path);
     pretty_assertions::assert_eq!(
         serde_json::to_value(&fork2_items).unwrap(),
         serde_json::to_value(&expected_after_second).unwrap()
     );
+}
+
+/// PF-84: with named accounts on (the default), a fork marks where its own
+/// usage per account begins, after the copied prefix.
+fn fork_account_usage_marker() -> RolloutItem {
+    RolloutItem::EventMsg(EventMsg::TokenCount(TokenCountEvent {
+        info: None,
+        rate_limits: None,
+        account_usage: Some(Vec::new()),
+    }))
 }
 
 fn thread_settings_applied_item(snapshot: ThreadConfigSnapshot) -> RolloutItem {
