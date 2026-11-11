@@ -132,7 +132,17 @@ pub async fn prepare_control_socket_path(socket_path: &Path) -> IoResult<()> {
 }
 
 pub struct AppServerStartupLock {
-    _file: std::fs::File,
+    file: std::fs::File,
+}
+
+impl Drop for AppServerStartupLock {
+    fn drop(&mut self) {
+        // #928: closing the file releases the lock only once no other copy of
+        // the descriptor is open, and a child another thread forked keeps one
+        // until it starts its program. Unlock now so the next startup waits
+        // only for this one.
+        let _ = self.file.unlock();
+    }
 }
 
 pub async fn acquire_app_server_startup_lock(
@@ -149,7 +159,7 @@ pub async fn acquire_app_server_startup_lock(
             .write(true)
             .open(startup_lock_path.as_path())?;
         file.lock()?;
-        Ok(AppServerStartupLock { _file: file })
+        Ok(AppServerStartupLock { file })
     })
     .await
     .map_err(|err| std::io::Error::other(format!("startup lock task failed: {err}")))?

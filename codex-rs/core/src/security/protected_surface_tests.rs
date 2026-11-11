@@ -10,8 +10,19 @@ use std::sync::Arc;
 
 const HOME: &str = "/home/fixture/.corbanu";
 
+/// A fixture path; on Windows (#1240) on drive `C:` (`/work` is `C:\work`).
+fn fixture(path: &str) -> std::path::PathBuf {
+    if cfg!(windows) {
+        format!("C:{}", path.replace('/', "\\")).into()
+    } else {
+        path.into()
+    }
+}
+
 fn cwd() -> PathUri {
-    PathUri::from_abs_path(&AbsolutePathBuf::from_absolute_path_checked("/work").expect("abs"))
+    PathUri::from_abs_path(
+        &AbsolutePathBuf::from_absolute_path_checked(fixture("/work")).expect("abs"),
+    )
 }
 
 fn mcp(tool: &str, acts_outside: bool, arguments: Value) -> Option<ProtectedActionKind> {
@@ -24,20 +35,33 @@ fn mcp(tool: &str, acts_outside: bool, arguments: Value) -> Option<ProtectedActi
         arguments: Some(&arguments),
         cwd: &cwd,
     };
-    classify_mcp(&call, Path::new(HOME))
+    classify_mcp(&call, &fixture(HOME))
 }
 
-/// Every built-in tool a session can register is on the matrix: a new tool
-/// is unclassified (and asks after untrusted content) until it is listed.
-#[tokio::test]
-async fn pf_23_s01_every_builtin_tool_route_is_classified() {
+/// The built-in tools a session registers, with every feature on, and the
+/// ones the matrix leaves unclassified. `zai` uses a provider without
+/// namespace tools and multi-agent V1, which registers the `_v1` agent-tool
+/// aliases.
+async fn builtin_tools(zai: bool) -> (Vec<String>, Vec<String>) {
     let home = tempfile::tempdir().expect("home");
     let test_cwd = tempfile::tempdir().expect("create test cwd");
     let mut config = build_test_config(home.path(), test_cwd.path()).await;
     for spec in codex_features::FEATURES {
         let _ = config.features.enable(spec.id);
     }
-    let (_session, turn) = make_session_and_context_for_config(config).await;
+    let zai_provider = codex_model_provider_info::ModelProviderInfo::create_zai_provider();
+    if zai {
+        let _ = config
+            .features
+            .disable(codex_features::Feature::MultiAgentV2);
+        config.model_provider_id = codex_model_provider_info::ZAI_PROVIDER_ID.to_string();
+        config.model_provider = zai_provider.clone();
+    }
+    let (_session, mut turn) = make_session_and_context_for_config(config).await;
+    if zai {
+        turn.provider =
+            codex_model_provider::create_model_provider(zai_provider, turn.auth_manager.clone());
+    }
     let step = StepContext::for_test(Arc::new(turn));
     let runtimes = build_core_tool_runtimes(
         step.turn.as_ref(),
@@ -47,14 +71,236 @@ async fn pf_23_s01_every_builtin_tool_route_is_classified() {
         /*wait_for_environment_tool_config*/ None,
     );
     assert!(runtimes.len() > 10, "{}", runtimes.len());
-    let unclassified: Vec<String> = runtimes
+    let names = runtimes
+        .iter()
+        .map(|runtime| runtime.tool_name().to_string())
+        .collect();
+    let unclassified = runtimes
         .iter()
         .filter(|runtime| {
             coverage(runtime.tool_origin(), &runtime.tool_name()) == Coverage::Unclassified
         })
         .map(|runtime| runtime.tool_name().to_string())
         .collect();
+    (names, unclassified)
+}
+
+/// Every built-in tool a session can register is on the matrix: a new tool
+/// is unclassified (and asks after untrusted content) until it is listed.
+#[tokio::test]
+async fn pf_23_s01_every_builtin_tool_route_is_classified() {
+    let (_, unclassified) = builtin_tools(/*zai*/ false).await;
     assert_eq!(unclassified, Vec::<String>::new());
+}
+
+/// D320 (#1653), D334 (#1702): on a provider without namespace tools (Z.AI,
+/// Chat Completions and Claude-style), every `_v1` agent-tool alias is
+/// classified like the Responses name it stands for.
+#[tokio::test]
+async fn d334_agent_tool_aliases_are_classified_without_namespace_tools() {
+    let (names, unclassified) = builtin_tools(/*zai*/ true).await;
+    let plain = ToolName::plain;
+    let v1 = |name| ToolName::namespaced("multi_agent_v1", name);
+    for (alias, responses) in [
+        ("spawn_agent_v1", "spawn_agent"),
+        ("send_input_v1", "send_input"),
+        ("wait_agent_v1", "wait_agent"),
+        ("close_agent_v1", "close_agent"),
+        ("resume_agent_v1", "resume_agent"),
+    ] {
+        assert!(names.iter().any(|name| name == alias), "{alias}: {names:?}");
+        assert_eq!(
+            coverage(ToolOrigin::Builtin, &plain(alias)),
+            coverage(ToolOrigin::Builtin, &v1(responses)),
+            "{alias}"
+        );
+    }
+    assert_eq!(unclassified, Vec::<String>::new());
+}
+
+/// D320 (#1653), D334 (#1702), D335: after untrusted content under Moderate
+/// or Aggressive with approvals off, waiting on, messaging and closing an
+/// agent go ahead on every route; starting one is refused as an agent launch
+/// and resuming one as a restart, never as a tool the security level has not
+/// classified. D388: V1 `send_input` to an agent that isn't running (here an
+/// unknown one) is refused as a restart on every route.
+#[tokio::test]
+async fn d334_agent_tools_after_untrusted_content_on_every_route() {
+    use crate::tools::context::ToolInvocation;
+    use crate::tools::context::ToolPayload;
+    use crate::tools::router::ToolCallSource;
+    use crate::turn_diff_tracker::TurnDiffTracker;
+    use codex_protocol::models::FunctionCallOutputPayload;
+    use codex_protocol::models::ResponseItem;
+    use codex_protocol::protocol::AskForApproval;
+    use codex_security_policy::SecurityLevel;
+
+    for level in [SecurityLevel::Moderate, SecurityLevel::Aggressive] {
+        let (session, mut turn) = crate::session::tests::make_session_and_context().await;
+        turn.approval_policy
+            .set(AskForApproval::Never)
+            .expect("approval policy");
+        let client = (*session.services.model_client())
+            .clone()
+            .with_ingress_level(level)
+            .with_source_envelopes(/*enabled*/ true);
+        client.note_recorded_for_taint(&[ResponseItem::FunctionCallOutput {
+            id: None,
+            call_id: "call-read".into(),
+            output: FunctionCallOutputPayload::from_text("README".into()),
+            internal_chat_message_metadata_passthrough: None,
+        }]);
+        session.services.replace_model_client(client);
+        let state = session
+            .services
+            .model_client()
+            .post_taint_state()
+            .expect("checks apply");
+        assert!(state.taint_generation > 0, "tainted");
+
+        let session = Arc::new(session);
+        let turn = Arc::new(turn);
+        let dispatch = |tool_name: ToolName, origin: ToolOrigin| {
+            let invocation = ToolInvocation {
+                session: Arc::clone(&session),
+                step_context: StepContext::for_test(Arc::clone(&turn)),
+                turn: Arc::clone(&turn),
+                cancellation_token: tokio_util::sync::CancellationToken::new(),
+                tracker: Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new())),
+                call_id: "call-agent".to_string(),
+                tool_name,
+                source: ToolCallSource::Direct,
+                payload: ToolPayload::Function {
+                    arguments: r#"{"id":"agent","target":"agent"}"#.to_string(),
+                },
+            };
+            async move { check_dispatch(&invocation, origin).await }
+        };
+        let refusal = |what: &str| {
+            format!(
+                "Not run: Security level {level:?}: this is {what} after untrusted content \
+                 entered the session, so it needs your approval, and approvals are off \
+                 (approval_policy = never)."
+            )
+        };
+        let launch = refusal("a request to start a new agent");
+        let restart = refusal("a request to restart a finished agent");
+        let unclassified = format!(
+            "Not run: Security level {level:?}: this is a tool the security level has not \
+             classified after untrusted content entered the session"
+        );
+        fn plain(name: &str) -> ToolName {
+            ToolName::plain(name)
+        }
+        // Responses (namespaced V1), the plain names, the `_v1` aliases of
+        // Z.AI / Chat Completions / Claude-style, and V2 (`collaboration`).
+        let routes = |name: &str| {
+            vec![
+                ToolName::namespaced("multi_agent_v1", name),
+                plain(name),
+                plain(&format!("{name}_v1")),
+                ToolName::namespaced("collaboration", name),
+            ]
+        };
+        let mut go_ahead: Vec<ToolName> = ["wait_agent", "close_agent"]
+            .into_iter()
+            .flat_map(routes)
+            .collect();
+        go_ahead.extend(
+            [
+                "send_message",
+                "send_message_plaintext",
+                "interrupt_agent",
+                "list_agents",
+            ]
+            .map(plain),
+        );
+        for name in go_ahead {
+            assert_eq!(
+                dispatch(name.clone(), ToolOrigin::Builtin).await,
+                Ok(()),
+                "{level:?} {name}"
+            );
+        }
+        let mut asks: Vec<(ToolName, &str)> = routes("spawn_agent")
+            .into_iter()
+            .chain([plain("spawn_agent_plaintext")])
+            .map(|name| (name, launch.as_str()))
+            .collect();
+        asks.extend(
+            routes("resume_agent")
+                .into_iter()
+                .chain(routes("send_input"))
+                .map(|name| (name, restart.as_str())),
+        );
+        for (name, expected) in asks {
+            let refusal = dispatch(name.clone(), ToolOrigin::Builtin)
+                .await
+                .expect_err("asks");
+            assert!(refusal.starts_with(expected), "{level:?} {name}: {refusal}");
+        }
+        // A client or MCP tool cannot borrow an agent tool's name.
+        for alias in ["wait_agent_v1", "send_input_v1", "close_agent_v1"] {
+            let refusal = dispatch(plain(alias), ToolOrigin::Dynamic)
+                .await
+                .expect_err("asks");
+            assert!(
+                refusal.starts_with(&unclassified),
+                "{level:?} {alias}: {refusal}"
+            );
+            assert_eq!(coverage(ToolOrigin::Mcp, &plain(alias)), Coverage::OwnCheck);
+        }
+    }
+}
+
+/// D334: before untrusted content nothing about the agent tools changes.
+#[tokio::test]
+async fn d334_agent_restart_does_not_ask_before_untrusted_content() {
+    use crate::tools::context::ToolInvocation;
+    use crate::tools::context::ToolPayload;
+    use crate::tools::router::ToolCallSource;
+    use crate::turn_diff_tracker::TurnDiffTracker;
+    use codex_protocol::protocol::AskForApproval;
+    use codex_security_policy::SecurityLevel;
+
+    let (session, mut turn) = crate::session::tests::make_session_and_context().await;
+    turn.approval_policy
+        .set(AskForApproval::Never)
+        .expect("approval policy");
+    let client = (*session.services.model_client())
+        .clone()
+        .with_ingress_level(SecurityLevel::Moderate)
+        .with_source_envelopes(/*enabled*/ true);
+    session.services.replace_model_client(client);
+    let session = Arc::new(session);
+    let turn = Arc::new(turn);
+    for name in [
+        "resume_agent",
+        "resume_agent_v1",
+        "followup_task",
+        "followup_task_plaintext",
+        "send_input",
+        "send_input_v1",
+    ] {
+        let invocation = ToolInvocation {
+            session: Arc::clone(&session),
+            step_context: StepContext::for_test(Arc::clone(&turn)),
+            turn: Arc::clone(&turn),
+            cancellation_token: tokio_util::sync::CancellationToken::new(),
+            tracker: Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new())),
+            call_id: "call-agent".to_string(),
+            tool_name: ToolName::plain(name),
+            source: ToolCallSource::Direct,
+            payload: ToolPayload::Function {
+                arguments: r#"{"id":"agent","target":"agent"}"#.to_string(),
+            },
+        };
+        assert_eq!(
+            check_dispatch(&invocation, ToolOrigin::Builtin).await,
+            Ok(()),
+            "{name}"
+        );
+    }
 }
 
 #[test]
@@ -89,8 +335,69 @@ fn pf_23_s01_route_matrix() {
         (
             ToolOrigin::Builtin,
             ToolName::namespaced("multi_agent_v1", "spawn_agent"),
+            Coverage::AgentLaunch,
+        ),
+        (
+            ToolOrigin::Builtin,
+            plain("spawn_agent_v1"),
+            Coverage::AgentLaunch,
+        ),
+        (
+            ToolOrigin::Builtin,
+            ToolName::namespaced("multi_agent_v1", "wait_agent"),
             Coverage::ChildAgent,
         ),
+        (
+            ToolOrigin::Builtin,
+            plain("wait_agent_v1"),
+            Coverage::ChildAgent,
+        ),
+        (
+            ToolOrigin::Builtin,
+            plain("send_input_v1"),
+            Coverage::AgentFollowup,
+        ),
+        (
+            ToolOrigin::Builtin,
+            ToolName::namespaced("multi_agent_v1", "send_input"),
+            Coverage::AgentFollowup,
+        ),
+        (
+            ToolOrigin::Builtin,
+            plain("close_agent_v1"),
+            Coverage::ChildAgent,
+        ),
+        (
+            ToolOrigin::Builtin,
+            plain("resume_agent_v1"),
+            Coverage::AgentRestart,
+        ),
+        (
+            ToolOrigin::Builtin,
+            ToolName::namespaced("multi_agent_v1", "resume_agent"),
+            Coverage::AgentRestart,
+        ),
+        (
+            ToolOrigin::Builtin,
+            plain("followup_task"),
+            Coverage::AgentFollowup,
+        ),
+        (
+            ToolOrigin::Builtin,
+            plain("followup_task_plaintext"),
+            Coverage::AgentFollowup,
+        ),
+        (
+            ToolOrigin::Dynamic,
+            plain("resume_agent_v1"),
+            Coverage::Unclassified,
+        ),
+        (
+            ToolOrigin::Dynamic,
+            plain("wait_agent_v1"),
+            Coverage::Unclassified,
+        ),
+        (ToolOrigin::Mcp, plain("wait_agent_v1"), Coverage::OwnCheck),
         (
             ToolOrigin::Builtin,
             plain("brand_new_tool"),
@@ -115,10 +422,6 @@ fn pf_23_s01_route_matrix() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_23_s01_mcp_calls_are_classified_by_effect_and_arguments() {
     use ProtectedActionKind::*;
     for (tool, acts_outside, arguments, expected) in [
@@ -200,15 +503,11 @@ fn pf_23_s01_mcp_calls_are_classified_by_effect_and_arguments() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_23_s01_typed_input_is_judged_as_the_command_it_amounts_to() {
     use ProtectedActionKind::*;
     let cwd = cwd();
     let typed =
-        |process: &str, chars: &str| classify_typed_input(process, chars, &cwd, Path::new(HOME));
+        |process: &str, chars: &str| classify_typed_input(process, chars, &cwd, &fixture(HOME));
     assert_eq!(typed("bash -i", "ls -la\n"), None);
     assert_eq!(typed("bash -i", "y\n"), None);
     assert_eq!(typed("bash -i", "corbanu vault list\n"), Some(Vault));

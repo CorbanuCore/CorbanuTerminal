@@ -5,6 +5,7 @@
 //! wrapper and nothing here logs or renders it.
 
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::fmt;
 use std::path::Path;
 use std::path::PathBuf;
@@ -177,11 +178,91 @@ pub(crate) fn holds_named_account(
     holds_named_account_where(codex_home, provider_id, |kinds| kinds.contains(&kind))
 }
 
-/// D86: whether the vault holds any named account of `provider_id`;
-/// `None` when the vault cannot be read. Blocking (it reads the vault
-/// index); no credential value is read.
-pub(crate) fn holds_any_named_account(codex_home: &Path, provider_id: &str) -> Option<bool> {
-    holds_named_account_where(codex_home, provider_id, |_| true)
+/// D86/#1193: the providers with at least one named account in the vault
+/// (none when it is not initialised); `None` when the vault cannot be read.
+/// Blocking (it reads the vault index), so it runs off the UI thread; no
+/// credential value is read.
+pub(crate) fn named_account_providers(codex_home: &Path) -> Option<BTreeSet<String>> {
+    let vault = Vault::new(codex_home.to_path_buf());
+    if vault.key_storage() == VaultKeyStorage::NotInitialized {
+        return Some(BTreeSet::new());
+    }
+    vault
+        .list_provider_accounts()
+        .inspect_err(|error| tracing::warn!(%error, "could not list named accounts"))
+        .ok()
+        .map(|accounts| {
+            accounts
+                .into_iter()
+                .map(|account| account.provider_id)
+                .collect()
+        })
+}
+
+/// #1251: what a named sign-in account is signed in with, as the background
+/// check found it in the vault.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum NamedSignInState {
+    /// Its kind, email hint and plan (no token).
+    SignedIn(codex_login::NamedSignInSummary),
+    /// Removed or signed out (D171).
+    NoSignIn,
+    /// The vault could not be read.
+    Unreadable,
+}
+
+/// #1251: reads `account`'s sign-in summary from the vault. Blocking, so it
+/// runs off the UI thread.
+pub(crate) fn named_sign_in_state(
+    codex_home: &Path,
+    account: &codex_login::NamedChatgptAccount,
+) -> NamedSignInState {
+    match codex_login::named_account_summary(codex_home, account) {
+        Ok(Some(summary)) => NamedSignInState::SignedIn(summary),
+        Ok(None) => NamedSignInState::NoSignIn,
+        Err(error) => {
+            tracing::warn!(%error, "could not read a named account's sign-in");
+            NamedSignInState::Unreadable
+        }
+    }
+}
+
+/// D86/#1193: works out off the UI thread which providers have a named
+/// account in this home and caches the answer in `catalog`, where `/status`
+/// reads it (until it is known, `/status` names the account rather than hide
+/// it). #1251: the same job caches the session's named sign-in summary
+/// (until it is known, `/status` names the account alone). Runs at session
+/// start, when a session is configured, after every account change, when
+/// `/providers` opens and after each `/status` (so a change made by another
+/// process shows on the next one); only the newest answer is kept. With
+/// named accounts off and no named sign-in, or outside a Tokio runtime, the
+/// vault is not read.
+pub(crate) fn check_named_account_providers(
+    catalog: &std::sync::Arc<crate::model_catalog::ModelCatalog>,
+    config: &Config,
+) {
+    let named_accounts = config
+        .features
+        .enabled(codex_features::Feature::NamedAccounts);
+    let sign_in = codex_model_provider::named_sign_in_account(&config.model_provider);
+    if !named_accounts && sign_in.is_none() {
+        return;
+    }
+    let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+        return;
+    };
+    let generation = catalog.begin_named_account_check();
+    let catalog = std::sync::Arc::clone(catalog);
+    let codex_home = config.codex_home.to_path_buf();
+    runtime.spawn_blocking(move || {
+        if named_accounts {
+            catalog.set_named_account_providers(generation, named_account_providers(&codex_home));
+        }
+        if let Some(account) = sign_in {
+            let state = named_sign_in_state(&codex_home, &account);
+            catalog.set_named_sign_in(generation, account, state);
+        }
+    });
 }
 
 fn holds_named_account_where(

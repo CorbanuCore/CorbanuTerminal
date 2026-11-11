@@ -842,6 +842,7 @@ async fn status_model_provider_uses_bedrock_runtime_base_url_and_gates_usage_lin
         "<none>".to_string(),
         /*refreshing_rate_limits*/ false,
         /*account_usage*/ None,
+        /*named_sign_in*/ None,
     );
     let rendered = render_lines(&composite.display_lines(/*width*/ 120)).join("\n");
 
@@ -884,6 +885,7 @@ async fn status_model_provider_uses_bedrock_runtime_base_url_and_gates_usage_lin
         "<none>".to_string(),
         /*refreshing_rate_limits*/ false,
         /*account_usage*/ None,
+        /*named_sign_in*/ None,
     );
     let rendered = render_lines(&composite.display_lines(/*width*/ 120)).join("\n");
 
@@ -1881,6 +1883,7 @@ async fn status_snapshot_uses_default_reasoning_when_config_empty() {
         "<none>".to_string(),
         /*refreshing_rate_limits*/ false,
         /*account_usage*/ None,
+        /*named_sign_in*/ None,
     );
     let mut rendered_lines = render_lines(&composite.display_lines(/*width*/ 80));
     if cfg!(windows) {
@@ -1991,6 +1994,7 @@ async fn transcript_overlay_remeasures_status_after_rate_limit_refresh() {
         "<none>".to_string(),
         /*refreshing_rate_limits*/ true,
         /*account_usage*/ None,
+        /*named_sign_in*/ None,
     );
     let mut overlay =
         TranscriptOverlay::new(vec![Arc::new(status)], RuntimeKeymap::defaults().pager);
@@ -2495,6 +2499,16 @@ async fn named_account_status_in(
             .expect("enable named accounts");
     }
     set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
+    // #1193: what the background check found in this home's vault, unless
+    // the test set it (a vault it cannot read leaves it unknown).
+    let account_usage = account_usage.map(|mut summary| {
+        if summary.named_account_in_home.is_none() {
+            summary.named_account_in_home =
+                crate::provider_named_accounts::named_account_providers(temp_home.path())
+                    .map(|providers| providers.contains("zai"));
+        }
+        summary
+    });
     // The session's own token usage: what the account rows add up to.
     let usage = account_usage
         .as_ref()
@@ -2541,6 +2555,7 @@ async fn named_account_status_in(
         "<none>".to_string(),
         /*refreshing_rate_limits*/ false,
         account_usage,
+        /*named_sign_in*/ None,
     );
     let mut rendered_lines = render_lines(&composite.display_lines(width));
     if cfg!(windows) {
@@ -2579,6 +2594,7 @@ async fn status_snapshot_account_usage_no_usage_yet() {
         /*named_accounts*/ true,
         Some("work"),
         Some(super::StatusAccountUsage {
+            named_account_in_home: None,
             rows: vec![("work".to_string(), TokenUsage::default())],
         }),
         /*width*/ 100,
@@ -2593,6 +2609,7 @@ async fn status_snapshot_account_usage_one_account() {
         /*named_accounts*/ true,
         Some("work"),
         Some(super::StatusAccountUsage {
+            named_account_in_home: None,
             rows: vec![(
                 "work".to_string(),
                 account_tokens(
@@ -2614,6 +2631,7 @@ async fn status_snapshot_account_usage_several_accounts() {
         /*named_accounts*/ true,
         /*account*/ None,
         Some(super::StatusAccountUsage {
+            named_account_in_home: None,
             rows: vec![
                 (
                     "default".to_string(),
@@ -2646,6 +2664,7 @@ fn model_provider_line(rendered: &str) -> &str {
 
 fn default_account_usage() -> Option<super::StatusAccountUsage> {
     Some(super::StatusAccountUsage {
+        named_account_in_home: None,
         rows: vec![(
             codex_vault::DEFAULT_PROVIDER_ACCOUNT.to_string(),
             account_tokens(
@@ -2672,6 +2691,15 @@ async fn status_snapshot_account_line_hidden_without_named_accounts() {
         line.contains("Z.AI") && !line.contains("account"),
         "{rendered}"
     );
+    // D125: nor the "Account usage" line: the card is exactly as with named
+    // accounts off.
+    assert!(!rendered.contains("Account usage"), "{rendered}");
+    let flag_off = named_account_status(
+        /*named_accounts*/ false, /*account*/ None, /*account_usage*/ None,
+        /*width*/ 100,
+    )
+    .await;
+    assert_eq!(rendered, flag_off);
     assert_snapshot!(rendered);
 }
 
@@ -2714,6 +2742,7 @@ async fn account_line_counts_only_this_providers_named_accounts() {
         !model_provider_line(&rendered).contains("account"),
         "{rendered}"
     );
+    assert!(!rendered.contains("Account usage"), "{rendered}");
 
     std::fs::write(
         home.path().join("secrets").join("local.age"),
@@ -2732,6 +2761,7 @@ async fn account_line_counts_only_this_providers_named_accounts() {
         model_provider_line(&rendered).contains("Z.AI · account default"),
         "{rendered}"
     );
+    assert!(rendered.contains("Account usage:"), "{rendered}");
 }
 
 /// D86: with named accounts off, an enrolled named account changes nothing.
@@ -2801,15 +2831,158 @@ async fn default_openai_status_is_unchanged_without_named_accounts() {
             /*refreshing_rate_limits*/ false,
             // What `status_account_usage` passes: rows only with the flag on.
             named_accounts.then(|| super::StatusAccountUsage {
+                // The background check found no named account.
+                named_account_in_home: Some(false),
                 rows: vec![(
                     codex_vault::DEFAULT_PROVIDER_ACCOUNT.to_string(),
                     usage.clone(),
                 )],
             }),
+            /*named_sign_in*/ None,
         );
         sanitize_directory(render_lines(&composite.display_lines(/*width*/ 100))).join("\n")
     }
     let on = render(/*named_accounts*/ true).await;
     assert!(!on.contains("Model provider"), "{on}");
     assert_eq!(on, render(/*named_accounts*/ false).await);
+}
+
+/// D171 (#1286): `/status` of an OpenAI session on the named ChatGPT account
+/// `work`, signed in when `signed_in`. #1251: with `known`, the background
+/// check has cached what this home's vault holds for it; without, not yet.
+async fn named_sign_in_status(signed_in: bool, remote: bool, known: bool) -> String {
+    let temp_home = TempDir::new().expect("temp home");
+    if signed_in {
+        app_test_support::write_named_chatgpt_auth(
+            temp_home.path(),
+            "openai",
+            "work",
+            ChatGptAuthFixture::new("work-access-not-a-secret")
+                .account_id("acct-work")
+                .plan_type("plus"),
+        )
+        .expect("named sign-in");
+    }
+    let mut config = test_config(&temp_home).await;
+    config.model_provider_id = "openai".to_string();
+    config.model_provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+    config.model_provider.account = Some(codex_model_provider_info::NamedProviderAccount {
+        provider_id: "openai".to_string(),
+        name: "work".to_string(),
+    });
+    config
+        .features
+        .enable(codex_features::Feature::NamedAccounts)
+        .expect("enable named accounts");
+    set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
+    let usage = account_tokens(
+        /*input*/ 1_000, /*cached*/ 0, /*output*/ 20, /*reasoning*/ 0,
+    );
+    let account_usage = super::StatusAccountUsage {
+        named_account_in_home: Some(true),
+        rows: vec![("work".to_string(), usage.clone())],
+    };
+    let now = chrono::Local
+        .with_ymd_and_hms(2026, 10, 22, 4, 5, 6)
+        .single()
+        .expect("timestamp");
+    let remote_connection = remote.then(|| RemoteConnectionStatus {
+        address: "wss://remote.example".to_string(),
+        version: "0.0.0".to_string(),
+    });
+    let (composite, _) = new_status_output_with_rate_limits_handle(
+        &config,
+        /*runtime_model_provider_base_url*/ None,
+        remote_connection.as_ref(),
+        /*account_display*/ None,
+        /*token_info*/ None,
+        &usage,
+        &None,
+        /*thread_name*/ None,
+        /*forked_from*/ None,
+        &[],
+        /*plan_type*/ None,
+        now,
+        "gpt-5.5",
+        /*collaboration_mode*/ None,
+        /*reasoning_effort_override*/ None,
+        "<none>".to_string(),
+        /*refreshing_rate_limits*/ false,
+        Some(account_usage),
+        known.then(|| {
+            crate::provider_named_accounts::named_sign_in_state(
+                temp_home.path(),
+                &codex_login::NamedChatgptAccount {
+                    provider_id: "openai".to_string(),
+                    name: "work".to_string(),
+                },
+            )
+        }),
+    );
+    sanitize_directory(render_lines(&composite.display_lines(/*width*/ 100))).join("\n")
+}
+
+/// D171 (#1286): once the session's ChatGPT account is removed or signed
+/// out, `/status` no longer presents the session as running on it: the
+/// provider line says the account is unavailable and the Account line names
+/// it with its recovery.
+#[tokio::test]
+async fn status_does_not_present_a_removed_sign_in_account_as_the_sessions() {
+    let signed_in = named_sign_in_status(
+        /*signed_in*/ true, /*remote*/ false, /*known*/ true,
+    )
+    .await;
+    assert!(signed_in.contains("OpenAI · account work"), "{signed_in}");
+    assert!(!signed_in.contains("unavailable"), "{signed_in}");
+
+    // A remote app server's account lives on its host: this vault cannot tell.
+    let remote = named_sign_in_status(
+        /*signed_in*/ false, /*remote*/ true, /*known*/ true,
+    )
+    .await;
+    assert!(remote.contains("OpenAI · account work"), "{remote}");
+    assert!(!remote.contains("unavailable"), "{remote}");
+
+    let removed = named_sign_in_status(
+        /*signed_in*/ false, /*remote*/ false, /*known*/ true,
+    )
+    .await;
+    assert!(!removed.contains("· account work"), "{removed}");
+    assert!(
+        removed.contains("OpenAI · account unavailable"),
+        "{removed}"
+    );
+    assert!(
+        removed.contains(
+            "account work has no sign-in: `corbanu login --account work` or `/providers`"
+        ),
+        "{removed}"
+    );
+}
+
+/// #1251: `/status` takes the named sign-in summary from the background
+/// check's cached answer, never the vault. While it is not known yet, the
+/// Account line names the account alone, whatever the vault holds.
+#[tokio::test]
+async fn status_snapshot_named_sign_in_summary_not_known_yet() {
+    let signed_in = named_sign_in_status(
+        /*signed_in*/ true, /*remote*/ false, /*known*/ true,
+    )
+    .await;
+    assert!(signed_in.contains("ChatGPT sign-in"), "{signed_in}");
+    assert!(signed_in.contains("(account work)"), "{signed_in}");
+
+    let unknown = named_sign_in_status(
+        /*signed_in*/ true, /*remote*/ false, /*known*/ false,
+    )
+    .await;
+    assert!(!unknown.contains("ChatGPT sign-in"), "{unknown}");
+    assert!(unknown.contains("OpenAI · account work"), "{unknown}");
+    // Removed or signed out is not assumed while unknown.
+    let removed_unknown = named_sign_in_status(
+        /*signed_in*/ false, /*remote*/ false, /*known*/ false,
+    )
+    .await;
+    assert_eq!(removed_unknown, unknown);
+    assert_snapshot!(unknown);
 }

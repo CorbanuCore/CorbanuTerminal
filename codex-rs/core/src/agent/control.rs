@@ -73,6 +73,7 @@ const LAST_TASK_MESSAGE_MAX_CHARS: usize = 240;
 const LAST_RESULT_MESSAGE_MAX_CHARS: usize = 500;
 const ROOT_LAST_TASK_MESSAGE: &str = "Main thread";
 mod execution;
+mod held_mailbox_warning;
 mod legacy;
 mod mailbox;
 mod residency;
@@ -461,6 +462,21 @@ impl AgentControl {
         result
     }
 
+    /// Whether `agent_id`'s resident session is the one `spawn_agent` created
+    /// with a first turn queued (D435). With `PendingInit`, that turn has not
+    /// started yet; a session reloaded later reads `PendingInit` with no turn.
+    pub(crate) async fn spawned_with_first_turn(&self, agent_id: ThreadId) -> bool {
+        let Ok(state) = self.upgrade() else {
+            return false;
+        };
+        state.get_thread(agent_id).await.is_ok_and(|thread| {
+            thread
+                .session
+                .spawned_with_first_turn
+                .load(std::sync::atomic::Ordering::Acquire)
+        })
+    }
+
     /// Interrupt the current task for an existing agent thread.
     pub(crate) async fn interrupt_agent(&self, agent_id: ThreadId) -> CodexResult<String> {
         let state = self.upgrade()?;
@@ -530,6 +546,18 @@ impl AgentControl {
 
     pub(crate) fn is_root_thread(&self, agent_id: ThreadId) -> bool {
         self.state.agent_id_for_path(&AgentPath::root()) == Some(agent_id)
+    }
+
+    /// Whether `thread_id` is loaded and is the root of its own tree: a thread a client
+    /// started (such as a pane the person opened), not a spawned or internal agent.
+    pub(crate) async fn is_loaded_root_thread(&self, thread_id: ThreadId) -> bool {
+        let Ok(state) = self.upgrade() else {
+            return false;
+        };
+        state
+            .get_thread(thread_id)
+            .await
+            .is_ok_and(|thread| !thread.session_source.is_non_root_agent())
     }
 
     pub(crate) fn ensure_agent_known(&self, agent_id: ThreadId) -> CodexResult<AgentMetadata> {
@@ -700,6 +728,71 @@ impl AgentControl {
             self.restore_thread_spawn_metadata(thread_id, &stored_thread.source);
         }
         Ok(())
+    }
+
+    /// #1701: whether `agent_id` is a loaded thread that `caller` did not
+    /// spawn, directly or through its own agents. `wait_agent` reads only
+    /// the caller's own agents; an id that is not loaded is not foreign
+    /// (waiting reports it as not found).
+    pub(crate) async fn is_foreign_loaded_thread(
+        &self,
+        caller: ThreadId,
+        agent_id: ThreadId,
+    ) -> CodexResult<bool> {
+        let state = self.upgrade()?;
+        if state.get_thread(agent_id).await.is_err() {
+            return Ok(false);
+        }
+        Ok(!self
+            .live_thread_spawn_descendants(caller)
+            .await?
+            .contains(&agent_id))
+    }
+
+    /// #1701: the names `list_agents` gives the loaded agents `caller`
+    /// spawned, directly or through its own agents.
+    pub(crate) async fn spawn_descendant_agent_names(
+        &self,
+        caller: ThreadId,
+    ) -> CodexResult<Vec<String>> {
+        Ok(self
+            .live_thread_spawn_descendants(caller)
+            .await?
+            .into_iter()
+            .map(|thread_id| {
+                self.get_agent_metadata(thread_id)
+                    .and_then(|metadata| metadata.agent_path)
+                    .map(|path| path.to_string())
+                    .unwrap_or_else(|| thread_id.to_string())
+            })
+            .collect())
+    }
+
+    /// #1756: the names `list_agents` gives the agents `caller` spawned,
+    /// directly or through its own agents: the loaded ones, and those not
+    /// loaded now (open edges in the agent graph, listed as unloaded).
+    pub(crate) async fn own_agent_names(&self, caller: ThreadId) -> CodexResult<Vec<String>> {
+        let mut thread_ids = self.live_thread_spawn_descendants(caller).await?;
+        let state = self.upgrade()?;
+        if let Some(agent_graph_store) = state.agent_graph_store()
+            && let Ok(persisted) = agent_graph_store
+                .list_thread_spawn_descendants(
+                    caller,
+                    Some(codex_agent_graph_store::ThreadSpawnEdgeStatus::Open),
+                )
+                .await
+        {
+            thread_ids.extend(persisted);
+        }
+        Ok(thread_ids
+            .into_iter()
+            .map(|thread_id| {
+                self.get_agent_metadata(thread_id)
+                    .and_then(|metadata| metadata.agent_path)
+                    .map(|path| path.to_string())
+                    .unwrap_or_else(|| thread_id.to_string())
+            })
+            .collect())
     }
 
     pub(crate) async fn list_live_agent_subtree_thread_ids(

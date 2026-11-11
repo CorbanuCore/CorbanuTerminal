@@ -482,7 +482,7 @@ impl<'a> Walk<'a> {
         // The body starts on the line after the operator's (one
         // here-document per line) and ends at the first line that is the
         // delimiter (after leading tabs for `<<-`).
-        let end_line = text[..end.start_byte()].rfind('\n').map_or(0, |at| at + 1);
+        let end_line = work::rfind(&text[..end.start_byte()], "\n").map_or(0, |at| at + 1);
         let body_start = body.map_or(end_line, |body| body.start_byte());
         let (Some(between), Some(body_text)) = (
             text.get(start.end_byte()..body_start),
@@ -572,10 +572,24 @@ impl<'a> Walk<'a> {
         let arithmetic = match kind {
             "arithmetic_expansion" => Some(source),
             "compound_statement" if source.starts_with("((") => Some(source),
-            "c_style_for_statement" => source.find("))").map(|end| &source[..end]),
+            // The header: up to the loop's body.
+            "c_style_for_statement" => {
+                let mut cursor = node.walk();
+                let body = node
+                    .children(&mut cursor)
+                    .find(|child| matches!(child.kind(), "do_group" | "compound_statement"));
+                Some(
+                    &source
+                        [..body.map_or(source.len(), |body| body.start_byte() - node.start_byte())],
+                )
+            }
             _ => None,
         };
-        if arithmetic.is_some_and(|text| text.contains(['\'', '"'])) {
+        // An assignment in arithmetic to a name built by an expansion
+        // (`$(( ${x}CT = 1 ))`) may set any variable.
+        if arithmetic
+            .is_some_and(|text| text.contains(['\'', '"']) || (text.contains('$') && assigns(text)))
+        {
             self.refuse(Refusal::Words);
         }
         self.bash_only |= matches!(
@@ -840,6 +854,15 @@ impl<'a> Walk<'a> {
             after_wrapper |= wrapper;
             !wrapper && !option
         });
+        // A nameref (`declare -n p=...`) makes a name stand for another.
+        if let Some(at) = wrapped
+            && matches!(words[at].text.as_str(), "declare" | "typeset" | "local")
+            && words[at + 1..]
+                .iter()
+                .any(|word| word.text.starts_with('-') && word.text.contains('n'))
+        {
+            self.refuse(Refusal::Reparse);
+        }
         // A variable named through an expansion (`export "$v=1"`, `read
         // "$v"`, `declare -n`) may be one that changes how lines are read.
         if let Some(at) = wrapped
@@ -1089,7 +1112,7 @@ fn splits_in_test(text: &str) -> bool {
 }
 
 /// `set` arguments that change nothing about how the lines after them are
-/// read: `-e`, `-u`, `-x`, `-v` (and `+`), `-o` with one of these names,
+/// read: `-e`, `-u`, `-v` (and `+`), `-o` with one of these names,
 /// and `--` with any positional parameters.
 fn harmless_set(args: &[Word]) -> bool {
     let mut option_name = false;
@@ -1124,11 +1147,27 @@ fn harmless_set(args: &[Word]) -> bool {
 /// `BASHOPTS`, `POSIXLY_CORRECT` (posix mode turns on aliases),
 /// `BASH_ALIASES`, `BASH_CMDS`.
 fn option_variable(word: &str) -> bool {
-    let name = word.split(['=', '[', '+']).next().unwrap_or_default();
-    matches!(
-        name,
-        "SHELLOPTS" | "BASHOPTS" | "POSIXLY_CORRECT" | "BASH_ALIASES" | "BASH_CMDS"
-    )
+    // Anywhere in the word as the command receives it (quotes removed):
+    // `declare -n q=POSIX"LY_CORRECT"` names it too.
+    OPTION_VARIABLES.iter().any(|name| word.contains(name))
+}
+
+/// Whether arithmetic text holds an assignment operator (`=`, `+=`, `<<=`, ...,
+/// `++`, `--`), not a comparison (`==`, `!=`, `<=`, `>=`).
+fn assigns(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    bytes.iter().enumerate().any(|(at, byte)| {
+        work::step();
+        let before = at.checked_sub(1).map(|before| bytes[before]);
+        let after = bytes.get(at + 1).copied();
+        // `<<=` and `>>=` assign; `<=` and `>=` compare.
+        let shift = at >= 2 && matches!(&bytes[at - 2..at], b"<<" | b">>");
+        (*byte == b'='
+            && after != Some(b'=')
+            && (shift || !matches!(before, Some(b'=' | b'!' | b'<' | b'>'))))
+            || (*byte == b'+' && after == Some(b'+'))
+            || (*byte == b'-' && after == Some(b'-'))
+    })
 }
 
 /// The text of a word's expansion, whose value is not known.

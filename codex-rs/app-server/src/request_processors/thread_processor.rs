@@ -450,22 +450,6 @@ fn validate_dynamic_tools(tools: &[DynamicToolSpec]) -> Result<(), String> {
     const DYNAMIC_TOOL_NAMESPACE_MAX_LEN: usize = 64;
     const DYNAMIC_TOOL_NAMESPACE_DESCRIPTION_MAX_LEN: usize = 1024;
     const DYNAMIC_TOOL_IDENTIFIER_PATTERN: &str = "^[a-zA-Z0-9_-]+$";
-    const RESERVED_RESPONSES_NAMESPACES: &[&str] = &[
-        "api_tool",
-        "browser",
-        "computer",
-        "container",
-        "file_search",
-        "functions",
-        "image_gen",
-        "multi_tool_use",
-        "python",
-        "python_user_visible",
-        "submodel_delegator",
-        "terminal",
-        "tool_search",
-        "web",
-    ];
 
     fn escape_identifier_for_error(value: &str) -> String {
         value.escape_default().to_string()
@@ -568,7 +552,7 @@ fn validate_dynamic_tools(tools: &[DynamicToolSpec]) -> Result<(), String> {
                 if name == "mcp" || name.starts_with("mcp__") {
                     return Err(format!("dynamic tool namespace is reserved: {name}"));
                 }
-                if RESERVED_RESPONSES_NAMESPACES.contains(&name) {
+                if codex_mcp::RESPONSES_RESERVED_NAMESPACES.contains(&name) {
                     return Err(format!(
                         "dynamic tool namespace collides with a reserved Responses API namespace: {name}",
                     ));
@@ -1378,6 +1362,7 @@ impl ThreadRequestProcessor {
             ephemeral,
             history_mode,
             session_start_source,
+            reopened_by_prompt_edit,
             thread_source,
             spawn_agent_parent_thread_id,
             spawn_agent_role,
@@ -1415,6 +1400,7 @@ impl ThreadRequestProcessor {
             personality,
         );
         typesafe_overrides.ephemeral = ephemeral;
+        typesafe_overrides.reopened_by_prompt_edit = reopened_by_prompt_edit;
         typesafe_overrides.allow_provider_model_fallback = allow_provider_model_fallback;
         typesafe_overrides.provider_account = provider_account;
         typesafe_overrides.inherited_provider_account = inherited_provider_account;
@@ -6026,7 +6012,9 @@ fn build_thread_from_snapshot(
         id: thread_id.to_string(),
         extra: None,
         session_id,
-        forked_from_id: None,
+        forked_from_id: config_snapshot
+            .forked_from_thread_id
+            .map(|id| id.to_string()),
         parent_thread_id: config_snapshot.parent_thread_id.map(|id| id.to_string()),
         preview: String::new(),
         ephemeral: config_snapshot.ephemeral,

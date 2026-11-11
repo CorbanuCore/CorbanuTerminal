@@ -207,7 +207,7 @@ fn append_history_line(
 // Closing a File alone need not release its lock while a forked child or a
 // duplicate descriptor still refers to the same open file description. Keep the
 // lock scoped to the operation, including every early return and I/O error.
-struct HistoryFileLock(File);
+pub(crate) struct HistoryFileLock(File);
 
 impl Drop for HistoryFileLock {
     fn drop(&mut self) {

@@ -198,6 +198,7 @@ fn insert_rmcp_test_server(config: &mut Config, command: String, approval_mode: 
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: Some(Duration::from_secs(10)),
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: Some(approval_mode),
             enabled_tools: None,

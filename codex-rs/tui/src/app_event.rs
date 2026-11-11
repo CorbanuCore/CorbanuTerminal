@@ -478,7 +478,9 @@ pub(crate) enum AppEvent {
     OpenSpawnClaudePaneTaskPrompt {
         pane_id: String,
     },
-    /// Start a normal turn in an existing spawned-agent pane.
+    /// An agent's task for a native pane, agent-opened or opened by the person
+    /// (D106, #1176): admitted to the pane's Core mailbox as an inter-agent
+    /// message, never as the person's input.
     SubmitSpawnAgentTask {
         thread_id: codex_protocol::ThreadId,
         task: String,
@@ -494,15 +496,6 @@ pub(crate) enum AppEvent {
     SubmitSpawnAgentTaskFromPerson {
         thread_id: codex_protocol::ThreadId,
         task: String,
-    },
-    /// Start a normal turn in an operator-owned native user pane.
-    SubmitCodexUserPaneTask {
-        thread_id: codex_protocol::ThreadId,
-        task: String,
-        /// #660: another agent sent it while the security kill switch was
-        /// on: it is reported not sent even when it is handled after the
-        /// switch was turned off.
-        sent_while_kill_switch_on: bool,
     },
     /// Deliver an edge-adapter message through the canonical native mailbox.
     SendSpawnAgentMailboxMessage {

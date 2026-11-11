@@ -320,12 +320,65 @@ fn user_message_count(thread: &Thread, prompt: &str) -> usize {
         .count()
 }
 
+/// Names the step a hung run is on. In #349 this test was once killed at nextest's 60 s limit
+/// with no output, although each event wait here has its own 5 s timeout. The watchdog is a plain
+/// thread, so it reports even if the runtime stops making progress. Under nextest, a run killed
+/// without its line had finished the test body, which puts the hang in runtime shutdown (or, far
+/// less likely, before the watchdog started). Plain `cargo test` captures the line unless run with
+/// `--nocapture`.
+struct StepWatchdog {
+    step: std::sync::Arc<std::sync::Mutex<(&'static str, std::time::Instant)>>,
+    _body_running: std::sync::mpsc::Sender<()>,
+}
+
+impl StepWatchdog {
+    const REPORT_AFTER: std::time::Duration = std::time::Duration::from_secs(/*secs*/ 40);
+
+    // Nextest shows a killed test's stderr, so the report goes there.
+    #[allow(clippy::print_stderr)]
+    fn start() -> Self {
+        let step = std::sync::Arc::new(std::sync::Mutex::new((
+            "starting",
+            std::time::Instant::now(),
+        )));
+        let (body_running, body_finished) = std::sync::mpsc::channel::<()>();
+        let current = std::sync::Arc::clone(&step);
+        std::thread::spawn(move || {
+            // Dropping the watchdog disconnects the channel, which ends this wait early.
+            if let Err(std::sync::mpsc::RecvTimeoutError::Timeout) =
+                body_finished.recv_timeout(Self::REPORT_AFTER)
+            {
+                let (step, since) = *current
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                eprintln!(
+                    "safety retry test still running after {:?}; current step: {step} (for {:?})",
+                    Self::REPORT_AFTER,
+                    since.elapsed()
+                );
+            }
+        });
+        Self {
+            step,
+            _body_running: body_running,
+        }
+    }
+
+    fn step(&self, step: &'static str) {
+        *self
+            .step
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = (step, std::time::Instant::now());
+    }
+}
+
 async fn run_safety_retry(
     previous_prompt: Option<&str>,
     failing_draft: Option<&str>,
     committed_steer: Option<&str>,
     scenario: SafetyRetryScenario,
 ) -> Result<()> {
+    let watchdog = StepWatchdog::start();
     let (active_chunks, release_active_response) = gated_response_chunks(
         "active-response",
         ev_completed_with_tokens("active-response", /*total_tokens*/ 100),
@@ -364,8 +417,10 @@ async fn run_safety_retry(
         ]),
     }]);
     let expected_request_count = response_sequences.len();
+    watchdog.step("starting the Responses server");
     let (server, _completions) = start_streaming_sse_server(response_sequences).await;
 
+    watchdog.step("building the test app");
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
     let codex_home = tempdir()?;
     std::fs::write(
@@ -405,7 +460,9 @@ goals = true
         .expect("test config should allow goals");
 
     let mut tui = crate::tui::test_support::make_test_tui()?;
+    watchdog.step("starting the embedded app server");
     let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
+    watchdog.step("starting the source thread");
     let started = app_server.start_thread(&app.config).await?;
     let source_thread_id = started.session.thread_id;
     app.replace_chat_widget_with_app_server_thread(
@@ -417,6 +474,7 @@ goals = true
     .await?;
     while app_event_rx.try_recv().is_ok() {}
 
+    watchdog.step("running the previous turn");
     if let Some(previous_prompt) = previous_prompt {
         submit_prompt(&mut app, previous_prompt);
         let previous_turn = next_user_turn_event(&mut app_event_rx);
@@ -440,6 +498,7 @@ goals = true
         }
     }
 
+    watchdog.step("storing the source goal");
     let state_db = codex_state::StateRuntime::init(
         app.config.sqlite.clone(),
         app.config.model_provider_id.clone(),
@@ -478,6 +537,7 @@ goals = true
         .await
         .expect("source goal usage should be recorded");
 
+    watchdog.step("starting the active turn");
     submit_prompt(&mut app, RETRY_PROMPT);
     let active_turn = next_user_turn_event(&mut app_event_rx);
     app.submit_thread_op(&mut app_server, source_thread_id, active_turn.clone())
@@ -491,6 +551,7 @@ goals = true
     )
     .await;
 
+    watchdog.step("committing the steer");
     if let Some(committed_steer) = committed_steer {
         submit_prompt(&mut app, committed_steer);
         let steer = next_user_turn_event(&mut app_event_rx);
@@ -513,6 +574,7 @@ goals = true
         assert_eq!(user_message_count(&source, committed_steer), 1);
     }
 
+    watchdog.step("reporting safety buffering");
     app.handle_app_server_event(
         &app_server,
         AppServerEvent::ServerNotification(Box::new(
@@ -547,6 +609,7 @@ goals = true
         )?;
     }
 
+    watchdog.step("retrying while another thread is primary");
     let primary_thread_id = ThreadId::new();
     app.primary_thread_id = Some(primary_thread_id);
     Box::pin(app.retry_safety_buffered_turn(
@@ -568,6 +631,7 @@ goals = true
     app.primary_thread_id = Some(source_thread_id);
     while app_event_rx.try_recv().is_ok() {}
 
+    watchdog.step("retrying the interrupted turn");
     Box::pin(app.retry_safety_buffered_turn(
         &mut tui,
         &mut app_server,
@@ -583,6 +647,7 @@ goals = true
 
     let first_retry_thread_id = app.chat_widget.thread_id().expect("first retry thread id");
     if scenario == SafetyRetryScenario::RetryTwice {
+        watchdog.step("retrying a second time");
         let first_retry_turn_id =
             next_turn_started(&mut app, &mut app_server, first_retry_thread_id).await;
         drive_until_request_count(
@@ -646,6 +711,7 @@ goals = true
         Box::pin(app.retry_safety_buffered_turn(&mut tui, &mut app_server, second_retry)).await;
     }
 
+    watchdog.step("checking for a failed branch");
     if let Some(draft) = failing_draft {
         assert_eq!(
             app.chat_widget.composer_text_with_pending(),
@@ -656,11 +722,15 @@ goals = true
             let _ = release_active_response.send(());
         }
         let _ = release_steered_response.send(());
+        watchdog.step("shutting down the app server");
         app_server.shutdown().await?;
+        watchdog.step("shutting down the Responses server");
         server.shutdown().await;
+        watchdog.step("dropping test state");
         return Ok(());
     }
 
+    watchdog.step("waiting for the goal continuation");
     drive_until_request_count(&mut app, &mut app_server, &server, expected_request_count).await;
     // The goal continuation's reply may or may not have rendered when its request arrives, so
     // wait for it: the history is then the same on every run.
@@ -707,6 +777,7 @@ goals = true
         insta::assert_snapshot!("safety_retry_committed_steer_history", rendered_retry);
     }
 
+    watchdog.step("reading the source and retry threads");
     let retry_thread_id = app.chat_widget.thread_id().expect("retry thread id");
     let source = app_server
         .thread_read(source_thread_id, /*include_turns*/ true)
@@ -745,6 +816,7 @@ goals = true
         assert_eq!(user_message_count(&retry, previous_prompt), 1);
     }
 
+    watchdog.step("reading the goals");
     let source_goal = app_server
         .thread_goal_get(source_thread_id)
         .await?
@@ -769,6 +841,7 @@ goals = true
     assert!(retry_goal.tokens_used >= expected_source_tokens);
     assert!(retry_goal.time_used_seconds >= 12);
 
+    watchdog.step("checking the Responses requests");
     let request_bodies = server
         .requests()
         .await
@@ -831,6 +904,7 @@ goals = true
         "inherited goal continuation should resume after the explicit retry"
     );
 
+    watchdog.step("shutting down the app server");
     if let Some(release_active_response) = release_active_response.take() {
         let _ = release_active_response.send(());
     }
@@ -838,7 +912,9 @@ goals = true
     let _ = release_previous_response.send(());
     let _ = release_retry_response.send(());
     app_server.shutdown().await?;
+    watchdog.step("shutting down the Responses server");
     server.shutdown().await;
+    watchdog.step("dropping test state");
     Ok(())
 }
 

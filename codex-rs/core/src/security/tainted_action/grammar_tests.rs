@@ -341,6 +341,9 @@ fn set_is_read_only_with_harmless_options() {
         "PS4='$(id)'; set -e; ls",
         "set -x",
         "printf -v \"$n\" %s x",
+        "declare -n q=POSIX\"LY_CORRECT\"",
+        "declare -n q=x",
+        "export BASH_\"ENV\"=f",
     ] {
         assert_eq!(read(text).err(), Some(Refusal::Reparse), "{text:?}");
     }
@@ -357,10 +360,13 @@ fn quotes_some_shells_do_not_honour_are_refused() {
         "false && (( ')) ; rm -rf ~ ; (( ' ))",
         "false && echo $(( ')) ; rm -rf ~ ; echo $(( ' ))",
         "echo \"${x:-'}\"; rm -rf ~; echo \"'}\"",
+        "x=POSIXLY_CORRE; : $(( ${x}CT = 1 ))",
+        "x=POSIXLY_CORRE; : $(( ${x}CT <<= 1 ))",
+        "for (( i=$((1)); i<\"))\"; i++ )) do :; done",
     ] {
         assert!(read(text).is_err(), "{text:?}");
     }
-    assert!(read("echo `date` \"${x:-a}\" $((1 + 2))").is_ok());
+    assert!(read("echo `date` \"${x:-a}\" $((1 + 2)) $(($n >= 2))").is_ok());
 }
 
 #[test]

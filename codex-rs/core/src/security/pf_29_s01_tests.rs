@@ -8,6 +8,7 @@ use tempfile::TempDir;
 
 use super::preflight::ConfigLayerInput;
 use super::preflight::Disposition;
+use super::preflight::Drift;
 #[cfg(unix)]
 use super::preflight::EntryStatus;
 use super::preflight::Finding;
@@ -81,6 +82,30 @@ fn find(preflight: &Preflight, kind: FindingKind) -> Vec<&Finding> {
         .collect()
 }
 
+/// The blocker every Windows machine has until PF-27-S06 brings protected
+/// launch there (#691).
+const WINDOWS_SANDBOX_BLOCKER: &str =
+    "OS sandbox: protected launch is not available on this platform yet (PF-27-S06)";
+
+/// [`Preflight::is_clean`] on macOS and Linux. Elsewhere (today, Windows)
+/// the OS sandbox row is never ready yet, so it must be exactly
+/// [`WINDOWS_SANDBOX_BLOCKER`] and the fixture is clean when nothing else
+/// blocks.
+pub(super) fn clean(preflight: &Preflight) -> bool {
+    if cfg!(any(target_os = "macos", target_os = "linux")) {
+        return preflight.is_clean();
+    }
+    let mut blockers = preflight.blockers();
+    let Some(at) = blockers
+        .iter()
+        .position(|line| line == WINDOWS_SANDBOX_BLOCKER)
+    else {
+        panic!("no Windows OS sandbox blocker in {blockers:?}");
+    };
+    blockers.remove(at);
+    blockers.is_empty()
+}
+
 fn layer(label: &str, path: Option<PathBuf>, toml: &str) -> ConfigLayerInput {
     ConfigLayerInput {
         label: label.to_string(),
@@ -90,17 +115,13 @@ fn layer(label: &str, path: Option<PathBuf>, toml: &str) -> ConfigLayerInput {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s01_empty_machine_is_clean_only_when_controls_are_ready() {
     let fixture = Fixture::new();
     let sources = fixture.sources();
-    assert!(fixture.run(&sources).is_clean());
+    assert!(clean(&fixture.run(&sources)));
 
     let off = Preflight::run_with_key(&sources, ReadinessFlags::default(), KEY);
-    assert!(!off.is_clean());
+    assert!(!clean(&off));
     let blockers = off.blockers();
     for key in [
         "secretless_agent_launch",
@@ -115,10 +136,6 @@ fn pf_29_s01_empty_machine_is_clean_only_when_controls_are_ready() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s01_credential_files_and_ssh_keys_are_isolated_not_blocking() {
     let fixture = Fixture::new();
     let home = fixture.home();
@@ -148,7 +165,7 @@ fn pf_29_s01_credential_files_and_ssh_keys_are_isolated_not_blocking() {
         );
     }
     assert_eq!(find(&preflight, FindingKind::SshPrivateKey).len(), 2);
-    assert!(preflight.is_clean(), "{:?}", preflight.blockers());
+    assert!(clean(&preflight), "{:?}", preflight.blockers());
 }
 
 #[test]
@@ -185,7 +202,7 @@ fn pf_29_s01_shell_profile_exports_block_and_never_expose_values() {
     let references = find(&preflight, FindingKind::Reference);
     assert_eq!(references.len(), 1);
     assert_eq!(references[0].class, SecretClass::PermittedDerived);
-    assert!(!preflight.is_clean());
+    assert!(!clean(&preflight));
 
     let rendered = format!("{preflight:?}{:?}", preflight.blockers());
     assert!(!rendered.contains(FAKE_KEY), "value leaked");
@@ -338,10 +355,6 @@ command = "docs-mcp"
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s01_old_memory_content_blocks_until_removed() {
     let fixture = Fixture::new();
     let memories = fixture.corbanu().join("memories");
@@ -360,12 +373,13 @@ fn pf_29_s01_old_memory_content_blocks_until_removed() {
     assert_eq!(
         memory[0].location,
         memories
-            .join("rollout_summaries/old.md")
+            .join("rollout_summaries")
+            .join("old.md")
             .display()
             .to_string()
     );
     assert_eq!(memory[0].disposition, Disposition::RemoveFromContext);
-    assert!(!preflight.is_clean());
+    assert!(!clean(&preflight));
 }
 
 #[cfg(unix)]
@@ -453,15 +467,11 @@ fn nix_is_root() -> bool {
 /// so a locked vault shows up as a store that cannot be read; a damaged
 /// store is the same. An empty `secrets/` (lock file only) is no vault.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s01_locked_or_damaged_vault_is_incomplete_readiness() {
     let fixture = Fixture::new();
     let store = fixture.corbanu().join("secrets/local.age");
     fixture.write(&fixture.corbanu().join("secrets/.vault.lock"), b"");
-    assert!(fixture.run(&fixture.sources()).is_clean());
+    assert!(clean(&fixture.run(&fixture.sources())));
 
     let vault_incomplete = |preflight: &Preflight| {
         preflight
@@ -472,11 +482,11 @@ fn pf_29_s01_locked_or_damaged_vault_is_incomplete_readiness() {
     fixture.write(&store, b"not an age file");
     let damaged = fixture.run(&fixture.sources());
     assert!(vault_incomplete(&damaged));
-    assert!(!damaged.is_clean());
+    assert!(!clean(&damaged));
 
     fixture.write(&store, b"age-encryption.org/v1\n-> scrypt salt 16\n---");
     let present = fixture.run(&fixture.sources());
-    assert!(present.is_clean(), "{:?}", present.blockers());
+    assert!(clean(&present), "{:?}", present.blockers());
     assert_eq!(
         find(&present, FindingKind::VaultStore)[0].disposition,
         Disposition::Denied
@@ -497,10 +507,6 @@ fn pf_29_s01_locked_or_damaged_vault_is_incomplete_readiness() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s01_corrupt_snapshots_and_histories_are_isolated() {
     let fixture = Fixture::new();
     let home = fixture.corbanu();
@@ -536,7 +542,7 @@ fn pf_29_s01_corrupt_snapshots_and_histories_are_isolated() {
         find(&preflight, FindingKind::Wallet)[0].class,
         SecretClass::CustodyKey
     );
-    assert!(preflight.is_clean(), "{:?}", preflight.blockers());
+    assert!(clean(&preflight), "{:?}", preflight.blockers());
 }
 
 /// #294: the secretless launch contract creates its protected directories
@@ -574,10 +580,270 @@ fn pf_29_s01_drift_between_preflight_and_activation() {
     let netrc_id = find(&first, FindingKind::CredentialFile)[0].id.clone();
     assert_eq!(drift.changed, vec![netrc_id]);
     assert_eq!(drift.added.len(), 1);
-    assert!(!second.is_clean());
+    assert!(!clean(&second));
 
     let (_, flags) = first.recheck(&sources, ReadinessFlags::default());
     assert!(flags.readiness_changed);
+}
+
+/// #802: Corbanu's own writes to its history stores and state databases
+/// (start-up settles them for some seconds) are not drift; a change to any
+/// other reviewed item, or a symlink at a store, still is.
+#[test]
+fn pf_29_s01_corbanu_own_store_writes_are_not_drift() {
+    let fixture = Fixture::new();
+    let corbanu = fixture.corbanu();
+    fixture.write(&corbanu.join("pfterminal_logs_2.sqlite"), b"page one");
+    fixture.write(&corbanu.join("sessions/2026/10/27/rollout-a.jsonl"), b"{}");
+    fixture.write(&corbanu.join("history.jsonl"), b"one\n");
+    fixture.write(&corbanu.join(".env"), b"PLAIN=1\n");
+    let sources = fixture.sources();
+    let first = fixture.run(&sources);
+
+    // What start-up and a running session write: a checkpoint, a new
+    // database, a new store and appended history, with a rollout added.
+    fixture.write(&corbanu.join("pfterminal_logs_2.sqlite"), b"page one, two");
+    fixture.write(&corbanu.join("pfterminal_state_5.sqlite"), b"state");
+    fixture.write(&corbanu.join("shell_snapshots/s.sh"), b"snapshot");
+    fixture.write(&corbanu.join("history.jsonl"), b"one\ntwo\n");
+    fixture.write(&corbanu.join("sessions/2026/rollout-b.jsonl"), b"{}");
+    let (second, drift) = first.recheck(&sources, ALL_ON);
+    assert!(drift.is_empty(), "{drift:?}");
+
+    // History cleared is not drift either.
+    std::fs::remove_file(corbanu.join("history.jsonl")).expect("remove history");
+    let (_, drift) = second.recheck(&sources, ALL_ON);
+    assert!(drift.is_empty(), "{drift:?}");
+
+    // Another file in the Corbanu home still counts, and so does a folder
+    // named like a database.
+    fixture.write(&corbanu.join(".env"), b"PLAIN=2\n");
+    fixture.write(&corbanu.join("odd.sqlite/inside"), b"x");
+    let (third, drift) = second.recheck(&sources, ALL_ON);
+    let id = |location: &str| {
+        third
+            .inventory
+            .findings
+            .iter()
+            .find(|finding| finding.location.ends_with(location))
+            .unwrap_or_else(|| panic!("no finding for {location}"))
+            .id
+            .clone()
+    };
+    assert_eq!(
+        drift,
+        Drift {
+            added: vec![id("odd.sqlite")],
+            changed: vec![id(".env")],
+            ..Drift::default()
+        }
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn pf_29_s01_symlink_at_a_corbanu_store_is_drift() {
+    let fixture = Fixture::new();
+    let corbanu = fixture.corbanu();
+    fixture.write(&corbanu.join("log/codex-tui.log"), b"line");
+    let sources = fixture.sources();
+    let first = fixture.run(&sources);
+
+    std::fs::rename(corbanu.join("log"), fixture.home().join("elsewhere")).expect("move log");
+    std::os::unix::fs::symlink(fixture.home().join("elsewhere"), corbanu.join("log"))
+        .expect("symlink");
+    let (second, drift) = first.recheck(&sources, ALL_ON);
+    assert_eq!(drift.changed.len(), 1, "{drift:?}");
+
+    // A symlink that appears where no store was also counts, a database
+    // included, and so does a symlinked store going away.
+    std::os::unix::fs::symlink(fixture.home().join("missing"), corbanu.join("sessions"))
+        .expect("dangling symlink");
+    std::os::unix::fs::symlink(
+        fixture.home().join("elsewhere/codex-tui.log"),
+        corbanu.join("x.sqlite"),
+    )
+    .expect("database symlink");
+    let (third, drift) = second.recheck(&sources, ALL_ON);
+    assert_eq!(drift.added.len(), 2, "{drift:?}");
+
+    std::fs::remove_file(corbanu.join("log")).expect("remove log symlink");
+    let (_, drift) = third.recheck(&sources, ALL_ON);
+    assert_eq!(drift.removed.len(), 1, "{drift:?}");
+}
+
+/// #1428: a database's `-wal`, `-shm` and `-journal` files count like the
+/// database: Corbanu's own writes to them are not drift.
+#[test]
+fn pf_29_s01_database_side_file_writes_are_not_drift() {
+    let fixture = Fixture::new();
+    let corbanu = fixture.corbanu();
+    fixture.write(&corbanu.join("state_5.sqlite"), b"pages");
+    fixture.write(&corbanu.join("state_5.sqlite-wal"), b"frames");
+    fixture.write(&corbanu.join("state_5.sqlite-shm"), b"index");
+    let sources = fixture.sources();
+    let first = fixture.run(&sources);
+    let entries = first
+        .inventory
+        .manifest
+        .entries
+        .iter()
+        .filter(|entry| entry.path.to_string_lossy().contains("state_5"))
+        .count();
+    assert_eq!(entries, 3, "one manifest entry per database file");
+
+    fixture.write(&corbanu.join("state_5.sqlite-wal"), b"more frames");
+    std::fs::remove_file(corbanu.join("state_5.sqlite-shm")).expect("remove shm");
+    fixture.write(&corbanu.join("state_5.sqlite-journal"), b"rollback");
+    fixture.write(&corbanu.join("logs_2.sqlite-wal"), b"frames");
+    let (_, drift) = first.recheck(&sources, ALL_ON);
+    assert!(drift.is_empty(), "{drift:?}");
+}
+
+/// #1428: a symlink at a database's side file is drift, and its target is
+/// isolated like a symlinked database's.
+#[cfg(unix)]
+#[test]
+fn pf_29_s01_symlink_at_a_database_side_file_is_drift() {
+    for suffix in ["-wal", "-shm", "-journal"] {
+        let fixture = Fixture::new();
+        let corbanu = fixture.corbanu();
+        let secret = fixture.home().join("secret.txt");
+        fixture.write(&secret, b"TOKEN=1");
+        fixture.write(&corbanu.join("state_5.sqlite"), b"pages");
+        let sources = fixture.sources();
+        let first = fixture.run(&sources);
+
+        let side = corbanu.join(format!("state_5.sqlite{suffix}"));
+        std::os::unix::fs::symlink(&secret, &side).expect("symlink");
+        let (second, drift) = first.recheck(&sources, ALL_ON);
+        assert_eq!(drift.changed.len(), 1, "{suffix}: {drift:?}");
+        let real = std::fs::canonicalize(&secret).expect("canonical secret");
+        assert!(
+            second.inventory.isolation_paths().contains(&real),
+            "{suffix}: target not isolated"
+        );
+
+        // A dangling one counts too, and so does its removal.
+        std::fs::remove_file(&side).expect("remove symlink");
+        std::os::unix::fs::symlink(fixture.home().join("missing"), &side).expect("dangling");
+        let (third, drift) = second.recheck(&sources, ALL_ON);
+        assert_eq!(drift.changed.len(), 1, "{suffix}: {drift:?}");
+        std::fs::remove_file(&side).expect("remove dangling symlink");
+        let (_, drift) = third.recheck(&sources, ALL_ON);
+        assert_eq!(drift.changed.len(), 1, "{suffix}: {drift:?}");
+    }
+}
+
+/// #1428: a database file that is not a regular file with one link (a
+/// pipe, or a hard link to a file elsewhere) is drift, the database itself
+/// included.
+#[cfg(unix)]
+#[test]
+fn pf_29_s01_irregular_database_files_are_drift() {
+    let fixture = Fixture::new();
+    let corbanu = fixture.corbanu();
+    let secret = fixture.home().join("secret.txt");
+    fixture.write(&secret, b"TOKEN=1");
+    fixture.write(&corbanu.join("state_5.sqlite"), b"pages");
+    let sources = fixture.sources();
+    let first = fixture.run(&sources);
+
+    std::fs::hard_link(&secret, corbanu.join("state_5.sqlite-shm")).expect("hard link");
+    let (second, drift) = first.recheck(&sources, ALL_ON);
+    assert_eq!(drift.changed.len(), 1, "{drift:?}");
+
+    std::fs::remove_file(corbanu.join("state_5.sqlite-shm")).expect("remove hard link");
+    let (third, drift) = second.recheck(&sources, ALL_ON);
+    assert_eq!(drift.changed.len(), 1, "{drift:?}");
+
+    let fifo = |path: &Path| {
+        let path = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()).expect("path");
+        // SAFETY: `path` is a valid NUL-terminated string.
+        assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0, "mkfifo");
+    };
+    std::fs::remove_file(corbanu.join("state_5.sqlite")).expect("remove database");
+    fifo(&corbanu.join("state_5.sqlite"));
+    let (_, drift) = third.recheck(&sources, ALL_ON);
+    assert_eq!(drift.changed.len(), 1, "{drift:?}");
+}
+
+/// #1441: a hard-linked database file is drift on every platform (Windows
+/// reads the link count through the file's handle); a plain one written by
+/// Corbanu is not.
+#[test]
+fn pf_29_s01_hard_linked_database_files_are_drift_everywhere() {
+    let fixture = Fixture::new();
+    let corbanu = fixture.corbanu();
+    let secret = fixture.home().join("secret.txt");
+    fixture.write(&secret, b"TOKEN=1");
+    fixture.write(&corbanu.join("state_5.sqlite"), b"pages");
+    let sources = fixture.sources();
+    let first = fixture.run(&sources);
+
+    fixture.write(&corbanu.join("state_5.sqlite-wal"), b"frames");
+    let (second, drift) = first.recheck(&sources, ALL_ON);
+    assert!(drift.is_empty(), "{drift:?}");
+
+    let shm = corbanu.join("state_5.sqlite-shm");
+    std::fs::hard_link(&secret, &shm).expect("hard link");
+    let (third, drift) = second.recheck(&sources, ALL_ON);
+    assert_eq!(drift.changed.len(), 1, "{drift:?}");
+    let links = |path: &Path| {
+        third
+            .inventory
+            .manifest
+            .entries
+            .iter()
+            .find(|entry| entry.path == path)
+            .unwrap_or_else(|| panic!("{} missing from manifest", path.display()))
+            .links
+    };
+    assert_eq!(links(&shm), Some(2));
+    assert_eq!(links(&corbanu.join("state_5.sqlite")), Some(1));
+}
+
+/// #1441: where a file created through a dangling symlink would land is
+/// isolated (at the end of a chain, relative targets resolved against the
+/// link's folder), and pointing the link elsewhere is drift.
+#[cfg(unix)]
+#[test]
+fn pf_29_s01_dangling_symlink_targets_are_isolated() {
+    let fixture = Fixture::new();
+    let home = fixture.home();
+    let corbanu = fixture.corbanu();
+    let elsewhere = fixture.root.path().join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).expect("mkdir");
+    let real = |path: &Path| std::fs::canonicalize(path).expect("canonical");
+    std::os::unix::fs::symlink(home.join("missing"), home.join(".git-credentials"))
+        .expect("absolute");
+    std::os::unix::fs::symlink("../elsewhere/netrc", home.join(".netrc")).expect("relative");
+    std::os::unix::fs::symlink(home.join("hop"), home.join(".pgpass")).expect("chain");
+    std::os::unix::fs::symlink(elsewhere.join("pgpass"), home.join("hop")).expect("hop");
+    fixture.write(&corbanu.join("state_5.sqlite"), b"pages");
+    let wal = corbanu.join("state_5.sqlite-wal");
+    std::os::unix::fs::symlink(elsewhere.join("wal"), &wal).expect("side file");
+    let sources = fixture.sources();
+    let first = fixture.run(&sources);
+
+    let isolated = first.inventory.isolation_paths();
+    for target in [
+        real(&home).join("missing"),
+        real(&elsewhere).join("netrc"),
+        real(&elsewhere).join("pgpass"),
+        real(&elsewhere).join("wal"),
+    ] {
+        assert!(
+            isolated.contains(&target),
+            "{} missing from {isolated:?}",
+            target.display()
+        );
+    }
+
+    std::fs::remove_file(&wal).expect("remove");
+    std::os::unix::fs::symlink(elsewhere.join("other"), &wal).expect("retarget");
+    let (_, drift) = first.recheck(&sources, ALL_ON);
+    assert_eq!(drift.changed.len(), 1, "{drift:?}");
 }
 
 #[test]
@@ -658,10 +924,6 @@ fn pf_29_s01_devices_and_pipes_neither_hang_nor_exhaust_memory() {
 /// is stored; it is not a secret, so it neither blocks Aggressive nor makes
 /// its config file a "credential file".
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s01_credential_store_modes_are_not_secrets() {
     let fixture = Fixture::new();
     let system_path = fixture.root.path().join("etc/codex/config.toml");
@@ -687,7 +949,7 @@ model_auto_compact_token_limit_scope = "body_after_prefix"
         Vec::<&Finding>::new()
     );
     assert_eq!(preflight.inventory.isolation_paths(), Vec::<PathBuf>::new());
-    assert!(preflight.is_clean(), "{:?}", preflight.blockers());
+    assert!(clean(&preflight), "{:?}", preflight.blockers());
 
     // Only the top-level settings, and only their choices: the same name
     // under another table, or a value that is not a choice, still blocks.
@@ -699,6 +961,6 @@ model_auto_compact_token_limit_scope = "body_after_prefix"
     ] {
         let mut sources = fixture.sources();
         sources.config_layers = vec![layer("launch flags", /*path*/ None, flag)];
-        assert!(!fixture.run(&sources).is_clean(), "{flag}");
+        assert!(!clean(&fixture.run(&sources)), "{flag}");
     }
 }

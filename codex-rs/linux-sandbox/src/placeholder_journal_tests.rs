@@ -64,6 +64,34 @@ impl Setup {
     fn sweep(&mut self) {
         self.journal.sweep(&|_, _| false);
     }
+
+    fn left_folder_with_children(&self, children: usize) -> PathBuf {
+        let folder = self.base.join("home/.git");
+        let paths = (0..children)
+            .map(|index| folder.join(format!("child-{index}")))
+            .collect::<Vec<_>>();
+        let mut planned = vec![Planned {
+            kind: Kind::Directory,
+            path: &folder,
+            real: &folder,
+            makes: true,
+        }];
+        planned.extend(paths.iter().map(|path| Planned {
+            kind: Kind::File,
+            path,
+            real: path,
+            makes: true,
+        }));
+        let mut maker =
+            open_journal(&self.base.join("corbanu/sandbox-placeholders")).expect("maker");
+        maker.register(&planned, &[]);
+        let records = self.records();
+        assert_eq!(records.len(), 1);
+        let record = maker.read(&records[0]).expect("record");
+        maker.remove_record().expect("unlink");
+        self.write(ended(), record.entries);
+        folder
+    }
 }
 
 /// A run that has ended: its pid is gone (or names another process, which
@@ -252,6 +280,254 @@ fn a_placeholder_a_run_made_and_left_is_removed() {
     assert!(std::fs::symlink_metadata(&folder).is_err());
     assert_eq!(setup.records(), Vec::<String>::new());
     assert_eq!(setup.report(), "");
+}
+
+#[test]
+fn a_sweep_limits_successful_removals_across_records_and_resumes() {
+    let mut setup = Setup::new();
+    for group in 0..2 {
+        let entries = (0..40)
+            .map(|index| {
+                let path = setup.base.join(format!("home/group-{group}-{index}"));
+                let identity = make_placeholder(&path, Kind::File).expect("placeholder");
+                Entry::Made {
+                    kind: Kind::File,
+                    path: path.clone(),
+                    real: path,
+                    identity,
+                }
+            })
+            .collect();
+        setup.write(ended(), entries);
+    }
+    assert_eq!(setup.records().len(), 2);
+
+    setup.sweep();
+
+    assert_eq!(
+        std::fs::read_dir(setup.base.join("home"))
+            .expect("home")
+            .count(),
+        16
+    );
+    let remaining = setup
+        .records()
+        .iter()
+        .map(|name| setup.journal.read(name).expect("deferred record"))
+        .flat_map(|record| record.entries)
+        .collect::<Vec<_>>();
+    assert_eq!(remaining.len(), 16);
+    assert!(remaining.iter().all(|entry| entry.paths().1.is_file()));
+    assert_eq!(setup.report(), "");
+
+    setup.sweep();
+
+    assert_eq!(
+        std::fs::read_dir(setup.base.join("home"))
+            .expect("home")
+            .count(),
+        0
+    );
+    assert_eq!(setup.records(), Vec::<String>::new());
+    assert_eq!(setup.report(), "");
+}
+
+/// Makes `count` placeholders in `home`, named `<prefix>-<index>`, and
+/// returns their paths and entries.
+fn placeholders(setup: &Setup, prefix: &str, count: usize) -> (Vec<PathBuf>, Vec<Entry>) {
+    let paths = (0..count)
+        .map(|index| setup.base.join(format!("home/{prefix}-{index}")))
+        .collect::<Vec<_>>();
+    let entries = paths
+        .iter()
+        .map(|path| Entry::Made {
+            kind: Kind::File,
+            path: path.clone(),
+            real: path.clone(),
+            identity: make_placeholder(path, Kind::File).expect("placeholder"),
+        })
+        .collect();
+    (paths, entries)
+}
+
+/// Writes the record of an ended run that made `count` placeholders.
+fn ended_with_placeholders(setup: &Setup, prefix: &str, count: usize) -> Vec<PathBuf> {
+    let (paths, entries) = placeholders(setup, prefix, count);
+    setup.write(ended(), entries);
+    paths
+}
+
+/// Makes the sweep read `points` as the mount points, and returns how many
+/// times it has read them.
+fn read_mounts_as(
+    setup: &mut Setup,
+    points: Option<HashSet<Vec<u8>>>,
+) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
+    let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = reads.clone();
+    setup.journal.mount_points = Box::new(move || {
+        counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        points.clone()
+    });
+    reads
+}
+
+fn recorded_entries(setup: &Setup) -> usize {
+    setup
+        .records()
+        .iter()
+        .map(|name| setup.journal.read(name).expect("record").entries.len())
+        .sum()
+}
+
+#[test]
+fn placeholders_mounted_over_do_not_hold_up_the_ones_after_them() {
+    let mut setup = Setup::new();
+    // One record, in this order (same depth; the sort is stable).
+    let (mounted, mut entries) = placeholders(&setup, "mounted", /*count*/ 70);
+    let (removable, more) = placeholders(&setup, "removable", /*count*/ 3);
+    entries.extend(more);
+    setup.write(ended(), entries);
+    let points = mounted
+        .iter()
+        .map(|path| path.as_os_str().as_bytes().to_vec())
+        .collect();
+    let reads = read_mounts_as(&mut setup, Some(points));
+
+    setup.sweep();
+
+    assert_eq!(reads.load(std::sync::atomic::Ordering::SeqCst), 73);
+    assert!(mounted.iter().all(|path| path.is_file()));
+    assert!(removable.iter().all(|path| !path.exists()));
+    assert_eq!(recorded_entries(&setup), 70);
+    assert_eq!(setup.report(), "");
+
+    read_mounts_as(&mut setup, Some(HashSet::new()));
+    setup.sweep();
+    setup.sweep();
+
+    assert!(mounted.iter().all(|path| !path.exists()));
+    assert_eq!(setup.records(), Vec::<String>::new());
+    assert_eq!(setup.report(), "");
+}
+
+#[test]
+fn a_parent_that_fails_after_its_children_keeps_the_identity_they_left() {
+    let mut setup = Setup::new();
+    let folder = setup.left_folder_with_children(/*children*/ 3);
+    // The children's reads succeed; the parent's cannot be made.
+    let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = reads.clone();
+    setup.journal.mount_points = Box::new(move || {
+        (counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < 3).then(HashSet::new)
+    });
+
+    setup.sweep();
+
+    assert_eq!(reads.load(std::sync::atomic::Ordering::SeqCst), 4);
+    assert!(folder.is_dir());
+    assert_eq!(std::fs::read_dir(&folder).expect("folder").count(), 0);
+    assert_eq!(recorded_entries(&setup), 1);
+
+    read_mounts_as(&mut setup, Some(HashSet::new()));
+    setup.sweep();
+
+    assert!(!folder.exists(), "{}", setup.report());
+    assert_eq!(setup.records(), Vec::<String>::new());
+    assert_eq!(setup.report(), "");
+}
+
+#[test]
+fn a_sweep_stops_once_the_mount_points_cannot_be_read() {
+    let mut setup = Setup::new();
+    let first = ended_with_placeholders(&setup, "first", /*count*/ 3);
+    let second = ended_with_placeholders(&setup, "second", /*count*/ 3);
+    let reads = read_mounts_as(&mut setup, /*points*/ None);
+
+    setup.sweep();
+
+    assert_eq!(reads.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert!(first.iter().chain(&second).all(|path| path.is_file()));
+    assert_eq!(recorded_entries(&setup), 6);
+    assert_eq!(setup.report(), "");
+}
+
+#[test]
+fn placeholders_settled_before_the_mount_read_do_not_use_up_the_sweep() {
+    let mut setup = Setup::new();
+    // One record, in this order (same depth; the sort is stable).
+    let (gone, mut entries) = placeholders(&setup, "gone", /*count*/ 10);
+    for path in &gone {
+        std::fs::remove_file(path).expect("removed by the person");
+    }
+    let (removable, more) = placeholders(&setup, "removable", /*count*/ 64);
+    entries.extend(more);
+    setup.write(ended(), entries);
+    let reads = read_mounts_as(&mut setup, Some(HashSet::new()));
+
+    setup.sweep();
+
+    assert_eq!(reads.load(std::sync::atomic::Ordering::SeqCst), 64);
+    assert!(removable.iter().all(|path| !path.exists()));
+    assert_eq!(setup.records(), Vec::<String>::new());
+    assert_eq!(setup.report(), "");
+}
+
+#[test]
+fn a_deferred_parent_keeps_the_identity_its_removed_children_left() {
+    let mut setup = Setup::new();
+    let folder = setup.left_folder_with_children(/*children*/ 64);
+
+    setup.sweep();
+
+    assert!(folder.is_dir(), "the parent is deferred after 64 removals");
+    assert_eq!(std::fs::read_dir(&folder).expect("folder").count(), 0);
+    let names = setup.records();
+    assert_eq!(names.len(), 1);
+    let record = setup.journal.read(&names[0]).expect("deferred record");
+    let found = crate::placeholder_registry::find_without_links(&folder)
+        .expect("lookup")
+        .expect("parent");
+    assert_eq!(
+        record.entries,
+        vec![Entry::Made {
+            kind: Kind::Directory,
+            path: folder.clone(),
+            real: folder.clone(),
+            identity: Identity::of(&found.status),
+        }]
+    );
+
+    setup.sweep();
+
+    assert!(!folder.exists(), "{}", setup.report());
+    assert_eq!(setup.records(), Vec::<String>::new());
+    assert_eq!(setup.report(), "");
+}
+
+#[test]
+fn a_deferred_parent_changed_between_sweeps_is_still_kept() {
+    let mut setup = Setup::new();
+    let folder = setup.left_folder_with_children(/*children*/ 64);
+
+    setup.sweep();
+
+    assert!(folder.is_dir());
+    tick();
+    std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o700))
+        .expect("the person changes the parent");
+    setup.sweep();
+
+    assert_eq!(
+        std::fs::symlink_metadata(&folder)
+            .expect("kept parent")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
+    assert_eq!(setup.records(), Vec::<String>::new(), "reported once");
+    assert!(setup.report().contains(".git"), "{}", setup.report());
 }
 
 #[test]
@@ -689,9 +965,72 @@ fn a_mount_point_in_any_of_this_users_namespaces_is_found() {
     assert_eq!(unescape_mount_point(br"/a\040b\134c"), b"/a b\\c".to_vec());
     assert_eq!(unescape_mount_point(br"/plain\x"), br"/plain\x".to_vec());
     // This process's own `/proc` is a mount point; a fresh folder is not.
-    assert!(mounted_anywhere(&[Path::new("/proc")]));
+    assert!(mounted_anywhere(&[Path::new("/proc")], mount_points()));
     let dir = tempfile::TempDir::new().expect("tempdir");
-    assert!(!mounted_anywhere(&[dir.path()]));
+    assert!(!mounted_anywhere(&[dir.path()], mount_points()));
+    assert!(mounted_anywhere(&[dir.path()], /*points*/ None));
+}
+
+// A fake `/proc/<pid>` in mount namespace `namespace`, with a `mountinfo`
+// listing `point`, or none (the process has ended) when `point` is `None`.
+fn fake_process(proc_dir: &Path, pid: &str, namespace: &str, point: Option<&str>) -> PathBuf {
+    let process = proc_dir.join(pid);
+    std::fs::create_dir_all(process.join("ns")).expect("ns folder");
+    std::os::unix::fs::symlink(namespace, process.join("ns/mnt")).expect("ns link");
+    // All fake processes share one root, so their views dedupe by namespace.
+    std::os::unix::fs::symlink(proc_dir, process.join("root")).expect("root link");
+    if let Some(point) = point {
+        std::fs::write(
+            process.join("mountinfo"),
+            format!("1 0 0:1 / {point} rw - tmpfs tmpfs rw\n"),
+        )
+        .expect("mountinfo");
+    }
+    process
+}
+
+#[test]
+fn a_process_that_ends_mid_scan_does_not_hide_its_namespace() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let ended = fake_process(temp.path(), "101", "mnt:[1]", /*point*/ None);
+    let live = fake_process(temp.path(), "102", "mnt:[1]", Some("/live-view"));
+    let other = fake_process(temp.path(), "103", "mnt:[2]", Some("/other-view"));
+
+    assert_eq!(
+        mount_points_for_processes([ended, live, other].into_iter()),
+        Some(HashSet::from([
+            b"/live-view".to_vec(),
+            b"/other-view".to_vec(),
+        ])),
+    );
+}
+
+#[test]
+fn a_namespace_whose_view_was_read_is_read_once() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let first = fake_process(temp.path(), "101", "mnt:[1]", Some("/first-view"));
+    // Reading a folder as `mountinfo` fails the whole scan, so this view
+    // must not be read: its namespace was already read through `first`.
+    let duplicate = fake_process(temp.path(), "102", "mnt:[1]", /*point*/ None);
+    std::fs::create_dir(duplicate.join("mountinfo")).expect("unreadable view");
+
+    assert_eq!(
+        mount_points_for_processes([first, duplicate].into_iter()),
+        Some(HashSet::from([b"/first-view".to_vec()])),
+    );
+}
+
+#[test]
+fn an_unreadable_view_still_fails_the_scan() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let unreadable = fake_process(temp.path(), "101", "mnt:[1]", /*point*/ None);
+    std::fs::create_dir(unreadable.join("mountinfo")).expect("unreadable view");
+    let live = fake_process(temp.path(), "102", "mnt:[1]", Some("/live-view"));
+
+    assert_eq!(
+        mount_points_for_processes([unreadable, live].into_iter()),
+        None
+    );
 }
 
 #[test]

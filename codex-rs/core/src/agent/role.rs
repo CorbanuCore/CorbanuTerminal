@@ -7,9 +7,12 @@
 //! or which role to use; the multi-agent tool handler owns that orchestration.
 
 use crate::config::AgentRoleConfig;
+use crate::config::AgentRoleSource;
 use crate::config::Config;
 use crate::config::ConfigOverrides;
 use crate::config::agent_roles::parse_agent_role_file_contents;
+use crate::config::agent_roles::project_role_ignored_keys_warning;
+use crate::config::agent_roles::sanitize_role_config_layer;
 use crate::config::deserialize_config_toml_with_base;
 use anyhow::anyhow;
 use codex_config::ConfigLayerEntry;
@@ -123,7 +126,8 @@ async fn apply_role_to_config_inner(
     let Some(config_file) = role.config_file.as_ref() else {
         return Ok(());
     };
-    let role_layer_toml = load_role_layer_toml(config, config_file, is_built_in, role_name).await?;
+    let role_layer_toml =
+        load_role_layer_toml(config, config_file, is_built_in, role.source, role_name).await?;
     if role_layer_toml
         .as_table()
         .is_some_and(toml::map::Map::is_empty)
@@ -220,6 +224,7 @@ async fn load_role_layer_toml(
     config: &Config,
     config_file: &Path,
     is_built_in: bool,
+    source: AgentRoleSource,
     role_name: &str,
 ) -> anyhow::Result<TomlValue> {
     let (role_config_toml, role_config_base) = if is_built_in {
@@ -233,13 +238,22 @@ async fn load_role_layer_toml(
         let role_config_base = config_file
             .parent()
             .ok_or(anyhow!("No corresponding config content"))?;
-        let role_config_toml = parse_agent_role_file_contents(
+        let mut role_config_toml = parse_agent_role_file_contents(
             &role_config_contents,
             config_file,
             role_config_base,
             Some(role_name),
         )?
         .config;
+        // The file is read again at spawn, so the denylist is applied here, not
+        // only when roles are discovered (D512, #1997).
+        let ignored_keys = sanitize_role_config_layer(source, &mut role_config_toml);
+        if !ignored_keys.is_empty() {
+            tracing::warn!(
+                "{}",
+                project_role_ignored_keys_warning(config_file, &ignored_keys)
+            );
+        }
         (role_config_toml, role_config_base)
     };
 
@@ -512,6 +526,7 @@ mod built_in {
                         description: Some("Default agent.".to_string()),
                         config_file: None,
                         nickname_candidates: None,
+                        source: AgentRoleSource::BuiltIn,
                     }
                 ),
                 (
@@ -526,6 +541,7 @@ Rules:
 - Reuse existing explorers for related questions."#.to_string()),
                         config_file: Some("explorer.toml".to_string().parse().unwrap_or_default()),
                         nickname_candidates: None,
+                        source: AgentRoleSource::BuiltIn,
                     }
                 ),
                 (
@@ -541,6 +557,7 @@ Rules:
 - Always tell workers they are **not alone in the codebase**, and they should not revert the edits made by others, and they should adjust their implementation to accommodate the changes made by others. This is important because there may be multiple workers making changes in parallel, and they need to be aware of each other's work to avoid conflicts and ensure a cohesive final product."#.to_string()),
                         config_file: None,
                         nickname_candidates: None,
+                        source: AgentRoleSource::BuiltIn,
                     }
                 ),
                 (
@@ -560,6 +577,7 @@ Nazgul report to Sauron/the human, translate the user's vision into implementati
                             "Cirith".to_string(),
                             "Barad".to_string(),
                         ]),
+                        source: AgentRoleSource::BuiltIn,
                     }
                 ),
                 (
@@ -580,6 +598,7 @@ Trolls report to the Nazgul CTO, manage Orc IC executors, prefer delegation over
                             "Burzglob".to_string(),
                             "Skailug".to_string(),
                         ]),
+                        source: AgentRoleSource::BuiltIn,
                     }
                 ),
                 (
@@ -600,6 +619,7 @@ Orcs follow the Troll's assignment exactly, do not expand scope, produce concret
                             "Narg".to_string(),
                             "Glob".to_string(),
                         ]),
+                        source: AgentRoleSource::BuiltIn,
                     }
                 ),
                 // Awaiter is temp removed
@@ -661,3 +681,7 @@ Orcs follow the Troll's assignment exactly, do not expand scope, produce concret
 #[cfg(test)]
 #[path = "role_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "role_project_tests.rs"]
+mod project_tests;

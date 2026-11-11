@@ -1,22 +1,21 @@
 ---
 source: tui/src/status/tests.rs
-assertion_line: 2672
+assertion_line: 2698
 expression: rendered
 ---
 /status
 
-╭────────────────────────────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v<V>)                                                                    │
-│                                                                                                │
-│  Model:            glm-5.3-flash (reasoning none, summaries auto)                              │
-│  Model provider:   Z.AI                                                                        │
-│  Directory: [[workspace]]                                                                      │
-│  Permissions:      Next turn: Custom (workspace with network access, Ask for approval)         │
-│  Security:         Requested Permissive; effective protection unverified (/security)           │
-│  Agents.md:        <none>                                                                      │
-│  Account:          Z.AI API key configured                                                     │
-│                                                                                                │
-│  Token usage:      41.3K total  (35.1K input + 6.25K output)                                   │
-│  Account usage:    default · 35,100 input · 12,000 cached input · 6,247 output (300 reasoning) │
-│  Limits:           data not available yet                                                      │
-╰────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v<V>)                                                            │
+│                                                                                        │
+│  Model:            glm-5.3-flash (reasoning none, summaries auto)                      │
+│  Model provider:   Z.AI                                                                │
+│  Directory: [[workspace]]                                                              │
+│  Permissions:      Next turn: Custom (workspace with network access, Ask for approval) │
+│  Security:         Requested Permissive; effective protection unverified (/security)   │
+│  Agents.md:        <none>                                                              │
+│  Account:          Z.AI API key configured                                             │
+│                                                                                        │
+│  Token usage:      41.3K total  (35.1K input + 6.25K output)                           │
+│  Limits:           data not available yet                                              │
+╰────────────────────────────────────────────────────────────────────────────────────────╯

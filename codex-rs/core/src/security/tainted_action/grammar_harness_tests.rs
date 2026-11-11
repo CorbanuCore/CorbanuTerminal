@@ -26,6 +26,7 @@ use std::process::Stdio;
 const SOURCES: &[&str] = &[
     include_str!("../tainted_action.rs"),
     include_str!("../tainted_action_tests.rs"),
+    include_str!("../issue_1276_to_1620_tests.rs"),
     include_str!("../tainted_action_refusal_tests.rs"),
     include_str!("arithmetic_tests.rs"),
     include_str!("arithmetic.rs"),
@@ -314,10 +315,6 @@ fn escaped(text: &str) -> String {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "the corpus is POSIX shell text; the grammar is the same on Windows"
-)]
 fn grammar_and_reader_differential() {
     let cases = all_cases();
     assert!(cases.len() > 2000, "corpus too small: {}", cases.len());
@@ -346,6 +343,22 @@ fn grammar_and_reader_differential() {
         }
         let category = format!("{comparison:?}");
         let zsh = matches!(grammar, Ok((_, true)));
+        // Phase 3: lines whose zsh-only checks no longer ask under zsh.
+        let proves = crate::security::tainted_action::named_shell::grammar_proves_data(&[
+            "/bin/zsh".to_string(),
+            "-lc".to_string(),
+            text.clone(),
+        ]);
+        if proves {
+            *counts
+                .entry(format!("{origin}: phase 3 proves data under zsh"))
+                .or_default() += 1;
+            let _ = writeln!(
+                report,
+                "{origin}\tphase 3 proves data\t\t\t\t{}",
+                escaped(text)
+            );
+        }
         *counts.entry(format!("{origin}: {category}")).or_default() += 1;
         if zsh {
             *counts.entry(format!("{origin}: zsh-unsure")).or_default() += 1;

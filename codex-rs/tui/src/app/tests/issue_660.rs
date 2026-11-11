@@ -32,61 +32,6 @@ fn register_native_ack(app: &mut App, sender: ThreadId, target: &str, task: &str
     );
 }
 
-/// #660: a native agent's task for a pane the person opened, sent while the
-/// switch was on and handled after it was turned off, is reported not sent
-/// to that agent without starting a turn in it.
-#[tokio::test]
-async fn issue_660_not_sent_report_to_a_native_sender_starts_no_turn() -> Result<()> {
-    let (mut app, mut app_event_rx, mut op_rx) = make_test_app_with_channels().await;
-    let config = app.chat_widget.config_ref().clone();
-    let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(&config)).await?;
-    let mut tui = crate::tui::test_support::make_test_tui()?;
-    let pane = ThreadId::from_string("00000000-0000-0000-0000-000000006601")?;
-    let sender = ThreadId::from_string("00000000-0000-0000-0000-000000006602")?;
-    app.upsert_agent_picker_thread(
-        pane,
-        Some("Gorbag".to_string()),
-        /*agent_role*/ None,
-        /*is_closed*/ false,
-    );
-    let target = app.logical_native_node_for_thread(pane);
-    register_native_ack(&mut app, sender, &target, "pf660 task", /*seq*/ 6601);
-    while app_event_rx.try_recv().is_ok() {}
-
-    issue_507_switch(&app, HumanRevocation::KillSwitchOn);
-    let sent_while_kill_switch_on = app.kill_switch_on_now();
-    assert!(sent_while_kill_switch_on);
-    issue_507_switch(&app, HumanRevocation::KillSwitchOff);
-    Box::pin(app.handle_event(
-        &mut tui,
-        &mut app_server,
-        AppEvent::SubmitCodexUserPaneTask {
-            thread_id: pane,
-            task: "pf660 task".to_string(),
-            sent_while_kill_switch_on,
-        },
-    ))
-    .await?;
-    assert!(op_rx.try_recv().is_err(), "no user turn was submitted");
-    assert_eq!(report_turns(&mut app_event_rx), vec![false]);
-
-    // Control: another failure after switch-off (the pane has no live
-    // session) reports with a turn, as before.
-    register_native_ack(&mut app, sender, &target, "pf660 later", /*seq*/ 6602);
-    Box::pin(app.handle_event(
-        &mut tui,
-        &mut app_server,
-        AppEvent::SubmitCodexUserPaneTask {
-            thread_id: pane,
-            task: "pf660 later".to_string(),
-            sent_while_kill_switch_on: false,
-        },
-    ))
-    .await?;
-    assert_eq!(report_turns(&mut app_event_rx), vec![true]);
-    Ok(())
-}
-
 /// #660 (same window, Claude side of #613): a native agent's task for a
 /// Claude pane that does not exist, sent while the switch was on and handled
 /// after it was turned off, is reported failed without starting a turn in
@@ -114,23 +59,17 @@ async fn issue_660_held_claude_task_failure_starts_no_sender_turn() {
 
 /// #660 (round 2): ordinary failures of tasks sent while the switch was on,
 /// handled after it was turned off, tell the native sender without starting
-/// a turn in it: an oversize task for a `/panes` pane, a task for a managed
-/// pane of a crew that is read-only, and an oversize Claude-pane task.
+/// a turn in it: a task for a managed pane of a crew that is read-only, and an
+/// oversize Claude-pane task. (A task for a `/panes` pane goes to its mailbox
+/// like any agent's task, D106.)
 #[tokio::test]
 async fn issue_660_failures_of_tasks_sent_while_on_start_no_sender_turn() -> Result<()> {
     let (mut app, mut app_event_rx, mut op_rx) = make_test_app_with_channels().await;
     let config = app.chat_widget.config_ref().clone();
     let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(&config)).await?;
     let mut tui = crate::tui::test_support::make_test_tui()?;
-    let pane = ThreadId::from_string("00000000-0000-0000-0000-000000006604")?;
     let managed = ThreadId::from_string("00000000-0000-0000-0000-000000006605")?;
     let sender = ThreadId::from_string("00000000-0000-0000-0000-000000006606")?;
-    app.upsert_agent_picker_thread(
-        pane,
-        Some("Gorbag".to_string()),
-        /*agent_role*/ None,
-        /*is_closed*/ false,
-    );
     issue_507_switch(&app, HumanRevocation::KillSwitchOn);
     let sent_while_kill_switch_on = app.kill_switch_on_now();
     assert!(sent_while_kill_switch_on);
@@ -138,8 +77,6 @@ async fn issue_660_failures_of_tasks_sent_while_on_start_no_sender_turn() -> Res
     let oversize = "x".repeat(crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES + 1);
 
     for sent in [sent_while_kill_switch_on, false] {
-        let pane_target = app.logical_native_node_for_thread(pane);
-        register_native_ack(&mut app, sender, &pane_target, &oversize, /*seq*/ 6604);
         let managed_target = app.logical_native_node_for_thread(managed);
         register_native_ack(
             &mut app,
@@ -158,16 +95,6 @@ async fn issue_660_failures_of_tasks_sent_while_on_start_no_sender_turn() -> Res
         );
         while app_event_rx.try_recv().is_ok() {}
 
-        Box::pin(app.handle_event(
-            &mut tui,
-            &mut app_server,
-            AppEvent::SubmitCodexUserPaneTask {
-                thread_id: pane,
-                task: oversize.clone(),
-                sent_while_kill_switch_on: sent,
-            },
-        ))
-        .await?;
         app.spawn_legacy_read_only = true;
         Box::pin(app.handle_event(
             &mut tui,
@@ -194,7 +121,7 @@ async fn issue_660_failures_of_tasks_sent_while_on_start_no_sender_turn() -> Res
         // Control (unstamped): the same failures report with a turn.
         assert_eq!(
             report_turns(&mut app_event_rx),
-            vec![!sent; 3],
+            vec![!sent; 2],
             "stamped: {sent}"
         );
     }

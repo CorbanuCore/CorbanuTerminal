@@ -1,0 +1,13 @@
+╰───────────────────────────────────────╯
+╭───────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)         │
+│                                       │
+│ model:     glm-5.2   /model to change │
+│ directory: ~/runs/…/fixture/workspace │
+╰───────────────────────────────────────╯
+■ Spawn a Troll before creating Orc panes, then choose that Troll as supervisor.
+  Spawn Troll
+  Choose the harness for this Troll pane.
+› 1. Harness: Corbanu Terminal  Native Corbanu Terminal agent pane; choose model and reasoning next.
+  2. Harness: Claude Code       Claude Code headless pane; choose provider route next.
+  Press enter to confirm or esc to go back

@@ -12,7 +12,8 @@ use super::work;
 /// Bytes of shell text one classification gives the grammar, each line
 /// costing [`LINE_COST`] more than its length; lines past it are not
 /// compared. With [`grammar::MAX_BYTES`] per line this bounds the grammar's
-/// work, and the log events, per classification. Only the command lines
+/// work per classification (lines too long to read are refused unread and
+/// logged, each, without charge). Only the command lines
 /// `quoted_pass` reads (a line's own text and nested shells' scripts) are
 /// compared, not the quoted words it re-reads.
 pub(super) const MAX_COMPARED_BYTES: usize = 64 * 1024;

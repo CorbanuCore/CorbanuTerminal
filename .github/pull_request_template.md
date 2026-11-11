@@ -17,5 +17,11 @@ Include a link to a bug report or enhancement request.
 - [ ] Literal arguments (`None`, `true`, numbers) in new code, tests included,
       carry a `/*param*/` comment. PR CI lints the crates you changed.
 - [ ] After changing a type (or a doc comment) in `codex-protocol` or
-      `codex-app-server-protocol`, run `just write-app-server-schema` and
+      `codex-app-server-protocol`, or a crate whose types they export
+      (`codex-security-policy`, `codex-utils-absolute-path`,
+      `codex-utils-path-uri`, `codex-extension-items`), run
+      `just write-app-server-schema` and
       `just write-app-server-schema --experimental`, and commit the fixtures.
+- [ ] A change users will notice adds a release-note fragment in
+      `qa/release/unreleased/notes/` (see its `README.md`); don't recreate
+      `qa/release/unreleased/RELEASE_NOTES.md`.
