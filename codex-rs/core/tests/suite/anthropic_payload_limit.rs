@@ -241,6 +241,95 @@ async fn anthropic_streamed_signed_thinking_rejection_repairs_and_retries_turn()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn history_repair_cannot_be_replayed_by_outer_stream_retries() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    for (metadata_count, text, expected_requests) in [(1, "", 2), (1, "x", 1), (33, "", 1)] {
+        let server = wiremock::MockServer::start().await;
+        let mut events = Vec::new();
+        for index in 0..metadata_count {
+            events.push(serde_json::json!({
+                "type": "message_start",
+                "message": {"id": "rejected", "model": format!("synthetic-{index}")}
+            }));
+        }
+        if !text.is_empty() {
+            events.push(serde_json::json!({
+                "type": "content_block_start", "index": 0,
+                "content_block": {"type": "text", "text": ""}
+            }));
+            events.push(serde_json::json!({
+                "type": "content_block_delta", "index": 0,
+                "delta": {"type": "text_delta", "text": text}
+            }));
+        }
+        events.push(serde_json::json!({
+            "type": "error",
+            "error": {
+                "type": "invalid_request_error",
+                "message": "thinking blocks in the latest assistant message cannot be modified"
+            }
+        }));
+        let body = events
+            .iter()
+            .map(|event| {
+                format!(
+                    "event: {}\ndata: {event}\n\n",
+                    event["type"].as_str().expect("event type")
+                )
+            })
+            .collect::<String>();
+        Mock::given(method("POST"))
+            .and(path_regex(".*/messages$"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(body, "text/event-stream"))
+            .expect(expected_requests)
+            .mount(&server)
+            .await;
+        let provider = ModelProviderInfo {
+            base_url: Some(format!("{}/v1", server.uri())),
+            env_key: Some("PATH".to_owned()),
+            request_max_retries: Some(0),
+            stream_max_retries: Some(3),
+            stream_idle_timeout_ms: Some(2_000),
+            ..ModelProviderInfo::create_anthropic_provider()
+        };
+        let test = test_codex()
+            .with_config(move |config| {
+                config.model = Some("claude-opus-5".to_owned());
+                config.model_provider_id = ANTHROPIC_PROVIDER_ID.to_owned();
+                config.model_provider = provider;
+            })
+            .build_with_auto_env(&server)
+            .await?;
+        test.codex
+            .submit(Op::UserInput {
+                items: vec![UserInput::Text {
+                    text: "hello".to_owned(),
+                    text_elements: vec![],
+                }],
+                final_output_json_schema: None,
+                responsesapi_client_metadata: None,
+                additional_context: Default::default(),
+                thread_settings: Default::default(),
+            })
+            .await?;
+        let mut saw_error = false;
+        loop {
+            match test.codex.next_event().await?.msg {
+                EventMsg::Error(_) => saw_error = true,
+                EventMsg::TurnComplete(_) => break,
+                _ => {}
+            }
+        }
+        assert!(saw_error);
+        assert_eq!(
+            server.received_requests().await.expect("requests").len(),
+            expected_requests as usize
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn plan_fable_route_sends_scoped_max_tokens() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 

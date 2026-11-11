@@ -2,6 +2,58 @@ use super::*;
 use pretty_assertions::assert_eq;
 use tokio::sync::mpsc;
 
+async fn prefetch(
+    stream: &mut ResponseStream,
+) -> Result<Vec<Result<ResponseEvent, ApiError>>, ApiError> {
+    super::prefetch(stream, || {}).await
+}
+
+#[tokio::test]
+async fn cancelled_prefetch_calls_lifecycle_handler_once() {
+    let (sender, rx_event) = mpsc::channel(1);
+    let mut stream = ResponseStream {
+        rx_event,
+        upstream_request_id: Some("synthetic-cancelled-request".to_owned()),
+    };
+    let recorded = std::cell::RefCell::new(Vec::new());
+    let request_id = stream.upstream_request_id.take();
+    let mut future = Box::pin(super::prefetch(&mut stream, || {
+        recorded.borrow_mut().push(request_id);
+    }));
+    assert!(futures::poll!(&mut future).is_pending());
+    drop(future);
+    assert_eq!(
+        &*recorded.borrow(),
+        &[Some("synthetic-cancelled-request".to_owned())]
+    );
+    drop(sender);
+}
+
+#[tokio::test]
+async fn completed_prefetch_does_not_report_cancellation() {
+    let called = std::cell::Cell::new(false);
+    let mut stream = stream(vec![Err(rejection())]);
+    assert!(
+        super::prefetch(&mut stream, || called.set(true))
+            .await
+            .is_err()
+    );
+    assert!(!called.get());
+}
+
+#[test]
+fn forwarded_history_rejection_is_not_retryable() {
+    let Err(error) = terminalize(Err(rejection())) else {
+        panic!("expected failure");
+    };
+    assert!(!codex_api::map_api_error(error).is_retryable());
+    let Err(error) = terminalize(Err(ApiError::Stream("ordinary connection loss".to_owned())))
+    else {
+        panic!("expected failure");
+    };
+    assert!(codex_api::map_api_error(error).is_retryable());
+}
+
 fn rejection() -> ApiError {
     ApiError::Stream(
         "invalid_request_error: thinking blocks in the latest assistant message cannot be modified"

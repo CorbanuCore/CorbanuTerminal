@@ -3530,16 +3530,25 @@ impl ModelClientSession {
 
             match stream_result {
                 Ok(mut stream) => {
+                    let upstream_request_id = stream.upstream_request_id.take();
                     let prefix = if signed_thinking_history_retry_used {
                         Vec::new()
                     } else {
-                        match anthropic_recovery::prefetch(&mut stream).await {
+                        match anthropic_recovery::prefetch(&mut stream, || {
+                            inference_trace_attempt.record_cancelled(
+                                STREAM_DROPPED_REASON,
+                                upstream_request_id.as_deref(),
+                                /*output_items*/ &[],
+                            );
+                        })
+                        .await
+                        {
                             Ok(prefix) => prefix,
                             Err(error) => {
                                 let mapped = self.client.state.provider.map_api_error(error);
                                 inference_trace_attempt.record_failed(
                                     &mapped,
-                                    stream.upstream_request_id.as_deref(),
+                                    upstream_request_id.as_deref(),
                                     /*output_items*/ &[],
                                 );
                                 signed_thinking_history_retry_used = true;
@@ -3547,10 +3556,11 @@ impl ModelClientSession {
                             }
                         }
                     };
-                    let upstream_request_id = stream.upstream_request_id.take();
                     let (stream, _) = map_response_events_with_server_state(
                         upstream_request_id,
-                        futures::stream::iter(prefix).chain(stream),
+                        futures::stream::iter(prefix)
+                            .chain(stream)
+                            .map(anthropic_recovery::terminalize),
                         session_telemetry.clone(),
                         inference_trace_attempt,
                         Arc::clone(&self.client.state.provider),
