@@ -292,6 +292,7 @@ async fn accounting_anthropic_native_spawned_children_role_reload_and_fork_own_o
                     description: Some("synthetic accounting child".into()),
                     config_file: Some(role_path.to_path_buf()),
                     nickname_candidates: None,
+                    source: codex_core::config::AgentRoleSource::User,
                 },
             );
         })
@@ -730,6 +731,7 @@ async fn role_override_native(case: RoleOverride) -> anyhow::Result<()> {
                     description: Some("synthetic transport override".into()),
                     config_file: Some(role_path.to_path_buf()),
                     nickname_candidates: None,
+                    source: codex_core::config::AgentRoleSource::User,
                 },
             );
         })

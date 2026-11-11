@@ -5,6 +5,7 @@ use app_test_support::create_final_assistant_message_sse_response;
 use app_test_support::create_mock_responses_server_repeating_assistant;
 use app_test_support::create_mock_responses_server_sequence;
 use app_test_support::create_shell_command_sse_response;
+use codex_app_server_protocol::AskForApproval;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::ItemCompletedNotification;
 use codex_app_server_protocol::ItemStartedNotification;
@@ -15,6 +16,7 @@ use codex_app_server_protocol::ReviewDelivery;
 use codex_app_server_protocol::ReviewStartParams;
 use codex_app_server_protocol::ReviewStartResponse;
 use codex_app_server_protocol::ReviewTarget;
+use codex_app_server_protocol::SandboxMode;
 use codex_app_server_protocol::ServerRequest;
 use codex_app_server_protocol::ThreadHistoryMode;
 use codex_app_server_protocol::ThreadItem;
@@ -569,4 +571,167 @@ fn create_config_toml(codex_home: &std::path::Path, server_uri: &str) -> std::io
         .with_provider_name("Mock provider")
         .disable_feature(Feature::ShellSnapshot)
         .write(codex_home)
+}
+
+/// #2015: runs a detached review of a thread and returns the parent's and the
+/// review's model requests.
+async fn run_detached_review(
+    mcp: &mut TestAppServer,
+    response_mock: &core_test_support::responses::ResponseMock,
+    thread_id: &str,
+) -> Result<(
+    core_test_support::responses::ResponsesRequest,
+    core_test_support::responses::ResponsesRequest,
+)> {
+    let ReviewStartResponse { .. } = mcp
+        .request(|request_id| ClientRequest::ReviewStart {
+            request_id,
+            params: ReviewStartParams {
+                thread_id: thread_id.to_string(),
+                delivery: Some(ReviewDelivery::Detached),
+                target: ReviewTarget::Custom {
+                    instructions: "detached review".to_string(),
+                },
+            },
+        })
+        .await?;
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_notification_message("turn/completed"),
+    )
+    .await??;
+    let mut requests = response_mock.requests();
+    assert_eq!(requests.len(), 2);
+    let review = requests.pop().expect("review request");
+    let parent = requests.pop().expect("parent request");
+    Ok((parent, review))
+}
+
+fn two_turn_sse() -> Vec<String> {
+    vec![
+        responses::sse(vec![
+            responses::ev_response_created("materialize-response"),
+            responses::ev_assistant_message("materialize-message", "materialized"),
+            responses::ev_completed("materialize-response"),
+        ]),
+        responses::sse(vec![
+            responses::ev_response_created("review-response"),
+            responses::ev_assistant_message("review-message", "No findings."),
+            responses::ev_completed("review-response"),
+        ]),
+    ]
+}
+
+fn sandbox_tag(request: &core_test_support::responses::ResponsesRequest) -> String {
+    let metadata: serde_json::Value = serde_json::from_str(
+        &request
+            .header("x-codex-turn-metadata")
+            .expect("x-codex-turn-metadata header"),
+    )
+    .expect("turn metadata JSON");
+    metadata["sandbox"]
+        .as_str()
+        .expect("sandbox tag")
+        .to_string()
+}
+
+/// #2015: a detached review runs with the parent thread's current sandbox
+/// and approval policy (set at thread start and changed by a later turn),
+/// not with the weaker ones the server started with.
+#[tokio::test]
+async fn issue_2015_detached_review_inherits_the_parent_threads_current_settings() -> Result<()> {
+    const WEAK_SANDBOX: &str = "`sandbox_mode` is `danger-full-access`";
+    const WEAK_APPROVALS: &str = "Approval policy is currently never";
+    let server = responses::start_mock_server().await;
+    let response_mock = responses::mount_sse_sequence(&server, two_turn_sse()).await;
+    let codex_home = TempDir::new()?;
+    MockResponsesConfig::new(&server.uri())
+        .with_provider_name("Mock provider")
+        .with_approval_policy("never")
+        .with_sandbox_mode("danger-full-access")
+        .disable_feature(Feature::ShellSnapshot)
+        .write(codex_home.path())?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .build_initialized()
+        .await?;
+
+    let ThreadStartResponse { thread, .. } = mcp
+        .start_thread(ThreadStartParams {
+            model: Some("mock-model".to_string()),
+            sandbox: Some(SandboxMode::ReadOnly),
+            ..Default::default()
+        })
+        .await?;
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_notification_message("thread/started"),
+    )
+    .await??;
+    let _: TurnStartResponse = mcp
+        .request(|request_id| ClientRequest::TurnStart {
+            request_id,
+            params: TurnStartParams {
+                thread_id: thread.id.clone(),
+                client_user_message_id: None,
+                input: vec![V2UserInput::Text {
+                    text: "materialize rollout".to_string(),
+                    text_elements: Vec::new(),
+                }],
+                approval_policy: Some(AskForApproval::UnlessTrusted),
+                ..Default::default()
+            },
+        })
+        .await?;
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_notification_message("turn/completed"),
+    )
+    .await??;
+
+    let (parent, review) = run_detached_review(&mut mcp, &response_mock, &thread.id).await?;
+    for (name, request) in [("parent", &parent), ("review", &review)] {
+        assert!(
+            request.body_contains_text("`sandbox_mode` is `read-only`"),
+            "{name}"
+        );
+        assert!(!request.body_contains_text(WEAK_SANDBOX), "{name}");
+        assert!(!request.body_contains_text(WEAK_APPROVALS), "{name}");
+    }
+    assert_eq!(sandbox_tag(&review), sandbox_tag(&parent));
+    Ok(())
+}
+
+/// #2015: a Windows sandbox set up after the server started (setup saves
+/// `[windows] sandbox`; a new thread loads it) reaches a detached review of
+/// a thread that runs with it.
+#[tokio::test]
+async fn issue_2015_detached_review_keeps_a_windows_sandbox_set_up_after_start() -> Result<()> {
+    let server = responses::start_mock_server().await;
+    let response_mock = responses::mount_sse_sequence(&server, two_turn_sse()).await;
+    let codex_home = TempDir::new()?;
+    MockResponsesConfig::new(&server.uri())
+        .with_provider_name("Mock provider")
+        .with_approval_policy("never")
+        .with_sandbox_mode("workspace-write")
+        .disable_feature(Feature::ShellSnapshot)
+        .write(codex_home.path())?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .build_initialized()
+        .await?;
+
+    let config = codex_home.path().join("config.toml");
+    let mut configured = std::fs::read_to_string(&config)?;
+    configured.push_str("\n[windows]\nsandbox = \"unelevated\"\n");
+    std::fs::write(&config, configured)?;
+
+    let thread_id = start_default_thread(&mut mcp).await?;
+    materialize_thread_rollout(&mut mcp, &thread_id).await?;
+    let (parent, review) = run_detached_review(&mut mcp, &response_mock, &thread_id).await?;
+    if cfg!(windows) {
+        assert_ne!(sandbox_tag(&parent), "none", "the thread has the sandbox");
+    }
+    assert_eq!(sandbox_tag(&review), sandbox_tag(&parent));
+    Ok(())
 }

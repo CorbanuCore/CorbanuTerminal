@@ -96,6 +96,8 @@ mod issue_1087;
 mod issue_1139;
 #[path = "issue_1355_tests.rs"]
 mod issue_1355;
+mod issue_1976;
+mod issue_2000;
 mod issue_443;
 mod issue_445;
 mod issue_505;

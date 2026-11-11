@@ -5787,6 +5787,7 @@ async fn spawn_thread_subagent_uses_role_specific_nickname_candidates() {
             description: Some("Research role".to_string()),
             config_file: None,
             nickname_candidates: Some(vec!["Atlas".to_string()]),
+            source: crate::config::AgentRoleSource::User,
         },
     );
     let (parent_thread_id, _parent_thread) = harness.start_thread().await;

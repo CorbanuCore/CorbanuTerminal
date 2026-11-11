@@ -373,13 +373,23 @@ async fn sec_win_1506_planted_project_config_is_not_loaded() {
     let agents_planted =
         || codex_config::planted_project_metadata().contains(&project.join(".agents"));
     let agents_before = agents_planted();
-    codex_windows_sandbox::confirm_planted_project_metadata(&project.join(".codex"))
-        .expect("confirm .codex");
+    codex_windows_sandbox::confirm_planted_project_metadata(
+        &project.join(".codex"),
+        codex_config::planted_stamps()
+            .get(&project.join(".codex"))
+            .copied(),
+    )
+    .expect("confirm .codex");
     let after_confirming = load().await;
     // Confirming one folder leaves the other planted.
     let agents_after_codex = agents_planted();
-    codex_windows_sandbox::confirm_planted_project_metadata(&project.join(".agents"))
-        .expect("confirm .agents");
+    codex_windows_sandbox::confirm_planted_project_metadata(
+        &project.join(".agents"),
+        codex_config::planted_stamps()
+            .get(&project.join(".agents"))
+            .copied(),
+    )
+    .expect("confirm .agents");
     let agents_after = agents_planted();
 
     assert_eq!(

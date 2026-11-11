@@ -82,6 +82,18 @@ pub(crate) type SessionTaskResult = CodexResult<Option<String>>;
 pub(crate) const TURN_PANICKED_MESSAGE: &str =
     "this turn stopped because of an internal error (a panic); the details are in the log";
 
+/// How a turn ended, for its mailbox messages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MailboxTurnEnd {
+    /// The turn ended on its own.
+    Completed,
+    /// The turn returned an error (a turn-aborted one included); its leftover input is
+    /// still recorded or submitted again afterwards.
+    Failed,
+    /// An interrupt, a replacing turn or a shutdown stopped the turn.
+    Aborted,
+}
+
 pub(crate) enum MailboxParentProvenance {
     Ignore,
     Attribute,
@@ -422,7 +434,13 @@ impl Session {
             debug_assert!(turn.task.is_none());
             Arc::clone(&turn.turn_state)
         };
-        turn_state.lock().await.token_usage_at_turn_start = token_usage_at_turn_start.clone();
+        {
+            let mut turn_state = turn_state.lock().await;
+            turn_state.token_usage_at_turn_start = token_usage_at_turn_start.clone();
+            // #1952 (D485): mail this turn starts with, taken off the mailbox queue above or by
+            // the caller.
+            turn_state.track_taken_mailbox_messages(input.iter().chain(pending_items.iter()));
+        }
         self.input_queue
             .extend_pending_input_for_turn_state(turn_state.as_ref(), pending_items)
             .await;
@@ -678,7 +696,7 @@ impl Session {
         if let Some(active_turn) = active_turn_to_clear {
             self.finish_turn_mailbox_messages(
                 active_turn.turn_state.as_ref(),
-                /*completed_naturally*/ false,
+                MailboxTurnEnd::Aborted,
             )
             .await;
             // Let interrupted tasks observe cancellation before dropping pending approvals, or an
@@ -720,11 +738,8 @@ impl Session {
             self.emit_turn_abort_lifecycle(reason.clone(), turn_context.extension_data.as_ref())
                 .await;
         }
-        self.finish_turn_mailbox_messages(
-            active_turn.turn_state.as_ref(),
-            /*completed_naturally*/ false,
-        )
-        .await;
+        self.finish_turn_mailbox_messages(active_turn.turn_state.as_ref(), MailboxTurnEnd::Aborted)
+            .await;
         // Let interrupted tasks observe cancellation before dropping pending approvals, or an
         // in-flight approval wait can surface as a model-visible rejection before TurnAborted.
         self.input_queue.clear_pending(&active_turn).await;
@@ -789,8 +804,15 @@ impl Session {
                 ts.token_usage_at_turn_start.clone(),
             )
         };
-        self.finish_turn_mailbox_messages(turn_state.as_ref(), completed_naturally)
-            .await;
+        self.finish_turn_mailbox_messages(
+            turn_state.as_ref(),
+            if completed_naturally {
+                MailboxTurnEnd::Completed
+            } else {
+                MailboxTurnEnd::Failed
+            },
+        )
+        .await;
         // Queue-only mail deliberately does not wake an idle thread or join the immediately
         // following admitted request. Crossing this terminal boundary makes it eligible to join
         // the next human turn without creating a model-only continuation loop.
@@ -1056,15 +1078,59 @@ impl Session {
     async fn finish_turn_mailbox_messages(
         &self,
         turn_state: &tokio::sync::Mutex<crate::state::TurnState>,
-        completed_naturally: bool,
+        end: MailboxTurnEnd,
     ) {
-        let message_ids = turn_state.lock().await.take_mailbox_message_ids();
-        if message_ids.is_empty() {
+        let (message_ids, unrecorded_message_ids) = {
+            let mut turn_state = turn_state.lock().await;
+            let message_ids = turn_state.take_mailbox_message_ids();
+            let unrecorded_message_ids =
+                turn_state.take_unrecorded_mailbox_message_ids(&message_ids);
+            let unrecorded_message_ids = match end {
+                MailboxTurnEnd::Aborted => unrecorded_message_ids,
+                MailboxTurnEnd::Completed | MailboxTurnEnd::Failed => Vec::new(),
+            };
+            (message_ids, unrecorded_message_ids)
+        };
+        if message_ids.is_empty() && unrecorded_message_ids.is_empty() {
             return;
         }
         let Some(state_db) = self.state_db() else {
             return;
         };
+        // #1952 (D485): mail the stopped turn took but never recorded is gone from this session
+        // (the abort drops the turn's input). Cancel its row, still Submitted under this
+        // session, so that reloading the agent does not hand it over again: mailbox recovery
+        // requeues a Submitted row of a replaced session, which is meant for a session that
+        // died (crash recovery, #1058/#1545) and still is. The transition only moves a row that
+        // is still Submitted. A message this session applied to its history is left as it is
+        // even when its row is still Submitted (its rollout did not flush, or the abort landed
+        // before the row moved on): recovery decides about it, as before.
+        for message_id in unrecorded_message_ids {
+            if self.has_applied_agent_message_id(&message_id).await {
+                continue;
+            }
+            match state_db
+                .transition_agent_message(
+                    &message_id,
+                    codex_state::AgentMailboxPhase::Submitted,
+                    codex_state::AgentMailboxPhase::Cancelled,
+                    crate::turn_timing::now_unix_timestamp_ms(),
+                )
+                .await
+            {
+                Ok(true) => debug!(
+                    %message_id,
+                    "cancelled agent mailbox message an interrupted turn took but never recorded"
+                ),
+                Ok(false) => {}
+                Err(err) => warn!(
+                    %err,
+                    %message_id,
+                    "failed to cancel agent mailbox message an interrupted turn never recorded"
+                ),
+            }
+        }
+        let completed_naturally = matches!(end, MailboxTurnEnd::Completed);
         for message_id in message_ids {
             let result = if completed_naturally {
                 state_db

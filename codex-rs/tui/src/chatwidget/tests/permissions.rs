@@ -1437,6 +1437,7 @@ async fn planted_repo_changes_prompt_snapshot() {
                 ],
             },
         ],
+        std::collections::BTreeMap::new(),
     );
     assert_chatwidget_snapshot!(
         "planted_repo_changes_prompt",

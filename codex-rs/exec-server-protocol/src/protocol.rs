@@ -14,6 +14,7 @@ use codex_utils_path_uri::PathUri;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::HttpAddressPolicy;
 use crate::ProcessId;
 
 pub const INITIALIZE_METHOD: &str = "initialize";
@@ -108,6 +109,10 @@ pub struct EnvironmentCapabilities {
     /// Whether capability discovery applies the filesystem sandbox sent with each root.
     #[serde(default)]
     pub capability_discovery_sandbox: bool,
+    /// Whether `http/request` enforces `addressPolicy`. Clients must not send
+    /// a policy-bearing request to an executor without it.
+    #[serde(default)]
+    pub http_address_policy: bool,
 }
 
 /// Status returned by an initialized exec-server connection.
@@ -140,6 +145,7 @@ impl EnvironmentInfo {
             capabilities: EnvironmentCapabilities {
                 network_proxy_launch: true,
                 capability_discovery_sandbox: true,
+                http_address_policy: true,
             },
         }
     }
@@ -612,7 +618,7 @@ pub struct HttpHeader {
 }
 
 /// Redirect behavior for an executor-side HTTP request.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum HttpRedirectPolicy {
     /// Follow redirects using the HTTP client's normal limits.
@@ -659,6 +665,10 @@ pub struct HttpRequestParams {
     /// Return after response headers and stream the response body as deltas.
     #[serde(default)]
     pub stream_response: bool,
+    /// Restricts which addresses the request, and each redirect hop, may
+    /// connect to. Omitted means no restriction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address_policy: Option<HttpAddressPolicy>,
 }
 
 /// HTTP response envelope returned from an executor `http/request` call.
