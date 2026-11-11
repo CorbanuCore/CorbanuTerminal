@@ -14,6 +14,7 @@ use crate::ClientRouteClass;
 use crate::HttpClient;
 use crate::HttpClientFactory;
 use crate::OutboundProxyRoute;
+use crate::ResolvedAddressFilter;
 use crate::client::RequestLogging;
 use crate::custom_ca::build_reqwest_client_with_custom_ca;
 use crate::with_chatgpt_cloudflare_cookie_store;
@@ -30,6 +31,7 @@ pub struct HttpClientBuilder {
     connect_timeout: Option<Duration>,
     chatgpt_cloudflare_cookie_store: bool,
     request_logging: RequestLogging,
+    resolved_address_filter: Option<ResolvedAddressFilter>,
 }
 
 impl HttpClientFactory {
@@ -90,6 +92,12 @@ impl HttpClientBuilder {
 
     pub fn with_chatgpt_cloudflare_cookie_store(mut self) -> Self {
         self.chatgpt_cloudflare_cookie_store = true;
+        self
+    }
+
+    /// Resolves host names through `filter`, so connections go only to addresses it allows.
+    pub(crate) fn resolved_address_filter(mut self, filter: ResolvedAddressFilter) -> Self {
+        self.resolved_address_filter = Some(filter);
         self
     }
 
@@ -305,6 +313,9 @@ impl HttpClientBuilder {
         if self.chatgpt_cloudflare_cookie_store {
             builder = with_chatgpt_cloudflare_cookie_store(builder);
         }
+        if let Some(filter) = self.resolved_address_filter {
+            builder = builder.dns_resolver(filter.resolver());
+        }
         builder
     }
 }
@@ -317,6 +328,7 @@ impl Default for HttpClientBuilder {
             connect_timeout: None,
             chatgpt_cloudflare_cookie_store: false,
             request_logging: RequestLogging::Enabled,
+            resolved_address_filter: None,
         }
     }
 }

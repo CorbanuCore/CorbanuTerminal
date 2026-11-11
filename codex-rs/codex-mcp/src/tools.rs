@@ -7,6 +7,8 @@
 
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::sync::Mutex;
+use std::sync::OnceLock;
 
 use codex_config::McpServerConfig;
 use codex_protocol::ToolName;
@@ -20,6 +22,100 @@ use tracing::warn;
 use crate::mcp::sanitize_responses_api_tool_name;
 
 const LEGACY_MCP_TOOL_NAME_PREFIX: &str = "mcp__";
+
+/// Namespaces of built-in tools (the multi-agent V2 namespace is configurable;
+/// `collaboration` is its default). An MCP server exposed without the `mcp__`
+/// prefix must not take one: on the Responses wire its tools would clash with
+/// the built-in's, and on wires without namespaces its calls would replay as
+/// built-in calls (#688, #1655).
+pub const BUILTIN_TOOL_NAMESPACES: &[&str] = &[
+    "collaboration",
+    "clock",
+    "image_gen",
+    "memories",
+    "multi_agent_v1",
+    "skills",
+    "web",
+];
+
+/// Namespaces the Responses API reserves for its own tools. Multi-agent V2
+/// `tool_namespace`, dynamic tool namespaces and MCP servers exposed without
+/// the `mcp__` prefix must not use one (#1666).
+pub const RESPONSES_RESERVED_NAMESPACES: &[&str] = &[
+    "api_tool",
+    "browser",
+    "computer",
+    "container",
+    "file_search",
+    "functions",
+    "image_gen",
+    "multi_tool_use",
+    "python",
+    "python_user_visible",
+    "submodel_delegator",
+    "terminal",
+    "tool_search",
+    "web",
+];
+
+/// Which reserved namespace an MCP server exposed without the `mcp__` prefix
+/// would take.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReservedMcpNamespace {
+    /// One of [`BUILTIN_TOOL_NAMESPACES`].
+    BuiltinTool,
+    /// One of [`RESPONSES_RESERVED_NAMESPACES`].
+    ResponsesApi,
+    /// The configured `features.multi_agent_v2.tool_namespace`.
+    MultiAgentV2,
+}
+
+impl ReservedMcpNamespace {
+    /// What the namespace is, completing "`name` is ...".
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::BuiltinTool => "a built-in tool namespace",
+            Self::ResponsesApi => "a tool namespace reserved by the Responses API",
+            Self::MultiAgentV2 => {
+                "the multi-agent tool namespace (`features.multi_agent_v2.tool_namespace`)"
+            }
+        }
+    }
+}
+
+/// Which reserved namespace an MCP server named `server_name` would take if
+/// its tools were exposed without the `mcp__` prefix: a built-in tool's, one
+/// the Responses API reserves, or the configured multi-agent V2 one.
+pub fn unprefixed_mcp_namespace_reservation(
+    server_name: &str,
+    multi_agent_v2_tool_namespace: Option<&str>,
+) -> Option<ReservedMcpNamespace> {
+    let namespace = sanitize_responses_api_tool_name(server_name);
+    if BUILTIN_TOOL_NAMESPACES.contains(&namespace.as_str()) {
+        Some(ReservedMcpNamespace::BuiltinTool)
+    } else if RESPONSES_RESERVED_NAMESPACES.contains(&namespace.as_str()) {
+        Some(ReservedMcpNamespace::ResponsesApi)
+    } else if multi_agent_v2_tool_namespace == Some(namespace.as_str()) {
+        Some(ReservedMcpNamespace::MultiAgentV2)
+    } else {
+        None
+    }
+}
+
+/// Warns once per process for each server that keeps its prefix.
+fn warn_forced_prefix(server_name: &str, namespace: &str, reserved: ReservedMcpNamespace) {
+    static WARNED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let mut warned = WARNED
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if warned.insert(server_name.to_string()) {
+        let reserved = reserved.description();
+        warn!(
+            "MCP server `{server_name}` keeps the `mcp__` prefix: `{namespace}` is {reserved}; rename the server to expose it without the prefix"
+        );
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolInfo {
@@ -110,10 +206,12 @@ pub(crate) fn filter_tools(tools: Vec<ToolInfo>, filter: &ToolFilter) -> Vec<Too
 ///
 /// When `prefix_mcp_tool_names` is true, the historical `mcp__` namespace
 /// prefix is added except for tools from `non_prefixed_mcp_tool_servers`.
+/// A namespace that would be a built-in's keeps the prefix either way.
 pub(crate) fn normalize_tools_for_model_with_prefix<I>(
     tools: I,
     prefix_mcp_tool_names: bool,
     non_prefixed_mcp_tool_servers: &[String],
+    multi_agent_v2_tool_namespace: Option<&str>,
 ) -> Vec<ToolInfo>
 where
     I: IntoIterator<Item = ToolInfo>,
@@ -136,10 +234,19 @@ where
             continue;
         }
 
-        let callable_namespace = callable_namespace_with_prefix(
-            &sanitize_responses_api_tool_name(&tool.callable_namespace),
-            prefix_mcp_tool_names && !non_prefixed_mcp_tool_servers.contains(&tool.server_name),
-        );
+        let namespace = sanitize_responses_api_tool_name(&tool.callable_namespace);
+        let mut prefixed =
+            prefix_mcp_tool_names && !non_prefixed_mcp_tool_servers.contains(&tool.server_name);
+        if !prefixed
+            && let Some(reserved) =
+                unprefixed_mcp_namespace_reservation(&namespace, multi_agent_v2_tool_namespace)
+        {
+            // Config load rejects configured servers like this; servers from
+            // other sources (plugins, skill dependencies) keep the prefix.
+            prefixed = true;
+            warn_forced_prefix(&tool.server_name, &namespace, reserved);
+        }
+        let callable_namespace = callable_namespace_with_prefix(&namespace, prefixed);
 
         candidates.push(CallableToolCandidate {
             callable_namespace,

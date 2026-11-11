@@ -118,6 +118,13 @@ impl FileSystemSandboxRunner {
             sandbox_context.windows_sandbox_level,
             /*has_managed_network_requirements*/ false,
         );
+        // #1976 (D491): never run the helper outside a sandbox when the
+        // context must not be served without one.
+        if sandbox == codex_sandboxing::SandboxType::None
+            && let Some(refusal) = &sandbox_context.unsandboxed_refusal
+        {
+            return Err(invalid_request(refusal.clone()));
+        }
         let command = SandboxCommand {
             program: helper.as_path().as_os_str().to_owned(),
             args: vec![CODEX_FS_HELPER_ARG1.to_string()],

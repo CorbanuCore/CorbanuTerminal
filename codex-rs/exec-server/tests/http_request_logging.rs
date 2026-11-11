@@ -83,6 +83,7 @@ async fn delegated_http_success_logs_do_not_expose_sensitive_request_or_response
                 redirect_policy,
                 request_id: "sensitive-request".to_string(),
                 stream_response: false,
+                address_policy: None,
             })
             .await?;
         let expected_status = match redirect_policy {
@@ -142,6 +143,7 @@ async fn delegated_http_failure_warning_redacts_request_url() -> anyhow::Result<
             redirect_policy: HttpRedirectPolicy::Follow,
             request_id: "failed-sensitive-request".to_string(),
             stream_response: false,
+            address_policy: None,
         })
         .await;
     assert!(error.is_err(), "request to a closed port should fail");
