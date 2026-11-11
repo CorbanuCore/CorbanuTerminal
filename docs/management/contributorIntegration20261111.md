@@ -1,5 +1,7 @@
 # Contributor integration checkpoint — November 11, 2026
 
+> Historical 06:28 UTC snapshot. See the [10:26 UTC integration update](contributorIntegration20261111-1026.md) for subsequent merges and remaining gates, and [tracker #2106](https://github.com/CorbanuCore/CorbanuTerminal/issues/2106) for later changes.
+
 Status at **06:28 UTC**. This is an implementation/qualification handoff, not a release or completed-feature announcement. Travis accepted the comparative assessment of 19 human and eight Dependabot PRs and requested revisions, incorporation and named thanks. [Tracking issue #2106](https://github.com/CorbanuCore/CorbanuTerminal/issues/2106) records current outcomes and review-budget grants.
 
 **No contributor PR has merged in this round.** All 19 human contributors' PR threads received named acknowledgments and their specific dispositions. Original author commits were retained through normal merge/fast-forward updates; no force pushes. Only #28 has been closed, as superseded, not merged. No binary was installed or released.
