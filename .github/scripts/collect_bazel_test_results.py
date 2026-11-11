@@ -9,6 +9,8 @@ separate follow-up stages.
 
 import re
 
+from bazel_evidence_io import EvidenceError
+
 
 MAX_METHODS = 100_000
 METHOD = re.compile(
@@ -18,10 +20,6 @@ RUNNING = re.compile(r"running ([0-9]{1,9}) tests?\Z")
 SUMMARY = re.compile(
     r"test result: (?:ok|FAILED)\. ([0-9]{1,9}) passed; ([0-9]{1,9}) failed; ([0-9]{1,9}) ignored;.*\Z"
 )
-
-
-class EvidenceError(Exception):
-    """Contains only a fixed public-safe category, never an input path/text."""
 
 
 def libtest_rows(data):
