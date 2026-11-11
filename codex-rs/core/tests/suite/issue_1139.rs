@@ -33,6 +33,12 @@ use tempfile::TempDir;
 
 const CALL_ID: &str = "call-1139";
 
+#[cfg(not(windows))]
+const HOOK_WRITE: &str = "printf 'echo hi\\n' > .git/hooks/pre-commit";
+/// PowerShell, which runs `shell_command` on Windows, has no `printf` (#1967).
+#[cfg(windows)]
+const HOOK_WRITE: &str = "echo 'echo hi' > .git/hooks/pre-commit";
+
 /// MOD-11's first two items.
 #[derive(Clone, Copy, Debug)]
 enum Command {
@@ -48,14 +54,14 @@ struct Outcome {
     hook_written: bool,
     config_changed: bool,
     denials: Vec<(&'static str, &'static str)>,
+    /// Whether a warning names the hook file, by whatever spelling of its
+    /// path (checked while the project folder exists).
+    names_hook: bool,
 }
 
-async fn run(level: SecurityLevel, command: Command) -> anyhow::Result<Outcome> {
+async fn run_1139(level: SecurityLevel, command: Command) -> anyhow::Result<Outcome> {
     let (name, arguments) = match command {
-        Command::Hook => (
-            "shell_command",
-            json!({ "command": "printf 'echo hi\\n' > .git/hooks/pre-commit" }),
-        ),
+        Command::Hook => ("shell_command", json!({ "command": HOOK_WRITE })),
         Command::Config => (
             "exec_command",
             json!({ "cmd": "git config user.name injected1139", "yield_time_ms": 5_000 }),
@@ -81,6 +87,8 @@ async fn run(level: SecurityLevel, command: Command) -> anyhow::Result<Outcome> 
         .with_config(move |config| {
             config.security_level = level;
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::Never);
+            // #1967: the sandbox that keeps `.git` read-only on Windows.
+            core_test_support::use_elevated_windows_sandbox(config);
             for feature in [Feature::SourceEnvelopes, Feature::UnifiedExec] {
                 config
                     .features
@@ -144,9 +152,12 @@ async fn run(level: SecurityLevel, command: Command) -> anyhow::Result<Outcome> 
     .collect();
     Ok(Outcome {
         output,
-        warnings,
         hook_written: git.join("hooks/pre-commit").exists(),
         config_changed: std::fs::read_to_string(git.join("config"))?.contains("injected1139"),
+        names_hook: warnings
+            .iter()
+            .any(|warning| names_file(warning, &git.join("hooks").join("pre-commit"))),
+        warnings,
         denials,
     })
 }
@@ -159,7 +170,28 @@ fn level_warnings(outcome: &Outcome) -> Vec<&String> {
         .collect()
 }
 
+/// Whether `warning` is Moderate's "blocked writing" warning for `file`,
+/// whose folder must exist, by whatever spelling of its path.
+fn names_file(warning: &str, file: &std::path::Path) -> bool {
+    let Some(rest) = warning.strip_prefix("Security level Moderate blocked writing `") else {
+        return false;
+    };
+    let Some((named, tail)) = rest.split_once('`') else {
+        return false;
+    };
+    let named = std::path::Path::new(named);
+    let same_folder = match (named.parent(), file.parent()) {
+        (Some(a), Some(b)) => match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => false,
+        },
+        _ => false,
+    };
+    same_folder && named.file_name() == file.file_name() && tail.starts_with(": under Moderate")
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[serial_test::serial(codex_home)]
 async fn issue_1139_moderate_git_folder_writes_name_the_level() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -168,12 +200,19 @@ async fn issue_1139_moderate_git_folder_writes_name_the_level() -> anyhow::Resul
         (Command::Hook, ".git/hooks/pre-commit"),
         (Command::Config, ".git/config"),
     ] {
-        let moderate = run(SecurityLevel::Moderate, command).await?;
+        let moderate = run_1139(SecurityLevel::Moderate, command).await?;
         let warnings = level_warnings(&moderate);
-        let explained = warnings.len() == 1
-            && warnings[0].starts_with(&format!(
-                "Security level Moderate blocked writing `{path}`: under Moderate"
-            ))
+        let named = warnings.len() == 1
+            && match command {
+                // PowerShell reports the hook it could not write by its full
+                // path, which the warning names; compare it as a file, as
+                // TEMP may be spelled with short names (#1967).
+                Command::Hook if cfg!(windows) => moderate.names_hook,
+                _ => warnings[0].starts_with(&format!(
+                    "Security level Moderate blocked writing `{path}`: under Moderate"
+                )),
+            };
+        let explained = named
             && warnings[0]
                 .contains("keeps the project's .git folder (git hooks and config) read-only")
             && warnings[0].contains("run the command in their own terminal")
@@ -196,7 +235,7 @@ async fn issue_1139_moderate_git_folder_writes_name_the_level() -> anyhow::Resul
             ));
         }
 
-        let permissive = run(SecurityLevel::Permissive, command).await?;
+        let permissive = run_1139(SecurityLevel::Permissive, command).await?;
         if !level_warnings(&permissive).is_empty() || permissive.output.contains("Security level") {
             wrong.push(format!(
                 "Permissive {command:?}: {:?} {}",

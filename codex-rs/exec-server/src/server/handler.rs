@@ -227,11 +227,7 @@ impl ExecServerHandler {
         if stream_response {
             self.reserve_http_body_stream(&http_request_id).await?;
         }
-        let response = self
-            .http_client
-            .runner(params.redirect_policy)
-            .run(params)
-            .await;
+        let response = self.http_client.runner(&params).run(params).await;
         if response.is_err() && stream_response {
             self.release_http_body_stream(&http_request_id).await;
         }

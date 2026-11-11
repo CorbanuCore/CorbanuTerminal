@@ -18,6 +18,40 @@ override is set, an explicit `CODEX_HOME` wins; otherwise Corbanu Terminal
 prefers an existing `.corbanu`, reuses a lone `.pfterminal`, and defaults fresh
 installs to `.corbanu`. This keeps product state separate from stock Codex.
 
+### Project config
+
+A trusted project can add its own `.codex/config.toml`. Because that file comes
+from the repository, it can't set the following; Corbanu ignores them there and
+shows a startup warning that names them:
+
+- where requests and credentials go: `openai_base_url`, `chatgpt_base_url`,
+  `model_provider`, `model_providers`, `openrouter_provider`,
+  `apps_mcp_product_sku`, `experimental_realtime_ws_base_url`,
+  `experimental_realtime_webrtc_call_base_url`, `otel` and
+  `features.respect_system_proxy`;
+- which command runs on notifications: `notify`;
+- which config profile applies: `profile` and `profiles`;
+- where Corbanu keeps its state databases and logs: `sqlite_home` and
+  `log_dir`. Otherwise a repository could have thread history, memories and
+  logs written into itself, or have Corbanu open databases it ships;
+- config locks: `debug.config_lockfile`, because replaying a lock replaces the
+  whole config, the settings above included.
+
+Set them in your user config (`CODEX_HOME/config.toml`), with `-c` on the
+command line, or in managed config. `CODEX_SQLITE_HOME` still works too.
+
+The same applies to agent roles a project declares: role files in the
+project's `.codex/agents/` folder and files a project's config names with
+`[agents.<role>] config_file`. When Corbanu spawns a child agent with such a
+role, it ignores those settings in the role file (the child keeps the parent's
+values) and names them in a startup warning. Roles you declare yourself (in
+`CODEX_HOME/agents/` or your user config), roles from managed config and
+built-in roles can still set them. A project role file also can't declare
+further roles (`[agents.<role>]` entries) for its child to spawn; declare those
+in the project's `.codex/agents/` folder instead. If a project only re-describes
+a role you declared or adds nicknames, without its own `config_file`, your file
+applies as before.
+
 ## Built-In Providers
 
 These providers are compiled into Corbanu Terminal:
@@ -348,6 +382,40 @@ plus the ones named in that server's `env_vars` or `env`, so a provider key
 reaches one only if you list it there. A shell profile that exports a key
 itself (for example a login shell reading `~/.zprofile`) is outside this
 filter.
+
+<a id="mcp-oauth-addresses"></a>
+
+## MCP OAuth Address Policy
+
+OAuth sign-in for a Streamable HTTP MCP server (discovery, client
+registration, token and refresh requests, and every redirect they follow) may
+connect only to public addresses, unless the server's own URL is local:
+
+| MCP server `url`                                                               | OAuth requests may also reach                        |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| `localhost`, `*.localhost` or a loopback IP (`127.0.0.1`, `[::1]`)             | loopback addresses                                   |
+| a private IP (`10.x`, `172.16-31.x`, `192.168.x`, `100.64.0.0/10`, `fc00::/7`) | private addresses                                    |
+| any IP literal                                                                 | that one address                                     |
+| any other host name                                                            | public addresses only, whatever the name resolves to |
+
+Link-local and cloud metadata addresses (`169.254.169.254`, `fd00:ec2::254`,
+`fd20:ce::254`), metadata host names (`metadata.google.internal`), `0.0.0.0`,
+multicast and reserved addresses are refused, except an IP literal that is the
+server URL's own address. Host names are checked after DNS resolution and the
+request connects only to the checked address. With an HTTP proxy, the proxy
+resolves host names, so only IP literals and host names themselves are
+checked. A blocked request fails with `MCP OAuth request blocked: ...`.
+
+A server named by a host name that resolves to a loopback or private address
+(an intranet name, `host.docker.internal`, a `.local` name or an `/etc/hosts`
+alias) can't use OAuth: even discovery on its own host is refused, so such a
+server that doesn't use OAuth shows its auth status as unknown, with a
+warning at startup. Use the server's IP address in `url` where its certificate
+allows that. A server URL of `0.0.0.0` allows only `0.0.0.0` itself, so use
+`localhost` or `127.0.0.1` if its OAuth endpoints are on loopback. Corbanu
+does not send OAuth requests through a remote executor that predates this
+policy; sign-in fails with `MCP OAuth request not sent: ...` until the
+executor is updated.
 
 <a id="telegram"></a>
 

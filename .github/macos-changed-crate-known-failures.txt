@@ -1,0 +1,4 @@
+# Tests that fail on macOS in rust-ci-changed-crate-tests-macos.yml (#1989).
+# One per line: <cargo package> <nextest test name> #<issue>. The job excludes
+# them so a new failure stands out; remove a line once its issue is fixed.
+codex-network-proxy credential_broker::isolated::tests::pf_27_s05::pf_27_s05_raw_key_is_not_left_in_core_memory #2069

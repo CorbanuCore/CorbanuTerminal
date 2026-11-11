@@ -402,6 +402,7 @@ async fn accounting_responses_role_overlay_preserves_binding() -> anyhow::Result
             config_file: Some(role.to_path_buf()),
             description: None,
             nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
         },
     );
     let parse_error =
