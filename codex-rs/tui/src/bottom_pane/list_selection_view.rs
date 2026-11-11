@@ -138,6 +138,8 @@ pub(crate) type OnCancelCallback = Option<Box<dyn Fn(&AppEventSender) + Send + S
 /// be accepted and are skipped by keyboard navigation.
 #[derive(Default)]
 pub(crate) struct SelectionItem {
+    /// Stable identity for retaining focus when rows or provider tabs change.
+    pub selection_id: Option<String>,
     pub name: String,
     pub name_prefix_spans: Vec<Span<'static>>,
     pub toggle: Option<SelectionToggle>,
@@ -1156,6 +1158,12 @@ impl BottomPaneView for ListSelectionView {
 
     fn selected_index(&self) -> Option<usize> {
         self.selected_actual_idx()
+    }
+
+    fn selected_item_id(&self) -> Option<&str> {
+        self.selected_actual_idx()
+            .and_then(|index| self.active_items().get(index))
+            .and_then(|item| item.selection_id.as_deref())
     }
 
     fn active_tab_id(&self) -> Option<&str> {

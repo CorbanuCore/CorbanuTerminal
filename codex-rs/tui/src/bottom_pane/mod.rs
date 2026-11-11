@@ -1371,6 +1371,23 @@ impl BottomPane {
             return false;
         };
         params.initial_selected_idx = current.selected_index();
+        if let Some(selected_id) = current.selected_item_id() {
+            if let Some(index) = params
+                .items
+                .iter()
+                .position(|item| item.selection_id.as_deref() == Some(selected_id))
+            {
+                params.initial_selected_idx = Some(index);
+            } else if let Some((tab, index)) = params.tabs.iter().find_map(|tab| {
+                tab.items
+                    .iter()
+                    .position(|item| item.selection_id.as_deref() == Some(selected_id))
+                    .map(|index| (tab, index))
+            }) {
+                params.initial_tab_id = Some(tab.id.clone());
+                params.initial_selected_idx = Some(index);
+            }
+        }
         let search_query = current.search_query().map(str::to_owned);
         self.view_stack.pop();
         self.apply_standard_popup_hint(&mut params);
