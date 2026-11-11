@@ -1389,6 +1389,7 @@ impl BottomPane {
             }
         }
         let search_query = current.search_query().map(str::to_owned);
+        let dismiss_after_child_accept = current.dismiss_after_child_accept();
         self.view_stack.pop();
         self.apply_standard_popup_hint(&mut params);
         let mut view = list_selection_view::ListSelectionView::new(
@@ -1398,6 +1399,9 @@ impl BottomPane {
         );
         if let Some(query) = search_query {
             view.set_search_query(query);
+        }
+        if dismiss_after_child_accept {
+            view.dismiss_when_child_accepts();
         }
         self.push_view(Box::new(view));
         true

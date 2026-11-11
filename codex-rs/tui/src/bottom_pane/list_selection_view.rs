@@ -853,6 +853,10 @@ impl ListSelectionView {
         }
     }
 
+    pub(super) fn dismiss_when_child_accepts(&mut self) {
+        self.dismiss_after_child_accept = true;
+    }
+
     pub(crate) fn set_search_query(&mut self, query: String) {
         self.search_query = query;
         self.apply_filter();

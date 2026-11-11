@@ -133,6 +133,28 @@ async fn restored_openai_appears_in_already_open_model_picker() -> Result<()> {
     app.chat_widget
         .handle_key_event(KeyEvent::from(KeyCode::Esc));
     assert!(!render_bottom_popup(&app.chat_widget, /*width*/ 120).contains("Select Model"));
+
+    // A status event can already be queued when Enter requests a child. Preserve
+    // the parent-dismissal flag until that queued reasoning dialog is accepted.
+    app.chat_widget
+        .open_all_models_popup(app.model_catalog.try_list_models().unwrap());
+    while rx.try_recv().is_ok() {}
+    app.chat_widget
+        .handle_key_event(KeyEvent::from(KeyCode::Enter));
+    let AppEvent::OpenReasoningPopup { model, .. } = rx.try_recv().unwrap() else {
+        panic!("expected model selection");
+    };
+    app.provider_manager_statuses_resolved(
+        /*generation*/ 1,
+        host.clone(),
+        host.resolve().entries().to_vec(),
+        /*accounts*/ None,
+        &app_server,
+    );
+    app.chat_widget.open_reasoning_popup(model);
+    app.chat_widget
+        .handle_key_event(KeyEvent::from(KeyCode::Enter));
+    assert!(!render_bottom_popup(&app.chat_widget, /*width*/ 120).contains("Select Model"));
     Ok(())
 }
 
