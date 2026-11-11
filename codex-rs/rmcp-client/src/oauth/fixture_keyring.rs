@@ -37,7 +37,7 @@ impl KeyringStore for DefaultKeyringStore {
             return NativeKeyringStore.load(service, account);
         };
         let result = builder
-            .build(None, service, account)
+            .build(/*target*/ None, service, account)
             .and_then(|entry| entry.get_password());
         match result {
             Ok(value) => Ok(Some(value)),
@@ -51,7 +51,7 @@ impl KeyringStore for DefaultKeyringStore {
             return NativeKeyringStore.save(service, account, value);
         };
         builder
-            .build(None, service, account)
+            .build(/*target*/ None, service, account)
             .and_then(|entry| entry.set_password(value))
             .map_err(CredentialStoreError::new)
     }
@@ -61,7 +61,7 @@ impl KeyringStore for DefaultKeyringStore {
             return NativeKeyringStore.delete(service, account);
         };
         let result = builder
-            .build(None, service, account)
+            .build(/*target*/ None, service, account)
             .and_then(|entry| entry.delete_credential());
         match result {
             Ok(()) => Ok(true),
