@@ -48,10 +48,19 @@ jobs:
           target: x86_64-pc-windows-gnullvm
           cache-scope: bazel-test-windows-native-main
 
+      - name: Prepare named test evidence
+        id: named_evidence
+        continue-on-error: true
+        shell: bash
+        run: |
+          evidence_dir="$(mktemp -d "${RUNNER_TEMP}/bazel-named-results.XXXXXXXX")"
+          echo "directory=$(cygpath -m "$evidence_dir")" >> "$GITHUB_OUTPUT"
+
       - name: bazel test the changed crates
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
           TARGETS: ${{ inputs.targets }}
+          NAMED_EVIDENCE_DIR: ${{ steps.named_evidence.outputs.directory }}
         shell: bash
         run: |
           read -r -a bazel_targets <<< "$TARGETS"
@@ -78,13 +87,27 @@ jobs:
             --build_metadata=TAG_windows_native_pr=true
           )
 
+          evidence_args=()
+          if [[ -n "$NAMED_EVIDENCE_DIR" ]]; then
+            evidence_args+=(--named-evidence-dir "$NAMED_EVIDENCE_DIR")
+          fi
           ./.github/scripts/run-bazel-ci.sh \
             --print-failed-action-summary \
             --print-failed-test-logs \
+            "${evidence_args[@]}" \
             -- \
             "${bazel_test_args[@]}" \
             -- \
             "${bazel_targets[@]}"
+
+      - name: Upload named test evidence
+        if: always() && !cancelled() && steps.named_evidence.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: bazel-named-results-test-windows-native-pr
+          path: ${{ steps.named_evidence.outputs.directory }}/report-*.json
+          if-no-files-found: warn
 
       - name: Upload Bazel execution logs
         if: always() && !cancelled()
