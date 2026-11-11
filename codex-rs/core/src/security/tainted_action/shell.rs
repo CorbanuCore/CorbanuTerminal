@@ -659,6 +659,9 @@ enum Group {
 struct Lexer {
     /// Finished commands, in order.
     done: Vec<SimpleCommand>,
+    /// Finished commands only reference earlier commands. A command from before
+    /// an open substitution cannot consume a command finished inside it.
+    feeds_finished: Vec<bool>,
     current: SimpleCommand,
     word: String,
     /// The word being built holds a lookup's output.
@@ -831,6 +834,11 @@ impl Lexer {
             Some("fi" | "done" | "esac") => self.close_group(Group::Keyword),
             _ => {}
         }
+        for &index in &finished.fed_by {
+            work::step();
+            self.feeds_finished[index] = true;
+        }
+        self.feeds_finished.push(false);
         self.done.push(finished);
         Some(self.done.len() - 1)
     }
@@ -944,17 +952,14 @@ impl Lexer {
         }
         self.real_open -= 1;
         let inner: Vec<usize> = (open.first..self.done.len()).collect();
-        // The commands at this level (not inside a nested substitution),
-        // found in one pass over what the inner commands are fed by.
-        let nested: std::collections::HashSet<usize> = inner
-            .iter()
-            .flat_map(|other| self.done[*other].fed_by.iter().copied())
-            .collect();
+        // The commands at this level, excluding already-consumed nested output.
         let top: Vec<usize> = inner
             .iter()
             .copied()
-            .filter(|index| !nested.contains(index))
+            .filter(|&index| !self.feeds_finished[index])
             .collect();
+        #[cfg(test)]
+        substitution_tests::assert_reference_top(&self.done, open.first, &top);
         let spliced = match top.as_slice() {
             _ if open.output || open.process => None,
             // #1772 review 3: `$(>&2 echo x)`, `$(echo x >log)` print
@@ -1520,6 +1525,10 @@ fn fact_output(command: &SimpleCommand) -> bool {
             )
         })
 }
+
+#[cfg(test)]
+#[path = "shell_substitution_tests.rs"]
+mod substitution_tests;
 
 /// What `echo`/`printf` with these words prints, if that is all they are.
 pub(super) fn literal_output(words: &[String]) -> Option<String> {
