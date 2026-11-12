@@ -636,6 +636,7 @@ fn judged_readings(read: impl Fn(shell::Reading, AssignmentReading) -> Classifie
     // from literals. Keep the strongest independent pre-change interpretation.
     if classifier.assignments_read_newly {
         for assignments in [AssignmentReading::CommentFree, AssignmentReading::Possible] {
+            work::step();
             let alternate = judged_syntax_readings(|reading| read(reading, assignments));
             if let Some(kind) = alternate.found {
                 classifier.note(kind);
