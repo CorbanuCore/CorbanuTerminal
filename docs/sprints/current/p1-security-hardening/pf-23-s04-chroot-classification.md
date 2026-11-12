@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-23-S04"
 title: "Chroot protected-action classification"
-status: in_progress
+status: draft
 plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-23"
 execution_order: 19
@@ -18,6 +18,12 @@ updated: 2026-11-11
 ---
 
 # PF-23-S04 — Chroot protected-action classification
+
+## Serialized handoff — 2026-11-12
+Return this reservation to draft while the same coordinator implements PF-23-S05.
+#1837 merged at493f370ccf328840c4e052ceeffcda4e8dd132e9:59green/skipped checks,
+classifier407passed, test blob479784bytes. Eleven frozen cases/demo await Opus.
+Evidence and review usage remain; source integration is not completion.
 
 ## Execution mandate
 
@@ -59,7 +65,6 @@ finder/exec launcher coverage, authentication recovery and other contributor fea
 - [x] Preserved contributor ancestry while reconciling finder/sudo and brace checks.
 - [x] Frozen independent [code-blind design](../../../../qa/security-levels/sprints/PF-23-S04/codeblind-design.md) before functional execution; all eleven cases remain unexecuted.
 - [x] Initial integrated classifier: 404/404 passed; independent review nevertheless found inherited script-input loss. New regression reproduced it; repair and final qualification remain in progress.
-
 - [x] Closed inherited script-input finding with red/green tests and independent repair review; pre-reconciliation classifier406/406 passed. Recorded corpus:5397 cases/10794 verdicts,62 new asks,0 quieter outcomes,0 kind changes or panics. Combined current-main replay remains required below.
 
 ## Remaining
@@ -91,9 +96,5 @@ one fresh code-blind test design and one exact-head code/security review after
 main reconciliation. No self-authorized retries or erased findings. A later
 functional evidence review needs its own recorded allocation.
 
-The initial exact-head review found inherited script-input metadata lost when
-reclassifying the chroot child. Coordinator authorized one additional narrow
-repair/delta review in #2106 and #1837 on 2026-11-11; prior rounds are retained.
-The new regression fails on the pre-repair production code. The repair asks
-conservatively when a child consumes inherited input as code; data-only child
-commands retain their existing handling. No functional/TUI pass is claimed.
+[Prior repair review and red/green evidence](https://github.com/CorbanuCore/CorbanuTerminal/blob/493f370ccf328840c4e052ceeffcda4e8dd132e9/docs/sprints/current/p1-security-hardening/pf-23-s04-chroot-classification.md#review-budget)
+remain preserved; no functional/TUI pass is claimed.
