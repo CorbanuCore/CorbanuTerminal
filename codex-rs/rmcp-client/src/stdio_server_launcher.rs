@@ -450,13 +450,37 @@ impl StdioServerProcessHandle {
                 Ok(())
             }
             StdioServerProcessKind::Local(None) => Ok(()),
-            StdioServerProcessKind::Executor(process) => match process.terminate().await {
-                Ok(()) => Ok(()),
-                Err(error) => {
-                    self.inner.terminated.store(false, Ordering::Release);
-                    Err(io::Error::other(error))
+            StdioServerProcessKind::Executor(process) => {
+                // The legacy fallback's startup timeout can drop this future while the
+                // executor has not answered (#2041). The guard then clears the flag, so a
+                // later `terminate()` or the last handle's `Drop` still stops the process.
+                let mut pending = PendingExecutorTerminate {
+                    terminated: &self.inner.terminated,
+                    confirmed: false,
+                };
+                match process.terminate().await {
+                    Ok(()) => {
+                        pending.confirmed = true;
+                        Ok(())
+                    }
+                    Err(error) => Err(io::Error::other(error)),
                 }
-            },
+            }
+        }
+    }
+}
+
+/// Clears `terminated` when dropped, unless the executor confirmed the terminate: on an
+/// error or a cancelled call, the process may still be running.
+struct PendingExecutorTerminate<'a> {
+    terminated: &'a AtomicBool,
+    confirmed: bool,
+}
+
+impl Drop for PendingExecutorTerminate<'_> {
+    fn drop(&mut self) {
+        if !self.confirmed {
+            self.terminated.store(false, Ordering::Release);
         }
     }
 }
