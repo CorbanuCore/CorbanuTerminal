@@ -44,6 +44,9 @@ use crate::in_process_transport::InProcessTransportFactory;
 use crate::protocol_mode::McpProtocolMode;
 use crate::stdio_server_launcher::StdioServerProcessHandle;
 
+#[path = "rmcp_client_terminate_tests.rs"]
+mod terminate_tests;
+
 /// Codex's default MCP startup timeout.
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 
