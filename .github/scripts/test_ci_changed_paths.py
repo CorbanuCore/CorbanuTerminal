@@ -218,6 +218,19 @@ class PrChangedPathsTest(unittest.TestCase):
                         self.detect([f"{area}/{name}.rs"]), self.expected(*enabled)
                     )
 
+    def test_vendor_only_dns_changes_select_windows_and_rust(self) -> None:
+        for suffix in ("src/hickory.rs", "src/chain.rs", "Cargo.toml"):
+            with self.subTest(suffix=suffix):
+                self.assertEqual(
+                    self.detect([f"third_party/rama-dns/{suffix}"]),
+                    self.expected(
+                        "codex", "windows_native_tests", "windows_native_sandbox"
+                    ),
+                )
+        self.assertEqual(
+            self.detect(["third_party/rama-dns-other/src/lib.rs"]), self.expected()
+        )
+
     def test_newline_in_unrelated_path_does_not_create_another_area(self) -> None:
         self.assertEqual(
             self.detect(["docs/note\ncodex-rs/core/src/lib.rs"]), self.expected()

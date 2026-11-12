@@ -75,6 +75,9 @@ def selected_packages(files: list[str], packages: dict[str, str]) -> list[str]:
             package = packages.get(str(parent))
             if package is not None:
                 selected.add(package)
+        # The local DNS adapter is outside Cargo workspace package directories.
+        if path.startswith("third_party/rama-dns/"):
+            selected.add("codex-network-proxy")
         if path.startswith(JOB_PATHS):
             selected.add(CANARY_PACKAGE)
     return sorted(selected)
