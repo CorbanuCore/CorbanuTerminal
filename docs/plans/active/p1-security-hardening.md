@@ -20,7 +20,7 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/.codex-work/contrib-1112-2133"
     branch: "maint/contrib-2133-1112"
-    base_commit: "493f370ccf328840c4e052ceeffcda4e8dd132e9"
+    base_commit: "02a3f70862ae62d555f08cff741cbec2f17bb894"
   - path: "/Volumes/CorbanuDrive/Corbanu/.codex-work/contrib-1111-1837"
     branch: "maint/contrib-1837-1111"
     base_commit: "2cfd034860f792d0c3605b40437a3e21e29b361e"
@@ -157,7 +157,7 @@ unbuilt controls read "not available".
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
 | Jim Ricketts (qualification lane) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf13-s07-20261007` | `feat/pf-13-s07-qualification-20261007` | `64137b71894f` | PF-13-S07 (`ready`) |
-| Contributor integration coordinator (broker lane) | `/Volumes/CorbanuDrive/Corbanu/.codex-work/contrib-1112-2133` | `maint/contrib-2133-1112` | `493f370ccf328840c4e052ceeffcda4e8dd132e9` | PF-23-S05 (`in_progress`), owner-approved #2133 revision/integration |
+| Contributor integration coordinator (broker lane) | `/Volumes/CorbanuDrive/Corbanu/.codex-work/contrib-1112-2133` | `maint/contrib-2133-1112` | `02a3f70862ae62d555f08cff741cbec2f17bb894` | PF-23-S05 (`in_progress`), owner-approved #2133 revision/integration |
 | Contributor integration coordinator (reservation returned) | `/Volumes/CorbanuDrive/Corbanu/.codex-work/contrib-1111-1837` | `maint/contrib-1837-1111` | `2cfd034860f7` | PF-23-S04 (`draft`), source merged; functional evidence/demo held for Opus recharge |
 | Contributor integration coordinator (reservation returned) | `/Volumes/CorbanuDrive/Corbanu/.codex-work/contrib-1111-88` | `maint/contrib-88-1111` | `5c7d8ed06095f` | PF-84-S07 (`draft`); Stage A preserved in #2115, explicit handoff in sprint; reactivate only after serialized chroot integration or a genuinely disjoint allocation |
 | Windows-host gate owner | released | released | released | PF-27-S06 completed and archived 2026-10-08 |

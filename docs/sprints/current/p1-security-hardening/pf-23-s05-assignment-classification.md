@@ -11,7 +11,7 @@ write_scope: "codex-rs/core/src/security/tainted_action.rs, codex-rs/core/src/se
 integration_gate: "Coordinator serializes classifier/lexer and plan edits; preserve current chroot, finder, brace and depth-limit checks; exact independent security review, isolated full classifier and targeted integration tests, blob/performance gates and all green CI before main integration. Functional execution/demo remain separately required and held for Opus recharge."
 worktree: "/Volumes/CorbanuDrive/Corbanu/.codex-work/contrib-1112-2133"
 branch: "maint/contrib-2133-1112"
-base_commit: "493f370ccf328840c4e052ceeffcda4e8dd132e9"
+base_commit: "02a3f70862ae62d555f08cff741cbec2f17bb894"
 depends_on: "PF-23-S01"
 created: 2026-11-12
 updated: 2026-11-12
