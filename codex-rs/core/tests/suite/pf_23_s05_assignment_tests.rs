@@ -4,6 +4,7 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::protocol::ReviewDecision;
 use pretty_assertions::assert_eq;
 use std::os::unix::fs::PermissionsExt;
+use test_case::test_case;
 
 async fn assignment_turn(
     prefix: &str,
@@ -40,49 +41,57 @@ async fn assignment_turn(
     .await
 }
 
+// Separate processes under nextest avoid accumulating the shared helper's
+// intentionally retained mock servers across many full session fixtures.
+#[test_case("false && r=origin"; "conditional")]
+#[test_case("(r=origin)"; "subshell")]
+#[test_case("r=origin | cat"; "pipeline")]
+#[test_case("f() { r=origin; }"; "function")]
+#[test_case("false && { r=origin; }"; "conditional_brace")]
+#[test_case("false &&\nr=origin"; "continued_condition")]
+#[test_case("r=origin && true &"; "async_list")]
+#[test_case("false && # continuation\nr=origin"; "comment_continuation")]
+#[test_case("r=origin && { true; } >log &"; "redirected_async_group")]
+#[test_case("if r=origin; then :; fi | cat"; "piped_keyword")]
+#[test_case("echo '#'; false && r=origin"; "single_quoted_hash")]
+#[test_case("echo \"#\"; false && r=origin"; "double_quoted_hash")]
+#[test_case("echo \\#; false && r=origin"; "escaped_hash")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn conditional_assignment_requires_fresh_approval_and_denial_never_executes()
--> anyhow::Result<()> {
+async fn conditional_assignment_requires_fresh_approval_and_denial_never_executes(
+    prefix: &str,
+) -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_wine_exec!(Ok(()), "local POSIX shell fixture");
-    for prefix in [
-        "false && r=origin",
-        "(r=origin)",
-        "r=origin | cat",
-        "f() { r=origin; }",
-        "false && { r=origin; }",
-        "false &&\nr=origin",
-        "r=origin && true &",
-        "false && # continuation\nr=origin",
-        "r=origin && { true; } >log &",
-        "if r=origin; then :; fi | cat",
-    ] {
-        let (test, captured) =
-            assignment_turn(prefix, SecurityLevel::Moderate, AskForApproval::OnRequest).await?;
-        let approval = next_exec_approval(&test)
-            .await
-            .expect("fresh post-taint approval");
-        assert!(
-            approval
-                .reason
-                .as_deref()
-                .unwrap_or_default()
-                .contains("after untrusted content")
-        );
-        assert_eq!(approval.proposed_execpolicy_amendment, None);
-        assert!(!test.cwd.path().join("ran").exists());
-        test.codex
-            .submit(Op::ExecApproval {
-                id: approval.effective_approval_id(),
-                turn_id: None,
-                decision: ReviewDecision::denied("synthetic denial"),
-            })
-            .await?;
-        assert!(next_exec_approval(&test).await.is_none());
-        assert!(!test.cwd.path().join("ran").exists());
-        let output = output_text(captured.requests().last().expect("result"), "call-fetch");
-        assert!(output.contains("synthetic denial"), "{prefix}: {output}");
-    }
+    let (test, captured) =
+        assignment_turn(prefix, SecurityLevel::Moderate, AskForApproval::OnRequest).await?;
+    let approval = next_exec_approval(&test).await.unwrap_or_else(|| {
+        let output = captured
+            .requests()
+            .last()
+            .map(|request| output_text(request, "call-fetch"))
+            .unwrap_or_default();
+        panic!("missing fresh approval for {prefix}: {output}");
+    });
+    assert!(
+        approval
+            .reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("after untrusted content")
+    );
+    assert_eq!(approval.proposed_execpolicy_amendment, None);
+    assert!(!test.cwd.path().join("ran").exists());
+    test.codex
+        .submit(Op::ExecApproval {
+            id: approval.effective_approval_id(),
+            turn_id: None,
+            decision: ReviewDecision::denied("synthetic denial"),
+        })
+        .await?;
+    assert!(next_exec_approval(&test).await.is_none());
+    assert!(!test.cwd.path().join("ran").exists());
+    let output = output_text(captured.requests().last().expect("result"), "call-fetch");
+    assert!(output.contains("synthetic denial"), "{prefix}: {output}");
     Ok(())
 }
 

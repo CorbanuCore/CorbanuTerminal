@@ -619,6 +619,7 @@ fn judged_both(action: &ApprovalAction, homes: impl Fn() -> Homes, as_named: boo
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 enum AssignmentReading {
     Reaching,
+    CommentFree,
     #[default]
     Possible,
 }
@@ -634,9 +635,11 @@ fn judged_readings(read: impl Fn(shell::Reading, AssignmentReading) -> Classifie
     // Unknown parent values must not erase a possible protected path assembled
     // from literals. Keep the strongest independent pre-change interpretation.
     if classifier.assignments_read_newly {
-        let possible = judged_syntax_readings(|reading| read(reading, AssignmentReading::Possible));
-        if let Some(kind) = possible.found {
-            classifier.note(kind);
+        for assignments in [AssignmentReading::CommentFree, AssignmentReading::Possible] {
+            let alternate = judged_syntax_readings(|reading| read(reading, assignments));
+            if let Some(kind) = alternate.found {
+                classifier.note(kind);
+            }
         }
     }
     classifier
@@ -2560,7 +2563,7 @@ impl Classifier {
                         .chars()
                         .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
                 {
-                    if !reaches_parent && self.assignments == AssignmentReading::Reaching {
+                    if !reaches_parent && self.assignments != AssignmentReading::Possible {
                         self.assignments_read_newly = true;
                         variables.insert(name.to_string(), shell::UNSEEN_OUTPUT.to_string());
                         continue;

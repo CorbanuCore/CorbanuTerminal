@@ -1213,16 +1213,18 @@ impl Lexer {
                 _ => false,
             };
             match ch {
-                // Keep conditional operators across comment-only continuations.
-                // Quotes are deliberately over-read by this lexer: the independent
-                // Possible pass retains all literal text and its protected findings.
-                '#' if self.assignments == AssignmentReading::Reaching && self.word.is_empty() => {
+                // Keep both reaching interpretations: a quoted/escaped hash may
+                // be data, while a real comment must not consume conditional flow.
+                '#' if self.assignments != AssignmentReading::Possible && self.word.is_empty() => {
                     self.comments_read_newly = true;
-                    while index < chars.len() && chars[index] != '\n' {
-                        work::step();
-                        index += 1;
+                    if self.assignments == AssignmentReading::CommentFree {
+                        while index < chars.len() && chars[index] != '\n' {
+                            work::step();
+                            index += 1;
+                        }
+                        continue;
                     }
-                    continue;
+                    self.word.push(ch);
                 }
                 '$' if index >= arithmetic_end && misread_parameter(&chars[index + 1..]) => {
                     self.operated = true;
