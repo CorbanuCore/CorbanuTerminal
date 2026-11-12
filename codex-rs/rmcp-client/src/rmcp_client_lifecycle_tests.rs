@@ -42,6 +42,10 @@ use crate::ElicitationAction;
 use crate::ExecutorStdioServerLauncher;
 use crate::in_process_transport::InProcessTransportFactory;
 use crate::protocol_mode::McpProtocolMode;
+use crate::stdio_server_launcher::StdioServerProcessHandle;
+
+#[path = "rmcp_client_terminate_tests.rs"]
+mod terminate_tests;
 
 /// Codex's default MCP startup timeout.
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
@@ -480,6 +484,8 @@ enum ExecutorHang {
 struct SilentExecProcess {
     process_id: ProcessId,
     terminate_hangs: bool,
+    /// Counts the terminate requests the executor received.
+    terminate_requests: Arc<watch::Sender<usize>>,
 }
 
 impl ExecProcess for SilentExecProcess {
@@ -517,6 +523,8 @@ impl ExecProcess for SilentExecProcess {
     }
 
     fn terminate(&self) -> ExecProcessFuture<'_, ()> {
+        self.terminate_requests
+            .send_modify(|requests| *requests += 1);
         if self.terminate_hangs {
             Box::pin(std::future::pending())
         } else {
@@ -540,6 +548,7 @@ impl ExecBackend for HangingExecBackend {
         let process: Arc<dyn ExecProcess> = Arc::new(SilentExecProcess {
             process_id: params.process_id,
             terminate_hangs: matches!(self.hang, ExecutorHang::Terminate),
+            terminate_requests: Arc::new(watch::channel(0).0),
         });
         Box::pin(async move {
             Ok(StartedExecProcess {
@@ -650,4 +659,32 @@ async fn remote_fallback_times_out_when_the_executor_never_starts_the_second_ser
 
     assert_fallback_timed_out(&started);
     assert_eq!(started.executor_starts, 2);
+}
+
+// #2041: when the fallback's startup timeout cancelled a terminate the executor never
+// answered, the handle stayed marked terminated, so dropping it sent no terminate.
+#[tokio::test(start_paused = true)]
+async fn dropping_a_handle_whose_terminate_was_cancelled_terminates_again() {
+    let (terminate_requests, mut requests) = watch::channel(0);
+    // Held here too, so the counter outlives the process the handle drops.
+    let terminate_requests = Arc::new(terminate_requests);
+    let handle = StdioServerProcessHandle::executor(
+        "remote-mcp-server".to_string(),
+        Arc::new(SilentExecProcess {
+            process_id: ProcessId::from("remote-mcp-server"),
+            terminate_hangs: true,
+            terminate_requests: Arc::clone(&terminate_requests),
+        }),
+    );
+
+    tokio::time::timeout(STARTUP_TIMEOUT, handle.terminate())
+        .await
+        .expect_err("the executor never answers the terminate");
+    assert_eq!(*requests.borrow(), 1);
+
+    drop(handle);
+    tokio::time::timeout(HANG_DEADLINE, requests.wait_for(|requests| *requests == 2))
+        .await
+        .expect("dropping the handle must send the terminate again")
+        .expect("the test holds the request counter");
 }
