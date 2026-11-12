@@ -14,26 +14,23 @@ branch: "maint/contrib-88-1111"
 base_commit: "5c7d8ed06095fabf6aa41d496996082c3dfa4384"
 depends_on: "PF-84-S06"
 created: 2026-11-11
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 # PF-84-S07 — Selected-account recovery
 
-## Integration handoff — 2026-11-11
+## Owner decision update — recorded 2026-11-12
 
-The coordinator returns this reservation to `draft` while serially integrating
-PF-23-S04. Both records share one real owner and the plan/index write boundary;
-renaming an owner or omitting shared paths would not make them independent.
-Stage A is preserved at `0fa06783eda5157ddbbc129ebc82abc9425636f2` in #2115,
-with independent review, isolated API242/Core10/Core-integration8 passes, a later
-five-case command-fixture replay, and synthetic native-Windows fixture evidence.
-Final CI is still pending; no functional acceptance or release is claimed.
-Stage B remains blocked on owner decision 88-B, and independent functional
-execution needs the requested Opus runtime restored. The original preservation
-contract is not waived. Coordinates remain recorded for reallocation; before
-further implementation, the integration owner must reactivate this reservation
-with disjoint ownership or after the chroot handoff, then run both checkers.
-No provider executor is running during this serialized integration.
+Travis accepted [88-B](https://github.com/CorbanuCore/CorbanuTerminal/pull/88#issuecomment-6810673461):
+fail closed and require explicit sign-in for ambiguous damaged/deleted external Claude credentials.
+Defer guaranteed restoration, including timeout, until all-writer coordination or identity-safe isolation exists.
+Never guess identity, undo logout, overwrite concurrent credentials or switch accounts silently.
+Remain `draft` until allocation and both checkers pass; no implementation/acceptance claim.
+Functional execution/demos await Opus recharge without a substitute executor.
+
+The [November 11 handoff and Stage A evidence](https://github.com/CorbanuCore/CorbanuTerminal/blob/493f370ccf328840c4e052ceeffcda4e8dd132e9/docs/sprints/current/p1-security-hardening/pf-84-s07-selected-account-recovery.md#integration-handoff--2026-11-11)
+remain preserved. PF-23-S04 and this sprint share the real owner and plan/index
+write boundary; renaming an owner or omitting shared paths cannot resolve it.
 
 ## Execution mandate
 
@@ -72,8 +69,11 @@ native Keychain retains existing ownership. Tests use synthetic records only.
 
 - [ ] Stage A: bounded pre-output stream repair including metadata, one retry maximum,
   no retry after visible content/tool output; genuine entitlement versus expired auth.
-- [ ] Stage B: selected-file refresh recovery for corrupt/missing state, timeout and
-  normal failure, preserving unknown fields and concurrent valid replacement.
+- [ ] Stage B: fail closed with explicit sign-in for ambiguous corrupt/missing
+  external Claude state, including timeout; qualify selected-source recovery
+  without guessing identity or restoring ambiguous credentials.
+- [ ] Preserve unknown fields, concurrent valid replacements and the approved
+  boundary deferring guaranteed automatic restoration.
 - [ ] Preserve explicit revocation/source drift and native Keychain isolation.
 - [ ] Freeze independent code-blind design; map every case to evidence or accepted disposition.
 - [ ] Final formatting, changed-crate and integration tests, exact-head security review.
