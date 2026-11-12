@@ -53,28 +53,36 @@ silently declaring complete shell analysis. Track any out-of-scope limitations.
 - [x] Plan/sprint checkers passed before product edits; scoped Clippy/fmt passed.
 - [x] [Original independent design](../../../../qa/security-levels/sprints/PF-23-S05/codeblind-design.md) frozen; execution held.
 
+- [x] Reproduced and repaired actionable source-review findings with regression controls.
+- [x] Covered conditional/group/subshell/background/substitution and identified inherited gaps.
+- [x] Scoped fix/fmt, then 414 classifier and 16 mock-session tests passed on the combined tree.
+- [x] Work-counter linearity checks passed; retained 5,397 cases/10,794 verdicts unchanged.
+- [x] Exact-head source security approval and all 46 final CI checks passed/skipped.
+- [x] Source merged as `23ac70e1f16561df98a4d198b5df9d531ca9b683`; @araupooo thanked and credited.
+- [x] [Source evidence and retained limitations](../../../../qa/security-levels/sprints/PF-23-S05/source-integration.md) recorded.
+
 ## Remaining
-- [ ] Reproduce and repair all actionable review findings with regression controls.
-- [ ] Qualify conditional/group/subshell/background/substitution and inherited gaps.
-- [ ] Format, then isolated focused/full classifier and affected integration tests.
-- [ ] Verify bounded/linear work and no quieter outcomes on the retained corpus.
-- [ ] Independent exact-head security approval and all CI checks green.
+
 - [ ] Execute frozen cases in enforced isolation after Opus recharge.
 - [ ] Independent functional evidence review, true-TUI/demo and applicable live-repository evidence.
-- [ ] Record merge, limits and @araupooo credit; archive only after all gates pass.
+- [ ] Complete remaining functional evidence; archive only after all gates pass.
 
 ## Verification
 
-- [ ] `just test -p codex-core --lib -E 'test(security::tainted_action)' --locked --offline`.
-- [ ] Existing/new security integration tests via isolated `just test`.
-- [ ] Changed files below512000bytes; diff/key scan, scoped Clippy and platform CI.
-- [ ] Permissive behavior unchanged; no runtime protected operation in unit fixtures.
+- [x] `just test -p codex-core --lib --test-threads 4 -E 'test(security::tainted_action)' --locked --offline`.
+- [x] New assignment approval-flow integration tests via isolated `just test` (16 passed).
+- [x] Changed files below 512,000 bytes; diff/key-pattern scan, scoped Clippy and platform CI passed.
+- [x] Permissive control passed; no runtime protected operation in unit fixtures.
+
+- [ ] Frozen functional cases executed with enforced isolation and independent evidence review.
 
 ## Exit evidence
 
-- [ ] Exact reviewed/tested head, raw failed attempts and fresh replay logs.
-- [ ] Separate implementation, functional, demo and release statuses.
-- [ ] No mock/unit pass described as independent acceptance or release.
+- [x] Exact reviewed source tree, raw failed attempts and fresh replay logs recorded.
+- [x] Separate implementation, functional, demo and release statuses recorded.
+- [x] No mock/unit pass described as independent acceptance or release.
+
+- [ ] Independent sealed functional execution, evidence review, true-TUI/live-repository and demo artifacts.
 
 ## Review budget
 
