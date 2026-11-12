@@ -612,7 +612,16 @@ pub(super) fn classify_as_windows(
 /// Judge with literal brace values while preserving the full pre-#1975
 /// verdict: #1772 redirections with old braces, plus the legacy reading.
 fn judged_both(action: &ApprovalAction, homes: impl Fn() -> Homes, as_named: bool) -> Classifier {
-    judged_readings(|reading| judged(action, homes(), as_named, reading))
+    judged_readings(|reading, assignments| judged(action, homes(), as_named, reading, assignments))
+}
+
+/// Whether assignments prove parent values or only possible literal paths.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum AssignmentReading {
+    Reaching,
+    CommentFree,
+    #[default]
+    Possible,
 }
 
 /// Shared by production classification and the forced-shell measuring
@@ -620,18 +629,37 @@ fn judged_both(action: &ApprovalAction, homes: impl Fn() -> Homes, as_named: boo
 /// reading, even if the latest reading did not itself change redirections.
 /// Only that baseline's redirection flag determines whether its legacy
 /// fallback is needed. Each pass has fresh classifier state and homes.
-fn judged_readings(read: impl Fn(shell::Reading) -> Classifier) -> Classifier {
+fn judged_readings(read: impl Fn(shell::Reading, AssignmentReading) -> Classifier) -> Classifier {
+    let mut classifier =
+        judged_syntax_readings(|reading| read(reading, AssignmentReading::Reaching));
+    // Unknown parent values must not erase a possible protected path assembled
+    // from literals. Keep the strongest independent pre-change interpretation.
+    if classifier.assignments_read_newly {
+        for assignments in [AssignmentReading::CommentFree, AssignmentReading::Possible] {
+            work::step();
+            let alternate = judged_syntax_readings(|reading| read(reading, assignments));
+            if let Some(kind) = alternate.found {
+                classifier.note(kind);
+            }
+        }
+    }
+    classifier
+}
+
+fn judged_syntax_readings(read: impl Fn(shell::Reading) -> Classifier) -> Classifier {
     let mut classifier = read(shell::Reading::LiteralBraces);
     let mut redirections_read_newly = classifier.redirections_read_newly;
     if classifier.braces_read_newly {
         let baseline = read(shell::Reading::Redirections);
         redirections_read_newly = baseline.redirections_read_newly;
+        classifier.assignments_read_newly |= baseline.assignments_read_newly;
         if let Some(kind) = baseline.found {
             classifier.note(kind);
         }
     }
     if redirections_read_newly {
         let legacy = read(shell::Reading::Legacy);
+        classifier.assignments_read_newly |= legacy.assignments_read_newly;
         if let Some(kind) = legacy.found {
             classifier.note(kind);
         }
@@ -646,6 +674,7 @@ fn judged(
     homes: Homes,
     as_named: bool,
     reading: shell::Reading,
+    assignments: AssignmentReading,
 ) -> Classifier {
     // `avoids_zsh` reads command words too, so reset before any reader can
     // observe a changed #1773 sudo option boundary.
@@ -657,7 +686,7 @@ fn judged(
             }
             ApprovalAction::ApplyPatch { .. } => false,
         };
-    judged_avoiding_read(action, homes, avoids_zsh, reading)
+    judged_avoiding_read(action, homes, avoids_zsh, reading, assignments)
 }
 
 /// [`judged`] with the zsh-only checks skipped at the top level when
@@ -669,9 +698,9 @@ fn judged_avoiding(
     homes: impl Fn() -> Homes,
     avoids_zsh: bool,
 ) -> Classifier {
-    judged_readings(|reading| {
+    judged_readings(|reading, assignments| {
         indirect::reset_sudo_option_boundary_changed();
-        judged_avoiding_read(action, homes(), avoids_zsh, reading)
+        judged_avoiding_read(action, homes(), avoids_zsh, reading, assignments)
     })
 }
 
@@ -682,9 +711,11 @@ fn judged_avoiding_read(
     homes: Homes,
     avoids_zsh: bool,
     reading: shell::Reading,
+    assignments: AssignmentReading,
 ) -> Classifier {
     let mut classifier = Classifier::new(homes, avoids_zsh);
     classifier.reading = reading;
+    classifier.assignments = assignments;
     match action {
         ApprovalAction::Shell { command, cwd, .. }
         | ApprovalAction::ExecCommand { command, cwd, .. } => {
@@ -757,6 +788,8 @@ impl Classifier {
             homes,
             found: None,
             reading: shell::Reading::LiteralBraces,
+            assignments: AssignmentReading::Reaching,
+            assignments_read_newly: false,
             redirections_read_newly: false,
             braces_read_newly: false,
             scripts_read: 0,
@@ -1507,6 +1540,8 @@ struct Folders {
 struct Classifier {
     homes: Homes,
     found: Option<ProtectedActionKind>,
+    assignments: AssignmentReading,
+    assignments_read_newly: bool,
     /// Redirection and brace behavior for this independent judgment.
     reading: shell::Reading,
     /// #1772 review 1: some lexed text was read where main reads it
@@ -1959,7 +1994,8 @@ impl Classifier {
             .any(|part| unknown_folder::may_redefine_sudo(part));
         // #841: this line's own sed programs (nested lines have theirs).
         let outer_scope = std::mem::replace(&mut self.sed_scope, SedScope::of(command));
-        let lexed = shell::simple_commands_read(command, self.reading);
+        let lexed = shell::simple_commands_assignments(command, self.reading, self.assignments);
+        self.assignments_read_newly |= lexed.comments_read_newly;
         self.redirections_read_newly |= lexed.redirections_read_newly;
         self.braces_read_newly |= lexed.braces_read_newly;
         if !self.stat_builtin {
@@ -2503,6 +2539,23 @@ impl Classifier {
                 )
             });
         if assigns {
+            // #1974: an assignment that may not run, or that runs only in
+            // a subshell, does not resolve the variable in the parent shell
+            // (`false && r=x`, `a || r=x`, `(r=x)`, an `if` body, a
+            // backgrounded group, a substitution). Such a variable is unseen
+            // from here on: a later use asks rather than trusting the value
+            // this assignment would have set, and a value it already held
+            // is dropped too, since the assignment may have replaced it.
+            let reaches_parent = !simple.substituted
+                && !simple.in_subshell
+                && !simple.in_keyword
+                && !simple.backgrounded
+                && !feeds_pipe
+                && simple.pipe_from.is_none()
+                && matches!(
+                    simple.assignment_after,
+                    certain_cd::Joint::Start | certain_cd::Joint::Seq
+                );
             for word in words {
                 work::step();
                 if let Some((name, value)) = word.split_once('=')
@@ -2511,6 +2564,11 @@ impl Classifier {
                         .chars()
                         .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
                 {
+                    if !reaches_parent && self.assignments != AssignmentReading::Possible {
+                        self.assignments_read_newly = true;
+                        variables.insert(name.to_string(), shell::UNSEEN_OUTPUT.to_string());
+                        continue;
+                    }
                     // Output the classifier cannot see keeps the variable
                     // unseen; an environment reference (`$JAVA_HOME/bin/java`)
                     // is kept as written.
@@ -4103,6 +4161,10 @@ mod tainted_action_git_option_value_tests;
 #[cfg(test)]
 #[path = "tainted_action_git_quoted_tests.rs"]
 mod tainted_action_git_quoted_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_post_taint_tests.rs"]
+mod tainted_action_post_taint_tests;
 
 #[cfg(test)]
 #[path = "tainted_action_option_glob_tests.rs"]
