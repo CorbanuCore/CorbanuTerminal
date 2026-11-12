@@ -273,6 +273,7 @@ fn mains_verdict(files: &[(&str, &str)], argv: &[&str]) -> Option<ProtectedActio
         homes,
         /*as_named*/ false,
         shell::Reading::Legacy,
+        AssignmentReading::Possible,
     )
     .found
 }
@@ -291,6 +292,7 @@ fn new_verdict(files: &[(&str, &str)], argv: &[&str]) -> Option<ProtectedActionK
         homes,
         /*as_named*/ false,
         shell::Reading::Redirections,
+        AssignmentReading::Reaching,
     )
     .found
 }
