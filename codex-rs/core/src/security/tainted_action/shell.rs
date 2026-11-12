@@ -5,6 +5,7 @@
 //! split into commands too. Command boundaries, pipes and substitutions are
 //! kept so wrappers, pipelines and code fed to an interpreter can be followed.
 
+use super::AssignmentReading;
 use super::certain_cd;
 use super::certain_cd::Joint;
 use super::work;
@@ -137,6 +138,8 @@ pub(super) struct Lexed {
     pub(super) redirections_read_newly: bool,
     /// #1975: literal braces retained instead of discarded or read as groups.
     pub(super) braces_read_newly: bool,
+    /// Assignment flow skipped possible comments; retain the literal reading too.
+    pub(super) comments_read_newly: bool,
 }
 
 /// How deeply substitutions (`$(`, `<(`, `>(`, backticks) are read inside
@@ -182,9 +185,18 @@ pub(super) enum Reading {
 /// Each flag records whether its change affected the lexed text, so an
 /// equivalent reading need not be judged again.
 pub(super) fn simple_commands_read(command: &[String], reading: Reading) -> Lexed {
+    simple_commands_assignments(command, reading, AssignmentReading::Possible)
+}
+
+pub(super) fn simple_commands_assignments(
+    command: &[String],
+    reading: Reading,
+    assignments: AssignmentReading,
+) -> Lexed {
     let mut lexer = Lexer {
         joint: Some(Joint::Start),
         assignment_joint: Some(Joint::Start),
+        assignments,
         reading,
         ..Lexer::default()
     };
@@ -217,12 +229,14 @@ pub(super) fn simple_commands_read(command: &[String], reading: Reading) -> Lexe
         lexer.flush();
     }
     let too_deep = lexer.too_deep;
+    let comments_read_newly = lexer.comments_read_newly;
     // #1772 review 2: after `finish`, which reorders the last command.
     let (commands, redirections_read_newly, braces_read_newly) = lexer.finish();
     Lexed {
         commands,
         incomplete,
         too_deep,
+        comments_read_newly,
         redirections_read_newly,
         braces_read_newly,
     }
@@ -704,7 +718,7 @@ struct Lexer {
     keyword_depth: usize,
     /// #1974: the commands the most recently closed bracket group holds,
     /// as a range into `done`, for a `&` that backgrounds the group.
-    just_closed_group: Option<(usize, usize)>,
+    just_closed_group: Option<(usize, usize, usize)>,
     redirect: Redirect,
     /// #1607: a `!` follows the output redirection just read (`>!`, `>>!`,
     /// `&>!`, `>&!`, `2>!`), which zsh reads as `>|`: the file is the word
@@ -722,6 +736,8 @@ struct Lexer {
     /// D194: the operators since the last word (`None`: a word).
     joint: Option<Joint>,
     assignment_joint: Option<Joint>,
+    assignments: AssignmentReading,
+    comments_read_newly: bool,
     /// Independent redirection/brace reading for this judgment.
     reading: Reading,
     /// #1772 review 1: see `Lexed::redirections_read_newly`.
@@ -916,7 +932,9 @@ impl Lexer {
                 self.open_group(Group::Keyword, finished.pipe_from.or(self.group_pipe()));
             }
             Some("fi" | "done" | "esac") => {
-                let _ = self.close_group(Group::Keyword);
+                self.just_closed_group = self
+                    .close_group(Group::Keyword)
+                    .map(|start| (start, self.done.len() + 1, self.list_start));
             }
             _ => {}
         }
@@ -986,7 +1004,7 @@ impl Lexer {
         // anything else runs the group in sequence.
         self.just_closed_group = self
             .close_group(group)
-            .map(|start| (start, self.done.len()));
+            .map(|start| (start, self.done.len(), self.list_start));
         self.current.pipe_from = self.group_pipe();
     }
 
@@ -1195,6 +1213,17 @@ impl Lexer {
                 _ => false,
             };
             match ch {
+                // Keep conditional operators across comment-only continuations.
+                // Quotes are deliberately over-read by this lexer: the independent
+                // Possible pass retains all literal text and its protected findings.
+                '#' if self.assignments == AssignmentReading::Reaching && self.word.is_empty() => {
+                    self.comments_read_newly = true;
+                    while index < chars.len() && chars[index] != '\n' {
+                        work::step();
+                        index += 1;
+                    }
+                    continue;
+                }
                 '$' if index >= arithmetic_end && misread_parameter(&chars[index + 1..]) => {
                     self.operated = true;
                     self.word.push(literal_char(ch));
@@ -1366,12 +1395,12 @@ impl Lexer {
                 ')' => self.close_bracket(Group::Subshell),
                 '|' => {
                     let pipe = next != Some('|') && (index == 0 || chars[index - 1] != '|');
-                    if let Some(range) = self.just_closed_group.take()
+                    self.start(if pipe { Start::Piped } else { Start::Plain });
+                    if let Some((start, end, _)) = self.just_closed_group.take()
                         && pipe
                     {
-                        self.non_parent_ranges.push(range);
+                        self.non_parent_ranges.push((start, end));
                     }
-                    self.start(if pipe { Start::Piped } else { Start::Plain });
                     self.operator(&chars, index);
                 }
                 // #1772 item 4: `&>` and `&>>` redirect stdout and stderr
@@ -1391,16 +1420,19 @@ impl Lexer {
                         // #1974: a command `&` backgrounds runs in a
                         // subshell, as does a group `&` follows (`&&` and
                         // `&>` are not backgrounding).
-                        let group = self.just_closed_group.take();
                         self.start(Start::Plain);
-                        let start =
-                            group.map_or(self.list_start, |(start, _)| start.min(self.list_start));
+                        let start = self
+                            .just_closed_group
+                            .take()
+                            .map_or(self.list_start, |(start, _, outer)| {
+                                start.min(outer).min(self.list_start)
+                            });
                         self.non_parent_ranges.push((start, self.done.len()));
                     } else {
                         // #1974: `;`, a newline and `&&` run what came
                         // before in sequence, so no group stays backgrounded.
-                        self.just_closed_group = None;
                         self.start(Start::Plain);
+                        self.just_closed_group = None;
                     }
                     self.operator(&chars, index);
                 }

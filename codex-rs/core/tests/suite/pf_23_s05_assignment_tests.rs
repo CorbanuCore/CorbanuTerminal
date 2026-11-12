@@ -53,6 +53,9 @@ async fn conditional_assignment_requires_fresh_approval_and_denial_never_execute
         "false && { r=origin; }",
         "false &&\nr=origin",
         "r=origin && true &",
+        "false && # continuation\nr=origin",
+        "r=origin && { true; } >log &",
+        "if r=origin; then :; fi | cat",
     ] {
         let (test, captured) =
             assignment_turn(prefix, SecurityLevel::Moderate, AskForApproval::OnRequest).await?;

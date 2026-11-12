@@ -616,9 +616,10 @@ fn judged_both(action: &ApprovalAction, homes: impl Fn() -> Homes, as_named: boo
 }
 
 /// Whether assignments prove parent values or only possible literal paths.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
 enum AssignmentReading {
     Reaching,
+    #[default]
     Possible,
 }
 
@@ -1989,7 +1990,8 @@ impl Classifier {
             .any(|part| unknown_folder::may_redefine_sudo(part));
         // #841: this line's own sed programs (nested lines have theirs).
         let outer_scope = std::mem::replace(&mut self.sed_scope, SedScope::of(command));
-        let lexed = shell::simple_commands_read(command, self.reading);
+        let lexed = shell::simple_commands_assignments(command, self.reading, self.assignments);
+        self.assignments_read_newly |= lexed.comments_read_newly;
         self.redirections_read_newly |= lexed.redirections_read_newly;
         self.braces_read_newly |= lexed.braces_read_newly;
         if !self.stat_builtin {
