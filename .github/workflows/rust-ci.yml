@@ -83,13 +83,13 @@ jobs:
           # runs them on main.
           app_server_schema=false
           for f in "${files[@]}"; do
-            [[ $f == codex-rs/* ]] && codex=true
+            [[ $f == codex-rs/* || $f == third_party/rama-dns/* ]] && codex=true
             [[ $f == codex-rs/* || $f == tools/argument-comment-lint/* || $f == justfile ]] && argument_comment_lint=true
             [[ $f == defs.bzl || $f == workspace_root_test_launcher.sh.tpl || $f == workspace_root_test_launcher.bat.tpl ]] && argument_comment_lint=true
             [[ $f == tools/argument-comment-lint/* || $f == .github/workflows/rust-ci.yml || $f == .github/workflows/rust-ci-full.yml ]] && argument_comment_lint_package=true
             [[ $f == .github/* ]] && workflows=true
             [[ $f == codex-rs/tui/* || $f == codex-rs/core/* || $f == codex-rs/state/* || $f == codex-rs/login/* ]] && windows_native_core=true windows_native_tests=true
-            [[ $f == codex-rs/windows-sandbox-rs/* || $f == codex-rs/network-proxy/* || $f == codex-rs/process-hardening/* || $f == codex-rs/sandboxing/* ]] && windows_native_sandbox=true windows_native_tests=true
+            [[ $f == codex-rs/windows-sandbox-rs/* || $f == codex-rs/network-proxy/* || $f == third_party/rama-dns/* || $f == codex-rs/process-hardening/* || $f == codex-rs/sandboxing/* ]] && windows_native_sandbox=true windows_native_tests=true
             [[ $f == codex-rs/exec-server/* ]] && windows_native_other=true windows_native_tests=true
             [[ $f == codex-rs/utils/pty/* ]] && windows_native_pty=true windows_native_tests=true
             [[ $f == codex-rs/app-server/* ]] && windows_native_app_server=true windows_native_tests=true
