@@ -119,6 +119,57 @@ fn issue_1974_plain_assignment_control_stays_quiet() {
 }
 
 #[test]
+fn review_assignment_contexts_never_resolve_an_unseen_remote() {
+    let lines = [
+        "r=origin | cat; git fetch e\"$r\"",
+        "f() { r=origin; }; git fetch e\"$r\"",
+        "function f { r=origin; }; git fetch e\"$r\"",
+        "false && { r=origin; }; git fetch e\"$r\"",
+        "false &&\nr=origin; git fetch e\"$r\"",
+        "r=origin && true & git fetch e\"$r\"",
+        "r=origin && tmp=$(echo x) & git fetch e\"$r\"",
+        "false && r=$(echo origin); git fetch e\"$r\"",
+        "{ r=origin; } | cat; git fetch e\"$r\"",
+        "true || { r=origin; }; git fetch e\"$r\"",
+        "false ||\nr=origin; git fetch e\"$r\"",
+    ];
+    assert_eq!(
+        wrong(&lines, Some(ProtectedActionKind::UnseenCode)),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn review_possible_literals_keep_protected_reads_visible() {
+    for (line, baseline) in [
+        (
+            "true && a=.a; b=ws; cat ~/$a$b/credentials",
+            "a=.a; b=ws; cat ~/$a$b/credentials",
+        ),
+        (
+            "true && a=.co; b=dex; cat ~/$a$b/config.toml",
+            "a=.co; b=dex; cat ~/$a$b/config.toml",
+        ),
+    ] {
+        let expected = script(baseline).expect("baseline protects this path");
+        assert_eq!(script(line), Some(expected), "{line}");
+    }
+}
+
+#[test]
+fn review_nested_background_group_scan_is_linear() {
+    work::assert_linear("nested background groups", |scale| {
+        let n = 200 * scale;
+        let line = format!(
+            "{}true; {}git fetch e\"$r\"",
+            "{ r=origin; ".repeat(n),
+            "} & ".repeat(n)
+        );
+        let _ = shell::simple_commands(&[line]);
+    });
+}
+
+#[test]
 fn issue_1974_conditional_assignment_scan_is_linear() {
     for (label, word, line) in [
         (

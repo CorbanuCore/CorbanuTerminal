@@ -7,7 +7,7 @@ plan_feature: "PF-23"
 execution_order: 78
 owner: "Contributor integration coordinator"
 parallel_lane: "broker"
-write_scope: "codex-rs/core/src/security/tainted_action.rs, codex-rs/core/src/security/tainted_action/shell.rs, codex-rs/core/src/security/tainted_action_post_taint_tests.rs, codex-rs/core/tests/suite/security_post_taint.rs, docs/plans/active/p1-security-hardening.md, docs/sprints/current/p1-security-hardening/pf-23-s04-chroot-classification.md, docs/sprints/current/p1-security-hardening/pf-23-s05-assignment-classification.md, docs/sprints/current/p1-security-hardening/index.md, qa/security-levels/sprints/PF-23-S05/, qa/release/unreleased/notes/2133-assignment-provenance.md"
+write_scope: "codex-rs/core/src/security/tainted_action.rs, codex-rs/core/src/security/tainted_action/shell.rs, codex-rs/core/src/security/tainted_action_post_taint_tests.rs, codex-rs/core/src/security/tainted_action_reading_tests.rs, codex-rs/core/tests/suite/pf_23_s01.rs, codex-rs/core/tests/suite/pf_23_s05_assignment_tests.rs, docs/plans/active/p1-security-hardening.md, docs/sprints/current/p1-security-hardening/pf-23-s04-chroot-classification.md, docs/sprints/current/p1-security-hardening/pf-23-s05-assignment-classification.md, docs/sprints/current/p1-security-hardening/index.md, qa/security-levels/sprints/PF-23-S05/, qa/release/unreleased/notes/2133-assignment-provenance.md"
 integration_gate: "Coordinator serializes classifier/lexer and plan edits; preserve current chroot, finder, brace and depth-limit checks; exact independent security review, isolated full classifier and targeted integration tests, blob/performance gates and all green CI before main integration. Functional execution/demo remain separately required and held for Opus recharge."
 worktree: "/Volumes/CorbanuDrive/Corbanu/.codex-work/contrib-1112-2133"
 branch: "maint/contrib-2133-1112"
@@ -49,17 +49,17 @@ silently declaring complete shell analysis. Track any out-of-scope limitations.
 
 - [x] Owner authorization, exact allocation and prior evidence handoff recorded.
 - [x] Contributor ancestry preserved; current main already included.
-- [x] Four initial Astra High review lenses authorized; no execution substitutes.
+- [x] Four initial Astra High lenses; code-blind design pass5 frozen, repair pass6 granted.
+- [x] Plan/sprint checkers passed before product edits; scoped Clippy/fmt passed.
+- [x] [Original independent design](../../../../qa/security-levels/sprints/PF-23-S05/codeblind-design.md) frozen; execution held.
 
 ## Remaining
-
-- [ ] Run plan/sprint checkers before product edits.
 - [ ] Reproduce and repair all actionable review findings with regression controls.
 - [ ] Qualify conditional/group/subshell/background/substitution and inherited gaps.
 - [ ] Format, then isolated focused/full classifier and affected integration tests.
 - [ ] Verify bounded/linear work and no quieter outcomes on the retained corpus.
 - [ ] Independent exact-head security approval and all CI checks green.
-- [ ] Freeze independent code-blind design; execute in enforced isolation after Opus recharge.
+- [ ] Execute frozen cases in enforced isolation after Opus recharge.
 - [ ] Independent functional evidence review, true-TUI/demo and applicable live-repository evidence.
 - [ ] Record merge, limits and @araupooo credit; archive only after all gates pass.
 

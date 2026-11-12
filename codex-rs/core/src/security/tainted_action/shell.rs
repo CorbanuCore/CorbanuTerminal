@@ -92,14 +92,16 @@ pub(super) struct SimpleCommand {
     pub(super) operated: Vec<usize>,
     /// D194: what joins it to the command before it.
     pub(super) after: Joint,
+    /// Assignment flow keeps conditional operators across line continuations.
+    pub(super) assignment_after: Joint,
     /// #1974: it is lexed inside a `( ... )` subshell, so an assignment in
     /// it does not reach the parent shell.
     pub(super) in_subshell: bool,
     /// #1974: it is lexed inside an `if`/`while`/`until`/`for`/`case`/
-    /// `select` body, so it may not run.
+    /// `select` body, or a conditional/deferred brace body, so it may not run.
     pub(super) in_keyword: bool,
-    /// #1974: it is terminated by `&`, or inside a group `&` terminates,
-    /// so it runs in a background subshell.
+    /// #1974: it belongs to an asynchronous list or a background/piped group,
+    /// so its assignments cannot establish the parent shell's values.
     pub(super) backgrounded: bool,
     /// #1772 review 3: a redirection sends its stdout elsewhere (`>log`,
     /// `>&2`, `1>&2`, `&>log`; not `2>log` or `2>&1`), so a substitution
@@ -182,6 +184,7 @@ pub(super) enum Reading {
 pub(super) fn simple_commands_read(command: &[String], reading: Reading) -> Lexed {
     let mut lexer = Lexer {
         joint: Some(Joint::Start),
+        assignment_joint: Some(Joint::Start),
         reading,
         ..Lexer::default()
     };
@@ -205,6 +208,7 @@ pub(super) fn simple_commands_read(command: &[String], reading: Reading) -> Lexe
         {
             lexer.start(Start::Plain);
             lexer.joint = Some(Joint::Start);
+            lexer.assignment_joint = Some(Joint::Start);
         }
         previous = Some(arg.as_str());
         let (expanded, complete) = expand_braces(&replace_ifs(arg));
@@ -621,6 +625,8 @@ enum Start {
 struct Open {
     outer: SimpleCommand,
     outer_word: String,
+    outer_assignment_joint: Option<Joint>,
+    outer_list_start: usize,
     /// The outer word already holds a lookup's output.
     outer_looked_up: bool,
     /// The outer word is already hidden from the quote-aware reading.
@@ -662,6 +668,8 @@ enum Group {
     Subshell,
     /// `{ ... }`: a group in the current shell.
     Brace,
+    /// A conditionally entered group or a deferred function body.
+    UncertainBrace,
     /// `if`/`while`/`until`/`for`/`case`/`select` ... `fi`/`done`/`esac`.
     Keyword,
 }
@@ -684,7 +692,11 @@ struct Lexer {
     open: Vec<Open>,
     /// Open groups, the pipe that feeds every command inside them, and the
     /// number of finished commands when each opened.
-    groups: Vec<(Group, Option<usize>, usize)>,
+    groups: Vec<(Group, Option<usize>, usize, usize)>,
+    /// Deferred interval marking avoids quadratic rescans of nested groups.
+    non_parent_ranges: Vec<(usize, usize)>,
+    /// Start of the current AND/OR list; restored when leaving a group.
+    list_start: usize,
     /// #1974: how many subshell groups are open, for `in_subshell` without
     /// scanning the stack (a line may open thousands: `x x ( ...`).
     subshell_depth: usize,
@@ -709,6 +721,7 @@ struct Lexer {
     real_open: usize,
     /// D194: the operators since the last word (`None`: a word).
     joint: Option<Joint>,
+    assignment_joint: Option<Joint>,
     /// Independent redirection/brace reading for this judgment.
     reading: Reading,
     /// #1772 review 1: see `Lexed::redirections_read_newly`.
@@ -725,6 +738,12 @@ impl Lexer {
             certain_cd::operator(previous, chars[index], chars.get(index + 1).copied())
         {
             self.joint = Some(Joint::then(self.joint, op));
+            self.assignment_joint = match (self.assignment_joint, chars[index], op) {
+                (Some(joint @ (Joint::And | Joint::Or | Joint::Pipe)), '\n', Joint::Seq) => {
+                    Some(joint)
+                }
+                (joint, _, op) => Some(Joint::then(joint, op)),
+            };
         }
     }
 
@@ -775,6 +794,7 @@ impl Lexer {
             let joint = self.joint.take();
             if self.current.words.is_empty() {
                 self.current.after = joint.unwrap_or_default();
+                self.current.assignment_after = self.assignment_joint.take().unwrap_or_default();
             }
             // #1607: the words stay bash's; zsh's file after the `!` is
             // the rest of this word (`>!f`) or the next word (`>! f`).
@@ -818,15 +838,16 @@ impl Lexer {
 
     /// The pipe feeding the innermost group (stored with it when it opened).
     fn group_pipe(&self) -> Option<usize> {
-        self.groups.last().and_then(|(_, pipe, _)| *pipe)
+        self.groups.last().and_then(|(_, pipe, _, _)| *pipe)
     }
 
     fn open_group(&mut self, group: Group, pipe: Option<usize>) {
         let inherited = pipe.or(self.group_pipe());
-        self.groups.push((group, inherited, self.done.len()));
+        self.groups
+            .push((group, inherited, self.done.len(), self.list_start));
         match group {
             Group::Subshell => self.subshell_depth += 1,
-            Group::Keyword => self.keyword_depth += 1,
+            Group::Keyword | Group::UncertainBrace => self.keyword_depth += 1,
             Group::Brace => {}
         }
     }
@@ -837,15 +858,16 @@ impl Lexer {
         if !self
             .groups
             .last()
-            .is_some_and(|(open, _, _)| *open == group)
+            .is_some_and(|(open, _, _, _)| *open == group)
         {
             return None;
         }
         match self.groups.pop() {
-            Some((_, _, start)) => {
+            Some((_, _, start, list_start)) => {
+                self.list_start = list_start;
                 match group {
                     Group::Subshell => self.subshell_depth -= 1,
-                    Group::Keyword => self.keyword_depth -= 1,
+                    Group::Keyword | Group::UncertainBrace => self.keyword_depth -= 1,
                     Group::Brace => {}
                 }
                 Some(start)
@@ -874,6 +896,12 @@ impl Lexer {
         // this command opens (`if ...`) or closes (`fi`) is not its own
         // yet: the `if` command runs its condition, and `fi` holds no
         // assignment.
+        if !matches!(
+            finished.assignment_after,
+            Joint::And | Joint::Or | Joint::Pipe
+        ) {
+            self.list_start = self.done.len();
+        }
         finished.in_subshell = self.subshell_depth > 0;
         finished.in_keyword = self.keyword_depth > 0;
         // #1772 review 2: main's reading moves no word (`>/dev/null done`
@@ -918,6 +946,14 @@ impl Lexer {
         // #1974: a new group supersedes the one a `&` might background.
         self.just_closed_group = None;
         self.flush();
+        let group = if group == Group::Brace
+            && (!self.current.words.is_empty()
+                || !matches!(self.assignment_joint, Some(Joint::Start | Joint::Seq)))
+        {
+            Group::UncertainBrace
+        } else {
+            group
+        };
         let piped = if self.current.words.is_empty() {
             self.current.pipe_from
         } else {
@@ -925,6 +961,7 @@ impl Lexer {
         };
         self.start(Start::Plain);
         self.joint = Some(Joint::Other);
+        self.assignment_joint = Some(Joint::Start);
         self.open_group(group, piped);
         if self.current.pipe_from.is_none() {
             self.current.pipe_from = self.group_pipe();
@@ -932,8 +969,19 @@ impl Lexer {
     }
 
     fn close_bracket(&mut self, group: Group) {
+        let group = if group == Group::Brace
+            && self
+                .groups
+                .last()
+                .is_some_and(|(open, _, _, _)| *open == Group::UncertainBrace)
+        {
+            Group::UncertainBrace
+        } else {
+            group
+        };
         self.start(Start::Plain);
         self.joint = Some(Joint::Other);
+        self.assignment_joint = Some(Joint::Other);
         // #1974: a `&` after the group backgrounds every command in it;
         // anything else runs the group in sequence.
         self.just_closed_group = self
@@ -970,6 +1018,8 @@ impl Lexer {
         self.open.push(Open {
             outer,
             outer_word,
+            outer_assignment_joint: self.assignment_joint,
+            outer_list_start: self.list_start,
             outer_looked_up,
             outer_hidden,
             outer_operated,
@@ -984,7 +1034,9 @@ impl Lexer {
             arithmetic,
             skip,
         });
+        self.list_start = self.done.len();
         self.joint = Some(Joint::Other);
+        self.assignment_joint = Some(Joint::Other);
     }
 
     /// Close the innermost substitution and continue the command it
@@ -1000,6 +1052,8 @@ impl Lexer {
         };
         // Back in the command it interrupted.
         self.joint = None;
+        self.assignment_joint = open.outer_assignment_joint;
+        self.list_start = open.outer_list_start;
         if open.skip {
             // The command it interrupted continues; what it printed is
             // unseen.
@@ -1086,6 +1140,18 @@ impl Lexer {
             self.close_substitution(/*arithmetic_close*/ false);
         }
         self.finish_current();
+        let mut edges = vec![0i64; self.done.len() + 1];
+        for (start, end) in self.non_parent_ranges {
+            work::step();
+            edges[start] += 1;
+            edges[end] -= 1;
+        }
+        let mut active = 0;
+        for (command, edge) in self.done.iter_mut().zip(edges) {
+            work::step();
+            active += edge;
+            command.backgrounded |= active > 0;
+        }
         (
             self.done,
             self.redirections_read_newly,
@@ -1299,9 +1365,12 @@ impl Lexer {
                 }
                 ')' => self.close_bracket(Group::Subshell),
                 '|' => {
-                    // #1974: a piped group is not backgrounded by a later `&`.
-                    self.just_closed_group = None;
                     let pipe = next != Some('|') && (index == 0 || chars[index - 1] != '|');
+                    if let Some(range) = self.just_closed_group.take()
+                        && pipe
+                    {
+                        self.non_parent_ranges.push(range);
+                    }
                     self.start(if pipe { Start::Piped } else { Start::Plain });
                     self.operator(&chars, index);
                 }
@@ -1313,25 +1382,20 @@ impl Lexer {
                     self.flush();
                 }
                 ';' | '&' | '\n' => {
-                    if ch == '&' && next != Some('&') && next != Some('>') {
+                    if ch == '&'
+                        && previous != Some('&')
+                        && previous != Some('|')
+                        && next != Some('&')
+                        && next != Some('>')
+                    {
                         // #1974: a command `&` backgrounds runs in a
                         // subshell, as does a group `&` follows (`&&` and
                         // `&>` are not backgrounding).
-                        if let Some((start, end)) = self.just_closed_group.take()
-                            && let Some(commands) = self.done.get_mut(start..end)
-                        {
-                            for command in commands {
-                                work::step();
-                                command.backgrounded = true;
-                            }
-                        }
-                        let finished = self.done.len();
+                        let group = self.just_closed_group.take();
                         self.start(Start::Plain);
-                        if self.done.len() > finished
-                            && let Some(command) = self.done.last_mut()
-                        {
-                            command.backgrounded = true;
-                        }
+                        let start =
+                            group.map_or(self.list_start, |(start, _)| start.min(self.list_start));
+                        self.non_parent_ranges.push((start, self.done.len()));
                     } else {
                         // #1974: `;`, a newline and `&&` run what came
                         // before in sequence, so no group stays backgrounded.
