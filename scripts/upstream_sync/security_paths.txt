@@ -1,6 +1,7 @@
 codex-rs/linux-sandbox/
 codex-rs/windows-sandbox-rs/
 codex-rs/network-proxy/
+third_party/rama-dns/
 codex-rs/sandboxing/
 codex-rs/execpolicy/
 codex-rs/execpolicy-legacy/

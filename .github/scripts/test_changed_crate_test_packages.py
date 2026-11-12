@@ -38,6 +38,17 @@ class ChangedCrateTestPackagesTest(unittest.TestCase):
             ["codex-core", "codex-rmcp-client", "codex-utils-string"],
         )
 
+    def test_vendor_only_dns_changes_select_network_proxy(self) -> None:
+        for suffix in ("src/hickory.rs", "src/chain.rs", "Cargo.toml"):
+            with self.subTest(suffix=suffix):
+                self.assertEqual(
+                    selected_packages([f"third_party/rama-dns/{suffix}"], PACKAGES),
+                    ["codex-network-proxy"],
+                )
+        self.assertEqual(
+            selected_packages(["third_party/rama-dns-other/src/lib.rs"], PACKAGES), []
+        )
+
     def test_nested_package_selects_both(self) -> None:
         self.assertEqual(
             selected_packages(["codex-rs/exec-server/tests/support/lib.rs"], PACKAGES),
