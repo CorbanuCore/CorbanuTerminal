@@ -1058,12 +1058,6 @@ async fn pf_30_s03_orchestrator_rechecks_after_the_prompt() {
         fn turn_environment<'a>(&self, req: &'a TurnEnvironment) -> &'a TurnEnvironment {
             req
         }
-        fn turn_environment<'a>(
-            &self,
-            _req: &'a (),
-        ) -> Option<&'a crate::session::turn_context::TurnEnvironment> {
-            None
-        }
         async fn run(
             &mut self,
             _req: &TurnEnvironment,

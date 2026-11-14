@@ -717,12 +717,6 @@ async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_
         fn turn_environment<'a>(&self, req: &'a TurnEnvironment) -> &'a TurnEnvironment {
             req
         }
-        fn turn_environment<'a>(
-            &self,
-            _req: &'a (),
-        ) -> Option<&'a crate::session::turn_context::TurnEnvironment> {
-            None
-        }
         async fn run(
             &mut self,
             _req: &TurnEnvironment,
