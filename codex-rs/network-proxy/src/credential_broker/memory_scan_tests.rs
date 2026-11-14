@@ -2,9 +2,10 @@
 //! memory (heap, stacks including the launch environment, anonymous maps)
 //! for a needle that is never materialized in plain form here.
 //!
-//! The needle is held masked (`byte ^ MASK`) and unmasked only in registers
-//! during comparison, so the scanner cannot find its own copy. The chunk
-//! buffer is zeroed after each comparison for the same reason.
+//! The needle is held masked (`byte ^ MASK`), so the scanner cannot find its
+//! own copy. Each chunk read is masked in place and searched for the masked
+//! needle instead. Masking can turn a masked copy read from this process into
+//! a plain one, so the chunk buffer is zeroed after each search.
 
 pub(crate) const MASK: u8 = 0x5a;
 const CHUNK: usize = 1 << 20;
@@ -16,6 +17,7 @@ pub(crate) fn mask(bytes: &[u8]) -> Vec<u8> {
 /// Number of places the unmasked needle occurs in writable memory.
 pub(crate) fn count_in_writable_memory(masked: &[u8]) -> usize {
     assert!(masked.len() >= 8, "needle too short to be meaningful");
+    let finder = memchr::memmem::Finder::new(masked);
     let mut buffer = vec![0_u8; CHUNK + masked.len()];
     let mut hits = 0;
     for (start, len) in writable_regions() {
@@ -25,9 +27,9 @@ pub(crate) fn count_in_writable_memory(masked: &[u8]) -> usize {
             let want = (len - offset).min(CHUNK + masked.len() - 1);
             let read = read_own_memory(start + offset, &mut buffer[..want]);
             if read >= masked.len() {
-                hits += count(&buffer[..read], masked);
+                hits += count(&mut buffer[..read], &finder);
             }
-            buffer.iter_mut().for_each(|byte| *byte = 0);
+            buffer.fill(0);
             if want <= CHUNK {
                 break;
             }
@@ -129,16 +131,16 @@ fn describe(address: usize) -> String {
     )
 }
 
-fn count(haystack: &[u8], masked: &[u8]) -> usize {
-    haystack
-        .windows(masked.len())
-        .filter(|window| {
-            window
-                .iter()
-                .zip(masked)
-                .all(|(byte, masked)| byte ^ MASK == *masked)
-        })
-        .count()
+/// Masks `chunk` in place and counts the masked needle in it, so each match
+/// is an unmasked needle in the bytes read (matches do not overlap). The
+/// caller zeroes the chunk afterwards.
+///
+/// `memmem` keeps the scan fast in the unoptimized test build: a
+/// byte-by-byte comparison here took about 5 s per scan on an M4 and timed
+/// out on hosted macOS runners (#2069).
+fn count(chunk: &mut [u8], finder: &memchr::memmem::Finder<'_>) -> usize {
+    chunk.iter_mut().for_each(|byte| *byte ^= MASK);
+    finder.find_iter(chunk).count()
 }
 
 #[cfg(target_os = "linux")]
@@ -329,4 +331,19 @@ fn read_own_memory(address: usize, buffer: &mut [u8]) -> usize {
     };
     // A partial copy (a page decommitted meanwhile) still reports its bytes.
     if ok != 0 || read > 0 { read } else { 0 }
+}
+
+/// #2069: `count` finds each unmasked needle in a chunk, as the
+/// byte-by-byte comparison did, and neither a masked copy nor a partial one.
+#[test]
+fn count_finds_only_unmasked_needles() {
+    let needle = b"pf27-scan-needle-2069";
+    let masked = mask(needle);
+    let finder = memchr::memmem::Finder::new(&masked);
+    let mut chunk = needle.to_vec();
+    chunk.extend_from_slice(b" filler ");
+    chunk.extend_from_slice(&masked);
+    chunk.extend_from_slice(needle);
+    chunk.extend_from_slice(&needle[..needle.len() - 1]);
+    pretty_assertions::assert_eq!(count(&mut chunk, &finder), 2);
 }

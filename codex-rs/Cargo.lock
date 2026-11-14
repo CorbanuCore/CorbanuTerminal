@@ -3939,6 +3939,7 @@ dependencies = [
  "codex-windows-sandbox",
  "globset",
  "libc",
+ "memchr",
  "pretty_assertions",
  "rama-core",
  "rama-dns",
