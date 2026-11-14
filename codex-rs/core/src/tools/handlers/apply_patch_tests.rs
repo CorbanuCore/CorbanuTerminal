@@ -313,8 +313,9 @@ async fn approval_keys_include_move_destination() {
     assert_eq!(keys.len(), 2);
 }
 
-/// #713: a patch whose paths aren't native to this host skips path matching,
-/// but a restricted turn must still ask for it instead of auto-approving it.
+/// #713: a patch whose paths aren't native to this host is never
+/// auto-approved under a restricted turn: it is asked for, or (where the host
+/// can't check the path at all) refused with a message.
 #[tokio::test]
 async fn foreign_patch_paths_are_not_auto_approved_under_a_restricted_turn() {
     use crate::session::tests::make_session_and_context_with_auth_and_config_and_rx;
@@ -343,11 +344,14 @@ async fn foreign_patch_paths_are_not_auto_approved_under_a_restricted_turn() {
     let path = PathUri::parse(foreign).expect("foreign path URI");
     assert!(path.to_abs_path().is_err(), "{foreign} must not be native");
     let action = ApplyPatchAction::new_add_for_test(&path, "content".to_string());
-    let turn_environment = turn
+    let mut turn_environment = turn
         .initial_environments
         .primary()
         .cloned()
         .expect("test turn should have a primary environment");
+    // Make the platform sandbox available on every OS (Windows tests default
+    // to no sandbox, where the patch would be asked for anyway).
+    turn_environment.config_mut().windows_sandbox_level = WindowsSandboxLevel::RestrictedToken;
     let step_context = StepContext::for_test(Arc::clone(&turn));
 
     let requirement =
@@ -355,7 +359,11 @@ async fn foreign_patch_paths_are_not_auto_approved_under_a_restricted_turn() {
             Ok((request, _handler_basis)) => request.exec_approval_requirement,
             // Refusing the foreign patch outright (the model is told why) is
             // also not auto-approval.
-            Err(FunctionCallError::RespondToModel(_)) => return,
+            Err(FunctionCallError::RespondToModel(message))
+                if message.starts_with("failed to check patch permissions") =>
+            {
+                return;
+            }
             Err(error) => panic!("unexpected error: {error:?}"),
         };
     assert!(
@@ -557,8 +565,16 @@ async fn issue_1057_grants_that_widen_the_patch_policy_are_carried() {
             .expect("native paths");
 
     assert!(
+        matches!(
+            request.exec_approval_requirement,
+            crate::tools::sandboxing::ExecApprovalRequirement::Skip { .. }
+        ),
+        "the grant widens the policy, so the patch goes through unasked: {:?}",
+        request.exec_approval_requirement
+    );
+    assert!(
         request.additional_permissions.is_some(),
-        "the grant widens the policy and is carried"
+        "and the grant is carried"
     );
     assert!(request.permissions_preapproved);
 }
