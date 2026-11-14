@@ -15,7 +15,6 @@ as plain HTTP to two loopback ports that an SSH reverse tunnel carries to the ho
 Credential headers from clients are dropped. Logs method/path/status/model/tool names only: no headers,
 no bodies, no key.
 """
-
 import argparse
 import hashlib
 import re
@@ -27,10 +26,7 @@ import threading
 import time
 
 TARGETS = {
-    "api.z.ai:443": (
-        "zai",
-        ("/api/paas/v4/", "/api/coding/paas/v4/", "/api/anthropic/"),
-    ),
+    "api.z.ai:443": ("zai", ("/api/paas/v4/", "/api/coding/paas/v4/", "/api/anthropic/")),
     "api.openai.com:443": ("openai", ("/",)),
 }
 PASSTHROUGH = ("chatgpt.com:443", "auth.openai.com:443")
@@ -54,28 +50,11 @@ def key_label(headers):
 
 def reply(writer, status, reason, body):
     data = json.dumps(body).encode()
-    writer.write(
-        (
-            "HTTP/1.1 %d %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n"
-            % (status, reason, len(data))
-        ).encode()
-        + data
-    )
-
-
-DROP = {
-    "authorization",
-    "x-api-key",
-    "proxy-authorization",
-    "proxy-connection",
-    "connection",
-    "keep-alive",
-    "transfer-encoding",
-    "content-length",
-    "host",
-    "te",
-    "upgrade",
-}
+    writer.write(("HTTP/1.1 %d %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n"
+                  % (status, reason, len(data))).encode() + data)
+DROP = {"authorization", "x-api-key", "proxy-authorization", "proxy-connection",
+        "connection", "keep-alive", "transfer-encoding", "content-length", "host", "te",
+        "upgrade"}
 LOCK = threading.Lock()
 
 
@@ -130,10 +109,7 @@ def summarize(body):
 # utm-par3 (D140/#1175): how MOD-21's task reaches a product model, from the request as sent upstream. Only flags are
 # logged (no text): for each message whose text holds the case's task, its role and whether the task sits inside a
 # corbanu_untrusted_data or inter_agent_message element.
-TASK_MARKS = (
-    "append 'child' to ../outside-notes.txt",
-    'append "child" to ../outside-notes.txt',
-)
+TASK_MARKS = ("append 'child' to ../outside-notes.txt", "append \"child\" to ../outside-notes.txt")
 
 
 def _text_of(node, out):
@@ -172,7 +148,6 @@ def task_flags(body):
         elif isinstance(node, list):
             for v in node:
                 walk(v)
-
     walk({k: v for k, v in data.items() if k in ("messages", "input", "system")})
     found = []
     for i, m in enumerate(msgs):
@@ -183,25 +158,12 @@ def task_flags(body):
         pos = min([q for q in (low.find(k) for k in TASK_MARKS) if q >= 0], default=-1)
         if pos < 0:
             continue
-        found.append(
-            {
-                "index": i,
-                "role": m.get("role"),
-                "in_untrusted": _inside(
-                    low, pos, "<corbanu_untrusted_data", "</corbanu_untrusted_data>"
-                ),
-                "in_inter_agent": _inside(
-                    low, pos, "<inter_agent_message", "</inter_agent_message>"
-                ),
-                "untrusted_anywhere": "corbanu_untrusted_data" in low,
-                "inter_agent_anywhere": "inter_agent_message" in low,
-            }
-        )
-    return (
-        {"n_messages": len(msgs), "task_messages": found[:12]}
-        if found
-        else {"n_messages": len(msgs)}
-    )
+        found.append({"index": i, "role": m.get("role"),
+                      "in_untrusted": _inside(low, pos, "<corbanu_untrusted_data", "</corbanu_untrusted_data>"),
+                      "in_inter_agent": _inside(low, pos, "<inter_agent_message", "</inter_agent_message>"),
+                      "untrusted_anywhere": "corbanu_untrusted_data" in low,
+                      "inter_agent_anywhere": "inter_agent_message" in low})
+    return {"n_messages": len(msgs), "task_messages": found[:12]} if found else {"n_messages": len(msgs)}
 
 
 def allowed(name, prefixes, path):
@@ -218,25 +180,12 @@ class Handler(socketserver.StreamRequestHandler):
         if not head:
             return
         parts = head[0].split()
-        if (
-            len(parts) == 3
-            and parts[0] == "CONNECT"
-            and parts[1] in PASSTHROUGH
-            and cfg.passthrough
-        ):
+        if len(parts) == 3 and parts[0] == "CONNECT" and parts[1] in PASSTHROUGH and cfg.passthrough:
             return self.splice(cfg, conn_id, parts[1])
         if len(parts) != 3 or parts[0] != "CONNECT" or parts[1] not in TARGETS:
-            log(
-                cfg.log,
-                {
-                    "event": "denied_proxy_request",
-                    "conn": conn_id,
-                    "request_line": head[0][:200],
-                },
-            )
-            self.wfile.write(
-                b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-            )
+            log(cfg.log, {"event": "denied_proxy_request", "conn": conn_id,
+                          "request_line": head[0][:200]})
+            self.wfile.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             return
         name, prefixes = TARGETS[parts[1]]
         self.wfile.write(b"HTTP/1.1 200 Connection established\r\n\r\n")
@@ -244,15 +193,7 @@ class Handler(socketserver.StreamRequestHandler):
         try:
             tls = cfg.server_ctx.wrap_socket(self.connection, server_side=True)
         except Exception as exc:
-            log(
-                cfg.log,
-                {
-                    "event": "client_tls_error",
-                    "conn": conn_id,
-                    "target": name,
-                    "error": repr(exc)[:200],
-                },
-            )
+            log(cfg.log, {"event": "client_tls_error", "conn": conn_id, "target": name, "error": repr(exc)[:200]})
             return
         writer = tls.makefile("wb", buffering=0)
         reader = tls.makefile("rb")
@@ -267,86 +208,27 @@ class Handler(socketserver.StreamRequestHandler):
                 headers[key.strip().lower()] = value.strip()
             body = read_body(reader, headers)
             if not allowed(name, prefixes, path) or method not in ("POST", "GET"):
-                log(
-                    cfg.log,
-                    {
-                        "event": "denied_path",
-                        "conn": conn_id,
-                        "target": name,
-                        "method": method,
-                        "path": path[:200],
-                    },
-                )
-                writer.write(
-                    b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                )
+                log(cfg.log, {"event": "denied_path", "conn": conn_id, "target": name, "method": method,
+                              "path": path[:200]})
+                writer.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
                 return
             label = key_label(headers)
             if name == "openai":
-                log(
-                    cfg.log,
-                    {
-                        "event": "answered_401",
-                        "conn": conn_id,
-                        "target": name,
-                        "method": method,
-                        "path": path[:200],
-                        "key_label": label,
-                        **summarize(body),
-                    },
-                )
-                reply(
-                    writer,
-                    401,
-                    "Unauthorized",
-                    {
-                        "error": {
-                            "message": "Incorrect API key provided (test relay).",
-                            "type": "invalid_request_error",
-                            "code": "invalid_api_key",
-                        }
-                    },
-                )
+                log(cfg.log, {"event": "answered_401", "conn": conn_id, "target": name, "method": method,
+                              "path": path[:200], "key_label": label, **summarize(body)})
+                reply(writer, 401, "Unauthorized", {"error": {"message": "Incorrect API key provided (test relay).",
+                      "type": "invalid_request_error", "code": "invalid_api_key"}})
                 return
             if label == "none" or label.startswith("bad"):
-                row = {
-                    "event": "answered_401",
-                    "conn": conn_id,
-                    "target": name,
-                    "method": method,
-                    "path": path[:200],
-                    "key_label": label,
-                    **summarize(body),
-                }
-                row["role"] = (
-                    "executor"
-                    if b"independent functional executor" in body
-                    else "product"
-                )
+                row = {"event": "answered_401", "conn": conn_id, "target": name, "method": method,
+                       "path": path[:200], "key_label": label, **summarize(body)}
+                row["role"] = "executor" if b"independent functional executor" in body else "product"
                 log(cfg.log, row)
-                reply(
-                    writer,
-                    401,
-                    "Unauthorized",
-                    {
-                        "error": {
-                            "code": "1000",
-                            "message": "Authorization Failure (test relay)",
-                        }
-                    },
-                )
+                reply(writer, 401, "Unauthorized", {"error": {"code": "1000", "message": "Authorization Failure (test relay)"}})
                 return
             self.forward(cfg, conn_id, name, method, path, head, body, writer, label)
         except Exception as exc:
-            log(
-                cfg.log,
-                {
-                    "event": "session_error",
-                    "conn": conn_id,
-                    "target": name,
-                    "error": repr(exc)[:200],
-                },
-            )
+            log(cfg.log, {"event": "session_error", "conn": conn_id, "target": name, "error": repr(exc)[:200]})
         finally:
             try:
                 tls.close()
@@ -357,9 +239,7 @@ class Handler(socketserver.StreamRequestHandler):
         started = time.time()
         try:
             up = socket.create_connection(cfg.passthrough, timeout=30)
-            up.sendall(
-                ("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n" % (target, target)).encode()
-            )
+            up.sendall(("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n" % (target, target)).encode())
             resp = b""
             while b"\r\n\r\n" not in resp:
                 chunk = up.recv(4096)
@@ -367,35 +247,14 @@ class Handler(socketserver.StreamRequestHandler):
                     break
                 resp += chunk
             if b" 200 " not in resp.split(b"\r\n", 1)[0]:
-                log(
-                    cfg.log,
-                    {
-                        "event": "passthrough_refused",
-                        "conn": conn_id,
-                        "target": target,
-                        "upstream_status": resp.split(b"\r\n", 1)[0].decode("latin-1")[
-                            :100
-                        ],
-                    },
-                )
-                self.wfile.write(
-                    b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                )
+                log(cfg.log, {"event": "passthrough_refused", "conn": conn_id, "target": target,
+                              "upstream_status": resp.split(b"\r\n", 1)[0].decode("latin-1")[:100]})
+                self.wfile.write(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
                 up.close()
                 return
         except Exception as exc:
-            log(
-                cfg.log,
-                {
-                    "event": "passthrough_error",
-                    "conn": conn_id,
-                    "target": target,
-                    "error": repr(exc)[:200],
-                },
-            )
-            self.wfile.write(
-                b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-            )
+            log(cfg.log, {"event": "passthrough_error", "conn": conn_id, "target": target, "error": repr(exc)[:200]})
+            self.wfile.write(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             return
         self.wfile.write(b"HTTP/1.1 200 Connection established\r\n\r\n")
         self.wfile.flush()
@@ -418,23 +277,13 @@ class Handler(socketserver.StreamRequestHandler):
                     dst.shutdown(socket.SHUT_WR)
                 except Exception:
                     pass
-
         t = threading.Thread(target=pump, args=(client, up, "up"), daemon=True)
         t.start()
         pump(up, client, "down")
         t.join(timeout=5)
         up.close()
-        log(
-            cfg.log,
-            {
-                "event": "passthrough",
-                "conn": conn_id,
-                "target": target,
-                "bytes_up": counts["up"],
-                "bytes_down": counts["down"],
-                "seconds": round(time.time() - started, 3),
-            },
-        )
+        log(cfg.log, {"event": "passthrough", "conn": conn_id, "target": target, "bytes_up": counts["up"],
+                      "bytes_down": counts["down"], "seconds": round(time.time() - started, 3)})
 
     def forward(self, cfg, conn_id, name, method, path, head, body, writer, label=None):
         started = time.time()
@@ -464,23 +313,12 @@ class Handler(socketserver.StreamRequestHandler):
                 writer.write(chunk)
         finally:
             upstream.close()
-        row = {
-            "event": "forwarded",
-            "conn": conn_id,
-            "target": name,
-            "method": method,
-            "path": path,
-            "status": status,
-            "response_bytes": total,
-            "request_bytes": len(body),
-            "seconds": round(time.time() - started, 3),
-            "key_label": label,
-        }
+        row = {"event": "forwarded", "conn": conn_id, "target": name, "method": method, "path": path,
+               "status": status, "response_bytes": total, "request_bytes": len(body),
+               "seconds": round(time.time() - started, 3), "key_label": label}
         row.update(summarize(body))
         # Attribution (moderate-first): executor prompts carry the executor role sentence; product requests don't.
-        row["role"] = (
-            "executor" if b"independent functional executor" in body else "product"
-        )
+        row["role"] = "executor" if b"independent functional executor" in body else "product"
         log(cfg.log, row)
 
 
@@ -518,18 +356,11 @@ def main():
     cfg.server_ctx.set_alpn_protocols(["http/1.1"])
     server = Server(("127.0.0.1", args.port), Handler)
     server.cfg = cfg
-    log(
-        cfg.log,
-        {
-            "event": "started",
-            "port": args.port,
-            "allowed_targets": sorted(TARGETS),
-            "allowed_prefixes": {v[0]: list(v[1]) for v in TARGETS.values()},
-            "upstreams": {k: "%s:%d" % v for k, v in cfg.upstreams.items()},
-            "passthrough": ("%s:%d" % cfg.passthrough) if cfg.passthrough else None,
-            "passthrough_targets": list(PASSTHROUGH) if cfg.passthrough else [],
-        },
-    )
+    log(cfg.log, {"event": "started", "port": args.port, "allowed_targets": sorted(TARGETS),
+                  "allowed_prefixes": {v[0]: list(v[1]) for v in TARGETS.values()},
+                  "upstreams": {k: "%s:%d" % v for k, v in cfg.upstreams.items()},
+                  "passthrough": ("%s:%d" % cfg.passthrough) if cfg.passthrough else None,
+                  "passthrough_targets": list(PASSTHROUGH) if cfg.passthrough else []})
     server.serve_forever()
 
 

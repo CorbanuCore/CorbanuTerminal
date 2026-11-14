@@ -18,94 +18,39 @@ class HandoffGateTests(unittest.TestCase):
         self.artifact.write_text("Synthetic evidence fixture, not product acceptance.")
         self.ref = {"path": "fixture.txt", "sha256": digest(self.artifact)}
         self.design = {
-            "feature": "fixture",
-            "designer": "designer-session",
-            "fresh_context": True,
-            "code_blind": True,
-            "results_blind": True,
-            "isolation": "instruction-only",
-            "brief": self.ref,
-            "screenshots": [self.ref],
-            "proposal": self.ref,
-            "access_record": self.ref,
-            "cases": [
-                {
-                    "id": "F01",
-                    "priority": "blocker",
-                    "starting_conditions": "existing profile",
-                    "actions": ["Open feature"],
-                    "expected": ["Feature usable"],
-                }
-            ],
+            "feature": "fixture", "designer": "designer-session",
+            "fresh_context": True, "code_blind": True, "results_blind": True,
+            "isolation": "instruction-only", "brief": self.ref,
+            "screenshots": [self.ref], "proposal": self.ref, "access_record": self.ref,
+            "cases": [{"id": "F01", "priority": "blocker", "starting_conditions": "existing profile",
+                       "actions": ["Open feature"], "expected": ["Feature usable"]}],
         }
         self.results = {
             "schema_version": 2,
             "implementer": "implementation-session",
-            "candidate": {
-                "version": "fixture",
-                "source": "fixture source",
-                "platform": "fixture",
-                "binary_sha256": self.hash,
-                "package_manifest": self.ref,
-            },
-            "cases": [
-                {
-                    "id": "F01",
-                    "disposition": "passed",
-                    "summary": "fixture outcome",
-                    "candidate_sha256": self.hash,
-                    "method": "tmux",
-                    "evidence": [self.ref],
-                }
-            ],
-            "evidence_check": {
-                "agent": "designer-session",
-                "verdict": "pass",
-                "artifact": self.ref,
-            },
+            "candidate": {"version": "fixture", "source": "fixture source", "platform": "fixture",
+                          "binary_sha256": self.hash, "package_manifest": self.ref},
+            "cases": [{"id": "F01", "disposition": "passed", "summary": "fixture outcome",
+                       "candidate_sha256": self.hash, "method": "tmux", "evidence": [self.ref]}],
+            "evidence_check": {"agent": "designer-session", "verdict": "pass", "artifact": self.ref},
             "review_budget": {"used": 2, "limit": 5, "ledger": self.ref},
         }
-        self.design_path, self.results_path = (
-            self.root / "design.json",
-            self.root / "results.json",
-        )
+        self.design_path, self.results_path = self.root / "design.json", self.root / "results.json"
         self.isolation = {
-            "enforcement": "os-enforced",
-            "agent": "executor-session",
-            "run_id": "run-1",
-            "case_id": "F01",
-            "candidate_sha256": self.hash,
-            "policy": self.ref,
-            "tool_inventory": self.ref,
-            "probe_evidence": self.ref,
+            "enforcement": "os-enforced", "agent": "executor-session",
+            "run_id": "run-1", "case_id": "F01", "candidate_sha256": self.hash,
+            "policy": self.ref, "tool_inventory": self.ref, "probe_evidence": self.ref,
         }
-        for field in (
-            "source_denied",
-            "history_denied",
-            "symlink_escape_denied",
-            "credentials_denied",
-            "cross_run_ipc_denied",
-            "network_restricted",
-            "package_readonly",
-            "children_confined",
-            "packet_readable",
-            "candidate_launchable",
-            "actual_input_available",
-        ):
+        for field in ("source_denied", "history_denied", "symlink_escape_denied",
+                      "credentials_denied", "cross_run_ipc_denied", "network_restricted",
+                      "package_readonly", "children_confined", "packet_readable",
+                      "candidate_launchable", "actual_input_available"):
             self.isolation[field] = True
         self.results["cases"][0]["execution"] = {
-            "agent": "executor-session",
-            "run_id": "run-1",
-            "model": "synthetic",
-            "machine": "fixture VM",
-            "profile": "fresh fixture",
-            "launcher": "fixture",
-            "fresh_context": True,
-            "code_blind": True,
-            "results_blind": True,
-            "packet": self.ref,
-            "access_record": self.ref,
-            "actions": self.ref,
+            "agent": "executor-session", "run_id": "run-1", "model": "synthetic",
+            "machine": "fixture VM", "profile": "fresh fixture", "launcher": "fixture",
+            "fresh_context": True, "code_blind": True, "results_blind": True,
+            "packet": self.ref, "access_record": self.ref, "actions": self.ref,
         }
 
     def write_records(self):
@@ -117,9 +62,7 @@ class HandoffGateTests(unittest.TestCase):
         for case in self.results["cases"]:
             if isinstance(case.get("execution"), dict):
                 case["execution"]["isolation_record"] = {
-                    "path": "isolation.json",
-                    "sha256": digest(isolation_path),
-                }
+                    "path": "isolation.json", "sha256": digest(isolation_path)}
         self.results_path.write_text(json.dumps(self.results))
 
     def run_gate(self):
@@ -149,10 +92,8 @@ class HandoffGateTests(unittest.TestCase):
                     self.run_gate()
 
     def test_stale_binary_and_stale_case_rejected(self):
-        for target, field in (
-            (self.results["candidate"], "binary_sha256"),
-            (self.results["cases"][0], "candidate_sha256"),
-        ):
+        for target, field in ((self.results["candidate"], "binary_sha256"),
+                              (self.results["cases"][0], "candidate_sha256")):
             with self.subTest(field=field):
                 target[field] = "0" * 64
                 with self.assertRaises(ValueError):
@@ -191,11 +132,7 @@ class HandoffGateTests(unittest.TestCase):
         case["disposition"] = "out_of_scope"
         with self.assertRaisesRegex(ValueError, "approval"):
             self.run_gate()
-        case["approval"] = {
-            "by": "product owner",
-            "reason": "unsupported platform",
-            "artifact": self.ref,
-        }
+        case["approval"] = {"by": "product owner", "reason": "unsupported platform", "artifact": self.ref}
         self.assertEqual(self.run_gate(), 1)
 
     def test_budget_includes_two_passes_and_prevents_unapproved_expansion(self):
@@ -204,26 +141,13 @@ class HandoffGateTests(unittest.TestCase):
                 self.results["review_budget"].update(used=used, limit=limit)
                 with self.assertRaises(ValueError):
                     self.run_gate()
-        self.results["review_budget"].update(
-            used=6,
-            limit=5,
-            extension={
-                "by": "product owner",
-                "reason": "recorded critical finding",
-                "artifact": self.ref,
-            },
-        )
+        self.results["review_budget"].update(used=6, limit=5, extension={
+            "by": "product owner", "reason": "recorded critical finding", "artifact": self.ref})
         self.assertEqual(self.run_gate(), 1)
 
     def test_implementer_cannot_approve_own_exclusion(self):
-        self.results["cases"][0].update(
-            disposition="out_of_scope",
-            approval={
-                "by": "implementation-session",
-                "reason": "not implemented",
-                "artifact": self.ref,
-            },
-        )
+        self.results["cases"][0].update(disposition="out_of_scope", approval={
+            "by": "implementation-session", "reason": "not implemented", "artifact": self.ref})
         with self.assertRaisesRegex(ValueError, "own exclusion"):
             self.run_gate()
 
@@ -278,13 +202,7 @@ class HandoffGateTests(unittest.TestCase):
                     self.isolation[field] = True
 
     def test_isolation_receipt_cannot_be_reused_across_candidates_or_runs(self):
-        for field in (
-            "agent",
-            "run_id",
-            "case_id",
-            "candidate_sha256",
-            "design_sha256",
-        ):
+        for field in ("agent", "run_id", "case_id", "candidate_sha256", "design_sha256"):
             original = self.isolation.get(field)
             with self.subTest(field=field):
                 self.isolation[field] = "stale"
@@ -297,14 +215,8 @@ class HandoffGateTests(unittest.TestCase):
 
     def test_executor_context_and_evidence_required(self):
         run = self.results["cases"][0]["execution"]
-        for field in (
-            "fresh_context",
-            "code_blind",
-            "results_blind",
-            "packet",
-            "access_record",
-            "actions",
-        ):
+        for field in ("fresh_context", "code_blind", "results_blind", "packet",
+                      "access_record", "actions"):
             original = run.pop(field)
             with self.subTest(field=field), self.assertRaises(ValueError):
                 self.run_gate()

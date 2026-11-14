@@ -5,7 +5,6 @@ and prints, per needle class, the files that contain it (paths relative to $S or
 
 usage: REAL_1=... REAL_2=... leakscan.py <root> [<root> ...]
 """
-
 import os, sys
 
 S = os.environ["S"]
@@ -16,30 +15,11 @@ synthetic = {
     "credential_process helper stderr (PROCSTDERR-S06CANARY)": b"PROCSTDERR-S06CANARY",
     "cached SSO access token (fake-sso-access-S06CANARY)": b"fake-sso-access-S06CANARY",
     "Bedrock bearer env canary (fakebearer-env-S06CANARY)": b"fakebearer-env-S06CANARY",
-    "named OpenAI API-key canaries (sk-canary-*/sk-fake-*/sk-tuiadd-*)": (
-        b"sk-canary-",
-        b"sk-fake-",
-        b"sk-tuiadd-",
-    ),
-    "ChatGPT refresh tokens from the mock (rt.<user>.<gen>)": (
-        b"rt.work.",
-        b"rt.play.",
-        b"rt.tuiwork.",
-        b"rt.devcode.",
-        b"rt.r1",
-        b"rt.r2",
-        b"rt.bad.",
-        b"rt.legacy.",
-        b"rt.named.",
-    ),
+    "named OpenAI API-key canaries (sk-canary-*/sk-fake-*/sk-tuiadd-*)": (b"sk-canary-", b"sk-fake-", b"sk-tuiadd-"),
+    "ChatGPT refresh tokens from the mock (rt.<user>.<gen>)": (b"rt.work.", b"rt.play.", b"rt.tuiwork.", b"rt.devcode.", b"rt.r1", b"rt.r2", b"rt.bad.", b"rt.legacy.", b"rt.named."),
     "mock JWT header (eyJhbGciOiAibm9uZSIs)": b"eyJhbGciOiAibm9uZSIs",
-    "env decoys (sk-envdecoy-, sk-codexenv-, fake-env-session, fake-webid-token, CODEX_ACCESS_TOKEN JWT eyJhbGciOiAibm9uZSJ9)": (
-        b"sk-envdecoy-",
-        b"sk-codexenv-",
-        b"fake-env-session",
-        b"fake-webid-token",
-        b"eyJhbGciOiAibm9uZSJ9",
-    ),
+    "env decoys (sk-envdecoy-, sk-codexenv-, fake-env-session, fake-webid-token, CODEX_ACCESS_TOKEN JWT eyJhbGciOiAibm9uZSJ9)":
+        (b"sk-envdecoy-", b"sk-codexenv-", b"fake-env-session", b"fake-webid-token", b"eyJhbGciOiAibm9uZSJ9"),
 }
 
 

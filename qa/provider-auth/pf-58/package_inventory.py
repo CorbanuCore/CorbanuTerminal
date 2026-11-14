@@ -1,5 +1,4 @@
 """Hash every file and record every link in an explicitly supplied package."""
-
 import argparse
 import hashlib
 import json
@@ -19,15 +18,10 @@ for path in sorted(package.rglob("*")):
         row["link"] = str(path.readlink())
     elif path.is_file():
         with path.open("rb") as source:
-            row.update(
-                size=path.stat().st_size,
-                sha256=hashlib.file_digest(source, "sha256").hexdigest(),
-            )
+            row.update(size=path.stat().st_size, sha256=hashlib.file_digest(source, "sha256").hexdigest())
     else:
         continue
     rows.append(row)
 args.output.parent.mkdir(parents=True, exist_ok=True)
-args.output.write_text(
-    json.dumps({"package": str(package), "files": rows}, indent=2) + "\n"
-)
+args.output.write_text(json.dumps({"package": str(package), "files": rows}, indent=2) + "\n")
 print(f"Inventoried {len(rows)} package files/links")

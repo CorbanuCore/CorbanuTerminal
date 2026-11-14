@@ -201,9 +201,7 @@ def route_evidence(lane: str, result_dir: Path, expected_model: str) -> dict[str
     }
 
 
-def verify_workspace(
-    workspace: Path, result_dir: Path, timeout_seconds: int
-) -> dict[str, Any]:
+def verify_workspace(workspace: Path, result_dir: Path, timeout_seconds: int) -> dict[str, Any]:
     capture_dir = result_dir / "captures"
     stdout_path = result_dir / "verifier.stdout"
     stderr_path = result_dir / "verifier.stderr"
@@ -260,7 +258,9 @@ def run_lane(
         env["CORBANU_DUMP_ANTHROPIC_REQUEST"] = str(
             result_dir / "corbanu.anthropic.request.json"
         )
-        env["CORBANU_DUMP_CHAT_REQUEST"] = str(result_dir / "corbanu.chat.request.json")
+        env["CORBANU_DUMP_CHAT_REQUEST"] = str(
+            result_dir / "corbanu.chat.request.json"
+        )
         command = [
             str(args.corbanu_bin),
             "exec",

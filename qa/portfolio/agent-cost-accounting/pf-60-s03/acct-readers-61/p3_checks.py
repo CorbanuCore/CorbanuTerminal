@@ -1,27 +1,21 @@
 """Assertions bound to driver input, including an in-product-process TZ control."""
-
 from datetime import datetime
 from pathlib import Path
 import json
 import re
 from zoneinfo import ZoneInfo
 
-COMPACT_HOUR = (
-    "Precision unsupported outside retained raw detail; compacted days "
-    "lost request/provider attribution. No bucket total."
-)
-
+COMPACT_HOUR = ("Precision unsupported outside retained raw detail; compacted days "
+                "lost request/provider attribution. No bucket total.")
 
 def assert_day(text, requested_day):
     days = set(re.findall(r"Requested UTC day: (\d{4}-\d{2}-\d{2})", text))
     assert days == {requested_day}, (requested_day, days)
 
-
 def assert_compact_hour(text):
     # Selected rows and viewports wrap at different widths.
     normalized = " ".join(text.replace("›", " ").split())
     assert COMPACT_HOUR in normalized, normalized
-
 
 def assert_timezone(path, pid, zone, utc):
     probe = json.loads(Path(str(path) + f".{pid}.json").read_text())

@@ -3,7 +3,6 @@ amendments and new cases; navigation; prompts.
 
 usage: python3 tools/make_packet3.py RUN3_DIR RUN2_DIR FIRST_RECORD_DIR OUT_DIR CANDIDATE_SHA
 """
-
 import hashlib, json, pathlib, shutil, sys
 
 CANDIDATE = sys.argv[5]
@@ -15,111 +14,58 @@ amend3 = json.loads((run3 / "design3/amendments3-final.json").read_text())
 new3 = json.loads((run3 / "design3/new-cases3.json").read_text())
 GROUPS = json.loads((run3 / "tools/groups.json").read_text())
 NOTES = json.loads((run3 / "tools/standing-notes.json").read_text())
-all_ids = (
-    [c["id"] for c in frozen["cases"]]
-    + [c["id"] for c in new2["cases"]]
-    + [c["id"] for c in new3["cases"]]
-)
-executed = [
-    i for i in all_ids if i != "AGG-R06"
-]  # needs Claude Code, not installed in the guest
-assert sorted(sum(GROUPS.values(), [])) == sorted(executed), (
-    "every executed case in exactly one group"
-)
+all_ids = [c["id"] for c in frozen["cases"]] + [c["id"] for c in new2["cases"]] + [c["id"] for c in new3["cases"]]
+executed = [i for i in all_ids if i != "AGG-R06"]  # needs Claude Code, not installed in the guest
+assert sorted(sum(GROUPS.values(), [])) == sorted(executed), "every executed case in exactly one group"
 
 out.mkdir(parents=True, exist_ok=True)
 shutil.copy2(first / "executor-packet/v2/design-cases.md", out / "design-cases.md")
-for sub, src in (
-    ("screens", first / "design/packet/screens"),
-    ("new-screens", run2 / "design-r/packet/new-screens"),
-    ("new-screens-3", run3 / "design3/packet/new-screens"),
-):
+for sub, src in (("screens", first / "design/packet/screens"), ("new-screens", run2 / "design-r/packet/new-screens"),
+                 ("new-screens-3", run3 / "design3/packet/new-screens")):
     (out / sub).mkdir(exist_ok=True)
     for txt in sorted(src.glob("*.txt")):
         shutil.copy2(txt, out / sub / txt.name)
-
 
 def block(rows, L):
     for r in rows:
         if r.get("no_change"):
             continue
         L += [f"### {r['case']} (amended; decisions {', '.join(r['decisions'])})", ""]
-        for k, lab in (
-            ("starting_conditions", "Starting conditions"),
-            ("actions", "Actions"),
-            ("expected", "Expected"),
-        ):
+        for k, lab in (("starting_conditions", "Starting conditions"), ("actions", "Actions"), ("expected", "Expected")):
             if k in r["new"]:
                 v = r["new"][k]
-                L += [f"- {lab}:"] + (
-                    [f"  - {v}"] if isinstance(v, str) else [f"  - {e}" for e in v]
-                )
+                L += [f"- {lab}:"] + ([f"  - {v}"] if isinstance(v, str) else [f"  - {e}" for e in v])
         L.append("")
-
 
 def cases(cs, L):
     for c in cs:
-        L += [
-            f"### {c['id']} ({c['priority']})",
-            "",
-            f"- Starting conditions: {c['starting_conditions']}",
-            "- Actions:",
-        ]
+        L += [f"### {c['id']} ({c['priority']})", "", f"- Starting conditions: {c['starting_conditions']}", "- Actions:"]
         L += [f"  {n}. {a}" for n, a in enumerate(c["actions"], 1)]
         L += ["- Expected:"] + [f"  - {e}" for e in c["expected"]] + [""]
 
-
-L = [
-    "# Amendments to the frozen cases, and new cases",
-    "",
-    "The frozen cases in `design-cases.md` are unchanged. Owner decisions changed what some of them expect; for those",
-    "cases an amendment governs where it differs from the frozen text. There are two rounds of amendments: of",
-    "2026-10-11 (part 1) and of 2026-10-13 (part 3). Where a case has a 2026-10-13 amendment, that amendment governs; what",
-    'it says is "unchanged" or does not mention stays as in the 2026-10-11 amendment, or as frozen if there is none.',
-    "New cases cover behaviour the decisions added (AGG-R.. in part 2, AGG-T.. in part 4). Screens of the candidates",
-    "are in `new-screens/` (earlier candidate) and `new-screens-3/` (this candidate).",
-    "",
-    "## Part 1: amendments of 2026-10-11",
-    "",
-]
+L = ["# Amendments to the frozen cases, and new cases", "",
+     "The frozen cases in `design-cases.md` are unchanged. Owner decisions changed what some of them expect; for those",
+     "cases an amendment governs where it differs from the frozen text. There are two rounds of amendments: of",
+     "2026-10-11 (part 1) and of 2026-10-13 (part 3). Where a case has a 2026-10-13 amendment, that amendment governs; what",
+     "it says is \"unchanged\" or does not mention stays as in the 2026-10-11 amendment, or as frozen if there is none.",
+     "New cases cover behaviour the decisions added (AGG-R.. in part 2, AGG-T.. in part 4). Screens of the candidates",
+     "are in `new-screens/` (earlier candidate) and `new-screens-3/` (this candidate).", "",
+     "## Part 1: amendments of 2026-10-11", ""]
 block(amend2["amendments"], L)
-L += [
-    "## Part 2: new cases of 2026-10-12 (AGG-R..)",
-    "",
-    "Shorthand S0/S1 as in `design-cases.md`.",
-    "",
-]
+L += ["## Part 2: new cases of 2026-10-12 (AGG-R..)", "", "Shorthand S0/S1 as in `design-cases.md`.", ""]
 cases(new2["cases"], L)
 L += ["## Part 3: amendments of 2026-10-13", ""]
 block([r for r in amend3["amendments"] if not r.get("withdrawn")], L)
-L += [
-    "## Part 4: new cases of 2026-10-13 (AGG-T..)",
-    "",
-    "Shorthand S0/S1 as in `design-cases.md`. AGG-T05 was withdrawn by its designer.",
-    "",
-]
+L += ["## Part 4: new cases of 2026-10-13 (AGG-T..)", "", "Shorthand S0/S1 as in `design-cases.md`. AGG-T05 was withdrawn by its designer.", ""]
 cases(new3["cases"], L)
-for qa in (
-    run2 / "design-r/questions-and-answers.md",
-    run3 / "design3/packet/questions-and-answers.md",
-):
-    L += [
-        "## Coordinator answers and test-environment facts ("
-        + ("2026-10-12" if qa.parent.name == "design-r" else "2026-10-13")
-        + ")",
-        "",
-        qa.read_text().split("\n", 2)[2],
-        "",
-    ]
+for qa in (run2 / "design-r/questions-and-answers.md", run3 / "design3/packet/questions-and-answers.md"):
+    L += ["## Coordinator answers and test-environment facts (" + ("2026-10-12" if qa.parent.name == "design-r" else "2026-10-13") + ")", "",
+          qa.read_text().split("\n", 2)[2], ""]
 (out / "amendments-and-new-cases.md").write_text("\n".join(L))
 frozen_sha = hashlib.sha256((out / "design-cases.md").read_bytes()).hexdigest()
-amend_sha = hashlib.sha256(
-    (out / "amendments-and-new-cases.md").read_bytes()
-).hexdigest()
+amend_sha = hashlib.sha256((out / "amendments-and-new-cases.md").read_bytes()).hexdigest()
 
-executor_prompt = (
-    first.parents[3] / "qa/code-blind-functional/executor-prompt.md"
-).read_text()
+executor_prompt = (first.parents[3] / "qa/code-blind-functional/executor-prompt.md").read_text()
 navigation = """# Neutral navigation
 
 Read your assigned case headings in `/opt/agms/packet/design-cases.md` (frozen cases) and in
@@ -148,28 +94,18 @@ request, record its words verbatim; you may resubmit the same case wording uncha
 (out / "navigation.md").write_text(navigation)
 (out / "executor-prompt.md").write_text(executor_prompt)
 (out / "prompts").mkdir(exist_ok=True)
-REPLAYS = (
-    json.loads((run3 / "tools/replays.json").read_text())
-    if (run3 / "tools/replays.json").exists()
-    else {}
-)
-ASSIGN = [(g, ids, NOTES.get(g, "")) for g, ids in GROUPS.items()] + [
-    (
-        label,
-        r["cases"],
-        (NOTES.get(r["group"], "") + " " if NOTES.get(r["group"]) else "")
-        + "Replay assignment (fresh executor; earlier attempts are kept separately): "
-        + r["note"],
-    )
-    for label, r in REPLAYS.items()
-]
+REPLAYS = json.loads((run3 / "tools/replays.json").read_text()) if (run3 / "tools/replays.json").exists() else {}
+ASSIGN = [(g, ids, NOTES.get(g, "")) for g, ids in GROUPS.items()] + \
+         [(label, r["cases"], (NOTES.get(r["group"], "") + " " if NOTES.get(r["group"]) else "") +
+           "Replay assignment (fresh executor; earlier attempts are kept separately): " + r["note"])
+          for label, r in REPLAYS.items()]
 for group, ids, note in ASSIGN:
     note = f"\n- Note for this group: {note}" if note else ""
     prompt = f"""{executor_prompt}
 {navigation}
 ## Assignment: group {group}
 
-- Cases, in order: {", ".join(ids)}.
+- Cases, in order: {', '.join(ids)}.
 - Candidate: Corbanu Terminal 0.1.48 package, read-only at `/opt/agms/pkg`; the program is
   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `{CANDIDATE}`.
 - Frozen cases file SHA-256: `{frozen_sha}`. Amendments and new cases file SHA-256: `{amend_sha}`.

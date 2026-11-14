@@ -129,7 +129,8 @@ class State:
             )
         if "pfterminal-send-task" in lower:
             if "draft and save the spec with the user" in lower or (
-                "draft mode:" in lower and "spec source: draft with manager" in lower
+                "draft mode:" in lower
+                and "spec source: draft with manager" in lower
             ):
                 return "Draft prepared. Reply QA_APPROVE_DRAFT to approve and start execution."
             if "spec below is locked" in lower and target:

@@ -131,7 +131,8 @@ class CodingBenchmarkRunnerTests(unittest.TestCase):
             marker = root / "verifier-ran"
             verifier = root / "verify.py"
             verifier.write_text(
-                f"from pathlib import Path\nPath({str(marker)!r}).write_text('ran')\n",
+                "from pathlib import Path\n"
+                f"Path({str(marker)!r}).write_text('ran')\n",
                 encoding="utf-8",
             )
             task = runner.TaskSpec(

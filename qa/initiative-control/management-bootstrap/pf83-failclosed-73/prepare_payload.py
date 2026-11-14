@@ -1,5 +1,4 @@
 """Future local preparation: allowlisted actor assets, no provenance or runtime."""
-
 import argparse
 import hashlib
 import io
@@ -18,15 +17,13 @@ ORIGINAL = "c97bf701cd7aff2e26f08884f35dbc9a4fc33b1eef14eee6328d2ea1f1411726"
 
 def selected(bundle):
     identity = verify(bundle, ATTESTATION)
-    files = {"package/" + name: bundle / "package" / name for name in identity["files"]}
+    files = { "package/" + name: bundle / "package" / name for name in identity["files"] }
     for name, expected in {
         "original-F01-F11.md": ORIGINAL,
         "navigation.md": sha(HERE.parent / "pf83-handoff-70" / "navigation.md"),
     }.items():
         path = bundle / "packet" / name
-        require(
-            not path.is_symlink() and sha(path) == expected, "packet asset mismatch"
-        )
+        require(not path.is_symlink() and sha(path) == expected, "packet asset mismatch")
         files["packet/" + name] = path
     return files
 
@@ -34,12 +31,8 @@ def selected(bundle):
 def prepare(bundle, output):
     files = selected(bundle)
     output.mkdir(mode=0o700)
-    inventory = {
-        name: dict(
-            sha256=sha(path), mode=0o555 if name.startswith("package/") else 0o444
-        )
-        for name, path in sorted(files.items())
-    }
+    inventory = {name: dict(sha256=sha(path), mode=0o555 if name.startswith("package/") else 0o444)
+                 for name, path in sorted(files.items())}
     raw = (json.dumps(inventory, indent=2, sort_keys=True) + "\n").encode()
     archive = output / "actor-assets.tar"
     with tarfile.open(archive, "x", format=tarfile.USTAR_FORMAT) as tar:
@@ -52,17 +45,11 @@ def prepare(bundle, output):
         info = tarfile.TarInfo("stage-inventory.json")
         info.size, info.mode = len(raw), 0o444
         tar.addfile(info, io.BytesIO(raw))
-    receipt = dict(
-        payload_kind="actor-assets-only-v1",
-        archive_sha256=sha(archive),
-        inventory_sha256=hashlib.sha256(raw).hexdigest(),
-        attestation_sha256=ATTESTATION,
-        files=inventory,
-        provenance_location="host-only; original bundle unchanged",
-    )
-    (output / "receipt.json").write_text(
-        json.dumps(receipt, indent=2, sort_keys=True) + "\n"
-    )
+    receipt = dict(payload_kind="actor-assets-only-v1", archive_sha256=sha(archive),
+                   inventory_sha256=hashlib.sha256(raw).hexdigest(),
+                   attestation_sha256=ATTESTATION, files=inventory,
+                   provenance_location="host-only; original bundle unchanged")
+    (output / "receipt.json").write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
     print(json.dumps(receipt))
 
 

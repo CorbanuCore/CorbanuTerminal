@@ -11,22 +11,17 @@ MOCK_429 gets HTTP 429 with Retry-After; every other bearer gets a short
 streamed "pong" with fixed usage. Bearers are synthetic canaries; the log keeps
 the label mapped from MOCK_LABELS ("label=value,...") or `other`.
 """
-
 import hashlib, hmac, http.server, json, os, socketserver, sys, threading, time, urllib.request, urllib.error
 
 MODE, PORT, LOG = sys.argv[1], int(sys.argv[2]), sys.argv[3]
 UPSTREAM = os.environ.get("UPSTREAM", "").rstrip("/")
 LOCK = threading.Lock()
 SECRET_HEADERS = {"authorization", "api-key", "x-api-key", "cookie"}
-LABELS = dict(
-    kv.split("=", 1) for kv in os.environ.get("MOCK_LABELS", "").split(",") if "=" in kv
-)
+LABELS = dict(kv.split("=", 1) for kv in os.environ.get("MOCK_LABELS", "").split(",") if "=" in kv)
 LABEL_OF = {v: k for k, v in LABELS.items()}
 MOCK_429 = set(x for x in os.environ.get("MOCK_429", "").split(",") if x)
 RETRY_AFTER = os.environ.get("MOCK_RETRY_AFTER", "120")
-RUN_SALT = os.urandom(
-    16
-)  # per process: auth_h groups bearers within one run, never across runs or machines
+RUN_SALT = os.urandom(16)  # per process: auth_h groups bearers within one run, never across runs or machines
 
 
 def log(rec):
@@ -65,9 +60,7 @@ class H(http.server.BaseHTTPRequestHandler):
         pass
 
     def _headers(self):
-        return {
-            k: v for k, v in self.headers.items() if k.lower() not in SECRET_HEADERS
-        }
+        return {k: v for k, v in self.headers.items() if k.lower() not in SECRET_HEADERS}
 
     def _body(self):
         n = int(self.headers.get("Content-Length") or 0)
@@ -82,14 +75,8 @@ class H(http.server.BaseHTTPRequestHandler):
     def handle_any(self, method):
         body = self._body()
         b = bearer(self.headers)
-        rec = {
-            "method": method,
-            "path": self.path,
-            "headers": self._headers(),
-            "auth_h": hmac.new(RUN_SALT, b.encode(), hashlib.sha256).hexdigest()[:10]
-            if b
-            else None,
-        }
+        rec = {"method": method, "path": self.path, "headers": self._headers(),
+               "auth_h": hmac.new(RUN_SALT, b.encode(), hashlib.sha256).hexdigest()[:10] if b else None}
         try:
             req = json.loads(body) if body else {}
             rec["model"] = req.get("model")
@@ -109,16 +96,10 @@ class H(http.server.BaseHTTPRequestHandler):
         if b in MOCK_429:
             rec["status"] = 429
             log(rec)
-            body = json.loads(
-                os.environ.get("MOCK_429_BODY")
-                or '{"error": {"message": "rate limited (mock)", "type": "rate_limit_error"}}'
-            )
-            return self.send_json(429, body, {"Retry-After": RETRY_AFTER})
-        slow = dict(
-            kv.split(":")
-            for kv in os.environ.get("MOCK_SLOW", "").split(",")
-            if ":" in kv
-        )
+            body = json.loads(os.environ.get("MOCK_429_BODY") or '{"error": {"message": "rate limited (mock)", "type": "rate_limit_error"}}')
+            return self.send_json(429, body,
+                                  {"Retry-After": RETRY_AFTER})
+        slow = dict(kv.split(":") for kv in os.environ.get("MOCK_SLOW", "").split(",") if ":" in kv)
         if rec["label"] in slow:
             rec["arrived"] = round(time.time(), 3)
             time.sleep(float(slow[rec["label"]]))
@@ -127,39 +108,14 @@ class H(http.server.BaseHTTPRequestHandler):
         rec["usage"] = [usage]
         log(rec)
         chunks = [
-            {
-                "id": "m1",
-                "object": "chat.completion.chunk",
-                "created": 0,
-                "model": "mock-model",
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {"role": "assistant", "content": "pong"},
-                        "finish_reason": None,
-                    }
-                ],
-            },
-            {
-                "id": "m1",
-                "object": "chat.completion.chunk",
-                "created": 0,
-                "model": "mock-model",
-                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-            },
-            {
-                "id": "m1",
-                "object": "chat.completion.chunk",
-                "created": 0,
-                "model": "mock-model",
-                "choices": [],
-                "usage": usage,
-            },
+            {"id": "m1", "object": "chat.completion.chunk", "created": 0, "model": "mock-model",
+             "choices": [{"index": 0, "delta": {"role": "assistant", "content": "pong"}, "finish_reason": None}]},
+            {"id": "m1", "object": "chat.completion.chunk", "created": 0, "model": "mock-model",
+             "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+            {"id": "m1", "object": "chat.completion.chunk", "created": 0, "model": "mock-model",
+             "choices": [], "usage": usage},
         ]
-        data = (
-            b"".join(b"data: " + json.dumps(c).encode() + b"\n\n" for c in chunks)
-            + b"data: [DONE]\n\n"
-        )
+        data = b"".join(b"data: " + json.dumps(c).encode() + b"\n\n" for c in chunks) + b"data: [DONE]\n\n"
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Content-Length", str(len(data)))
@@ -178,15 +134,8 @@ class H(http.server.BaseHTTPRequestHandler):
 
     def forward(self, rec, method, body):
         url = UPSTREAM + self.path
-        hdrs = {
-            k: v
-            for k, v in self.headers.items()
-            if k.lower()
-            not in {"host", "content-length", "accept-encoding", "connection"}
-        }
-        req = urllib.request.Request(
-            url, data=body if method == "POST" else None, headers=hdrs, method=method
-        )
+        hdrs = {k: v for k, v in self.headers.items() if k.lower() not in {"host", "content-length", "accept-encoding", "connection"}}
+        req = urllib.request.Request(url, data=body if method == "POST" else None, headers=hdrs, method=method)
         buf = b""
         try:
             resp = urllib.request.urlopen(req, timeout=600)
@@ -195,21 +144,14 @@ class H(http.server.BaseHTTPRequestHandler):
             resp, status, rh = e, e.code, e.headers
         self.send_response(status)
         for k, v in rh.items():
-            if k.lower() not in {
-                "transfer-encoding",
-                "connection",
-                "content-length",
-                "content-encoding",
-            }:
+            if k.lower() not in {"transfer-encoding", "connection", "content-length", "content-encoding"}:
                 self.send_header(k, v)
         self.send_header("Transfer-Encoding", "chunked")
         self.end_headers()
         rec["client_aborted"] = False
         try:
             while True:
-                chunk = (
-                    resp.read1(65536) if hasattr(resp, "read1") else resp.read(65536)
-                )
+                chunk = resp.read1(65536) if hasattr(resp, "read1") else resp.read(65536)
                 if not chunk:
                     break
                 buf += chunk

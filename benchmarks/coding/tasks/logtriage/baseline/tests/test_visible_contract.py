@@ -14,9 +14,7 @@ class VisibleContractTests(unittest.TestCase):
 
         parsed = parse_logs(lines)
 
-        self.assertEqual(
-            [entry["severity"] for entry in parsed["entries"]], ["INFO", "ERROR"]
-        )
+        self.assertEqual([entry["severity"] for entry in parsed["entries"]], ["INFO", "ERROR"])
         self.assertEqual(parsed["entries"][1]["service"], "worker")
         self.assertEqual(parsed["entries"][1]["message"], "job failed")
 
@@ -33,9 +31,7 @@ class VisibleContractTests(unittest.TestCase):
         self.assertEqual(summary["by_service"]["api"], 2)
         self.assertEqual(summary["top_messages"][0], {"message": "failed", "count": 2})
 
-        window = query_window(
-            lines, "2026-07-02T10:01:00Z", "2026-07-02T10:03:00Z", severity="error"
-        )
+        window = query_window(lines, "2026-07-02T10:01:00Z", "2026-07-02T10:03:00Z", severity="error")
         self.assertEqual([entry["id"] for entry in window], ["a2", "w1"])
 
 

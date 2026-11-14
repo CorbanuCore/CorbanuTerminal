@@ -2,7 +2,6 @@
 
 usage: python3 tools/make_design.py RECORD_DIR
 """
-
 import hashlib
 import json
 import pathlib
@@ -13,34 +12,29 @@ design_dir = root / "design"
 
 
 def ref(path):
-    return {
-        "path": str(path.relative_to(root)),
-        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-    }
+    return {"path": str(path.relative_to(root)), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
 proposal = json.loads((design_dir / "original-proposal-cases.json").read_text())
 cases = [dict(case, source="designer") for case in proposal["cases"]]
-cases.append(
-    {
-        "id": "AGG-A01",
-        "priority": "blocker",
-        "source": "integrator amendment A01 (additive; supersedes nothing)",
-        "starting_conditions": "Fresh profile, Permissive, launched on route zai-anthropic with model glm-5.2.",
-        "actions": [
-            "Ask: Reply with exactly: pong",
-            "Open /security, choose Aggressive, confirm with Enter, restart with r",
-            "Ask: Reply with exactly: pong",
-        ],
-        "expected": [
-            'Both turns complete with "pong"',
-            "No error about a missing output limit and no refused request",
-        ],
-    }
-)
+cases.append({
+    "id": "AGG-A01",
+    "priority": "blocker",
+    "source": "integrator amendment A01 (additive; supersedes nothing)",
+    "starting_conditions": "Fresh profile, Permissive, launched on route zai-anthropic with model glm-5.2.",
+    "actions": [
+        "Ask: Reply with exactly: pong",
+        "Open /security, choose Aggressive, confirm with Enter, restart with r",
+        "Ask: Reply with exactly: pong",
+    ],
+    "expected": [
+        "Both turns complete with \"pong\"",
+        "No error about a missing output limit and no refused request",
+    ],
+})
 screens = sorted((design_dir / "packet/screens").glob("*.png"))
 design = {
-    "feature": 'Milestone "Aggressive ships" (P1 security hardening, qualification lane)',
+    "feature": "Milestone \"Aggressive ships\" (P1 security hardening, qualification lane)",
     "designer": "01a12807-f56f-7531-a8b9-b7e909b7e460",
     "fresh_context": True,
     "code_blind": True,

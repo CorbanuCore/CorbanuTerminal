@@ -17,9 +17,7 @@ class VisibleContractTests(unittest.TestCase):
             capacity=2,
         )
 
-        self.assertEqual(
-            [d["allowed"] for d in result["decisions"]], [True, True, False]
-        )
+        self.assertEqual([d["allowed"] for d in result["decisions"]], [True, True, False])
         self.assertEqual(result["decisions"][-1]["reason"], "rate_limited")
 
     def test_sliding_window_visible_contract(self) -> None:
@@ -33,9 +31,7 @@ class VisibleContractTests(unittest.TestCase):
             window_seconds=10,
         )
 
-        self.assertEqual(
-            [d["allowed"] for d in result["decisions"]], [True, True, True]
-        )
+        self.assertEqual([d["allowed"] for d in result["decisions"]], [True, True, True])
         self.assertEqual([d["window_count"] for d in result["decisions"]], [1, 2, 2])
 
 

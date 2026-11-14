@@ -61,9 +61,7 @@ def resolve_asset(root: Path, manifest_path: Path, filename: str) -> Path:
     if raw.is_absolute():
         candidates.append(raw)
     else:
-        candidates.extend(
-            [root / raw, manifest_path.parent / raw, root / "public" / raw]
-        )
+        candidates.extend([root / raw, manifest_path.parent / raw, root / "public" / raw])
     for candidate in candidates:
         if candidate.exists():
             return candidate
@@ -92,9 +90,7 @@ def chrome_screenshot(url: str, out: Path, width: int, height: int) -> dict[str,
         f"--screenshot={out}",
         url,
     ]
-    proc = subprocess.run(
-        cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60
-    )
+    proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60)
     return {
         "cmd": cmd,
         "returncode": proc.returncode,
@@ -125,13 +121,7 @@ def main() -> int:
     parser_obj = ImgParser()
     parser_obj.feed(html)
     all_text = " ".join(parser_obj.text)
-    searchable = " ".join(
-        [
-            html,
-            *[load_text(p) for p in root.glob("*.js")],
-            *[load_text(p) for p in root.glob("*.css")],
-        ]
-    )
+    searchable = " ".join([html, *[load_text(p) for p in root.glob("*.js")], *[load_text(p) for p in root.glob("*.css")]])
 
     manifest_path = root / "image_manifest.json"
     if not manifest_path.exists():
@@ -146,20 +136,12 @@ def main() -> int:
     else:
         errors.append("missing image_manifest.json")
 
-    entries = (
-        manifest
-        if isinstance(manifest, list)
-        else manifest.get("images")
-        if isinstance(manifest, dict)
-        else []
-    )
+    entries = manifest if isinstance(manifest, list) else manifest.get("images") if isinstance(manifest, dict) else []
     if not isinstance(entries, list):
         entries = []
         errors.append("image_manifest.json must be a list or contain images list")
     if len(entries) != 3:
-        errors.append(
-            f"expected exactly 3 manifest image entries, found {len(entries)}"
-        )
+        errors.append(f"expected exactly 3 manifest image entries, found {len(entries)}")
 
     image_rows = []
     generated_refs = 0
@@ -171,9 +153,7 @@ def main() -> int:
         filename = str(entry.get("filename") or entry.get("path") or "")
         prompt = str(entry.get("prompt") or "")
         if model != "gpt-image-2":
-            errors.append(
-                f"manifest entry {i} model is {model!r}, expected gpt-image-2"
-            )
+            errors.append(f"manifest entry {i} model is {model!r}, expected gpt-image-2")
         if len(prompt) < 30:
             errors.append(f"manifest entry {i} prompt is missing or too short")
         if not filename:
@@ -189,27 +169,13 @@ def main() -> int:
             continue
         if min(size) < 900:
             errors.append(f"image too small: {path} {size[0]}x{size[1]}")
-        rel_names = {
-            filename,
-            str(path.relative_to(root)) if path.is_relative_to(root) else path.name,
-            path.name,
-        }
+        rel_names = {filename, str(path.relative_to(root)) if path.is_relative_to(root) else path.name, path.name}
         if any(ref in html for ref in rel_names):
             generated_refs += 1
-        image_rows.append(
-            {
-                "filename": filename,
-                "path": str(path),
-                "width": size[0],
-                "height": size[1],
-                "bytes": path.stat().st_size,
-            }
-        )
+        image_rows.append({"filename": filename, "path": str(path), "width": size[0], "height": size[1], "bytes": path.stat().st_size})
 
     if generated_refs < 2:
-        errors.append(
-            f"rendered HTML references only {generated_refs} generated assets; expected at least 2"
-        )
+        errors.append(f"rendered HTML references only {generated_refs} generated assets; expected at least 2")
 
     lower_text = all_text.lower()
     lower_search = searchable.lower()
@@ -257,9 +223,7 @@ def main() -> int:
         "tests_passed": 1 if not errors else 0,
         "tests_total": 1,
     }
-    (out_dir / "toothpaste_verify.json").write_text(
-        json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    (out_dir / "toothpaste_verify.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"{SUMMARY_PREFIX} {json.dumps(summary, sort_keys=True)}")
     return 0 if summary["ok"] else 1
 

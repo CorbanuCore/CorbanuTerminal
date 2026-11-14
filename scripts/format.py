@@ -41,12 +41,13 @@ def just_formatter_group(*, check: bool) -> FormatterGroup:
 
 
 def is_frozen_artifact(path: Path) -> bool:
-    """Keep captured evidence and byte-pinned benchmark packets unchanged."""
-    parts = path.parts
-    return (parts[:1] == ("qa",) and "collected" in parts[1:]) or (
-        parts[:3] == ("benchmarks", "coding", "tasks")
-        and any(part in {"bugged", "tests_pristine"} for part in parts[3:])
-    )
+    """Keep Corbanu's evidence and benchmark trees byte-for-byte unchanged.
+
+    Files under qa/ and benchmarks/ are hash-pinned by manifests, provenance
+    records and CI contracts (for example the ingress contract), so formatting
+    must never rewrite them.
+    """
+    return path.parts[:1] in {("qa",), ("benchmarks",)}
 
 
 def rust_formatter_group(*, check: bool) -> FormatterGroup:

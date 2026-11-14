@@ -3,7 +3,6 @@
 amendment L2 (reference), the final amendment L3, screens-v6/-v7 and the group plan. Writes design-cases.md (the
 index of frozen files with SHA-256), navigation.md, executor-prompt.md and prompts/L0N.md.
 usage: make_packet_L3.py CANDIDATE_SHA256"""
-
 import hashlib
 import json
 import pathlib
@@ -11,9 +10,7 @@ import shutil
 import sys
 
 Q = pathlib.Path(__file__).resolve().parent.parent
-M = pathlib.Path(
-    "/Volumes/CorbanuDrive/Corbanu/worktrees/qa-local3/qa/security-levels/milestones"
-)
+M = pathlib.Path("/Volumes/CorbanuDrive/Corbanu/worktrees/qa-local3/qa/security-levels/milestones")
 V4D = M / "moderate-vm-parity3-20261021/executor-packet/v4d"
 V8 = M / "localmodel-rerun2-20261021/executor-packet/v8"
 P = Q / "packet-L3"
@@ -21,14 +18,9 @@ CAND = sys.argv[1]
 if P.exists():
     raise SystemExit(f"{P} exists; move it away first")
 P.mkdir()
-shutil.copytree(
-    V4D, P / "mod", ignore=shutil.ignore_patterns("prompts", "executor-prompt.md")
-)
+shutil.copytree(V4D, P / "mod", ignore=shutil.ignore_patterns("prompts", "executor-prompt.md"))
 shutil.copytree(V8 / "agg", P / "agg")
-shutil.copy2(
-    M / "aggressive-amendment7-20261021/design/amendment7-final.md",
-    P / "agg/amendment7.md",
-)
+shutil.copy2(M / "aggressive-amendment7-20261021/design/amendment7-final.md", P / "agg/amendment7.md")
 shutil.copy2(V8 / "amendments-L2.md", P / "amendments-L2.md")
 shutil.copy2(Q / "design/amendments-L3-final.md", P / "amendments-L3.md")
 shutil.copytree(V8 / "screens-v6", P / "screens-v6")
@@ -40,23 +32,10 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-FROZEN = [
-    "mod/design-cases.md",
-    "mod/amendments.md",
-    "mod/amendments-v3.md",
-    "mod/amendments-v4.md",
-    "mod/amendments-v6.md",
-    "mod/amendments-v7.md",
-    "mod/amendments-v9.md",
-    "mod/navigation.md",
-    "agg/design-cases.md",
-    "agg/amendments-and-new-cases.md",
-    "agg/amendment7.md",
-    "agg/navigation.md",
-    "amendments-L2.md",
-    "amendments-L3.md",
-    "navigation.md",
-]
+FROZEN = ["mod/design-cases.md", "mod/amendments.md", "mod/amendments-v3.md", "mod/amendments-v4.md",
+          "mod/amendments-v6.md", "mod/amendments-v7.md", "mod/amendments-v9.md", "mod/navigation.md",
+          "agg/design-cases.md", "agg/amendments-and-new-cases.md", "agg/amendment7.md", "agg/navigation.md",
+          "amendments-L2.md", "amendments-L3.md", "navigation.md"]
 rows = "\n".join(f"| `{f}` | `{sha(P / f)}` |" for f in FROZEN)
 (P / "design-cases.md").write_text(
     "# Index of this packet's frozen files\n\n"
@@ -64,8 +43,7 @@ rows = "\n".join(f"| `{f}` | `{sha(P / f)}` |" for f in FROZEN)
     "packet of the last Moderate runs, with amendments v2, v3, v4, v6, v7 and v9) and `agg/` (the Aggressive packet "
     "with amendment 7). `amendments-L2.md` is an earlier local-model run's amendment, here for reference. "
     "`amendments-L3.md` is this run's amendment and governs over them for the cases it names (see `navigation.md`).\n\n"
-    "| File | SHA-256 |\n| --- | --- |\n" + rows + "\n"
-)
+    "| File | SHA-256 |\n| --- | --- |\n" + rows + "\n")
 
 HEADER = """You are the independent functional executor, not the implementer or reviewer.
 Use only the supplied frozen human cases, neutral navigation, fixtures and exact
@@ -134,29 +112,25 @@ command or tool cell and every prompt, verbatim, as `amendments-L3.md` asks; and
 (passed, failed, blocked, not exercised, inconclusive or pending evidence check, with the reason). End with one line
 per case, as `amendments-L3.md` ("How each outcome is recorded") gives it. Do not claim human acceptance.
 """
-RO = "In this group that `config.toml` is read-only to you (you may read it; never edit it)."
-RW = (
-    "In this group that `config.toml` is writable by you (mode 600, as a person's own file is); change it only as "
-    "the case says, and only while the product is stopped."
-)
+RO = ("In this group that `config.toml` is read-only to you (you may read it; never edit it).")
+RW = ("In this group that `config.toml` is writable by you (mode 600, as a person's own file is); change it only as "
+      "the case says, and only while the product is stopped.")
 NAV = (P / "navigation.md").read_text()
 groups = json.loads((Q / "tools" / "groups.json").read_text())
 (P / "prompts").mkdir()
 for g in groups:
     files = ", ".join(f"`{f}` `{sha(P / f)}`" for f in g["files"])
-    text = (
-        HEADER + "\n" + NAV + "\n## Assignment: group " + g["id"] + "\n\n"
-        f"- Cases, in order: {g['cases']}.\n"
-        "- Candidate: Corbanu Terminal 0.1.48 package, read-only at `/opt/agms/pkg`; the program is\n"
-        f"  `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `{CAND}`.\n"
-        f"- Frozen files for your case (SHA-256; all are listed in `/opt/agms/packet/design-cases.md`): {files}.\n"
-        "- Coordinator isolation preflight for this run: `$AGMS_RUN/evidence/preflight-summary.json` and the two\n"
-        "  `preflight-*.json` files beside it. Before anything else, run\n"
-        "  `agms-probe all > $AGMS_RUN/evidence/preflight-executor.json; echo rc=$?` yourself and check that it reports\n"
-        '  `"ok": true`. If it does not, stop and report every case as blocked.\n'
-        f"- Note for this group: {g['note']}\n\n"
-        + ENV.format(config=RW if g["id"] in ("L03", "L04") else RO)
-    )
+    text = (HEADER + "\n" + NAV + "\n## Assignment: group " + g["id"] + "\n\n"
+            f"- Cases, in order: {g['cases']}.\n"
+            "- Candidate: Corbanu Terminal 0.1.48 package, read-only at `/opt/agms/pkg`; the program is\n"
+            f"  `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `{CAND}`.\n"
+            f"- Frozen files for your case (SHA-256; all are listed in `/opt/agms/packet/design-cases.md`): {files}.\n"
+            "- Coordinator isolation preflight for this run: `$AGMS_RUN/evidence/preflight-summary.json` and the two\n"
+            "  `preflight-*.json` files beside it. Before anything else, run\n"
+            "  `agms-probe all > $AGMS_RUN/evidence/preflight-executor.json; echo rc=$?` yourself and check that it reports\n"
+            "  `\"ok\": true`. If it does not, stop and report every case as blocked.\n"
+            f"- Note for this group: {g['note']}\n\n"
+            + ENV.format(config=RW if g["id"] in ("L03", "L04") else RO))
     (P / "prompts" / (g["id"] + ".md")).write_text(text)
     print(g["id"], sha(P / "prompts" / (g["id"] + ".md")))
 print("index", sha(P / "design-cases.md"))

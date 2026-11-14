@@ -1,8 +1,6 @@
-use std::panic::catch_unwind;
-use std::panic::set_hook;
+use std::panic::{catch_unwind, set_hook};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
 
 fn main() {
     const MARKER: &str = "synthetic-pf13-panic-marker-not-a-credential";

@@ -1,5 +1,4 @@
 """Scratch-package predicate controls; synthetic coordinator state only."""
-
 import hashlib
 import json
 import os
@@ -9,8 +8,8 @@ import subprocess
 import sys
 import tempfile
 
-PREDICATE = "return action is None or dispatcher is None or cls.dispatch_owner(state, action) in (None, dispatcher)"
-PROBE = r"""
+PREDICATE = 'return action is None or dispatcher is None or cls.dispatch_owner(state, action) in (None, dispatcher)'
+PROBE = r'''
 import json
 from pathlib import Path
 import sys
@@ -46,7 +45,7 @@ assert set(after["watchdog_coverage"]["covered_actions"]) == {
 assert after["manager"]["watchdog_will_report"] == any("manager" in event for event in events)
 print(json.dumps(dict(before=before["watchdog_coverage"], after=after["watchdog_coverage"],
                      events=events), sort_keys=True))
-"""
+'''
 
 
 def main():
@@ -57,8 +56,7 @@ def main():
         "include_hand": "return True",
         "exclude_manager": (
             "return action is not None and "
-            "(dispatcher is None or cls.dispatch_owner(state, action) in (None, dispatcher))"
-        ),
+            "(dispatcher is None or cls.dispatch_owner(state, action) in (None, dispatcher))"),
     }
     results = {}
     summary_sha = hashlib.sha256((source / "owner_daemon.py").read_bytes()).hexdigest()
@@ -72,34 +70,17 @@ def main():
         assert original.count(PREDICATE) == 1
         if replacement:
             coordinator.write_text(original.replace(PREDICATE, replacement))
-        assert (
-            hashlib.sha256((package / "owner_daemon.py").read_bytes()).hexdigest()
-            == summary_sha
-        )
-        env = dict(
-            PATH="/opt/homebrew/bin:/usr/bin:/bin",
-            TMPDIR="/private/tmp",
-            PYTHONPATH=str(package),
-            PYTHONDONTWRITEBYTECODE="1",
-            CORBANU_TEST_NO_NATIVE_KEYRING="1",
-            **{
-                key: str(base)
-                for key in ("HOME", "CODEX_HOME", "CORBANU_HOME", "PFTERMINAL_HOME")
-            },
-        )
-        run = subprocess.run(
-            [sys.executable, "-B", "-c", PROBE, str(package / "state")],
-            env=env,
-            cwd=package,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        assert hashlib.sha256((package / "owner_daemon.py").read_bytes()).hexdigest() == summary_sha
+        env = dict(PATH="/opt/homebrew/bin:/usr/bin:/bin", TMPDIR="/private/tmp",
+                   PYTHONPATH=str(package), PYTHONDONTWRITEBYTECODE="1",
+                   CORBANU_TEST_NO_NATIVE_KEYRING="1",
+                   **{key: str(base) for key in
+                      ("HOME", "CODEX_HOME", "CORBANU_HOME", "PFTERMINAL_HOME")})
+        run = subprocess.run([sys.executable, "-B", "-c", PROBE, str(package / "state")],
+                             env=env, cwd=package, capture_output=True, text=True, timeout=30)
         assert run.returncode == 0, (name, run.returncode, run.stderr)
         results[name] = json.loads(run.stdout)
-        results[name]["coordinator_sha256"] = hashlib.sha256(
-            coordinator.read_bytes()
-        ).hexdigest()
+        results[name]["coordinator_sha256"] = hashlib.sha256(coordinator.read_bytes()).hexdigest()
     baseline = results["baseline"]["after"]
     widened = results["include_hand"]["after"]
     denied = results["exclude_manager"]["after"]
@@ -112,19 +93,9 @@ def main():
     assert "hand stall detection=covered by this watchdog" in widened["summary"]
     assert baseline["manager_covered"] and not denied["manager_covered"]
     assert "manager=excluded" in denied["summary"]
-    print(
-        json.dumps(
-            dict(
-                result="PASS",
-                scratch=str(base),
-                live_access=False,
-                unchanged_summary_sha256=summary_sha,
-                variants=results,
-            ),
-            indent=2,
-            sort_keys=True,
-        )
-    )
+    print(json.dumps(dict(result="PASS", scratch=str(base), live_access=False,
+                          unchanged_summary_sha256=summary_sha, variants=results),
+                     indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

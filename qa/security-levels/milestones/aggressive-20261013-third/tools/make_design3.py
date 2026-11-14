@@ -3,18 +3,13 @@
 
 usage: python3 tools/make_design3.py RECORD_DIR
 """
-
 import hashlib, json, pathlib, sys
 
-root = pathlib.Path(sys.argv[1])
-d = root / "design"
+root = pathlib.Path(sys.argv[1]); d = root / "design"
 sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
 ref = lambda p: {"path": str(p.relative_to(root)), "sha256": sha(p)}
 r2 = json.loads((d / "design-r2-20261012.json").read_text())
-amend = {
-    a["case"]: a
-    for a in json.loads((d / "amendments3-final.json").read_text())["amendments"]
-}
+amend = {a["case"]: a for a in json.loads((d / "amendments3-final.json").read_text())["amendments"]}
 new = json.loads((d / "new-cases3.json").read_text())
 cases = []
 for c in r2["cases"]:
@@ -22,26 +17,14 @@ for c in r2["cases"]:
     if c["id"] in amend:
         c["amendment_20261013"] = amend[c["id"]]
     cases.append(c)
-cases += [
-    dict(
-        c,
-        source="third-run designer (Opus 5.5 High, thread "
-        + new["designer_thread"]
-        + ")",
-    )
-    for c in new["cases"]
-]
-assert len(amend) == sum(1 for c in cases if "amendment_20261013" in c), (
-    "every amendment applies to a case"
-)
+cases += [dict(c, source="third-run designer (Opus 5.5 High, thread " + new["designer_thread"] + ")") for c in new["cases"]]
+assert len(amend) == sum(1 for c in cases if "amendment_20261013" in c), "every amendment applies to a case"
 design = {
-    "feature": 'Milestone "Aggressive ships" third run (P1 security hardening, qualification lane)',
+    "feature": "Milestone \"Aggressive ships\" third run (P1 security hardening, qualification lane)",
     "designer": new["designer_thread"],
     "frozen_designer": r2["frozen_designer"],
     "second_run_designer": r2["designer"],
-    "fresh_context": True,
-    "code_blind": True,
-    "results_blind": True,
+    "fresh_context": True, "code_blind": True, "results_blind": True,
     "isolation": "instruction-only",
     "brief": ref(d / "packet/intent-addendum-20261013.md"),
     "original_brief": ref(d / "packet/intent.md"),

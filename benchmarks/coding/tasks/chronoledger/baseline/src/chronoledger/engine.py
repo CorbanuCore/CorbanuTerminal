@@ -24,27 +24,17 @@ class ChronoLedgerEngine:
 
         return {"ok": False, "error": "not_implemented"}
 
-    def balance_as_of(
-        self, account: str, currency: str, as_of: str | None = None
-    ) -> str:
+    def balance_as_of(self, account: str, currency: str, as_of: str | None = None) -> str:
         """Return a banker's-rounded 2dp posted balance as of timestamp."""
 
         return "0.00"
 
-    def raw_balance_as_of(
-        self, account: str, currency: str, as_of: str | None = None
-    ) -> str:
+    def raw_balance_as_of(self, account: str, currency: str, as_of: str | None = None) -> str:
         """Return the exact unrounded Decimal balance string as of timestamp."""
 
         return "0"
 
-    def reverse(
-        self,
-        txn_id: str,
-        ts: str,
-        reversal_id: str | None = None,
-        idempotency_key: str | None = None,
-    ) -> dict[str, Any]:
+    def reverse(self, txn_id: str, ts: str, reversal_id: str | None = None, idempotency_key: str | None = None) -> dict[str, Any]:
         """Post the exact inverse of a previously applied transaction."""
 
         return {"ok": False, "error": "not_implemented"}

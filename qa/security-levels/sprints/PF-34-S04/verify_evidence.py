@@ -9,9 +9,7 @@ HERE = Path(__file__).resolve().parent
 REPOSITORY = HERE.parents[3]
 EVIDENCE = (HERE / "evidence.md").read_text(encoding="utf-8")
 REVIEWED_INTEGRATION_COMMIT = "279ce48a9e8d3b28ab518ff184aae770d7462d2f"
-INTEGRATION_REVIEW_PACKET = (
-    "5ebbb39bbea56a3cc69549f6239e7346e627584d5b261e4dee556d87c5c1c8f4"
-)
+INTEGRATION_REVIEW_PACKET = "5ebbb39bbea56a3cc69549f6239e7346e627584d5b261e4dee556d87c5c1c8f4"
 NARRATED_FILES = {
     "Contract SHA-256": "codex-rs/content-security/src/contract.rs",
     "Contract tests SHA-256": "codex-rs/content-security/src/contract_tests.rs",
@@ -35,9 +33,7 @@ def main() -> None:
             raise SystemExit(f"PF-34-S04 ledger path is unsafe: {relative}")
         path = REPOSITORY.joinpath(*relative_path.parts)
         if path.is_symlink() or not path.resolve().is_relative_to(REPOSITORY.resolve()):
-            raise SystemExit(
-                f"PF-34-S04 ledger path escapes the repository: {relative}"
-            )
+            raise SystemExit(f"PF-34-S04 ledger path escapes the repository: {relative}")
         actual = hashlib.sha256(path.read_bytes()).hexdigest()
         if actual != digest:
             raise SystemExit(f"PF-34-S04 hash mismatch: {relative}")

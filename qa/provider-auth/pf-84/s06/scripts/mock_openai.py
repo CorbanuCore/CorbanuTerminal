@@ -11,7 +11,6 @@ expired access token gets 401 from */responses. POST */responses answers with th
 user and token generation it was authorized as. The log (--log) records users,
 generations and events only.
 """
-
 import argparse
 import base64
 import http.server
@@ -41,23 +40,17 @@ def claims(token):
 
 def issue(user, gen, access_ttl):
     now = int(time.time())
-    id_token = jwt(
-        {
-            "sub": "user-%s" % user,
-            "email": "%s@example.com" % user.split("-")[0],
-            "https://api.openai.com/auth": {
-                "chatgpt_user_id": "chatgpt-user-%s" % user.split("-")[0],
-                "chatgpt_account_id": "workspace-%s" % user,
-                "chatgpt_plan_type": "plus",
-            },
-        }
-    )
+    id_token = jwt({
+        "sub": "user-%s" % user,
+        "email": "%s@example.com" % user.split("-")[0],
+        "https://api.openai.com/auth": {
+            "chatgpt_user_id": "chatgpt-user-%s" % user.split("-")[0],
+            "chatgpt_account_id": "workspace-%s" % user,
+            "chatgpt_plan_type": "plus",
+        },
+    })
     access = jwt({"user": user, "gen": gen, "exp": now + access_ttl})
-    return {
-        "id_token": id_token,
-        "access_token": access,
-        "refresh_token": "rt-%s-%d" % (user, gen),
-    }
+    return {"id_token": id_token, "access_token": access, "refresh_token": "rt-%s-%d" % (user, gen)}
 
 
 def main():
@@ -77,11 +70,7 @@ def main():
             pass
 
         def reply(self, status, body=None, ctype="application/json"):
-            data = (
-                b""
-                if body is None
-                else (body if isinstance(body, bytes) else json.dumps(body).encode())
-            )
+            data = b"" if body is None else (body if isinstance(body, bytes) else json.dumps(body).encode())
             self.send_response(status)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
@@ -95,7 +84,7 @@ def main():
             if payload and "user" in payload:
                 return "%s (token gen %s)" % (payload["user"], payload["gen"])
             if token.startswith("sk-fake-"):
-                return "api key %s" % token[len("sk-fake-") :]
+                return "api key %s" % token[len("sk-fake-"):]
             return "unknown" if token else "none"
 
         def do_GET(self):
@@ -112,11 +101,7 @@ def main():
                     if "json" in ctype:
                         body = json.loads(raw or b"{}")
                     else:
-                        body = dict(
-                            pair.split("=", 1)
-                            for pair in raw.decode().split("&")
-                            if "=" in pair
-                        )
+                        body = dict(pair.split("=", 1) for pair in raw.decode().split("&") if "=" in pair)
                 except (ValueError, UnicodeDecodeError):
                     body = {}
             path = self.path.split("?")[0]
@@ -125,29 +110,13 @@ def main():
                 STATE["ttl"] = int(body.get("ttl", 60))
                 return self.reply(200, {})
             if path.endswith("/deviceauth/usercode"):
-                return self.reply(
-                    200,
-                    {
-                        "device_auth_id": "dev-1",
-                        "user_code": "MOCK-0001",
-                        "interval": "0",
-                    },
-                )
+                return self.reply(200, {"device_auth_id": "dev-1", "user_code": "MOCK-0001", "interval": "0"})
             if path.endswith("/deviceauth/token"):
-                return self.reply(
-                    200,
-                    {
-                        "authorization_code": "authcode-%s" % STATE["next_user"],
-                        "code_challenge": "c",
-                        "code_verifier": "v",
-                    },
-                )
+                return self.reply(200, {"authorization_code": "authcode-%s" % STATE["next_user"],
+                                        "code_challenge": "c", "code_verifier": "v"})
             if path == "/oauth/revoke":
                 token = body.get("token", "")
-                log(
-                    event="revoke",
-                    user=token.split("-")[1] if token.startswith("rt-") else "?",
-                )
+                log(event="revoke", user=token.split("-")[1] if token.startswith("rt-") else "?")
                 return self.reply(200, {})
             if path == "/oauth/token":
                 if body.get("grant_type") == "authorization_code":
@@ -159,38 +128,17 @@ def main():
                     ttl = -60 if user.startswith("bad") else STATE.get("ttl", 60)
                     return self.reply(200, issue(user, 1, access_ttl=ttl))
                 rt = body.get("refresh_token", "")
-                user, gen = (
-                    rt[3:].rsplit("-", 1) if rt.startswith("rt-") else ("?", "0")
-                )
+                user, gen = rt[3:].rsplit("-", 1) if rt.startswith("rt-") else ("?", "0")
                 if user.startswith("bad"):
                     log(event="refresh-rejected", user=user, reason="expired")
-                    return self.reply(
-                        401,
-                        {
-                            "error": {
-                                "code": "refresh_token_expired",
-                                "message": "refresh token expired",
-                            }
-                        },
-                    )
+                    return self.reply(401, {"error": {"code": "refresh_token_expired",
+                                                      "message": "refresh token expired"}})
                 with LOCK:
                     current = STATE["gen"].get(user)
                     if current is None or int(gen) != current:
-                        log(
-                            event="refresh-rejected",
-                            user=user,
-                            reason="reused",
-                            gen=int(gen),
-                        )
-                        return self.reply(
-                            401,
-                            {
-                                "error": {
-                                    "code": "refresh_token_reused",
-                                    "message": "refresh token reused",
-                                }
-                            },
-                        )
+                        log(event="refresh-rejected", user=user, reason="reused", gen=int(gen))
+                        return self.reply(401, {"error": {"code": "refresh_token_reused",
+                                                          "message": "refresh token reused"}})
                     STATE["gen"][user] = current + 1
                 log(event="refresh", user=user, from_gen=current, to_gen=current + 1)
                 return self.reply(200, issue(user, current + 1, access_ttl=3600))
@@ -199,65 +147,26 @@ def main():
                 token = self.headers.get("authorization", "")[7:]
                 payload = claims(token)
                 if payload and payload.get("exp", 0) < time.time():
-                    log(
-                        event="responses-rejected",
-                        who=who,
-                        reason="expired access token",
-                    )
-                    return self.reply(
-                        401,
-                        {
-                            "error": {
-                                "code": "token_expired",
-                                "message": "access token expired",
-                            }
-                        },
-                    )
+                    log(event="responses-rejected", who=who, reason="expired access token")
+                    return self.reply(401, {"error": {"code": "token_expired",
+                                                      "message": "access token expired"}})
                 log(event="responses", who=who)
                 rid = "resp_mock_%d" % int(time.time() * 1000)
-                item = {
-                    "type": "message",
-                    "role": "assistant",
-                    "id": "msg_1",
-                    "content": [
-                        {
-                            "type": "output_text",
-                            "text": "openai-mock: authorized as %s" % who,
-                        }
-                    ],
-                }
-                usage = {
-                    "input_tokens": 100,
-                    "input_tokens_details": {"cached_tokens": 0},
-                    "output_tokens": 7,
-                    "output_tokens_details": {"reasoning_tokens": 0},
-                    "total_tokens": 107,
-                }
-                events = [
-                    (
-                        "response.created",
-                        {"type": "response.created", "response": {"id": rid}},
-                    ),
-                    (
-                        "response.output_item.done",
-                        {"type": "response.output_item.done", "item": item},
-                    ),
-                    (
-                        "response.completed",
-                        {
-                            "type": "response.completed",
-                            "response": {"id": rid, "usage": usage},
-                        },
-                    ),
-                ]
+                item = {"type": "message", "role": "assistant", "id": "msg_1",
+                        "content": [{"type": "output_text", "text": "openai-mock: authorized as %s" % who}]}
+                usage = {"input_tokens": 100, "input_tokens_details": {"cached_tokens": 0},
+                         "output_tokens": 7, "output_tokens_details": {"reasoning_tokens": 0},
+                         "total_tokens": 107}
+                events = [("response.created", {"type": "response.created", "response": {"id": rid}}),
+                          ("response.output_item.done", {"type": "response.output_item.done", "item": item}),
+                          ("response.completed", {"type": "response.completed",
+                                                  "response": {"id": rid, "usage": usage}})]
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.send_header("Connection", "close")
                 self.end_headers()
                 for name, data in events:
-                    self.wfile.write(
-                        ("event: %s\ndata: %s\n\n" % (name, json.dumps(data))).encode()
-                    )
+                    self.wfile.write(("event: %s\ndata: %s\n\n" % (name, json.dumps(data))).encode())
                     self.wfile.flush()
                 return None
             return self.reply(404)

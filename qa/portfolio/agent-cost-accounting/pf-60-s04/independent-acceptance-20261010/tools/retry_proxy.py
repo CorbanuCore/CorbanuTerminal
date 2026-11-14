@@ -7,7 +7,6 @@ Forwards http://127.0.0.1:PORT/<path> to https://UPSTREAM/<path>, streams the re
 JSON line per request to LOG: path, status, model, provider response ids and every `usage` object seen in SSE chunks
 (Chat Completions `usage`, Anthropic `message.usage` / `usage`). Never logs headers or bodies.
 """
-
 import argparse, http.client, http.server, json, ssl, threading, time
 
 lock = threading.Lock()
@@ -68,43 +67,20 @@ def main():
                 self.end_headers()
                 self.wfile.write(err)
                 with lock, open(args.log, "a") as f:
-                    f.write(
-                        json.dumps(
-                            {
-                                "t_start": time.time(),
-                                "path": self.path,
-                                "status": 503,
-                                "injected": True,
-                                "model": req.get("model"),
-                                "ids": [],
-                                "usage": [],
-                            }
-                        )
-                        + "\n"
-                    )
+                    f.write(json.dumps({"t_start": time.time(), "path": self.path, "status": 503, "injected": True,
+                                        "model": req.get("model"), "ids": [], "usage": []}) + "\n")
                 return
-            hdrs = {
-                k: v
-                for k, v in self.headers.items()
-                if k.lower()
-                not in ("host", "content-length", "accept-encoding", "connection")
-            }
+            hdrs = {k: v for k, v in self.headers.items()
+                    if k.lower() not in ("host", "content-length", "accept-encoding", "connection")}
             hdrs["Host"] = args.upstream
             hdrs["Accept-Encoding"] = "identity"
-            conn = http.client.HTTPSConnection(
-                args.upstream, context=ssl.create_default_context(), timeout=600
-            )
+            conn = http.client.HTTPSConnection(args.upstream, context=ssl.create_default_context(), timeout=600)
             t0 = time.time()
             conn.request("POST", self.path, body=body, headers=hdrs)
             r = conn.getresponse()
             self.send_response(r.status)
             for k, v in r.getheaders():
-                if k.lower() in (
-                    "content-length",
-                    "transfer-encoding",
-                    "connection",
-                    "content-encoding",
-                ):
+                if k.lower() in ("content-length", "transfer-encoding", "connection", "content-encoding"):
                     continue
                 self.send_header(k, v)
             self.send_header("Transfer-Encoding", "chunked")
@@ -143,17 +119,9 @@ def main():
                 emit(buf)
             self.wfile.write(b"0\r\n\r\n")
             self.wfile.flush()
-            rec = {
-                "t_start": t0,
-                "t_end": time.time(),
-                "upstream": args.upstream,
-                "path": self.path,
-                "status": r.status,
-                "model": req.get("model"),
-                "stream": req.get("stream"),
-                "ids": sorted(ids),
-                "usage": usages,
-            }
+            rec = {"t_start": t0, "t_end": time.time(), "upstream": args.upstream, "path": self.path,
+                   "status": r.status, "model": req.get("model"), "stream": req.get("stream"),
+                   "ids": sorted(ids), "usage": usages}
             with lock, open(args.log, "a") as f:
                 f.write(json.dumps(rec) + "\n")
 

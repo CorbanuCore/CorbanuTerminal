@@ -3,7 +3,6 @@ plus the re-run designer's new cases.
 
 usage: python3 tools/make_design_r.py RECORD_DIR
 """
-
 import hashlib
 import json
 import pathlib
@@ -22,9 +21,7 @@ def ref(path):
 
 
 frozen = json.loads((d / "frozen-design-20261010.json").read_text())
-amend = {
-    a["case"]: a for a in json.loads((d / "amendments.json").read_text())["amendments"]
-}
+amend = {a["case"]: a for a in json.loads((d / "amendments.json").read_text())["amendments"]}
 new = json.loads((d / "new-cases.json").read_text())
 cases = []
 for c in frozen["cases"]:
@@ -34,7 +31,7 @@ for c in frozen["cases"]:
     cases.append(c)
 cases += [dict(c) for c in new["cases"]]
 design = {
-    "feature": 'Milestone "Aggressive ships" re-run (P1 security hardening, qualification lane)',
+    "feature": "Milestone \"Aggressive ships\" re-run (P1 security hardening, qualification lane)",
     "designer": "01a12e74-b702-7402-b93d-63d03a499d02",
     "frozen_designer": frozen["designer"],
     "fresh_context": True,

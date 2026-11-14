@@ -2,7 +2,6 @@
 
 The benchmark starts with deliberately incomplete code. Implement the contract.
 """
-
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -15,18 +14,10 @@ def parse_logs(lines: Iterable[str]) -> dict[str, Any]:
     return {"entries": [], "duplicate_count": 0, "diagnostics": []}
 
 
-def summarize_logs(
-    lines: Iterable[str], start: str | None = None, end: str | None = None
-) -> dict[str, Any]:
+def summarize_logs(lines: Iterable[str], start: str | None = None, end: str | None = None) -> dict[str, Any]:
     """Return severity/service/message rollups for a time window."""
 
-    return {
-        "total": 0,
-        "by_severity": {},
-        "by_service": {},
-        "top_messages": [],
-        "diagnostics": [],
-    }
+    return {"total": 0, "by_severity": {}, "by_service": {}, "top_messages": [], "diagnostics": []}
 
 
 def query_window(

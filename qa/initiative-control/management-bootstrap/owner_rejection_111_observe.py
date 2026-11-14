@@ -1,5 +1,4 @@
 """Disposable real journal -> saved projection -> renderer evidence, not acceptance."""
-
 import html
 import json
 
@@ -15,29 +14,15 @@ def capture(case, label, at):
     projected, health, rendered = case.rendered_projection(at)
     journal = case.store.read("transport")
     notice = html.unescape(rendered.split("<p>", 1)[1].split("</p>", 1)[0])
-    print(
-        json.dumps(
-            dict(
-                scenario=label,
-                hold=journal["hold"],
-                status=projected["status"],
-                health=health,
-                rendered_notice=notice,
-                outstanding=s.outstanding_quarantine(journal),
-                retained_expired=sum(
-                    row["reason"] == "unbound-expired"
-                    for row in journal.get("quarantine", {}).get("records", [])
-                ),
-            ),
-            sort_keys=True,
-        )
-    )
+    print(json.dumps(dict(scenario=label, hold=journal["hold"],
+        status=projected["status"], health=health, rendered_notice=notice,
+        outstanding=s.outstanding_quarantine(journal),
+        retained_expired=sum(row["reason"] == "unbound-expired"
+            for row in journal.get("quarantine", {}).get("records", []))), sort_keys=True))
 
 
 def observe(scenario):
-    case = ManagerTests(
-        "test_unknown_history_guidance_renders_through_saved_projection_and_clears"
-    )
+    case = ManagerTests("test_unknown_history_guidance_renders_through_saved_projection_and_clears")
     case.setUp()
     try:
         at = NOW
@@ -49,24 +34,11 @@ def observe(scenario):
             case.callback()
             case.review_gap()
             deadline = case.store.read("transport")["held_human"]["Ev001"]["expires_at"]
-            at = (d.stamp(deadline) + s.dt.timedelta(seconds=1)).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
-            )
+            at = (d.stamp(deadline) + s.dt.timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
             case.transport.now = case.owner.now = lambda: at
             case.owner.update("connected")
-            case.store.write(
-                "supervisor",
-                dict(
-                    binding=PIN,
-                    health=dict(
-                        state="healthy",
-                        event_flush_failures=0,
-                        pending_events=0,
-                        observed_at=at,
-                        reason=None,
-                    ),
-                ),
-            )
+            case.store.write("supervisor", dict(binding=PIN, health=dict(
+                state="healthy", event_flush_failures=0, pending_events=0, observed_at=at, reason=None)))
             capture(case, "expired-nonheld-stale-projection", at)
         else:
             case.sending()

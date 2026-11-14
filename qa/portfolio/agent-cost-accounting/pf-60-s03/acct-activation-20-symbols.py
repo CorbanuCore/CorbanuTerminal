@@ -1,5 +1,4 @@
 """Discriminate default and developer-feature native artifacts without source inspection."""
-
 import argparse
 import hashlib
 import json
@@ -10,13 +9,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("binary", type=Path)
 parser.add_argument("mode", choices=["default", "enabled"])
 args = parser.parse_args()
-data = subprocess.run(
-    ["nm", "-a", str(args.binary)], capture_output=True, text=True, check=True
-)
+data = subprocess.run(["nm", "-a", str(args.binary)], capture_output=True, text=True, check=True)
 activation = [s for s in data.stdout.splitlines() if "developer_accounting_mode" in s]
-collector = [
-    s for s in data.stdout.splitlines() if "accounting" in s and "start_request" in s
-]
+collector = [s for s in data.stdout.splitlines() if "accounting" in s and "start_request" in s]
 result = {
     "mode": args.mode,
     "binary": str(args.binary.resolve()),
@@ -29,6 +24,4 @@ result = {
 }
 print(json.dumps(result, indent=2))
 assert collector, "No accounting collector control symbol: scan is not discriminating"
-assert bool(activation) == (args.mode == "enabled"), (
-    "Activation symbol does not match build mode"
-)
+assert bool(activation) == (args.mode == "enabled"), "Activation symbol does not match build mode"

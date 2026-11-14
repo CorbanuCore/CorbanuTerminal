@@ -1,5 +1,4 @@
 """Structural checks only; external raw evidence and independence need review."""
-
 import hashlib
 import json
 from pathlib import Path
@@ -10,33 +9,19 @@ from jsonschema import Draft202012Validator
 HERE = Path(__file__).resolve().parent
 CAPTURE = json.loads((HERE / "evidence-contract.schema.json").read_text())
 RESULTS = json.loads((HERE / "results.schema.json").read_text())
-KEY = (
-    "case",
-    "branch",
-    "profile",
-    "repository",
-    "queue_variant",
-    "queue_packet_sha256",
-)
+KEY = ("case", "branch", "profile", "repository", "queue_variant", "queue_packet_sha256")
 
 
 def frozen_branches():
     raw = (HERE.parent / "pf83-controls-86" / "branch-bindings.json").read_bytes()
-    if (
-        hashlib.sha256(raw).hexdigest()
-        != "17970976834f9f48760ee8cb3e0c1fc552005648fe3a5a48c1dde18894d97159"
-    ):
+    if hashlib.sha256(raw).hexdigest() != "17970976834f9f48760ee8cb3e0c1fc552005648fe3a5a48c1dde18894d97159":
         raise ValueError("frozen branch binding digest mismatch")
     binding = json.loads(raw)
-    original = (
-        HERE.parent / "pf83-capture-82" / "evidence-contract.schema.json"
-    ).read_bytes()
+    original = (HERE.parent / "pf83-capture-82" / "evidence-contract.schema.json").read_bytes()
     if hashlib.sha256(original).hexdigest() != binding["round82_sha256"]:
         raise ValueError("round-82 frozen contract digest mismatch")
-    originals = {
-        rule["if"]["properties"]["case"]["const"]: rule["then"]["x-required-branches"]
-        for rule in json.loads(original)["allOf"]
-    }
+    originals = {rule["if"]["properties"]["case"]["const"]: rule["then"]["x-required-branches"]
+                 for rule in json.loads(original)["allOf"]}
     if {case: list(rows) for case, rows in binding["branches"].items()} != originals:
         raise ValueError("binding must preserve every frozen round-82 branch")
     return {case: list(rows.values()) for case, rows in binding["branches"].items()}
@@ -44,29 +29,17 @@ def frozen_branches():
 
 def check_branch_bindings():
     expected = frozen_branches()
-    for rules in (
-        CAPTURE["allOf"],
-        RESULTS["$defs"]["coverage_tuple"]["allOf"],
-        RESULTS["$defs"]["result"]["allOf"],
-    ):
-        pairs = [
-            (
-                rule["if"]["properties"]["case"]["const"],
-                rule["then"]["properties"]["branch"]["enum"],
-            )
-            for rule in rules
-            if "case" in rule.get("if", {}).get("properties", {})
-        ]
+    for rules in (CAPTURE["allOf"], RESULTS["$defs"]["coverage_tuple"]["allOf"],
+                  RESULTS["$defs"]["result"]["allOf"]):
+        pairs = [(rule["if"]["properties"]["case"]["const"],
+                  rule["then"]["properties"]["branch"]["enum"])
+                 for rule in rules if "case" in rule.get("if", {}).get("properties", {})]
         if len(pairs) != len(expected) or dict(pairs) != expected:
-            raise ValueError(
-                "schema branch identifiers drifted from frozen round-82 binding"
-            )
+            raise ValueError("schema branch identifiers drifted from frozen round-82 binding")
     for rule in CAPTURE["allOf"]:
         case = rule["if"]["properties"]["case"]["const"]
         if rule["then"]["x-required-branches"] != expected[case]:
-            raise ValueError(
-                "required branch annotation drifted from frozen round-82 binding"
-            )
+            raise ValueError("required branch annotation drifted from frozen round-82 binding")
 
 
 def meta_validate():
@@ -80,10 +53,7 @@ def check_interval(row, turn, lower, upper):
         raise ValueError("phase identity/order mismatch: " + row["phase"])
     for field in ("first_effect_ns", "approval_decision_ns"):
         timestamp = row[field]
-        if (
-            timestamp is not None
-            and not lower < timestamp <= row["monotonic_ns"] < upper
-        ):
+        if timestamp is not None and not lower < timestamp <= row["monotonic_ns"] < upper:
             raise ValueError(row["phase"] + " " + field + " outside phase window")
 
 
@@ -122,8 +92,7 @@ def check_capture(document):
         phase, timestamp = row["phase"], row["monotonic_ns"]
         valid = {
             "pre_change": row["turn_or_session_id"] == old and timestamp < selected,
-            "in_continuation": row["turn_or_session_id"] == old
-            and selected < timestamp < ended,
+            "in_continuation": row["turn_or_session_id"] == old and selected < timestamp < ended,
             "new_turn": row["turn_or_session_id"] == new and ended < timestamp,
         }[phase]
         if not valid:
@@ -137,22 +106,15 @@ def check_capture(document):
 def check_results(document):
     check_branch_bindings()
     Draft202012Validator(RESULTS).validate(document)
-    expected = {
-        tuple(row[key] for key in KEY)
-        for row in document["coverage_manifest"]["expected"]
-    }
+    expected = {tuple(row[key] for key in KEY)
+                for row in document["coverage_manifest"]["expected"]}
     actual = {tuple(row[key] for key in KEY) for row in document["records"]}
     if expected != actual:
         raise ValueError("missing/unexpected coverage tuples")
-    branches = {
-        (row["case"], row["branch"])
-        for row in document["coverage_manifest"]["expected"]
-    }
-    required = {
-        (case, branch)
-        for case, branches in frozen_branches().items()
-        for branch in branches
-    }
+    branches = {(row["case"], row["branch"])
+                for row in document["coverage_manifest"]["expected"]}
+    required = {(case, branch) for case, branches in frozen_branches().items()
+                for branch in branches}
     if branches != required:
         raise ValueError("coverage manifest must preserve all original branches")
     attempts = [row["attempt_id"] for row in document["records"]]
@@ -167,8 +129,6 @@ if __name__ == "__main__":
     elif len(sys.argv) == 3 and sys.argv[1] in ("capture", "results"):
         document = json.loads(Path(sys.argv[2]).read_text())
         {"capture": check_capture, "results": check_results}[sys.argv[1]](document)
-        print(
-            sys.argv[1] + ": structural checks PASS; raw-evidence review still required"
-        )
+        print(sys.argv[1] + ": structural checks PASS; raw-evidence review still required")
     else:
         raise SystemExit("usage: check_contract.py [capture|results FILE]")

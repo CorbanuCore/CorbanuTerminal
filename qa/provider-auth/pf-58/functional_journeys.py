@@ -1,5 +1,4 @@
 """Synthetic exact-package selection/persistence/keyboard/failure journeys."""
-
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -29,36 +28,16 @@ class Endpoint(BaseHTTPRequestHandler):
         with self.server.lock:
             serial = len(self.server.requests) + 1
             status = self.server.status
-            self.server.requests.append(
-                {
-                    "serial": serial,
-                    "path": self.path,
-                    "model": body.get("model"),
-                    "effort": body.get("reasoning", {}).get("effort"),
-                    "auth_route": auth.removeprefix("Bearer synthetic-"),
-                    "status": status,
-                    "latest_user": latest,
-                }
-            )
+            self.server.requests.append({"serial": serial, "path": self.path, "model": body.get("model"),
+                "effort": body.get("reasoning", {}).get("effort"), "auth_route": auth.removeprefix("Bearer synthetic-"),
+                "status": status, "latest_user": latest})
         if "DELAY_FIXTURE" in latest:
             self.server.started.set()
             self.server.release.wait(30)
         if status == 200:
             payload, kind = sse(f"JOURNEY_REPLY_{serial}"), "text/event-stream"
         else:
-            payload, kind = (
-                json.dumps(
-                    {
-                        "error": {
-                            "code": "invalid_api_key"
-                            if status == 401
-                            else "fixture_failure",
-                            "message": "Synthetic controlled failure",
-                        }
-                    }
-                ).encode(),
-                "application/json",
-            )
+            payload, kind = json.dumps({"error": {"code": "invalid_api_key" if status == 401 else "fixture_failure", "message": "Synthetic controlled failure"}}).encode(), "application/json"
         self.send_response(status)
         self.send_header("Content-Type", kind)
         self.send_header("Content-Length", str(len(payload)))
@@ -85,9 +64,7 @@ def run(candidate, repo, evidence):
         for suffix in ("a", "b"):
             config += f'\n[model_providers.qa-{suffix}]\nname="QA Route {suffix.upper()}"\nbase_url="{uri}/{suffix}"\nenv_key="QA_{suffix.upper()}_KEY"\nwire_api="responses"\nrequest_max_retries=0\nstream_max_retries=0\n'
         config_path.write_text(config)
-        (home / "auth.json").write_text(
-            json.dumps({"OPENAI_API_KEY": "synthetic-openai"})
-        )
+        (home / "auth.json").write_text(json.dumps({"OPENAI_API_KEY": "synthetic-openai"}))
 
         def check(name):
             session.save(name)
@@ -139,34 +116,19 @@ def run(candidate, repo, evidence):
             session.key("Escape")
             session.key("Escape")
             assert config_path.read_bytes() == before
-            assert (
-                request("Confirm cancellation leaves the selected route intact")[
-                    "model"
-                ]
-                == "gpt-5.6-sol"
-            )
+            assert request("Confirm cancellation leaves the selected route intact")["model"] == "gpt-5.6-sol"
             check("F17-selection-cancel-request")
 
-            for model, label, effort in [
-                ("gpt-6-astra", "GPT-6 Astra", "High"),
-                ("gpt-5.6-sol", "GPT-5.6-Sol", "Low"),
-            ]:
+            for model, label, effort in [("gpt-6-astra", "GPT-6 Astra", "High"), ("gpt-5.6-sol", "GPT-5.6-Sol", "Low")]:
                 session.picker("OpenAI")
                 session.choose(label)
                 session.wait("Select Reasoning")
                 session.choose(effort)
                 session.wait("Model changed to")
                 state = tomllib.loads(config_path.read_text())
-                assert (state["model"], state["model_reasoning_effort"]) == (
-                    model,
-                    effort.lower(),
-                )
+                assert (state["model"], state["model_reasoning_effort"]) == (model, effort.lower())
                 sent = request("Prove selected model and effort " + effort)
-                assert (sent["model"], sent["effort"], sent["auth_route"]) == (
-                    model,
-                    effort.lower(),
-                    "openai",
-                )
+                assert (sent["model"], sent["effort"], sent["auth_route"]) == (model, effort.lower(), "openai")
                 session.picker("OpenAI")
                 assert session.view().count("(current)") == 1
                 session.key("Escape")
@@ -184,10 +146,7 @@ def run(candidate, repo, evidence):
                 session.choose("QA Route B", confirm=False)
                 session.wait("Inactive")
                 session.key("Escape")
-                assert (
-                    request("Restart persistence request " + str(cycle))["auth_route"]
-                    == "openai"
-                )
+                assert request("Restart persistence request " + str(cycle))["auth_route"] == "openai"
             check("F18-persisted-disabled-restart-twice")
             session.manager()
             session.choose("QA Route B")
@@ -198,17 +157,12 @@ def run(candidate, repo, evidence):
 
             for size in [(80, 24), (40, 18), (140, 44)]:
                 session.manager()
-                session.tmux(
-                    "resize-window", "-t", "qa", "-x", str(size[0]), "-y", str(size[1])
-                )
+                session.tmux("resize-window", "-t", "qa", "-x", str(size[0]), "-y", str(size[1]))
                 session.choose("QA Route B", confirm=False)
                 session.save(f"F24-manager-{size[0]}x{size[1]}")
                 session.key("Escape")
                 session.tmux("resize-window", "-t", "qa", "-x", "140", "-y", "44")
-            assert (
-                request("After resize, route and composer remain usable")["auth_route"]
-                == "openai"
-            )
+            assert request("After resize, route and composer remain usable")["auth_route"] == "openai"
             check("F24-resize-last-row-recovery")
 
             session.attach_cycle()
@@ -224,55 +178,31 @@ def run(candidate, repo, evidence):
             session.choose("QA Route B", confirm=False)
             server.release.set()
             session.wait("JOURNEY_REPLY_" + str(len(server.requests)))
-            assert (
-                "QA Route B"
-                in [
-                    line
-                    for line in session.view().splitlines()
-                    if line.lstrip().startswith((">", "›"))
-                ][-1]
-            )
+            assert "QA Route B" in [line for line in session.view().splitlines() if line.lstrip().startswith((">", "›"))][-1]
             session.key("Escape")
             check("F26-late-response-keeps-menu-selection")
 
             session.exit()
             # Separate established custom-route fixture: selection is seeded
             # before startup, but rejection/cancel/replacement happen in one process.
-            current = (
-                config_path.read_text()
-                .replace('model_provider = "openai"', 'model_provider = "qa-a"')
-                .replace('model_provider="openai"', 'model_provider="qa-a"')
-            )
-            current = current.replace(
-                'model = "gpt-5.6-sol"', 'model = "fixture-model"'
-            ).replace('model="gpt-5.6-sol"', 'model="fixture-model"')
+            current = config_path.read_text().replace('model_provider = "openai"', 'model_provider = "qa-a"').replace('model_provider="openai"', 'model_provider="qa-a"')
+            current = current.replace('model = "gpt-5.6-sol"', 'model = "fixture-model"').replace('model="gpt-5.6-sol"', 'model="fixture-model"')
             config_path.write_text(current)
             session.start()
             for status in (403, 429, 500):
                 server.status = status
                 count = len(server.requests)
                 session.submit("Controlled service failure " + str(status))
-                session.wait(
-                    {
-                        403: "unexpected status 403 Forbidden",
-                        429: "rate limited by provider",
-                        500: "We're currently experiencing high demand",
-                    }[status]
-                )
+                session.wait({403: "unexpected status 403 Forbidden",
+                              429: "rate limited by provider",
+                              500: "We're currently experiencing high demand"}[status])
                 session.save(f"service-error-{status}")
                 session.manager()
                 session.choose("QA Route A", confirm=False)
-                assert "Credential needs attention" not in session.view(), (
-                    "non-auth failure poisoned credential health"
-                )
+                assert "Credential needs attention" not in session.view(), "non-auth failure poisoned credential health"
                 session.key("Escape")
                 server.status = 200
-                assert (
-                    request("Retry after service restoration " + str(status))[
-                        "auth_route"
-                    ]
-                    == "a"
-                )
+                assert request("Retry after service restoration " + str(status))["auth_route"] == "a"
                 assert len(server.requests) == count + 2
             check("F23-service-failure-retry-isolation")
             server.status = 401
@@ -296,10 +226,7 @@ def run(candidate, repo, evidence):
             session.wait("Enabled · configured")
             session.key("Escape")
             server.status = 200
-            assert (
-                request("Continue after explicit credential repair")["auth_route"]
-                == "a2"
-            )
+            assert request("Continue after explicit credential repair")["auth_route"] == "a2"
             check("F08-F12-rejection-cancel-repair-no-duplicate")
             session.manager()
             session.choose("QA Route B", confirm=False)
@@ -311,12 +238,7 @@ def run(candidate, repo, evidence):
             session.wait("Configure providers and control")
             session.wait("Enabled · configured")
             session.key("Escape")
-            assert (
-                request("Nonselected repair must not change current routing")[
-                    "auth_route"
-                ]
-                == "a2"
-            )
+            assert request("Nonselected repair must not change current routing")["auth_route"] == "a2"
             session.picker("Other")
             session.save("custom-route-picker")
             session.choose("fixture-model via qa-b")
@@ -344,12 +266,7 @@ def run(candidate, repo, evidence):
             session.choose("QA Route A — fixture-model")
             session.wait("Configure providers and control")
             session.key("Escape")
-            assert (
-                request("Explicit replacement of disabled current provider")[
-                    "auth_route"
-                ]
-                == "a2"
-            )
+            assert request("Explicit replacement of disabled current provider")["auth_route"] == "a2"
             session.manager()
             session.choose("QA Route B")
             session.choose("Reactivate")
@@ -358,10 +275,7 @@ def run(candidate, repo, evidence):
             session.picker("Other")
             session.choose("fixture-model via qa-b")
             session.wait("Model changed to")
-            assert (
-                request("Reactivated route retains repaired credential")["auth_route"]
-                == "b2"
-            )
+            assert request("Reactivated route retains repaired credential")["auth_route"] == "b2"
             check("F14-current-disable-cancel-explicit-replacement-reactivate")
             session.exit()
             result["passed"] = True
@@ -369,19 +283,9 @@ def run(candidate, repo, evidence):
             server.release.set()
             session.close()
             for path in evidence.glob("*.txt"):
-                assert not any(
-                    secret in path.read_text()
-                    for secret in (
-                        "synthetic-openai",
-                        "synthetic-a",
-                        "synthetic-b",
-                        "synthetic-cancelled",
-                    )
-                ), "secret in visible evidence"
+                assert not any(secret in path.read_text() for secret in ("synthetic-openai", "synthetic-a", "synthetic-b", "synthetic-cancelled")), "secret in visible evidence"
             session.receipt(result)
-            (evidence / "requests.json").write_text(
-                json.dumps(server.requests, indent=2)
-            )
+            (evidence / "requests.json").write_text(json.dumps(server.requests, indent=2))
             server.shutdown()
             server.server_close()
     return result
@@ -393,8 +297,4 @@ if __name__ == "__main__":
     parser.add_argument("--repo", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
     args = parser.parse_args()
-    print(
-        json.dumps(
-            run(args.candidate.resolve(), args.repo.resolve(), args.evidence.resolve())
-        )
-    )
+    print(json.dumps(run(args.candidate.resolve(), args.repo.resolve(), args.evidence.resolve())))

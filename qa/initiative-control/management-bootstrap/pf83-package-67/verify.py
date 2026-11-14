@@ -1,5 +1,4 @@
 """Read-only source/package checks, writing only this allocation's evidence."""
-
 import ast
 import csv
 import hashlib
@@ -23,31 +22,16 @@ def main():
     freeze = HERE.parent / "pf83-exit-61-production-freeze.md"
     rows = re.findall(r"\| `(codex-rs/[^`]+)` \| `([a-f0-9]{64})`", freeze.read_text())
     assert len(rows) == 34
-    comparison = [
-        dict(
-            path=p,
-            frozen_sha256=h,
-            checkout_sha256=sha(REPO / p),
-            built_source_sha256=sha(ART / "source" / p),
-        )
-        for p, h in rows
-    ]
+    comparison = [dict(path=p, frozen_sha256=h, checkout_sha256=sha(REPO / p),
+                       built_source_sha256=sha(ART / "source" / p)) for p, h in rows]
     for row in comparison:
-        row["matches"] = (
-            row["frozen_sha256"] == row["checkout_sha256"] == row["built_source_sha256"]
-        )
-    (HERE / "production-comparison.json").write_text(
-        json.dumps(comparison, indent=2) + "\n"
-    )
+        row["matches"] = row["frozen_sha256"] == row["checkout_sha256"] == row["built_source_sha256"]
+    (HERE / "production-comparison.json").write_text(json.dumps(comparison, indent=2) + "\n")
     assert all(row["matches"] for row in comparison)
     fixture_code = (HARNESS / "fixtures.py").read_text()
     parsed = ast.parse(fixture_code)
-    mapping = next(
-        ast.literal_eval(node.value)
-        for node in parsed.body
-        if isinstance(node, ast.Assign)
-        and any(isinstance(t, ast.Name) and t.id == "MAP" for t in node.targets)
-    )
+    mapping = next(ast.literal_eval(node.value) for node in parsed.body if isinstance(node, ast.Assign)
+                   and any(isinstance(t, ast.Name) and t.id == "MAP" for t in node.targets))
     with (HERE.parent / "pf83-packaged-63-case-inputs.tsv").open() as stream:
         packets = list(csv.DictReader(stream, delimiter="\t"))
     assert len(packets) == 288
@@ -56,13 +40,8 @@ def main():
         path = HARNESS / row["harness_relative_packet_path"]
         assert sha(path) == row["sha256"]
         group = path.name.split("--")[0]
-        cases = sorted(
-            case
-            for case, prefixes in mapping.items()
-            if any(
-                group == prefix or group.startswith(prefix + "-") for prefix in prefixes
-            )
-        )
+        cases = sorted(case for case, prefixes in mapping.items()
+                       if any(group == prefix or group.startswith(prefix + "-") for prefix in prefixes))
         assert cases == row["all_mapped_cases"].split(","), (path.name, cases, row)
         assert row["projected_case"] in cases
         counts[row["projected_case"]] = counts.get(row["projected_case"], 0) + 1
@@ -91,23 +70,13 @@ def main():
         for argv in (["/usr/bin/file", str(path)], ["/usr/bin/otool", "-L", str(path)]):
             result = subprocess.run(argv, text=True, capture_output=True)
             assert result.returncode == 0
-            inspections[name][argv[0]] = dict(
-                argv=argv, exit_code=result.returncode, stdout=result.stdout
-            )
-    (HERE / "binary-inspection.json").write_text(
-        json.dumps(inspections, indent=2) + "\n"
-    )
-    receipt = dict(
-        production_files=34,
-        production_matches=34,
-        packet_paths=288,
-        packet_counts=counts,
-        package_manifest_sha256=sha(manifest_path),
-        build_attestation_sha256=sha(ART / "build-attestation.json"),
-        executable_inventory=sorted(binaries),
-        no_packaged_execution=True,
-        live_harness_pin_updated=False,
-    )
+            inspections[name][argv[0]] = dict(argv=argv, exit_code=result.returncode, stdout=result.stdout)
+    (HERE / "binary-inspection.json").write_text(json.dumps(inspections, indent=2) + "\n")
+    receipt = dict(production_files=34, production_matches=34, packet_paths=288,
+                   packet_counts=counts, package_manifest_sha256=sha(manifest_path),
+                   build_attestation_sha256=sha(ART / "build-attestation.json"),
+                   executable_inventory=sorted(binaries), no_packaged_execution=True,
+                   live_harness_pin_updated=False)
     (HERE / "verification.json").write_text(json.dumps(receipt, indent=2) + "\n")
     print(json.dumps(receipt))
 

@@ -1,5 +1,4 @@
 """Exercise monetary semantics independently of frozen capture integrity."""
-
 import gzip
 import json
 from pathlib import Path
@@ -21,24 +20,16 @@ def invoke(directory, name, semantics=False):
     if semantics:
         command.append("--semantics-only")
     process = subprocess.run(command, capture_output=True, text=True)
-    result = dict(
-        exit=process.returncode,
-        receipt_written=target.exists(),
-        stdout=process.stdout,
-        stderr=process.stderr,
-    )
+    result = dict(exit=process.returncode, receipt_written=target.exists(),
+                  stdout=process.stdout, stderr=process.stderr)
     with (out / "processes.jsonl").open("a") as log:
         log.write(json.dumps(dict(name=name, **result)) + "\n")
     return result
 
 
-baselines = {
-    mode: invoke(source, "baseline-" + mode, mode == "semantics-only")
-    for mode in ("digest-bound", "semantics-only")
-}
-assert all(r["exit"] == 0 and r["receipt_written"] for r in baselines.values()), (
-    baselines
-)
+baselines = {mode: invoke(source, "baseline-" + mode, mode == "semantics-only")
+             for mode in ("digest-bound", "semantics-only")}
+assert all(r["exit"] == 0 and r["receipt_written"] for r in baselines.values()), baselines
 receipt = json.loads((out / "baseline-semantics-only.json").read_text())
 assert not receipt["capture_qualified"]
 assert receipt["content_bound_page_count"] == receipt["viewport_bound_count"] == 0
@@ -47,37 +38,19 @@ assert bound["content_bound_page_count"] == 24 and bound["viewport_bound_count"]
 
 # Deliberately enumerate the expected contract independently of the auditor's
 # check inventory. Deleting an auditor check must not shrink this test plan.
-priced = [
-    "backend-reopened",
-    "historical",
-    "historical-Request-1-Attempt-1",
-    "mixed-provider",
-    "mixed-provider-Request-1-Attempt-1",
-    "mixed-provider-Provider-openai",
-    "narrow",
-    "narrow-Request-1-Attempt-1",
-    "stale-restored-control",
-]
-unknown = [
-    "missing-price",
-    "missing-price-Request-1-Attempt-1",
-    "no-usage",
-    "no-usage-Request-1-Attempt-1",
-]
+priced = ["backend-reopened", "historical", "historical-Request-1-Attempt-1",
+          "mixed-provider", "mixed-provider-Request-1-Attempt-1",
+          "mixed-provider-Provider-openai", "narrow", "narrow-Request-1-Attempt-1",
+          "stale-restored-control"]
+unknown = ["missing-price", "missing-price-Request-1-Attempt-1",
+           "no-usage", "no-usage-Request-1-Attempt-1"]
 zero = ["zero-attempt-day", "never-prompted"]
 plan = []
 
 
 def page_case(key, page, pattern, replacement, append=False):
-    plan.append(
-        dict(
-            check=key,
-            page=page,
-            pattern=pattern,
-            replacement=replacement,
-            append=append,
-        )
-    )
+    plan.append(dict(check=key, page=page, pattern=pattern,
+                     replacement=replacement, append=append))
 
 
 exact = r"Known (?:subtotal|estimate) exact USD: [0-9.]+"
@@ -87,27 +60,15 @@ for page in priced + unknown + zero:
     page_case("exact-value:" + page, page, r"exact USD: [0-9.]+", "exact USD: 9.99")
     for kind in ("count", "value"):
         if page in zero:
-            page_case(
-                "display-" + kind + ":" + page,
-                page,
-                "",
-                "Known estimated token cost: $9.99",
-                append=True,
-            )
+            page_case("display-" + kind + ":" + page, page, "",
+                      "Known estimated token cost: $9.99", append=True)
         else:
-            page_case(
-                "display-" + kind + ":" + page,
-                page,
-                display,
-                "" if kind == "count" else "Known estimated token cost: $9.99",
-            )
+            page_case("display-" + kind + ":" + page, page, display,
+                      "" if kind == "count" else "Known estimated token cost: $9.99")
 for page in unknown:
     for key, phrase in [
         ("unknown-cost", "Estimated token cost: unknown"),
-        (
-            "incomplete-cost",
-            "Full recorded estimate: unavailable (1 of 1 attempts incomplete)",
-        ),
+        ("incomplete-cost", "Full recorded estimate: unavailable (1 of 1 attempts incomplete)"),
     ]:
         page_case(key + ":" + page, page, re.escape(phrase), "REMOVED")
 for page in [p for p in priced if p.endswith("Attempt-1")]:
@@ -115,86 +76,42 @@ for page in [p for p in priced if p.endswith("Attempt-1")]:
         # Mutate displayed and exact sides independently: both must be checked.
         for field, pattern, replacement in [
             ("display", re.escape(label) + r" cost: \$[0-9.]+", label + " cost: $9.99"),
-            (
-                "exact",
-                re.escape(label) + r" cost: (\$[0-9.]+); exact USD [0-9.]+",
-                label + r" cost: \1; exact USD 9.99",
-            ),
+            ("exact", re.escape(label) + r" cost: (\$[0-9.]+); exact USD [0-9.]+",
+             label + r" cost: \1; exact USD 9.99"),
         ]:
             page_case("component:" + page + ":" + label, page, pattern, replacement)
             plan[-1]["variant"] = field
     for label in ("Noncached input", "Cache read", "Output"):
-        page_case(
-            "rate:" + page + ":" + label,
-            page,
-            re.escape(label) + r" rate: [0-9.]+ USD",
-            label + " rate: 9.99 USD",
-        )
+        page_case("rate:" + page + ":" + label, page,
+                  re.escape(label) + r" rate: [0-9.]+ USD", label + " rate: 9.99 USD")
 for key, page, phrases in [
-    (
-        "missing-price",
-        "missing-price-Request-1-Attempt-1",
-        [
-            ("snapshot", "Price: unavailable — no dispatch-time price snapshot"),
-            ("input", "Noncached input cost: unknown — rate unavailable"),
-            ("output", "Output cost: unknown — rate unavailable"),
-        ],
-    ),
-    (
-        "no-usage",
-        "no-usage-Request-1-Attempt-1",
-        [
-            ("input", "Input: unknown — no retained numeric evidence"),
-            ("output", "Output cost: unknown — no retained numeric evidence"),
-        ],
-    ),
+    ("missing-price", "missing-price-Request-1-Attempt-1", [
+        ("snapshot", "Price: unavailable — no dispatch-time price snapshot"),
+        ("input", "Noncached input cost: unknown — rate unavailable"),
+        ("output", "Output cost: unknown — rate unavailable")]),
+    ("no-usage", "no-usage-Request-1-Attempt-1", [
+        ("input", "Input: unknown — no retained numeric evidence"),
+        ("output", "Output cost: unknown — no retained numeric evidence")]),
 ]:
     for label, phrase in phrases:
         page_case(key + ":" + page + ":" + label, page, re.escape(phrase), "REMOVED")
 for page in ("stale-estimate", "stale-refresh", "unavailable-backend"):
     page_case("refused-money:" + page, page, "", "Total: $9.99", append=True)
-for phrase in (
-    "Estimated token cost for recorded attempts: $0.000710",
-    "Billed cost: unavailable — no settlement evidence",
-    "this UTC day is not their complete lifetime.",
-):
+for phrase in ("Estimated token cost for recorded attempts: $0.000710",
+               "Billed cost: unavailable — no settlement evidence",
+               "this UTC day is not their complete lifetime."):
     page_case("narrow-qualifier:" + phrase, "narrow", re.escape(phrase), "REMOVED")
-page_case(
-    "narrow-exact",
-    "narrow",
-    "Known subtotal exact USD: 0.00071",
-    "Known subtotal exact USD: 9.99",
-)
-metrics = [
-    "Input",
-    "Noncached input (derived for inclusive input)",
-    "Cache read",
-    "Cache write",
-    "Output",
-    "Reasoning (subset, not separately billed)",
-    "Total (not separately billed)",
-]
-for page in (
-    "historical",
-    "narrow",
-    "mixed-provider",
-    "missing-price",
-    "no-usage",
-    "zero-attempt-day",
-):
+page_case("narrow-exact", "narrow", "Known subtotal exact USD: 0.00071",
+          "Known subtotal exact USD: 9.99")
+metrics = ["Input", "Noncached input (derived for inclusive input)", "Cache read",
+           "Cache write", "Output", "Reasoning (subset, not separately billed)",
+           "Total (not separately billed)"]
+for page in ("historical", "narrow", "mixed-provider", "missing-price", "no-usage", "zero-attempt-day"):
     for label in metrics:
-        page_case(
-            "usage:" + page + ":" + label,
-            page,
-            re.escape(label) + r": [0-9]+ known",
-            label + ": 999 known",
-        )
-for key in (
-    "arithmetic:known-attempt",
-    "arithmetic:emitted-usage",
-    "native:missing-price",
-    "native:rates",
-):
+        page_case("usage:" + page + ":" + label, page,
+                  re.escape(label) + r": [0-9]+ known", label + ": 999 known")
+for key in ("arithmetic:known-attempt", "arithmetic:emitted-usage",
+            "native:missing-price", "native:rates"):
     plan.append(dict(check=key))
 expected_checks = {c["check"] for c in plan}
 assert expected_checks == set(receipt["monetary_checks"]), (
@@ -259,23 +176,11 @@ for index, case in enumerate(plan):
     assert result["exit"] != 0 and not result["receipt_written"], (case, result)
     diagnostic = json.loads(result["stderr"].splitlines()[0])
     assert key in diagnostic["semantic_failures"], (case, result)
-    assert expected_checks == set(diagnostic["monetary_checks_evaluated"]), (
-        case,
-        result,
-    )
+    assert expected_checks == set(diagnostic["monetary_checks_evaluated"]), (case, result)
     results.append(dict(mutation=case, **result))
-(out / "semantic-results.json").write_text(
-    json.dumps(
-        dict(
-            baselines=baselines,
-            checks=len(expected_checks),
-            mutations=len(results),
-            controls=results,
-        ),
-        indent=2,
-    )
-    + "\n"
-)
+(out / "semantic-results.json").write_text(json.dumps(
+    dict(baselines=baselines, checks=len(expected_checks), mutations=len(results),
+         controls=results), indent=2) + "\n")
 
 # Integrity controls must fail for their own reason. A viewport-only edit is
 # invisible to JSON binding; semantics-only must still pass it.
@@ -294,41 +199,20 @@ for kind, paths in (
                     row["rendered"] = lines
             changes["reader-cases.json"] = encoded(cases)
         else:
-            changes = {
-                path.name: gzip.compress(
-                    gzip.decompress(path.read_bytes()) + b"\nTotal: $9.99\n", mtime=0
-                )
-            }
+            changes = {path.name: gzip.compress(
+                gzip.decompress(path.read_bytes()) + b"\nTotal: $9.99\n", mtime=0)}
         number = len(plan) + len(integrity)
         directory = fixture(number, changes)
         result = invoke(directory, "integrity-" + str(number))
         assert result["exit"] != 0 and not result["receipt_written"], result
-        reason = (
-            "unexpected viewport content"
-            if kind == "viewport"
-            else "unexpected content on"
-        )
-        assert (
-            reason in result["stderr"]
-            and path.name.removesuffix("-selected.json") in result["stderr"]
-        ), result
+        reason = "unexpected viewport content" if kind == "viewport" else "unexpected content on"
+        assert reason in result["stderr"] and path.name.removesuffix("-selected.json") in result["stderr"], result
         semantic = None
         if kind == "viewport":
             semantic = invoke(directory, "viewport-semantic-" + str(number), True)
             assert semantic["exit"] == 0 and semantic["receipt_written"], semantic
-        integrity.append(
-            dict(kind=kind, file=path.name, bound=result, semantics=semantic)
-        )
-(out / "integrity-results.json").write_text(
-    json.dumps(dict(json_pages=24, viewports=45, controls=integrity), indent=2) + "\n"
-)
-print(
-    json.dumps(
-        dict(
-            monetary_checks=len(expected_checks),
-            semantic_mutations=len(results),
-            json_integrity=24,
-            viewport_integrity=45,
-        )
-    )
-)
+        integrity.append(dict(kind=kind, file=path.name, bound=result, semantics=semantic))
+(out / "integrity-results.json").write_text(json.dumps(
+    dict(json_pages=24, viewports=45, controls=integrity), indent=2) + "\n")
+print(json.dumps(dict(monetary_checks=len(expected_checks), semantic_mutations=len(results),
+                      json_integrity=24, viewport_integrity=45)))

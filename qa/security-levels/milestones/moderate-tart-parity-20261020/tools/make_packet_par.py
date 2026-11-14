@@ -6,7 +6,6 @@ From qual-mod3's make_packet4.py; the prompt template is unchanged.
 
 usage: python3 tools/make_packet_par.py V4_PACKET_DIR TOOLS_DIR OUT_DIR CANDIDATE_SHA
 """
-
 import hashlib
 import json
 import pathlib
@@ -19,13 +18,7 @@ GROUPS = json.loads((tools / "groups.json").read_text())
 NOTES = json.loads((tools / "standing-notes.json").read_text())
 REPLAYS = {}
 out.mkdir(parents=True, exist_ok=True)
-for name in (
-    "design-cases.md",
-    "amendments.md",
-    "amendments-v3.md",
-    "amendments-v4.md",
-    "executor-prompt.md",
-):
+for name in ("design-cases.md", "amendments.md", "amendments-v3.md", "amendments-v4.md", "executor-prompt.md"):
     shutil.copy2(v4 / name, out / name)
 for dst in ("screens", "screens-v3", "screens-v4"):
     (out / dst).mkdir(exist_ok=True)
@@ -71,23 +64,17 @@ not apply to this run. MOD-06's git-commit part stays not run, as the MOD-06 ame
 """
 (out / "navigation.md").write_text(navigation)
 (out / "prompts").mkdir(exist_ok=True)
-ASSIGN = [(g, ids, NOTES.get(g, "")) for g, ids in GROUPS.items()] + [
-    (
-        label,
-        r["cases"],
-        (NOTES.get(r["group"], "") + " " if NOTES.get(r["group"]) else "")
-        + "Replay assignment (fresh executor; earlier attempts are kept separately): "
-        + r["note"],
-    )
-    for label, r in REPLAYS.items()
-]
+ASSIGN = [(g, ids, NOTES.get(g, "")) for g, ids in GROUPS.items()] + \
+         [(label, r["cases"], (NOTES.get(r["group"], "") + " " if NOTES.get(r["group"]) else "") +
+           "Replay assignment (fresh executor; earlier attempts are kept separately): " + r["note"])
+          for label, r in REPLAYS.items()]
 for group, ids, note in ASSIGN:
     note = f"\n- Note for this group: {note}" if note else ""
     prompt = f"""{executor_prompt}
 {navigation}
 ## Assignment: group {group}
 
-- Cases, in order: {", ".join(ids)}.
+- Cases, in order: {', '.join(ids)}.
 - Candidate: Corbanu Terminal 0.1.48 package, read-only at `/opt/agms/pkg`; the program is
   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `{CANDIDATE}`.
 - Frozen cases file SHA-256: `{cases_sha}`. Amendments file SHA-256: `{amend_sha}`. Amendment v3 file SHA-256:

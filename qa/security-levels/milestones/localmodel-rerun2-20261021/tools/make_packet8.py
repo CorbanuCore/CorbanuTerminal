@@ -2,7 +2,6 @@
 """qwen-rerun2: build executor packet v8 (packet-v8/) from the frozen sub-packets, the final amendment L2 and the
 group plan: writes design-cases.md (the index of frozen files with SHA-256), executor-prompt.md and prompts/R0N.md.
 usage: make_packet8.py CANDIDATE_SHA256"""
-
 import hashlib
 import json
 import pathlib
@@ -17,31 +16,17 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-FROZEN = [
-    "agg/design-cases.md",
-    "agg/amendments-and-new-cases.md",
-    "agg/navigation.md",
-    "acc/design-cases.md",
-    "acc/amendments.md",
-    "acc/answers.md",
-    "acc/navigation.md",
-    "mod/design-cases.md",
-    "mod/amendments.md",
-    "mod/amendments-v3.md",
-    "mod/amendments-v4.md",
-    "mod/amendments-v5.md",
-    "mod/navigation.md",
-    "amendments-L2.md",
-    "navigation.md",
-]
+FROZEN = ["agg/design-cases.md", "agg/amendments-and-new-cases.md", "agg/navigation.md",
+          "acc/design-cases.md", "acc/amendments.md", "acc/answers.md", "acc/navigation.md",
+          "mod/design-cases.md", "mod/amendments.md", "mod/amendments-v3.md", "mod/amendments-v4.md",
+          "mod/amendments-v5.md", "mod/navigation.md", "amendments-L2.md", "navigation.md"]
 rows = "\n".join(f"| `{f}` | `{sha(P / f)}` |" for f in FROZEN)
 (P / "design-cases.md").write_text(
     "# Index of this packet's frozen files\n\n"
     "The case texts are in the sub-packets, copied byte for byte from the signed-off records: `agg/` (Aggressive "
     "packet v7), `acc/` (accounting acceptance packet v3), `mod/` (Moderate packet v5). `amendments-L2.md` is this "
     "re-run's amendment and governs over them for the cases it names (see `navigation.md`).\n\n"
-    "| File | SHA-256 |\n| --- | --- |\n" + rows + "\n"
-)
+    "| File | SHA-256 |\n| --- | --- |\n" + rows + "\n")
 
 HEADER = """You are the independent functional executor, not the implementer or reviewer.
 Use only the supplied frozen human cases, neutral navigation, fixtures and exact
@@ -101,29 +86,25 @@ result (passed, failed, blocked, not exercised or inconclusive, with the reason)
 `VERDICT <case id>: passed|failed|blocked|not exercised` (as `amendments-L2.md` says how each outcome is recorded).
 Do not claim human acceptance.
 """
-MILESTONE = (
-    "Its `config.toml` switches the security features on (protected launch included) and starts at "
-    "Permissive."
-)
-NEUTRAL = "Its `config.toml` is the accounting record's neutral profile (no security features), as in that record."
+MILESTONE = ("Its `config.toml` switches the security features on (protected launch included) and starts at "
+             "Permissive.")
+NEUTRAL = ("Its `config.toml` is the accounting record's neutral profile (no security features), as in that record.")
 NAV = (P / "navigation.md").read_text()
 groups = json.loads((Q / "tools" / "groups.json").read_text())
 (P / "prompts").mkdir(exist_ok=True)
 for g in groups:
     files = ", ".join(f"`{f}` `{sha(P / f)}`" for f in g["files"])
-    text = (
-        HEADER + "\n" + NAV + "\n## Assignment: group " + g["id"] + "\n\n"
-        f"- Cases, in order: {g['cases']}.\n"
-        "- Candidate: Corbanu Terminal 0.1.48 package, read-only at `/opt/agms/pkg`; the program is\n"
-        f"  `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `{CAND}`.\n"
-        f"- Frozen files for your cases (SHA-256; all are listed in `/opt/agms/packet/design-cases.md`): {files}.\n"
-        "- Coordinator isolation preflight for this run: `$AGMS_RUN/evidence/preflight-summary.json` and the two\n"
-        "  `preflight-*.json` files beside it. Before anything else, run\n"
-        "  `agms-probe all > $AGMS_RUN/evidence/preflight-executor.json; echo rc=$?` yourself and check that it reports\n"
-        '  `"ok": true`. If it does not, stop and report every case as blocked.\n'
-        f"- Note for this group: {g['note']}\n\n"
-        + ENV.format(profile=NEUTRAL if g.get("neutral") else MILESTONE)
-    )
+    text = (HEADER + "\n" + NAV + "\n## Assignment: group " + g["id"] + "\n\n"
+            f"- Cases, in order: {g['cases']}.\n"
+            "- Candidate: Corbanu Terminal 0.1.48 package, read-only at `/opt/agms/pkg`; the program is\n"
+            f"  `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `{CAND}`.\n"
+            f"- Frozen files for your cases (SHA-256; all are listed in `/opt/agms/packet/design-cases.md`): {files}.\n"
+            "- Coordinator isolation preflight for this run: `$AGMS_RUN/evidence/preflight-summary.json` and the two\n"
+            "  `preflight-*.json` files beside it. Before anything else, run\n"
+            "  `agms-probe all > $AGMS_RUN/evidence/preflight-executor.json; echo rc=$?` yourself and check that it reports\n"
+            "  `\"ok\": true`. If it does not, stop and report every case as blocked.\n"
+            f"- Note for this group: {g['note']}\n\n"
+            + ENV.format(profile=NEUTRAL if g.get("neutral") else MILESTONE))
     (P / "prompts" / (g["id"] + ".md")).write_text(text)
     print(g["id"], sha(P / "prompts" / (g["id"] + ".md")))
 print("index", sha(P / "design-cases.md"))

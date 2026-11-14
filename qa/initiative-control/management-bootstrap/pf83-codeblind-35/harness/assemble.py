@@ -4,7 +4,6 @@ usage: assemble.py RECORD_DIR RUNS_DIR CASE=RUN_DIR_NAME [...]
 Copies evidence into RECORD_DIR/runs/CASE/, writes isolation.json per case, and
 prints a JSON stub per case (dispositions are written separately by the integrator).
 """
-
 import hashlib
 import json
 import pathlib
@@ -15,14 +14,9 @@ import tarfile
 DESIGN = "design.json"
 CANDIDATE = "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6"
 GROUP_FIELDS = {
-    "repo": "source_denied",
-    "history": "history_denied",
-    "symlink": "symlink_escape_denied",
-    "credentials": "credentials_denied",
-    "ipc": "cross_run_ipc_denied",
-    "network": "network_restricted",
-    "package": "package_readonly",
-    "child": "children_confined",
+    "repo": "source_denied", "history": "history_denied", "symlink": "symlink_escape_denied",
+    "credentials": "credentials_denied", "ipc": "cross_run_ipc_denied", "network": "network_restricted",
+    "package": "package_readonly", "child": "children_confined",
 }
 
 
@@ -48,60 +42,29 @@ def main(record, runs, pairs):
         dst.mkdir(parents=True)
         with tarfile.open(src / "collected.tar") as tar:
             tar.extractall(dst / "collected")
-        for extra in (
-            "executor-events.jsonl",
-            "executor.stderr",
-            "executor-exit.txt",
-            "executor-start.txt",
-            "executor-end.txt",
-            "preflight-summary.stdout",
-            "wipe-before.txt",
-            "wipe-after.txt",
-        ):
+        for extra in ("executor-events.jsonl", "executor.stderr", "executor-exit.txt",
+                      "executor-start.txt", "executor-end.txt", "preflight-summary.stdout",
+                      "wipe-before.txt", "wipe-after.txt"):
             if (src / extra).exists():
                 shutil.copy2(src / extra, dst / extra)
         ev = dst / "collected" / "evidence"
-        result = next(
-            (
-                p
-                for p in (
-                    ev / "result.md",
-                    dst / "collected/work/evidence/result.md",
-                    dst / "collected/work/result.md",
-                )
-                if p.exists()
-            ),
-            None,
-        )
-        events = [
-            json.loads(l)
-            for l in (dst / "executor-events.jsonl").read_text().splitlines()
-            if l.startswith('{"type"')
-        ]
+        result = next((p for p in (ev / "result.md", dst / "collected/work/evidence/result.md",
+                                   dst / "collected/work/result.md") if p.exists()), None)
+        events = [json.loads(l) for l in (dst / "executor-events.jsonl").read_text().splitlines()
+                  if l.startswith("{\"type\"")]
         thread = next(e["thread_id"] for e in events if e["type"] == "thread.started")
         docs = {}
-        for name_ in (
-            "preflight-launcher.json",
-            "preflight-tmux-child.json",
-            "preflight-executor.json",
-        ):
+        for name_ in ("preflight-launcher.json", "preflight-tmux-child.json", "preflight-executor.json"):
             p = ev / name_
-            docs[name_] = (
-                json.loads(p.read_text())
-                if p.exists()
-                else {"ok": False, "missing": True}
-            )
+            docs[name_] = json.loads(p.read_text()) if p.exists() else {"ok": False, "missing": True}
         probes = dst / "probes.json"
         probes.write_text(json.dumps(docs, indent=1) + "\n")
         groups = {}
         for doc in docs.values():
             for row in doc.get("probes", []):
                 groups.setdefault(row["group"], []).append(row["ok"])
-        positive = {
-            r["probe"]: r["ok"]
-            for r in docs["preflight-launcher.json"].get("probes", [])
-            if r["group"] == "positive"
-        }
+        positive = {r["probe"]: r["ok"] for r in docs["preflight-launcher.json"].get("probes", [])
+                    if r["group"] == "positive"}
         pty = (ev / "preflight-pty-control.txt").read_text()
         isolation = {
             "enforcement": "os-enforced",
@@ -115,7 +78,7 @@ def main(record, runs, pairs):
             "probe_evidence": ref(probes, record),
             "packet_readable": positive.get("packet readable and frozen", False),
             "candidate_launchable": positive.get("package launch --version", False)
-            and positive.get("package binary digest", False),
+                                    and positive.get("package binary digest", False),
             "actual_input_available": pty.count("pf83-pty-input-control") >= 2,
             "probe_documents_ok": {k: v.get("ok") for k, v in docs.items()},
         }
@@ -124,41 +87,18 @@ def main(record, runs, pairs):
         start = (src / "executor-start.txt").read_text().strip()
         end = (src / "executor-end.txt").read_text().strip()
         import datetime
-
-        t0 = (
-            datetime.datetime.strptime(start, "%Y-%m-%dT%H:%M:%SZ")
-            .replace(tzinfo=datetime.timezone.utc)
-            .timestamp()
-            * 1e9
-        )
-        t1 = (
-            datetime.datetime.strptime(end, "%Y-%m-%dT%H:%M:%SZ")
-            .replace(tzinfo=datetime.timezone.utc)
-            .timestamp()
-            * 1e9
-        )
-        window = [
-            l
-            for l in (record / "common/mediator-campaign.jsonl")
-            .read_text()
-            .splitlines()
-            if t0 - 60e9 <= json.loads(l)["time_ns"] <= t1 + 5e9
-        ]
+        t0 = datetime.datetime.strptime(start, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).timestamp() * 1e9
+        t1 = datetime.datetime.strptime(end, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).timestamp() * 1e9
+        window = [l for l in (record / "common/mediator-campaign.jsonl").read_text().splitlines()
+                  if t0 - 60e9 <= json.loads(l)["time_ns"] <= t1 + 5e9]
         (dst / "mediator-window.jsonl").write_text("\n".join(window) + "\n")
         isolation["mediator_window"] = ref(dst / "mediator-window.jsonl", record)
-        isolation["mediator_window_note"] = (
-            "all mediator rows from preflight to executor end; concurrent lanes share the mediator"
-        )
+        isolation["mediator_window_note"] = "all mediator rows from preflight to executor end; concurrent lanes share the mediator"
         (dst / "isolation.json").write_text(json.dumps(isolation, indent=1) + "\n")
         out[label] = {
-            "run_id": name,
-            "agent": thread,
-            "result": str(result.relative_to(record)) if result else None,
-            "isolation_ok": all(
-                isolation[f]
-                for f in list(GROUP_FIELDS.values())
-                + ["packet_readable", "candidate_launchable", "actual_input_available"]
-            ),
+            "run_id": name, "agent": thread, "result": str(result.relative_to(record)) if result else None,
+            "isolation_ok": all(isolation[f] for f in list(GROUP_FIELDS.values()) +
+                                ["packet_readable", "candidate_launchable", "actual_input_available"]),
         }
     print(json.dumps(out, indent=1))
 

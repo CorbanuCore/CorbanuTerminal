@@ -19,7 +19,6 @@ realtime feature on and keeps the profile's file credential store and log folder
 its text model before realtime starts; without it that warm-up ran on the default GPT-6 Sol (~$0.03).
 `--model` stays the realtime session's model.
 """
-
 import argparse
 import json
 import queue
@@ -43,8 +42,7 @@ parser.add_argument("--thread-model")
 args = parser.parse_args()
 
 proc = subprocess.Popen(
-    [args.bin, "-C", args.workspace, "app-server"]
-    + [a for kv in args.config for a in ("-c", kv)],
+    [args.bin, "-C", args.workspace, "app-server"] + [a for kv in args.config for a in ("-c", kv)],
     stdin=subprocess.PIPE,
     stdout=subprocess.PIPE,
     stderr=subprocess.DEVNULL,
@@ -107,17 +105,10 @@ def call(method, params, timeout=30):
     return reply.get("result", {})
 
 
-call(
-    "initialize",
-    {
-        "clientInfo": {
-            "name": "pf60-s09-realtime-driver",
-            "title": None,
-            "version": "0",
-        },
-        "capabilities": {"experimentalApi": True},
-    },
-)
+call("initialize", {
+    "clientInfo": {"name": "pf60-s09-realtime-driver", "title": None, "version": "0"},
+    "capabilities": {"experimentalApi": True},
+})
 send("initialized", notify=True)
 thread_start = {"model": args.thread_model} if args.thread_model else {}
 thread = call("thread/start", thread_start)["thread"]["id"]
@@ -137,17 +128,7 @@ if args.model:
 if args.version:
     start["version"] = args.version
 call("thread/realtime/start", start, timeout=60)
-started = wait(
-    lambda m: (
-        m.get("method")
-        in (
-            "thread/realtime/started",
-            "thread/realtime/error",
-            "thread/realtime/closed",
-        )
-    ),
-    30,
-)
+started = wait(lambda m: m.get("method") in ("thread/realtime/started", "thread/realtime/error", "thread/realtime/closed"), 30)
 print("start:", started and started.get("method"))
 if started and started.get("method") == "thread/realtime/error":
     print("error:", json.dumps(started.get("params", {}))[:400])
@@ -166,18 +147,11 @@ if started and started.get("method") == "thread/realtime/started":
             print("item:", text)
             if '"type": "response.done"' in text or '"response.done"' in text:
                 return True
-        return method in (
-            "thread/realtime/transcript/done",
-            "thread/realtime/error",
-            "thread/realtime/closed",
-        )
+        return method in ("thread/realtime/transcript/done", "thread/realtime/error", "thread/realtime/closed")
 
     end = wait(done, args.timeout)
     print("reply end:", end and end.get("method"))
-    print(
-        "reply text:",
-        "".join(reply)[:200] or (end or {}).get("params", {}).get("text", "")[:200],
-    )
+    print("reply text:", "".join(reply)[:200] or (end or {}).get("params", {}).get("text", "")[:200])
     call("thread/realtime/stop", {"threadId": thread})
     wait(lambda m: m.get("method") == "thread/realtime/closed", 10)
 print("thread:", thread)

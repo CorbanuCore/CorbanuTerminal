@@ -1,5 +1,4 @@
 """Exercise the replay receipt assertion without executing any package or tests."""
-
 import copy
 import importlib.util
 import json
@@ -13,10 +12,8 @@ spec.loader.exec_module(module)
 receipt = json.loads((here / "current-tip/receipt.json").read_text())
 module.assert_receipt(receipt)
 results = [dict(case="actual-current-tip", passed=True)]
-for field, value in (
-    ("stdout_matches_prior_replay", False),
-    ("source_tip_after", "changed-integration-tip"),
-):
+for field, value in (("stdout_matches_prior_replay", False),
+                     ("source_tip_after", "changed-integration-tip")):
     changed = copy.deepcopy(receipt)
     changed[field] = value
     try:

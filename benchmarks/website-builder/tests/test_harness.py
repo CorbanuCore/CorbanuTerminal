@@ -27,11 +27,7 @@ class WebsiteHarnessTests(unittest.TestCase):
     def test_rubric_totals_one_hundred_points(self) -> None:
         self.assertEqual(sum(judge_pair.RUBRIC_MAX.values()), 100)
         self.assertEqual(
-            set(
-                judge_pair.SCHEMA["properties"]["site_a"]["properties"]["rubric"][
-                    "required"
-                ]
-            ),
+            set(judge_pair.SCHEMA["properties"]["site_a"]["properties"]["rubric"]["required"]),
             set(judge_pair.RUBRIC_MAX),
         )
 

@@ -21,7 +21,6 @@ acct-rerun changes (2026-10-22): no real key on the guest. Real hosts are sent a
 Authorization) to a host-side key relay through one SSH reverse tunnel on the guest's loopback
 (--relay NAME=PORT); the relay adds the key and the TLS to the real host. A route without a relay answers 503.
 """
-
 import argparse
 import json
 import socket
@@ -33,40 +32,18 @@ import zlib
 
 REAL = {
     "api.z.ai": ("zai", ("/api/paas/v4/", "/api/coding/paas/v4/", "/api/anthropic/")),
-    "api.openai.com": (
-        "openai",
-        (
-            "/v1/responses",
-            "/v1/images/generations",
-            "/v1/images/edits",
-            "/v1/models",
-            "/v1/realtime",
-        ),
-    ),
+    "api.openai.com": ("openai", ("/v1/responses", "/v1/images/generations", "/v1/images/edits",
+                                  "/v1/models", "/v1/realtime")),
     "api.moonshot.ai": ("kimi", ("/v1/chat/completions", "/v1/models")),
 }
 STANDIN = {
-    "auth.openai.com": 18601,
-    "chatgpt.com": 18601,
-    "ab.chatgpt.com": 18601,
-    "openrouter.ai": 18602,
-    "ai-gateway.vercel.sh": 18602,
-    "api.corbanu.com": 18602,
+    "auth.openai.com": 18601, "chatgpt.com": 18601, "ab.chatgpt.com": 18601,
+    "openrouter.ai": 18602, "ai-gateway.vercel.sh": 18602, "api.corbanu.com": 18602,
     "llm.mylab.test": 18602,
 }
-DROP = {
-    "authorization",
-    "x-api-key",
-    "proxy-authorization",
-    "proxy-connection",
-    "connection",
-    "keep-alive",
-    "transfer-encoding",
-    "content-length",
-    "host",
-    "te",
-    "upgrade",
-}
+DROP = {"authorization", "x-api-key", "proxy-authorization", "proxy-connection",
+        "connection", "keep-alive", "transfer-encoding", "content-length", "host", "te",
+        "upgrade"}
 LOCK = threading.Lock()
 SPEND = {"kimi_posts": 0, "realtime_sessions": 0}
 
@@ -113,11 +90,8 @@ def summarize(body):
         return {}
     if not isinstance(data, dict):
         return {}
-    return {
-        "model": data.get("model"),
-        "stream": data.get("stream"),
-        "service_tier": data.get("service_tier"),
-    }
+    return {"model": data.get("model"), "stream": data.get("stream"),
+            "service_tier": data.get("service_tier")}
 
 
 def usage_from(tail):
@@ -162,13 +136,7 @@ class FrameTap:
     """Best-effort parser of server->client WebSocket frames; logs realtime usage reports."""
 
     def __init__(self, cfg, conn_id):
-        self.cfg, self.conn_id, self.buf, self.parts, self.inflate = (
-            cfg,
-            conn_id,
-            b"",
-            [],
-            None,
-        )
+        self.cfg, self.conn_id, self.buf, self.parts, self.inflate = cfg, conn_id, b"", [], None
         self.compressed = False
 
     def feed(self, data):
@@ -189,7 +157,7 @@ class FrameTap:
                     pos += 4  # masked (not expected from a server)
                 if len(self.buf) < pos + n:
                     return
-                payload, self.buf = self.buf[pos : pos + n], self.buf[pos + n :]
+                payload, self.buf = self.buf[pos:pos + n], self.buf[pos + n:]
                 opcode = b0 & 0x0F
                 if opcode in (1, 2):
                     self.parts, self.compressed = [payload], bool(b0 & 0x40)
@@ -201,14 +169,7 @@ class FrameTap:
                     self.message(b"".join(self.parts))
                     self.parts = []
         except Exception as exc:  # never disturb the relay
-            log(
-                self.cfg.log,
-                {
-                    "event": "ws_tap_error",
-                    "conn": self.conn_id,
-                    "error": repr(exc)[:200],
-                },
-            )
+            log(self.cfg.log, {"event": "ws_tap_error", "conn": self.conn_id, "error": repr(exc)[:200]})
             self.buf = b""
 
     def message(self, data):
@@ -224,15 +185,8 @@ class FrameTap:
             return
         if obj.get("type") == "response.done":
             response = obj.get("response") or {}
-            log(
-                self.cfg.log,
-                {
-                    "event": "realtime_response_done",
-                    "conn": self.conn_id,
-                    "status": response.get("status"),
-                    "usage": response.get("usage"),
-                },
-            )
+            log(self.cfg.log, {"event": "realtime_response_done", "conn": self.conn_id,
+                               "status": response.get("status"), "usage": response.get("usage")})
 
 
 def pin_target(cfg, host):
@@ -246,16 +200,8 @@ def realtime_admit(cfg, conn_id, path):
         SPEND["realtime_sessions"] += 1
         n = SPEND["realtime_sessions"]
     if n > cfg.realtime_cap:
-        log(
-            cfg.log,
-            {
-                "event": "denied_realtime_cap",
-                "conn": conn_id,
-                "path": path[:200],
-                "count": n,
-                "cap": cfg.realtime_cap,
-            },
-        )
+        log(cfg.log, {"event": "denied_realtime_cap", "conn": conn_id, "path": path[:200],
+                      "count": n, "cap": cfg.realtime_cap})
         return False
     return True
 
@@ -268,27 +214,13 @@ class RealtimeHandler(socketserver.BaseRequestHandler):
         conn_id = "rt-%d-%d" % (time.time_ns(), self.client_address[1])
         host = "api.openai.com"
         if not self.client_address[0].startswith("127."):
-            log(
-                cfg.log,
-                {
-                    "event": "denied_non_loopback",
-                    "conn": conn_id,
-                    "peer": self.client_address[0],
-                },
-            )
+            log(cfg.log, {"event": "denied_non_loopback", "conn": conn_id, "peer": self.client_address[0]})
             return
         try:
             tls = cfg.server_ctx.wrap_socket(self.request, server_side=True)
         except Exception as exc:
-            log(
-                cfg.log,
-                {
-                    "event": "client_tls_error",
-                    "conn": conn_id,
-                    "host": host + " (direct)",
-                    "error": repr(exc)[:200],
-                },
-            )
+            log(cfg.log, {"event": "client_tls_error", "conn": conn_id, "host": host + " (direct)",
+                          "error": repr(exc)[:200]})
             return
         try:
             reader = tls.makefile("rb")
@@ -302,55 +234,21 @@ class RealtimeHandler(socketserver.BaseRequestHandler):
                 headers[key.strip().lower()] = value.strip()
             websocket = headers.get("upgrade", "").lower() == "websocket"
             if method != "GET" or not path.startswith("/v1/realtime") or not websocket:
-                log(
-                    cfg.log,
-                    {
-                        "event": "denied_path",
-                        "conn": conn_id,
-                        "host": host + " (direct)",
-                        "method": method,
-                        "path": path[:200],
-                        "websocket": websocket,
-                    },
-                )
-                tls.sendall(
-                    b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                )
+                log(cfg.log, {"event": "denied_path", "conn": conn_id, "host": host + " (direct)",
+                              "method": method, "path": path[:200], "websocket": websocket})
+                tls.sendall(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
                 return
             if "openai" not in cfg.relays:
-                tls.sendall(
-                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                )
+                tls.sendall(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
                 return
             if not realtime_admit(cfg, conn_id, path):
-                tls.sendall(
-                    b"HTTP/1.1 429 Too Many Requests\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                )
+                tls.sendall(b"HTTP/1.1 429 Too Many Requests\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
                 return
             # Reuse the CONNECT path's forwarder (it relays the upgrade and frames both ways).
-            Handler.forward(
-                self,
-                cfg,
-                conn_id,
-                host,
-                method,
-                path,
-                head,
-                headers,
-                b"",
-                tls,
-                cfg.relays["openai"],
-            )
+            Handler.forward(self, cfg, conn_id, host, method, path, head, headers, b"", tls, cfg.relays["openai"])
         except Exception as exc:
-            log(
-                cfg.log,
-                {
-                    "event": "session_error",
-                    "conn": conn_id,
-                    "host": host + " (direct)",
-                    "error": repr(exc)[:200],
-                },
-            )
+            log(cfg.log, {"event": "session_error", "conn": conn_id, "host": host + " (direct)",
+                          "error": repr(exc)[:200]})
         finally:
             try:
                 tls.close()
@@ -368,32 +266,17 @@ class Handler(socketserver.StreamRequestHandler):
         parts = head[0].split()
         host = parts[1][:-4] if len(parts) == 3 and parts[1].endswith(":443") else None
         if parts[0:1] != ["CONNECT"] or (host not in REAL and host not in STANDIN):
-            log(
-                cfg.log,
-                {
-                    "event": "denied_proxy_request",
-                    "conn": conn_id,
-                    "request_line": head[0][:200],
-                },
-            )
-            self.wfile.write(
-                b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-            )
+            log(cfg.log, {"event": "denied_proxy_request", "conn": conn_id,
+                          "request_line": head[0][:200]})
+            self.wfile.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             return
         self.wfile.write(b"HTTP/1.1 200 Connection established\r\n\r\n")
         self.wfile.flush()
         try:
             tls = cfg.server_ctx.wrap_socket(self.connection, server_side=True)
         except Exception as exc:
-            log(
-                cfg.log,
-                {
-                    "event": "client_tls_error",
-                    "conn": conn_id,
-                    "host": host,
-                    "error": repr(exc)[:200],
-                },
-            )
+            log(cfg.log, {"event": "client_tls_error", "conn": conn_id, "host": host,
+                          "error": repr(exc)[:200]})
             return
         reader = tls.makefile("rb")
         try:
@@ -409,19 +292,9 @@ class Handler(socketserver.StreamRequestHandler):
             if host in REAL:
                 keyname, prefixes = REAL[host]
                 if not path.startswith(prefixes) or method not in ("POST", "GET"):
-                    log(
-                        cfg.log,
-                        {
-                            "event": "denied_path",
-                            "conn": conn_id,
-                            "host": host,
-                            "method": method,
-                            "path": path[:200],
-                        },
-                    )
-                    tls.sendall(
-                        b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                    )
+                    log(cfg.log, {"event": "denied_path", "conn": conn_id, "host": host,
+                                  "method": method, "path": path[:200]})
+                    tls.sendall(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
                     return
                 if host == "api.moonshot.ai" and method == "POST":
                     with LOCK:
@@ -429,81 +302,34 @@ class Handler(socketserver.StreamRequestHandler):
                         n = SPEND["kimi_posts"]
                     if n > cfg.moonshot_cap:
                         # Owner's spend limit for real Moonshot requests in this campaign.
-                        log(
-                            cfg.log,
-                            {
-                                "event": "denied_spend_cap",
-                                "conn": conn_id,
-                                "host": host,
-                                "path": path[:200],
-                                "count": n,
-                                "cap": cfg.moonshot_cap,
-                            },
-                        )
+                        log(cfg.log, {"event": "denied_spend_cap", "conn": conn_id, "host": host,
+                                      "path": path[:200], "count": n, "cap": cfg.moonshot_cap})
                         msg = b'{"error":{"message":"test harness: Moonshot request limit reached"}}'
-                        tls.sendall(
-                            b"HTTP/1.1 429 Too Many Requests\r\nContent-Type: application/json\r\n"
-                            b"Content-Length: %d\r\nConnection: close\r\n\r\n%s"
-                            % (len(msg), msg)
-                        )
+                        tls.sendall(b"HTTP/1.1 429 Too Many Requests\r\nContent-Type: application/json\r\n"
+                                    b"Content-Length: %d\r\nConnection: close\r\n\r\n%s" % (len(msg), msg))
                         return
                 if keyname not in cfg.relays:
-                    log(
-                        cfg.log,
-                        {
-                            "event": "denied_no_key",
-                            "conn": conn_id,
-                            "host": host,
-                            "path": path[:200],
-                        },
-                    )
-                    tls.sendall(
-                        b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                    )
+                    log(cfg.log, {"event": "denied_no_key", "conn": conn_id, "host": host, "path": path[:200]})
+                    tls.sendall(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
                     return
                 if path.startswith("/v1/realtime"):
-                    if headers.get(
-                        "upgrade", ""
-                    ).lower() != "websocket" or not realtime_admit(cfg, conn_id, path):
-                        tls.sendall(
-                            b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                        )
+                    if headers.get("upgrade", "").lower() != "websocket" or not realtime_admit(cfg, conn_id, path):
+                        tls.sendall(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
                         return
-                self.forward(
-                    cfg,
-                    conn_id,
-                    host,
-                    method,
-                    path,
-                    head,
-                    headers,
-                    body,
-                    tls,
-                    cfg.relays[keyname],
-                )
+                self.forward(cfg, conn_id, host, method, path, head, headers, body, tls,
+                             cfg.relays[keyname])
             else:
-                self.forward(
-                    cfg, conn_id, host, method, path, head, headers, body, tls, None
-                )
+                self.forward(cfg, conn_id, host, method, path, head, headers, body, tls, None)
         except Exception as exc:
-            log(
-                cfg.log,
-                {
-                    "event": "session_error",
-                    "conn": conn_id,
-                    "host": host,
-                    "error": repr(exc)[:200],
-                },
-            )
+            log(cfg.log, {"event": "session_error", "conn": conn_id, "host": host,
+                          "error": repr(exc)[:200]})
         finally:
             try:
                 tls.close()
             except Exception:
                 pass
 
-    def forward(
-        self, cfg, conn_id, host, method, path, head, headers, body, client, relay
-    ):
+    def forward(self, cfg, conn_id, host, method, path, head, headers, body, client, relay):
         started = time.time()
         websocket = headers.get("upgrade", "").lower() == "websocket"
         out = ["%s %s HTTP/1.1" % (method, path), "Host: " + host]
@@ -521,9 +347,7 @@ class Handler(socketserver.StreamRequestHandler):
         if relay is not None:
             upstream = socket.create_connection(("127.0.0.1", relay), timeout=600)
         else:
-            upstream = socket.create_connection(
-                ("127.0.0.1", STANDIN[host]), timeout=600
-            )
+            upstream = socket.create_connection(("127.0.0.1", STANDIN[host]), timeout=600)
         status = None
         total = 0
         tail = b""
@@ -542,18 +366,10 @@ class Handler(socketserver.StreamRequestHandler):
                 if websocket and status == "101":
                     # Relay frames both ways until either side closes.
                     upstream.settimeout(None)
-                    back = threading.Thread(
-                        target=pipe, args=(client, upstream), daemon=True
-                    )
+                    back = threading.Thread(target=pipe, args=(client, upstream), daemon=True)
                     back.start()
-                    tap = (
-                        FrameTap(cfg, conn_id)
-                        if path.startswith("/v1/realtime")
-                        else None
-                    )
-                    rest = (
-                        chunk.split(b"\r\n\r\n", 1)[1] if b"\r\n\r\n" in chunk else b""
-                    )
+                    tap = FrameTap(cfg, conn_id) if path.startswith("/v1/realtime") else None
+                    rest = chunk.split(b"\r\n\r\n", 1)[1] if b"\r\n\r\n" in chunk else b""
                     if tap and rest:
                         tap.feed(rest)
                     pipe(upstream, client, tap)
@@ -562,19 +378,10 @@ class Handler(socketserver.StreamRequestHandler):
                 tail = (tail + chunk)[-262144:]
         finally:
             upstream.close()
-        row = {
-            "event": "forwarded",
-            "conn": conn_id,
-            "host": host,
-            "method": method,
-            "path": path[:200],
-            "status": status,
-            "websocket": websocket,
-            "response_bytes": total,
-            "request_bytes": len(body),
-            "real": relay is not None,
-            "seconds": round(time.time() - started, 3),
-        }
+        row = {"event": "forwarded", "conn": conn_id, "host": host, "method": method,
+               "path": path[:200], "status": status, "websocket": websocket,
+               "response_bytes": total, "request_bytes": len(body),
+               "real": relay is not None, "seconds": round(time.time() - started, 3)}
         row.update(summarize(body))
         if relay is not None and not websocket:
             row["usage"] = usage_from(tail)
@@ -589,12 +396,7 @@ class Server(socketserver.ThreadingTCPServer):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, required=True)
-    parser.add_argument(
-        "--relay",
-        action="append",
-        default=[],
-        help="name=port (zai, openai, kimi): host relay via tunnel",
-    )
+    parser.add_argument("--relay", action="append", default=[], help="name=port (zai, openai, kimi): host relay via tunnel")
     parser.add_argument("--cert", required=True)
     parser.add_argument("--cert-key", required=True)
     parser.add_argument("--upstream-ca", required=True)
@@ -602,9 +404,7 @@ def main():
     parser.add_argument("--moonshot-cap", type=int, default=12)
     parser.add_argument("--realtime-cap", type=int, default=0)
     parser.add_argument("--realtime-port", type=int, default=0)
-    parser.add_argument(
-        "--pin", action="append", default=[], help="HOST=IP for upstream connections"
-    )
+    parser.add_argument("--pin", action="append", default=[], help="HOST=IP for upstream connections")
     args = parser.parse_args()
 
     class Cfg:
@@ -632,20 +432,11 @@ def main():
         realtime = Server(("0.0.0.0", args.realtime_port), RealtimeHandler)
         realtime.cfg = cfg
         threading.Thread(target=realtime.serve_forever, daemon=True).start()
-    log(
-        cfg.log,
-        {
-            "event": "started",
-            "port": args.port,
-            "real_hosts": {h: list(p) for h, (_, p) in REAL.items()},
-            "standin_hosts": STANDIN,
-            "relays": cfg.relays,
-            "moonshot_cap": cfg.moonshot_cap,
-            "realtime_cap": cfg.realtime_cap,
-            "realtime_port": args.realtime_port,
-            "pins": cfg.pins,
-        },
-    )
+    log(cfg.log, {"event": "started", "port": args.port,
+                  "real_hosts": {h: list(p) for h, (_, p) in REAL.items()},
+                  "standin_hosts": STANDIN, "relays": cfg.relays,
+                  "moonshot_cap": cfg.moonshot_cap, "realtime_cap": cfg.realtime_cap,
+                  "realtime_port": args.realtime_port, "pins": cfg.pins})
     server.serve_forever()
 
 

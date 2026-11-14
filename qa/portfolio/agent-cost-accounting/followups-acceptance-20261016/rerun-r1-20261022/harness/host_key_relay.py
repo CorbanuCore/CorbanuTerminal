@@ -9,7 +9,6 @@ The key comes from the environment at start (RELAY_KEY, filled from the Corbanu 
 this process) and is removed from the environment at once.
 Logs method/path/status/bytes/model only: no headers, no bodies, no key.
 """
-
 import argparse
 import json
 import os
@@ -23,19 +22,8 @@ ROUTES = {
     "zai": ("api.z.ai", ("/api/paas/v4/", "/api/coding/paas/v4/", "/api/anthropic/")),
     "openai": ("api.openai.com", ("/v1/responses", "/v1/models")),
 }
-DROP = {
-    "authorization",
-    "x-api-key",
-    "proxy-authorization",
-    "proxy-connection",
-    "connection",
-    "keep-alive",
-    "transfer-encoding",
-    "content-length",
-    "host",
-    "te",
-    "upgrade",
-}
+DROP = {"authorization", "x-api-key", "proxy-authorization", "proxy-connection", "connection",
+        "keep-alive", "transfer-encoding", "content-length", "host", "te", "upgrade"}
 LOG_LOCK = threading.Lock()
 
 
@@ -115,24 +103,10 @@ class Handler(socketserver.StreamRequestHandler):
             headers[key.strip().lower()] = value.strip()
         websocket = headers.get("upgrade", "").lower() == "websocket"
         body = b"" if websocket else read_body(self.rfile, headers)
-        if (
-            method not in ("GET", "POST")
-            or not path.startswith(cfg.prefixes)
-            or (websocket and method != "GET")
-        ):
-            log(
-                cfg.log,
-                {
-                    "event": "denied_path",
-                    "conn": conn,
-                    "method": method,
-                    "path": path[:200],
-                    "websocket": websocket,
-                },
-            )
-            self.wfile.write(
-                b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-            )
+        if method not in ("GET", "POST") or not path.startswith(cfg.prefixes) or (websocket and method != "GET"):
+            log(cfg.log, {"event": "denied_path", "conn": conn, "method": method, "path": path[:200],
+                          "websocket": websocket})
+            self.wfile.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             return
         started = time.time()
         out = ["%s %s HTTP/1.1" % (method, path), "Host: " + cfg.host]
@@ -149,10 +123,8 @@ class Handler(socketserver.StreamRequestHandler):
         raw = ("\r\n".join(out) + "\r\n\r\n").encode("latin-1") + body
         status, total, error = None, 0, None
         try:
-            upstream = cfg.client_ctx.wrap_socket(
-                socket.create_connection((cfg.host, 443), timeout=600),
-                server_hostname=cfg.host,
-            )
+            upstream = cfg.client_ctx.wrap_socket(socket.create_connection((cfg.host, 443), timeout=600),
+                                                  server_hostname=cfg.host)
             try:
                 upstream.sendall(raw)
                 del raw
@@ -169,9 +141,7 @@ class Handler(socketserver.StreamRequestHandler):
                         self.wfile.flush()
                         upstream.settimeout(None)
                         self.connection.settimeout(None)
-                        back = threading.Thread(
-                            target=pump, args=(self.rfile.read1, upstream), daemon=True
-                        )
+                        back = threading.Thread(target=pump, args=(self.rfile.read1, upstream), daemon=True)
                         back.start()
                         pump(upstream.recv, self.connection)
                         back.join(5)
@@ -180,18 +150,9 @@ class Handler(socketserver.StreamRequestHandler):
                 upstream.close()
         except OSError as exc:
             error = repr(exc)[:200]
-        row = {
-            "event": "forwarded",
-            "conn": conn,
-            "method": method,
-            "path": path[:200],
-            "status": status,
-            "websocket": websocket,
-            "request_bytes": len(body),
-            "first_response_bytes": total,
-            "seconds": round(time.time() - started, 3),
-            "model": model_of(body),
-        }
+        row = {"event": "forwarded", "conn": conn, "method": method, "path": path[:200], "status": status,
+               "websocket": websocket, "request_bytes": len(body), "first_response_bytes": total,
+               "seconds": round(time.time() - started, 3), "model": model_of(body)}
         if error:
             row["error"] = error
         log(cfg.log, row)
@@ -216,16 +177,8 @@ def main():
     cfg.client_ctx.set_alpn_protocols(["http/1.1"])
     server = Server(("127.0.0.1", cfg.port), Handler)
     server.cfg = cfg
-    log(
-        cfg.log,
-        {
-            "event": "started",
-            "route": cfg.route,
-            "upstream": cfg.host,
-            "listen": "127.0.0.1:%d" % cfg.port,
-            "allowed_prefixes": list(cfg.prefixes),
-        },
-    )
+    log(cfg.log, {"event": "started", "route": cfg.route, "upstream": cfg.host,
+                  "listen": "127.0.0.1:%d" % cfg.port, "allowed_prefixes": list(cfg.prefixes)})
     server.serve_forever()
 
 

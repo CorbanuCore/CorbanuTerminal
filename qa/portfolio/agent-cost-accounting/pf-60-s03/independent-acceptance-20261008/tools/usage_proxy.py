@@ -7,7 +7,6 @@ provider-reported `usage` objects seen in the response. Never logs headers.
 With --strip-usage, `usage` fields are removed from every SSE chunk before
 being forwarded (simulates a provider that reports no usage).
 """
-
 import argparse, http.client, http.server, json, ssl, threading, time
 
 UPSTREAM = "api.z.ai"
@@ -34,28 +33,17 @@ def main():
                 req = json.loads(body)
             except Exception:
                 req = {}
-            hdrs = {
-                k: v
-                for k, v in self.headers.items()
-                if k.lower()
-                not in ("host", "content-length", "accept-encoding", "connection")
-            }
+            hdrs = {k: v for k, v in self.headers.items()
+                    if k.lower() not in ("host", "content-length", "accept-encoding", "connection")}
             hdrs["Host"] = UPSTREAM
             hdrs["Accept-Encoding"] = "identity"
-            conn = http.client.HTTPSConnection(
-                UPSTREAM, context=ssl.create_default_context(), timeout=600
-            )
+            conn = http.client.HTTPSConnection(UPSTREAM, context=ssl.create_default_context(), timeout=600)
             t0 = time.time()
             conn.request("POST", self.path, body=body, headers=hdrs)
             r = conn.getresponse()
             self.send_response(r.status)
             for k, v in r.getheaders():
-                if k.lower() in (
-                    "content-length",
-                    "transfer-encoding",
-                    "connection",
-                    "content-encoding",
-                ):
+                if k.lower() in ("content-length", "transfer-encoding", "connection", "content-encoding"):
                     continue
                 self.send_header(k, v)
             self.send_header("Transfer-Encoding", "chunked")
@@ -100,17 +88,9 @@ def main():
                 emit(buf)
             self.wfile.write(b"0\r\n\r\n")
             self.wfile.flush()
-            rec = {
-                "t_start": t0,
-                "t_end": time.time(),
-                "path": self.path,
-                "status": r.status,
-                "model": req.get("model"),
-                "stream": req.get("stream"),
-                "ids": sorted(ids),
-                "usage": usages,
-                "stripped": args.strip_usage,
-            }
+            rec = {"t_start": t0, "t_end": time.time(), "path": self.path, "status": r.status,
+                   "model": req.get("model"), "stream": req.get("stream"), "ids": sorted(ids),
+                   "usage": usages, "stripped": args.strip_usage}
             with lock, open(args.log, "a") as f:
                 f.write(json.dumps(rec) + "\n")
 

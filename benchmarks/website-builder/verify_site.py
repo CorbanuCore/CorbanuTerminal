@@ -92,14 +92,7 @@ def static_checks(root: Path) -> dict[str, Any]:
     manifest_images: list[Path] = []
     if manifest_path:
         for index, item in enumerate(entries):
-            for field in (
-                "filename",
-                "model",
-                "prompt",
-                "size",
-                "quality",
-                "created_at",
-            ):
+            for field in ("filename", "model", "prompt", "size", "quality", "created_at"):
                 if not item.get(field):
                     errors.append(f"manifest entry {index} missing {field}")
             if item.get("model") != "gpt-image-2":
@@ -150,10 +143,7 @@ def static_checks(root: Path) -> dict[str, Any]:
     if SECRET_PATTERN.search(sources):
         errors.append("possible embedded API secret found")
     for hook in HOOKS:
-        if (
-            f'data-benchmark="{hook}"' not in sources
-            and f"data-benchmark='{hook}'" not in sources
-        ):
+        if f'data-benchmark="{hook}"' not in sources and f"data-benchmark='{hook}'" not in sources:
             errors.append(f"missing benchmark hook: {hook}")
 
     referenced = 0
@@ -168,9 +158,7 @@ def static_checks(root: Path) -> dict[str, Any]:
             referenced += 1
     details["manifest_images_referenced_in_source"] = referenced
     if referenced < 2:
-        errors.append(
-            f"at least 2 generated images must be referenced, found {referenced}"
-        )
+        errors.append(f"at least 2 generated images must be referenced, found {referenced}")
 
     lower = sources.lower()
     required_terms = {
@@ -251,10 +239,7 @@ def start_server(root: Path, log_dir: Path) -> tuple[subprocess.Popen[bytes], st
 
 
 def rms_difference(before: Path, after: Path) -> float:
-    with (
-        Image.open(before).convert("RGB") as left,
-        Image.open(after).convert("RGB") as right,
-    ):
+    with Image.open(before).convert("RGB") as left, Image.open(after).convert("RGB") as right:
         if left.size != right.size:
             return 255.0
         stat = ImageStat.Stat(ImageChops.difference(left, right))
@@ -265,12 +250,7 @@ def browser_checks(root: Path, result_dir: Path) -> dict[str, Any]:
     from playwright.sync_api import sync_playwright
 
     errors: list[str] = []
-    evidence: dict[str, Any] = {
-        "captures": {},
-        "console_errors": [],
-        "page_errors": [],
-        "request_failures": [],
-    }
+    evidence: dict[str, Any] = {"captures": {}, "console_errors": [], "page_errors": [], "request_failures": []}
     result_dir.mkdir(parents=True, exist_ok=True)
     server, url = start_server(root, result_dir)
     try:
@@ -287,17 +267,13 @@ def browser_checks(root: Path, result_dir: Path) -> dict[str, Any]:
                 device_scale_factor=1,
                 reduced_motion="reduce",
             )
-            context.grant_permissions(
-                ["clipboard-read", "clipboard-write"], origin=url.rstrip("/")
-            )
+            context.grant_permissions(["clipboard-read", "clipboard-write"], origin=url.rstrip("/"))
             page = context.new_page()
             page.on(
                 "console",
-                lambda message: (
-                    evidence["console_errors"].append(message.text)
-                    if message.type == "error"
-                    else None
-                ),
+                lambda message: evidence["console_errors"].append(message.text)
+                if message.type == "error"
+                else None,
             )
             page.on("pageerror", lambda exc: evidence["page_errors"].append(str(exc)))
             page.on(
@@ -321,10 +297,7 @@ def browser_checks(root: Path, result_dir: Path) -> dict[str, Any]:
 
             desktop_hero = result_dir / "desktop_hero.png"
             page.screenshot(path=str(desktop_hero))
-            evidence["captures"]["desktop_hero"] = {
-                "path": str(desktop_hero),
-                "sha256": sha256(desktop_hero),
-            }
+            evidence["captures"]["desktop_hero"] = {"path": str(desktop_hero), "sha256": sha256(desktop_hero)}
 
             # A full-page screenshot does not reliably trigger native lazy loading
             # for images far below the viewport. Scroll through the document first,
@@ -359,19 +332,14 @@ def browser_checks(root: Path, result_dir: Path) -> dict[str, Any]:
             )
             evidence["desktop_image_state"] = image_state
             failed_images = [
-                item
-                for item in image_state
-                if not item["complete"] or item["naturalWidth"] <= 0
+                item for item in image_state if not item["complete"] or item["naturalWidth"] <= 0
             ]
             if failed_images:
                 errors.append(f"desktop images did not load: {failed_images}")
 
             desktop_full = result_dir / "desktop_full.png"
             page.screenshot(path=str(desktop_full), full_page=True)
-            evidence["captures"]["desktop_full"] = {
-                "path": str(desktop_full),
-                "sha256": sha256(desktop_full),
-            }
+            evidence["captures"]["desktop_full"] = {"path": str(desktop_full), "sha256": sha256(desktop_full)}
 
             cta = page.locator('[data-benchmark="primary-cta"]').first
             if cta.count() == 0:
@@ -385,16 +353,12 @@ def browser_checks(root: Path, result_dir: Path) -> dict[str, Any]:
                 try:
                     panel.wait_for(state="visible", timeout=5000)
                 except Exception:
-                    errors.append(
-                        "install panel did not become visible after primary CTA"
-                    )
+                    errors.append("install panel did not become visible after primary CTA")
                 desktop_install = result_dir / "desktop_install.png"
                 page.screenshot(path=str(desktop_install))
                 difference = rms_difference(before_install, desktop_install)
                 if difference < 1.0:
-                    errors.append(
-                        f"install state screenshot was effectively unchanged (RMS {difference:.3f})"
-                    )
+                    errors.append(f"install state screenshot was effectively unchanged (RMS {difference:.3f})")
                 evidence["captures"]["desktop_install"] = {
                     "path": str(desktop_install),
                     "sha256": sha256(desktop_install),
@@ -419,25 +383,17 @@ def browser_checks(root: Path, result_dir: Path) -> dict[str, Any]:
                 errors.append("orchestration state or two controls missing in browser")
             else:
                 state.scroll_into_view_if_needed()
-                initial = (
-                    state.inner_text() + "|" + (state.get_attribute("data-state") or "")
-                ).strip()
+                initial = (state.inner_text() + "|" + (state.get_attribute("data-state") or "")).strip()
                 changed = False
                 for index in range(min(controls.count(), 6)):
                     controls.nth(index).click()
                     page.wait_for_timeout(150)
-                    current = (
-                        state.inner_text()
-                        + "|"
-                        + (state.get_attribute("data-state") or "")
-                    ).strip()
+                    current = (state.inner_text() + "|" + (state.get_attribute("data-state") or "")).strip()
                     if current != initial:
                         changed = True
                         break
                 if not changed:
-                    errors.append(
-                        "orchestration controls did not change displayed state"
-                    )
+                    errors.append("orchestration controls did not change displayed state")
                 desktop_orchestration = result_dir / "desktop_orchestration.png"
                 page.screenshot(path=str(desktop_orchestration))
                 evidence["captures"]["desktop_orchestration"] = {
@@ -457,11 +413,9 @@ def browser_checks(root: Path, result_dir: Path) -> dict[str, Any]:
             mobile = mobile_context.new_page()
             mobile.on(
                 "console",
-                lambda message: (
-                    evidence["console_errors"].append(message.text)
-                    if message.type == "error"
-                    else None
-                ),
+                lambda message: evidence["console_errors"].append(message.text)
+                if message.type == "error"
+                else None,
             )
             mobile.on("pageerror", lambda exc: evidence["page_errors"].append(str(exc)))
             mobile.goto(url, wait_until="networkidle", timeout=60000)
@@ -477,10 +431,7 @@ def browser_checks(root: Path, result_dir: Path) -> dict[str, Any]:
                 errors.append(f"mobile horizontal overflow: {mobile_overflow}")
             mobile_hero = result_dir / "mobile_hero.png"
             mobile.screenshot(path=str(mobile_hero))
-            evidence["captures"]["mobile_hero"] = {
-                "path": str(mobile_hero),
-                "sha256": sha256(mobile_hero),
-            }
+            evidence["captures"]["mobile_hero"] = {"path": str(mobile_hero), "sha256": sha256(mobile_hero)}
 
             menu = mobile.locator('[data-benchmark="mobile-menu"]').first
             panel = mobile.locator('[data-benchmark="mobile-menu-panel"]').first
@@ -498,9 +449,7 @@ def browser_checks(root: Path, result_dir: Path) -> dict[str, Any]:
                 mobile.screenshot(path=str(mobile_menu))
                 difference = rms_difference(before_menu, mobile_menu)
                 if difference < 1.0:
-                    errors.append(
-                        f"mobile menu screenshot was effectively unchanged (RMS {difference:.3f})"
-                    )
+                    errors.append(f"mobile menu screenshot was effectively unchanged (RMS {difference:.3f})")
                 evidence["captures"]["mobile_menu"] = {
                     "path": str(mobile_menu),
                     "sha256": sha256(mobile_menu),
@@ -550,16 +499,7 @@ def main() -> int:
         target = result_dir / "verification.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(output, indent=2, sort_keys=True), encoding="utf-8")
-    print(
-        json.dumps(
-            {
-                "ok": output["ok"],
-                "output": str(target),
-                "errors": static["errors"]
-                + (output.get("browser", {}).get("errors", [])),
-            }
-        )
-    )
+    print(json.dumps({"ok": output["ok"], "output": str(target), "errors": static["errors"] + (output.get("browser", {}).get("errors", []))}))
     return 0 if output["ok"] else 1
 
 

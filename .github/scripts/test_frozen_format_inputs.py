@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Formatting may edit sources, but never captured evidence or input packets."""
+"""Formatting may edit sources, but never the hash-pinned qa/ and benchmarks/ trees."""
 
 import importlib.util
 from pathlib import Path
@@ -19,26 +19,30 @@ SPEC.loader.exec_module(FORMAT)
 
 
 class FrozenFormatInputsTests(unittest.TestCase):
-    def test_captured_and_benchmark_packets_are_frozen(self):
+    def test_evidence_and_benchmark_trees_are_frozen(self):
         for path in [
             "qa/security-levels/runs/G17/collected/fixture/workspace/src/notes.py",
             "qa/security-levels/runs/G17/collected/evidence/example.rs",
+            # Verifiers and tools are pinned by manifests too (ingress contract).
+            "qa/security-levels/ingress-contract/verify.py",
+            "qa/security-levels/tools/collect.py",
+            "qa/portfolio/example/tools/make_packet.py",
             "benchmarks/coding/tasks/apigate/bugged/src/example.rs",
             "benchmarks/coding/tasks/apigate/tests_pristine/test_example.py",
+            "benchmarks/coding/tasks/apigate/verifier/verify.py",
+            "benchmarks/coding/runner.py",
         ]:
             with self.subTest(path=path):
                 self.assertTrue(FORMAT.is_frozen_artifact(Path(path)))
 
-    def test_live_sources_verifiers_and_similar_names_remain_in_scope(self):
+    def test_live_sources_and_similar_names_remain_in_scope(self):
         for path in [
             "codex-rs/core/src/session/mod.rs",
-            "qa/security-levels/tools/collect.py",
-            "qa/security-levels/collected_tools/check.py",
-            "benchmarks/coding/tasks/apigate/verifier/verify.py",
-            "benchmarks/coding/tasks/apigate/tests_hidden/test_example.py",
-            "benchmarks/coding/runner.py",
+            "codex-rs/qa/src/lib.rs",
+            "scripts/qa/tart/check.py",
             "scripts/collected/example.py",
-            "docs/collected/example.py",
+            "docs/benchmarks/example.py",
+            "qa_tools/check.py",
         ]:
             with self.subTest(path=path):
                 self.assertFalse(FORMAT.is_frozen_artifact(Path(path)))
@@ -81,7 +85,7 @@ class FrozenFormatInputsTests(unittest.TestCase):
             "codex-rs/state/BUILD.bazel",
             "qa/runs/G17/collected/fixture/BUILD.bazel",
             "benchmarks/coding/tasks/example/bugged/BUILD.bazel",
-            "qa/collected_tools/BUILD.bazel",
+            "scripts/qa/BUILD.bazel",
         ]
         with patch.object(
             FORMAT.subprocess, "check_output", return_value="\0".join(paths).encode()

@@ -126,9 +126,7 @@ class IngressContractVerifierTest(unittest.TestCase):
             for item in manifest["fixtures"]
             if item["id"] == "quarantine-v1-transitions"
         )
-        fixture["sha256"] = hashlib.sha256(
-            (self.root / relative).read_bytes()
-        ).hexdigest()
+        fixture["sha256"] = hashlib.sha256((self.root / relative).read_bytes()).hexdigest()
         self.save("manifest.json", manifest)
         self.assert_verification_fails("quarantine v1 semantics changed")
 

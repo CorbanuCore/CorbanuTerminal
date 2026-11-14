@@ -1,5 +1,4 @@
 """Local round-77 controls; synthetic owner/SSH responses are not admission."""
-
 import contextlib
 import io
 import json
@@ -32,33 +31,17 @@ class Accuracy(unittest.TestCase):
         expected = json.loads((PRIOR / "packet-rebinding.json").read_text())["binding"]
         (cls.harness / "fixtures.py").write_text("CANDIDATE = " + repr(expected) + "\n")
         # Local APFS clone: no guest staging or package execution.
-        subprocess.run(
-            [
-                "/bin/cp",
-                "-cpR",
-                str(PRIOR / "artifacts/handoff-root"),
-                str(cls.root / "bundle"),
-            ],
-            check=True,
-        )
-        subprocess.run(
-            [
-                "/bin/cp",
-                "-cpR",
-                str(PRIOR / "artifacts/rebound"),
-                str(cls.root / "coordinator-packets"),
-            ],
-            check=True,
-        )
+        subprocess.run(["/bin/cp", "-cpR", str(PRIOR / "artifacts/handoff-root"),
+                        str(cls.root / "bundle")], check=True)
+        subprocess.run(["/bin/cp", "-cpR", str(PRIOR / "artifacts/rebound"),
+                        str(cls.root / "coordinator-packets")], check=True)
         cls.key = cls.root / "synthetic-key"
         cls.key.write_text("SYNTHETIC; NOT A PRIVATE KEY\n")
         cls.key.chmod(0o600)
         cls.checker = cls.root / "synthetic-owner-check"
-        cls.checker.write_text(
-            "#!" + sys.executable + "\nimport json, sys\n"
-            "print(json.dumps(dict(check=sys.argv[2], status='passed', "
-            "evidence=['SYNTHETIC CONTROL ONLY'])))\n"
-        )
+        cls.checker.write_text("#!" + sys.executable + "\nimport json, sys\n"
+                              "print(json.dumps(dict(check=sys.argv[2], status='passed', "
+                              "evidence=['SYNTHETIC CONTROL ONLY'])))\n")
         cls.checker.chmod(0o700)
 
     @classmethod
@@ -69,25 +52,11 @@ class Accuracy(unittest.TestCase):
         cls.tmp.cleanup()
 
     def args(self):
-        return preflight.parser().parse_args(
-            [
-                "--harness",
-                str(self.harness),
-                "--bundle",
-                str(self.root / "bundle"),
-                "--packets",
-                str(self.root / "coordinator-packets"),
-                "--receiving",
-                str(self.root),
-                "--key",
-                str(self.key),
-                "--owner-check",
-                str(self.checker),
-                "--owner-check-sha256",
-                stage.sha(self.checker),
-                "--contact-guest",
-            ]
-        )
+        return preflight.parser().parse_args([
+            "--harness", str(self.harness), "--bundle", str(self.root / "bundle"),
+            "--packets", str(self.root / "coordinator-packets"), "--receiving", str(self.root),
+            "--key", str(self.key), "--owner-check", str(self.checker),
+            "--owner-check-sha256", stage.sha(self.checker), "--contact-guest"])
 
     def run_preflight(self, args, identity=None):
         calls = []
@@ -110,39 +79,18 @@ class Accuracy(unittest.TestCase):
     def test_wrapper_preserves_real_process_exit_codes(self):
         rows = []
         for expected in (0, 7, 23):
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    "-B",
-                    str(GUARDS / "dispatch_guard.py"),
-                    "--harness",
-                    str(self.harness),
-                    "--bundle",
-                    str(self.root / "bundle"),
-                    "--packets",
-                    str(self.root / "coordinator-packets"),
-                    "--",
-                    sys.executable,
-                    "-I",
-                    "-B",
-                    "-c",
-                    "raise SystemExit(" + str(expected) + ")",
-                ],
-                capture_output=True,
-                text=True,
-                env={"PATH": "/usr/bin:/bin", "HOME": str(self.root)},
-            )
+            result = subprocess.run([
+                sys.executable, "-B", str(GUARDS / "dispatch_guard.py"),
+                "--harness", str(self.harness), "--bundle", str(self.root / "bundle"),
+                "--packets", str(self.root / "coordinator-packets"), "--",
+                sys.executable, "-I", "-B", "-c", "raise SystemExit(" + str(expected) + ")"],
+                capture_output=True, text=True,
+                env={"PATH": "/usr/bin:/bin", "HOME": str(self.root)})
             self.assertEqual(result.returncode, expected)
             self.assertEqual(result.stderr, "")
             self.assertEqual(json.loads(result.stdout)["checked_packets"], 288)
-            rows.append(
-                dict(
-                    child_exit=expected,
-                    wrapper_exit=result.returncode,
-                    checked_packets=288,
-                    stderr=result.stderr,
-                )
-            )
+            rows.append(dict(child_exit=expected, wrapper_exit=result.returncode,
+                             checked_packets=288, stderr=result.stderr))
         OBSERVATIONS["real_exit_code_demonstration"] = rows
 
     def test_missing_inputs_reports_every_precondition_without_contact(self):
@@ -154,11 +102,7 @@ class Accuracy(unittest.TestCase):
         OBSERVATIONS["missing_inputs"] = report
 
     def test_all_checks_with_synthetic_owner_and_ssh(self):
-        good = (
-            'Darwin arm64\n503\nagent\n26.2\n"IOPlatformUUID" = "'
-            + stage.GUEST_UUID
-            + '"\n'
-        )
+        good = 'Darwin arm64\n503\nagent\n26.2\n"IOPlatformUUID" = "' + stage.GUEST_UUID + '"\n'
         code, report, calls = self.run_preflight(self.args(), good)
         self.assertEqual(code, 0)
         self.assertEqual(len(calls), 1)
@@ -186,20 +130,13 @@ class Accuracy(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    suite = unittest.TestSuite(
-        [
-            unittest.defaultTestLoader.loadTestsFromTestCase(Guards),
-            unittest.defaultTestLoader.loadTestsFromTestCase(Accuracy),
-        ]
-    )
+    suite = unittest.TestSuite([
+        unittest.defaultTestLoader.loadTestsFromTestCase(Guards),
+        unittest.defaultTestLoader.loadTestsFromTestCase(Accuracy)])
     result = unittest.TextTestRunner(verbosity=2).run(suite)
-    OBSERVATIONS["summary"] = dict(
-        run=result.testsRun,
-        failures=len(result.failures),
-        errors=len(result.errors),
-        guest_contact=False,
-        functional_cases_executed=0,
-    )
+    OBSERVATIONS["summary"] = dict(run=result.testsRun, failures=len(result.failures),
+                                    errors=len(result.errors), guest_contact=False,
+                                    functional_cases_executed=0)
     with (HERE / "controls.json").open("x") as stream:
         json.dump(OBSERVATIONS, stream, indent=2, sort_keys=True)
         stream.write("\n")

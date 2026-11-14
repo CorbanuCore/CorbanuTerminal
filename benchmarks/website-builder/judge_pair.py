@@ -132,14 +132,7 @@ def site_schema() -> dict[str, Any]:
                 "maxItems": 8,
             },
         },
-        "required": [
-            "rubric",
-            "subtotal",
-            "penalties",
-            "total",
-            "strengths",
-            "weaknesses",
-        ],
+        "required": ["rubric", "subtotal", "penalties", "total", "strengths", "weaknesses"],
         "additionalProperties": False,
     }
 

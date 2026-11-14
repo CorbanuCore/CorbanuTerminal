@@ -10,9 +10,7 @@ from typing import NoReturn
 
 ROOT = Path(__file__).resolve().parent
 ALLOWED_KINDS = {"raw", "rendered", "sanitized", "quarantine-transitions"}
-EXPECTED_SCHEMA_SHA256 = (
-    "eb5637086be6cc07d4d7b8bffedc0a16d141d81772ce11e4b903e4053e997873"
-)
+EXPECTED_SCHEMA_SHA256 = "eb5637086be6cc07d4d7b8bffedc0a16d141d81772ce11e4b903e4053e997873"
 
 
 def fail(message: str) -> NoReturn:
@@ -52,26 +50,18 @@ def fixture_path(relative: PurePosixPath) -> Path:
 def fixture_inventory() -> set[str]:
     paths: set[str] = set()
     fixture_root = ROOT / "fixtures"
-    for directory, directory_names, file_names in os.walk(
-        fixture_root, followlinks=False
-    ):
+    for directory, directory_names, file_names in os.walk(fixture_root, followlinks=False):
         base = Path(directory)
         for name in directory_names:
             candidate = base / name
             if candidate.is_symlink():
-                fail(
-                    f"fixture inventory contains symlink: {candidate.relative_to(ROOT)}"
-                )
+                fail(f"fixture inventory contains symlink: {candidate.relative_to(ROOT)}")
         for name in file_names:
             candidate = base / name
             if candidate.is_symlink():
-                fail(
-                    f"fixture inventory contains symlink: {candidate.relative_to(ROOT)}"
-                )
+                fail(f"fixture inventory contains symlink: {candidate.relative_to(ROOT)}")
             if not candidate.is_file():
-                fail(
-                    f"fixture inventory contains non-file: {candidate.relative_to(ROOT)}"
-                )
+                fail(f"fixture inventory contains non-file: {candidate.relative_to(ROOT)}")
             paths.add(candidate.relative_to(ROOT).as_posix())
     return paths
 
@@ -195,10 +185,7 @@ def main() -> None:
         if (
             not isinstance(boundaries, list)
             or boundaries != sorted(set(boundaries))
-            or any(
-                not isinstance(point, int) or point <= 0 or point >= len(sanitized)
-                for point in boundaries
-            )
+            or any(not isinstance(point, int) or point <= 0 or point >= len(sanitized) for point in boundaries)
             or segmentation.get("count") != len(boundaries) + 1
             or segmentation.get("reassembly_sha256")
             != hashlib.sha256(sanitized).hexdigest()
@@ -224,24 +211,12 @@ def main() -> None:
         "authority": "none",
         "initial": "pending_reassembly",
         "transitions": [
-            {
-                "from": "pending_reassembly",
-                "event": "complete",
-                "to": "pending_screening",
-            },
-            {
-                "from": "pending_reassembly",
-                "event": "malformed_or_cancelled",
-                "to": "unavailable",
-            },
+            {"from": "pending_reassembly", "event": "complete", "to": "pending_screening"},
+            {"from": "pending_reassembly", "event": "malformed_or_cancelled", "to": "unavailable"},
             {"from": "pending_screening", "event": "allow", "to": "screened_untrusted"},
             {"from": "pending_screening", "event": "suspicious", "to": "quarantined"},
             {"from": "pending_screening", "event": "hostile", "to": "rejected"},
-            {
-                "from": "pending_screening",
-                "event": "missing_stale_mismatch_or_timeout",
-                "to": "unavailable",
-            },
+            {"from": "pending_screening", "event": "missing_stale_mismatch_or_timeout", "to": "unavailable"},
         ],
         "forbidden": [
             "release_prefix",

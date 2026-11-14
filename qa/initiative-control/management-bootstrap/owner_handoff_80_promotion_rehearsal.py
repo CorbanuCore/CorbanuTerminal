@@ -1,5 +1,4 @@
 """Run the exact promotion recipe against a disposable launchd installation."""
-
 from argparse import Namespace
 import json
 import os
@@ -23,9 +22,7 @@ from test_owner_promotion_94 import fixture_manifest
 def main():
     base = Path(tempfile.mkdtemp(prefix="op80-", dir="/private/tmp"))
     schedule, runtime, state, runs, worktree, publish = (
-        base / name
-        for name in ("schedule", "runtime", "state", "runs", "worktree", "publish")
-    )
+        base / name for name in ("schedule", "runtime", "state", "runs", "worktree", "publish"))
     for path in (schedule, runtime, runs, worktree, publish):
         path.mkdir(mode=0o700)
     for path in Path(owner.__file__).parent.glob("*.py"):
@@ -40,103 +37,43 @@ def main():
     allocation["timeout_seconds"] = 180
     brief = base / "brief.json"
     f.write_json(brief, {"task": "synthetic promotion probe"})
-    cycle_inputs = dict(
-        allocation="promotion",
-        base_commit="a" * 40,
-        brief_file=str(brief),
-        brief_sha256=f.file_digest(brief),
-        model="fixture-model",
-        reasoning_effort="high",
-        task="Read the frozen brief",
-        worktree=str(worktree),
-    )
+    cycle_inputs = dict(allocation="promotion", base_commit="a" * 40, brief_file=str(brief),
+                        brief_sha256=f.file_digest(brief), model="fixture-model",
+                        reasoning_effort="high", task="Read the frozen brief", worktree=str(worktree))
     for key, inputs, replace in (
         ("promotion-flat", cycle_inputs, False),
-        (
-            "promotion-work",
-            freeze_worker_inputs(cycle_inputs, provider="fixture", policy="--yolo"),
-            True,
-        ),
+        ("promotion-work", freeze_worker_inputs(cycle_inputs, provider="fixture", policy="--yolo"), True),
     ):
         allocation["inputs"] = {k: v for k, v in inputs.items() if k != "allocation"}
-        c.put_allocation(
-            "promotion",
-            allocation,
-            replace,
-            c.snapshot()["revision"],
-            {"fixture": True},
-        )
+        c.put_allocation("promotion", allocation, replace, c.snapshot()["revision"], {"fixture": True})
         c.event({"id": key})
         packet = c.begin_manager()
-        action = dict(
-            id=key,
-            kind="repair",
-            workstream="delivery",
-            sprint="PF80",
-            rationale="synthetic promotion rehearsal",
-            timeout_seconds=180,
-            inputs={"allocation": "promotion", **allocation["inputs"]},
-            expected_revision=packet["state_revision"],
-        )
-        c.accept_decision(
-            packet["manager_run"],
-            dict(state_revision=packet["state_revision"], actions=[action]),
-            {"fixture": True},
-        )
+        action = dict(id=key, kind="repair", workstream="delivery", sprint="PF80",
+                      rationale="synthetic promotion rehearsal", timeout_seconds=180,
+                      inputs={"allocation": "promotion", **allocation["inputs"]},
+                      expected_revision=packet["state_revision"])
+        c.accept_decision(packet["manager_run"],
+                          dict(state_revision=packet["state_revision"], actions=[action]),
+                          {"fixture": True})
     config_path = schedule / "config.json"
-    config = dict(
-        coordinator=str(state),
-        worktrees=[str(worktree)],
-        package_digest=owner.package_digest(),
-        manager_enabled=False,
-    )
+    config = dict(coordinator=str(state), worktrees=[str(worktree)],
+                  package_digest=owner.package_digest(), manager_enabled=False)
     f.write_json(config_path, config)
     owner.setup(config_path)
-    owner.arm_owner(
-        config_path,
-        dict(
-            decision_id="synthetic-initial",
-            revision=1,
-            authority="disposable rehearsal",
-            scope="fixture-only",
-            generation=1,
-            config_digest=digest(config),
-            package_digest=owner.package_digest(),
-        ),
-    )
+    owner.arm_owner(config_path, dict(decision_id="synthetic-initial", revision=1,
+                    authority="disposable rehearsal", scope="fixture-only", generation=1,
+                    config_digest=digest(config), package_digest=owner.package_digest()))
     binary = base / "synthetic-worker"
-    f.write_file(
-        binary,
-        FIXTURE.replace("PYTHON", str(Path(sys.executable).resolve()), 1),
-        mode=0o700,
-    )
+    f.write_file(binary, FIXTURE.replace("PYTHON", str(Path(sys.executable).resolve()), 1), mode=0o700)
     transport = base / "transport.json"
-    f.write_json(
-        transport,
-        dict(
-            kind="tmux",
-            binary=str(binary),
-            binary_sha256=f.file_digest(binary),
-            tmux=str(Path(shutil.which("tmux")).resolve()),
-            runs_dir=str(runs),
-            auth_link=str(base / "unused/auth.json"),
-        ),
-    )
+    f.write_json(transport, dict(kind="tmux", binary=str(binary), binary_sha256=f.file_digest(binary),
+                                tmux=str(Path(shutil.which("tmux")).resolve()), runs_dir=str(runs),
+                                auth_link=str(base / "unused/auth.json")))
     f.write_file(worktree / "allow-ack", b"synthetic ACK allowed")
     python = Path(sys.executable).resolve()
-    args = Namespace(
-        owner="install",
-        root=schedule,
-        label="com.corbanu.initiative-owner.test-promotion80-" + str(os.getpid()),
-        python=python,
-        python_sha256=f.file_digest(python),
-        runtime=runtime,
-        config=config_path,
-        interval=30,
-        publish_state=publish,
-        confirm_live=False,
-        domain="user",
-    )
+    args = Namespace(owner="install", root=schedule, label="com.corbanu.initiative-owner.test-promotion80-" + str(os.getpid()),
+                     python=python, python_sha256=f.file_digest(python), runtime=runtime,
+                     config=config_path, interval=30, publish_state=publish, confirm_live=False, domain="user")
     try:
         activate.owner_activation(args)
         end = time.monotonic() + 20
@@ -150,54 +87,23 @@ def main():
         # Synthetic declarations exercise gate mechanics, not real inference.
         # This file explicitly disclaims qualification and is never a live receipt.
         proof = base / "synthetic-preflight.md"
-        f.write_file(
-            proof,
-            b"SYNTHETIC test declarations only; NO real qualification or human approval.",
-        )
+        f.write_file(proof, b"SYNTHETIC test declarations only; NO real qualification or human approval.")
         preflight = base / "preflight.json"
-        f.write_json(
-            preflight,
-            fixture_manifest(
-                proof,
-                c.snapshot(),
-                "promotion-flat",
-                "promotion-work",
-                owner.load(transport),
-            ),
-        )
-        env = dict(
-            OWNER94_PREFLIGHT=str(preflight),
-            PATH=f.SAFE_PATH,
-            PYTHONPATH=str(Path(owner.__file__).parent),
-            PYTHONDONTWRITEBYTECODE="1",
-            OWNER80_SCHEDULE=str(schedule),
-            OWNER80_TRANSPORT=str(transport),
-            OWNER80_ACTIONS="promotion-work",
-            OWNER80_DECISION_ID="synthetic-promotion",
-            OWNER80_DECISION_REVISION="1",
-            OWNER80_AUTHORITY="disposable rehearsal only",
-            CORBANU_TEST_NO_NATIVE_KEYRING="1",
-            **{
-                key: str(base)
-                for key in ("HOME", "CODEX_HOME", "CORBANU_HOME", "PFTERMINAL_HOME")
-            },
-        )
-        result = subprocess.run(
-            [sys.executable, "-B", "-c", code],
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=90,
-        )
-        emit(
-            "recipe", exit=result.returncode, stdout=result.stdout, stderr=result.stderr
-        )
+        f.write_json(preflight, fixture_manifest(proof, c.snapshot(), "promotion-flat",
+                                                 "promotion-work", owner.load(transport)))
+        env = dict(OWNER94_PREFLIGHT=str(preflight),
+                   PATH=f.SAFE_PATH, PYTHONPATH=str(Path(owner.__file__).parent), PYTHONDONTWRITEBYTECODE="1",
+                   OWNER80_SCHEDULE=str(schedule), OWNER80_TRANSPORT=str(transport),
+                   OWNER80_ACTIONS="promotion-work", OWNER80_DECISION_ID="synthetic-promotion",
+                   OWNER80_DECISION_REVISION="1", OWNER80_AUTHORITY="disposable rehearsal only",
+                   CORBANU_TEST_NO_NATIVE_KEYRING="1",
+                   **{key: str(base) for key in ("HOME", "CODEX_HOME", "CORBANU_HOME", "PFTERMINAL_HOME")})
+        result = subprocess.run([sys.executable, "-B", "-c", code], env=env, capture_output=True, text=True, timeout=90)
+        emit("recipe", exit=result.returncode, stdout=result.stdout, stderr=result.stderr)
         assert result.returncode == 0
         end = time.monotonic() + 100
         while c.snapshot()["actions"]["promotion-work"]["status"] != "returned":
-            assert time.monotonic() < end, (
-                "promoted recurring owner did not finish work"
-            )
+            assert time.monotonic() < end, "promoted recurring owner did not finish work"
             time.sleep(0.2)
         # Returned is committed before the tick releases its owner lock. Status
         # is advisory and can be unavailable in that interval; preserve attempts.
@@ -214,11 +120,7 @@ def main():
         with c.connection() as db:
             assert db.execute("SELECT COUNT(*) FROM audit").fetchone()[0] > before
         assert (worktree / "performed.txt").read_text() == "4\n"
-        emit(
-            "promoted_work_returned",
-            status=status,
-            tick=owner.load(schedule / "tick.json"),
-        )
+        emit("promoted_work_returned", status=status, tick=owner.load(schedule / "tick.json"))
         owner.disarm_owner(config_path, 3)
     finally:
         if (schedule / "installation.json").exists():
@@ -227,16 +129,8 @@ def main():
         for path in runs.glob("*/worker.json"):
             worker = Worker(path.parent)
             worker.tmux("kill-server", check=False)
-        emit(
-            "cleanup", service=owner.service(args.label, "user/" + str(os.getuid()))[0]
-        )
-    emit(
-        "PASS",
-        root=str(base),
-        exact_markdown_recipe=True,
-        live_access=False,
-        real_inference=False,
-    )
+        emit("cleanup", service=owner.service(args.label, "user/" + str(os.getuid()))[0])
+    emit("PASS", root=str(base), exact_markdown_recipe=True, live_access=False, real_inference=False)
 
 
 if __name__ == "__main__":

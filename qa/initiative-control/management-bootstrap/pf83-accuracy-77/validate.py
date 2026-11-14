@@ -1,5 +1,4 @@
 """Reuse the isolated gate runner with new, write-once round-77 evidence."""
-
 from pathlib import Path
 import sys
 

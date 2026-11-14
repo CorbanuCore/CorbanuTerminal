@@ -51,13 +51,9 @@ class HiddenContractTests(unittest.TestCase):
 
     def test_replay_complex_balances_and_diagnostics(self) -> None:
         state = replay_events(EVENTS_COMPLEX, as_of="2026-01-31T23:59:59Z")
-        self.assertEqual(
-            money_path(state, "accounts", "alice", "USD", "posted"), "88.51"
-        )
+        self.assertEqual(money_path(state, "accounts", "alice", "USD", "posted"), "88.51")
         self.assertEqual(money_path(state, "accounts", "alice", "USD", "held"), "20.00")
-        self.assertEqual(
-            money_path(state, "accounts", "alice", "USD", "available"), "68.51"
-        )
+        self.assertEqual(money_path(state, "accounts", "alice", "USD", "available"), "68.51")
         self.assertEqual(money_path(state, "accounts", "bob", "USD", "posted"), "-1.25")
         self.assertEqual(state["applied_event_ids"][:3], ["seed", "dep", "dup"])
         codes = [d["code"] for d in state["diagnostics"]]
@@ -72,9 +68,7 @@ class HiddenContractTests(unittest.TestCase):
 
     def test_as_of_filter_excludes_later_events(self) -> None:
         state = replay_events(EVENTS_COMPLEX, as_of="2026-01-05T23:59:59Z")
-        self.assertEqual(
-            money_path(state, "accounts", "alice", "USD", "posted"), "91.01"
-        )
+        self.assertEqual(money_path(state, "accounts", "alice", "USD", "posted"), "91.01")
         self.assertEqual(money_path(state, "accounts", "alice", "USD", "held"), "20.00")
         self.assertNotIn("bob", state["accounts"])
 
@@ -96,9 +90,7 @@ class HiddenContractTests(unittest.TestCase):
         state = replay_events(lines)
         self.assertEqual(money_path(state, "accounts", "a", "USD", "posted"), "5.00")
         self.assertEqual(money_path(state, "accounts", "a", "USD", "held"), "0.00")
-        self.assertIn(
-            "insufficient_available", [d["code"] for d in state["diagnostics"]]
-        )
+        self.assertIn("insufficient_available", [d["code"] for d in state["diagnostics"]])
 
     def test_monthly_report_flow_accounting(self) -> None:
         report = monthly_report(EVENTS_COMPLEX, month="2026-01")
@@ -136,21 +128,10 @@ class HiddenContractTests(unittest.TestCase):
             text=True,
         )
         replay_data = json.loads(replay_out)
-        self.assertEqual(
-            money_path(replay_data, "accounts", "alice", "USD", "posted"), "88.51"
-        )
+        self.assertEqual(money_path(replay_data, "accounts", "alice", "USD", "posted"), "88.51")
 
         report_out = subprocess.check_output(
-            [
-                sys.executable,
-                "-m",
-                "eventforge.cli",
-                "report",
-                events_path,
-                "--month",
-                "2026-01",
-                "--json",
-            ],
+            [sys.executable, "-m", "eventforge.cli", "report", events_path, "--month", "2026-01", "--json"],
             cwd=repo,
             env=env,
             text=True,

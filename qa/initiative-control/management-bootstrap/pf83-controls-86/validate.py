@@ -1,5 +1,4 @@
 """Use the guarded gate with fresh round-86 receipts and the shared test cache."""
-
 from pathlib import Path
 import sys
 

@@ -1,5 +1,4 @@
 """Verify disjoint saved store rows, without inferring empty-page session roots."""
-
 import hashlib
 import json
 from pathlib import Path
@@ -16,16 +15,12 @@ def compare(bindings, identities, before, during):
     for row in before["draft_accounting_attempts"]:
         payload = json.loads(row["payload"])
         assert (row["attempt_id"], row["request_id"]) == (
-            payload["attempt_id"],
-            payload["request_id"],
-        ), "row/payload identity mismatch"
+            payload["attempt_id"], payload["request_id"]), "row/payload identity mismatch"
         right.append(payload)
     assert len(left) == len(right) == 4, "expected four rows per read-back"
     assert before == during, "round-62 store changed during fresh reader"
     assert set(identities) == {"historical_and_mixed", "missing_price", "no_usage"}
-    assert {a["thread_id"] for a in left} == set(identities.values()), (
-        "round-61 thread mapping mismatch"
-    )
+    assert {a["thread_id"] for a in left} == set(identities.values()), "round-61 thread mapping mismatch"
     populations = {}
     for key, count in (("attempt_id", 4), ("request_id", 4), ("thread_id", 3)):
         a, b = ({row[key] for row in rows} for rows in (left, right))
@@ -38,12 +33,8 @@ def compare(bindings, identities, before, during):
 def main():
     output = Path(sys.argv[1])
     output.mkdir(parents=True, exist_ok=False)
-    paths = [
-        source61 / "native-bindings.json",
-        source61 / "identities.json",
-        source62 / "store-before-fresh-reader.json",
-        source62 / "store-during-fresh-reader.json",
-    ]
+    paths = [source61 / "native-bindings.json", source61 / "identities.json",
+             source62 / "store-before-fresh-reader.json", source62 / "store-during-fresh-reader.json"]
     inputs = [json.loads(p.read_text()) for p in paths]
     populations = compare(*inputs)
     controls = []
@@ -81,35 +72,17 @@ def main():
         controls.append(dict(mutation="changed-during-reader", error=str(error)))
     else:
         raise AssertionError("changed store accepted")
-    report = dict(
-        passed=True,
-        rows_per_dataset=4,
-        populations=populations,
-        round62_before_during_equal=True,
-        controls=controls,
-        sources=[
-            dict(
-                path=str(p.relative_to(here.parent)),
-                sha256=hashlib.sha256(p.read_bytes()).hexdigest(),
-            )
-            for p in paths
-        ],
-        limitation="Disjoint saved store attempt/request/thread identifiers only. "
-        "This does not bind the root or attempt population resolved by either "
-        "byte-identical empty page, prove capture-time store attachment, or "
-        "independently authenticate the saved read-backs.",
-    )
+    report = dict(passed=True, rows_per_dataset=4, populations=populations,
+                  round62_before_during_equal=True, controls=controls,
+                  sources=[dict(path=str(p.relative_to(here.parent)),
+                                sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in paths],
+                  limitation="Disjoint saved store attempt/request/thread identifiers only. "
+                  "This does not bind the root or attempt population resolved by either "
+                  "byte-identical empty page, prove capture-time store attachment, or "
+                  "independently authenticate the saved read-backs.")
     (output / "results.json").write_text(json.dumps(report, indent=2) + "\n")
-    print(
-        json.dumps(
-            dict(
-                rows_per_dataset=4,
-                disjoint_identity_fields=3,
-                unchanged_round62=True,
-                negative_controls=len(controls),
-            )
-        )
-    )
+    print(json.dumps(dict(rows_per_dataset=4, disjoint_identity_fields=3,
+                          unchanged_round62=True, negative_controls=len(controls))))
 
 
 if __name__ == "__main__":

@@ -1,5 +1,4 @@
 """Run the existing isolated gate with fresh, write-once round-83 receipts."""
-
 from pathlib import Path
 import sys
 
