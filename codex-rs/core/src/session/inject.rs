@@ -332,6 +332,28 @@ impl Session {
             .await;
     }
 
+    /// Corbanu: records annotated items under a host-chosen origin (PF-30), e.g. compaction
+    /// output as the model's own.
+    pub(crate) async fn record_annotated_conversation_items_from(
+        &self,
+        turn_context: &TurnContext,
+        model_info: &ModelInfo,
+        items: Vec<ResponseItemEnvelope>,
+        origin: Option<crate::security::ingress::MessageOrigin>,
+    ) {
+        let (annotated_items, image_preparations) = self
+            .prepare_annotated_conversation_items_for_history(turn_context, model_info, items)
+            .await;
+        self.record_prepared_conversation_items_from(
+            turn_context,
+            model_info,
+            annotated_items,
+            image_preparations,
+            origin,
+        )
+        .await;
+    }
+
     /// Injects items into active work, or records them without starting a turn.
     pub(crate) async fn inject_no_new_turn(
         &self,

@@ -529,8 +529,9 @@ async fn readmit_interrupted_input(
             .await;
             let message = match result {
                 // A running turn that cannot take the input now (a review or compaction, other
-                // permissions under D532, another output schema) gets it for its next turn,
-                // as a refused follow-up does under D529 (a): held input is never dropped.
+                // permissions under D532, another output schema) holds it as deferred input,
+                // as a refused follow-up does under D529 (a). A natural turn end re-admits it;
+                // a turn that fails records it without starting a turn (open ledger row).
                 Ok(codex_protocol::turn_input::TurnInputSubmission::NotSubmitted {
                     reason:
                         codex_protocol::turn_input::NotSubmittedReason::AuthorizationChanged
@@ -564,9 +565,17 @@ async fn readmit_interrupted_input(
                     .await
                     .as_ref()
                     .and_then(|turn| turn.finishing.clone());
-                if let Some(finishing) = finishing {
-                    finishing.cancelled().await;
-                }
+                let items = match finishing {
+                    Some(finishing) => {
+                        finishing.cancelled().await;
+                        // A turn may have started during the wait: join it if so.
+                        match sess.inject_extension_if_running(items).await {
+                            Ok(()) => return,
+                            Err(items) => items,
+                        }
+                    }
+                    None => items,
+                };
                 let context = sess.new_default_turn().await;
                 sess.record_annotated_conversation_items(&context, context.model_info(), items)
                     .await;
@@ -748,11 +757,12 @@ pub(super) async fn submission_loop(
                         &result,
                         Ok(codex_protocol::turn_input::SuspendTurnOutcome::Suspended { .. })
                     );
-                    let _ = reply.send(result);
                     if should_exit {
-                        // #872: nothing writes this thread's items after its suspension.
+                        // #872: nothing writes this thread's items after its suspension. Noted
+                        // before the reply, so a resume of this thread id is not affected.
                         crate::home_access::note_thread_ended(sess.thread_id());
                     }
+                    let _ = reply.send(result);
                     should_exit
                 }
                 Op::ThreadSettings {
