@@ -309,6 +309,37 @@ fn network_hook_cwd_overrides_only_local_commands() {
     }
 }
 
+/// #722 (D246): a permission hook may allow a local network request, but not
+/// a remote one (one not in the turn counts as remote unless it is the local
+/// id); other actions are unaffected.
+#[tokio::test]
+async fn issue_722_hook_may_not_allow_remote_network_requests() {
+    let (_session, turn, _events) = make_session_and_context_with_rx().await;
+    let environments = crate::environment_selection::TurnEnvironmentSnapshot::default();
+    let cwd = AbsolutePathBuf::try_from(std::env::temp_dir()).unwrap();
+    let network = |environment_id: &str| ApprovalAction::NetworkAccess {
+        id: "network-1".into(),
+        turn_id: "turn-1".into(),
+        environment_id: environment_id.into(),
+        target: "https://example.com:443".into(),
+        host: "example.com".into(),
+        protocol: NetworkApprovalProtocol::Https,
+        port: 443,
+        trigger: None,
+        hook_command: "curl https://example.com".into(),
+        hook_run_id: "hook-1".into(),
+        command: vec!["network-access".into(), "https://example.com:443".into()],
+        cwd: cwd.clone(),
+    };
+
+    assert!(
+        network(codex_exec_server::LOCAL_ENVIRONMENT_ID).permission_hook_may_allow(&environments)
+    );
+    assert!(!network("remote").permission_hook_may_allow(&environments));
+    let (command, _) = exec_approval(&turn, "call-1", ApprovalsReviewer::User);
+    assert!(command.permission_hook_may_allow(&environments));
+}
+
 /// #437: what the inspector lists for each refused approval.
 #[test]
 fn sec_437_refused_approvals_are_described_for_the_inspector() {
@@ -398,7 +429,7 @@ async fn issue_513_a_remembered_approval_is_not_a_person_asked_now() {
 
 /// A command approval context for the person (no automatic reviewer).
 fn exec_approval(
-    turn: &crate::session::turn_context::TurnContext,
+    turn: &Arc<crate::session::turn_context::TurnContext>,
     call_id: &str,
     reviewer: ApprovalsReviewer,
 ) -> (ApprovalAction, ApprovalContext) {

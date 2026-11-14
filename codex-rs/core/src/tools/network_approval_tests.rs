@@ -135,7 +135,10 @@ async fn execution_cancellation_respects_network_approval_boundary(
             return;
         }
         ExecutionCancellationTiming::PendingReview => {
-            service.record_call_outcome("execution-1", "original execution denial".to_string());
+            service.record_call_outcome(
+                "execution-1",
+                NetworkApprovalOutcome::DeniedByPolicy("original execution denial".to_string()),
+            );
             NetworkDecision::deny("not_allowed")
         }
         ExecutionCancellationTiming::AcceptedReview => {
@@ -177,7 +180,10 @@ async fn execution_cancellation_respects_network_approval_boundary(
             assert!(poll!(decision.as_mut()).is_pending());
             // The visible prompt closed, but the queued execution still holds tool results.
             assert!(*session.subscribe_elicitation_pause_state().borrow());
-            service.record_call_outcome("execution-1", "original execution denial".to_string());
+            service.record_call_outcome(
+                "execution-1",
+                NetworkApprovalOutcome::DeniedByPolicy("original execution denial".to_string()),
+            );
             assert!(poll!(decision.as_mut()).is_pending());
             drop(commit_guard);
             NetworkDecision::Allow
@@ -207,11 +213,19 @@ async fn execution_cancellation_respects_network_approval_boundary(
     let key =
         HostApprovalKey::from_request(&request, NetworkApprovalProtocol::Http, "local".to_string());
     assert_eq!(
-        service.session_approved_hosts.lock().await.contains(&key),
+        service
+            .session_approved_hosts
+            .lock()
+            .await
+            .contains(&key, session.services.authority_marker()),
         expected_decision == NetworkDecision::Allow,
     );
     // A late callback must not resurrect the cancelled execution, even with a host grant.
-    service.session_approved_hosts.lock().await.insert(key);
+    service.session_approved_hosts.lock().await.insert(
+        key,
+        /*shown_under*/ None,
+        session.services.authority_marker(),
+    );
     assert_eq!(
         service
             .handle_inline_policy_request(Arc::clone(&session), request)
@@ -220,7 +234,9 @@ async fn execution_cancellation_respects_network_approval_boundary(
     );
     assert_eq!(
         service.take_call_outcome("execution-1").await,
-        Some("original execution denial".to_string())
+        Some(NetworkApprovalOutcome::DeniedByPolicy(
+            "original execution denial".to_string()
+        ))
     );
     {
         let pending = service.pending_host_approvals.lock().unwrap();
@@ -863,9 +879,9 @@ async fn record_blocked_request_sets_policy_outcome_for_owner_call() {
     assert!(cancellation_token.is_cancelled());
     assert_eq!(
             service.take_call_outcome("registration-1").await,
-            Some(
+            Some(NetworkApprovalOutcome::DeniedByPolicy(
                 "Network access to \"example.com\" was blocked: domain is not on the allowlist for the current sandbox mode.".to_string()
-            )
+            ))
         );
 }
 
@@ -875,7 +891,10 @@ async fn blocked_request_does_not_override_recorded_approval_outcome() {
     register_call_with_default_shell_trigger(&service, "registration-1").await;
     let rejection = "approval client unavailable";
 
-    service.record_call_outcome("registration-1", rejection.to_string());
+    service.record_call_outcome(
+        "registration-1",
+        NetworkApprovalOutcome::DeniedByApproval(rejection.to_string()),
+    );
     service
         .record_blocked_request(denied_blocked_request("example.com"))
         .await;
@@ -895,7 +914,10 @@ async fn specific_approval_outcome_replaces_earlier_blocked_request() {
     service
         .record_blocked_request(denied_blocked_request("example.com"))
         .await;
-    service.record_call_outcome("registration-1", rejection.to_string());
+    service.record_call_outcome(
+        "registration-1",
+        NetworkApprovalOutcome::DeniedByApproval(rejection.to_string()),
+    );
 
     let error =
         network_approval_outcome_to_result(service.take_call_outcome("registration-1").await)
@@ -909,13 +931,19 @@ async fn disconnect_fallback_preserves_earlier_approval_outcome() {
     let cancellation = register_call_with_default_shell_trigger(&service, "registration-1").await;
     let denial = "approval client unavailable";
 
-    service.record_call_outcome("registration-1", denial.to_string());
-    service.record_call_outcome_if_absent("registration-1", "network disconnected".to_string());
+    service.record_call_outcome(
+        "registration-1",
+        NetworkApprovalOutcome::DeniedByApproval(denial.to_string()),
+    );
+    service.record_call_outcome_if_absent(
+        "registration-1",
+        NetworkApprovalOutcome::DeniedByPolicy("network disconnected".to_string()),
+    );
 
     assert!(cancellation.is_cancelled());
     assert_eq!(
         service.take_call_outcome("registration-1").await,
-        Some(denial.to_string())
+        Some(NetworkApprovalOutcome::DeniedByApproval(denial.to_string()))
     );
 }
 
@@ -926,18 +954,29 @@ async fn disconnect_fallback_cancels_execution_and_yields_to_explicit_denial() {
     let disconnect = "network disconnected";
     let denial = "explicit approval denial";
 
-    service.record_call_outcome_if_absent("registration-1", disconnect.to_string());
+    service.record_call_outcome_if_absent(
+        "registration-1",
+        NetworkApprovalOutcome::DeniedByPolicy(disconnect.to_string()),
+    );
     assert!(cancellation.is_cancelled());
     assert_eq!(
         service.take_call_outcome("registration-1").await,
-        Some(disconnect.to_string())
+        Some(NetworkApprovalOutcome::DeniedByPolicy(
+            disconnect.to_string()
+        ))
     );
 
-    service.record_call_outcome_if_absent("registration-1", disconnect.to_string());
-    service.record_call_outcome("registration-1", denial.to_string());
+    service.record_call_outcome_if_absent(
+        "registration-1",
+        NetworkApprovalOutcome::DeniedByPolicy(disconnect.to_string()),
+    );
+    service.record_call_outcome(
+        "registration-1",
+        NetworkApprovalOutcome::DeniedByApproval(denial.to_string()),
+    );
     assert_eq!(
         service.take_call_outcome("registration-1").await,
-        Some(denial.to_string())
+        Some(NetworkApprovalOutcome::DeniedByApproval(denial.to_string()))
     );
 }
 
@@ -946,8 +985,14 @@ async fn latest_specific_approval_outcome_replaces_earlier_specific_outcome() {
     let service = NetworkApprovalService::default();
     register_call_with_default_shell_trigger(&service, "registration-1").await;
 
-    service.record_call_outcome("registration-1", "earlier approval rejection".to_string());
-    service.record_call_outcome("registration-1", "latest approval rejection".to_string());
+    service.record_call_outcome(
+        "registration-1",
+        NetworkApprovalOutcome::DeniedByPolicy("earlier approval rejection".to_string()),
+    );
+    service.record_call_outcome(
+        "registration-1",
+        NetworkApprovalOutcome::DeniedByPolicy("latest approval rejection".to_string()),
+    );
 
     let error =
         network_approval_outcome_to_result(service.take_call_outcome("registration-1").await)
@@ -962,24 +1007,12 @@ async fn latest_specific_approval_outcome_replaces_earlier_specific_outcome() {
 fn approval_denial_messages_are_bounded_for_model_context() {
     let rejection = "x".repeat(40_000);
 
-<<<<<<< HEAD
     let error = network_approval_outcome_to_result(Some(NetworkApprovalOutcome::DeniedByApproval(
         rejection,
     )))
     .expect_err("approval denial should remain an error");
     let ToolError::Declined(message) = error else {
-||||||| 413492cd6c
-    let error = network_approval_outcome_to_result(Some(NetworkApprovalOutcome::DeniedByApproval(
-        rejection,
-    )))
-    .expect_err("approval denial should remain an error");
-    let ToolError::Rejected(message) = error else {
-=======
-    let error = network_approval_outcome_to_result(Some(rejection))
-        .expect_err("approval denial should remain an error");
-    let ToolError::Rejected(message) = error else {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-        panic!("approval denial should produce a rejected tool error");
+        panic!("approval denial should produce a declined tool error");
     };
 
     assert!(codex_utils_string::approx_token_count(&message) < 1_000);
@@ -997,7 +1030,10 @@ async fn deferred_finish_reuses_denial_result_after_first_consumer() {
         finish_outcome: Arc::new(OnceCell::new()),
         _execution_proxy: None,
     };
-    service.record_call_outcome("registration-1", "network denied".to_string());
+    service.record_call_outcome(
+        "registration-1",
+        NetworkApprovalOutcome::DeniedByPolicy("network denied".to_string()),
+    );
 
     let first = deferred
         .finish(&service)
@@ -1019,7 +1055,10 @@ async fn record_call_outcome_ignores_inactive_call() {
         register_call_with_default_shell_trigger(&service, "registration-1").await;
     service.unregister_call("registration-1").await;
 
-    service.record_call_outcome("registration-1", "network denied".to_string());
+    service.record_call_outcome(
+        "registration-1",
+        NetworkApprovalOutcome::DeniedByPolicy("network denied".to_string()),
+    );
 
     assert!(!cancellation_token.is_cancelled());
     assert_eq!(service.take_call_outcome("registration-1").await, None);
@@ -1057,9 +1096,9 @@ async fn attributed_blocked_request_targets_one_of_multiple_active_calls() {
     assert_eq!(service.take_call_outcome("registration-1").await, None);
     assert_eq!(
         service.take_call_outcome("registration-2").await,
-        Some(
+        Some(NetworkApprovalOutcome::DeniedByPolicy(
             "Network access to \"example.com\" was blocked: domain is not on the allowlist for the current sandbox mode.".to_string()
-        )
+        ))
     );
 }
 
@@ -1069,30 +1108,26 @@ async fn attributed_blocked_request_targets_one_of_multiple_active_calls() {
 async fn remote_environment_detection_for_network_hook_decisions() {
     use crate::environment_selection::TurnEnvironmentSnapshot;
     use crate::environment_selection::TurnEnvironmentState;
-    use crate::session::turn_context::TurnEnvironment;
     use codex_exec_server::Environment;
     use codex_exec_server::REMOTE_ENVIRONMENT_ID;
-    use codex_utils_absolute_path::AbsolutePathBuf;
-    use codex_utils_path_uri::PathUri;
 
-    let cwd = PathUri::from_abs_path(&AbsolutePathBuf::current_dir().expect("cwd"));
-    let environment = |id: &str, environment: Environment| {
-        TurnEnvironmentState::Ready(TurnEnvironment::new(
-            id.to_string(),
-            Arc::new(environment),
-            cwd.clone(),
-            Vec::new(),
-            /*shell*/ None,
-        ))
-    };
+    let (_session, turn) = crate::session::tests::make_session_and_context().await;
+    let local = turn
+        .initial_environments
+        .primary()
+        .expect("local environment")
+        .clone();
+    assert_eq!(local.selection.environment_id, LOCAL_ENVIRONMENT_ID);
+    let mut remote = local.clone();
+    remote.selection.environment_id = REMOTE_ENVIRONMENT_ID.to_string();
+    remote.environment = Arc::new(
+        Environment::create_for_tests(Some("ws://127.0.0.1:8765".to_string()))
+            .expect("remote environment"),
+    );
     let snapshot = TurnEnvironmentSnapshot {
         environments: vec![
-            environment(LOCAL_ENVIRONMENT_ID, Environment::default_for_tests()),
-            environment(
-                REMOTE_ENVIRONMENT_ID,
-                Environment::create_for_tests(Some("ws://127.0.0.1:8765".to_string()))
-                    .expect("remote environment"),
-            ),
+            TurnEnvironmentState::Ready(local),
+            TurnEnvironmentState::Ready(remote),
         ],
     };
 
@@ -1102,4 +1137,147 @@ async fn remote_environment_detection_for_network_hook_decisions() {
     let empty = TurnEnvironmentSnapshot::default();
     assert!(!is_remote_environment(&empty, LOCAL_ENVIRONMENT_ID));
     assert!(is_remote_environment(&empty, "other"));
+}
+
+/// D52 (#1001): under Aggressive, the proxy built for an environment's own
+/// network policy leaves out network allow rules saved outside Aggressive, as
+/// the session's managed proxy does; a host allowed under Aggressive stays.
+/// Outside Aggressive both apply.
+#[tokio::test]
+async fn issue_1001_environment_owner_proxy_leaves_out_allow_rules_saved_outside_aggressive()
+-> anyhow::Result<()> {
+    use codex_execpolicy::Decision;
+    use codex_execpolicy::NetworkRuleProtocol;
+    use codex_network_proxy::NetworkProxyConfig;
+
+    let (session, _turn) = crate::session::tests::make_session_and_context().await;
+    let codex_home = session.codex_home().await.to_path_buf();
+    std::fs::create_dir_all(&codex_home)?;
+    for (host, approved_under) in [
+        (
+            "aggressive.example",
+            crate::exec_policy::ApprovedUnder::Aggressive,
+        ),
+        (
+            "permissive.example",
+            crate::exec_policy::ApprovedUnder::LessStrict,
+        ),
+    ] {
+        session
+            .services
+            .exec_policy
+            .append_network_rule_and_update(
+                &codex_home,
+                host,
+                NetworkRuleProtocol::Https,
+                Decision::Allow,
+                Some("Allowed by you".to_string()),
+                approved_under,
+            )
+            .await?;
+    }
+    let owner = EnvironmentNetworkPolicy::from_config(
+        &NetworkProxyConfig::default(),
+        /*managed_allowed_domains_only*/ false,
+    );
+    let permission_profile = PermissionProfile::workspace_write();
+    let allowed = |session: &Session| -> anyhow::Result<Vec<String>> {
+        let spec = environment_owner_network_spec(
+            session,
+            /*controller*/ None,
+            &owner,
+            &permission_profile,
+            /*environment*/ None,
+        )?;
+        let mut config = NetworkProxyConfig::default();
+        spec.environment_policy().apply_to(&mut config);
+        let mut allowed = config.allowed_domains().unwrap_or_default();
+        allowed.sort();
+        Ok(allowed)
+    };
+
+    assert_eq!(
+        allowed(&session)?,
+        vec![
+            "aggressive.example".to_string(),
+            "permissive.example".to_string(),
+        ]
+    );
+    let client = (*session.services.model_client())
+        .clone()
+        .with_ingress_level(codex_security_policy::SecurityLevel::Aggressive);
+    session.services.replace_model_client(client);
+    assert_eq!(allowed(&session)?, vec!["aggressive.example".to_string()]);
+    Ok(())
+}
+
+/// #945: a run queued behind another run's prompt for the same host is not
+/// allowed just because that prompt's owner closed the queue: the session
+/// grant counts only if it was stored under the policy in force now. A grant
+/// fenced by a security transition (or never stored) means the run is asked.
+#[tokio::test]
+async fn issue_945_closed_prompt_queue_asks_unless_the_grant_is_in_force() {
+    let (session, turn, _events) = crate::session::tests::make_session_and_context_with_rx().await;
+    let service = NetworkApprovalService::default();
+    let host = HostApprovalKey {
+        environment_id: "local".to_string(),
+        host: "queued.example".to_string(),
+        protocol: "https",
+        port: 443,
+    };
+    let review = |execution_id: &str, current_grant: bool| {
+        let service = &service;
+        let session = &session;
+        let turn = &turn;
+        let host = host.clone();
+        let execution_id = execution_id.to_string();
+        async move {
+            // The earlier run's prompt closed the queue for this host.
+            let queue = Arc::new(Semaphore::new(/*permits*/ 1));
+            queue.close();
+            service
+                .pending_host_approvals
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .manual_prompts
+                .insert(host.clone(), queue);
+            if current_grant {
+                service.session_approved_hosts.lock().await.insert(
+                    host.clone(),
+                    /*shown_under*/ None,
+                    session.services.authority_marker(),
+                );
+            }
+            let mut owner = PendingHostApprovalOwner::new(
+                service,
+                PendingHostApprovalKey {
+                    host,
+                    turn_id: turn.sub_id.clone(),
+                    execution_id: Some(execution_id),
+                },
+                Arc::new(PendingHostApproval::new()),
+                /*execution_cancellation*/ None,
+            );
+            let resolution = owner
+                .review_user_prompt(
+                    session,
+                    turn,
+                    /*timing_call_id*/ None,
+                    "blocked by policy",
+                    async { ApprovalResolution::user(ReviewDecision::denied("asked the person")) },
+                )
+                .await;
+            owner.complete(PendingApprovalDecision::Deny);
+            resolution.decision
+        }
+    };
+
+    assert_eq!(
+        review("execution-b", /*current_grant*/ false).await,
+        ReviewDecision::denied("asked the person")
+    );
+    assert_eq!(
+        review("execution-c", /*current_grant*/ true).await,
+        ReviewDecision::Approved
+    );
 }

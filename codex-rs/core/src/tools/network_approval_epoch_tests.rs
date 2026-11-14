@@ -11,7 +11,6 @@ use crate::session::tests::make_session_and_context_with_rx;
 use crate::session::turn_context::TurnContext;
 use crate::state::TaskKind;
 use crate::tasks::SessionTask;
-use crate::tasks::SessionTaskContext;
 use crate::tasks::SessionTaskResult;
 use codex_network_proxy::NetworkPolicyRequestArgs;
 use codex_protocol::SessionId;
@@ -44,7 +43,7 @@ impl SessionTask for WaitingTask {
 
     async fn run(
         self: Arc<Self>,
-        _session: Arc<SessionTaskContext>,
+        _session: Arc<Session>,
         _ctx: Arc<TurnContext>,
         _input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
@@ -68,11 +67,16 @@ impl Fixture {
         let (session, turn_context, events) = make_session_and_context_with_rx().await;
         assert!(
             permission_profile_allows_network_approval_flow(&turn_context.permission_profile())
-                && allows_network_approval_flow(turn_context.approval_policy.value()),
+                && allows_network_approval_flow(turn_context.approval_policy()),
             "the test turn may ask about the network"
         );
         let controller = TrustedSecurityController::initialize(
-            &session.services.agent_control.effective_security_policy(),
+            &session
+                .services
+                .agent_control
+                .local()
+                .expect("the local agent backend")
+                .effective_security_policy(),
             PersistedHumanSecurityState::new(
                 SecuritySettings::new(SecurityLevel::Permissive),
                 PolicyPrincipal::new(PrincipalKind::Human, "human:issue-945").unwrap(),
@@ -85,9 +89,10 @@ impl Fixture {
         )
         .expect("initialize the session's policy tree");
         let environment_id = turn_context
-            .environments
+            .initial_environments
             .primary()
             .expect("a primary environment")
+            .selection
             .environment_id
             .clone();
         // A remembered host could be saved here.
@@ -162,7 +167,10 @@ impl Fixture {
                 .pending_host_approvals
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let mut open = approvals.iter().filter(|(key, _)| key.host.host == HOST);
+            let mut open = approvals
+                .executions
+                .iter()
+                .filter(|(key, _)| key.host.host == HOST);
             let (_, pending) = open.next().expect("an open prompt for the host");
             assert!(open.next().is_none(), "one open prompt for the host");
             pending.joined_waiters.subscribe()
