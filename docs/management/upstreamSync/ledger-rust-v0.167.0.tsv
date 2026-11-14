@@ -365,28 +365,28 @@ codex-rs/core/tests/common/test_codex.rs	content	UU	core	S2a core session/client
 codex-rs/core/tests/responses_headers.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		3	21	true	false	false	true	
 codex-rs/core/tests/suite/abort_tasks.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	5	true	false	false	false	
 codex-rs/core/tests/suite/apply_patch_cli.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	24	true	false	false	false	
-codex-rs/core/tests/suite/auto_review.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	2	true	false	false	false	
+codex-rs/core/tests/suite/auto_review.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a7 (maintainer)	no	resolved	merged	1	2	true	false	false	false	sync-s2a7: both ModelInfo fields: main's max_output_tokens and upstream's guardian. Not compiled yet (codex-core tests build at tier exit).
 codex-rs/core/tests/suite/client.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		6	136	true	false	false	true	
 codex-rs/core/tests/suite/client_websockets.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		6	53	true	false	false	true	
 codex-rs/core/tests/suite/code_mode_elicitation.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	9	true	false	false	false	
-codex-rs/core/tests/suite/compact.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	5	true	false	false	false	
+codex-rs/core/tests/suite/compact.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a7 (maintainer)	no	resolved	merged	1	5	true	false	false	false	sync-s2a7: upstream's replacement-history envelopes, each item with main's local provenance cleared (#578) before comparison. Not compiled yet (codex-core tests build at tier exit).
 codex-rs/core/tests/suite/compact_remote.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	1631	true	false	false	false	
 codex-rs/core/tests/suite/compact_remote_parity.rs	modify/delete	UD	core	S2a core session/client/turn	2	sync-s2a2 (maintainer)	no	resolved	deleted	0	0	true	false	false	false	deleted upstream; skeleton keeps ours | S2a (sync-s2a2): legacy-vs-v2 parity suite removed upstream with legacy remote compaction (#44273)
 codex-rs/core/tests/suite/compact_resume_fork.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	205	true	false	false	false	
 codex-rs/core/tests/suite/hooks.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	5	true	false	false	false	
 codex-rs/core/tests/suite/mcp_startup_refresh_http_proxy.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	20	true	false	false	false	
-codex-rs/core/tests/suite/mcp_tool_cache.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	3	true	false	false	false	
+codex-rs/core/tests/suite/mcp_tool_cache.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a7 (maintainer)	no	resolved	merged	1	3	true	false	false	false	sync-s2a7: upstream's moved config.cwd with main's note that remote stdio MCP servers need an explicit cwd. Not compiled yet (codex-core tests build at tier exit).
 codex-rs/core/tests/suite/mod.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		9	54	true	false	false	true	
 codex-rs/core/tests/suite/model_switching.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	93	true	false	false	false	
 codex-rs/core/tests/suite/multi_agent_resume.rs	content	UU	core	S2c core agents	2	unassigned	no	open		4	93	true	false	false	false	
 codex-rs/core/tests/suite/network_approval.rs	content	UU	core	S3a security resolution	1+2	security owner	no	open		8	1456	true	false	true	true	
-codex-rs/core/tests/suite/otel.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	5	true	false	false	true	
+codex-rs/core/tests/suite/otel.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a7 (maintainer)	no	resolved	merged	1	5	true	false	false	true	sync-s2a7: both: main's clippy::disallowed_methods allow (traced_test) and upstream's TurnInputRequest import. Not compiled yet (codex-core tests build at tier exit).
 codex-rs/core/tests/suite/pending_input.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		8	157	true	false	false	false	
 codex-rs/core/tests/suite/personality.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		3	720	true	false	false	false	
 codex-rs/core/tests/suite/prompt_caching.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		4	70	true	false	false	false	
 codex-rs/core/tests/suite/remote_env.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	8	true	false	false	true	
 codex-rs/core/tests/suite/remote_models.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	8	true	false	false	false	
-codex-rs/core/tests/suite/request_plugin_install.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	3	true	false	false	false	
+codex-rs/core/tests/suite/request_plugin_install.rs	content	UU	core	S2a core session/client/turn	2	sync-s2a7 (maintainer)	no	resolved	merged	1	3	true	false	false	false	sync-s2a7: upstream's moved config.cwd with main's note that remote stdio MCP servers need an explicit cwd. Not compiled yet (codex-core tests build at tier exit).
 codex-rs/core/tests/suite/responses_lite.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	25	true	false	false	false	
 codex-rs/core/tests/suite/resume.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		3	177	true	false	false	false	
 codex-rs/core/tests/suite/resume_warning.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	9	true	false	false	true	

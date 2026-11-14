@@ -661,13 +661,8 @@ async fn cached_mcp_startup_is_eager_for_root_and_lazy_for_subagents() -> anyhow
                 serde_json::from_value(json!({
                     "command": command,
                     "environment_id": environment_id,
-<<<<<<< HEAD
                     // Remote stdio MCP servers must be given an explicit cwd.
-                    "cwd": config.cwd.clone(),
-||||||| 413492cd6c
-=======
                     "cwd": config.cwd,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     "env": {
                         "MCP_TEST_APP_ONLY_CWD_MARKER_FILE": app_only_cwd_marker_file,
                         "MCP_TEST_INITIALIZE_BARRIER_FILE": barrier_file,

@@ -374,16 +374,11 @@ fn replacement_history_from_rollout(path: &Path) -> Result<Vec<Value>> {
             replacement_history = Some(
                 items
                     .into_iter()
-<<<<<<< HEAD
-                    .map(|mut item| {
+                    .map(|envelope| {
+                        let mut item = envelope.item;
                         item.clear_local_provenance();
                         serde_json::to_value(item)
                     })
-||||||| 413492cd6c
-                    .map(serde_json::to_value)
-=======
-                    .map(|envelope| serde_json::to_value(envelope.item))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     .collect::<std::result::Result<Vec<_>, _>>()?,
             );
         }
