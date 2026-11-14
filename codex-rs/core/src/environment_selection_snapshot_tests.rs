@@ -270,6 +270,7 @@ async fn credential_refresh_does_not_restore_a_removed_environment() {
         /*state_db*/ None,
         Some(broker),
         /*prefer_executor_snapshots*/ false,
+        /*removed_env_vars*/ Vec::new(),
     );
     let environments = Arc::new(ThreadEnvironments::new(
         Arc::new(EnvironmentManager::default_for_tests()),

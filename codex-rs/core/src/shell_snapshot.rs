@@ -658,16 +658,16 @@ async fn capture_snapshot(
         removed_env_vars,
     )
     .await?;
-    let capture = CapturedSnapshot::parse(shell_type, raw_snapshot.as_bytes())
+    let mut capture = CapturedSnapshot::parse(shell_type, raw_snapshot.as_bytes())
         .ok_or_else(|| anyhow!("invalid shell snapshot capture"))?;
+    // #310: no secret-named export, nor a provider credential name, is written
+    // to the snapshot file, whatever the policy admits. Only the file changes:
+    // the captured environment, and so the broker's credential and alias
+    // handling for commands, is untouched.
+    let secret_exports = secret_export_patterns(removed_env_vars);
+    capture.retain_exports(|key| !secret_exports.iter().any(|pattern| pattern.matches(key)));
     let Some(credential_broker) = credential_broker else {
-        return Ok((
-            capture.render_script(&snapshot_export_policy(
-                shell_environment_policy,
-                removed_env_vars,
-            )),
-            None,
-        ));
+        return Ok((capture.render_script(shell_environment_policy), None));
     };
 
     let original_env = std::str::from_utf8(capture.environment)?
@@ -882,13 +882,6 @@ async fn capture_snapshot(
             .filter(|(_, value)| !value.is_empty())
             .map(|(key, _)| key.clone()),
     );
-    // #310: no secret-named export is persisted with its value. Credentials
-    // the broker handles are rendered as live references, not values.
-    let secret_exports = secret_export_patterns(removed_env_vars);
-    snapshot_allowed_env.retain(|key, _| {
-        snapshot_credential_keys.contains(key)
-            || !secret_exports.iter().any(|pattern| pattern.matches(key))
-    });
     let Some(PreparedSnapshot {
         script: snapshot,
         aliases: mut credential_env,
@@ -908,7 +901,6 @@ async fn capture_snapshot(
                     /*thread_id*/ None,
                 )
                 .contains_key(key)
-                    && !secret_exports.iter().any(|pattern| pattern.matches(key))
             },
             brokered_keys: &snapshot_credential_keys,
             brokered_alias_keys: &brokered_alias_keys,
@@ -1083,28 +1075,30 @@ async fn validate_snapshot(
     .map(|_| ())
 }
 
-/// #310: export-name patterns never persisted with a value: the secret names
-/// and the provider credential names (`removed_env_vars`), case-insensitively.
+/// #310: export names never written to a snapshot file: the secret names and
+/// the provider credential names (`removed_env_vars`), case-insensitively. A
+/// configured name that is not a plain identifier is skipped, so it cannot act
+/// as a wildcard.
 fn secret_export_patterns(removed_env_vars: &[String]) -> Vec<EnvironmentVariablePattern> {
     SECRET_EXPORT_NAME_PATTERNS
         .iter()
         .copied()
-        .chain(removed_env_vars.iter().map(String::as_str))
+        .chain(
+            removed_env_vars
+                .iter()
+                .map(String::as_str)
+                .filter(|name| is_plain_env_name(name)),
+        )
         .map(EnvironmentVariablePattern::new_case_insensitive)
         .collect()
 }
 
-/// #310: `policy` with the secret export names excluded, for rendering a
-/// snapshot's exports. Only the snapshot file uses it; commands keep `policy`.
-fn snapshot_export_policy(
-    policy: &ShellEnvironmentPolicy,
-    removed_env_vars: &[String],
-) -> ShellEnvironmentPolicy {
-    let mut policy = policy.clone();
-    policy
-        .exclude
-        .extend(secret_export_patterns(removed_env_vars));
-    policy
+fn is_plain_env_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
+        && chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
 }
 
 /// #310: whether `name` is a provider credential variable the snapshot shell
