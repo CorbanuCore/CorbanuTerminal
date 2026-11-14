@@ -75,7 +75,7 @@ fn stream(events: Vec<Result<ResponseEvent, ApiError>>) -> ResponseStream {
 #[tokio::test]
 async fn metadata_before_rejection_is_still_recoverable() {
     let mut stream = stream(vec![
-        Ok(ResponseEvent::Created),
+        Ok(ResponseEvent::Created { response_id: None }),
         Ok(ResponseEvent::ServerModel("synthetic-model".to_owned())),
         Ok(ResponseEvent::ServerReasoningIncluded(true)),
         Err(rejection()),
@@ -90,7 +90,7 @@ async fn metadata_before_rejection_is_still_recoverable() {
 #[tokio::test]
 async fn visible_output_prevents_replay_and_preserves_the_later_error() {
     let mut stream = stream(vec![
-        Ok(ResponseEvent::Created),
+        Ok(ResponseEvent::Created { response_id: None }),
         Ok(ResponseEvent::OutputTextDelta {
             item_id: None,
             delta: "x".to_owned(),
@@ -138,7 +138,7 @@ async fn unrelated_error_is_forwarded_without_retry() {
 
 #[tokio::test]
 async fn metadata_buffer_is_bounded_and_never_discards_overflow() {
-    let mut events: Vec<_> = (0..33).map(|_| Ok(ResponseEvent::Created)).collect();
+    let mut events: Vec<_> = (0..33).map(|_| Ok(ResponseEvent::Created { response_id: None })).collect();
     events.push(Err(rejection()));
     let mut stream = stream(events);
     assert_eq!(
@@ -147,7 +147,7 @@ async fn metadata_buffer_is_bounded_and_never_discards_overflow() {
     );
     assert!(matches!(
         stream.next().await,
-        Some(Ok(ResponseEvent::Created))
+        Some(Ok(ResponseEvent::Created { response_id: None }))
     ));
     assert!(matches!(stream.next().await, Some(Err(_))));
 

@@ -57,7 +57,7 @@ async fn read_prefix(
             event => {
                 let metadata = matches!(
                     &event,
-                    Ok(ResponseEvent::Created | ResponseEvent::ServerReasoningIncluded(_))
+                    Ok(ResponseEvent::Created { .. } | ResponseEvent::ServerReasoningIncluded(_))
                 ) || matches!(&event, Ok(ResponseEvent::ServerModel(model)) if model.len() <= 1024);
                 prefix.push(event);
                 if !metadata {
