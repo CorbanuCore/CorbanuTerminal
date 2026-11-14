@@ -622,8 +622,10 @@ impl RemoteControlWebsocket {
                 connection_end_reason,
                 ConnectionEndReason::ConnectionWorkerStopped
             ) {
-                self.status_publisher
-                    .publish_status(RemoteControlConnectionStatus::Connecting);
+                self.status_publisher.publish_status_while_enabled(
+                    RemoteControlConnectionStatus::Connecting,
+                    &self.desired_state_rx,
+                );
                 // Spread automatic reconnects before token refresh or enrollment, too.
                 let reconnect_delay = next_reconnect_delay(&mut self.reconnect_attempt);
                 tokio::select! {
@@ -635,10 +637,8 @@ impl RemoteControlWebsocket {
                         if changed.is_err() {
                             break;
                         }
-                        if !self.desired_state_rx.borrow().is_enabled() {
-                            self.status_publisher
-                                .publish_status(RemoteControlConnectionStatus::Disabled);
-                        }
+                        // #857: unless a re-enable has landed since.
+                        self.publish_cycle_disabled();
                     }
                     _ = tokio::time::sleep(reconnect_delay) => {}
                 }
@@ -889,8 +889,10 @@ impl RemoteControlWebsocket {
                         return ConnectOutcome::Disabled;
                     }
                     if super::auth::is_policy_denial(&err) {
-                        self.status_publisher
-                            .publish_status(RemoteControlConnectionStatus::Errored);
+                        self.status_publisher.publish_status_while_enabled(
+                            RemoteControlConnectionStatus::Errored,
+                            &self.desired_state_rx,
+                        );
                         if let Some(changes) = &mut policy_changes {
                             tokio::select! {
                                 _ = shutdown_token.cancelled() => return ConnectOutcome::Shutdown,

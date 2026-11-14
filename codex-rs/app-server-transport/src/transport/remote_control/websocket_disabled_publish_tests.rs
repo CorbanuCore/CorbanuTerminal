@@ -177,9 +177,9 @@ async fn connect_returned_disabled(racing_enable: bool) -> RemoteControlConnecti
 
 /// `run_connection()`'s branch: a disable ends a live connection.
 async fn connection_ended_by_disable(racing_enable: bool) -> RemoteControlConnectionStatus {
-    let race = race("http://127.0.0.1:1/", racing_enable);
+    let mut race = race("http://127.0.0.1:1/", racing_enable);
     let (client, _server) = connected_websocket_pair().await;
-    let websocket = race.websocket.as_ref().expect("the loop");
+    let websocket = race.websocket.as_mut().expect("the loop");
     let (reason, ()) = tokio::join!(
         websocket.run_connection(client, race.shutdown_token.child_token()),
         async { disable(&race.desired_state_tx, &race.status_publisher) },
