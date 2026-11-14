@@ -1,0 +1,8 @@
+---
+source: tui/src/app/tests/issue_646.rs
+assertion_line: 55
+expression: rendered
+---
+⚠ No provider is allowed for spawned agents: project config or agent role
+  restrictions leave `agents.provider_allowlist` empty. Project lists can only
+  narrow the providers allowed by higher-trust settings or other project lists.

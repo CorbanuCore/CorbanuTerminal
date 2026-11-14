@@ -5,6 +5,10 @@ use codex_config::ConfigLayer;
 use codex_config::ConfigLayerMetadata;
 use codex_config::ConfigLayerSource;
 
+#[cfg(test)]
+#[path = "config_layer_tests.rs"]
+mod tests;
+
 /// Converts a config-layer source owned by `codex-config` into the app-server wire type owned by
 /// `codex-app-server-protocol`.
 ///
@@ -42,7 +46,10 @@ pub(crate) fn config_layer_metadata_to_api(
     metadata: ConfigLayerMetadata,
 ) -> ApiConfigLayerMetadata {
     ApiConfigLayerMetadata {
-        name: config_layer_source_to_api(metadata.name),
+        name: match metadata.project_role_file {
+            Some(file) => ApiConfigLayerSource::ProjectRole { file },
+            None => config_layer_source_to_api(metadata.name),
+        },
         version: metadata.version,
     }
 }
@@ -55,7 +62,10 @@ pub(crate) fn config_layer_metadata_to_api(
 /// function instead of a `From` implementation.
 pub(crate) fn config_layer_to_api(layer: ConfigLayer) -> ApiConfigLayer {
     ApiConfigLayer {
-        name: config_layer_source_to_api(layer.name),
+        name: match layer.project_role_file {
+            Some(file) => ApiConfigLayerSource::ProjectRole { file },
+            None => config_layer_source_to_api(layer.name),
+        },
         version: layer.version,
         config: layer.config,
         disabled_reason: layer.disabled_reason,

@@ -222,6 +222,7 @@ impl ConfigLayerEntry {
         ConfigLayerMetadata {
             name: self.name.clone(),
             version: self.version.clone(),
+            project_role_file: self.project_role_file.clone(),
         }
     }
 
@@ -229,6 +230,7 @@ impl ConfigLayerEntry {
         ConfigLayer {
             name: self.name.clone(),
             version: self.version.clone(),
+            project_role_file: self.project_role_file.clone(),
             config: serde_json::to_value(&self.config).unwrap_or(JsonValue::Null),
             disabled_reason: self.disabled_reason.clone(),
         }
