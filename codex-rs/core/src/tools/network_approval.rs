@@ -477,11 +477,13 @@ impl<'a> PendingHostApprovalOwner<'a> {
                 execution_id = self.key.execution_id.as_deref(),
                 "waiting for the current endpoint approval"
             );
-            let Ok(permit) = Arc::clone(queue).acquire_owned().await else {
-                // The prompt owner closes the queue when it commits a session grant.
-                return ApprovalResolution::user(ReviewDecision::Approved);
-            };
-            self.prompt_permit = Some(permit);
+            // The prompt owner closes the queue when it commits a session
+            // grant. #945: the grant counts only if it was stored under the
+            // policy in force now (a transition fences it), so a closed queue
+            // falls through to the marker-bound check below, and a miss asks.
+            if let Ok(permit) = Arc::clone(queue).acquire_owned().await {
+                self.prompt_permit = Some(permit);
+            }
         }
         // #945: under the policy in force now.
         match self

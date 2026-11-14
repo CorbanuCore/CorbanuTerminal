@@ -1210,3 +1210,74 @@ async fn issue_1001_environment_owner_proxy_leaves_out_allow_rules_saved_outside
     assert_eq!(allowed(&session)?, vec!["aggressive.example".to_string()]);
     Ok(())
 }
+
+/// #945: a run queued behind another run's prompt for the same host is not
+/// allowed just because that prompt's owner closed the queue: the session
+/// grant counts only if it was stored under the policy in force now. A grant
+/// fenced by a security transition (or never stored) means the run is asked.
+#[tokio::test]
+async fn issue_945_closed_prompt_queue_asks_unless_the_grant_is_in_force() {
+    let (session, turn, _events) = crate::session::tests::make_session_and_context_with_rx().await;
+    let service = NetworkApprovalService::default();
+    let host = HostApprovalKey {
+        environment_id: "local".to_string(),
+        host: "queued.example".to_string(),
+        protocol: "https",
+        port: 443,
+    };
+    let review = |execution_id: &str, current_grant: bool| {
+        let service = &service;
+        let session = &session;
+        let turn = &turn;
+        let host = host.clone();
+        let execution_id = execution_id.to_string();
+        async move {
+            // The earlier run's prompt closed the queue for this host.
+            let queue = Arc::new(Semaphore::new(/*permits*/ 1));
+            queue.close();
+            service
+                .pending_host_approvals
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .manual_prompts
+                .insert(host.clone(), queue);
+            if current_grant {
+                service.session_approved_hosts.lock().await.insert(
+                    host.clone(),
+                    /*shown_under*/ None,
+                    session.services.authority_marker(),
+                );
+            }
+            let mut owner = PendingHostApprovalOwner::new(
+                service,
+                PendingHostApprovalKey {
+                    host,
+                    turn_id: turn.sub_id.clone(),
+                    execution_id: Some(execution_id),
+                },
+                Arc::new(PendingHostApproval::new()),
+                /*execution_cancellation*/ None,
+            );
+            let resolution = owner
+                .review_user_prompt(
+                    session,
+                    turn,
+                    /*timing_call_id*/ None,
+                    "blocked by policy",
+                    async { ApprovalResolution::user(ReviewDecision::denied("asked the person")) },
+                )
+                .await;
+            owner.complete(PendingApprovalDecision::Deny);
+            resolution.decision
+        }
+    };
+
+    assert_eq!(
+        review("execution-b", /*current_grant*/ false).await,
+        ReviewDecision::denied("asked the person")
+    );
+    assert_eq!(
+        review("execution-c", /*current_grant*/ true).await,
+        ReviewDecision::Approved
+    );
+}
