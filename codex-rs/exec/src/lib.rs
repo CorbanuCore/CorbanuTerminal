@@ -11,13 +11,9 @@ mod event_processor;
 mod event_processor_with_human_output;
 pub(crate) mod event_processor_with_jsonl_output;
 pub(crate) mod exec_events;
-<<<<<<< HEAD
 mod json_usage;
 mod panic_watch;
-||||||| 413492cd6c
-=======
 mod worktree;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 pub use cli::Cli;
 pub use cli::Command;
@@ -88,22 +84,13 @@ use codex_core::config::resolve_profile_v2_config_path;
 use codex_core::find_thread_meta_by_name_str;
 use codex_core::format_exec_policy_error_with_source;
 use codex_core::path_utils;
-<<<<<<< HEAD
 use codex_core::windows_sandbox::WindowsSandboxLevelExt;
-||||||| 413492cd6c
-=======
 use codex_core::read_session_meta_line;
 use codex_features::Feature;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_feedback::CodexFeedback;
 use codex_git_utils::get_git_repo_root;
-<<<<<<< HEAD
-||||||| 413492cd6c
-use codex_login::AuthConfig;
-=======
 use codex_history::RolloutItem;
 use codex_history::RolloutLine;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_login::default_client::set_default_client_residency_requirement;
 use codex_login::default_client::set_default_originator;
 use codex_login::enforce_login_restrictions;
@@ -116,15 +103,11 @@ use codex_protocol::SessionId;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::SandboxMode;
-<<<<<<< HEAD
 use codex_protocol::config_types::WindowsSandboxLevel;
-||||||| 413492cd6c
-=======
 use codex_protocol::mcp_approval_meta::APPROVAL_KIND_KEY;
 use codex_protocol::mcp_approval_meta::APPROVAL_KIND_MCP_TOOL_CALL;
 use codex_protocol::mcp_approval_meta::CANCELLATION_REASON_KEY;
 use codex_protocol::mcp_approval_meta::McpApprovalCancellationReason;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::protocol::AskForApproval;
@@ -353,23 +336,12 @@ pub async fn run_main_enforced(
         json: json_mode,
         prompt,
         output_schema: output_schema_path,
-<<<<<<< HEAD
         account,
         home_wait_secs,
-        config_overrides,
-||||||| 413492cd6c
-        config_overrides,
-=======
         mut config_overrides,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     } = cli;
-<<<<<<< HEAD
     // #616: wait out an unreadable Corbanu home instead of ending the turn.
     codex_core::home_access::set_home_wait_window(std::time::Duration::from_secs(home_wait_secs));
-    let shared = shared.into_inner();
-||||||| 413492cd6c
-    let shared = shared.into_inner();
-=======
     if cyber_access_program.is_some() {
         match command.as_ref() {
             Some(ExecCommand::Review(_)) => {
@@ -383,7 +355,6 @@ pub async fn run_main_enforced(
     }
     let mut shared = shared.into_inner();
     shared.take_auto_review_config_overrides(&mut config_overrides);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let SharedCliOptions {
         images,
         model: model_cli_arg,
@@ -391,14 +362,8 @@ pub async fn run_main_enforced(
         oss_provider,
         config_profile_v2,
         sandbox_mode: sandbox_mode_cli_arg,
-<<<<<<< HEAD
-        mut dangerously_bypass_approvals_and_sandbox,
-||||||| 413492cd6c
-        dangerously_bypass_approvals_and_sandbox,
-=======
         auto_review: _,
-        dangerously_bypass_approvals_and_sandbox,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        mut dangerously_bypass_approvals_and_sandbox,
         bypass_hook_trust,
         cwd,
         mut add_dir,
@@ -616,43 +581,10 @@ pub async fn run_main_enforced(
     .await;
     trace_exec_timing("after_bootstrap_config", run_main_started_at);
     let bootstrap_config_toml = &bootstrap_config.config_toml;
-<<<<<<< HEAD
     if let Some(enforced) = enforced {
         cli_kv_overrides
             .extend(enforced.env_overrides(&bootstrap_config_toml.shell_environment_policy));
     }
-
-    let chatgpt_base_url = bootstrap_config_toml
-        .chatgpt_base_url
-        .clone()
-        .unwrap_or_else(|| "https://chatgpt.com/backend-api/".to_string());
-    let auth_route_config = resolve_bootstrap_auth_route_config(
-        bootstrap_config_toml,
-        bootstrap_config
-            .config_layer_stack
-            .requirements()
-            .feature_requirements
-            .as_ref(),
-    )?;
-    let cloud_config_bundle = cloud_config_bundle_loader_for_storage(
-        codex_home.to_path_buf(),
-||||||| 413492cd6c
-
-    let chatgpt_base_url = bootstrap_config_toml
-        .chatgpt_base_url
-        .clone()
-        .unwrap_or_else(|| "https://chatgpt.com/backend-api/".to_string());
-    let auth_route_config = resolve_bootstrap_auth_route_config(
-        bootstrap_config_toml,
-        bootstrap_config
-            .config_layer_stack
-            .requirements()
-            .feature_requirements
-            .as_ref(),
-    )?;
-    let cloud_config_bundle = cloud_config_bundle_loader_for_storage(
-        codex_home.to_path_buf(),
-=======
     let bootstrap_auth_config = embedded_network_policy
         .bind_bootstrap_auth(bootstrap_auth_config(&codex_home, &bootstrap_config)?);
     // API keys cannot fetch workspace-managed configuration. Preserve the
@@ -661,16 +593,10 @@ pub async fn run_main_enforced(
     let cloud_config_bundle = managed_config_bundle_loader_for_storage(
         bootstrap_auth_config,
         bootstrap_config.config_layer_stack.requirements_toml(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         /*enable_codex_api_key_env*/ false,
     )
-<<<<<<< HEAD
-    .await;
-    trace_exec_timing("after_cloud_config_bundle", run_main_started_at);
-||||||| 413492cd6c
-    .await;
-=======
     .await?;
+    trace_exec_timing("after_cloud_config_bundle", run_main_started_at);
     if let Some(worktree) = managed_worktree.as_ref() {
         // Destination auth can fetch source policy that the host bootstrap could not.
         let source_config = ConfigBuilder::default()
@@ -692,7 +618,6 @@ pub async fn run_main_enforced(
             );
         }
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let run_cli_overrides = cli_kv_overrides.clone();
     let run_loader_overrides = loader_overrides.clone();
     let run_cloud_config_bundle = cloud_config_bundle.clone();
@@ -797,8 +722,12 @@ pub async fn run_main_enforced(
         build_config,
     )
     .await?;
-<<<<<<< HEAD
     trace_exec_timing("after_build_exec_config", run_main_started_at);
+    embedded_network_policy.activate(&mut config);
+    let daybreak_override = cli_kv_overrides
+        .iter()
+        .any(|(key, _)| key == "daybreak")
+        .then_some(config.daybreak_enabled);
     // PF-84 (#425): exec cannot switch providers, so another provider's
     // account that no spawned agent can use is refused, not ignored.
     if let Some(message) = codex_core::config::unused_other_provider_account_error(&config) {
@@ -818,14 +747,6 @@ pub async fn run_main_enforced(
             }
         }
     }
-||||||| 413492cd6c
-=======
-    embedded_network_policy.activate(&mut config);
-    let daybreak_override = cli_kv_overrides
-        .iter()
-        .any(|(key, _)| key == "daybreak")
-        .then_some(config.daybreak_enabled);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let resume_approvals_reviewer_override = cli_kv_overrides
         .iter()
         .any(|(key, _)| key == "approvals_reviewer")
@@ -846,7 +767,6 @@ pub async fn run_main_enforced(
 
     set_default_client_residency_requirement(config.enforce_residency.value());
 
-<<<<<<< HEAD
     // PF-84-S06 (#570): a session on a named sign-in account checks the
     // restrictions against that account at thread start and never reads or
     // logs out the default login. A resumed thread's account is known only
@@ -857,23 +777,8 @@ pub async fn run_main_enforced(
         || (config.named_accounts_enabled() && matches!(command, Some(ExecCommand::Resume(_))));
     if leaves_default_login {
         codex_login::leave_default_login_unenforced();
-    } else if let Err(err) = enforce_login_restrictions(&config.default_login_restrictions()).await
-||||||| 413492cd6c
-    let auth_route_config = config.auth_route_config();
-    if let Err(err) = enforce_login_restrictions(&AuthConfig {
-        codex_home: config.codex_home.to_path_buf(),
-        auth_credentials_store_mode: config.cli_auth_credentials_store_mode,
-        keyring_backend_kind: config.auth_keyring_backend_kind(),
-        forced_login_method: config.forced_login_method,
-        forced_chatgpt_workspace_id: config.forced_chatgpt_workspace_id.clone(),
-        chatgpt_base_url: Some(config.chatgpt_base_url.clone()),
-        auth_route_config,
-    })
-    .await
-=======
-    if !is_workload_identity_selected()
-        && let Err(err) = enforce_login_restrictions(&config.auth_config()).await
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    } else if !is_workload_identity_selected()
+        && let Err(err) = enforce_login_restrictions(&config.default_login_restrictions()).await
     {
         eprintln!("{err}");
         std::process::exit(1);
