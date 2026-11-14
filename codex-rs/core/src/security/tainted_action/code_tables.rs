@@ -194,8 +194,13 @@ pub(super) fn may_load_stat(command: &[String], commands: &[shell::SimpleCommand
             work::step();
             names_stat_load(word)
         }) || [false, true].into_iter().any(|zsh| {
-            each_command(&run_words(&simple.words, simple, zsh), |_, name| {
+            let words = run_words(&simple.words, simple, zsh);
+            each_command(&words, |at, name| {
                 name == "enable"
+                    // #2001: a later style lookup may run arbitrary code,
+                    // including a disguised load of the stat builtin.
+                    || (name == "zstyle"
+                        && words.get(at + 1).is_some_and(|option| option == "-e"))
                     || (!matches!(name, "[" | "[[")
                         && name.contains(['$', '`', '*', '?', '[', '{', '(']))
                     || name.contains(shell::UNSEEN_OUTPUT)

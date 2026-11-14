@@ -846,6 +846,22 @@ impl Classifier {
                         push_script(found, folders, line, launch, unknown);
                     }
                 }
+                // #2001: zstyle -e stores all value words as a deferred
+                // eval. Always judge their joined text as a shell script,
+                // even if the words themselves contain no further quotes.
+                if resolved_name == "zstyle"
+                    && texts.get(at + 1).is_some_and(|option| option == "-e")
+                {
+                    found.deferred = true;
+                    let from = (at + 4).min(texts.len());
+                    let line = joined(
+                        String::new(),
+                        &texts[from..],
+                        &mut joined_left,
+                        &mut found.unreadable,
+                    );
+                    push_script(found, folders, line, replaced(launches[at]), unknown);
+                }
                 if resolved_name == "eval" {
                     // #1283: `eval` joins its words and parses them again, so
                     // quoting split across them takes effect (`eval git config
