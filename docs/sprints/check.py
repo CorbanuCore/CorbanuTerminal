@@ -68,9 +68,7 @@ def concrete(value):
 
 def lane_names(value):
     return [
-        lane.strip().casefold()
-        for lane in value.split(",")
-        if concrete(lane.strip())
+        lane.strip().casefold() for lane in value.split(",") if concrete(lane.strip())
     ]
 
 

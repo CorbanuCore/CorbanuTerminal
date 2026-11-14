@@ -140,7 +140,9 @@ class PrArgumentCommentLintTest(unittest.TestCase):
         return (REPO_ROOT / ".github" / "workflows" / "rust-ci.yml").read_text()
 
     def job(self, name: str) -> str:
-        match = re.search(rf"(?ms)^  {re.escape(name)}:\n.*?(?=^  \S|\Z)", self.rust_ci())
+        match = re.search(
+            rf"(?ms)^  {re.escape(name)}:\n.*?(?=^  \S|\Z)", self.rust_ci()
+        )
         self.assertIsNotNone(match, name)
         return match.group(0)
 
@@ -174,7 +176,9 @@ class PrArgumentCommentLintTest(unittest.TestCase):
 
     def test_lint_is_required(self) -> None:
         rust_ci = self.rust_ci()
-        self.assertRegex(rust_ci, r"(?ms)^  results:\n.*?^        argument_comment_lint_changed,$")
+        self.assertRegex(
+            rust_ci, r"(?ms)^  results:\n.*?^        argument_comment_lint_changed,$"
+        )
         self.assertIn(
             "[[ '${{ needs.argument_comment_lint_changed.result }}' == 'success' ]]",
             rust_ci,
@@ -197,7 +201,9 @@ class PrArgumentCommentLintTest(unittest.TestCase):
             self.assertIsNotNone(match)
             return match.group(1), match.group(2)
 
-        lint_build = (REPO_ROOT / ".github" / "workflows" / "rust-ci-lint-build.yml").read_text()
+        lint_build = (
+            REPO_ROOT / ".github" / "workflows" / "rust-ci-lint-build.yml"
+        ).read_text()
         paths, key = cargo_home_restore(self.job("argument_comment_lint_changed"))
         main_paths, main_key = cargo_home_restore(lint_build)
         self.assertEqual(paths, main_paths)
@@ -265,7 +271,8 @@ class CacheSavePolicyTest(unittest.TestCase):
         indent = len(lines[start]) - len(lines[start].lstrip())
         end = index + 1
         while end < len(lines) and (
-            not lines[end].strip() or len(lines[end]) - len(lines[end].lstrip()) > indent
+            not lines[end].strip()
+            or len(lines[end]) - len(lines[end].lstrip()) > indent
         ):
             end += 1
         return "\n".join(lines[start:end])
@@ -346,7 +353,9 @@ class RunScopedCachePruneTest(unittest.TestCase):
         texts = {path.name: path.read_text() for path in self.WORKFLOWS.glob("*.yml")}
         callers: dict[str, set[str]] = {name: set() for name in texts}
         for name, text in texts.items():
-            for callee in re.findall(r"uses: \./\.github/workflows/([\w.-]+\.yml)", text):
+            for callee in re.findall(
+                r"uses: \./\.github/workflows/([\w.-]+\.yml)", text
+            ):
                 callers[callee].add(name)
 
         def entrypoints(name: str, seen: set[str]) -> set[str]:
@@ -366,13 +375,16 @@ class RunScopedCachePruneTest(unittest.TestCase):
                 with self.subTest(saver=name, entrypoint=entry):
                     self.assertIn(workflow_name, prune_names)
         self.assertGreaterEqual(
-            checked, {"blocking-ci.yml", "postmerge-ci.yml", "nightly-ci.yml", "tmux-smoke.yml"}
+            checked,
+            {"blocking-ci.yml", "postmerge-ci.yml", "nightly-ci.yml", "tmux-smoke.yml"},
         )
 
     def test_macos_core_security_cache_is_saved_once_per_push(self) -> None:
         # blocking-ci and postmerge both run it on main; only postmerge saves.
         core = (self.WORKFLOWS / "rust-ci-core-security.yml").read_text()
-        self.assertRegex(core, r"(?m)^      save_cache:\n(?:        .*\n)*?        default: true$")
+        self.assertRegex(
+            core, r"(?m)^      save_cache:\n(?:        .*\n)*?        default: true$"
+        )
         self.assertIn(
             "if: always() && !cancelled() && inputs.save_cache && github.ref == 'refs/heads/main'",
             core,
@@ -383,7 +395,9 @@ class RunScopedCachePruneTest(unittest.TestCase):
             r"      save_cache: \$\{\{ matrix\.runner != 'macos-15' \}\}$",
         )
         full = (self.WORKFLOWS / "rust-ci-full.yml").read_text()
-        macos = re.search(r"(?ms)^  core_security_tests_macos:\n(.*?)^    secrets:", full)
+        macos = re.search(
+            r"(?ms)^  core_security_tests_macos:\n(.*?)^    secrets:", full
+        )
         self.assertIsNotNone(macos)
         self.assertNotIn("save_cache", macos.group(1))
 
@@ -437,7 +451,9 @@ class PrAppServerSchemaFixturesTest(unittest.TestCase):
     def detect(self, files: list[str]) -> bool:
         """Runs the `changed` job's path loop on `files`."""
         script = self.job(self.workflow("rust-ci.yml"), "changed")
-        loop = re.search(r'(?ms)^ +for f in "\$\{files\[@\]\}"; do\n.*?^ +done$', script)
+        loop = re.search(
+            r'(?ms)^ +for f in "\$\{files\[@\]\}"; do\n.*?^ +done$', script
+        )
         self.assertIsNotNone(loop)
         program = "\n".join(
             [
@@ -457,12 +473,17 @@ class PrAppServerSchemaFixturesTest(unittest.TestCase):
     def test_runs_for_the_schema_crates_and_this_workflow(self) -> None:
         for crate in self.SCHEMA_CRATES:
             with self.subTest(crate=crate):
-                self.assertTrue(self.detect(["README.md", f"codex-rs/{crate}/src/lib.rs"]))
+                self.assertTrue(
+                    self.detect(["README.md", f"codex-rs/{crate}/src/lib.rs"])
+                )
         self.assertTrue(self.detect([".github/workflows/rust-ci.yml"]))
         for files in (
             ["codex-rs/core/src/lib.rs", "README.md", "docs/ci.md"],
             ["codex-rs/protocol-extra/src/lib.rs", "codex-rs/app-server/src/lib.rs"],
-            ["codex-rs/utils/path-utils/src/lib.rs", "codex-rs/ext/web-search/src/lib.rs"],
+            [
+                "codex-rs/utils/path-utils/src/lib.rs",
+                "codex-rs/ext/web-search/src/lib.rs",
+            ],
             [".github/workflows/rust-ci-full.yml", "codex-rs/Cargo.lock.bak"],
             ["codex-rs/Cargo.toml.bak"],
             ["codex-rs/codex-experimental-api-macros-extra/src/lib.rs"],
@@ -497,7 +518,9 @@ class PrAppServerSchemaFixturesTest(unittest.TestCase):
         }
         seen, todo = set(), ["codex-app-server-protocol"]
         while todo:
-            manifest = tomllib.loads((codex_rs / paths[todo.pop()] / "Cargo.toml").read_text())
+            manifest = tomllib.loads(
+                (codex_rs / paths[todo.pop()] / "Cargo.toml").read_text()
+            )
             for section in ("dependencies", "build-dependencies"):
                 for dep in manifest.get(section, {}):
                     if dep in paths and dep not in seen:
@@ -507,9 +530,14 @@ class PrAppServerSchemaFixturesTest(unittest.TestCase):
         exporting = sorted(
             paths[dep]
             for dep in seen
-            if any(derive.search(rs.read_text()) for rs in (codex_rs / paths[dep]).rglob("*.rs"))
+            if any(
+                derive.search(rs.read_text())
+                for rs in (codex_rs / paths[dep]).rglob("*.rs")
+            )
         )
-        self.assertEqual(sorted(set(self.SCHEMA_CRATES) - {"app-server-protocol"}), exporting)
+        self.assertEqual(
+            sorted(set(self.SCHEMA_CRATES) - {"app-server-protocol"}), exporting
+        )
         for path in exporting:
             with self.subTest(path=path):
                 self.assertTrue(self.detect([f"codex-rs/{path}/src/lib.rs"]))
@@ -518,7 +546,8 @@ class PrAppServerSchemaFixturesTest(unittest.TestCase):
         # Non-PR events get the forced file list; postmerge rust-ci-full
         # runs the schema fixture tests on main.
         forced = re.search(
-            r'(?m)^            files=\((.*)\)$', self.job(self.workflow("rust-ci.yml"), "changed")
+            r"(?m)^            files=\((.*)\)$",
+            self.job(self.workflow("rust-ci.yml"), "changed"),
         )
         self.assertIsNotNone(forced)
         files = re.findall(r'"([^"]+)"', forced.group(1))
@@ -538,13 +567,16 @@ class PrAppServerSchemaFixturesTest(unittest.TestCase):
             r"    if: \$\{\{ needs\.changed\.outputs\.app_server_schema == 'true' \}\}$",
         )
         self.assertIn(
-            "run: cargo test --locked -p codex-app-server-protocol --lib schema_fixtures", job
+            "run: cargo test --locked -p codex-app-server-protocol --lib schema_fixtures",
+            job,
         )
         self.assertIn("uses: ./.github/actions/check-clean-worktree", job)
 
     def test_required_when_it_runs(self) -> None:
         rust_ci = self.workflow("rust-ci.yml")
-        self.assertRegex(rust_ci, r"(?ms)^  results:\n.*?^        app_server_schema_fixtures,$")
+        self.assertRegex(
+            rust_ci, r"(?ms)^  results:\n.*?^        app_server_schema_fixtures,$"
+        )
         self.assertIn(
             "if [[ \"${NEEDS_CHANGED_OUTPUTS_APP_SERVER_SCHEMA}\" == 'true' ]]; then\n"
             "            [[ '${{ needs.app_server_schema_fixtures.result }}' == 'success' ]]",
@@ -555,6 +587,7 @@ class PrAppServerSchemaFixturesTest(unittest.TestCase):
             "${{ needs.changed.outputs.app_server_schema }}",
             rust_ci,
         )
+
 
 class PrWindowsNativeTestsTest(unittest.TestCase):
     """#636 (owner decision 2026-10-15): native Windows tests on PRs that
@@ -583,7 +616,9 @@ class PrWindowsNativeTestsTest(unittest.TestCase):
     def detect(self, files: list[str]) -> bool:
         """Runs the `changed` job's path loop on `files`."""
         script = self.job(self.workflow("rust-ci.yml"), "changed")
-        loop = re.search(r'(?ms)^ +for f in "\$\{files\[@\]\}"; do\n.*?^ +done$', script)
+        loop = re.search(
+            r'(?ms)^ +for f in "\$\{files\[@\]\}"; do\n.*?^ +done$', script
+        )
         self.assertIsNotNone(loop)
         program = "\n".join(
             [
@@ -603,7 +638,9 @@ class PrWindowsNativeTestsTest(unittest.TestCase):
     def test_runs_only_for_its_crates_and_its_workflow(self) -> None:
         for crate in self.CRATES + self.MORE_CRATES:
             with self.subTest(crate=crate):
-                self.assertTrue(self.detect(["README.md", f"codex-rs/{crate}/src/lib.rs"]))
+                self.assertTrue(
+                    self.detect(["README.md", f"codex-rs/{crate}/src/lib.rs"])
+                )
         self.assertTrue(self.detect([f".github/workflows/{self.REUSABLE}"]))
         for files in (
             ["codex-rs/core-api/src/lib.rs", "codex-rs/tui-markdown/x.rs"],
@@ -617,7 +654,8 @@ class PrWindowsNativeTestsTest(unittest.TestCase):
         # Non-PR events get the forced file list; nightly runs every crate's
         # native Windows tests in bazel.yml instead.
         forced = re.search(
-            r'(?m)^            files=\((.*)\)$', self.job(self.workflow("rust-ci.yml"), "changed")
+            r"(?m)^            files=\((.*)\)$",
+            self.job(self.workflow("rust-ci.yml"), "changed"),
         )
         self.assertIsNotNone(forced)
         files = re.findall(r'"([^"]+)"', forced.group(1))
@@ -642,7 +680,9 @@ class PrWindowsNativeTestsTest(unittest.TestCase):
 
     def test_required_when_it_runs(self) -> None:
         rust_ci = self.workflow("rust-ci.yml")
-        self.assertRegex(rust_ci, r"(?ms)^  results:\n.*?^        windows_native_tests,$")
+        self.assertRegex(
+            rust_ci, r"(?ms)^  results:\n.*?^        windows_native_tests,$"
+        )
         self.assertIn(
             "if [[ \"${NEEDS_CHANGED_OUTPUTS_WINDOWS_NATIVE_TESTS}\" == 'true' ]]; then\n"
             "            [[ '${{ needs.windows_native_tests.result }}' == 'success' ]]",
@@ -665,7 +705,8 @@ class PrWindowsNativeTestsTest(unittest.TestCase):
         default = re.search(r"(?m)^        default: (.*)$", triggers)
         self.assertIsNotNone(default)
         self.assertEqual(
-            default.group(1).split(), [f"//codex-rs/{crate}/..." for crate in self.CRATES]
+            default.group(1).split(),
+            [f"//codex-rs/{crate}/..." for crate in self.CRATES],
         )
         self.assertIn('read -r -a bazel_targets <<< "$TARGETS"', reusable)
         self.assertIn("--build_tests_only", reusable)
@@ -677,7 +718,10 @@ class PrWindowsNativeTestsTest(unittest.TestCase):
         reusable = self.workflow(self.REUSABLE)
         self.assertIn("cache-scope: bazel-test-windows-native-main", reusable)
         # bazel.yml scopes that job's cache by its job ID.
-        self.assertIn("cache-scope: bazel-${{ github.job }}", self.job(self.workflow("bazel.yml"), "test-windows-native-main"))
+        self.assertIn(
+            "cache-scope: bazel-${{ github.job }}",
+            self.job(self.workflow("bazel.yml"), "test-windows-native-main"),
+        )
         self.assertNotIn("actions/cache/save@", reusable)
         self.assertNotRegex(reusable, r"uses: actions/cache@")
 
@@ -686,7 +730,10 @@ class PrWindowsNativeTestsTest(unittest.TestCase):
         # there (not in .bazelrc, which every platform reads).
         flag = "--flaky_test_attempts=//codex-rs/login:login-unit-tests@2"
         native_main = self.job(self.workflow("bazel.yml"), "test-windows-native-main")
-        for name, text in (("pr", self.workflow(self.REUSABLE)), ("nightly", native_main)):
+        for name, text in (
+            ("pr", self.workflow(self.REUSABLE)),
+            ("nightly", native_main),
+        ):
             with self.subTest(job=name):
                 self.assertEqual(re.findall(r"--flaky_test_attempts=\S+", text), [flag])
         self.assertEqual(self.workflow("bazel.yml").count("--flaky_test_attempts"), 1)
@@ -732,14 +779,18 @@ class NightlyHeavyJobsTest(unittest.TestCase):
             self.workflow("nightly-ci.yml"),
             r"(?m)^    uses: \./\.github/workflows/rust-ci-core-developer-accounting\.yml$",
         )
-        triggers = self.workflow("rust-ci-core-developer-accounting.yml").split("\njobs:")[0]
+        triggers = self.workflow("rust-ci-core-developer-accounting.yml").split(
+            "\njobs:"
+        )[0]
         for trigger in ("pull_request", "push"):
             with self.subTest(trigger=trigger):
                 self.assertNotRegex(triggers, rf"(?m)^  {trigger}:")
 
     def test_slow_argument_lint_platforms_are_gated(self) -> None:
         rust_ci = self.workflow("rust-ci.yml")
-        self.assertIn('if [[ "$PLATFORM" != "Windows" && "$COLD_BAZEL" != "true" ]]', rust_ci)
+        self.assertIn(
+            'if [[ "$PLATFORM" != "Windows" && "$COLD_BAZEL" != "true" ]]', rust_ci
+        )
 
     def test_sdk_bazel_job_is_gated(self) -> None:
         self.assertRegex(

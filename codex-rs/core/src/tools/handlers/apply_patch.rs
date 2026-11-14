@@ -13,12 +13,8 @@ use crate::function_tool::FunctionCallError;
 use crate::safety::PatchPolicyMatcher;
 use crate::safety::PatchSandboxRoute;
 use crate::session::session::Session;
-<<<<<<< HEAD
-use crate::session::turn_context::PatchFallbackTransition;
-||||||| 413492cd6c
-=======
 use crate::session::step_context::StepContext;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use crate::session::turn_context::PatchFallbackTransition;
 use crate::session::turn_context::TurnContext;
 use crate::session::turn_context::TurnEnvironment;
 use crate::tools::context::ApplyPatchToolOutput;
@@ -31,14 +27,10 @@ use crate::tools::context::boxed_tool_output;
 use crate::tools::events::ToolEmitter;
 use crate::tools::events::ToolEventCtx;
 use crate::tools::handlers::apply_patch_spec::create_apply_patch_freeform_tool;
-<<<<<<< HEAD
 use crate::tools::handlers::emit_model_edit_compat_metric;
 use crate::tools::handlers::emit_model_edit_fallback_activated_metric;
-use crate::tools::handlers::read_granted_permissions;
-||||||| 413492cd6c
-=======
 use crate::tools::handlers::file_system_sandbox_policy_context_for_cwd;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use crate::tools::handlers::read_granted_permissions;
 use crate::tools::handlers::resolve_tool_environment;
 use crate::tools::handlers::selected_executor;
 use crate::tools::handlers::updated_hook_command;
@@ -75,7 +67,6 @@ use codex_tools::ToolSpec;
 use codex_utils_path_uri::PathUri;
 
 const APPLY_PATCH_ARGUMENT_DIFF_BUFFER_INTERVAL: Duration = Duration::from_millis(500);
-<<<<<<< HEAD
 const STRUCTURED_EDIT_FALLBACK_GUIDANCE: &str = "Repeated apply_patch grammar failures detected (2). Structured edit fallback is active for this turn. Do not retry apply_patch; use structured_edit for existing files or structured_write for new and full-file writes.";
 
 fn record_apply_patch_grammar_failure(turn: &TurnContext, protocol: &'static str) -> u8 {
@@ -103,9 +94,38 @@ fn reject_apply_patch_if_fallback_active(
         STRUCTURED_EDIT_FALLBACK_GUIDANCE.to_string(),
     ))
 }
-||||||| 413492cd6c
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+
+/// A strict `apply_patch` grammar failure: counted toward the
+/// structured-edit fallback, measured, and answered with the guidance once
+/// the fallback is active.
+fn patch_grammar_failure(
+    turn: &TurnContext,
+    parse_error: impl std::fmt::Display,
+) -> FunctionCallError {
+    record_apply_patch_grammar_failure(turn, "strict_apply_patch");
+    emit_model_edit_compat_metric(turn, "strict_apply_patch", "failure", "parse_error");
+    let mut message = format!("apply_patch verification failed: {parse_error}");
+    if turn.structured_edit_fallback_enabled() {
+        message.push_str("\n\n");
+        message.push_str(STRUCTURED_EDIT_FALLBACK_GUIDANCE);
+    }
+    FunctionCallError::RespondToModel(message)
+}
+
+/// PF-27-S02, D491 (#1976), PF-23-S01: the file-tool sandbox context for a
+/// patch: the turn's (launch-contract narrowing, Windows unsandboxed refusal)
+/// with the post-taint protected-path denials, as on main.
+fn protected_patch_context(
+    session: &Session,
+    turn: &TurnContext,
+    turn_environment: &TurnEnvironment,
+) -> codex_exec_server::FileSystemSandboxContext {
+    crate::security::protected_surface::protect_file_tool_context(
+        session,
+        turn,
+        turn.file_system_sandbox_context(/*additional_permissions*/ None, turn_environment),
+    )
+}
 
 /// Handles freeform `apply_patch` requests and routes verified patches to the
 /// selected environment filesystem.
@@ -271,53 +291,6 @@ fn file_paths_for_action(action: &ApplyPatchAction) -> Vec<PathUri> {
 }
 
 fn write_permissions_for_paths(
-<<<<<<< HEAD
-    file_paths: &[AbsolutePathBuf],
-    file_system_sandbox_policy: &codex_protocol::permissions::FileSystemSandboxPolicy,
-    cwd: &AbsolutePathBuf,
-) -> Option<AdditionalPermissionProfile> {
-    // #606: as the sandboxes, nothing through a writable link they leave out.
-    let excluded = file_system_sandbox_policy.writable_links_into_read_only_paths(cwd.as_path());
-    let write_paths = file_paths
-        .iter()
-        .map(|path| {
-            path.parent()
-                .unwrap_or_else(|| path.clone())
-                .into_path_buf()
-        })
-        .filter(|path| {
-            !file_system_sandbox_policy.can_write_path_outside_excluded_links(
-                path.as_path(),
-                cwd.as_path(),
-                &excluded,
-            )
-        })
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .map(AbsolutePathBuf::from_absolute_path)
-        .collect::<Result<Vec<_>, _>>()
-        .ok()?;
-||||||| 413492cd6c
-    file_paths: &[AbsolutePathBuf],
-    file_system_sandbox_policy: &codex_protocol::permissions::FileSystemSandboxPolicy,
-    cwd: &AbsolutePathBuf,
-) -> Option<AdditionalPermissionProfile> {
-    let write_paths = file_paths
-        .iter()
-        .map(|path| {
-            path.parent()
-                .unwrap_or_else(|| path.clone())
-                .into_path_buf()
-        })
-        .filter(|path| {
-            !file_system_sandbox_policy.can_write_path_with_cwd(path.as_path(), cwd.as_path())
-        })
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .map(AbsolutePathBuf::from_absolute_path)
-        .collect::<Result<Vec<_>, _>>()
-        .ok()?;
-=======
     file_paths: &[PathUri],
     matching: &PatchPolicyMatcher<'_>,
 ) -> io::Result<Option<AdditionalPermissionProfile>> {
@@ -347,7 +320,6 @@ fn write_permissions_for_paths(
     }
     write_paths.sort_by_key(PathUri::to_string);
     write_paths.dedup();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     if write_paths.is_empty() {
         return Ok(None);
@@ -373,139 +345,6 @@ fn apply_patch_payload_command(payload: &ToolPayload) -> Option<String> {
     payload.freeform_input()
 }
 
-<<<<<<< HEAD
-async fn effective_patch_permissions(
-    session: &Session,
-    turn: &TurnContext,
-    environment_id: &str,
-    action: &ApplyPatchAction,
-    cwd: &PathUri,
-) -> std::io::Result<(
-    Vec<PathUri>,
-    crate::tools::handlers::EffectiveAdditionalPermissions,
-    codex_protocol::permissions::FileSystemSandboxPolicy,
-)> {
-    let file_paths = file_paths_for_action(action);
-    let native_cwd = cwd.to_abs_path()?;
-    // #1057: read once, so every grant that widens the policy (and so may
-    // let the patch through unasked) is also carried by the request.
-    let granted_permissions = read_granted_permissions(session, environment_id).await;
-    let base_file_system_sandbox_policy = turn.file_system_sandbox_policy();
-    let file_system_sandbox_policy = effective_file_system_sandbox_policy(
-        &base_file_system_sandbox_policy,
-        granted_permissions.as_ref(),
-    );
-    let native_file_paths = file_paths
-        .iter()
-        .map(PathUri::to_abs_path)
-        .collect::<Result<Vec<_>, _>>()?;
-    let effective_additional_permissions = with_granted_permissions(
-        granted_permissions,
-        native_cwd.as_path(),
-        crate::sandboxing::SandboxPermissions::UseDefault,
-        write_permissions_for_paths(&native_file_paths, &file_system_sandbox_policy, &native_cwd),
-    );
-
-    Ok((
-        file_paths,
-        effective_additional_permissions,
-        file_system_sandbox_policy,
-    ))
-}
-
-fn patch_permissions_without_path_matching(
-    turn: &TurnContext,
-    action: &ApplyPatchAction,
-) -> (
-    Vec<PathUri>,
-    crate::tools::handlers::EffectiveAdditionalPermissions,
-    codex_protocol::permissions::FileSystemSandboxPolicy,
-) {
-    // TODO(anp): Make permission matching operate on PathUri. Until then, foreign paths skip
-    // permission matching. They are still assessed against the turn's own policy, never an
-    // unrestricted one, so a restricted turn asks (or rejects) instead of auto-approving (#713).
-    (
-        file_paths_for_action(action),
-        crate::tools::handlers::EffectiveAdditionalPermissions {
-            sandbox_permissions: crate::sandboxing::SandboxPermissions::UseDefault,
-            additional_permissions: None,
-            permissions_preapproved: false,
-        },
-        turn.file_system_sandbox_policy(),
-    )
-}
-
-||||||| 413492cd6c
-async fn effective_patch_permissions(
-    session: &Session,
-    turn: &TurnContext,
-    environment_id: &str,
-    action: &ApplyPatchAction,
-    cwd: &PathUri,
-) -> std::io::Result<(
-    Vec<PathUri>,
-    crate::tools::handlers::EffectiveAdditionalPermissions,
-    codex_protocol::permissions::FileSystemSandboxPolicy,
-)> {
-    let file_paths = file_paths_for_action(action);
-    let native_cwd = cwd.to_abs_path()?;
-    let granted_permissions = merge_permission_profiles(
-        session
-            .granted_session_permissions(environment_id)
-            .await
-            .as_ref(),
-        session
-            .granted_turn_permissions(environment_id)
-            .await
-            .as_ref(),
-    );
-    let base_file_system_sandbox_policy = turn.file_system_sandbox_policy();
-    let file_system_sandbox_policy = effective_file_system_sandbox_policy(
-        &base_file_system_sandbox_policy,
-        granted_permissions.as_ref(),
-    );
-    let native_file_paths = file_paths
-        .iter()
-        .map(PathUri::to_abs_path)
-        .collect::<Result<Vec<_>, _>>()?;
-    let effective_additional_permissions = apply_granted_turn_permissions(
-        session,
-        environment_id,
-        native_cwd.as_path(),
-        crate::sandboxing::SandboxPermissions::UseDefault,
-        write_permissions_for_paths(&native_file_paths, &file_system_sandbox_policy, &native_cwd),
-    )
-    .await;
-
-    Ok((
-        file_paths,
-        effective_additional_permissions,
-        file_system_sandbox_policy,
-    ))
-}
-
-fn patch_permissions_without_path_matching(
-    action: &ApplyPatchAction,
-) -> (
-    Vec<PathUri>,
-    crate::tools::handlers::EffectiveAdditionalPermissions,
-    codex_protocol::permissions::FileSystemSandboxPolicy,
-) {
-    // TODO(anp): Make permission matching operate on PathUri. Until then, foreign paths skip
-    // permission matching; a managed turn still fails closed at the platform sandbox boundary.
-    (
-        file_paths_for_action(action),
-        crate::tools::handlers::EffectiveAdditionalPermissions {
-            sandbox_permissions: crate::sandboxing::SandboxPermissions::UseDefault,
-            additional_permissions: None,
-            permissions_preapproved: false,
-        },
-        codex_protocol::permissions::FileSystemSandboxPolicy::unrestricted(),
-    )
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 impl ToolExecutor<ToolInvocation> for ApplyPatchHandler {
     fn tool_name(&self) -> ToolName {
         ToolName::plain("apply_patch")
@@ -540,8 +379,8 @@ impl ApplyPatchHandler {
             ..
         } = invocation;
 
+        let turn = Arc::clone(&step_context.turn);
         reject_apply_patch_if_fallback_active(&turn, "strict_apply_patch")?;
-
         let Some(patch_input) = apply_patch_payload_command(&payload) else {
             emit_model_edit_compat_metric(
                 &turn,
@@ -553,324 +392,19 @@ impl ApplyPatchHandler {
                 "apply_patch handler received unsupported payload".to_string(),
             ));
         };
-<<<<<<< HEAD
-        let args = match codex_apply_patch::parse_patch(&patch_input) {
-            Ok(args) => {
-                turn.record_strict_apply_patch_parse_success();
-                args
-            }
-            Err(parse_error) => {
-                record_apply_patch_grammar_failure(&turn, "strict_apply_patch");
-                emit_model_edit_compat_metric(
-                    &turn,
-                    "strict_apply_patch",
-                    "failure",
-                    "parse_error",
-                );
-                let mut message = format!("apply_patch verification failed: {parse_error}");
-                if turn.structured_edit_fallback_enabled() {
-                    message.push_str("\n\n");
-                    message.push_str(STRUCTURED_EDIT_FALLBACK_GUIDANCE);
-                }
-                return Err(FunctionCallError::RespondToModel(message));
-            }
-||||||| 413492cd6c
-        let args = match codex_apply_patch::parse_patch(&patch_input) {
-            Ok(args) => args,
-            Err(parse_error) => {
-                return Err(FunctionCallError::RespondToModel(format!(
-                    "apply_patch verification failed: {parse_error}"
-                )));
-            }
-=======
         let turn_environment = selected_executor(&environments, &step_context.environments)?;
-        let request = prepare_patch_request(&patch_input, turn_environment, &step_context).await?;
+        let (request, handler_basis) =
+            prepare_patch_request(&patch_input, turn_environment, &session, &step_context).await?;
         let tool_ctx = ToolCtx {
             session,
             step_context,
             cancellation_token,
             call_id,
             tool_name,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
-<<<<<<< HEAD
-        let selected_environment_id =
-            require_environment_id(args.environment_id.as_deref(), self.multi_environment)?;
-
-        // Verify the parsed patch against the selected environment filesystem.
-        let Some(turn_environment) = resolve_tool_environment(
-            &step_context.environments,
-            selected_environment_id.as_deref(),
-        )?
-        else {
-            emit_model_edit_compat_metric(&turn, "strict_apply_patch", "failure", "unavailable");
-            return Err(FunctionCallError::RespondToModel(
-                "apply_patch is unavailable in this session".to_string(),
-            ));
-        };
-        let fs = turn_environment.environment.get_filesystem();
-        let sandbox = crate::security::protected_surface::protect_file_tool_context(
-            &session,
-            &turn,
-            turn.file_system_sandbox_context(
-                /*additional_permissions*/ None,
-                turn_environment,
-            ),
-        );
-        match codex_apply_patch::verify_apply_patch_args(
-            args,
-            turn_environment.cwd(),
-            fs.as_ref(),
-            Some(&sandbox),
-        )
-        .await
-        {
-            codex_apply_patch::MaybeApplyPatchVerified::Body(changes) => {
-                // #1057: taken before the grants are read.
-                let handler_basis = HandlerBasis::now(session.as_ref());
-                let (file_paths, effective_additional_permissions, file_system_sandbox_policy) =
-                    effective_patch_permissions(
-                        session.as_ref(),
-                        turn.as_ref(),
-                        &turn_environment.environment_id,
-                        &changes,
-                        turn_environment.cwd(),
-                    )
-                    .await
-                    .unwrap_or_else(|_| {
-                        patch_permissions_without_path_matching(turn.as_ref(), &changes)
-                    });
-                match apply_patch::apply_patch(turn.as_ref(), &file_system_sandbox_policy, changes)
-                    .await
-                {
-                    InternalApplyPatchInvocation::Output(item) => {
-                        let content = item?;
-                        Ok(boxed_tool_output(ApplyPatchToolOutput::from_text(content)))
-                    }
-                    InternalApplyPatchInvocation::DelegateToRuntime(apply) => {
-                        let changes = convert_apply_patch_to_protocol(&apply.action);
-                        let emitter = ToolEmitter::apply_patch_for_environment(
-                            changes.clone(),
-                            apply.auto_approved,
-                            turn_environment.environment_id.clone(),
-                        );
-                        let event_ctx = ToolEventCtx::new(
-                            session.as_ref(),
-                            turn.as_ref(),
-                            &call_id,
-                            Some(&tracker),
-                        );
-                        emitter.begin(event_ctx).await;
-
-                        let req = ApplyPatchRequest {
-                            turn_environment: turn_environment.clone(),
-                            action: apply.action,
-                            file_paths,
-                            changes,
-                            exec_approval_requirement: apply.exec_approval_requirement,
-                            additional_permissions: effective_additional_permissions
-                                .additional_permissions,
-                            permissions_preapproved: effective_additional_permissions
-                                .permissions_preapproved,
-                        };
-
-                        let mut orchestrator =
-                            ToolOrchestrator::new().with_handler_basis(Some(handler_basis));
-                        let mut runtime = ApplyPatchRuntime::new();
-                        let tool_ctx = ToolCtx {
-                            session: session.clone(),
-                            turn: turn.clone(),
-                            call_id: call_id.clone(),
-                            tool_name: tool_name.clone(),
-                        };
-                        let out = orchestrator
-                            .run(
-                                &mut runtime,
-                                &req,
-                                &tool_ctx,
-                                turn.as_ref(),
-                                turn.approval_policy.value(),
-                            )
-                            .await
-                            .map(|result| result.output);
-                        let (out, delta) = match out {
-                            Ok(output) => (Ok(output.exec_output), Some(output.delta)),
-                            Err(error) => (Err(error), Some(runtime.committed_delta().clone())),
-                        };
-                        let event_ctx = ToolEventCtx::new(
-                            session.as_ref(),
-                            turn.as_ref(),
-                            &call_id,
-                            Some(&tracker),
-                        );
-                        let content = emitter.finish(event_ctx, out, delta.as_ref()).await?;
-                        Ok(boxed_tool_output(ApplyPatchToolOutput::from_text(content)))
-                    }
-                }
-            }
-            codex_apply_patch::MaybeApplyPatchVerified::CorrectnessError(parse_error) => {
-                emit_model_edit_compat_metric(
-                    &turn,
-                    "strict_apply_patch",
-                    "failure",
-                    "verification_error",
-                );
-                Err(FunctionCallError::RespondToModel(format!(
-                    "apply_patch verification failed: {parse_error}"
-                )))
-            }
-            codex_apply_patch::MaybeApplyPatchVerified::ShellParseError(error) => {
-                tracing::trace!("Failed to parse apply_patch input, {error:?}");
-                record_apply_patch_grammar_failure(&turn, "strict_apply_patch");
-                emit_model_edit_compat_metric(
-                    &turn,
-                    "strict_apply_patch",
-                    "failure",
-                    "shell_parse_error",
-                );
-                let mut message = "apply_patch handler received invalid patch input".to_string();
-                if turn.structured_edit_fallback_enabled() {
-                    message.push_str("\n\n");
-                    message.push_str(STRUCTURED_EDIT_FALLBACK_GUIDANCE);
-                }
-                Err(FunctionCallError::RespondToModel(message))
-            }
-            codex_apply_patch::MaybeApplyPatchVerified::NotApplyPatch => {
-                emit_model_edit_compat_metric(
-                    &turn,
-                    "strict_apply_patch",
-                    "failure",
-                    "not_apply_patch",
-                );
-                Err(FunctionCallError::RespondToModel(
-                    "apply_patch handler received non-apply_patch input".to_string(),
-                ))
-            }
-        }
-||||||| 413492cd6c
-        let selected_environment_id =
-            require_environment_id(args.environment_id.as_deref(), self.multi_environment)?;
-
-        // Verify the parsed patch against the selected environment filesystem.
-        let Some(turn_environment) = resolve_tool_environment(
-            &step_context.environments,
-            selected_environment_id.as_deref(),
-        )?
-        else {
-            return Err(FunctionCallError::RespondToModel(
-                "apply_patch is unavailable in this session".to_string(),
-            ));
-        };
-        let fs = turn_environment.environment.get_filesystem();
-        let sandbox = turn
-            .file_system_sandbox_context(/*additional_permissions*/ None, turn_environment);
-        match codex_apply_patch::verify_apply_patch_args(
-            args,
-            turn_environment.cwd(),
-            fs.as_ref(),
-            Some(&sandbox),
-        )
-        .await
-        {
-            codex_apply_patch::MaybeApplyPatchVerified::Body(changes) => {
-                let (file_paths, effective_additional_permissions, file_system_sandbox_policy) =
-                    effective_patch_permissions(
-                        session.as_ref(),
-                        turn.as_ref(),
-                        &turn_environment.environment_id,
-                        &changes,
-                        turn_environment.cwd(),
-                    )
-                    .await
-                    .unwrap_or_else(|_| patch_permissions_without_path_matching(&changes));
-                match apply_patch::apply_patch(turn.as_ref(), &file_system_sandbox_policy, changes)
-                    .await
-                {
-                    InternalApplyPatchInvocation::Output(item) => {
-                        let content = item?;
-                        Ok(boxed_tool_output(ApplyPatchToolOutput::from_text(content)))
-                    }
-                    InternalApplyPatchInvocation::DelegateToRuntime(apply) => {
-                        let changes = convert_apply_patch_to_protocol(&apply.action);
-                        let emitter = ToolEmitter::apply_patch_for_environment(
-                            changes.clone(),
-                            apply.auto_approved,
-                            turn_environment.environment_id.clone(),
-                        );
-                        let event_ctx = ToolEventCtx::new(
-                            session.as_ref(),
-                            turn.as_ref(),
-                            &call_id,
-                            Some(&tracker),
-                        );
-                        emitter.begin(event_ctx).await;
-
-                        let req = ApplyPatchRequest {
-                            turn_environment: turn_environment.clone(),
-                            action: apply.action,
-                            file_paths,
-                            changes,
-                            exec_approval_requirement: apply.exec_approval_requirement,
-                            additional_permissions: effective_additional_permissions
-                                .additional_permissions,
-                            permissions_preapproved: effective_additional_permissions
-                                .permissions_preapproved,
-                        };
-
-                        let mut orchestrator = ToolOrchestrator::new();
-                        let mut runtime = ApplyPatchRuntime::new();
-                        let tool_ctx = ToolCtx {
-                            session: session.clone(),
-                            turn: turn.clone(),
-                            call_id: call_id.clone(),
-                            tool_name: tool_name.clone(),
-                        };
-                        let out = orchestrator
-                            .run(
-                                &mut runtime,
-                                &req,
-                                &tool_ctx,
-                                turn.as_ref(),
-                                turn.approval_policy.value(),
-                            )
-                            .await
-                            .map(|result| result.output);
-                        let (out, delta) = match out {
-                            Ok(output) => (Ok(output.exec_output), Some(output.delta)),
-                            Err(error) => (Err(error), Some(runtime.committed_delta().clone())),
-                        };
-                        let event_ctx = ToolEventCtx::new(
-                            session.as_ref(),
-                            turn.as_ref(),
-                            &call_id,
-                            Some(&tracker),
-                        );
-                        let content = emitter.finish(event_ctx, out, delta.as_ref()).await?;
-                        Ok(boxed_tool_output(ApplyPatchToolOutput::from_text(content)))
-                    }
-                }
-            }
-            codex_apply_patch::MaybeApplyPatchVerified::CorrectnessError(parse_error) => {
-                Err(FunctionCallError::RespondToModel(format!(
-                    "apply_patch verification failed: {parse_error}"
-                )))
-            }
-            codex_apply_patch::MaybeApplyPatchVerified::ShellParseError(error) => {
-                tracing::trace!("Failed to parse apply_patch input, {error:?}");
-                Err(FunctionCallError::RespondToModel(
-                    "apply_patch handler received invalid patch input".to_string(),
-                ))
-            }
-            codex_apply_patch::MaybeApplyPatchVerified::NotApplyPatch => {
-                Err(FunctionCallError::RespondToModel(
-                    "apply_patch handler received non-apply_patch input".to_string(),
-                ))
-            }
-        }
-=======
-        let content = execute_prepared_patch(request, Some(&tracker), tool_ctx).await?;
+        let content =
+            execute_prepared_patch(request, handler_basis, Some(&tracker), tool_ctx).await?;
         Ok(boxed_tool_output(ApplyPatchToolOutput::from_text(content)))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
@@ -879,14 +413,17 @@ impl CoreToolRuntime for ApplyPatchHandler {
         &self,
         invocation: &ToolInvocation,
     ) -> Result<ToolEnvironments, FunctionCallError> {
-        let ToolPayload::Custom { input } = &invocation.payload else {
+        let Some(input) = apply_patch_payload_command(&invocation.payload) else {
             return Err(FunctionCallError::Fatal(
                 "expected apply_patch input".to_string(),
             ));
         };
-        let args = codex_apply_patch::parse_patch(input).map_err(|err| {
-            FunctionCallError::RespondToModel(format!("apply_patch verification failed: {err}"))
-        })?;
+        // The patch is parsed here first (before `handle_call`), so main's
+        // structured-edit fallback is checked and counted here too.
+        let turn = invocation.step_context.turn.as_ref();
+        reject_apply_patch_if_fallback_active(turn, "strict_apply_patch")?;
+        let args = codex_apply_patch::parse_patch(&input)
+            .map_err(|parse_error| patch_grammar_failure(turn, parse_error))?;
         let environment_id =
             require_environment_id(args.environment_id.as_deref(), self.multi_environment)?;
         let environment = resolve_tool_environment(
@@ -962,6 +499,8 @@ impl CoreToolRuntime for ApplyPatchHandler {
     }
 }
 
+/// Which tool sent an intercepted patch: the strict shell path counts toward
+/// the structured-edit fallback; the structured tools do not.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum InterceptedPatchSource {
     StrictShell,
@@ -982,187 +521,18 @@ pub(crate) async fn intercept_apply_patch(
     tool_name: &str,
     source: InterceptedPatchSource,
 ) -> Result<Option<FunctionToolOutput>, FunctionCallError> {
-<<<<<<< HEAD
-    let sandbox = crate::security::protected_surface::protect_file_tool_context(
-        &session,
-        &turn,
-        turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment),
-    );
-||||||| 413492cd6c
-    let sandbox =
-        turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment);
-=======
-    let sandbox = turn_environment.sandbox_context(/*additional_permissions*/ None);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let turn = Arc::clone(&step_context.turn);
+    let sandbox = protected_patch_context(&session, &turn, &turn_environment);
     match codex_apply_patch::maybe_parse_apply_patch_verified(command, cwd, fs, Some(&sandbox))
         .await
     {
         codex_apply_patch::MaybeApplyPatchVerified::Body(changes) => {
-<<<<<<< HEAD
             if source == InterceptedPatchSource::StrictShell {
                 turn.record_strict_apply_patch_parse_success();
                 reject_apply_patch_if_fallback_active(&turn, "strict_apply_patch_shell")?;
             }
-            // #1057: taken before the grants are read.
-            let handler_basis = HandlerBasis::now(session.as_ref());
-            let (approval_keys, effective_additional_permissions, file_system_sandbox_policy) =
-                effective_patch_permissions(
-                    session.as_ref(),
-                    turn.as_ref(),
-                    &turn_environment.environment_id,
-                    &changes,
-                    cwd,
-                )
-                .await
-                .unwrap_or_else(|_| {
-                    patch_permissions_without_path_matching(turn.as_ref(), &changes)
-                });
-            match apply_patch::apply_patch(turn.as_ref(), &file_system_sandbox_policy, changes)
-                .await
-            {
-                InternalApplyPatchInvocation::Output(item) => {
-                    let content = item?;
-                    Ok(Some(FunctionToolOutput::from_text(content, Some(true))))
-                }
-                InternalApplyPatchInvocation::DelegateToRuntime(apply) => {
-                    let changes = convert_apply_patch_to_protocol(&apply.action);
-                    let emitter = ToolEmitter::apply_patch_for_environment(
-                        changes.clone(),
-                        apply.auto_approved,
-                        turn_environment.environment_id.clone(),
-                    );
-                    let event_ctx = ToolEventCtx::new(
-                        session.as_ref(),
-                        turn.as_ref(),
-                        call_id,
-                        tracker.as_ref().copied(),
-                    );
-                    emitter.begin(event_ctx).await;
-
-                    let req = ApplyPatchRequest {
-                        turn_environment,
-                        action: apply.action,
-                        file_paths: approval_keys,
-                        changes,
-                        exec_approval_requirement: apply.exec_approval_requirement,
-                        additional_permissions: effective_additional_permissions
-                            .additional_permissions,
-                        permissions_preapproved: effective_additional_permissions
-                            .permissions_preapproved,
-                    };
-
-                    let mut orchestrator =
-                        ToolOrchestrator::new().with_handler_basis(Some(handler_basis));
-                    let mut runtime = ApplyPatchRuntime::new();
-                    let tool_ctx = ToolCtx {
-                        session: session.clone(),
-                        turn: turn.clone(),
-                        call_id: call_id.to_string(),
-                        tool_name: ToolName::plain(tool_name),
-                    };
-                    let out = orchestrator
-                        .run(
-                            &mut runtime,
-                            &req,
-                            &tool_ctx,
-                            turn.as_ref(),
-                            turn.approval_policy.value(),
-                        )
-                        .await
-                        .map(|result| result.output);
-                    let (out, delta) = match out {
-                        Ok(output) => (Ok(output.exec_output), Some(output.delta)),
-                        Err(error) => (Err(error), Some(runtime.committed_delta().clone())),
-                    };
-                    let event_ctx = ToolEventCtx::new(
-                        session.as_ref(),
-                        turn.as_ref(),
-                        call_id,
-                        tracker.as_ref().copied(),
-                    );
-                    let content = emitter.finish(event_ctx, out, delta.as_ref()).await?;
-                    Ok(Some(FunctionToolOutput::from_text(content, Some(true))))
-                }
-            }
-||||||| 413492cd6c
-            let (approval_keys, effective_additional_permissions, file_system_sandbox_policy) =
-                effective_patch_permissions(
-                    session.as_ref(),
-                    turn.as_ref(),
-                    &turn_environment.environment_id,
-                    &changes,
-                    cwd,
-                )
-                .await
-                .unwrap_or_else(|_| patch_permissions_without_path_matching(&changes));
-            match apply_patch::apply_patch(turn.as_ref(), &file_system_sandbox_policy, changes)
-                .await
-            {
-                InternalApplyPatchInvocation::Output(item) => {
-                    let content = item?;
-                    Ok(Some(FunctionToolOutput::from_text(content, Some(true))))
-                }
-                InternalApplyPatchInvocation::DelegateToRuntime(apply) => {
-                    let changes = convert_apply_patch_to_protocol(&apply.action);
-                    let emitter = ToolEmitter::apply_patch_for_environment(
-                        changes.clone(),
-                        apply.auto_approved,
-                        turn_environment.environment_id.clone(),
-                    );
-                    let event_ctx = ToolEventCtx::new(
-                        session.as_ref(),
-                        turn.as_ref(),
-                        call_id,
-                        tracker.as_ref().copied(),
-                    );
-                    emitter.begin(event_ctx).await;
-
-                    let req = ApplyPatchRequest {
-                        turn_environment,
-                        action: apply.action,
-                        file_paths: approval_keys,
-                        changes,
-                        exec_approval_requirement: apply.exec_approval_requirement,
-                        additional_permissions: effective_additional_permissions
-                            .additional_permissions,
-                        permissions_preapproved: effective_additional_permissions
-                            .permissions_preapproved,
-                    };
-
-                    let mut orchestrator = ToolOrchestrator::new();
-                    let mut runtime = ApplyPatchRuntime::new();
-                    let tool_ctx = ToolCtx {
-                        session: session.clone(),
-                        turn: turn.clone(),
-                        call_id: call_id.to_string(),
-                        tool_name: ToolName::plain(tool_name),
-                    };
-                    let out = orchestrator
-                        .run(
-                            &mut runtime,
-                            &req,
-                            &tool_ctx,
-                            turn.as_ref(),
-                            turn.approval_policy.value(),
-                        )
-                        .await
-                        .map(|result| result.output);
-                    let (out, delta) = match out {
-                        Ok(output) => (Ok(output.exec_output), Some(output.delta)),
-                        Err(error) => (Err(error), Some(runtime.committed_delta().clone())),
-                    };
-                    let event_ctx = ToolEventCtx::new(
-                        session.as_ref(),
-                        turn.as_ref(),
-                        call_id,
-                        tracker.as_ref().copied(),
-                    );
-                    let content = emitter.finish(event_ctx, out, delta.as_ref()).await?;
-                    Ok(Some(FunctionToolOutput::from_text(content, Some(true))))
-                }
-            }
-=======
-            let request = prepare_verified_patch(changes, turn_environment, &step_context)?;
+            let (request, handler_basis) =
+                prepare_verified_patch(changes, turn_environment, &session, &step_context).await?;
             let tool_ctx = ToolCtx {
                 session,
                 step_context,
@@ -1170,9 +540,8 @@ pub(crate) async fn intercept_apply_patch(
                 call_id: call_id.to_string(),
                 tool_name: ToolName::plain(tool_name),
             };
-            let content = execute_prepared_patch(request, tracker, tool_ctx).await?;
+            let content = execute_prepared_patch(request, handler_basis, tracker, tool_ctx).await?;
             Ok(Some(FunctionToolOutput::from_text(content, Some(true))))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         codex_apply_patch::MaybeApplyPatchVerified::CorrectnessError(parse_error) => {
             if source == InterceptedPatchSource::StrictShell {
@@ -1228,18 +597,19 @@ pub(crate) async fn intercept_apply_patch(
 pub(crate) async fn prepare_patch_request(
     patch_input: &str,
     turn_environment: &TurnEnvironment,
+    session: &Session,
     step_context: &StepContext,
-) -> Result<ApplyPatchRequest, FunctionCallError> {
+) -> Result<(ApplyPatchRequest, HandlerBasis), FunctionCallError> {
+    let turn = step_context.turn.as_ref();
     let args = match codex_apply_patch::parse_patch(patch_input) {
-        Ok(args) => args,
-        Err(parse_error) => {
-            return Err(FunctionCallError::RespondToModel(format!(
-                "apply_patch verification failed: {parse_error}"
-            )));
+        Ok(args) => {
+            turn.record_strict_apply_patch_parse_success();
+            args
         }
+        Err(parse_error) => return Err(patch_grammar_failure(turn, parse_error)),
     };
     let fs = turn_environment.environment.get_filesystem();
-    let sandbox = turn_environment.sandbox_context(/*additional_permissions*/ None);
+    let sandbox = protected_patch_context(session, turn, turn_environment);
     match codex_apply_patch::verify_apply_patch_args(
         args,
         turn_environment.cwd(),
@@ -1249,20 +619,37 @@ pub(crate) async fn prepare_patch_request(
     .await
     {
         codex_apply_patch::MaybeApplyPatchVerified::Body(changes) => {
-            prepare_verified_patch(changes, turn_environment.clone(), step_context)
+            prepare_verified_patch(changes, turn_environment.clone(), session, step_context).await
         }
         codex_apply_patch::MaybeApplyPatchVerified::CorrectnessError(parse_error) => {
+            emit_model_edit_compat_metric(
+                turn,
+                "strict_apply_patch",
+                "failure",
+                "verification_error",
+            );
             Err(FunctionCallError::RespondToModel(format!(
                 "apply_patch verification failed: {parse_error}"
             )))
         }
         codex_apply_patch::MaybeApplyPatchVerified::ShellParseError(error) => {
             tracing::trace!("Failed to parse apply_patch input, {error:?}");
-            Err(FunctionCallError::RespondToModel(
-                "apply_patch handler received invalid patch input".to_string(),
-            ))
+            record_apply_patch_grammar_failure(turn, "strict_apply_patch");
+            emit_model_edit_compat_metric(
+                turn,
+                "strict_apply_patch",
+                "failure",
+                "shell_parse_error",
+            );
+            let mut message = "apply_patch handler received invalid patch input".to_string();
+            if turn.structured_edit_fallback_enabled() {
+                message.push_str("\n\n");
+                message.push_str(STRUCTURED_EDIT_FALLBACK_GUIDANCE);
+            }
+            Err(FunctionCallError::RespondToModel(message))
         }
         codex_apply_patch::MaybeApplyPatchVerified::NotApplyPatch => {
+            emit_model_edit_compat_metric(turn, "strict_apply_patch", "failure", "not_apply_patch");
             Err(FunctionCallError::RespondToModel(
                 "apply_patch handler received non-apply_patch input".to_string(),
             ))
@@ -1270,11 +657,14 @@ pub(crate) async fn prepare_patch_request(
     }
 }
 
-fn prepare_verified_patch(
+/// The request for a verified patch, and (#1057) the policy basis taken
+/// before its grants were read.
+async fn prepare_verified_patch(
     action: ApplyPatchAction,
     turn_environment: TurnEnvironment,
+    session: &Session,
     step_context: &StepContext,
-) -> Result<ApplyPatchRequest, FunctionCallError> {
+) -> Result<(ApplyPatchRequest, HandlerBasis), FunctionCallError> {
     let cwd = action.cwd.clone();
     let sandbox_context = turn_environment.sandbox_context(/*additional_permissions*/ None);
     let policy_context = file_system_sandbox_policy_context_for_cwd(&sandbox_context, &cwd);
@@ -1288,7 +678,12 @@ fn prepare_verified_patch(
     };
     let environment_id = turn_environment.selection.environment_id.as_str();
     let file_paths = file_paths_for_action(&action);
-    let granted_permissions = step_context.turn.granted_permissions(environment_id);
+    // #1057: the basis is taken before the grants are read, and the grants
+    // are read once (#245: through the session, which strips protected
+    // paths), so every grant that widens the policy is also carried by the
+    // request.
+    let handler_basis = HandlerBasis::now(session);
+    let granted_permissions = read_granted_permissions(session, environment_id).await;
     let base_file_system_sandbox_policy = turn_environment
         .permission_profile()
         .file_system_sandbox_policy();
@@ -1307,8 +702,8 @@ fn prepare_verified_patch(
         write_permissions_for_paths(&file_paths, &matching).map_err(|error| {
             FunctionCallError::RespondToModel(format!("failed to check patch permissions: {error}"))
         })?;
-    let effective_additional_permissions = apply_granted_turn_permissions(
-        step_context,
+    let effective_additional_permissions = with_granted_permissions(
+        granted_permissions,
         &turn_environment,
         &cwd,
         crate::sandboxing::SandboxPermissions::UseDefault,
@@ -1321,18 +716,23 @@ fn prepare_verified_patch(
         &action,
     )?;
     let changes = convert_apply_patch_to_protocol(&action);
-    Ok(ApplyPatchRequest {
-        turn_environment,
-        action,
-        file_paths,
-        changes: Arc::new(changes),
-        exec_approval_requirement,
-        additional_permissions: effective_additional_permissions.additional_permissions,
-        permissions_preapproved: effective_additional_permissions.permissions_preapproved,
-    })
+    Ok((
+        ApplyPatchRequest {
+            turn_environment,
+            action,
+            file_paths,
+            changes: Arc::new(changes),
+            exec_approval_requirement,
+            additional_permissions: effective_additional_permissions.additional_permissions,
+            permissions_preapproved: effective_additional_permissions.permissions_preapproved,
+        },
+        handler_basis,
+    ))
 }
+
 async fn execute_prepared_patch(
     request: ApplyPatchRequest,
+    handler_basis: HandlerBasis,
     tracker: Option<&SharedTurnDiffTracker>,
     tool_ctx: ToolCtx,
 ) -> Result<String, FunctionCallError> {
@@ -1353,7 +753,7 @@ async fn execute_prepared_patch(
     );
     emitter.begin(event_ctx).await;
 
-    let mut orchestrator = ToolOrchestrator::new();
+    let mut orchestrator = ToolOrchestrator::new().with_handler_basis(Some(handler_basis));
     let mut runtime = ApplyPatchRuntime::new();
     let result = orchestrator
         .run(&mut runtime, &request, &tool_ctx)

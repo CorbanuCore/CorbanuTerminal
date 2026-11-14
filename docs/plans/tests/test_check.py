@@ -115,7 +115,7 @@ class PlanCheckerTests(unittest.TestCase):
                 root = self.make_root(temporary)
                 text = active_plan("Security").replace(
                     "status: active",
-                    f'status: active\nparallel_sprint_limit: {limit}\n'
+                    f"status: active\nparallel_sprint_limit: {limit}\n"
                     f'parallel_lanes: "{lanes}"\nintegration_owner: "{owner}"',
                 )
                 (root / "active/security.md").write_text(text, encoding="utf-8")
@@ -127,7 +127,7 @@ class PlanCheckerTests(unittest.TestCase):
             root = self.make_root(temporary)
             text = active_plan("Security").replace(
                 "status: active",
-                'status: active\nparallel_sprint_limit: 3\nmax_active_sprints: 1\n'
+                "status: active\nparallel_sprint_limit: 3\nmax_active_sprints: 1\n"
                 'parallel_lanes: "a, b, c"\nintegration_owner: "Owner"',
             )
             (root / "active/security.md").write_text(text, encoding="utf-8")
@@ -141,7 +141,9 @@ class PlanCheckerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = self.make_root(temporary)
             for number in range(3):
-                (root / "active" / f"plan-{number}.md").write_text(active_plan(str(number)))
+                (root / "active" / f"plan-{number}.md").write_text(
+                    active_plan(str(number))
+                )
             result = checker.check_plan_root(root)
             self.assertTrue(result["ok"], result["errors"])
             self.assertEqual(result["available_slots"], 0)

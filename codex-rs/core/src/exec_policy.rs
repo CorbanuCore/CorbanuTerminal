@@ -16,12 +16,8 @@ use codex_execpolicy::MatchOptions;
 use codex_execpolicy::NetworkRuleProtocol;
 use codex_execpolicy::Policy;
 use codex_execpolicy::PolicyParser;
-<<<<<<< HEAD
 use codex_execpolicy::PrefixRule;
-||||||| 413492cd6c
-=======
 use codex_execpolicy::RequirementsExecPolicy;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_execpolicy::RuleMatch;
 use codex_execpolicy::blocking_append_allow_prefix_rule;
 use codex_execpolicy::blocking_append_allow_prefix_rule_with_justification;
@@ -353,13 +349,21 @@ impl ExecPolicyManager {
     /// `forbidden` rules also match wrapped forms (see
     /// [`strict_forbidden_matches`]).
     #[instrument(level = "info", skip_all)]
-<<<<<<< HEAD
     pub(crate) async fn load(
         config_stack: &ConfigLayerStack,
         strict_rules: bool,
     ) -> Result<Self, ExecPolicyError> {
+        let source_requirements = config_stack
+            .requirements()
+            .exec_policy
+            .as_deref()
+            .cloned()
+            .map(Arc::new);
         let manager = if strict_rules {
-            let mut manager = Self::new(Arc::new(load_exec_policy(config_stack).await?));
+            let mut manager = Self::from_snapshot(
+                Arc::new(load_exec_policy(config_stack).await?),
+                source_requirements,
+            );
             manager.strict_rules = true;
             manager
         } else {
@@ -367,7 +371,7 @@ impl ExecPolicyManager {
             if let Some(err) = warning.as_ref() {
                 tracing::warn!("failed to parse rules: {err}");
             }
-            Self::new(Arc::new(policy))
+            Self::from_snapshot(Arc::new(policy), source_requirements)
         };
         let (approved, approved_hosts) = aggressive::load_approved(config_stack).await;
         manager.aggressive_approved.store(Arc::new(approved));
@@ -375,32 +379,12 @@ impl ExecPolicyManager {
             .aggressive_approved_hosts
             .store(Arc::new(approved_hosts));
         Ok(manager)
-||||||| 413492cd6c
-    pub(crate) async fn load(config_stack: &ConfigLayerStack) -> Result<Self, ExecPolicyError> {
-        let (policy, warning) = load_exec_policy_with_warning(config_stack).await?;
-        if let Some(err) = warning.as_ref() {
-            tracing::warn!("failed to parse rules: {err}");
-        }
-        Ok(Self::new(Arc::new(policy)))
-=======
-    pub(crate) async fn load(config_stack: &ConfigLayerStack) -> Result<Self, ExecPolicyError> {
-        let (policy, warning) = load_exec_policy_with_warning(config_stack).await?;
-        if let Some(err) = warning.as_ref() {
-            tracing::warn!("failed to parse rules: {err}");
-        }
-        let source_requirements = config_stack.requirements().exec_policy.as_deref().cloned();
-        Ok(Self::from_snapshot(
-            Arc::new(policy),
-            source_requirements.map(Arc::new),
-        ))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) fn current(&self) -> Arc<Policy> {
         self.policy.load_full()
     }
 
-<<<<<<< HEAD
     /// Issue #443: the policy an agent command is checked against. While
     /// Core's level for the session is Aggressive (also right after a person
     /// confirms it in `/security`, before the restart that loads the rules
@@ -445,35 +429,31 @@ impl ExecPolicyManager {
         self.strict_rules || live_aggressive
     }
 
-    /// [`Self::create_exec_approval_requirement`] outside Aggressive.
-||||||| 413492cd6c
-=======
     pub(crate) fn snapshot(&self) -> (Arc<Policy>, Option<Arc<RequirementsExecPolicy>>) {
         (self.current(), self.source_requirements.clone())
     }
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    /// [`Self::create_exec_approval_requirement`] outside Aggressive.
     #[cfg(test)]
     pub(crate) async fn create_exec_approval_requirement_for_command(
         &self,
         req: ExecApprovalRequest<'_>,
     ) -> ExecApprovalRequirement {
-<<<<<<< HEAD
         self.create_exec_approval_requirement(req, /*live_aggressive*/ false)
             .await
     }
 
     /// The approval an agent command needs under the session's live level
-    /// (see [`Self::current_for`]).
+    /// (see [`Self::current_for`]), parsed for this host's shell rules.
     pub(crate) async fn create_exec_approval_requirement(
         &self,
         req: ExecApprovalRequest<'_>,
         live_aggressive: bool,
-||||||| 413492cd6c
-=======
+    ) -> ExecApprovalRequirement {
         self.create_exec_approval_requirement_for_command_platform(
             req,
             DangerousCommandPlatform::host(),
+            live_aggressive,
         )
         .await
     }
@@ -482,10 +462,18 @@ impl ExecPolicyManager {
         &self,
         req: ExecApprovalRequest<'_>,
         command_platform: DangerousCommandPlatform,
+        live_aggressive: bool,
     ) -> ExecApprovalRequirement {
         let commands = commands_for_exec_policy_for_platform(req.command, command_platform);
-        self.create_exec_approval_requirement_for_parsed_commands(req, commands, command_platform)
-            .await
+        let full_command = req.command;
+        self.create_exec_approval_requirement_for_parsed_commands(
+            req,
+            commands,
+            command_platform,
+            live_aggressive,
+            full_command,
+        )
+        .await
     }
 
     async fn create_exec_approval_requirement_for_parsed_commands(
@@ -496,7 +484,11 @@ impl ExecPolicyManager {
             command_origin,
         }: ExecPolicyCommands,
         command_platform: DangerousCommandPlatform,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        live_aggressive: bool,
+        // The whole command line as the model sent it, for strict matching
+        // (the request's `command` may be only the executable, see
+        // `create_exec_approval_requirement_for_shell`).
+        full_command: &[String],
     ) -> ExecApprovalRequirement {
         let ExecApprovalRequest {
             command,
@@ -508,33 +500,13 @@ impl ExecPolicyManager {
             prefix_rule,
             allow_prefix_rules,
         } = req;
-<<<<<<< HEAD
-        let exec_policy = self.current_for(live_aggressive);
-        let ExecPolicyCommands {
-            commands,
-            used_complex_parsing,
-            command_origin,
-        } = commands_for_exec_policy(command);
-        // Keep heredoc prefix parsing for rule evaluation so existing
-        // allow/prompt/forbidden rules still apply, but avoid auto-derived
-        // amendments when only the heredoc fallback parser matched.
-        let auto_amendment_allowed = !used_complex_parsing;
-||||||| 413492cd6c
-        let exec_policy = self.current();
-        let ExecPolicyCommands {
-            commands,
-            used_complex_parsing,
-            command_origin,
-        } = commands_for_exec_policy(command);
-        // Keep heredoc prefix parsing for rule evaluation so existing
-        // allow/prompt/forbidden rules still apply, but avoid auto-derived
-        // amendments when only the heredoc fallback parser matched.
-        let auto_amendment_allowed = !used_complex_parsing;
-=======
-        let exec_policy = self.current_for_environment(environment_policy, allow_prefix_rules);
+        let exec_policy = self.current_for_environment_at(
+            environment_policy,
+            allow_prefix_rules,
+            live_aggressive,
+        );
         // Avoid reusable approvals when this model does not honor prefix rules.
         let auto_amendment_allowed = allow_prefix_rules == AllowPrefixRules::Honor;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let exec_policy_fallback = |cmd: &[String]| {
             render_decision_for_unmatched_command_for_platform(
                 cmd,
@@ -558,8 +530,9 @@ impl ExecPolicyManager {
         );
         if self.strict_rules_for(live_aggressive) {
             // The original command, not the parsed one: parsing keeps only
-            // the first command of a heredoc script.
-            apply_strict_forbidden_matches(&mut evaluation, exec_policy.as_ref(), command);
+            // the first command of a heredoc script. The whole command line,
+            // not just the executable an executable-identity check judges.
+            apply_strict_forbidden_matches(&mut evaluation, exec_policy.as_ref(), full_command);
         }
 
         let requested_amendment = if auto_amendment_allowed {
@@ -1174,7 +1147,6 @@ pub(crate) fn default_policy_path(codex_home: &Path) -> PathBuf {
     codex_home.join(RULES_DIR_NAME).join(DEFAULT_POLICY_FILE)
 }
 
-<<<<<<< HEAD
 /// Program-name suffixes a launcher may add (Windows, npm shims).
 const PROGRAM_SUFFIXES: [&str; 6] = [".exe", ".com", ".cmd", ".bat", ".ps1", ".js"];
 /// Later occurrences of a rule's second word tried per program word.
@@ -1350,10 +1322,7 @@ fn program_key(token: &str) -> Option<String> {
     (!name.is_empty()).then(|| name.to_string())
 }
 
-||||||| 413492cd6c
-=======
 #[cfg(test)]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {
     commands_for_exec_policy_for_platform(command, DangerousCommandPlatform::host())
 }

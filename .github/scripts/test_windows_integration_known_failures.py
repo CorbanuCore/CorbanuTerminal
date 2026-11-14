@@ -29,7 +29,9 @@ class KnownFailureListTest(unittest.TestCase):
             with self.subTest(test=entry.test):
                 self.assertIn(entry.package, PACKAGE_DIRS)
                 *modules, function = entry.test.split("::")
-                tests_dir = REPO_ROOT / "codex-rs" / PACKAGE_DIRS[entry.package] / "tests"
+                tests_dir = (
+                    REPO_ROOT / "codex-rs" / PACKAGE_DIRS[entry.package] / "tests"
+                )
                 if modules:
                     sources = [tests_dir.joinpath(*modules[:-1], modules[-1] + ".rs")]
                     self.assertTrue(sources[0].is_file(), sources[0])
@@ -104,8 +106,12 @@ class KnownFailureListTest(unittest.TestCase):
 class PackageSelectionTest(unittest.TestCase):
     def test_each_crate_runs_only_its_package(self) -> None:
         select = known.changed_packages
-        self.assertEqual(select(["codex-rs/core/src/lib.rs", "docs/ci.md"]), ["codex-core"])
-        self.assertEqual(select(["codex-rs/app-server/tests/all.rs"]), ["codex-app-server"])
+        self.assertEqual(
+            select(["codex-rs/core/src/lib.rs", "docs/ci.md"]), ["codex-core"]
+        )
+        self.assertEqual(
+            select(["codex-rs/app-server/tests/all.rs"]), ["codex-app-server"]
+        )
         self.assertEqual(
             select(["codex-rs/core/x.rs", "codex-rs/app-server/y.rs"]),
             ["codex-core", "codex-app-server"],
@@ -151,15 +157,20 @@ class WorkflowTest(unittest.TestCase):
         workflow = self.workflow()
         self.assertIn("runs-on: windows-2022", workflow)
         self.assertIn("timeout-minutes: 60", workflow)
-        self.assertIn("package: ${{ fromJSON(needs.packages.outputs.packages) }}", workflow)
+        self.assertIn(
+            "package: ${{ fromJSON(needs.packages.outputs.packages) }}", workflow
+        )
         self.assertIn("if: ${{ needs.packages.outputs.packages != '[]' }}", workflow)
         self.assertIn(
-            "cargo nextest run --cargo-profile ci-test -p \"$PACKAGE\" --test '*'", workflow
+            "cargo nextest run --cargo-profile ci-test -p \"$PACKAGE\" --test '*'",
+            workflow,
         )
         self.assertIn('-E "$filter"', workflow)
         self.assertIn('filter="$("$python" "$known" filter "$PACKAGE")"', workflow)
         self.assertIn("filter=\"${filter%$'\\r'}\"", workflow)
-        self.assertIn('"$python" "$known" summary "$PACKAGE" >> "$GITHUB_STEP_SUMMARY"', workflow)
+        self.assertIn(
+            '"$python" "$known" summary "$PACKAGE" >> "$GITHUB_STEP_SUMMARY"', workflow
+        )
         # Restore-only.
         self.assertNotIn("actions/cache/save", workflow)
         self.assertNotRegex(workflow, r"uses: actions/cache@")
@@ -168,7 +179,8 @@ class WorkflowTest(unittest.TestCase):
         # actions/cache versions a cache by its path list.
         def paths(text: str) -> str:
             match = re.search(
-                r"(?ms)- name: Restore cargo home cache\n.*?path: \|\n(.*?)\n\s+key:", text
+                r"(?ms)- name: Restore cargo home cache\n.*?path: \|\n(.*?)\n\s+key:",
+                text,
             )
             self.assertIsNotNone(match)
             return "\n".join(line.strip() for line in match.group(1).splitlines())

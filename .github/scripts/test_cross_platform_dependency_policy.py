@@ -13,9 +13,12 @@ class CrossPlatformDependencyPolicyTest(unittest.TestCase):
 
         self.assertEqual(ctor, "1.0.13")
 
-        lockfile = (workspace_manifest.parent / "Cargo.lock").read_text(encoding="utf-8")
+        lockfile = (workspace_manifest.parent / "Cargo.lock").read_text(
+            encoding="utf-8"
+        )
         self.assertNotIn('name = "ctor-proc-macro"', lockfile)
         self.assertNotIn('name = "dtor-proc-macro"', lockfile)
+
     def test_bazel_uses_upstream_proc_macro_exec_routing(self) -> None:
         root = Path(__file__).parents[2]
         module = (root / "MODULE.bazel").read_text(encoding="utf-8")

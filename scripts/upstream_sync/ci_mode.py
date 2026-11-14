@@ -292,13 +292,22 @@ def codeowners(action, wt, owner=None):
             if line.strip() and not line.startswith(("#", "/"))
         ]
         if unanchored:
-            sys.exit("error: main's D318 block has unanchored patterns: " + ", ".join(unanchored))
+            sys.exit(
+                "error: main's D318 block has unanchored patterns: "
+                + ", ".join(unanchored)
+            )
         # SG2/SG3 read security_paths.txt, whose named layer is footprint.NAMED; the file must be regenerated
         # from NAMED and name main's paths (CODEOWNERS itself stays out, plan section 4).
         expected = list(dict.fromkeys(footprint.NAMED))
-        listed = [line.strip() for line in open(os.path.join(HERE, "security_paths.txt")) if line.strip()]
+        listed = [
+            line.strip()
+            for line in open(os.path.join(HERE, "security_paths.txt"))
+            if line.strip()
+        ]
         if listed[: len(expected)] != expected:
-            sys.exit("error: security_paths.txt's named layer differs from footprint.NAMED; regenerate it")
+            sys.exit(
+                "error: security_paths.txt's named layer differs from footprint.NAMED; regenerate it"
+            )
         named = set(listed)
         unnamed = [
             line.split()[0]
@@ -308,7 +317,9 @@ def codeowners(action, wt, owner=None):
             and line.split()[0][1:] not in named
         ]
         if unnamed:
-            sys.exit("security_paths.txt misses main's D318 patterns: " + ", ".join(unnamed))
+            sys.exit(
+                "security_paths.txt misses main's D318 patterns: " + ", ".join(unnamed)
+            )
         print("sync block and security_paths.txt cover main's D318 block")
         return
     if action == "check":

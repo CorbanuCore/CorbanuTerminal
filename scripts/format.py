@@ -40,6 +40,16 @@ def just_formatter_group(*, check: bool) -> FormatterGroup:
     return FormatterGroup("Just", (Command(tuple(args)),))
 
 
+def is_frozen_artifact(path: Path) -> bool:
+    """Keep Corbanu's evidence and benchmark trees byte-for-byte unchanged.
+
+    Files under qa/ and benchmarks/ are hash-pinned by manifests, provenance
+    records and CI contracts (for example the ingress contract), so formatting
+    must never rewrite them.
+    """
+    return path.parts[:1] in {("qa",), ("benchmarks",)}
+
+
 def rust_formatter_group(*, check: bool) -> FormatterGroup:
     rust_workspace = REPO_ROOT / "codex-rs"
     repository_files = subprocess.check_output(
@@ -58,7 +68,9 @@ def rust_formatter_group(*, check: bool) -> FormatterGroup:
     rust_files = sorted(
         os.path.relpath(REPO_ROOT / os.fsdecode(encoded_path), rust_workspace)
         for encoded_path in repository_files
-        if encoded_path and (REPO_ROOT / os.fsdecode(encoded_path)).is_file()
+        if encoded_path
+        and not is_frozen_artifact(Path(os.fsdecode(encoded_path)))
+        and (REPO_ROOT / os.fsdecode(encoded_path)).is_file()
     )
     # Git supplies every source file, including files Cargo cannot discover.
     # Do not recursively format child modules again or include ignored files.
@@ -91,6 +103,8 @@ def buildifier_formatter_group(*, check: bool) -> FormatterGroup:
         if not encoded_path:
             continue
         path = Path(os.fsdecode(encoded_path))
+        if is_frozen_artifact(path):
+            continue
         name = path.name
         if (
             name in {"BUILD", "WORKSPACE", "MODULE.bazel"}

@@ -27,7 +27,7 @@ use crate::shell::ShellType;
 use crate::tools::network_approval::execution_network_proxy;
 use crate::tools::network_approval::remote_network_proxy_launch;
 use crate::tools::sandboxing::ToolError;
-use crate::unified_exec::exec_env_policy_from_shell_policy;
+use crate::unified_exec::exec_env_policy_for_config;
 
 const MAX_HOOK_OUTPUT_BYTES: usize = 1024 * 1024;
 
@@ -122,8 +122,11 @@ impl EnvironmentCommandExecutor {
             metadata: None,
             argv,
             cwd: environment.cwd().clone(),
-            env_policy: Some(exec_env_policy_from_shell_policy(
+            // Issue #310: provider credentials stay out of the hook's
+            // environment on the executor too.
+            env_policy: Some(exec_env_policy_for_config(
                 environment.shell_environment_policy(),
+                &self.turn.config,
             )),
             shell_snapshot: None,
             env,
@@ -201,7 +204,9 @@ impl HookEnvironmentExecutor for EnvironmentCommandExecutor {
                 .launch_params(environment, argv, env)
                 .await
                 .map_err(|error| match error {
-                    ToolError::Rejected(message) => anyhow::anyhow!("{message}"),
+                    ToolError::Rejected(message) | ToolError::Declined(message) => {
+                        anyhow::anyhow!("{message}")
+                    }
                     ToolError::Codex(error) => anyhow::Error::new(error),
                 })?;
             let deadline = tokio::time::Instant::now() + timeout;

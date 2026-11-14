@@ -17,7 +17,9 @@ class OrchestrateTuiBrandingTest(unittest.TestCase):
             script,
             re.MULTILINE,
         )
-        self.assertIsNotNone(match, "TUI matrix must retain an overridable product label")
+        self.assertIsNotNone(
+            match, "TUI matrix must retain an overridable product label"
+        )
         self.assertEqual(match.group(1), "Corbanu Terminal")
 
 

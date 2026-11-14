@@ -14,7 +14,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BOT = "github-actions[bot]"
 V8 = "v8-canary / Build release x86_64-unknown-linux-gnu"
 V8_SKIPPED = "v8-canary / Build ${{ matrix.variant }} ${{ matrix.target }}"
-TESTS = "rust-ci-full / Tests — ubuntu-24.04 - x86_64-unknown-linux-gnu / Tests shard 1/4"
+TESTS = (
+    "rust-ci-full / Tests — ubuntu-24.04 - x86_64-unknown-linux-gnu / Tests shard 1/4"
+)
 RESULTS = "Postmerge CI results"
 
 
@@ -58,17 +60,32 @@ class FakeGitHub:
         # applied, to interleave another report's write.
         self.before: dict[str, Callable[[], None]] = {}
 
-    def add_run(self, run_id: int, sha: str, created_at: str, job_results: dict[str, str],
-                status: str = "completed") -> None:
+    def add_run(
+        self,
+        run_id: int,
+        sha: str,
+        created_at: str,
+        job_results: dict[str, str],
+        status: str = "completed",
+    ) -> None:
         self.runs[run_id] = {
-            "id": run_id, "sha": sha, "created_at": created_at, "status": status,
+            "id": run_id,
+            "sha": sha,
+            "created_at": created_at,
+            "status": status,
             "jobs": job_results,
         }
 
     def add_issue(self, body: str, login: str = BOT) -> int:
         number = len(self.issues) + 1
         self.issues.append(
-            {"number": number, "open": True, "body": body, "login": login, "comments": []}
+            {
+                "number": number,
+                "open": True,
+                "body": body,
+                "login": login,
+                "comments": [],
+            }
         )
         return number
 
@@ -89,7 +106,11 @@ class FakeGitHub:
 
     def __call__(self, args: list[str]) -> str:
         self.calls.append(args)
-        flags = {args[i]: args[i + 1] for i in range(len(args) - 1) if args[i].startswith("--")}
+        flags = {
+            args[i]: args[i + 1]
+            for i in range(len(args) - 1)
+            if args[i].startswith("--")
+        }
         if hook := self.before.pop(" ".join(args[:2]), None):
             hook()
         if args[:2] == ["label", "create"]:
@@ -102,7 +123,8 @@ class FakeGitHub:
         if args[:2] == ["issue", "view"]:
             issue = self.issue(args[2])
             comments = [
-                {"body": c["body"], "author": {"login": c["login"]}} for c in issue["comments"]
+                {"body": c["body"], "author": {"login": c["login"]}}
+                for c in issue["comments"]
             ]
             return json.dumps({"body": issue["body"], "comments": comments})
         if args[:2] == ["issue", "comment"]:
@@ -126,14 +148,25 @@ class FakeGitHub:
             if flags.get("--jq") == ".state":
                 return state + "\n"
             return json.dumps(
-                {"state": state, "body": issue["body"], "login": issue["login"], "type": "Bot"
-                 if issue["login"] == BOT else "User"}
+                {
+                    "state": state,
+                    "body": issue["body"],
+                    "login": issue["login"],
+                    "type": "Bot" if issue["login"] == BOT else "User",
+                }
             )
-        if match := re.fullmatch(rf"repos/{REPO}/issues/(\d+)/comments\?per_page=100", path):
+        if match := re.fullmatch(
+            rf"repos/{REPO}/issues/(\d+)/comments\?per_page=100", path
+        ):
             return page(
                 [
-                    json.dumps({"body": c["body"], "login": c["login"],
-                                "type": "Bot" if c["login"] == BOT else "User"})
+                    json.dumps(
+                        {
+                            "body": c["body"],
+                            "login": c["login"],
+                            "type": "Bot" if c["login"] == BOT else "User",
+                        }
+                    )
                     for c in self.issue(match.group(1))["comments"]
                 ],
                 path,
@@ -142,7 +175,9 @@ class FakeGitHub:
         if match := re.fullmatch(rf"repos/{REPO}/actions/runs/(\d+)", path):
             run = self.runs[int(match.group(1))]
             return json.dumps({k: run[k] for k in ("id", "created_at", "status")})
-        if match := re.fullmatch(rf"repos/{REPO}/actions/runs/(\d+)/jobs\?per_page=100", path):
+        if match := re.fullmatch(
+            rf"repos/{REPO}/actions/runs/(\d+)/jobs\?per_page=100", path
+        ):
             run = self.runs[int(match.group(1))]
             return page(
                 [
@@ -159,7 +194,9 @@ class FakeGitHub:
         ):
             # The API lists newest first.
             runs = sorted(
-                self.runs.values(), key=lambda run: (run["created_at"], run["id"]), reverse=True
+                self.runs.values(),
+                key=lambda run: (run["created_at"], run["id"]),
+                reverse=True,
             )
             return page(
                 [
@@ -274,7 +311,9 @@ class PostmergeReportTest(unittest.TestCase):
         self.assertIn(marker(11, T1, [RESULTS, TESTS]), gh.issues[0]["body"])
         self.assertIn("close it by hand", gh.issues[0]["body"])
         gh.add_run(12, B, T2, jobs(v8=None))
-        self.assertEqual(Reporter(gh, REPO).report(12, B, "success", "run-12"), "closed #1")
+        self.assertEqual(
+            Reporter(gh, REPO).report(12, B, "success", "run-12"), "closed #1"
+        )
 
     def test_duplicate_issues_from_concurrent_reports_are_merged(self) -> None:
         # #1697 item 2: without the single-slot group two red reports can both
@@ -353,7 +392,9 @@ class PostmergeReportTest(unittest.TestCase):
         # not cost one jobs call per run.
         s = Scenario(head=B)
         for i in range(80):
-            s.gh.add_run(100 + i, B, f"2026-11-09T{i // 60:02}:{i % 60:02}:00Z", jobs(v8=None))
+            s.gh.add_run(
+                100 + i, B, f"2026-11-09T{i // 60:02}:{i % 60:02}:00Z", jobs(v8=None)
+            )
         self.assertIn("not passed again", s.report(179, "success"))
         self.assertEqual(s.gh.open_numbers(), [1])
         # At most RUNS_CHECKED (50) newer runs plus the recorded run itself (a re-run).
@@ -374,13 +415,19 @@ class PostmergeReportTest(unittest.TestCase):
         gh.add_issue("postmerge-ci failed on 9999999999: run-0")
         gh.add_run(11, A, T1, jobs(v8=None))
         gh.add_run(12, B, T2, jobs(v8=None))
-        self.assertIn("older commit", Reporter(gh, REPO).report(11, A, "success", "run-11"))
-        self.assertEqual(Reporter(gh, REPO).report(12, B, "success", "run-12"), "closed #1")
+        self.assertIn(
+            "older commit", Reporter(gh, REPO).report(11, A, "success", "run-11")
+        )
+        self.assertEqual(
+            Reporter(gh, REPO).report(12, B, "success", "run-12"), "closed #1"
+        )
 
 
 class PostmergeWorkflowTest(unittest.TestCase):
     def report_job(self) -> str:
-        workflow = (REPO_ROOT / ".github" / "workflows" / "postmerge-ci.yml").read_text()
+        workflow = (
+            REPO_ROOT / ".github" / "workflows" / "postmerge-ci.yml"
+        ).read_text()
         match = re.search(r"(?ms)^  report:\n(.*?)(?=^  \S|\Z)", workflow)
         assert match, "postmerge-ci.yml has no report job"
         return match.group(1)
@@ -394,7 +441,9 @@ class PostmergeWorkflowTest(unittest.TestCase):
         self.assertIn("run: python3 .github/scripts/postmerge_report.py", job)
         self.assertRegex(job, r"(?m)^      actions: read$")
         self.assertIn("RUN_ID: ${{ github.run_id }}", job)
-        self.assertIn(LABEL, (REPO_ROOT / ".github/scripts/postmerge_report.py").read_text())
+        self.assertIn(
+            LABEL, (REPO_ROOT / ".github/scripts/postmerge_report.py").read_text()
+        )
 
 
 if __name__ == "__main__":

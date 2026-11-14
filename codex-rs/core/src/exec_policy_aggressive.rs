@@ -27,7 +27,6 @@ use std::path::Path;
 
 use codex_config::ConfigLayerSource;
 use codex_config::ConfigLayerStack;
-use codex_config::ConfigLayerStackOrdering;
 use codex_execpolicy::Decision;
 use codex_execpolicy::Evaluation;
 use codex_execpolicy::PatternToken;
@@ -62,11 +61,7 @@ async fn read_home_rules(config_stack: &ConfigLayerStack) -> Option<(std::path::
         return None;
     }
     let folder = config_stack
-        .get_layers(
-            ConfigLayerStackOrdering::LowestPrecedenceFirst,
-            /*include_disabled*/ false,
-        )
-        .into_iter()
+        .layers_low_to_high()
         .filter(|layer| matches!(layer.name, ConfigLayerSource::User { .. }))
         .find_map(codex_config::ConfigLayerEntry::config_folder)?;
     let path = crate::exec_policy::default_policy_path(folder.as_path());
