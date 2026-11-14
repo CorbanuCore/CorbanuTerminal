@@ -465,11 +465,13 @@ impl ExecPolicyManager {
         live_aggressive: bool,
     ) -> ExecApprovalRequirement {
         let commands = commands_for_exec_policy_for_platform(req.command, command_platform);
+        let full_command = req.command;
         self.create_exec_approval_requirement_for_parsed_commands(
             req,
             commands,
             command_platform,
             live_aggressive,
+            full_command,
         )
         .await
     }
@@ -483,6 +485,10 @@ impl ExecPolicyManager {
         }: ExecPolicyCommands,
         command_platform: DangerousCommandPlatform,
         live_aggressive: bool,
+        // The whole command line as the model sent it, for strict matching
+        // (the request's `command` may be only the executable, see
+        // `create_exec_approval_requirement_for_shell`).
+        full_command: &[String],
     ) -> ExecApprovalRequirement {
         let ExecApprovalRequest {
             command,
@@ -521,8 +527,9 @@ impl ExecPolicyManager {
         );
         if self.strict_rules_for(live_aggressive) {
             // The original command, not the parsed one: parsing keeps only
-            // the first command of a heredoc script.
-            apply_strict_forbidden_matches(&mut evaluation, exec_policy.as_ref(), command);
+            // the first command of a heredoc script. The whole command line,
+            // not just the executable an executable-identity check judges.
+            apply_strict_forbidden_matches(&mut evaluation, exec_policy.as_ref(), full_command);
         }
 
         let requested_amendment = if auto_amendment_allowed {

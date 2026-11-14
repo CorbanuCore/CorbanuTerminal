@@ -53,9 +53,18 @@ impl ExecPolicyManager {
                 "inherited execution policy does not preserve destination requirements".to_string(),
             ));
         }
-        Ok(Self::from_snapshot(
+        let mut manager = Self::from_snapshot(
             Arc::clone(&snapshot.policy),
             snapshot.source_requirements.clone(),
-        ))
+        );
+        // Corbanu: the destination's `strict_rules` (forbidden rules also
+        // match wrapped forms) applies to an inherited policy as to one it
+        // loads from files.
+        manager.strict_rules = stack
+            .effective_config()
+            .get("strict_rules")
+            .and_then(toml::Value::as_bool)
+            .unwrap_or(false);
+        Ok(manager)
     }
 }
