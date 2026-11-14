@@ -103,6 +103,7 @@ pub(crate) struct McpServerConnection {
     legacy_fallback: Option<Arc<OnceLock<Arc<Self>>>>,
     // Startup-only budget; changing it must not replace a ready connection.
     startup_timeout: Duration,
+    discover_timeout: Duration,
     startup_trigger: Option<watch::Sender<bool>>,
     // Only the initial host-owned Apps attempt publishes here. A retry uses normal readiness.
     initialized_apps:
@@ -566,6 +567,8 @@ impl McpConnectionSet {
             let startup_timeout = configured_config
                 .startup_timeout_sec
                 .unwrap_or(DEFAULT_STARTUP_TIMEOUT);
+            let discover_timeout =
+                crate::rmcp_client::effective_discover_timeout(&configured_config);
             let configured_tool_timeout = Some(
                 configured_config
                     .tool_timeout_sec
@@ -751,6 +754,7 @@ impl McpConnectionSet {
                     let pending = same_identity
                         && !connection.client.startup_complete.load(Ordering::Acquire)
                         && connection.startup_timeout == startup_timeout
+                        && connection.discover_timeout == discover_timeout
                         && !connection.startup_is_dormant()
                         && !connection.client.cancel_token.is_cancelled();
                     let ready = same_identity
@@ -815,6 +819,7 @@ impl McpConnectionSet {
                     == Some(&connection_identity)
                     && !connection.client.startup_complete.load(Ordering::Acquire)
                     && connection.startup_timeout == startup_timeout
+                    && connection.discover_timeout == discover_timeout
                     && !connection.startup_is_dormant()
                     && !connection.client.cancel_token.is_cancelled()
                     && previous_view.catalog_item_limit == catalog_item_limit
@@ -959,6 +964,7 @@ impl McpConnectionSet {
                             )
                         }),
                         startup_timeout,
+                        discover_timeout,
                         catalog_item_limit,
                     },
                 )
@@ -1023,6 +1029,7 @@ impl McpConnectionSet {
                         startup_cancellation: startup_cancellation.clone(),
                         legacy_fallback,
                         startup_timeout,
+                        discover_timeout,
                         startup_trigger,
                         initialized_apps,
                         _diagnostics_guard: LIVE_CONNECTIONS.track(),

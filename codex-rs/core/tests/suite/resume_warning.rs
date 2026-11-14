@@ -48,22 +48,12 @@ fn resume_history(
         realtime_active: None,
         cyber_access_program: None,
         effort: config.model_reasoning_effort.clone(),
-<<<<<<< HEAD
         security_level: None,
-        summary: config
-            .model_reasoning_summary
-            .unwrap_or(ReasoningSummary::Auto),
-||||||| 413492cd6c
-        summary: config
-            .model_reasoning_summary
-            .unwrap_or(ReasoningSummary::Auto),
-=======
         summary: Some(
             config
                 .model_reasoning_summary
                 .unwrap_or(ReasoningSummary::Auto),
         ),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     InitialHistory::Resumed(ResumedHistory {

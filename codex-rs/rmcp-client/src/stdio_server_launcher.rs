@@ -264,6 +264,12 @@ impl StdioServerTransport {
         }
     }
 
+    /// Keeps the server process handle alive after this transport is dropped, so a legacy
+    /// fallback can stop the process before it starts the next one.
+    pub(super) fn process_handle(&self) -> Arc<StdioServerProcessHandle> {
+        Arc::clone(&self.process)
+    }
+
     pub(super) fn process_slot(&self) -> StdioProcessSlot {
         Arc::new(AsyncMutex::new(StdioProcessRegistration {
             process: self.process_ref(),
@@ -533,8 +539,10 @@ impl LocalStdioServerLauncher {
             protocol_mode
         };
         let process_id = child.id();
-        // A legacy replacement still belongs to the discovery startup that launched it.
+        // A legacy replacement still belongs to the discovery startup that launched it. An
+        // opted-in 2026-07-28 server can be replaced by a legacy fallback the same way.
         let discovery_owned = (protocol_mode == McpProtocolMode::DiscoverLocalStdio
+            || protocol_mode == McpProtocolMode::V20260728
             || replacement_slot.is_some())
             && process_id.is_some();
         let (transport, stderr) =
@@ -903,8 +911,18 @@ impl ExecutorStdioServerLauncher {
             env_vars,
             cwd,
             protocol_mode,
-            replacement_slot: _,
+            replacement_slot,
         } = command;
+        // As in the local launcher, a replacement doesn't start once `shutdown()` has closed
+        // the slot.
+        if let Some(slot) = &replacement_slot
+            && slot.lock().await.closed
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "MCP client is shut down",
+            ));
+        }
         let Some(cwd) = cwd else {
             return Err(io::Error::other(
                 "executor stdio server requires an explicit cwd",
@@ -948,7 +966,7 @@ impl ExecutorStdioServerLauncher {
 
         let process =
             StdioServerProcessHandle::executor(program_name.clone(), Arc::clone(&started.process));
-        Ok(StdioServerTransport {
+        let transport = StdioServerTransport {
             inner: StdioServerTransportInner::Executor(ExecutorProcessTransport::new(
                 started.process,
                 program_name,
@@ -956,7 +974,28 @@ impl ExecutorStdioServerLauncher {
             process,
             discovery_cleanup: None,
             protocol_mode,
-        })
+        };
+        // The executor call can't run under the slot lock, so register the replacement after
+        // it starts, and stop it if `shutdown()` closed the slot in the meantime.
+        if let Some(slot) = replacement_slot {
+            let registered = {
+                let mut slot = slot.lock().await;
+                if !slot.closed {
+                    slot.process = transport.process_ref();
+                }
+                !slot.closed
+            };
+            if !registered {
+                if let Err(error) = transport.process.terminate().await {
+                    warn!("failed to terminate remote MCP server process after shutdown: {error}");
+                }
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "MCP client is shut down",
+                ));
+            }
+        }
+        Ok(transport)
     }
 
     fn process_api_argv(program: &OsString, args: &[OsString]) -> Result<Vec<String>> {

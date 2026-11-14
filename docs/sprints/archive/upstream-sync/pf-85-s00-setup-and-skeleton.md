@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-85-S00"
 title: "Setup and skeleton merge"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/upstream-sync-rust-v0.167.0.md"
 plan_feature: "PF-85"
 execution_order: 1
@@ -14,7 +14,7 @@ branch: "sync/upstream-rust-v0.167.0"
 base_commit: "781b935ff783178f146d02815f8fc01332ae21a4"
 depends_on: "none"
 created: 2026-11-07
-updated: 2026-11-07
+updated: 2026-11-11
 ---
 
 # PF-85-S00 — Setup and skeleton merge
@@ -55,19 +55,22 @@ updated: 2026-11-07
 
 ## Remaining
 
-- [ ] Record the baseline results on #1627; merge the skeleton PR into the sync branch; confirm the CI mode loads there.
-- [ ] S1 kick-off checklist on #1628.
+None. Historical S00 exit was accepted on November 7; the record was stale.
+The [S0 exit evidence](https://github.com/CorbanuCore/CorbanuTerminal/issues/1627#issuecomment-6705151922)
+records the baseline, merged skeleton, CI-mode execution and S1 kick-off.
+Cancelled baseline lanes and later slice-specific red checks remain recorded there;
+this archival reconciliation does not relabel them as passing or qualify the sync build.
 
 ## Verification
 
 - [x] Skeleton parents: `git rev-list --parents -n1 1d2e8ca07d` shows `781b935f 086ccc83` (#1690).
 - [x] `cargo metadata --locked` and `cargo deny --locked check` pass on the skeleton tree (glitch, #1690).
-- [ ] CI mode loads on the sync branch after the merge (workflow runs start; skipped jobs skip).
+- [x] CI mode loaded after #1690 merged as `3d364616d5a30dbc59663b9d24b809afeb667c62`; workflow execution/skip evidence is in the S0 exit comment.
 - [x] TUI applicability: none (no runnable build until S04).
 
 ## Exit evidence
 
-- [ ] Implementation commit recorded.
-- [ ] Final-tree test output linked.
-- [ ] `Done` and `Remaining` ledgers reflect reality.
-- [ ] Completed record moved to `docs/sprints/archive/upstream-sync/`.
+- [x] Skeleton implementation `1d2e8ca07d4f5b56c15a89ecc5ac4669b2464012`, merged through #1690.
+- [x] Skeleton metadata, cargo-deny, workflow-mode and baseline evidence linked in the S0 exit comment; this internal stage has no runnable feature acceptance.
+- [x] S1 kick-off recorded on #1628; `Done` and `Remaining` reconciled against the accepted historical exit.
+- [x] Completed record moved to `docs/sprints/archive/upstream-sync/`.
