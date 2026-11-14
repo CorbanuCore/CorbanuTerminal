@@ -745,3 +745,15 @@ pub(crate) fn build_legacy_api_turns_from_rollout_items(items: &[RolloutItem]) -
     }
     builder.finish()
 }
+
+/// #658: [`AuthManager::auth_with_http_client_factory`] for the account the
+/// session runs on (`None` when it has no sign-in or sessions disagree), so a
+/// ChatGPT backend request never falls back to the default login.
+pub(crate) async fn session_auth_with_http_client_factory(
+    auth_manager: &Arc<AuthManager>,
+) -> Option<(CodexAuth, codex_http_client::HttpClientFactory)> {
+    auth_manager
+        .for_session()?
+        .auth_with_http_client_factory()
+        .await
+}

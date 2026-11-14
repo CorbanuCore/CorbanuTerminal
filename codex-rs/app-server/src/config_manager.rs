@@ -645,6 +645,27 @@ impl ConfigManager {
         cwd: AbsolutePathBuf,
         permission_profile: String,
     ) -> std::io::Result<Config> {
+        self.load_permission_config_for_thread_runtime(
+            thread_config,
+            cwd,
+            permission_profile,
+            /*model*/ None,
+            /*model_provider*/ None,
+        )
+        .await
+    }
+
+    /// [`Self::load_permission_config_for_thread`] for the thread's runtime
+    /// model and provider: CLI/model switches can legitimately differ from
+    /// config.toml, and validating a mixed pair blocks an otherwise valid turn.
+    pub(crate) async fn load_permission_config_for_thread_runtime(
+        &self,
+        thread_config: &Config,
+        cwd: AbsolutePathBuf,
+        permission_profile: String,
+        model: Option<String>,
+        model_provider: Option<String>,
+    ) -> std::io::Result<Config> {
         let mut session_flags = TomlValue::Table(Default::default());
         for layer in thread_config.config_layer_stack.layers_low_to_high() {
             if matches!(layer.name, codex_config::ConfigLayerSource::SessionFlags) {
@@ -666,6 +687,8 @@ impl ConfigManager {
             &overrides,
             /*request_overrides*/ None,
             ConfigOverrides {
+                model,
+                model_provider,
                 cwd: Some(cwd.to_path_buf()),
                 default_permissions: Some(permission_profile),
                 codex_linux_sandbox_exe: self.arg0_paths.codex_linux_sandbox_exe.clone(),

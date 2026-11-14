@@ -127,7 +127,8 @@ impl FeedbackRequestProcessor {
         };
 
         let http_client_factory = self.config.http_client_factory();
-        let auth = self.auth_manager.auth_cached();
+        // #658: the account the session runs on.
+        let auth = self.auth_manager.session_auth_cached();
         let turn_metadata = if let Some(conversation_id) = conversation_id
             && let Some(rollout_path) = self
                 .resolve_rollout_path(conversation_id, self.state_db.as_ref(), save_path.as_ref())
@@ -144,12 +145,6 @@ impl FeedbackRequestProcessor {
         apply_feedback_turn_metadata(&mut upload_tags, turn_metadata);
         let prompt_hash = upload_tags.get("prompt_hash").cloned();
 
-<<<<<<< HEAD
-        let auth = self.auth_manager.session_auth_cached();
-||||||| 413492cd6c
-        let auth = self.auth_manager.auth_cached();
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if let Some(chatgpt_user_id) = auth
             .as_ref()
             .and_then(codex_login::CodexAuth::get_chatgpt_user_id)
@@ -874,14 +869,8 @@ mod tests {
                     realtime_active: None,
                     cyber_access_program: None,
                     effort: effort.clone(),
-<<<<<<< HEAD
                     security_level: None,
-                    summary: ReasoningSummary::Auto,
-||||||| 413492cd6c
-                    summary: ReasoningSummary::Auto,
-=======
                     summary: Some(ReasoningSummary::Auto),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }),
             }
         }));

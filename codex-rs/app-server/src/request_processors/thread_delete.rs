@@ -40,7 +40,6 @@ impl ThreadRequestProcessor {
 
         self.validate_root_thread_delete(thread_id, thread_ids.len() > 1)
             .await?;
-<<<<<<< HEAD
         // Rollout files go first and cannot come back, so check before removing
         // anything that the state database (its cost ledger included) can be
         // updated. A failure here leaves the conversation whole.
@@ -54,8 +53,7 @@ impl ThreadRequestProcessor {
                          so it was left as it is. Try again; if it keeps failing, report this message. Cause: {err:#}"
                     ))
                 })?;
-||||||| 413492cd6c
-=======
+        }
         if let Some(store) = self
             .thread_store
             .as_any()
@@ -65,7 +63,6 @@ impl ThreadRequestProcessor {
                 .ensure_no_attached_threads(&thread_ids)
                 .await
                 .map_err(thread_store_delete_error)?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         for thread_id_to_delete in thread_ids.iter().copied() {
             self.prepare_thread_for_delete(thread_id_to_delete).await?;
@@ -81,33 +78,6 @@ impl ThreadRequestProcessor {
             .await
             .map_err(thread_store_delete_error)?;
 
-<<<<<<< HEAD
-        if let Some(state_db) = self.state_db.as_ref() {
-            state_db
-                .delete_threads_strict(thread_ids.as_slice())
-                .await
-                .map_err(|err| {
-                    internal_error(format!(
-                        "conversation {thread_id} was deleted, but some of its local records could not be removed. \
-                         Delete it again to finish. Cause: {err:#}"
-                    ))
-                })?;
-        }
-
-||||||| 413492cd6c
-        if let Some(state_db) = self.state_db.as_ref() {
-            state_db
-                .delete_threads_strict(thread_ids.as_slice())
-                .await
-                .map_err(|err| {
-                    internal_error(format!(
-                        "failed to delete app-server state for {thread_id}: {err}"
-                    ))
-                })?;
-        }
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         deleted_thread_ids.extend(
             delete_order
                 .into_iter()

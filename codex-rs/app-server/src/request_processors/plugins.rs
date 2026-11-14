@@ -580,25 +580,7 @@ impl PluginRequestProcessor {
         if !context.plugins_enabled() && context.load_errors.is_empty() {
             return Ok(empty_response());
         }
-<<<<<<< HEAD
         let auth = self.auth_manager.session_auth().await;
-        if !self
-            .workspace_codex_plugins_enabled(&config, auth.as_ref())
-            .await
-        {
-            return Ok(empty_response());
-        }
-||||||| 413492cd6c
-        let auth = self.auth_manager.auth().await;
-        if !self
-            .workspace_codex_plugins_enabled(&config, auth.as_ref())
-            .await
-        {
-            return Ok(empty_response());
-        }
-=======
-        let auth = self.auth_manager.auth().await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let auth_mode = auth.as_ref().map(CodexAuth::api_auth_mode);
         if include_local
             && force_refetch
@@ -861,25 +843,7 @@ impl PluginRequestProcessor {
         if !context.plugins_enabled() && context.load_errors.is_empty() {
             return Ok(empty_response());
         }
-<<<<<<< HEAD
         let auth = self.auth_manager.session_auth().await;
-        if !self
-            .workspace_codex_plugins_enabled(&config, auth.as_ref())
-            .await
-        {
-            return Ok(empty_response());
-        }
-||||||| 413492cd6c
-        let auth = self.auth_manager.auth().await;
-        if !self
-            .workspace_codex_plugins_enabled(&config, auth.as_ref())
-            .await
-        {
-            return Ok(empty_response());
-        }
-=======
-        let auth = self.auth_manager.auth().await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let auth_mode = auth.as_ref().map(CodexAuth::api_auth_mode);
 
         let use_remote_global_catalog = context.remote_plugins_enabled()
@@ -1065,7 +1029,7 @@ impl PluginRequestProcessor {
         });
 
         let mut config = self.load_latest_config(config_cwd).await?;
-        let auth = match self.auth_manager.auth_with_http_client_factory().await {
+        let auth = match crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager).await {
             Some((auth, factory)) => {
                 config.application_network_policy = factory.network_policy().clone();
                 Some(auth)
@@ -1073,14 +1037,6 @@ impl PluginRequestProcessor {
             None => None,
         };
         let plugins_input = config.plugins_config_input();
-<<<<<<< HEAD
-        let auth = self.auth_manager.session_auth().await;
-        plugins_manager.set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));
-||||||| 413492cd6c
-        let auth = self.auth_manager.auth().await;
-        plugins_manager.set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         let plugin = match read_source {
             Ok(marketplace_path) => {
@@ -1550,40 +1506,14 @@ impl PluginRequestProcessor {
             }
         };
         let config_cwd = marketplace_path.as_path().parent().map(Path::to_path_buf);
-<<<<<<< HEAD
-        let config = self.load_latest_config(config_cwd.clone()).await?;
-        let auth = self.auth_manager.session_auth().await;
-
-        if !self
-            .workspace_codex_plugins_enabled(&config, auth.as_ref())
-            .await
-        {
-            return Err(invalid_request(
-                "Codex plugins are disabled for this workspace",
-            ));
-        }
-||||||| 413492cd6c
-        let config = self.load_latest_config(config_cwd.clone()).await?;
-        let auth = self.auth_manager.auth().await;
-
-        if !self
-            .workspace_codex_plugins_enabled(&config, auth.as_ref())
-            .await
-        {
-            return Err(invalid_request(
-                "Codex plugins are disabled for this workspace",
-            ));
-        }
-=======
         let mut config = self.load_latest_config(config_cwd.clone()).await?;
-        let auth = match self.auth_manager.auth_with_http_client_factory().await {
+        let auth = match crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager).await {
             Some((auth, factory)) => {
                 config.application_network_policy = factory.network_policy().clone();
                 Some(auth)
             }
             None => None,
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         let plugins_manager = self.thread_manager.plugins_manager();
         let marketplace_display = marketplace_path.display().to_string();
@@ -1668,37 +1598,8 @@ impl PluginRequestProcessor {
         remote_plugin_id: String,
         install_attempt_id: Option<String>,
     ) -> Result<PluginInstallResponse, JSONRPCErrorError> {
-<<<<<<< HEAD
-        let config = self.load_latest_config(/*fallback_cwd*/ None).await?;
-        if !config.features.enabled(Feature::Plugins) {
-            return Err(invalid_request(format!(
-                "remote plugin install is not enabled for marketplace {remote_marketplace_name}"
-            )));
-        }
-        validate_remote_plugin_id(&remote_plugin_id)?;
-
-        let auth = self.auth_manager.session_auth().await;
-        let remote_plugin_service_config = remote_plugin_service_config(&config);
-        let remote_detail =
-            codex_core_plugins::remote::fetch_remote_plugin_detail_with_download_urls(
-                &remote_plugin_service_config,
-||||||| 413492cd6c
-        let config = self.load_latest_config(/*fallback_cwd*/ None).await?;
-        if !config.features.enabled(Feature::Plugins) {
-            return Err(invalid_request(format!(
-                "remote plugin install is not enabled for marketplace {remote_marketplace_name}"
-            )));
-        }
-        validate_remote_plugin_id(&remote_plugin_id)?;
-
-        let auth = self.auth_manager.auth().await;
-        let remote_plugin_service_config = remote_plugin_service_config(&config);
-        let remote_detail =
-            codex_core_plugins::remote::fetch_remote_plugin_detail_with_download_urls(
-                &remote_plugin_service_config,
-=======
         let mut config = self.load_latest_config(/*fallback_cwd*/ None).await?;
-        let auth = match self.auth_manager.auth_with_http_client_factory().await {
+        let auth = match crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager).await {
             Some((auth, factory)) => {
                 config.application_network_policy = factory.network_policy().clone();
                 Some(auth)
@@ -1709,7 +1610,6 @@ impl PluginRequestProcessor {
         let installation = plugins_manager
             .install_remote_plugin(
                 &config.plugins_config_input(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 auth.as_ref(),
                 RemotePluginInstallRequest {
                     marketplace_name: remote_marketplace_name.clone(),
@@ -2205,105 +2105,11 @@ impl PluginRequestProcessor {
         plugin_id: String,
     ) -> Result<PluginUninstallResponse, JSONRPCErrorError> {
         let config = self.load_latest_config(/*fallback_cwd*/ None).await?;
-<<<<<<< HEAD
-        if !config.features.enabled(Feature::Plugins) {
-            return Err(invalid_request("remote plugin uninstall is not enabled"));
-        }
-        validate_remote_plugin_id(&plugin_id)?;
-
         let auth = self.auth_manager.session_auth().await;
-        let remote_plugin_service_config = remote_plugin_service_config(&config);
-        let uninstall_target = codex_core_plugins::remote::resolve_remote_plugin_uninstall_target(
-            &remote_plugin_service_config,
-            auth.as_ref(),
-            &plugin_id,
-        )
-        .await
-        .map_err(|err| {
-            remote_plugin_catalog_error_to_jsonrpc(err, "resolve remote plugin before uninstall")
-        })?;
-        let plugins_manager = self.thread_manager.plugins_manager();
-        let mut plugin_telemetry = plugins_manager
-            .telemetry_metadata_for_installed_plugin_with_remote_id(
-                &uninstall_target.plugin_id,
-                &uninstall_target.remote_plugin_id,
-            )
-            .await;
-        if plugin_telemetry.capability_summary.is_none() {
-            plugin_telemetry.capability_summary =
-                Some(uninstall_target.fallback_capability_summary.clone());
-        }
-        let uninstall_result = codex_core_plugins::remote::uninstall_remote_plugin(
-            &remote_plugin_service_config,
-            auth.as_ref(),
-            config.codex_home.to_path_buf(),
-            uninstall_target,
-        )
-        .await;
-
-        if matches!(
-            &uninstall_result,
-            Ok(()) | Err(RemotePluginCatalogError::CacheRemove(_))
-        ) {
-            self.analytics_events_client
-                .track_plugin_uninstalled(plugin_telemetry);
-            if plugins_manager.clear_remote_installed_plugins_cache() {
-                self.on_effective_plugins_changed();
-            }
-            plugins_manager.maybe_start_remote_installed_plugins_cache_refresh_after_mutation(
-||||||| 413492cd6c
-        if !config.features.enabled(Feature::Plugins) {
-            return Err(invalid_request("remote plugin uninstall is not enabled"));
-        }
-        validate_remote_plugin_id(&plugin_id)?;
-
-        let auth = self.auth_manager.auth().await;
-        let remote_plugin_service_config = remote_plugin_service_config(&config);
-        let uninstall_target = codex_core_plugins::remote::resolve_remote_plugin_uninstall_target(
-            &remote_plugin_service_config,
-            auth.as_ref(),
-            &plugin_id,
-        )
-        .await
-        .map_err(|err| {
-            remote_plugin_catalog_error_to_jsonrpc(err, "resolve remote plugin before uninstall")
-        })?;
-        let plugins_manager = self.thread_manager.plugins_manager();
-        let mut plugin_telemetry = plugins_manager
-            .telemetry_metadata_for_installed_plugin_with_remote_id(
-                &uninstall_target.plugin_id,
-                &uninstall_target.remote_plugin_id,
-            )
-            .await;
-        if plugin_telemetry.capability_summary.is_none() {
-            plugin_telemetry.capability_summary =
-                Some(uninstall_target.fallback_capability_summary.clone());
-        }
-        let uninstall_result = codex_core_plugins::remote::uninstall_remote_plugin(
-            &remote_plugin_service_config,
-            auth.as_ref(),
-            config.codex_home.to_path_buf(),
-            uninstall_target,
-        )
-        .await;
-
-        if matches!(
-            &uninstall_result,
-            Ok(()) | Err(RemotePluginCatalogError::CacheRemove(_))
-        ) {
-            self.analytics_events_client
-                .track_plugin_uninstalled(plugin_telemetry);
-            if plugins_manager.clear_remote_installed_plugins_cache() {
-                self.on_effective_plugins_changed();
-            }
-            plugins_manager.maybe_start_remote_installed_plugins_cache_refresh_after_mutation(
-=======
-        let auth = self.auth_manager.auth().await;
         let outcome = self
             .thread_manager
             .plugins_manager()
             .uninstall_remote_plugin(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 &config.plugins_config_input(),
                 auth.as_ref(),
                 &plugin_id,
