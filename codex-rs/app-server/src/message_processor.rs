@@ -152,12 +152,8 @@ pub(crate) struct MessageProcessor {
     outgoing: Arc<OutgoingMessageSender>,
     startup_warnings: StartupWarnings,
     models_refresh_worker: ModelsRefreshWorker,
-<<<<<<< HEAD
     plugins_manager: Arc<codex_core_plugins::PluginsManager>,
-||||||| 413492cd6c
-=======
     turn_cost_worker: Option<TurnCostWorker>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     skills_watcher: Arc<SkillsWatcher>,
     account_processor: Arc<AccountRequestProcessor>,
     apps_processor: AppsRequestProcessor,
@@ -405,20 +401,6 @@ impl MessageProcessor {
                 None => manager,
             }
         });
-<<<<<<< HEAD
-        let models_manager = thread_manager.get_models_manager();
-        let models_refresh_worker =
-            crate::models_refresh_worker::spawn(&models_manager, config.http_client_factory());
-        let plugins_manager = thread_manager.plugins_manager();
-        plugins_manager.set_analytics_events_client(analytics_events_client.clone());
-||||||| 413492cd6c
-        let models_manager = thread_manager.get_models_manager();
-        let models_refresh_worker =
-            crate::models_refresh_worker::spawn(&models_manager, config.http_client_factory());
-        thread_manager
-            .plugins_manager()
-            .set_analytics_events_client(analytics_events_client.clone());
-=======
         let model_catalog = Arc::new(crate::model_catalog::ModelCatalog::new(
             config_manager.clone(),
             startup_cwd,
@@ -429,10 +411,8 @@ impl MessageProcessor {
         let models_refresh_worker = crate::models_refresh_worker::spawn(&model_catalog);
         let turn_cost_worker =
             TurnCostWorker::spawn(Arc::clone(&config), Arc::clone(&auth_manager));
-        thread_manager
-            .plugins_manager()
-            .set_analytics_events_client(analytics_events_client.clone());
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let plugins_manager = thread_manager.plugins_manager();
+        plugins_manager.set_analytics_events_client(analytics_events_client.clone());
         let skills_watcher = SkillsWatcher::new(
             thread_manager.skills_service(),
             &config.codex_home,
@@ -639,12 +619,8 @@ impl MessageProcessor {
                 config: config_warnings,
             },
             models_refresh_worker,
-<<<<<<< HEAD
             plugins_manager,
-||||||| 413492cd6c
-=======
             turn_cost_worker,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             skills_watcher,
             account_processor,
             apps_processor,
@@ -916,17 +892,13 @@ impl MessageProcessor {
 
     pub(crate) async fn drain_background_tasks(&self) {
         self.models_refresh_worker.shutdown();
-<<<<<<< HEAD
         // #477: no plugin `git` keeps writing to the home after exit.
         self.plugins_manager
             .shutdown_curated_repo_sync(CURATED_REPO_SYNC_SHUTDOWN_TIMEOUT)
             .await;
-||||||| 413492cd6c
-=======
         if let Some(worker) = &self.turn_cost_worker {
             worker.shutdown();
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.thread_processor.drain_background_tasks().await;
     }
 
@@ -986,20 +958,11 @@ impl MessageProcessor {
     }
 
     /// Handle a standalone JSON-RPC response originating from the peer.
-<<<<<<< HEAD
-    pub(crate) async fn process_response(&self, response: JSONRPCResponse) {
-        // Results can hold tokens (e.g. account/chatgptAuthTokens/refresh); log the id only.
-        tracing::info!("<- response: {:?}", response.id);
-||||||| 413492cd6c
-    pub(crate) async fn process_response(&self, response: JSONRPCResponse) {
-        tracing::info!("<- response: {:?}", response);
-=======
     pub(crate) async fn process_response(
         &self,
         connection_id: ConnectionId,
         response: JSONRPCResponse,
     ) {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let JSONRPCResponse { id, result, .. } = response;
         self.outgoing
             .notify_client_response(connection_id, id, result)
@@ -1654,14 +1617,11 @@ impl MessageProcessor {
             ClientRequest::ThreadItemsList { params, .. } => {
                 self.thread_processor.thread_items_list(params).await
             }
-<<<<<<< HEAD
             ClientRequest::ThreadTurnsItemsList { params, .. } => {
                 self.thread_processor.thread_turns_items_list(params).await
-||||||| 413492cd6c
-=======
+            }
             ClientRequest::ThreadItemsRead { params, .. } => {
                 self.thread_processor.thread_items_read(params).await
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
             ClientRequest::ThreadShellCommand { params, .. } => {
                 self.thread_processor
@@ -1848,16 +1808,10 @@ impl MessageProcessor {
                     .thread_realtime_stop(&request_id, params)
                     .await
             }
-<<<<<<< HEAD
-            ClientRequest::ThreadRealtimeListVoices { .. } => {
-||||||| 413492cd6c
-            ClientRequest::ThreadRealtimeListVoices { params: _, .. } => {
-=======
             ClientRequest::ThreadTimelineList { params, .. } => {
                 self.thread_processor.thread_timeline_list(params).await
             }
             ClientRequest::ThreadRealtimeListVoices { params: _, .. } => {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 self.turn_processor.thread_realtime_list_voices().await
             }
             ClientRequest::ReviewStart { params, .. } => {

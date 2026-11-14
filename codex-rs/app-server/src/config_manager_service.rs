@@ -18,13 +18,7 @@ use codex_config::ConfigLayerEntry;
 use codex_config::ConfigLayerMetadata;
 use codex_config::ConfigLayerSource;
 use codex_config::ConfigLayerStack;
-<<<<<<< HEAD
-use codex_config::ConfigLayerStackOrdering;
 use codex_config::ConfigRequirements;
-||||||| 413492cd6c
-use codex_config::ConfigLayerStackOrdering;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_config::ConfigRequirementsToml;
 use codex_config::ShellEnvironmentPolicyFilterRepresentation;
 use codex_config::config_toml::ConfigToml;
@@ -505,27 +499,6 @@ impl ConfigManager {
                 )
             })?;
         let effective = updated_layers.effective_config();
-<<<<<<< HEAD
-        validate_config(&effective).map_err(|err| {
-            ConfigManagerError::write(
-                ConfigWriteErrorCode::ConfigValidationError,
-                format!("Invalid configuration: {err}"),
-            )
-        })?;
-        reject_new_non_prefixed_mcp_server_name_clash(
-            &layers.effective_config(),
-            &effective,
-            layers.requirements(),
-            self.codex_home(),
-        )?;
-||||||| 413492cd6c
-        validate_config(&effective).map_err(|err| {
-            ConfigManagerError::write(
-                ConfigWriteErrorCode::ConfigValidationError,
-                format!("Invalid configuration: {err}"),
-            )
-        })?;
-=======
         validate_config(&effective)
             .and_then(|()| {
                 credential_provider_edits.validate_remapping(
@@ -540,7 +513,12 @@ impl ConfigManager {
                     format!("Invalid configuration: {err}"),
                 )
             })?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        reject_new_non_prefixed_mcp_server_name_clash(
+            &layers.effective_config(),
+            &effective,
+            layers.requirements(),
+            self.codex_home(),
+        )?;
 
         if !config_edits.is_empty() {
             ConfigEditsBuilder::for_config_path(provided_path.as_path())
@@ -626,7 +604,6 @@ async fn write_empty_user_config(write_path: PathBuf) -> Result<(), ConfigManage
         .map_err(|err| ConfigManagerError::io("failed to create empty user config.toml", err))
 }
 
-<<<<<<< HEAD
 /// Rejects a write that would make the next config load fail with the #1655
 /// MCP name check. A clash the config already had is left to the loader, so
 /// unrelated writes (or ones that fix it) still go through.
@@ -656,12 +633,7 @@ fn reject_new_non_prefixed_mcp_server_name_clash(
     }
 }
 
-fn parse_value(value: JsonValue) -> Result<Option<TomlValue>, String> {
-||||||| 413492cd6c
-fn parse_value(value: JsonValue) -> Result<Option<TomlValue>, String> {
-=======
 fn parse_value(value: JsonValue) -> Result<Option<TomlValue>, ConfigManagerError> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     if value.is_null() {
         return Ok(None);
     }
@@ -1016,20 +988,8 @@ fn compute_override_metadata(
     effective: &TomlValue,
     segments: &[String],
 ) -> Option<OverriddenMetadata> {
-<<<<<<< HEAD
-    let user_value = {
-        let user_layer = layers.get_active_user_layer()?;
-        value_at_semantic_path(&user_layer.config, segments)
-    };
-||||||| 413492cd6c
-    let user_value = match layers.get_active_user_layer() {
-        Some(user_layer) => value_at_semantic_path(&user_layer.config, segments),
-        None => return None,
-    };
-=======
     let user_layer = layers.get_active_user_layer()?;
     let user_value = value_at_semantic_path(&user_layer.config, segments);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let effective_value = value_at_semantic_path(effective, segments);
 
     if user_value.is_some() && user_value == effective_value {

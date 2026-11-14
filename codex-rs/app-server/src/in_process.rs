@@ -68,18 +68,15 @@ use crate::transport::OutboundConnectionState;
 use crate::transport::route_outgoing_envelope;
 pub use bootstrap::EmbeddedNetworkPolicy;
 use codex_analytics::AppServerRpcTransport;
-use codex_app_server_protocol::AgentMessageDelivery;
 use codex_app_server_protocol::ClientNotification;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::ConfigWarningNotification;
 use codex_app_server_protocol::InitializeParams;
-use codex_app_server_protocol::ItemCompletedNotification;
 use codex_app_server_protocol::JSONRPCErrorError;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::Result;
 use codex_app_server_protocol::ServerNotification;
 use codex_app_server_protocol::ServerRequest;
-use codex_app_server_protocol::ThreadItemPayload;
 use codex_arg0::Arg0DispatchPaths;
 use codex_config::CloudConfigBundleLoader;
 use codex_config::LoaderOverrides;
@@ -123,42 +120,6 @@ pub const DEFAULT_IN_PROCESS_CHANNEL_CAPACITY: usize = CHANNEL_CAPACITY;
 
 type PendingClientRequestResponse = std::result::Result<Result, JSONRPCErrorError>;
 
-<<<<<<< HEAD
-||||||| 413492cd6c
-fn server_notification_requires_delivery(notification: &ServerNotification) -> bool {
-    matches!(
-        notification,
-        ServerNotification::TurnCompleted(_)
-            | ServerNotification::ThreadSettingsUpdated(_)
-            | ServerNotification::ExternalAgentConfigImportCompleted(_)
-    )
-}
-
-=======
-fn server_notification_requires_delivery(notification: &ServerNotification) -> bool {
-    matches!(
-        notification,
-        ServerNotification::ProcessOutputDelta(_)
-            | ServerNotification::ProcessExited(_)
-            | ServerNotification::TurnCompleted(_)
-            | ServerNotification::ThreadQueueChanged(_)
-            | ServerNotification::ThreadSettingsUpdated(_)
-            | ServerNotification::ThreadAttachmentUpdated(_)
-            | ServerNotification::ExternalAgentConfigImportCompleted(_)
-            | ServerNotification::ItemCompleted(ItemCompletedNotification {
-                item: codex_app_server_protocol::ThreadItem {
-                    payload: ThreadItemPayload::AgentMessage {
-                        delivery: Some(AgentMessageDelivery::Async),
-                        ..
-                    },
-                    ..
-                },
-                ..
-            })
-    )
-}
-
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 /// Input needed to start an in-process app-server runtime.
 ///
 /// These fields mirror the pieces of ambient process state that stdio and
@@ -420,14 +381,8 @@ pub async fn start(mut args: InProcessStartArgs) -> IoResult<InProcessClientHand
         });
     }
     let initialize = args.initialize.clone();
-<<<<<<< HEAD
-    let client = start_uninitialized(args).await?;
-    trace_in_process_timing("after_start_uninitialized", start_started_at);
-||||||| 413492cd6c
-    let client = start_uninitialized(args).await?;
-=======
     let client = Box::pin(start_uninitialized(args)).await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    trace_in_process_timing("after_start_uninitialized", start_started_at);
 
     let initialize_response = client
         .request(ClientRequest::Initialize {
@@ -468,14 +423,9 @@ async fn run_outbound_router(
     }
 }
 
-<<<<<<< HEAD
-async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClientHandle> {
+async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcessClientHandle> {
     let start_uninitialized_at = Instant::now();
     trace_in_process_timing("start_uninitialized_start", start_uninitialized_at);
-||||||| 413492cd6c
-async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClientHandle> {
-=======
-async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcessClientHandle> {
     let config_manager = ConfigManager::new(
         args.config.codex_home.to_path_buf(),
         args.cli_overrides,
@@ -495,7 +445,11 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
         args.enable_codex_api_key_env,
     )
     .await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    crate::follow_configured_session_account(
+        &auth_manager,
+        args.config.as_ref(),
+        /*embedded*/ true,
+    );
     let channel_capacity = args.channel_capacity.max(1);
     let installation_id = resolve_installation_id(&args.config.codex_home).await?;
     trace_in_process_timing("after_resolve_installation_id", start_uninitialized_at);
@@ -504,21 +458,6 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
 
     let runtime_handle = tokio::spawn(async move {
         let (outgoing_tx, outgoing_rx) = mpsc::channel::<OutgoingEnvelope>(channel_capacity);
-<<<<<<< HEAD
-        let auth_manager =
-            AuthManager::shared_from_config(args.config.as_ref(), args.enable_codex_api_key_env)
-                .await;
-        crate::follow_configured_session_account(
-            &auth_manager,
-            args.config.as_ref(),
-            /*embedded*/ true,
-        );
-||||||| 413492cd6c
-        let auth_manager =
-            AuthManager::shared_from_config(args.config.as_ref(), args.enable_codex_api_key_env)
-                .await;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let analytics_events_client =
             analytics_events_client_from_config(Arc::clone(&auth_manager), args.config.as_ref());
         let analytics_events_flush_client = analytics_events_client.clone();
@@ -682,7 +621,6 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
         let mut pending_request_responses =
             HashMap::<RequestId, oneshot::Sender<PendingClientRequestResponse>>::new();
         let mut shutdown_ack = None;
-        let mut pending_event: Option<(InProcessServerEvent, Option<oneshot::Sender<()>>)> = None;
 
         loop {
             tokio::select! {
@@ -759,14 +697,6 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
                         }
                     }
                 }
-                permit = event_tx.reserve(), if pending_event.is_some() => {
-                    let Ok(permit) = permit else { break };
-                    let Some((event, written)) = pending_event.take() else { continue };
-                    permit.send(event);
-                    if let Some(written) = written {
-                        let _ = written.send(());
-                    }
-                }
                 queued_message = async {
                     tokio::select! {
                         reply = process_reply_rx.recv() => match reply {
@@ -776,8 +706,7 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
                             Some(OutgoingEnvelope::Broadcast { .. }) => unreachable!("replies are connection scoped"),
                             None => None,
                         },
-                        // Leave ordinary replies and events queued until the pending event fits.
-                        event = writer_rx.recv(), if pending_event.is_none() => event,
+                        event = writer_rx.recv() => event,
                     }
                 } => {
                     let Some(queued_message) = queued_message else {
@@ -828,63 +757,13 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
                         }
                         OutgoingMessage::AppServerNotification(envelope) => {
                             let notification = envelope.notification;
-<<<<<<< HEAD
                             if event_tx
                                 .send(InProcessServerEvent::ServerNotification(Box::new(
                                     notification,
                                 )))
                                 .is_err()
-||||||| 413492cd6c
-                            if server_notification_requires_delivery(&notification) {
-                                if event_tx
-                                    .send(InProcessServerEvent::ServerNotification(Box::new(
-                                        notification,
-                                    )))
-                                    .await
-                                    .is_err()
-                                {
-                                    break;
-                                }
-                            } else if let Err(send_error) =
-                                event_tx.try_send(InProcessServerEvent::ServerNotification(
-                                    Box::new(notification),
-                                ))
-=======
-                            if server_notification_requires_delivery(&notification) {
-                                pending_event = Some((
-                                    InProcessServerEvent::ServerNotification(Box::new(notification)),
-                                    queued_message.write_complete_tx,
-                                ));
-                                continue;
-                            }
-                            if let Err(send_error) =
-                                event_tx.try_send(InProcessServerEvent::ServerNotification(
-                                    Box::new(notification),
-                                ))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                             {
-<<<<<<< HEAD
                                 break;
-||||||| 413492cd6c
-                                match send_error {
-                                    mpsc::error::TrySendError::Full(_) => {
-                                        warn!("dropping in-process server notification (queue full)");
-                                    }
-                                    mpsc::error::TrySendError::Closed(_) => {
-                                        break;
-                                    }
-                                }
-=======
-                                match send_error {
-                                    mpsc::error::TrySendError::Full(_) => {
-                                        warn!("dropping in-process server notification (queue full)");
-                                        continue;
-                                    }
-                                    mpsc::error::TrySendError::Closed(_) => {
-                                        break;
-                                    }
-                                }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                             }
                         }
                     }
@@ -895,7 +774,6 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
             }
         }
 
-        drop(pending_event);
         drop(writer_rx);
         drop(process_reply_rx);
         drop(processor_tx);
@@ -946,20 +824,13 @@ mod tests {
     use codex_app_server_protocol::ConfigRequirementsReadResponse;
     use codex_app_server_protocol::SessionSource as ApiSessionSource;
     use codex_app_server_protocol::ThreadAttachmentAddParams;
-    use codex_app_server_protocol::ThreadAttachmentOperation;
     use codex_app_server_protocol::ThreadAttachmentRemoveParams;
-    use codex_app_server_protocol::ThreadAttachmentUpdatedNotification;
-    use codex_app_server_protocol::ThreadQueueChangedNotification;
     use codex_app_server_protocol::ThreadSetNameParams;
     use codex_app_server_protocol::ThreadStartParams;
     use codex_app_server_protocol::ThreadStartResponse;
     use codex_core::config::ConfigBuilder;
-<<<<<<< HEAD
     use codex_core::config::ConfigOverrides;
-||||||| 413492cd6c
-=======
     use futures::FutureExt;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     use pretty_assertions::assert_eq;
     use std::path::Path;
     use tempfile::TempDir;
@@ -1053,88 +924,34 @@ mod tests {
                     .expect("test runtime should build");
                 runtime.block_on(Box::pin(future));
             })
-<<<<<<< HEAD
             .expect("test thread should spawn");
         handle.join().expect("test thread should not panic");
-||||||| 413492cd6c
-            .await
-            .expect("request transport should work")
-            .expect("request should succeed");
-        assert!(response.is_object());
-
-        let _parsed: ConfigRequirementsReadResponse =
-            serde_json::from_value(response).expect("response should match v2 schema");
-        client
-            .shutdown()
-            .await
-            .expect("in-process runtime should shutdown cleanly");
     }
 
-    #[tokio::test]
-    async fn in_process_start_uses_requested_session_source_for_thread_start() {
-        for (requested_source, expected_source) in [
-            (SessionSource::Cli, ApiSessionSource::Cli),
-            (SessionSource::Exec, ApiSessionSource::Exec),
-        ] {
-            let client = start_test_client(requested_source).await;
-            let response = client
-                .request(ClientRequest::ThreadStart {
-                    request_id: RequestId::Integer(2),
-                    params: ThreadStartParams {
-                        ephemeral: Some(true),
-                        ..ThreadStartParams::default()
-                    },
-                })
-                .await
-                .expect("request transport should work")
-                .expect("thread/start should succeed");
-            let parsed: ThreadStartResponse =
-                serde_json::from_value(response).expect("thread/start response should parse");
-            assert_eq!(parsed.thread.source, expected_source);
-            client
-                .shutdown()
-                .await
-                .expect("in-process runtime should shutdown cleanly");
-        }
-    }
+    #[test]
+    fn in_process_start_initializes_and_handles_typed_v2_request() {
+        run_in_process_test_with_stack(
+            "in_process_start_initializes_and_handles_typed_v2_request",
+            async move {
+                let client = start_test_client(SessionSource::Cli).await;
+                let response = client
+                    .request(ClientRequest::ConfigRequirementsRead {
+                        request_id: RequestId::Integer(1),
+                        params: None,
+                    })
+                    .await
+                    .expect("request transport should work")
+                    .expect("request should succeed");
+                assert!(response.is_object());
 
-    #[tokio::test]
-    async fn in_process_start_clamps_zero_channel_capacity() {
-        let client =
-            start_test_client_with_capacity(SessionSource::Cli, /*channel_capacity*/ 0).await;
-        let response = loop {
-            match client
-                .request(ClientRequest::ConfigRequirementsRead {
-                    request_id: RequestId::Integer(4),
-                    params: None,
-                })
-                .await
-            {
-                Ok(response) => break response.expect("request should succeed"),
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    tokio::task::yield_now().await;
-                }
-                Err(err) => panic!("request transport should work: {err}"),
-            }
-        };
-        let _parsed: ConfigRequirementsReadResponse =
-            serde_json::from_value(response).expect("response should match v2 schema");
-        client
-            .shutdown()
-            .await
-            .expect("in-process runtime should shutdown cleanly");
-=======
-            .await
-            .expect("request transport should work")
-            .expect("request should succeed");
-        assert!(response.is_object());
-
-        let _parsed: ConfigRequirementsReadResponse =
-            serde_json::from_value(response).expect("response should match v2 schema");
-        client
-            .shutdown()
-            .await
-            .expect("in-process runtime should shutdown cleanly");
+                let _parsed: ConfigRequirementsReadResponse =
+                    serde_json::from_value(response).expect("response should match v2 schema");
+                client
+                    .shutdown()
+                    .await
+                    .expect("in-process runtime should shutdown cleanly");
+            },
+        );
     }
 
     /// Importing a project makes its change visible to an embedder before the import reply.
@@ -1178,64 +995,73 @@ mod tests {
         client.shutdown().await.unwrap();
     }
 
-    #[tokio::test]
-    async fn in_process_start_uses_requested_session_source_for_thread_start() {
-        for (requested_source, expected_source) in [
-            (SessionSource::Cli, ApiSessionSource::Cli),
-            (SessionSource::Exec, ApiSessionSource::Exec),
-        ] {
-            let client = start_test_client(requested_source).await;
-            let response = client
-                .request(ClientRequest::ThreadStart {
-                    request_id: RequestId::Integer(2),
-                    params: ThreadStartParams {
-                        ephemeral: Some(true),
-                        ..ThreadStartParams::default()
-                    },
-                })
-                .await
-                .expect("request transport should work")
-                .expect("thread/start should succeed");
-            let parsed: ThreadStartResponse =
-                serde_json::from_value(response).expect("thread/start response should parse");
-            assert_eq!(parsed.thread.source, expected_source);
-            client
-                .shutdown()
-                .await
-                .expect("in-process runtime should shutdown cleanly");
-        }
+    #[test]
+    fn in_process_start_uses_requested_session_source_for_thread_start() {
+        run_in_process_test_with_stack(
+            "in_process_start_uses_requested_session_source_for_thread_start",
+            async move {
+                for (requested_source, expected_source) in [
+                    (SessionSource::Cli, ApiSessionSource::Cli),
+                    (SessionSource::Exec, ApiSessionSource::Exec),
+                ] {
+                    let client = start_test_client(requested_source).await;
+                    let response = client
+                        .request(ClientRequest::ThreadStart {
+                            request_id: RequestId::Integer(2),
+                            params: ThreadStartParams {
+                                ephemeral: Some(true),
+                                ..ThreadStartParams::default()
+                            },
+                        })
+                        .await
+                        .expect("request transport should work")
+                        .expect("thread/start should succeed");
+                    let parsed: ThreadStartResponse = serde_json::from_value(response)
+                        .expect("thread/start response should parse");
+                    assert_eq!(parsed.thread.source, expected_source);
+                    client
+                        .shutdown()
+                        .await
+                        .expect("in-process runtime should shutdown cleanly");
+                }
+            },
+        );
     }
 
-    #[tokio::test]
-    async fn in_process_start_clamps_zero_channel_capacity() {
-        let client = start_test_client_with_options(
-            SessionSource::Cli,
-            /*channel_capacity*/ 0,
-            /*capabilities*/ None,
-        )
-        .await;
-        let response = loop {
-            match client
-                .request(ClientRequest::ConfigRequirementsRead {
-                    request_id: RequestId::Integer(4),
-                    params: None,
-                })
-                .await
-            {
-                Ok(response) => break response.expect("request should succeed"),
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    tokio::task::yield_now().await;
-                }
-                Err(err) => panic!("request transport should work: {err}"),
-            }
-        };
-        let _parsed: ConfigRequirementsReadResponse =
-            serde_json::from_value(response).expect("response should match v2 schema");
-        client
-            .shutdown()
-            .await
-            .expect("in-process runtime should shutdown cleanly");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    #[test]
+    fn in_process_start_clamps_zero_channel_capacity() {
+        run_in_process_test_with_stack(
+            "in_process_start_clamps_zero_channel_capacity",
+            async move {
+                let client = start_test_client_with_options(
+                    SessionSource::Cli,
+                    /*channel_capacity*/ 0,
+                    /*capabilities*/ None,
+                )
+                .await;
+                let response = loop {
+                    match client
+                        .request(ClientRequest::ConfigRequirementsRead {
+                            request_id: RequestId::Integer(4),
+                            params: None,
+                        })
+                        .await
+                    {
+                        Ok(response) => break response.expect("request should succeed"),
+                        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                            tokio::task::yield_now().await;
+                        }
+                        Err(err) => panic!("request transport should work: {err}"),
+                    }
+                };
+                let _parsed: ConfigRequirementsReadResponse =
+                    serde_json::from_value(response).expect("response should match v2 schema");
+                client
+                    .shutdown()
+                    .await
+                    .expect("in-process runtime should shutdown cleanly");
+            },
+        );
     }
 
     #[tokio::test(start_paused = true)]
@@ -1292,184 +1118,8 @@ mod tests {
     }
 
     #[test]
-<<<<<<< HEAD
-    fn in_process_start_initializes_and_handles_typed_v2_request() {
-        run_in_process_test_with_stack(
-            "in_process_start_initializes_and_handles_typed_v2_request",
-            async move {
-                let client = start_test_client(SessionSource::Cli).await;
-                let response = client
-                    .request(ClientRequest::ConfigRequirementsRead {
-                        request_id: RequestId::Integer(1),
-                        params: None,
-                    })
-                    .await
-                    .expect("request transport should work")
-                    .expect("request should succeed");
-                assert!(response.is_object());
-
-                let _parsed: ConfigRequirementsReadResponse =
-                    serde_json::from_value(response).expect("response should match v2 schema");
-                client
-                    .shutdown()
-                    .await
-                    .expect("in-process runtime should shutdown cleanly");
-            },
-        );
-    }
-
-    #[test]
-    fn in_process_start_uses_requested_session_source_for_thread_start() {
-        run_in_process_test_with_stack(
-            "in_process_start_uses_requested_session_source_for_thread_start",
-            async move {
-                for (requested_source, expected_source) in [
-                    (SessionSource::Cli, ApiSessionSource::Cli),
-                    (SessionSource::Exec, ApiSessionSource::Exec),
-                ] {
-                    let client = start_test_client(requested_source).await;
-                    let response = client
-                        .request(ClientRequest::ThreadStart {
-                            request_id: RequestId::Integer(2),
-                            params: ThreadStartParams {
-                                ephemeral: Some(true),
-                                ..ThreadStartParams::default()
-                            },
-                        })
-                        .await
-                        .expect("request transport should work")
-                        .expect("thread/start should succeed");
-                    let parsed: ThreadStartResponse = serde_json::from_value(response)
-                        .expect("thread/start response should parse");
-                    assert_eq!(parsed.thread.source, expected_source);
-                    client
-                        .shutdown()
-                        .await
-                        .expect("in-process runtime should shutdown cleanly");
-                }
-            },
-        );
-    }
-
-    #[test]
-    fn in_process_start_clamps_zero_channel_capacity() {
-        run_in_process_test_with_stack(
-            "in_process_start_clamps_zero_channel_capacity",
-            async move {
-                let client = start_test_client_with_capacity(
-                    SessionSource::Cli,
-                    /*channel_capacity*/ 0,
-                )
-                .await;
-                let response = loop {
-                    match client
-                        .request(ClientRequest::ConfigRequirementsRead {
-                            request_id: RequestId::Integer(4),
-                            params: None,
-                        })
-                        .await
-                    {
-                        Ok(response) => break response.expect("request should succeed"),
-                        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                            tokio::task::yield_now().await;
-                        }
-                        Err(err) => panic!("request transport should work: {err}"),
-                    }
-                };
-                let _parsed: ConfigRequirementsReadResponse =
-                    serde_json::from_value(response).expect("response should match v2 schema");
-                client
-                    .shutdown()
-                    .await
-                    .expect("in-process runtime should shutdown cleanly");
-            },
-        );
-    }
-
-    #[test]
     fn default_in_process_capacity_has_streaming_burst_headroom() {
         const { assert!(DEFAULT_IN_PROCESS_CHANNEL_CAPACITY >= 4096) };
-||||||| 413492cd6c
-    fn guaranteed_delivery_helpers_cover_terminal_server_notifications() {
-        assert!(server_notification_requires_delivery(
-            &ServerNotification::TurnCompleted(TurnCompletedNotification {
-                thread_id: "thread-1".to_string(),
-                turn: Turn {
-                    id: "turn-1".to_string(),
-                    items: Vec::new(),
-                    items_view: TurnItemsView::NotLoaded,
-                    status: TurnStatus::Completed,
-                    error: None,
-                    started_at: None,
-                    completed_at: Some(0),
-                    duration_ms: None,
-                },
-            })
-        ));
-        assert!(server_notification_requires_delivery(
-            &ServerNotification::ExternalAgentConfigImportCompleted(
-                ExternalAgentConfigImportCompletedNotification {
-                    import_id: "import".to_string(),
-                    item_type_results: Vec::new(),
-                },
-            )
-        ));
-=======
-    fn guaranteed_delivery_helpers_cover_required_server_notifications() {
-        assert!(server_notification_requires_delivery(
-            &ServerNotification::TurnCompleted(TurnCompletedNotification {
-                thread_id: "thread-1".to_string(),
-                turn: Turn {
-                    id: "turn-1".to_string(),
-                    root_turn_id: None,
-                    items: Vec::new(),
-                    items_view: TurnItemsView::NotLoaded,
-                    status: TurnStatus::Completed,
-                    error: None,
-                    started_at: None,
-                    completed_at: Some(0),
-                    duration_ms: None,
-                },
-            })
-        ));
-        assert!(server_notification_requires_delivery(
-            &ServerNotification::ThreadQueueChanged(ThreadQueueChangedNotification {
-                thread_id: "thread-1".to_string(),
-            })
-        ));
-        assert!(server_notification_requires_delivery(
-            &ServerNotification::ExternalAgentConfigImportCompleted(
-                ExternalAgentConfigImportCompletedNotification {
-                    import_id: "import".to_string(),
-                    item_type_results: Vec::new(),
-                },
-            )
-        ));
-        assert!(server_notification_requires_delivery(
-            &ServerNotification::ThreadAttachmentUpdated(ThreadAttachmentUpdatedNotification {
-                thread_id: "thread-1".to_string(),
-                attachment_type: "pull_request".to_string(),
-                identity_key: r#"["github.com","openai","codex",123]"#.to_string(),
-                attachment_id: "attachment-1".to_string(),
-                operation: ThreadAttachmentOperation::Deleted,
-            })
-        ));
-        assert!(server_notification_requires_delivery(
-            &ServerNotification::ItemCompleted(ItemCompletedNotification::new(
-                "thread-1".to_string(),
-                "turn-1".to_string(),
-                ThreadItemPayload::AgentMessage {
-                    id: "item-1".to_string(),
-                    text: "Still working".to_string(),
-                    phase: None,
-                    memory_citation: None,
-                    delivery: Some(AgentMessageDelivery::Async),
-                    questions: None,
-                },
-                /*started_at_ms*/ None,
-                /*completed_at_ms*/ 0
-            ))
-        ));
     }
 
     #[cfg(unix)]
@@ -1536,7 +1186,7 @@ mod tests {
 
         timeout(Duration::from_secs(10), async {
             // The pipe readers can hold this payload while delivery is stalled.
-            while client.event_rx.capacity() != 0 || !dir.path().join("exited").exists() {
+            while !dir.path().join("exited").exists() {
                 tokio::task::yield_now().await;
             }
             let error = client
@@ -1591,7 +1241,7 @@ mod tests {
         )
         .await;
         timeout(Duration::from_secs(10), async {
-            while client.event_rx.capacity() != 0 || !dir.path().join("written").exists() {
+            while !dir.path().join("written").exists() {
                 tokio::task::yield_now().await;
             }
             // A resize on a pipe fails, but its error still has to release the handle for kill.
@@ -1706,7 +1356,6 @@ mod tests {
             }
         }
 
-        assert_eq!(client.event_rx.capacity(), 0);
         let mut queued_requests = Vec::with_capacity(capacity);
         for index in 0..capacity {
             let mut request = Box::pin(sender.request(ClientRequest::ConfigRequirementsRead {
@@ -1729,6 +1378,5 @@ mod tests {
         .await
         .expect("shutdown must complete with full request and event queues")
         .expect("shutdown should succeed");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
