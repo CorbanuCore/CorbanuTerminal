@@ -825,8 +825,7 @@ impl UnifiedExecProcessManager {
                 Arc::clone(&initial_exec_command_active),
                 // #2000: typing into this process is judged later by the
                 // sandbox it started with (D522 (a): MXC counts as none).
-                if process.sandbox_type() == Some(codex_sandboxing::SandboxType::WindowsMxc)
-                {
+                if process.sandbox_type() == Some(codex_sandboxing::SandboxType::WindowsMxc) {
                     codex_protocol::config_types::WindowsSandboxLevel::Disabled
                 } else {
                     crate::tools::orchestrator::unsandboxed_check_level(
@@ -1723,7 +1722,10 @@ impl UnifiedExecProcessManager {
         let mut env = apply_unified_exec_env(env);
         strip_output_env(&mut env);
         let mut explicit_env_overrides = shell_environment_policy.r#set.clone();
-        inject_tasknode_profile_env(&mut explicit_env_overrides, &context.step_context.turn.config);
+        inject_tasknode_profile_env(
+            &mut explicit_env_overrides,
+            &context.step_context.turn.config,
+        );
         strip_output_env(&mut explicit_env_overrides);
         let exec_server_env_config = ExecServerEnvConfig {
             policy: exec_env_policy_from_shell_policy(

@@ -405,11 +405,9 @@ mod tests {
             r#"{"session_id":29757.0,"chars":"","yield_time_ms":120000.0,"max_output_tokens":3000.0}"#,
         )
         .expect("integral JSON floats should be compatible with integer tool fields");
-        let terminal: super::super::TerminalSessionArgs = parse_arguments_for_tool(
-            "write_stdin",
-            r#"{"session_id":29757.0,"chars":""}"#,
-        )
-        .expect("an integral JSON float session id should be accepted");
+        let terminal: super::super::TerminalSessionArgs =
+            parse_arguments_for_tool("write_stdin", r#"{"session_id":29757.0,"chars":""}"#)
+                .expect("an integral JSON float session id should be accepted");
 
         assert_eq!(terminal.session_id, 29_757);
         assert_eq!(args.yield_time_ms, 120_000);
