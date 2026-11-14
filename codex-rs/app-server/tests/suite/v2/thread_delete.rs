@@ -349,7 +349,6 @@ async fn thread_delete_handles_live_threads_before_rollout_exists() -> Result<()
     Ok(())
 }
 
-<<<<<<< HEAD
 /// A ledger attempt owned by `thread_id`, recorded now with the ledger's
 /// checkpoint `behind_ms` ahead of the clock (a clock that stepped back).
 async fn record_accounting_attempt(
@@ -530,8 +529,8 @@ async fn thread_delete_leaves_the_rollout_when_accounting_fails() -> Result<()> 
     );
     assert_eq!(ledger_counts(&state_db).await?.0, 0);
     Ok(())
-||||||| 413492cd6c
-=======
+}
+
 #[tokio::test]
 async fn thread_delete_removes_persisted_board_even_with_feature_disabled() -> Result<()> {
     let server = create_mock_responses_server_sequence(vec![
@@ -698,5 +697,4 @@ async fn board_counts(pool: &sqlx::SqlitePool) -> Result<(i64, i64, i64)> {
     )
     .fetch_one(pool)
     .await?)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
