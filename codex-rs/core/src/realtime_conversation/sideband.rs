@@ -2,6 +2,7 @@ use super::RealtimeInputTask;
 use super::RealtimeInputTaskExit;
 use super::RealtimeSidebandSessionInitialization;
 use super::RealtimeWebrtcSidebandInputTask;
+use super::admit_realtime_operation;
 use super::flush_realtime_transcript_tail;
 use super::report_realtime_transport_loss;
 use super::run_realtime_input_task;
@@ -27,10 +28,18 @@ const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(5);
 const STABLE_CONNECTION_DURATION: Duration = Duration::from_secs(30);
 const TRANSPORT_CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Runs the client sideband of a WebRTC call, reconnecting as upstream does.
+/// The call's record (#824), if any, gets the sideband's end time: when it
+/// stopped for good (a requested stop, cancellation, a refused or failed
+/// connection, or the transport lost without reconnecting), before the
+/// transcript tail is flushed. This does not infer the remote media call's
+/// end.
 pub(super) fn spawn_webrtc_sideband_input_task(
     input: RealtimeWebrtcSidebandInputTask,
+    record: Option<crate::accounting::realtime::RealtimeSessionRecord>,
 ) -> JoinHandle<()> {
     let RealtimeWebrtcSidebandInputTask {
+        model_client,
         client,
         session_config,
         call_id,
@@ -60,6 +69,14 @@ pub(super) fn spawn_webrtc_sideband_input_task(
             } => RealtimeTranscriptState::default(),
         };
         while realtime_active.load(Ordering::Relaxed) {
+            // Each connection (and reconnection) is admitted under the live
+            // policy before session instructions reach the sideband.
+            if admit_realtime_operation(&model_client, &events_tx)
+                .await
+                .is_err()
+            {
+                break;
+            }
             let connection = match tokio::select! {
                 biased;
                 _ = stop_token.cancelled() => break,
@@ -123,6 +140,8 @@ pub(super) fn spawn_webrtc_sideband_input_task(
             // Run the realtime input loop.
             let exit = run_realtime_input_task(
                 RealtimeInputTask {
+                    usage_tx: None,
+                    model_client: model_client.clone(),
                     writer: connection.writer(),
                     events: connection.events(),
                     text_rx: input_channels.text_rx.clone(),
@@ -187,8 +206,12 @@ pub(super) fn spawn_webrtc_sideband_input_task(
             // Cancellation may win before the task takes its already connected observer.
             close_sideband_transport(&connection).await;
         }
+        if let Some(record) = record {
+            record.end(chrono::Utc::now().timestamp_millis()).await;
+        }
         let transcript_tail = transcript_state.take_transcript_tail().await;
-        flush_realtime_transcript_tail(&transcript_tail_flush, &transcript_tail).await;
+        flush_realtime_transcript_tail(&model_client, &transcript_tail_flush, &transcript_tail)
+            .await;
     })
 }
 

@@ -68,8 +68,11 @@ pub(super) async fn attach(attachment: ExistingCallAttachment) -> CodexResult<Jo
         .await
         .map_err(map_api_error)?;
 
+    // #824: the frontend created this call; core sent no request for it, so
+    // there is nothing of its own to record.
     Ok(spawn_webrtc_sideband_input_task(
         RealtimeWebrtcSidebandInputTask {
+            model_client,
             client,
             session_config,
             call_id,
@@ -86,5 +89,6 @@ pub(super) async fn attach(attachment: ExistingCallAttachment) -> CodexResult<Jo
             transcript_tail_flush,
             stop_token,
         },
+        /*record*/ None,
     ))
 }
