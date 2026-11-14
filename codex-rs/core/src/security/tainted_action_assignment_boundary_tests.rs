@@ -95,7 +95,7 @@ fn issue_2192_assignment_after_a_non_blank_character_asks() {
         "export X=0,1; git fetch origin",
         "r=o, ; git fetch e\"$r\"",
     ];
-    assert_eq!(wrong(&quiet, None), Vec::<String>::new());
+    assert_eq!(wrong(&quiet, /*expected*/ None), Vec::<String>::new());
     assert_eq!(
         wrong(
             &["git fetch e\"$r\""],
