@@ -138,7 +138,9 @@ async fn unrelated_error_is_forwarded_without_retry() {
 
 #[tokio::test]
 async fn metadata_buffer_is_bounded_and_never_discards_overflow() {
-    let mut events: Vec<_> = (0..33).map(|_| Ok(ResponseEvent::Created { response_id: None })).collect();
+    let mut events: Vec<_> = (0..33)
+        .map(|_| Ok(ResponseEvent::Created { response_id: None }))
+        .collect();
     events.push(Err(rejection()));
     let mut stream = stream(events);
     assert_eq!(

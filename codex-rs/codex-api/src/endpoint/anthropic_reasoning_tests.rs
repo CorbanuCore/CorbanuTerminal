@@ -29,6 +29,7 @@ fn compatible_fable_fixture_preserves_existing_totals() {
             output_tokens: 30,
             reasoning_output_tokens: 9,
             total_tokens: 137298,
+            codex_rollout_budget_units: None,
         }
     );
 }
@@ -147,6 +148,7 @@ fn cumulative_input_and_accounting_observer_are_unchanged() {
             output_tokens: 40,
             reasoning_output_tokens: 9,
             total_tokens: 61
+            codex_rollout_budget_units: None,
         }
     );
     let plain = json!({"usage": {"input_tokens": 9, "output_tokens": 30}});

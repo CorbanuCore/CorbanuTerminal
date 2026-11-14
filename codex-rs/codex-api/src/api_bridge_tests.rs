@@ -81,6 +81,7 @@ fn entitlement_recovery_gate_preserves_authentication_failures() {
             url: None,
             headers: None,
             body: Some(body.to_owned()),
+            retry_after: None,
         };
         assert_eq!(is_plan_entitlement_error(&transport), expected);
         assert_eq!(
@@ -97,6 +98,7 @@ fn entitlement_recovery_gate_preserves_authentication_failures() {
         url: None,
         headers: None,
         body: Some("context tokens exceed this plan".to_owned()),
+        retry_after: None,
     }));
 }
 
