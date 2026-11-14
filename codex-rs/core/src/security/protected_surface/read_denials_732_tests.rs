@@ -65,7 +65,10 @@ fn separate_database_rules_keep_top_level_provenance_and_read_time_protection() 
             "state.sqlite-journal",
             "later.sqlite-wal",
         ] {
-            assert!(matcher.is_local_path_read_denied(&folder.join(name)), "{name}");
+            assert!(
+                matcher.is_local_path_read_denied(&folder.join(name)),
+                "{name}"
+            );
         }
         assert!(!matcher.is_local_path_read_denied(&cwd.join("fixture.sqlite")));
     }
@@ -106,6 +109,8 @@ fn backups_below_a_kept_folder_keep_the_recursive_scan() {
     );
     let matcher = denials.matcher().unwrap();
     assert!(matcher.is_local_path_read_denied(&backup));
-    assert!(matcher.is_local_path_read_denied(&folder.join("db-backups/sqlite-2-0/logs_2.sqlite-wal")));
+    assert!(
+        matcher.is_local_path_read_denied(&folder.join("db-backups/sqlite-2-0/logs_2.sqlite-wal"))
+    );
     assert!(!matcher.is_local_path_read_denied(&cwd.join("fixture.txt")));
 }

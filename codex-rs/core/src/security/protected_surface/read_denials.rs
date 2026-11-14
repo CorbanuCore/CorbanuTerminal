@@ -1060,7 +1060,9 @@ impl ReadDenials {
             self.paths()
                 .map(|path| {
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::Path { path: path.clone().into() },
+                        FileSystemPath::Path {
+                            path: path.clone().into(),
+                        },
                         FileSystemAccessMode::Deny,
                     )
                 })
@@ -1107,13 +1109,17 @@ impl ReadDenials {
                 .iter()
                 .map(|path| {
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::Path { path: path.clone().into() },
+                        FileSystemPath::Path {
+                            path: path.clone().into(),
+                        },
                         FileSystemAccessMode::Deny,
                     )
                 })
                 .chain(self.fixed.iter().map(|path| {
                     FileSystemSandboxEntry::skip_missing_path(
-                        FileSystemPath::Path { path: path.clone().into() },
+                        FileSystemPath::Path {
+                            path: path.clone().into(),
+                        },
                         FileSystemAccessMode::Deny,
                     )
                 }))
@@ -1135,7 +1141,9 @@ impl ReadDenials {
                 )
                 .chain(self.moderate_marker.iter().map(|path| {
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::Path { path: path.clone().into() },
+                        FileSystemPath::Path {
+                            path: path.clone().into(),
+                        },
                         FileSystemAccessMode::Deny,
                     )
                 }))
@@ -1188,7 +1196,9 @@ impl ReadDenials {
             })
             .map(|path| {
                 FileSystemSandboxEntry::skip_missing_path(
-                    FileSystemPath::Path { path: path.clone().into() },
+                    FileSystemPath::Path {
+                        path: path.clone().into(),
+                    },
                     FileSystemAccessMode::Write,
                 )
             })
@@ -1781,13 +1791,20 @@ fn pattern_matcher(policy: &FileSystemSandboxPolicy, cwd: &Path) -> Option<ReadD
 fn with_real_locations(policy: &FileSystemSandboxPolicy) -> FileSystemSandboxPolicy {
     let mut resolved = policy.clone();
     let mut denied: Vec<(AbsolutePathBuf, AbsolutePathBuf)> = Vec::new();
+    // A denied path with no native form here cannot be compared below, so
+    // then no permissive entry gains a real-location copy (fail closed).
+    let mut unresolved_deny = false;
     for entry in &policy.entries {
         if entry.access == FileSystemAccessMode::Deny
             && let FileSystemPath::Path { path } = &entry.path
-            && let Ok(path) = path.to_abs_path()
         {
-            let real = real_location(&path).unwrap_or_else(|| path.clone());
-            denied.push((path, real));
+            match path.to_abs_path() {
+                Ok(path) => {
+                    let real = real_location(&path).unwrap_or_else(|| path.clone());
+                    denied.push((path, real));
+                }
+                Err(_) => unresolved_deny = true,
+            }
         }
     }
     for entry in &policy.entries {
@@ -1799,16 +1816,17 @@ fn with_real_locations(policy: &FileSystemSandboxPolicy) -> FileSystemSandboxPol
                     .filter(|real| *real != path)
                     .filter(|real| {
                         entry.access == FileSystemAccessMode::Deny
-                            || denied
-                                .iter()
-                                .filter(|(spelled, real_denied)| {
-                                    real.as_path().starts_with(spelled.as_path())
-                                        || real.as_path().starts_with(real_denied.as_path())
-                                })
-                                .all(|(spelled, real_denied)| {
-                                    path.as_path().starts_with(spelled.as_path())
-                                        || path.as_path().starts_with(real_denied.as_path())
-                                })
+                            || (!unresolved_deny
+                                && denied
+                                    .iter()
+                                    .filter(|(spelled, real_denied)| {
+                                        real.as_path().starts_with(spelled.as_path())
+                                            || real.as_path().starts_with(real_denied.as_path())
+                                    })
+                                    .all(|(spelled, real_denied)| {
+                                        path.as_path().starts_with(spelled.as_path())
+                                            || path.as_path().starts_with(real_denied.as_path())
+                                    }))
                     })
                     .map(|path| FileSystemPath::Path { path: path.into() })
             }),

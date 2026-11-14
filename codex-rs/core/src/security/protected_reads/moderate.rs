@@ -225,7 +225,9 @@ fn explain_denied(
     // A malformed pattern denies every path; explain nothing then.
     let own = ReadDenyMatcher::try_new_for_local_paths(&base, cwd).ok()?;
     let protected = denials.apply(&inputs.profile)?.file_system_sandbox_policy();
-    let protected = ReadDenyMatcher::try_new_for_local_paths(&protected, cwd).ok().flatten()?;
+    let protected = ReadDenyMatcher::try_new_for_local_paths(&protected, cwd)
+        .ok()
+        .flatten()?;
     let (user_home, codex_home) = (inputs.user_home.as_deref(), inputs.codex_home.as_path());
     // The secretless launch contract refuses a launch outside a sandbox at
     // every level, so with the person's own full access no level change
@@ -254,7 +256,9 @@ fn explain_denied(
     let read = |path: &Path| {
         let blocked = protected.is_local_path_read_denied(path)
             && base.can_read_path_with_cwd(path, cwd)
-            && !own.as_ref().is_some_and(|own| own.is_local_path_read_denied(path));
+            && !own
+                .as_ref()
+                .is_some_and(|own| own.is_local_path_read_denied(path));
         if blocked {
             found.replace(Some(path.to_path_buf()));
         }

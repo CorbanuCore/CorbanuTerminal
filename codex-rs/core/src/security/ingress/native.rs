@@ -659,16 +659,14 @@ impl NativeIngress {
                         name,
                         namespace,
                         ..
-                    } => {
-                        Ok(ResponseItem::FunctionCallOutput {
-                            id: id.clone(),
-                            call_id: call_id.clone(),
-                            name: name.clone(),
-                            namespace: namespace.clone(),
-                            output: FunctionCallOutputPayload::from_text(text),
-                            internal_chat_message_metadata_passthrough: None,
-                        })
-                    }
+                    } => Ok(ResponseItem::FunctionCallOutput {
+                        id: id.clone(),
+                        call_id: call_id.clone(),
+                        name: name.clone(),
+                        namespace: namespace.clone(),
+                        output: FunctionCallOutputPayload::from_text(text),
+                        internal_chat_message_metadata_passthrough: None,
+                    }),
                     ResponseItem::CustomToolCallOutput {
                         id, call_id, name, ..
                     } => Ok(ResponseItem::CustomToolCallOutput {

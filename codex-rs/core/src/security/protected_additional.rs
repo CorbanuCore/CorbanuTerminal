@@ -233,7 +233,9 @@ fn reopened(
         let mut merged = protected.clone();
         merged.entries.extend(spellings.iter().map(|root| {
             FileSystemSandboxEntry::new(
-                FileSystemPath::Path { path: root.clone().into() },
+                FileSystemPath::Path {
+                    path: root.clone().into(),
+                },
                 FileSystemAccessMode::Write,
             )
         }));

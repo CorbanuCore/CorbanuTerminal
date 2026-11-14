@@ -722,7 +722,12 @@ fn judged_avoiding_read(
         // sync D543 (a): main's approval actions were only commands and
         // patches. Any other upstream action that reaches this judge is
         // judged as unseen code (fail closed: the person decides).
-        _ => classifier.note(ProtectedActionKind::UnseenCode),
+        ApprovalAction::WriteStdin { .. }
+        | ApprovalAction::McpToolCall { .. }
+        | ApprovalAction::NetworkAccess { .. }
+        | ApprovalAction::RequestPermissions { .. } => {
+            classifier.note(ProtectedActionKind::UnseenCode);
+        }
     }
     // D410: a `stat` writing a table where the action may load its builtin.
     if classifier.stat_pending && classifier.stat_builtin {

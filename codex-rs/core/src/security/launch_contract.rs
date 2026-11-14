@@ -647,15 +647,20 @@ impl LaunchContract {
                 .iter()
                 .map(|path| {
                     FileSystemSandboxEntry::skip_missing_path(
-                        FileSystemPath::Path { path: path.clone().into() },
+                        FileSystemPath::Path {
+                            path: path.clone().into(),
+                        },
                         FileSystemAccessMode::Deny,
                     )
                 })
                 .collect();
-            ReadDenyMatcher::try_new_for_local_paths(&FileSystemSandboxPolicy::restricted(entries), cwd)
-                .ok()
-                .flatten()
-                .is_some_and(|matcher| matcher.is_local_path_read_denied(path))
+            ReadDenyMatcher::try_new_for_local_paths(
+                &FileSystemSandboxPolicy::restricted(entries),
+                cwd,
+            )
+            .ok()
+            .flatten()
+            .is_some_and(|matcher| matcher.is_local_path_read_denied(path))
         };
         Some(if among(&self.cli_token_paths) {
             KeptFile::CliToken
@@ -712,7 +717,9 @@ impl LaunchContract {
         self.protected_paths()
             .into_iter()
             .map(|path| {
-                let path_entry = FileSystemPath::Path { path: path.clone().into() };
+                let path_entry = FileSystemPath::Path {
+                    path: path.clone().into(),
+                };
                 let path = &path;
                 // PF-27-S06: the Windows sandbox drops every skip-if-missing
                 // entry, so a path that exists is denied outright there. So

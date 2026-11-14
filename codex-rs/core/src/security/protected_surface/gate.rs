@@ -271,7 +271,8 @@ pub(crate) async fn check_dispatch(
     };
     let admission = admit(
         &invocation.session,
-        invocation.turn.approval_policy(),
+        // The step's live policy, as the reviewer routing below reads it.
+        invocation.step_context.settings.approval_policy(),
         route,
         &invocation.call_id,
         move || Some(kind),
@@ -311,7 +312,8 @@ fn automatic_reviewer_answers(invocation: &ToolInvocation) -> bool {
         settings.approval_policy(),
         codex_protocol::protocol::AskForApproval::OnRequest
             | codex_protocol::protocol::AskForApproval::Granular(_)
-    ) && settings.approvals_reviewer() == codex_protocol::config_types::ApprovalsReviewer::AutoReview
+    ) && settings.approvals_reviewer()
+        == codex_protocol::config_types::ApprovalsReviewer::AutoReview
 }
 
 /// D334 (#1702), D388: a follow-up task or V1 `send_input` to an agent with

@@ -389,7 +389,9 @@ impl ReadPolicyInputs {
         denials.deny_home_listing();
         let policy = denials.apply(&self.profile)?.file_system_sandbox_policy();
         // A malformed pattern denies every path; explain nothing then.
-        ReadDenyMatcher::try_new_for_local_paths(&policy, cwd).ok().flatten()
+        ReadDenyMatcher::try_new_for_local_paths(&policy, cwd)
+            .ok()
+            .flatten()
     }
 
     /// The session's protected paths, as the read policy is built from them.
@@ -775,7 +777,9 @@ pub(crate) async fn denial_explanation(
                     inputs.user_home.as_deref(),
                     &inputs.codex_home,
                     &denial_lines,
-                    &|path| matcher.is_listing_denied(path) && !matcher.is_local_path_read_denied(path),
+                    &|path| {
+                        matcher.is_listing_denied(path) && !matcher.is_local_path_read_denied(path)
+                    },
                 )
                 .map(ProtectedNote::Listing)
             })
@@ -846,7 +850,8 @@ pub(crate) async fn denial_explanation(
                     return None;
                 }
                 let lines = &denial_lines[..denial_lines.len().min(MAX_REPORTED_LINES)];
-                in_lines(lines, &|path| matcher.is_local_path_read_denied(path)).map(ProtectedNote::Read)
+                in_lines(lines, &|path| matcher.is_local_path_read_denied(path))
+                    .map(ProtectedNote::Read)
             })
     })
     .await?;
