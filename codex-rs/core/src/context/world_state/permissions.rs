@@ -77,10 +77,28 @@ impl PermissionsState {
     }
 
     /// Adds what the active security level blocks (#439).
+    /// The note joins the hash of the prefix-free instructions, so a note change
+    /// re-sends the section while saved prefixes keep their own diff.
     pub(crate) fn with_note(self, note: &str) -> Self {
         let instructions = self.instructions.with_note(note);
+        let snapshot = match self.snapshot {
+            PermissionsSnapshot::Current {
+                instructions: instructions_hash,
+                approved_command_prefixes,
+            } => PermissionsSnapshot::Current {
+                instructions: WorldStateHash::from_json(&serde_json::json!({
+                    "instructions": instructions_hash,
+                    "note": note,
+                })),
+                approved_command_prefixes,
+            },
+            PermissionsSnapshot::Legacy(_) => {
+                PermissionsSnapshot::Legacy(WorldStateHash::from_fragment(&instructions))
+            }
+        };
         Self {
-            snapshot: WorldStateHash::from_fragment(&instructions),
+            saved_prefix_heading: self.saved_prefix_heading,
+            snapshot,
             instructions,
         }
     }

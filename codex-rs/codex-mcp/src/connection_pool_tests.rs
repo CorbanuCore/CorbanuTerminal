@@ -154,6 +154,7 @@ pub(crate) fn key(context: &McpRuntimeContext, config: &McpServerConfig) -> Conn
         ),
         auth_state: None,
         startup_timeout: Duration::from_secs(30),
+        discover_timeout: crate::rmcp_client::effective_discover_timeout(config),
         catalog_item_limit: 100,
     }
 }
@@ -433,6 +434,81 @@ async fn timed_out_open_is_released_after_the_server_acknowledges_it() {
         open.message["params"]["leaseId"]
     );
     release.reply(json!({}));
+}
+
+#[tokio::test]
+async fn pending_startups_require_matching_discover_budgets_but_ready_clients_do_not() {
+    for second_budget in [5, 30, 60] {
+        let pool = McpConnectionPool::default();
+        let runtime_context = context();
+        let first_key = key(&runtime_context, &config());
+        let mut second_config = config();
+        second_config.discover_timeout_sec = Some(Duration::from_secs(second_budget));
+        let mut second_key = key(&runtime_context, &second_config);
+        let starts = Arc::new(AtomicUsize::new(0));
+        let started = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+        let launch = startup(
+            ConnectionSharing::Negotiated,
+            Arc::clone(&starts),
+            Arc::clone(&started),
+            Arc::clone(&release),
+            TestServer::default(),
+        );
+        let first = pool.connect(
+            Arc::default(),
+            first_key,
+            Arc::default(),
+            /*tool_catalog_cache_context*/ None,
+            CancellationToken::new(),
+            &launch,
+        );
+        tokio::pin!(first);
+        assert!(futures::poll!(&mut first).is_pending());
+        started.notified().await;
+        let second = pool.connect(
+            Arc::default(),
+            second_key.clone(),
+            Arc::default(),
+            /*tool_catalog_cache_context*/ None,
+            CancellationToken::new(),
+            &launch,
+        );
+        tokio::pin!(second);
+        assert!(futures::poll!(&mut second).is_pending());
+        if second_budget == 5 {
+            // The shorter budget starts independently while the first startup is held.
+            let second = tokio::time::timeout(Duration::from_secs(5), &mut second)
+                .await
+                .expect("different discovery budgets must not share pending startup")
+                .expect("second startup succeeds");
+            assert_eq!(starts.load(Ordering::SeqCst), 2);
+            release.notify_one();
+            let first = first.await.expect("first startup succeeds");
+            assert!(!Arc::ptr_eq(&first.client, &second.client));
+        } else {
+            // Explicit default and values capped by startup share the same effective wait.
+            release.notify_one();
+            let first = first.await.expect("first startup succeeds");
+            let second = second.await.expect("shared startup succeeds");
+            assert_eq!(starts.load(Ordering::SeqCst), 1);
+            assert!(Arc::ptr_eq(&first.client, &second.client));
+            second_key.discover_timeout = Duration::from_secs(1);
+            let ready = pool
+                .connect(
+                    Arc::default(),
+                    second_key,
+                    Arc::default(),
+                    /*tool_catalog_cache_context*/ None,
+                    CancellationToken::new(),
+                    &launch,
+                )
+                .await
+                .expect("ready connection ignores discovery budget changes");
+            assert!(Arc::ptr_eq(&first.client, &ready.client));
+            assert_eq!(starts.load(Ordering::SeqCst), 1);
+        }
+    }
 }
 
 #[tokio::test]

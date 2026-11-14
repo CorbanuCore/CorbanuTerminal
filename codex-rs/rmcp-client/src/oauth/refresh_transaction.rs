@@ -4,11 +4,11 @@ use std::time::Duration;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
+use super::DefaultKeyringStore;
 use anyhow::Context;
 use anyhow::Error;
 use anyhow::Result;
 use codex_config::McpServerOAuthConfig;
-use codex_keyring_store::DefaultKeyringStore;
 use codex_keyring_store::KeyringStore;
 use oauth2::TokenResponse;
 use rmcp::transport::auth::AuthError;

@@ -253,6 +253,7 @@ impl ContextManager {
                 | RolloutItem::SecurityRiskScore(_)
                 | RolloutItem::TokenUsageRecord(_)
                 | RolloutItem::RealtimeItem(_)
+                | RolloutItem::SourceOrigin(_)
                 | RolloutItem::Compacted(_)
                 | RolloutItem::EventMsg(_) => None,
             })
@@ -370,12 +371,8 @@ impl ContextManager {
                     ) {
                         active_segment.previous_turn_settings = Some(PreviousTurnSettings {
                             model: ctx.model.clone(),
-<<<<<<< HEAD
                             model_provider: ctx.model_provider.clone(),
-||||||| 413492cd6c
-=======
                             cyber_access_program: ctx.cyber_access_program,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                             comp_hash: ctx.comp_hash.clone(),
                             realtime_active: ctx.realtime_active,
                         });
@@ -447,18 +444,12 @@ impl ContextManager {
                 RolloutItem::EventMsg(_)
                 | RolloutItem::DynamicToolsUpdated { .. }
                 | RolloutItem::SessionMeta(_)
-<<<<<<< HEAD
-                | RolloutItem::InterAgentCommunicationMetadata { .. }
-                | RolloutItem::SourceOrigin(_) => {}
-||||||| 413492cd6c
-                | RolloutItem::InterAgentCommunicationMetadata { .. } => {}
-=======
                 | RolloutItem::RealtimeItem(_)
                 | RolloutItem::RetainedContext(_)
                 | RolloutItem::SecurityRiskScore(_)
                 | RolloutItem::TokenUsageRecord(_)
-                | RolloutItem::InterAgentCommunicationMetadata { .. } => {}
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                | RolloutItem::InterAgentCommunicationMetadata { .. }
+                | RolloutItem::SourceOrigin(_) => {}
             }
         }
 
@@ -565,14 +556,10 @@ impl ContextManager {
                 | RolloutItem::TurnContext(_)
                 | RolloutItem::RealtimeItem(_)
                 | RolloutItem::WorldState(_)
-<<<<<<< HEAD
                 | RolloutItem::SourceOrigin(_)
-||||||| 413492cd6c
-=======
                 | RolloutItem::SecurityRiskScore(_)
                 | RolloutItem::TokenUsageRecord(_)
                 | RolloutItem::DynamicToolsUpdated { .. }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 | RolloutItem::SessionMeta(_) => {}
             }
         }
@@ -612,15 +599,11 @@ impl ContextManager {
                 | RolloutItem::InterAgentCommunication(_)
                 | RolloutItem::InterAgentCommunicationMetadata { .. }
                 | RolloutItem::TurnContext(_)
-<<<<<<< HEAD
                 | RolloutItem::SourceOrigin(_)
-||||||| 413492cd6c
-=======
                 | RolloutItem::RealtimeItem(_)
                 | RolloutItem::TokenUsageRecord(_)
                 | RolloutItem::RetainedContext(_)
                 | RolloutItem::SecurityRiskScore(_)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 | RolloutItem::EventMsg(_) => {
                     unreachable!("only world-state replay items are collected")
                 }

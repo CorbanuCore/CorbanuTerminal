@@ -155,6 +155,7 @@ impl McpConnectionSet {
                     client,
                     startup_cancellation: StartupCancellation::default(),
                     startup_timeout: DEFAULT_STARTUP_TIMEOUT,
+                    discover_timeout: DEFAULT_STARTUP_TIMEOUT,
                     initialized_apps: None,
                     startup_trigger: None,
                     legacy_fallback: None,
@@ -5836,6 +5837,7 @@ async fn manager_with_reusable_ready_server(
                 startup_timeout: config
                     .startup_timeout_sec
                     .unwrap_or(DEFAULT_STARTUP_TIMEOUT),
+                discover_timeout: crate::rmcp_client::effective_discover_timeout(&config),
                 initialized_apps: None,
                 startup_trigger: None,
                 legacy_fallback: None,
@@ -6296,6 +6298,7 @@ async fn reconciliation_reuses_connection_without_relisting_regular_tools() -> a
                 startup_timeout: config
                     .startup_timeout_sec
                     .unwrap_or(DEFAULT_STARTUP_TIMEOUT),
+                discover_timeout: crate::rmcp_client::effective_discover_timeout(&config),
                 initialized_apps: None,
                 startup_trigger: None,
                 legacy_fallback: None,
@@ -6477,6 +6480,68 @@ async fn reconciliation_reuses_an_unchanged_ready_server() {
     assert_eq!(
         model_tool_names(&reconciled.list_all_tools().await),
         HashSet::from([ToolName::namespaced("mcp__docs", "search")])
+    );
+}
+
+#[tokio::test]
+async fn reconciliation_compares_pending_discover_budgets() -> anyhow::Result<()> {
+    for budget in [5, 30, 60] {
+        let runtime_context = reusable_server_runtime_context();
+        let mut config = reusable_server_config("http://127.0.0.1:1");
+        let tools = vec![create_test_tool("docs", "search")];
+        let mut previous =
+            manager_with_reusable_ready_server(&config, &runtime_context, tools.clone()).await;
+        let (pending_client, startup_started, release_startup) =
+            create_gated_async_managed_client(create_test_managed_client(tools).await);
+        let startup = tokio::spawn({
+            let pending_client = pending_client.clone();
+            async move { pending_client.client().await }
+        });
+        startup_started.await?;
+        Arc::get_mut(&mut previous.servers.get_mut("docs").unwrap().connection)
+            .expect("fixture owns the connection")
+            .client = pending_client;
+        config.discover_timeout_sec = Some(Duration::from_secs(budget));
+        let reconciled = tokio::time::timeout(
+            Duration::from_secs(2),
+            reconcile_reusable_server(&previous, config, runtime_context),
+        )
+        .await
+        .expect("pending reconciliation must not wait for old startup");
+        assert_eq!(
+            previous.shares_test_connection_with(&reconciled, "docs"),
+            budget >= 30
+        );
+        if budget >= 30 {
+            release_startup
+                .send(())
+                .map_err(|()| anyhow!("startup stopped unexpectedly"))?;
+            startup.await??;
+        } else {
+            // A replacement may cancel its predecessor; release/reap either outcome.
+            let _ = release_startup.send(());
+            let _ = startup.await?;
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn reconciliation_reuses_ready_server_when_discover_budget_changes() {
+    let runtime_context = reusable_server_runtime_context();
+    let mut config = reusable_server_config("http://127.0.0.1:1");
+    let previous = manager_with_reusable_ready_server(
+        &config,
+        &runtime_context,
+        vec![create_test_tool("docs", "search")],
+    )
+    .await;
+    config.discover_timeout_sec = Some(Duration::from_secs(1));
+    let reconciled = reconcile_reusable_server(&previous, config, runtime_context).await;
+    assert!(previous.shares_test_connection_with(&reconciled, "docs"));
+    assert_eq!(
+        model_tool_names(&reconciled.list_all_tools().await),
+        HashSet::from([ToolName::namespaced("mcp__docs", "search")]),
     );
 }
 
@@ -7135,6 +7200,7 @@ async fn reconciliation_replaces_closed_connections() -> anyhow::Result<()> {
         startup_timeout: config
             .startup_timeout_sec
             .unwrap_or(DEFAULT_STARTUP_TIMEOUT),
+        discover_timeout: crate::rmcp_client::effective_discover_timeout(&config),
         initialized_apps: None,
         startup_trigger: None,
         legacy_fallback: None,

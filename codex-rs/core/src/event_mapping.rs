@@ -233,6 +233,8 @@ pub fn parse_turn_item(item: &ResponseItem) -> Option<TurnItem> {
                     content: vec![AgentMessageContent::Text { text }],
                     phase: Some(MessagePhase::Commentary),
                     memory_citation: None,
+                    delivery: None,
+                    questions: None,
                 })
             }),
         ResponseItem::Reasoning {

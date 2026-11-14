@@ -41,8 +41,8 @@ use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort;
+use codex_history::RolloutItem;
 use codex_protocol::protocol::AccountTokenUsage;
-use codex_protocol::protocol::RolloutItem;
 use codex_protocol::protocol::TokenUsage;
 use codex_rollout_trace::InferenceTraceContext;
 use codex_security_policy::SecurityLevel;
@@ -134,14 +134,7 @@ fn recorded_security_level(items: &[RolloutItem]) -> SecurityLevel {
 /// developer messages and AGENTS.md / skill fragments are dropped; nothing is
 /// added or rewritten.
 fn keep_for_stage_one(item: &ResponseItem) -> Option<ResponseItem> {
-    let ResponseItem::Message {
-        id,
-        role,
-        content,
-        phase,
-        internal_chat_message_metadata_passthrough: metadata,
-    } = item
-    else {
+    let ResponseItem::Message { role, content, .. } = item else {
         return codex_rollout::should_persist_response_item_for_memories(item)
             .then(|| item.clone());
     };
@@ -168,13 +161,18 @@ fn keep_for_stage_one(item: &ResponseItem) -> Option<ResponseItem> {
         })
         .cloned()
         .collect();
-    (!content.is_empty()).then(|| ResponseItem::Message {
-        id: id.clone(),
-        role: role.clone(),
-        content,
-        phase: phase.clone(),
-        internal_chat_message_metadata_passthrough: metadata.clone(),
-    })
+    if content.is_empty() {
+        return None;
+    }
+    let mut kept = item.clone();
+    if let ResponseItem::Message {
+        content: kept_content,
+        ..
+    } = &mut kept
+    {
+        *kept_content = content;
+    }
+    Some(kept)
 }
 
 pub struct StageOneMemoryOutput {
@@ -307,6 +305,8 @@ impl StageOneMemoryBinding {
             let policy = owner
                 .services
                 .agent_control
+                .local_or_unsupported()
+                .map_err(|_| StageOneMemoryDenial::PolicyUnavailable)?
                 .effective_security_policy()
                 .snapshot_for_agent(self.owner_id)
                 .map_err(|_| StageOneMemoryDenial::PolicyUnavailable)?;
@@ -389,12 +389,22 @@ impl StageOneMemoryClient {
             snapshot.session_source,
             snapshot.originator,
             config.model_verbosity,
+            config.features.enabled(Feature::ContentItemKinds),
+            /*reasoning_effort_override_enabled*/ false,
             config.features.enabled(Feature::EnableRequestCompression),
             config.features.enabled(Feature::RuntimeMetrics),
             /*beta_features_header*/ None,
             /*concurrent_reasoning_summaries_enabled*/ false,
+            /*output_token_replay_enabled*/ false,
             /*attestation_provider*/ None,
             config.http_client_factory(),
+            session
+                .services
+                .thread_extension_data
+                .get_or_init(|| config.workspace_routing_context())
+                .as_ref()
+                .clone(),
+            /*request_contributors*/ Vec::new(),
         );
         client.with_stage_one_memory_binding(Arc::clone(&binding))?;
         Ok(Self {
@@ -488,7 +498,7 @@ impl StageOneMemoryClient {
         let conversation: Vec<ResponseItem> = items
             .iter()
             .filter_map(|item| match item {
-                RolloutItem::ResponseItem(item) => Some(item.clone()),
+                RolloutItem::ResponseItem(item) => Some(item.item.clone()),
                 RolloutItem::InterAgentCommunication(communication) => {
                     Some(communication.to_model_input_item())
                 }

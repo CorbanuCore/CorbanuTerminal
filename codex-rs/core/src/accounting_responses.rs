@@ -337,7 +337,7 @@ impl DeferredResponsesSampling {
             .get_or_try_init(|| async {
                 let mut completion = Bootstrap(self, false);
                 self.session
-                    .try_ensure_rollout_materialized()
+                    .try_ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
                     .await
                     .map_err(|error| {
                         CodexErr::Fatal(failure("materialize rollout", error).into())

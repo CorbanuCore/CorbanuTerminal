@@ -131,7 +131,7 @@ impl Session {
                     &self.services.thread_extension_data,
                     McpThreadIdentity {
                         auth_changed: !self.services.mcp_runtime.current_auth_matches(
-                            self.services.auth_manager.auth_cached().as_ref(),
+                            self.services.auth_manager().auth_cached().as_ref(),
                         ),
                         session_source: &session_source,
                         originator: &originator,
@@ -192,13 +192,6 @@ impl Session {
             return;
         };
         loop {
-<<<<<<< HEAD
-            let auth = self.services.auth_manager().auth_cached();
-            if self
-||||||| 413492cd6c
-            let auth = self.services.auth_manager.auth_cached();
-            if self
-=======
             // Compare and rebuild from current environments, not choices saved for a future turn.
             let environments = self.services.turn_environments.snapshot().await;
             let environment_selections = environments.all_selections();
@@ -208,9 +201,8 @@ impl Session {
             ) {
                 self.mark_mcp_runtime_dirty();
             }
-            let auth = self.services.auth_manager.auth_cached();
+            let auth = self.services.auth_manager().auth_cached();
             if !self
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 .services
                 .mcp_runtime
                 .current_auth_matches(auth.as_ref())
@@ -225,22 +217,8 @@ impl Session {
                 refresh: &self.mcp_refresh,
                 published: false,
             };
-<<<<<<< HEAD
             let auth = self.services.auth_manager().auth().await;
-            self.services
-                .plugins_manager
-                .set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));
-            let desired = self.latest_mcp_desired_state(auth).await;
-||||||| 413492cd6c
-            let auth = self.services.auth_manager.auth().await;
-            self.services
-                .plugins_manager
-                .set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));
-            let desired = self.latest_mcp_desired_state(auth).await;
-=======
-            let auth = self.services.auth_manager.auth().await;
             let desired = self.latest_mcp_desired_state(auth, environments).await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             let selected_capability_roots = self
                 .resolve_selected_capability_roots_for_step(&desired.environments)
                 .await;
@@ -302,19 +280,6 @@ impl Session {
             .acquire()
             .await
             .map_err(|_| anyhow::anyhow!("MCP runtime refresh semaphore closed"))?;
-<<<<<<< HEAD
-        let auth = self.services.auth_manager().auth().await;
-        self.services
-            .plugins_manager
-            .set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));
-        let desired = self.latest_mcp_desired_state(auth).await;
-||||||| 413492cd6c
-        let auth = self.services.auth_manager.auth().await;
-        self.services
-            .plugins_manager
-            .set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));
-        let desired = self.latest_mcp_desired_state(auth).await;
-=======
         self.services.mcp_runtime.refresh_codex_apps_tools().await
     }
 
@@ -333,11 +298,10 @@ impl Session {
             refresh: &self.mcp_refresh,
             published: false,
         };
-        let auth = self.services.auth_manager.auth().await;
+        let auth = self.services.auth_manager().auth().await;
         let environments = self.services.turn_environments.snapshot().await;
         let environment_selections = environments.all_selections();
         let desired = self.latest_mcp_desired_state(auth, environments).await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let selected_capability_roots = self
             .resolve_selected_capability_roots_for_step(&desired.environments)
             .await;
@@ -857,18 +821,6 @@ impl Session {
             error!("MCP runtime refresh semaphore closed");
             return;
         };
-<<<<<<< HEAD
-        let auth = self.services.auth_manager().auth().await;
-        self.services
-            .plugins_manager
-            .set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));
-||||||| 413492cd6c
-        let auth = self.services.auth_manager.auth().await;
-        self.services
-            .plugins_manager
-            .set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         {
             let mut state = self.state.lock().await;
             let mut config = (*state.session_configuration.original_config_do_not_use).clone();
@@ -888,7 +840,7 @@ impl Session {
             refresh: &self.mcp_refresh,
             published: false,
         };
-        let auth = self.services.auth_manager.auth().await;
+        let auth = self.services.auth_manager().auth().await;
         let ready_selected_capability_roots = self
             .services
             .mcp_runtime

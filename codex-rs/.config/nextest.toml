@@ -42,7 +42,7 @@ slow-timeout = { period = "60s", terminate-after = 11 }
 # checks that every codex-core test staging the elevated helpers is listed.
 # First, so no other group's override can claim them before this one.
 platform = 'cfg(windows)'
-filter = 'package(codex-core) & (test(windows_elevated_does_not_create_missing_workspace_metadata) | test(windows_elevated_enforces_deny_read_and_protects_setup_marker) | test(pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory) | test(pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write) | test(sec_win_1863_command_exec_localhost_unc_cwd_fails_closed) | test(sec_win_d398_command_exec_non_canonical_cwd) | test(issue_1139_moderate_git_folder_writes_name_the_level) | test(pf_30_s03_vault_command_after_untrusted_content_needs_the_human) | test(pf_30_s03_recalled_memory_gates_a_first_protected_action) | test(sec_439_no_network_names_the_level_only_under_aggressive) | test(pf_30_s01_source_envelopes_label_tool_output_and_keep_human_prompt) | test(pf_30_s03_permission_hook_allow_does_not_approve_a_tainted_protected_action) | test(pf_30_s03_a_tricked_child_agent_cannot_reach_the_vault))'
+filter = 'package(codex-core) & (test(windows_elevated_) | test(windows_sandbox_cli_preserves_managed_deny_reads_across_launches) | test(pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory) | test(pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write) | test(sec_win_1863_command_exec_localhost_unc_cwd_fails_closed) | test(sec_win_d398_command_exec_non_canonical_cwd) | test(issue_1139_moderate_git_folder_writes_name_the_level) | test(pf_30_s03_vault_command_after_untrusted_content_needs_the_human) | test(pf_30_s03_recalled_memory_gates_a_first_protected_action) | test(sec_439_no_network_names_the_level_only_under_aggressive) | test(pf_30_s01_source_envelopes_label_tool_output_and_keep_human_prompt) | test(pf_30_s03_permission_hook_allow_does_not_approve_a_tainted_protected_action) | test(pf_30_s03_a_tricked_child_agent_cannot_reach_the_vault))'
 test-group = 'windows_sandbox_legacy_sessions'
 
 [[profile.default.overrides]]
@@ -67,9 +67,6 @@ max-threads = 4
 max-threads = 1
 
 [test-groups.windows_sandbox_legacy_sessions]
-max-threads = 1
-
-[test-groups.windows_sandbox_accounts]
 max-threads = 1
 
 [test-groups.windows_process_heavy]
@@ -137,15 +134,12 @@ filter = 'package(codex-core) & kind(test) & test(apply_patch_cli)'
 test-group = 'core_apply_patch_cli_integration'
 
 [[profile.default.overrides]]
-# These cases share the runner's elevated sandbox accounts. Queue them before
-# starting their timeout; their file lock still coordinates other test processes.
+# These cases share the runner's elevated sandbox accounts with legacy sessions.
+# Use the SAME group, not an independently serialized group that can overlap it.
+# Queue before timeout; the file lock still coordinates other test processes.
 platform = 'cfg(windows)'
-filter = '''
-    (package(codex-core) & binary(windows_sandbox)) |
-    (package(codex-exec-server) & test(file_system_elevated_relative_read_denial_uses_policy_cwd)) |
-    (package(codex-windows-sandbox) & test(elevated_non_tty_cmd_forwards_env_output_and_exit))
-'''
-test-group = 'windows_sandbox_accounts'
+filter = 'package(codex-exec-server) & test(file_system_elevated_relative_read_denial_uses_policy_cwd)'
+test-group = 'windows_sandbox_legacy_sessions'
 
 [[profile.default.overrides]]
 # These tests create restricted-token Windows child processes and private desktops.
@@ -159,7 +153,7 @@ test-group = 'windows_sandbox_accounts'
 # Every test that runs the elevated setup takes it too (#1827): the setup
 # resets the sandbox users' passwords, failing other tests' logons (1326), and
 # in tests it asserts the guard is held.
-filter = 'package(codex-windows-sandbox) & (test(legacy_) | test(elevated_) | test(sec_win_1648_) | test(d311_) | test(d377_) | test(sec_win_345_sandboxed_commands_dont_get_the_runners_access))'
+filter = 'package(codex-windows-sandbox) & (test(legacy_) | test(elevated_) | test(sec_win_1648_) | test(d311_) | test(d377_) | test(sec_win_345_sandboxed_commands_dont_get_the_runners_access) | test(large_deny_list_uses_environment_without_changing_the_request) | test(windows_wrapper_args_round_trip))'
 test-group = 'windows_sandbox_legacy_sessions'
 
 [[profile.default.overrides]]
