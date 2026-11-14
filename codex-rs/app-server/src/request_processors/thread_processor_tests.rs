@@ -551,167 +551,6 @@ mod thread_processor_behavior_tests {
     }
 
     #[test]
-<<<<<<< HEAD
-    fn requested_permissions_trust_project_uses_permission_profile_intent() {
-        let cwd = test_path_buf("/tmp/project").abs();
-        let full_access_profile = codex_protocol::models::PermissionProfile::Disabled;
-        let workspace_write_profile = codex_protocol::models::PermissionProfile::workspace_write();
-        let read_only_profile = codex_protocol::models::PermissionProfile::read_only();
-        let split_write_profile =
-            codex_protocol::models::PermissionProfile::from_runtime_permissions(
-                &FileSystemSandboxPolicy::restricted(vec![
-                    FileSystemSandboxEntry {
-                        path: FileSystemPath::Path { path: cwd.clone() },
-                        access: FileSystemAccessMode::Write,
-                        missing_path_behavior: None,
-                    },
-                    FileSystemSandboxEntry {
-                        path: FileSystemPath::GlobPattern {
-                            scan: None,
-                            pattern: "/tmp/project/**/*.env".to_string(),
-                        },
-                        access: FileSystemAccessMode::Deny,
-                        missing_path_behavior: None,
-                    },
-                ]),
-                NetworkSandboxPolicy::Restricted,
-            );
-
-        assert!(requested_permissions_trust_project(
-            &ConfigOverrides {
-                permission_profile: Some(full_access_profile),
-                ..Default::default()
-            },
-            cwd.as_path()
-        ));
-        assert!(requested_permissions_trust_project(
-            &ConfigOverrides {
-                permission_profile: Some(workspace_write_profile),
-                ..Default::default()
-            },
-            cwd.as_path()
-        ));
-        assert!(requested_permissions_trust_project(
-            &ConfigOverrides {
-                permission_profile: Some(split_write_profile),
-                ..Default::default()
-            },
-            cwd.as_path()
-        ));
-        assert!(requested_permissions_trust_project(
-            &ConfigOverrides {
-                default_permissions: Some(BUILT_IN_PERMISSION_PROFILE_WORKSPACE.to_string()),
-                ..Default::default()
-            },
-            cwd.as_path()
-        ));
-        assert!(requested_permissions_trust_project(
-            &ConfigOverrides {
-                default_permissions: Some(
-                    BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS.to_string()
-                ),
-                ..Default::default()
-            },
-            cwd.as_path()
-        ));
-        assert!(!requested_permissions_trust_project(
-            &ConfigOverrides {
-                permission_profile: Some(read_only_profile),
-                ..Default::default()
-            },
-            cwd.as_path()
-        ));
-        assert!(!requested_permissions_trust_project(
-            &ConfigOverrides {
-                default_permissions: Some(BUILT_IN_PERMISSION_PROFILE_READ_ONLY.to_string()),
-                ..Default::default()
-            },
-            cwd.as_path()
-        ));
-    }
-
-    #[test]
-||||||| 413492cd6c
-    fn requested_permissions_trust_project_uses_permission_profile_intent() {
-        let cwd = test_path_buf("/tmp/project").abs();
-        let full_access_profile = codex_protocol::models::PermissionProfile::Disabled;
-        let workspace_write_profile = codex_protocol::models::PermissionProfile::workspace_write();
-        let read_only_profile = codex_protocol::models::PermissionProfile::read_only();
-        let split_write_profile =
-            codex_protocol::models::PermissionProfile::from_runtime_permissions(
-                &FileSystemSandboxPolicy::restricted(vec![
-                    FileSystemSandboxEntry {
-                        path: FileSystemPath::Path { path: cwd.clone() },
-                        access: FileSystemAccessMode::Write,
-                        missing_path_behavior: None,
-                    },
-                    FileSystemSandboxEntry {
-                        path: FileSystemPath::GlobPattern {
-                            pattern: "/tmp/project/**/*.env".to_string(),
-                        },
-                        access: FileSystemAccessMode::Deny,
-                        missing_path_behavior: None,
-                    },
-                ]),
-                NetworkSandboxPolicy::Restricted,
-            );
-
-        assert!(requested_permissions_trust_project(
-            &ConfigOverrides {
-                permission_profile: Some(full_access_profile),
-                ..Default::default()
-            },
-            cwd.as_path()
-        ));
-        assert!(requested_permissions_trust_project(
-            &ConfigOverrides {
-                permission_profile: Some(workspace_write_profile),
-                ..Default::default()
-            },
-            cwd.as_path()
-        ));
-        assert!(requested_permissions_trust_project(
-            &ConfigOverrides {
-                permission_profile: Some(split_write_profile),
-                ..Default::default()
-            },
-            cwd.as_path()
-        ));
-        assert!(requested_permissions_trust_project(
-            &ConfigOverrides {
-                default_permissions: Some(BUILT_IN_PERMISSION_PROFILE_WORKSPACE.to_string()),
-                ..Default::default()
-            },
-            cwd.as_path()
-        ));
-        assert!(requested_permissions_trust_project(
-            &ConfigOverrides {
-                default_permissions: Some(
-                    BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS.to_string()
-                ),
-                ..Default::default()
-            },
-            cwd.as_path()
-        ));
-        assert!(!requested_permissions_trust_project(
-            &ConfigOverrides {
-                permission_profile: Some(read_only_profile),
-                ..Default::default()
-            },
-            cwd.as_path()
-        ));
-        assert!(!requested_permissions_trust_project(
-            &ConfigOverrides {
-                default_permissions: Some(BUILT_IN_PERMISSION_PROFILE_READ_ONLY.to_string()),
-                ..Default::default()
-            },
-            cwd.as_path()
-        ));
-    }
-
-    #[test]
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     fn config_load_error_marks_cloud_config_bundle_failures_for_relogin() {
         let err = std::io::Error::other(CloudConfigBundleLoadError::new(
             CloudConfigBundleLoadErrorCode::Auth,
@@ -822,16 +661,12 @@ mod thread_processor_behavior_tests {
             requires_openai_auth: false,
             supports_websockets: true,
             supports_standalone_web_search: false,
-<<<<<<< HEAD
             billing: None,
-||||||| 413492cd6c
-=======
             capabilities: None,
             project_id: None,
             location: None,
             credential_file: None,
             include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
         let config_manager = ConfigManager::new(
             temp_dir.path().to_path_buf(),
@@ -980,13 +815,21 @@ mod thread_processor_behavior_tests {
 
         request.provider_account = Some("fake".to_string());
         assert_eq!(
-            collect_resume_override_mismatches(&request, &config_snapshot),
+            collect_resume_override_mismatches(
+                &request,
+                &config_snapshot,
+                /*selected_service_tier*/ None,
+            ),
             vec!["provider_account requested=zai:fake active=Some(\"zai:main\")".to_string()]
         );
         for same in ["main", "zai:main"] {
             request.provider_account = Some(same.to_string());
             assert_eq!(
-                collect_resume_override_mismatches(&request, &config_snapshot),
+                collect_resume_override_mismatches(
+                    &request,
+                    &config_snapshot,
+                    /*selected_service_tier*/ None,
+                ),
                 Vec::<String>::new(),
                 "{same}"
             );
@@ -995,7 +838,11 @@ mod thread_processor_behavior_tests {
         config_snapshot.provider_account = Some("zai:default".to_string());
         request.provider_account = Some("zai:main".to_string());
         assert_eq!(
-            collect_resume_override_mismatches(&request, &config_snapshot),
+            collect_resume_override_mismatches(
+                &request,
+                &config_snapshot,
+                /*selected_service_tier*/ None,
+            ),
             vec!["provider_account requested=zai:main active=Some(\"zai:default\")".to_string()]
         );
     }
@@ -1004,64 +851,19 @@ mod thread_processor_behavior_tests {
     /// thread; an account of the thread's own provider still can.
     #[test]
     fn collect_resume_override_mismatches_ignores_another_providers_account() {
-        let cwd = test_path_buf("/tmp").abs();
-        let request = ThreadResumeParams {
-            thread_id: "thread-1".to_string(),
-            history: None,
-            path: None,
-            model: None,
-            model_provider: None,
-            provider_account: None,
-            service_tier: None,
-            cwd: None,
-            runtime_workspace_roots: None,
-            approval_policy: None,
-            approvals_reviewer: None,
-            sandbox: None,
-            permissions: None,
-            config: None,
-            base_instructions: None,
-            developer_instructions: None,
-            personality: None,
-            exclude_turns: false,
-            initial_turns_page: None,
-        };
-        let config_snapshot = ThreadConfigSnapshot {
-            model: "gpt-5".to_string(),
-            model_provider_id: "zai".to_string(),
-            service_tier: Some("flex".to_string()),
-            approval_policy: codex_protocol::protocol::AskForApproval::OnRequest,
-            approvals_reviewer: codex_protocol::config_types::ApprovalsReviewer::User,
-            permission_profile: codex_protocol::models::PermissionProfile::Disabled,
-            active_permission_profile: None,
-            environments: TurnEnvironmentSelections::new(cwd, Vec::new()),
-            workspace_roots: Vec::new(),
-            profile_workspace_roots: Vec::new(),
-            ephemeral: false,
-            reasoning_effort: None,
-            reasoning_summary: None,
-            personality: None,
-            collaboration_mode: CollaborationMode {
-                mode: ModeKind::Default,
-                settings: Settings {
-                    model: "gpt-5".to_string(),
-                    reasoning_effort: None,
-                    developer_instructions: None,
-                },
-            },
-            session_source: SessionSource::Cli,
-            history_mode: Default::default(),
-            forked_from_thread_id: None,
-            parent_thread_id: None,
-            thread_source: None,
-            originator: "test_originator".to_string(),
-            provider_account: Some("zai:work".to_string()),
-        };
+        let (mut request, mut config_snapshot) = resume_mismatch_fixture();
+        request.service_tier = None;
+        config_snapshot.model_provider_id = "zai".to_string();
+        config_snapshot.provider_account = Some("zai:work".to_string());
 
         let mismatches = |selection: &str| {
             let mut request = request.clone();
             request.provider_account = Some(selection.to_string());
-            collect_resume_override_mismatches(&request, &config_snapshot)
+            collect_resume_override_mismatches(
+                &request,
+                &config_snapshot,
+                /*selected_service_tier*/ None,
+            )
         };
         assert_eq!(
             [
@@ -1098,6 +900,7 @@ mod thread_processor_behavior_tests {
     fn persisted_workspace_permission_history() -> Vec<RolloutItem> {
         vec![RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(
             codex_protocol::protocol::ThreadSettingsAppliedEvent {
+                thread_id: None,
                 thread_settings: codex_protocol::protocol::ThreadSettingsSnapshot {
                     model: "gpt-5.4".to_string(),
                     model_provider_id: "openai".to_string(),
@@ -1108,6 +911,7 @@ mod thread_processor_behavior_tests {
                     ),
                     active_permission_profile: None,
                     cwd: test_path_buf("/tmp/persisted-workspace").abs(),
+                    runtime_workspace_roots: None,
                     reasoning_effort: None,
                     reasoning_summary: None,
                     personality: None,
@@ -1119,6 +923,7 @@ mod thread_processor_behavior_tests {
                             developer_instructions: None,
                         },
                     },
+                    disabled_plugin_ids: Vec::new(),
                 },
             },
         ))]
@@ -1236,66 +1041,78 @@ mod thread_processor_behavior_tests {
                 panic!("fixture")
             };
             event.thread_settings.service_tier = tier.map(str::to_string);
-            let mut overrides = ConfigOverrides::default();
-            merge_persisted_service_tier(&history, /*request_overrides*/ None, &mut overrides);
-            assert_eq!(overrides.service_tier, Some(tier.map(str::to_string)));
+            let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &history[0] else {
+                panic!("fixture")
+            };
+            assert_eq!(
+                resumed_service_tier(
+                    Some(&event.thread_settings),
+                    /*restore_service_tier*/ true,
+                    /*explicit_model_override*/ false,
+                ),
+                Some(tier.map(str::to_string))
+            );
         }
-        let mut overrides = ConfigOverrides::default();
-        merge_persisted_service_tier(&[], /*request_overrides*/ None, &mut overrides);
-        assert_eq!(overrides.service_tier, Some(None));
+        // No settings record: standard routing, never today's global default.
+        assert_eq!(
+            resumed_service_tier(
+                /*persisted*/ None, /*restore_service_tier*/ true,
+                /*explicit_model_override*/ false,
+            ),
+            Some(None)
+        );
     }
 
     #[test]
     fn resume_service_tier_keeps_explicit_tier_or_model_override() {
-        for mut overrides in [
-            ConfigOverrides {
-                service_tier: Some(Some("priority".to_string())),
-                ..Default::default()
-            },
-            ConfigOverrides {
-                service_tier: Some(None),
-                ..Default::default()
-            },
-            ConfigOverrides {
-                model: Some("explicit-model".to_string()),
-                ..Default::default()
-            },
-        ] {
-            let before = overrides.service_tier.clone();
-            merge_persisted_service_tier(
-                &persisted_workspace_permission_history(),
-                /*request_overrides*/ None,
-                &mut overrides,
-            );
-            assert_eq!(overrides.service_tier, before);
-        }
-        let mut overrides = ConfigOverrides::default();
-        let request = HashMap::from([("service_tier".to_string(), serde_json::json!("flex"))]);
-        merge_persisted_service_tier(
-            &persisted_workspace_permission_history(),
-            Some(&request),
-            &mut overrides,
+        let history = persisted_workspace_permission_history();
+        let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &history[0] else {
+            panic!("fixture")
+        };
+        // An explicit tier (typed or in the request config) keeps the loaded config's.
+        assert_eq!(
+            resumed_service_tier(
+                Some(&event.thread_settings),
+                /*restore_service_tier*/ false,
+                /*explicit_model_override*/ false,
+            ),
+            None
         );
-        assert_eq!(overrides.service_tier, None);
+        // An explicit model without a settings record keeps the loaded config's tier too.
+        assert_eq!(
+            resumed_service_tier(
+                /*persisted*/ None, /*restore_service_tier*/ true,
+                /*explicit_model_override*/ true,
+            ),
+            None
+        );
     }
 
     #[test]
     fn resume_service_tier_recovers_settings_before_compaction_suffix() {
+        let thread_id = ThreadId::new();
         let mut durable = persisted_workspace_permission_history();
         let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &mut durable[0] else {
             panic!("fixture")
         };
+        event.thread_id = Some(thread_id);
         event.thread_settings.service_tier = Some("priority".to_string());
-        let mut suffix = vec![RolloutItem::Compacted(
-            codex_protocol::protocol::CompactedItem {
+        let mut suffix = vec![RolloutItem::Compacted(Box::new(
+            codex_rollout::CompactedItem {
                 message: "checkpoint".to_string(),
                 replacement_history: Some(Vec::new()),
+                guardian_history: None,
+                retained_context: None,
+                mcp_resource_origins: None,
                 window_number: Some(1),
                 first_window_id: None,
                 previous_window_id: None,
                 window_id: None,
+                compaction_response_id: None,
+                latest_token_usage_record: None,
+                resume_metadata: None,
             },
-        )];
+        ))];
         let checkpoint = suffix[0].clone();
         prepend_missing_resume_settings(&mut suffix, &durable);
         assert_eq!(suffix.len(), 2);
@@ -1303,53 +1120,78 @@ mod thread_processor_behavior_tests {
             serde_json::to_value(&suffix[1]).unwrap(),
             serde_json::to_value(checkpoint).unwrap()
         );
-        let mut overrides = ConfigOverrides::default();
-        merge_persisted_service_tier(&suffix, /*request_overrides*/ None, &mut overrides);
-        assert_eq!(overrides.service_tier, Some(Some("priority".to_string())));
+        let history = InitialHistory::Resumed(ResumedHistory {
+            history_revision: None,
+            conversation_id: thread_id,
+            history: Arc::new(suffix),
+            rollout_path: None,
+        });
+        let settings = latest_persisted_model_settings(&history).expect("recovered settings");
+        assert_eq!(
+            resumed_service_tier(
+                Some(settings),
+                /*restore_service_tier*/ true,
+                /*explicit_model_override*/ false,
+            ),
+            Some(Some("priority".to_string()))
+        );
     }
 
     #[test]
-    fn merge_persisted_permissions_restores_restricted_thread_without_override() {
+    fn resume_restores_restricted_thread_permissions_without_override() {
+        // Upstream's restore (#39153/#53150/#57227) replaced main's
+        // merge_persisted_permissions: a settings snapshot owned by the thread
+        // restores its approval policy and its unnamed permission profile.
+        let thread_id = ThreadId::new();
+        let mut history = persisted_workspace_permission_history();
+        let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &mut history[0] else {
+            panic!("fixture")
+        };
+        event.thread_id = Some(thread_id);
+        let settings =
+            PersistedResumeSettings::from_history(&history, thread_id).expect("owned settings");
+        assert_eq!(
+            settings.approval_policy,
+            codex_protocol::protocol::AskForApproval::Never
+        );
         let mut typesafe_overrides = ConfigOverrides::default();
-
-        merge_persisted_permissions(
-            &persisted_workspace_permission_history(),
+        apply_persisted_permission_profile(
+            &settings,
             /*request_overrides*/ None,
             &mut typesafe_overrides,
         );
-
         assert_eq!(
-            typesafe_overrides.approval_policy,
-            Some(codex_protocol::protocol::AskForApproval::Never)
-        );
-        assert_eq!(
-            typesafe_overrides.permission_profile,
+            typesafe_overrides.persisted_permission_profile,
             Some(codex_protocol::models::PermissionProfile::workspace_write())
         );
     }
 
     #[test]
-    fn merge_persisted_permissions_preserves_explicit_resume_override() {
+    fn resume_permission_restore_preserves_explicit_override() {
+        let thread_id = ThreadId::new();
+        let mut history = persisted_workspace_permission_history();
+        let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &mut history[0] else {
+            panic!("fixture")
+        };
+        event.thread_id = Some(thread_id);
+        let settings =
+            PersistedResumeSettings::from_history(&history, thread_id).expect("owned settings");
         let mut typesafe_overrides = ConfigOverrides {
             approval_policy: Some(codex_protocol::protocol::AskForApproval::OnRequest),
             permission_profile: Some(codex_protocol::models::PermissionProfile::Disabled),
             ..Default::default()
         };
-
-        merge_persisted_permissions(
-            &persisted_workspace_permission_history(),
+        apply_persisted_permission_profile(
+            &settings,
             /*request_overrides*/ None,
             &mut typesafe_overrides,
-        );
-
-        assert_eq!(
-            typesafe_overrides.approval_policy,
-            Some(codex_protocol::protocol::AskForApproval::OnRequest)
         );
         assert_eq!(
             typesafe_overrides.permission_profile,
             Some(codex_protocol::models::PermissionProfile::Disabled)
         );
+        assert_eq!(typesafe_overrides.persisted_permission_profile, None);
+        assert_eq!(typesafe_overrides.persisted_permission_profile_id, None);
     }
 
     #[test]
