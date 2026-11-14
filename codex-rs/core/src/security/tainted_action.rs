@@ -2554,7 +2554,8 @@ impl Classifier {
             // #1974: an assignment that may not run, or that runs only in
             // a subshell, does not resolve the variable in the parent shell
             // (`false && r=x`, `a || r=x`, `(r=x)`, an `if` body, a
-            // backgrounded group, a substitution). Such a variable is unseen
+            // backgrounded group, a substitution, #2192 a word the lexer
+            // split where the shell does not). Such a variable is unseen
             // from here on: a later use asks rather than trusting the value
             // this assignment would have set, and a value it already held
             // is dropped too, since the assignment may have replaced it.
@@ -2564,6 +2565,7 @@ impl Classifier {
                 && !simple.backgrounded
                 && !feeds_pipe
                 && simple.pipe_from.is_none()
+                && !simple.split_inside_word
                 && matches!(
                     simple.assignment_after,
                     certain_cd::Joint::Start | certain_cd::Joint::Seq
