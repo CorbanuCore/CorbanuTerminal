@@ -11561,7 +11561,7 @@ async fn interrupt_clears_steered_input_without_follow_up_turn() {
     assert!(sess.active_turn.lock().await.is_none());
     assert_eq!(
         (Vec::<TurnInput>::new(), None),
-        sess.input_queue.get_pending_input(&sess.active_turn).await
+        sess.input_queue.drain_mailbox_input_items().await
     );
     assert!(
         tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv())
@@ -11685,7 +11685,9 @@ async fn try_start_turn_if_idle_rejects_active_turn_without_injecting() {
     assert_eq!(vec![item], err.into_input());
     assert_eq!(
         (Vec::<TurnInput>::new(), None),
-        sess.input_queue.get_pending_input(&sess.active_turn).await
+        sess.input_queue
+            .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+            .await
     );
 
     sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
@@ -11712,7 +11714,7 @@ async fn try_start_turn_if_idle_rejects_plan_mode_without_injecting() {
     assert!(sess.active_turn.lock().await.is_none());
     assert_eq!(
         (Vec::<TurnInput>::new(), None),
-        sess.input_queue.get_pending_input(&sess.active_turn).await
+        sess.input_queue.drain_mailbox_input_items().await
     );
 }
 
@@ -11770,7 +11772,9 @@ async fn try_start_turn_if_idle_rejects_active_review_turn_without_injecting() {
     assert_eq!(vec![item], err.into_input());
     assert_eq!(
         (Vec::<TurnInput>::new(), None),
-        sess.input_queue.get_pending_input(&sess.active_turn).await
+        sess.input_queue
+            .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+            .await
     );
 
     sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
@@ -11927,7 +11931,9 @@ async fn steer_input_returns_active_turn_id() {
 
     assert_eq!(turn_id, tc.sub_id);
     assert_eq!(
-        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        sess.input_queue
+            .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+            .await,
         (
             vec![TurnInput::UserInput {
                 content: steer_input,
@@ -11996,7 +12002,9 @@ async fn steer_input_rejects_changed_authorization_without_mutating_active_work(
             "Permissions changed since this turn started. Wait for it to finish or stop it, then submit your message again."
         );
         assert_eq!(
-            sess.input_queue.get_pending_input(&sess.active_turn).await,
+            sess.input_queue
+                .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+                .await,
             (Vec::new(), None)
         );
         let active = sess.active_turn.lock().await;
@@ -12216,12 +12224,16 @@ async fn authorization_changed_mail_waits_for_turn_boundary() {
             .await;
         assert!(!sess.input_queue.has_pending_input(&sess.active_turn).await);
         assert_eq!(
-            sess.input_queue.get_pending_input(&sess.active_turn).await,
+            sess.input_queue
+                .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+                .await,
             (vec![], None)
         );
         sess.input_queue.mark_mailbox_ready_for_next_turn().await;
         assert_eq!(
-            sess.input_queue.get_pending_input(&sess.active_turn).await,
+            sess.input_queue
+                .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+                .await,
             (vec![], None)
         );
         sess.abort_all_tasks(TurnAbortReason::Replaced).await;
@@ -12270,7 +12282,9 @@ async fn authorization_changed_injection_preserves_items_until_completion() {
     assert_eq!(sess.clone_history().await.raw_items(), history_before);
     assert!(!sess.input_queue.has_pending_input(&sess.active_turn).await);
     assert_eq!(
-        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        sess.input_queue
+            .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+            .await,
         (vec![], None)
     );
     let turn_state = sess
@@ -12521,7 +12535,9 @@ async fn authorization_changed_user_input_runs_after_completion_with_latest_perm
     .await;
     assert!(!sess.input_queue.has_pending_input(&sess.active_turn).await);
     assert_eq!(
-        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        sess.input_queue
+            .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+            .await,
         (vec![], None)
     );
     while rx.try_recv().is_ok() {}
@@ -12679,7 +12695,9 @@ async fn interrupted_input_cannot_be_spliced_into_review_task() {
     )
     .await;
     assert_eq!(
-        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        sess.input_queue
+            .get_pending_input_for_running_task(&sess.active_turn, &review.sub_id)
+            .await,
         (vec![], None)
     );
     let (TurnInput::UserInput { content, client_id }, _) =
@@ -12702,7 +12720,9 @@ async fn interrupted_input_cannot_be_spliced_into_review_task() {
     )
     .await;
     assert_eq!(
-        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        sess.input_queue
+            .get_pending_input_for_running_task(&sess.active_turn, &review.sub_id)
+            .await,
         (vec![], None)
     );
     let active = sess.active_turn.lock().await;
@@ -12930,7 +12950,9 @@ async fn deferred_mail_does_not_interrupt_turn_local_sleep() {
             );
         }
         assert_eq!(
-            sess.input_queue.get_pending_input(&sess.active_turn).await,
+            sess.input_queue
+                .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+                .await,
             (vec![TurnInput::InterAgentCommunication(mail.clone())], None)
         );
         sess.abort_all_tasks(TurnAbortReason::Replaced).await;
@@ -13067,7 +13089,10 @@ async fn authorization_changed_turn_receives_code_mode_notify_and_user_shell_out
             break;
         }
     }
-    let (pending, _) = sess.input_queue.get_pending_input(&sess.active_turn).await;
+    let (pending, _) = sess
+        .input_queue
+        .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+        .await;
     assert_eq!(pending.len(), 2);
     assert_eq!(
         pending[0],
@@ -13226,16 +13251,88 @@ async fn queue_only_mailbox_mail_waits_for_next_turn_after_answer_boundary() {
         "queue-only mailbox mail should stay buffered once the current turn emitted its answer"
     );
     assert_eq!(
-        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        sess.input_queue
+            .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+            .await,
         (Vec::new(), None)
     );
 
     sess.abort_all_tasks(TurnAbortReason::Replaced).await;
 
+    // With no active turn there is no turn state to record the mail, so it stays queued.
+    assert!(sess.input_queue.has_pending_mailbox_items().await);
+
+    let next_turn = sess.new_default_turn().await;
+    sess.spawn_task(
+        Arc::clone(&next_turn),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+
     assert_eq!(
-        (sess.input_queue.get_pending_input(&sess.active_turn).await).0,
+        (sess
+            .input_queue
+            .get_pending_input_for_running_task(&sess.active_turn, &next_turn.sub_id)
+            .await)
+            .0,
         vec![TurnInput::InterAgentCommunication(communication)],
     );
+
+    sess.abort_all_tasks(TurnAbortReason::Replaced).await;
+}
+
+#[tokio::test]
+async fn running_turn_notes_the_mail_it_takes() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    let mut mail = InterAgentCommunication::new(
+        AgentPath::root(),
+        AgentPath::try_from("/root/worker").expect("agent path"),
+        Vec::new(),
+        "taken mid-turn".to_string(),
+        /*trigger_turn*/ true,
+    );
+    let message_id = mail.ensure_message_identity().to_string();
+    sess.input_queue
+        .enqueue_mailbox_communication(mail.clone(), /*parent_turn_id*/ None)
+        .await;
+
+    let (input, _) = sess
+        .input_queue
+        .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+        .await;
+
+    assert_eq!(input, vec![TurnInput::InterAgentCommunication(mail)]);
+    let turn_state = Arc::clone(
+        &sess
+            .active_turn
+            .lock()
+            .await
+            .as_ref()
+            .expect("active turn")
+            .turn_state,
+    );
+    assert_eq!(
+        turn_state
+            .lock()
+            .await
+            .take_unrecorded_mailbox_message_ids(&[]),
+        vec![message_id]
+    );
+
+    sess.abort_all_tasks(TurnAbortReason::Replaced).await;
 }
 
 #[tokio::test]
@@ -13362,7 +13459,11 @@ async fn steered_input_reopens_mailbox_delivery_for_current_turn() {
     .expect("steered input should be accepted");
 
     assert_eq!(
-        (sess.input_queue.get_pending_input(&sess.active_turn).await).0,
+        (sess
+            .input_queue
+            .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+            .await)
+            .0,
         vec![
             TurnInput::UserInput {
                 content: vec![UserInput::Text {
@@ -13420,7 +13521,11 @@ async fn stale_defer_mailbox_delivery_does_not_override_steered_input() {
         .await;
 
     assert_eq!(
-        (sess.input_queue.get_pending_input(&sess.active_turn).await).0,
+        (sess
+            .input_queue
+            .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+            .await)
+            .0,
         vec![
             TurnInput::UserInput {
                 content: vec![UserInput::Text {
@@ -13485,7 +13590,11 @@ async fn tool_calls_reopen_mailbox_delivery_for_current_turn() {
     assert!(output.needs_follow_up);
     assert!(output.tool_future.is_some());
     assert_eq!(
-        (sess.input_queue.get_pending_input(&sess.active_turn).await).0,
+        (sess
+            .input_queue
+            .get_pending_input_for_running_task(&sess.active_turn, &tc.sub_id)
+            .await)
+            .0,
         vec![TurnInput::InterAgentCommunication(communication)],
     );
 }

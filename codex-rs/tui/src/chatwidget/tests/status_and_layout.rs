@@ -2848,7 +2848,8 @@ async fn status_line_tps_updates_from_completed_turn_average() {
 
     let status_line = status_line_text(&chat).expect("status line should render after TPS sample");
     assert!(status_line.contains("Corbanu Terminal"));
-    assert!(status_line.ends_with("TPS: 20.0 tok/s"));
+    // Reasoning is a subset of the 30 output tokens: 30 / 2 seconds.
+    assert!(status_line.ends_with("TPS: 15.0 tok/s"));
 }
 
 #[tokio::test]
@@ -2898,7 +2899,8 @@ async fn status_line_tps_updates_when_usage_arrives_after_completion() {
     let status_line =
         status_line_text(&chat).expect("status line should render after late usage update");
     assert!(status_line.contains("Corbanu Terminal"));
-    assert!(status_line.ends_with("TPS: 20.0 tok/s"));
+    // Reasoning is a subset of the 30 output tokens: 30 / 2 seconds.
+    assert!(status_line.ends_with("TPS: 15.0 tok/s"));
 }
 
 #[tokio::test]

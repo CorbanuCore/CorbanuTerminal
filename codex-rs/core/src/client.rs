@@ -23,6 +23,9 @@
 //! WebSocket prewarm is treated as the first websocket connection attempt for a turn. If it
 //! fails, normal stream retry/fallback logic handles recovery on the same turn.
 
+#[path = "client_anthropic_recovery.rs"]
+mod anthropic_recovery;
+
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -3526,9 +3529,38 @@ impl ModelClientSession {
             );
 
             match stream_result {
-                Ok(stream) => {
-                    let (stream, _) = map_response_stream(
-                        stream,
+                Ok(mut stream) => {
+                    let upstream_request_id = stream.upstream_request_id.take();
+                    let prefix = if signed_thinking_history_retry_used {
+                        Vec::new()
+                    } else {
+                        match anthropic_recovery::prefetch(&mut stream, || {
+                            inference_trace_attempt.record_cancelled(
+                                STREAM_DROPPED_REASON,
+                                upstream_request_id.as_deref(),
+                                /*output_items*/ &[],
+                            );
+                        })
+                        .await
+                        {
+                            Ok(prefix) => prefix,
+                            Err(error) => {
+                                let mapped = self.client.state.provider.map_api_error(error);
+                                inference_trace_attempt.record_failed(
+                                    &mapped,
+                                    upstream_request_id.as_deref(),
+                                    /*output_items*/ &[],
+                                );
+                                signed_thinking_history_retry_used = true;
+                                continue;
+                            }
+                        }
+                    };
+                    let (stream, _) = map_response_events_with_server_state(
+                        upstream_request_id,
+                        futures::stream::iter(prefix)
+                            .chain(stream)
+                            .map(anthropic_recovery::terminalize),
                         session_telemetry.clone(),
                         inference_trace_attempt,
                         Arc::clone(&self.client.state.provider),
@@ -5966,6 +5998,10 @@ fn is_anthropic_signed_thinking_history_rejection(error: &ApiError) -> bool {
             })
             .unwrap_or_else(|| body.clone()),
         ApiError::InvalidRequest { message } => message.clone(),
+        ApiError::Stream(message) => match message.strip_prefix("invalid_request_error: ") {
+            Some(message) => message.to_owned(),
+            None => return false,
+        },
         _ => return false,
     };
     let message = message.to_ascii_lowercase();
@@ -6985,6 +7021,9 @@ async fn try_unauthorized_recovery(
     session_telemetry: &SessionTelemetry,
     provider: &SharedModelProvider,
 ) -> Result<UnauthorizedRecoveryExecution> {
+    if codex_api::is_plan_entitlement_error(&transport) {
+        return Err(provider.map_api_error(ApiError::Transport(transport)));
+    }
     let debug = extract_response_debug_context(&transport);
     if let Some(recovery) = auth_recovery
         && recovery.has_next()

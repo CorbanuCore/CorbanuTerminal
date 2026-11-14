@@ -213,12 +213,19 @@ jobs:
         shell: bash
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+          SHARD: ${{ matrix.shard }}
         run: |
           if [[ -n "${BUILDBUDDY_API_KEY:-}" ]]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping Windows gnullvm Bazel shard because authenticated remote execution is unavailable; the native MSVC validation job remains mandatory."
+            # #1856: say plainly that this shard's tests did not run. The job
+            # still succeeds.
+            disclosure="Windows gnullvm cross shard ${SHARD:-?}/4: its bazel test step did NOT run because authenticated remote execution (BuildBuddy) is unavailable. The native Windows lane runs most crates' unit and integration tests; see docs/ci.md (#1856). The native MSVC validation job remains mandatory."
+            echo "::notice::${disclosure}"
+            if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+              printf '%s\n' "${disclosure}" >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
 
       - name: Test BuildBuddy Bazel wrapper
