@@ -61,7 +61,14 @@ fn item_key(item: &ResponseItem) -> Option<ContentDigest> {
 /// Role plus exact text parts. Media is excluded so history normalization
 /// that strips images for a text-only model keeps the host registration.
 fn message_key(item: &ResponseItem) -> Option<ContentDigest> {
-    let ResponseItem::Message { role, content, .. } = item else {
+    let ResponseItem::Message {
+        role,
+        content,
+        encrypted_content,
+        status,
+        ..
+    } = item
+    else {
         return None;
     };
     let texts: Vec<&str> = content
@@ -76,9 +83,16 @@ fn message_key(item: &ResponseItem) -> Option<ContentDigest> {
             _ => None,
         })
         .collect();
-    serde_json::to_vec(&(role, texts))
-        .ok()
-        .map(|bytes| ContentDigest::of(&bytes))
+    // Upstream's `encrypted_content` and `status` (sync, #2153 review) are part of the
+    // message the model reads, so they are part of its key: a copy that adds them (for
+    // example to tampered restored history) does not take a registered human or host
+    // message's origin. Without them the key is main's, so journaled keys still match.
+    let bytes = if encrypted_content.is_none() && status.is_none() {
+        serde_json::to_vec(&(role, texts))
+    } else {
+        serde_json::to_vec(&(role, texts, encrypted_content, status))
+    };
+    bytes.ok().map(|bytes| ContentDigest::of(&bytes))
 }
 
 #[derive(Default)]
@@ -733,3 +747,7 @@ mod tests;
 #[cfg(test)]
 #[path = "pf_30_s02_tests.rs"]
 mod pf_30_s02_tests;
+
+#[cfg(test)]
+#[path = "native_message_key_tests.rs"]
+mod message_key_tests;
