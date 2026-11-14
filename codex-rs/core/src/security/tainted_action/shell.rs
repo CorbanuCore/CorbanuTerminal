@@ -138,6 +138,8 @@ pub(super) struct Lexed {
     pub(super) redirections_read_newly: bool,
     /// #1975: literal braces retained instead of discarded or read as groups.
     pub(super) braces_read_newly: bool,
+    /// #2018: the pre-change reading saw a brace beside shell keywords.
+    pub(super) keyword_braces: bool,
     /// Assignment flow skipped possible comments; retain the literal reading too.
     pub(super) comments_read_newly: bool,
 }
@@ -176,12 +178,14 @@ pub(super) enum Reading {
     /// #1772 redirections and #1975 literal brace arguments.
     #[default]
     LiteralBraces,
+    /// #2018: also recognize groups next to shell keywords.
+    KeywordBraces,
 }
 
 /// [`simple_commands`] under one reading. The classifier combines the
 /// strongest finding from the changed reading and both pre-#1975 readings.
 /// Redirection changes are enabled except in `Legacy`; literal brace
-/// handling is enabled only in `LiteralBraces`. Helper lexers stay `Legacy`.
+/// handling is enabled in `LiteralBraces` and `KeywordBraces`. Helpers stay `Legacy`.
 /// Each flag records whether its change affected the lexed text, so an
 /// equivalent reading need not be judged again.
 pub(super) fn simple_commands_read(command: &[String], reading: Reading) -> Lexed {
@@ -230,6 +234,7 @@ pub(super) fn simple_commands_assignments(
     }
     let too_deep = lexer.too_deep;
     let comments_read_newly = lexer.comments_read_newly;
+    let keyword_braces = lexer.keyword_braces;
     // #1772 review 2: after `finish`, which reorders the last command.
     let (commands, redirections_read_newly, braces_read_newly) = lexer.finish();
     Lexed {
@@ -239,6 +244,7 @@ pub(super) fn simple_commands_assignments(
         comments_read_newly,
         redirections_read_newly,
         braces_read_newly,
+        keyword_braces,
     }
 }
 
@@ -744,9 +750,52 @@ struct Lexer {
     redirections_read_newly: bool,
     /// #1975: see `Lexed::braces_read_newly`.
     braces_read_newly: bool,
+    keyword_braces: bool,
 }
 
 impl Lexer {
+    /// Match original, unquoted keywords. The word lexer strips quotes and
+    /// escapes, so its words alone cannot distinguish `time` from `"time"`.
+    fn keyword_brace(&self, before: &[char], brace: char) -> bool {
+        if self.current.words.is_empty()
+            || !before.last().is_some_and(|ch| ch.is_whitespace())
+            || self.redirect != Redirect::None
+            || self.redirect_word_next
+        {
+            return false;
+        }
+        let mut raw = before
+            .rsplit(|ch| ch.is_whitespace() || matches!(ch, ';' | '&' | '|' | '(' | ')'))
+            .filter(|word| !word.is_empty());
+        let words = self.current.words.as_slice();
+        match brace {
+            '{' => words.iter().rev().all(|word| {
+                work::step();
+                matches!(
+                    word.as_str(),
+                    "if" | "then" | "elif" | "else" | "do" | "while" | "until" | "!" | "time"
+                ) && raw
+                    .next()
+                    .is_some_and(|text| text.iter().copied().eq(word.chars()))
+            }),
+            '}' => {
+                matches!(words, [word] if matches!(word.as_str(), "fi" | "done" | "esac"))
+                    && matches!(
+                        self.groups.as_slice(),
+                        [
+                            ..,
+                            (Group::Brace | Group::UncertainBrace, ..),
+                            (Group::Keyword, ..)
+                        ]
+                    )
+                    && raw
+                        .next()
+                        .is_some_and(|text| text.iter().copied().eq(words[0].chars()))
+            }
+            _ => false,
+        }
+    }
+
     /// D194: the operator at `chars[index]`.
     fn operator(&mut self, chars: &[char], index: usize) {
         let previous = index.checked_sub(1).map(|at| chars[at]);
@@ -1312,25 +1361,57 @@ impl Lexer {
                 ')' if self.open.last().is_some_and(|open| !open.backtick) => {
                     self.close_substitution(/*arithmetic_close*/ next == Some(')'));
                 }
+                '{' | '}'
+                    if matches!(
+                        self.reading,
+                        Reading::LiteralBraces | Reading::KeywordBraces
+                    ) && self.word.is_empty()
+                        && !parameter_brace
+                        && next.is_none_or(|after| {
+                            after.is_whitespace()
+                                || (ch == '}' && matches!(after, ';' | '&' | '|' | ')'))
+                        })
+                        && self.keyword_brace(&chars[..index], ch) =>
+                {
+                    self.keyword_braces = true;
+                    if self.reading == Reading::LiteralBraces {
+                        // Keep main's literal-brace judgment intact.
+                        self.braces_read_newly = true;
+                        self.word.push(ch);
+                    } else if ch == '{' {
+                        self.open_bracket(Group::Brace);
+                    } else {
+                        // Finish the keyword terminator before selecting the
+                        // surrounding brace group's kind.
+                        self.start(Start::Plain);
+                        self.close_bracket(Group::Brace);
+                    }
+                }
                 // #1975: in bash a brace argument cannot delimit a group.
                 // Closing one at `git fetch -o '}' -- "$r"` splits off the
                 // remote. Keep the main reading for its separate judgment.
                 '{' if self.word.is_empty()
                     && next.is_none_or(char::is_whitespace)
-                    && (self.reading != Reading::LiteralBraces
-                        || self.current.words.is_empty()) =>
+                    && (!matches!(
+                        self.reading,
+                        Reading::LiteralBraces | Reading::KeywordBraces
+                    ) || self.current.words.is_empty()) =>
                 {
                     self.open_bracket(Group::Brace);
                 }
                 '}' if self.word.is_empty()
-                    && (self.reading != Reading::LiteralBraces
-                        || self.current.words.is_empty()) =>
+                    && (!matches!(
+                        self.reading,
+                        Reading::LiteralBraces | Reading::KeywordBraces
+                    ) || self.current.words.is_empty()) =>
                 {
                     self.close_bracket(Group::Brace);
                 }
                 '{' | '}'
-                    if self.reading == Reading::LiteralBraces
-                        && (!parameter_brace || self.word.is_empty()) =>
+                    if matches!(
+                        self.reading,
+                        Reading::LiteralBraces | Reading::KeywordBraces
+                    ) && (!parameter_brace || self.word.is_empty()) =>
                 {
                     self.braces_read_newly = true;
                     self.word.push(ch);
