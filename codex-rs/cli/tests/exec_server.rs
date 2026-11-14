@@ -623,8 +623,14 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{collector_url}/v1/metrics", pr
         // The build identity belongs to the spawned CLI, not this test process.
         provider_id: environment_info.provider_id.clone(),
         prepend_path_dirs: environment_info.prepend_path_dirs.clone(),
+        // #2050 (D510): the executor reports its own host's platform sandbox.
+        host_sandbox: environment_info.host_sandbox,
         ..EnvironmentInfo::local()
     };
+    assert_eq!(
+        environment_info.host_sandbox.map(|host| host.os),
+        Some(codex_exec_server::HostOs::current())
+    );
     assert_eq!(environment_info.as_ref(), &expected_info);
     std::fs::remove_file(&manifest)?;
     assert_eq!(client.force_environment_info().await?, expected_info);
