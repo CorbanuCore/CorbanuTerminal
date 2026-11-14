@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""Render astraVsOpus.html from data.json (inline SVG only, no scripts)."""
+import html
+import json
+import sys
+from pathlib import Path
+
+B = Path(__file__).resolve().parent
+data = json.loads((B / "data.json").read_text())
+MODELS = ["opus", "astra"]
+NAME = {"opus": "Opus 5.5 High", "astra": "Astra High"}
+COL = {"opus": "#c2410c", "astra": "#1d4ed8"}
+DET = {"full": ("#15803d", "found"), "partial": ("#ca8a04", "partly"), "missed": ("#b91c1c", "missed"),
+       "clean": ("#15803d", "clean"), "fp": ("#b91c1c", "flagged"), "newreal": ("#7c3aed", "new real issue"), "pending": ("#9ca3af", "pending")}
+e = html.escape
+
+
+def svg(w, h, body, title):
+    return (f'<figure><svg viewBox="0 0 {w} {h}" width="100%" style="max-width:{w}px" role="img" '
+            f'aria-label="{e(title)}" xmlns="http://www.w3.org/2000/svg" font-family="system-ui,sans-serif" '
+            f'font-size="12">{body}</svg><figcaption>{e(title)}</figcaption></figure>')
+
+
+def legend(x, y, items):
+    out, cx = [], x
+    for c, label in items:
+        out.append(f'<rect x="{cx}" y="{y}" width="12" height="12" fill="{c}"/>'
+                   f'<text x="{cx + 16}" y="{y + 10}">{e(label)}</text>')
+        cx += 16 + 7 * len(label) + 18
+    return "".join(out)
+
+
+def grid_a(cases):
+    """(1) detection grid: rows = cases, columns = models."""
+    rh, top, lw = 26, 30, 330
+    h = top + rh * len(cases) + 40
+    b = [f'<text x="{lw + 60}" y="18" text-anchor="middle" font-weight="bold">{NAME["opus"]}</text>',
+         f'<text x="{lw + 190}" y="18" text-anchor="middle" font-weight="bold">{NAME["astra"]}</text>']
+    for i, c in enumerate(cases):
+        y = top + i * rh
+        b.append(f'<text x="4" y="{y + 17}">{e(c["id"] + " " + c["label"])}</text>')
+        for j, m in enumerate(MODELS):
+            r = c["runs"].get(m, {})
+            st = r.get("detect", "pending")
+            col, word = DET.get(st, DET["pending"])
+            v = r.get("verdict", "")
+            ok = r.get("verdict_ok")
+            mark = "" if ok is None else (" ✓" if ok else " ✗")
+            x = lw + j * 130
+            b.append(f'<rect x="{x}" y="{y + 2}" width="120" height="{rh - 4}" rx="4" fill="{col}"/>'
+                     f'<text x="{x + 60}" y="{y + 17}" text-anchor="middle" fill="white">'
+                     f'{e(word)} · {e(v[:3])}{mark}</text>')
+    b.append(legend(4, h - 22, [(DET["full"][0], "found / clean"), (DET["partial"][0], "partly found"),
+                                (DET["missed"][0], "missed / flagged"), (DET["newreal"][0], "new real issue")]))
+    return svg(lw + 270, h, "".join(b),
+               "Figure 1. Track A: did each model find the known defect? (APP/REQ = verdict; ✓/✗ = verdict correct/wrong against the frozen key)")
+
+
+def bars(groups, series, title, ymax=None, unit="", w=640, h=260, fmt="{:g}"):
+    """Grouped bars. groups: [(label, {series_key: value})]; series: [(key, label, colour)]."""
+    left, bottom, top = 50, 50, 20
+    ymax = ymax or max([v for _, d in groups for v in d.values() if v is not None] + [1])
+    pw, ph = w - left - 10, h - top - bottom
+    gw = pw / max(len(groups), 1)
+    bw = min(28, (gw - 10) / max(len(series), 1))
+    b = [f'<line x1="{left}" y1="{top + ph}" x2="{w - 10}" y2="{top + ph}" stroke="#555"/>']
+    nt = 5 if ymax == 5 else 4
+    for k in range(nt + 1):
+        v = ymax * k / nt
+        y = top + ph - ph * k / nt
+        b.append(f'<line x1="{left}" y1="{y}" x2="{w - 10}" y2="{y}" stroke="#ddd"/>'
+                 f'<text x="{left - 4}" y="{y + 4}" text-anchor="end">{fmt.format(round(v, 1))}{e(unit)}</text>')
+    for gi, (label, d) in enumerate(groups):
+        gx = left + gi * gw + (gw - bw * len(series)) / 2
+        for si, (key, _, col) in enumerate(series):
+            v = d.get(key)
+            if v is None:
+                continue
+            bh = ph * min(v, ymax) / ymax
+            x = gx + si * bw
+            b.append(f'<rect x="{x:.1f}" y="{top + ph - bh:.1f}" width="{bw - 2:.1f}" height="{bh:.1f}" fill="{col}">'
+                     f'<title>{e(label)} {e(key)}: {fmt.format(v)}{e(unit)}</title></rect>')
+        b.append(f'<text x="{left + gi * gw + gw / 2:.1f}" y="{top + ph + 16}" text-anchor="middle">{e(label)}</text>')
+    b.append(legend(left, h - 18, [(c, l) for _, l, c in series]))
+    return svg(w, h, "".join(b), title)
+
+
+def table(head, rows):
+    t = ["<table><thead><tr>" + "".join(f"<th>{e(str(x))}</th>" for x in head) + "</tr></thead><tbody>"]
+    for r in rows:
+        t.append("<tr>" + "".join(f"<td>{x if isinstance(x, Markup) else e(str(x))}</td>" for x in r) + "</tr>")
+    return "".join(t) + "</tbody></table>"
+
+
+class Markup(str):
+    pass
+
+
+def main():
+    d = data
+    A = d["trackA"]
+    parts = []
+    parts.append(f"<h1>{e(d['title'])}</h1><p class=meta>{e(d['status'])}</p>")
+    parts.append("<h2>In short</h2>" + "".join(f"<p>{p}</p>" for p in d["summary_html"]))
+    # Track A
+    parts.append("<h2>Track A — review benchmark (known defects)</h2>")
+    parts.append("".join(f"<p>{p}</p>" for p in A["intro_html"]))
+    parts.append(grid_a(A["cases"]))
+    fa = [(NAME[m], {"false": A["totals"][m]["false_alarms"], "real": A["totals"][m]["real_extras"],
+                     "unsure": A["totals"][m]["uncertain_extras"]}) for m in MODELS]
+    parts.append(bars(fa, [("false", "false alarms", "#b91c1c"), ("real", "real extra findings", "#15803d"),
+                           ("unsure", "uncertain", "#9ca3af")],
+                      "Figure 2. Track A: extra findings beyond the known defect, judged against the code", w=420))
+    parts.append(table(["Metric"] + [NAME[m] for m in MODELS],
+                       [[k] + [A["totals"][m].get(key, "") for m in MODELS] for k, key in A["metric_rows"]]))
+    parts.append("".join(f"<p>{p}</p>" for p in A["notes_html"]))
+    # Track B
+    Bt = d["trackB"]
+    parts.append("<h2>Track B — paired implementation</h2>")
+    parts.append("".join(f"<p>{p}</p>" for p in Bt["intro_html"]))
+    hid = Bt["hidden"]
+    for dim_chart in Bt.get("rubric_charts", []):
+        parts.append(bars(dim_chart["groups"], [(k, l, c) for k, l, c in dim_chart["series"]],
+                          dim_chart["title"], ymax=5, w=880, h=280))
+    rows = [[t["task"], t["desc"]] + [Markup(f'<span class="{"pass" if t[m]["pass"] else ("fail" if t[m]["pass"] is False else "pend")}">'
+                                              f'{e(t[m]["text"])}</span>') for m in MODELS] for t in hid]
+    parts.append("<h3>Figure 4. Hidden check per task</h3>" + table(["Task", "What", NAME["opus"], NAME["astra"]], rows))
+    parts.append("".join(f"<p>{p}</p>" for p in Bt["notes_html"]))
+    # Cost
+    C = d["cost"]
+    parts.append("<h2>Cost</h2>")
+    parts.append(bars(C["wall"], [(m, NAME[m], COL[m]) for m in MODELS],
+                      "Figure 5a. Wall time per run (minutes)", unit="", w=760))
+    parts.append(bars(C["tokens"], [(m, NAME[m], COL[m]) for m in MODELS],
+                      "Figure 5b. Tokens per run (thousands)", unit="k", w=760))
+    parts.append("".join(f"<p>{p}</p>" for p in C["notes_html"]))
+    # Recommendation
+    R = d["recommendation"]
+    parts.append("<h2>Recommendation by task class</h2>")
+    parts.append("<h3>Figure 6. Who may do what</h3>" + table(["Task class", "Recommendation", "Evidence"],
+                 [[r[0], Markup(f'<b class="rec">{e(r[1])}</b>'), r[2]] for r in R["rows"]]))
+    parts.append("".join(f"<p>{p}</p>" for p in R["notes_html"]))
+    parts.append("<h2>Caveats</h2><ul>" + "".join(f"<li>{c}</li>" for c in d["caveats_html"]) + "</ul>")
+    parts.append("<h2>Decisions for Travis</h2><ol>" + "".join(f"<li>{c}</li>" for c in d["decisions_html"]) + "</ol>")
+    css = ("body{font-family:system-ui,sans-serif;max-width:900px;margin:2em auto;padding:0 1em;line-height:1.5;color:#111}"
+           "table{border-collapse:collapse;margin:1em 0;width:100%}td,th{border:1px solid #ccc;padding:4px 8px;text-align:left;vertical-align:top}"
+           "th{background:#f3f4f6}figure{margin:1.5em 0}figcaption{font-size:.9em;color:#444}.meta{color:#555}"
+           ".pass{color:#15803d;font-weight:bold}.fail{color:#b91c1c;font-weight:bold}.pend{color:#6b7280}.rec{white-space:nowrap}")
+    doc = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{e(d["title"])}</title>'
+           f'<style>{css}</style></head><body>{"".join(parts)}</body></html>\n')
+    out = Path(sys.argv[1]) if len(sys.argv) > 1 else B / "astraVsOpus.html"
+    out.write_text(doc)
+    print(out, len(doc.encode()))
+
+
+main()

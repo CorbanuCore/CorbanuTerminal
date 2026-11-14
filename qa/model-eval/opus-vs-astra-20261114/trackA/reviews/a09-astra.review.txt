@@ -1,0 +1,5 @@
+No blocking defects found in the specified diff. The Windows override covers all four staging callers and shares the existing single-threaded group. The scanner changes preserve prior behavior by inspection.
+
+Review was local and read-only; no builds or tests were run.
+
+VERDICT: APPROVE

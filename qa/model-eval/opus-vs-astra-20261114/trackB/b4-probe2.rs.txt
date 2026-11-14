@@ -1,0 +1,22 @@
+
+// bench-1114 scratch probe (not committed): verdicts for piped reserved-word groups.
+#[test]
+fn bench_piped_probe2() {
+    let root = workspace(&[]);
+    let mut out = Vec::new();
+    for shell_name in ["bash", "zsh"] {
+        for line in ["echo ok | bash", "{ echo ok; } | bash", "! echo ok | bash"] {
+            let action = action_in(root.path(), &[shell_name, "-lc", line]);
+            let plain = classify_with(&action, Path::new(HOME), Some(root.path()));
+            let named = classify_as_named_with(&action, Path::new(HOME), Some(root.path()));
+            out.push(format!("{shell_name} | {line} | plain={plain:?} | named={named:?}"));
+        }
+    }
+    for l in &out {
+        eprintln!("BENCHPROBE {l}");
+    }
+    assert!(
+        out.iter().all(|l| l.matches("UnseenCode").count() == 2),
+        "some piped group is not UnseenCode: {out:#?}"
+    );
+}

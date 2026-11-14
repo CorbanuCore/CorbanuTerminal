@@ -1,0 +1,34 @@
+Fixed #2046 and committed locally. Working tree is clean.
+
+- `codex-rs/core/src/session/input_queue.rs` now checks the polling task’s turn ID and holds the active-turn lock through input removal and mailbox tracking.
+- `turn.rs` supplies that ID.
+- Added `guardian_replacement_input_tests.rs`, updated the shared fixture in `stale_poll_mail_tests.rs`, and wired the test in `mod.rs`.
+- Added the release-note fragment and [validation record](./qa/reliability/issue-2046-guardian-replacement-input.md).
+
+The regression command was:
+
+```sh
+just test -p codex-core --lib -j8 --locked --offline \
+  -E 'test(guardian_stopping_turn_cannot_take_replacement_input)'
+```
+
+**Before:** failed on both attempts, exit 100—the stopped task took both replacement inputs.  
+**After:** passed, exit 0.  
+**Focused tests:** all 18 passed without retries, covering input queues, stop paths, guardian lifecycle, and input preservation.
+
+Final checks passed:
+
+```sh
+cargo clippy -p codex-core --all-targets -j8 --locked --offline -- -D warnings
+cargo fmt -p codex-core -- --config imports_granularity=Item
+cargo fmt -p codex-core -- --check
+```
+
+Builds used the required target directory and eight jobs; tests used the isolated wrapper with both home aliases unset and `RUST_MIN_STACK=8388608`. The initial reproduction used PATH’s Rust 1.95; final validation used pinned Rust 1.99.1. Release-note checks passed.
+
+Local commits:
+
+- `d503ffc7b74a994935fa425fba42a773651c07d4` — failing regression
+- `e073a3e107cf3bcb7ede1daa73ad1f23768fa2f1` — fix, release note, evidence
+
+No full-workspace or TUI qualification was performed. Nothing was pushed, and no contributors were contacted.

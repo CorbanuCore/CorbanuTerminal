@@ -1,0 +1,24 @@
+LOCAL ONLY: do not git push, do not use gh to create/edit/comment/review/merge anything, do not contact contributors.
+
+You are a software engineer on CorbanuTerminal (a security-focused fork of the OpenAI Codex CLI; Rust workspace under codex-rs/).
+
+TASK (upstream-sync conflict resolution): this checkout is Corbanu's upstream-sync branch, which merges upstream OpenAI Codex rust-v0.167.0 into Corbanu's main. The crate `codex-rs/agent-roles` (package `codex-agent-roles`) does not compile: it still contains unresolved conflict markers. Resolve them so that `cargo check -p codex-agent-roles --all-targets` and `cargo clippy -p codex-agent-roles --all-targets -- -D warnings` pass.
+
+Sync conventions: upstream's file layout and structure win; every Corbanu behaviour that Corbanu's main has must be kept (port it into upstream's structure where upstream moved code). The Corbanu-main side of this merge is commit 1855c92ae188bbdd07fb816d1154ecb683f539de (reachable here); main's equivalent logic may live in other crates/files there (e.g. codex-rs/core/src/config/). Record what you resolved by updating the matching rows of docs/management/upstreamSync/ledger-rust-v0.167.0.tsv (follow the format of rows already marked resolved). Other crates on this branch (e.g. codex-core) may still contain conflict markers; leave them alone. The crate may have no unit tests of its own; if so, the "fail-before" gate item is: the crate fails to compile before and compiles after, and you explain how you verified the kept behaviour.
+
+Working rules (binding):
+- Work only in this checkout (a local branch is already checked out). Commit your work locally on that branch with clear messages. There is no remote. Do not read other checkouts, worker notes or logs outside this directory; read-only dependency sources under ~/.cargo/registry/src are fine. Do not use GitHub or the network for this task.
+- NEVER use `git stash` (any form). Never `rm -f`; never pkill/killall (kill only a PID you started). Never force anything.
+- BUILD DIR: use exactly `export CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/bench1114-b3-opus` and `-j8` for every cargo command (other jobs share this machine). Never put build output on the internal disk.
+- TEST HOME: run `unset CORBANU_HOME CODEX_HOME` before any cargo test. For codex-core tests also `export RUST_MIN_STACK=8388608`.
+- MEMORY: never run a test that can grow without bound; prove blow-ups with bounded inputs and counters. Stop any process above 16 GB RSS.
+- NO TRACING: never run commands under `set -x`/`bash -x`, `env`, `printenv`, `declare -p`. KEYCHAIN: never run `security` against the login keychain, never run third-party agent binaries.
+- RELEASE NOTES: a user-visible change adds its own fragment `qa/release/unreleased/notes/<issue>-<slug>.md` starting with a `## Section` heading copied exactly from an existing fragment (see qa/release/unreleased/README.md if present). Never create qa/release/unreleased/RELEASE_NOTES.md.
+- Keep the change scoped to the task; no unrelated refactors.
+
+Gate (all required before you finish):
+1. A regression test that FAILS before your fix and PASSES after it (show both runs; e.g. commit the test first, run it, then the fix).
+2. Focused tests for the touched area pass.
+3. `cargo clippy -p <crate> --all-targets -- -D warnings` clean for each crate you changed; `cargo fmt` (or `just fmt` if available) applied.
+
+Your FINAL MESSAGE is your result file. Include: what you changed and why (files), the fail-before/pass-after evidence (test names, commands, outcomes), clippy/fmt status, the local commit SHA(s), and anything you did not finish or are unsure about. Claims must match what you actually ran.

@@ -1,0 +1,24 @@
+#!/bin/bash
+# hidden_b3.sh <arm> : compile + clippy (pinned 1.99.1) + hidden behaviour test + diff vs merged resolution.
+B=/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114
+TC=/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/rustup/toolchains/1.99.1-aarch64-apple-darwin/bin
+arm=$1; wt=$B/wt/b3-$arm; out=$B/trackB/out/b3-hidden-$arm.txt
+cd $wt || exit 2
+[ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "dirty"; exit 2; }
+unset CORBANU_HOME CODEX_HOME
+export CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/bench1114-b3-$arm PATH=$TC:$PATH
+{
+echo "## [$arm] HEAD $(git rev-parse --short HEAD) — conflict markers left in agent-roles: $(git grep -c '^<<<<<<<\|^>>>>>>>' -- codex-rs/agent-roles | wc -l | tr -d ' ') files"
+cd codex-rs
+cargo check -j8 -p codex-agent-roles --all-targets > /tmp/b3c-$arm.txt 2>&1; echo "cargo check -p codex-agent-roles --all-targets: exit=$?"; grep -E "^error" /tmp/b3c-$arm.txt | head -5
+cargo clippy -j8 -p codex-agent-roles --all-targets -- -D warnings > /tmp/b3k-$arm.txt 2>&1; echo "cargo clippy -p codex-agent-roles --all-targets -- -D warnings: exit=$?"; grep -E "^error" /tmp/b3k-$arm.txt | head -5
+mkdir -p agent-roles/tests; cp $B/trackB/hidden/b3/hidden_b3_behaviour.rs agent-roles/tests/
+echo "hidden behaviour test (main's base_instructions validation kept: accepted alone, blank rejected, developer_instructions still accepted):"
+cargo test -j8 -p codex-agent-roles --test hidden_b3_behaviour 2>&1 | grep -E "^test |test result|error(\[|:)|panicked"
+rm agent-roles/tests/hidden_b3_behaviour.rs; rmdir agent-roles/tests 2>/dev/null
+cd ..
+echo "diff vs merged resolution (#2059 ce78a87e52), agent-roles/src only:"
+git diff --stat ce78a87e52 HEAD -- codex-rs/agent-roles/src 2>/dev/null || echo "(reference commit not in this clone; see reference.diff comparison)"
+} > $out 2>&1
+git status --porcelain
+cat $out

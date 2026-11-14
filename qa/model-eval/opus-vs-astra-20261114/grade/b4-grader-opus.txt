@@ -1,0 +1,21 @@
+I read both diffs, both result files, the hidden checks and the base classifier. Both solutions pass every hidden check, so the real difference is how each handles the task's rule to keep the classifier never quieter than before.
+
+**X**
+- **Code:** X added a small reserved-word counter to the lexer. It tracks quoting, escapes, substitutions and redirections, so `'then' {`, `\time {`, `>then {` and `$(echo then) {` still keep the brace literal. That matches how bash actually parses these, and the changes in `shell.rs` are tidy.
+- **Tests:** a new lexer test file with 22 group spellings and 11 controls, plus bash and zsh classifier tests. These include a targeted check, on the issue's group lines, that the verdict is never quieter than main's two older readings. The hidden check confirms 3 tests fail before the fix and all pass after.
+- **Safety gap:** with the fix, the issue's spellings skip the older pre-#1975 judgment entirely. Before the fix, the old literal-brace reading flagged lines like `! { echo ok; } | bash` as `UnseenCode`. Y measured that this kind of change makes 4 judgments quieter than before. Those flags were probably false positives from misreading the braces. Even so, the task explicitly says never quieter than before, and X's report says the result is never quieter without testing that case.
+- **Gate and report:** X reports clippy as failing. It likely ran an older toolchain than the pinned 1.99.1, under which the hidden check shows clippy is clean. X said so honestly and showed its own change adds no warnings, but it didn't try the pinned toolchain. Skipping the release note was explained and is reasonable.
+
+**Y**
+- **Safety:** Y found the quieter piped-group case with its own 405-line comparison corpus. It added a new reading that keeps the old literal-brace verdict as a floor, then measured 810 judgments with 0 quieter. Clippy passes on the pinned toolchain and the release note passes the checker.
+- **Cost:** that floor runs an extra judgment on exactly the lines the issue wanted to stop judging twice. So in practice the precision gain is mostly lost, and Y says no speedup is claimed. The fix also doesn't track quoting, so `'then' {` is read as a group, though the floor still covers it.
+- **Readability:** the brace checks are long inline conditions with a work counter inside a closure, which is harder to read than X's version.
+- **Scope:** Y added a new reading type and changed `tainted_action.rs`. It also committed a 128-line evidence file to `qa/release/unreleased/` that refers to uncommitted local log files.
+- **Tests:** they cover every spelling in bash and zsh, plus literal controls, a linearity check and the piped-group case. The general never-quieter test reuses the existing lines rather than the new #2018 spellings.
+
+**Preference: Y.** X's change is cleaner, more precise and better scoped, and it actually achieves the issue's goal of fewer second judgments. But this is a security-focused fork, and the task's explicit rule was never quieter than before. Y found a real class of inputs where the simple fix becomes quieter than before, kept the old verdict for them, proved it with a differential run, and met the clippy gate on the pinned toolchain. X instead claimed it was never quieter without testing that case. Y's extra cost and scope creep are real, but they weigh less than missing that rule.
+
+SCORES
+X correctness=4 security_rules=3 test_quality=4 scope=5 clarity=4 honesty=4
+Y correctness=4 security_rules=5 test_quality=4 scope=3 clarity=3 honesty=5
+PREFERENCE: Y
