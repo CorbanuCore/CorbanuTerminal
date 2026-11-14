@@ -26,11 +26,11 @@
 - astra: MISSED. Verdict REQ (correct, for other reasons). Extras: #1 false write attribution on read denial → real; #2 paths with spaces → real; #3 integration test uses POSIX printf on Windows → uncertain (not checked whether gated).
 
 ## A07 #1175 (P: person's task turn/start carries visible pane's cached settings; S1 parent-owned panes; S2 kill switch re-check, Running before turn)
-- opus: FULL (#1 High: workspace roots + sandbox fallback from visible pane via submit_thread_op — same mechanism as the real fix "no cwd/model/approval/sandbox/permissions"; S2 both parts found: #2 Running when no turn started, #3 kill switch not re-checked after materialization). Verdict REQ. Severity calibrated. Extras: #4 missing refusal tests → real (minor).
+- opus: FULL (#1 High: workspace roots + sandbox fallback from visible pane via submit_thread_op — same mechanism as the real fix "no cwd/model/approval/sandbox/permissions"; S2 both parts found: #2 Running when no turn started, #3 kill switch not re-checked after materialization). Verdict REQ. Severity calibrated. Extras: #4 missing refusal tests → real (minor); #2 second part, rejected steer moves the visible pane's pending steer / acts on the wrong pane (event_dispatch via thread_routing:857/918) → real (Astra found the same, its #3). Counted: 2 real.
+- (A07) astra: FULL (#1 High: submit_thread_op supplies displayed pane's workspace roots as explicit override — same leak; sandbox part not named). S2 partly (#2 Running when capacity rejected; kill switch re-check not found). Verdict REQ. Severity calibrated. Extras: #3 rejected steer uses displayed pane's recovery queue → real (Opus found the same, #2).
 
 ## A08 #1889 (P: check reads full SDDL incl. inherited Low label → fails; should read DACL only)
 - opus: FULL (exact mechanism, line, fix). Verdict REQ. Severity Medium calibrated. No extras.
-- (A07) astra: FULL (#1 High: submit_thread_op supplies displayed pane's workspace roots as explicit override — same leak; sandbox part not named). S2 partly (#2 Running when capacity rejected; kill switch re-check not found). Verdict REQ. Severity calibrated. Extras: #3 rejected steer uses displayed pane's recovery queue → real (Opus found the same, #2).
 - (A08) astra: FULL (exact). Verdict REQ. Severity Medium calibrated.
 
 ## A09 #1878 (control)
@@ -40,3 +40,6 @@
 ## A10 #1944 (control)
 - opus: APPROVE (correct). Extras: locale-dependent assertion (low) → real-minor; test uses developer's global git config (nit) → real-minor.
 - astra: REQUEST_CHANGES (incorrect vs key). Extras: #1 High: GIT_ALLOW_PROTOCOL=file sets file transport to "always", overriding git's protocol.file.allow=user default, so a hostile .gitmodules can clone a local repo → technically accurate per git docs, but low impact under the sandbox (the command could read those files directly; Astra itself notes filesystem limits still apply); severity overstated → UNCERTAIN, sent to blinded extra grading; #2 locale-dependent assertion → real-minor (same as opus #1).
+
+## Blinded grading of the 13 findings we could not settle (2026-11-14 ~13:20Z)
+Both graders (Opus and Astra, unattributed packet `grade/A-extra-brief.txt`, map `grade/extra-map.json`) rated all 13 REAL. They differed on severity (the Opus grader rated lower). All 13 were moved from uncertain to real (`grade/extra-adjust.json`). Since neither grader rejected anything, this is weak evidence that the findings are real; it is not proof. Under the frozen key, Astra's A10 verdict (REQUEST_CHANGES on a control) is still counted as wrong, even though its reason was judged real.

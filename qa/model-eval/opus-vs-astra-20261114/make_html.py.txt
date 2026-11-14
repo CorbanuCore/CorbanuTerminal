@@ -45,7 +45,7 @@ def grid_a(cases):
             col, word = DET.get(st, DET["pending"])
             v = r.get("verdict", "")
             ok = r.get("verdict_ok")
-            mark = " ?" if ok is None else (" ✓" if ok else " ✗")
+            mark = "" if ok is None else (" ✓" if ok else " ✗")
             x = lw + j * 130
             b.append(f'<rect x="{x}" y="{y + 2}" width="120" height="{rh - 4}" rx="4" fill="{col}"/>'
                      f'<text x="{x + 60}" y="{y + 17}" text-anchor="middle" fill="white">'
@@ -53,7 +53,7 @@ def grid_a(cases):
     b.append(legend(4, h - 22, [(DET["full"][0], "found / clean"), (DET["partial"][0], "partly found"),
                                 (DET["missed"][0], "missed / flagged"), (DET["newreal"][0], "new real issue")]))
     return svg(lw + 270, h, "".join(b),
-               "Figure 1. Track A: did each model find the known defect? (APP/REQ = verdict; ✓ correct, ✗ wrong, ? debatable)")
+               "Figure 1. Track A: did each model find the known defect? (APP/REQ = verdict; ✓/✗ = verdict correct/wrong against the frozen key)")
 
 
 def bars(groups, series, title, ymax=None, unit="", w=640, h=260, fmt="{:g}"):

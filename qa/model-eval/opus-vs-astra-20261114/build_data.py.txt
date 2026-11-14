@@ -52,7 +52,7 @@ for cid, label, defect, runs in A:
         det, verdict, real, unc, false, sev = runs[m]
         adj = adjust.get(f"{cid}-{m}", {})
         real += adj.get("real", 0); unc += adj.get("uncertain", 0); false += adj.get("false", 0)
-        ok = (verdict == "REQ") if defect else (None if det == "newreal" else verdict == "APP")
+        ok = (verdict == "REQ") if defect else (verdict == "APP")
         mp = B / "runs" / "trackA" / f"{cid.lower()}-{m}.meta"
         wall, tok = meta(mp) if mp.exists() else (0, 0)
         c["runs"][m] = {"detect": det, "verdict": verdict, "verdict_ok": ok, "wall": wall, "tokens": tok}
@@ -60,16 +60,16 @@ for cid, label, defect, runs in A:
         if defect:
             t[det] += 1
             t["sev_ok"] += 1 if sev else 0
-        t["verdict_ok"] += bool(ok); t["n"] += 1 if ok is not None else 0
+        t["verdict_ok"] += bool(ok); t["n"] += 1
         t["real_extras"] += real; t["uncertain_extras"] += unc
-        t["false_alarms"] += false + (0 if defect or ok is None or ok else 1)
+        t["false_alarms"] += false
         t["wall"] += wall; t["tokens"] += tok or 0
     cases.append(c)
 for m in M:
     t = tot[m]
     t["detect_txt"] = f'{t["full"]} full, {t["partial"]} partial, {t["missed"]} missed (of 8)'
     t["score_txt"] = f'{t["full"] + 0.5 * t["partial"]:.1f} / 8'
-    t["verdict_txt"] = f'{t["verdict_ok"]} / {t["n"]}' + ("" if t["n"] == 10 else " (A10 debatable, excluded)")
+    t["verdict_txt"] = f'{t["verdict_ok"]} / {t["n"]}' + (" (A10 counted wrong per the frozen key; both graders judged its reason real)" if m == "astra" else "")
     t["wall_txt"] = f'{t["wall"] / 60:.0f} min total ({t["wall"] / 600:.1f} min per review)'
     t["tok_txt"] = f'{t["tokens"] / 1000:.0f}k total ({t["tokens"] / 10000:.0f}k per review)'
     t["sev_txt"] = f'{t["sev_ok"]} of {t["full"] + t["partial"]} found defects'
@@ -79,9 +79,9 @@ data["trackA"].update({
     "cases": cases,
     "totals": tot,
     "metric_rows": [("Known defects found (full = 1, partial = ½)", "score_txt"), ("Breakdown", "detect_txt"),
-                    ("Correct verdict (10 PRs)", "verdict_txt"), ("Severity calibrated", "sev_txt"),
+                    ("Correct verdict vs frozen key (10 PRs)", "verdict_txt"), ("Severity calibrated", "sev_txt"),
                     ("Real extra findings", "real_extras"), ("Uncertain extra findings", "uncertain_extras"),
-                    ("False alarms (wrong blocking claims or wrong verdict on a clean PR)", "false_alarms"),
+                    ("Extra findings judged false", "false_alarms"),
                     ("Wall time", "wall_txt"), ("Tokens", "tok_txt")],
 })
 
