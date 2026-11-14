@@ -18,12 +18,34 @@ MAX_ATTEMPTS = 10_000
 MAX_TOTAL_LOG_BYTES = 64 * 1024 * 1024
 MAX_METHODS = 100_000
 # Match the current native Windows target groups, not the original four crates.
-CRATES = ("tui", "core", "state", "login", "windows-sandbox-rs", "network-proxy",
-          "process-hardening", "sandboxing", "exec-server", "utils/pty", "app-server")
-TARGET = re.compile(r"//codex-rs/(?:" + "|".join(CRATES) + r")(?:/[A-Za-z0-9_.+-]+)*:[A-Za-z0-9_.+-]+\Z")
+CRATES = (
+    "tui",
+    "core",
+    "state",
+    "login",
+    "windows-sandbox-rs",
+    "network-proxy",
+    "process-hardening",
+    "sandboxing",
+    "exec-server",
+    "utils/pty",
+    "app-server",
+)
+TARGET = re.compile(
+    r"//codex-rs/(?:" + "|".join(CRATES) + r")(?:/[A-Za-z0-9_.+-]+)*:[A-Za-z0-9_.+-]+\Z"
+)
 CONFIG = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
-STATUSES = {"PASSED", "FLAKY", "TIMEOUT", "FAILED", "INCOMPLETE", "REMOTE_FAILURE",
-            "FAILED_TO_BUILD", "TOOL_HALTED_BEFORE_TESTING", "NO_STATUS"}
+STATUSES = {
+    "PASSED",
+    "FLAKY",
+    "TIMEOUT",
+    "FAILED",
+    "INCOMPLETE",
+    "REMOTE_FAILURE",
+    "FAILED_TO_BUILD",
+    "TOOL_HALTED_BEFORE_TESTING",
+    "NO_STATUS",
+}
 
 
 def unique_object(pairs):
@@ -41,9 +63,14 @@ def attempt_identity(value):
     target = value.get("label")
     config = value.get("configuration", {})
     config = config.get("id") if isinstance(config, dict) else None
-    if (not isinstance(target, str) or len(target) > 2048
-            or not TARGET.fullmatch(target) or any(p in (".", "..") for p in target.split("/"))
-            or not isinstance(config, str) or not CONFIG.fullmatch(config)):
+    if (
+        not isinstance(target, str)
+        or len(target) > 2048
+        or not TARGET.fullmatch(target)
+        or any(p in (".", "..") for p in target.split("/"))
+        or not isinstance(config, str)
+        or not CONFIG.fullmatch(config)
+    ):
         raise EvidenceError("invalid_attempt_identity")
     result = {"target": target, "configuration": config}
     for field in ("run", "shard", "attempt"):
@@ -57,9 +84,11 @@ def attempt_identity(value):
 def execution_evidence(result):
     execution = result.get("executionInfo")
     strategy = execution.get("strategy") if isinstance(execution, dict) else None
-    evidence = {"strategy": strategy if strategy in (
-        "local", "remote", "sandboxed", "worker", "windows-sandbox"
-    ) else "unknown"}
+    evidence = {
+        "strategy": strategy
+        if strategy in ("local", "remote", "sandboxed", "worker", "windows-sandbox")
+        else "unknown"
+    }
     for field in ("testAttemptStartMillisEpoch", "testAttemptDurationMillis"):
         value = result.get(field)
         if isinstance(value, str) and re.fullmatch(r"[0-9]{1,18}", value):
@@ -69,13 +98,19 @@ def execution_evidence(result):
     return evidence
 
 
-def collect(bep_path, testlogs_root, invocation_id, checkout_sha, workflow_outcome="unknown"):
+def collect(
+    bep_path, testlogs_root, invocation_id, checkout_sha, workflow_outcome="unknown"
+):
     report = {
-        "schemaVersion": 1, "invocationId": None, "checkoutSha": None,
-        "workflowOutcome": workflow_outcome if workflow_outcome in (
-            "success", "failure", "cancelled", "skipped"
-        ) else "unknown",
-        "captureStatus": "incomplete", "issues": [], "attempts": [],
+        "schemaVersion": 1,
+        "invocationId": None,
+        "checkoutSha": None,
+        "workflowOutcome": workflow_outcome
+        if workflow_outcome in ("success", "failure", "cancelled", "skipped")
+        else "unknown",
+        "captureStatus": "incomplete",
+        "issues": [],
+        "attempts": [],
         "limitations": [
             "IDs and checksums associate artifacts, not independent producer authenticity.",
             "Named rows do not establish fresh execution or every conditional test body.",
@@ -84,10 +119,17 @@ def collect(bep_path, testlogs_root, invocation_id, checkout_sha, workflow_outco
     }
     issues = report["issues"]
     try:
-        valid_uuid = isinstance(invocation_id, str) and str(UUID(invocation_id)) == invocation_id.lower()
+        valid_uuid = (
+            isinstance(invocation_id, str)
+            and str(UUID(invocation_id)) == invocation_id.lower()
+        )
     except ValueError:
         valid_uuid = False
-    if not valid_uuid or not isinstance(checkout_sha, str) or not re.fullmatch(r"[0-9a-f]{40}", checkout_sha):
+    if (
+        not valid_uuid
+        or not isinstance(checkout_sha, str)
+        or not re.fullmatch(r"[0-9a-f]{40}", checkout_sha)
+    ):
         issues.append("invalid_invocation_binding")
         return report
     report.update(invocationId=invocation_id, checkoutSha=checkout_sha)
@@ -101,22 +143,36 @@ def collect(bep_path, testlogs_root, invocation_id, checkout_sha, workflow_outco
         if any(not isinstance(event, dict) for event in events):
             raise EvidenceError("invalid_event")
     except (EvidenceError, ValueError, UnicodeError, RecursionError) as error:
-        issues.append(str(error) if isinstance(error, EvidenceError) else "malformed_bep")
+        issues.append(
+            str(error) if isinstance(error, EvidenceError) else "malformed_bep"
+        )
         return report
     starts = [event["started"] for event in events if "started" in event]
     metadata = [event["buildMetadata"] for event in events if "buildMetadata" in event]
-    if len(starts) != 1 or not isinstance(starts[0], dict) or starts[0].get("uuid") != invocation_id:
+    if (
+        len(starts) != 1
+        or not isinstance(starts[0], dict)
+        or starts[0].get("uuid") != invocation_id
+    ):
         issues.append("invocation_mismatch")
         return report
-    if (len(metadata) != 1 or not isinstance(metadata[0], dict)
-            or not isinstance(metadata[0].get("metadata"), dict)
-            or metadata[0]["metadata"].get("CORBANU_CHECKOUT_SHA") != checkout_sha):
+    if (
+        len(metadata) != 1
+        or not isinstance(metadata[0], dict)
+        or not isinstance(metadata[0].get("metadata"), dict)
+        or metadata[0]["metadata"].get("CORBANU_CHECKOUT_SHA") != checkout_sha
+    ):
         issues.append("checkout_mismatch")
         return report
     report["observedInvocationId"] = invocation_id
     report["observedCheckoutSha"] = checkout_sha
     finishes = [event["finished"] for event in events if "finished" in event]
-    if not events or events[-1].get("lastMessage") is not True or len(finishes) != 1 or not isinstance(finishes[0], dict):
+    if (
+        not events
+        or events[-1].get("lastMessage") is not True
+        or len(finishes) != 1
+        or not isinstance(finishes[0], dict)
+    ):
         issues.append("incomplete_bep")
     # A terminal marker alone does not close the announced event graph.
     # Canonical JSON keys are kept only in memory, never exposed in the report.
@@ -152,7 +208,9 @@ def collect(bep_path, testlogs_root, invocation_id, checkout_sha, workflow_outco
             break
         try:
             event_id = event.get("id", {})
-            item = attempt_identity(event_id.get("testResult") if isinstance(event_id, dict) else None)
+            item = attempt_identity(
+                event_id.get("testResult") if isinstance(event_id, dict) else None
+            )
             key = tuple(item.values())
             if key in identities:
                 issues.append("duplicate_attempt_identity")
@@ -161,22 +219,41 @@ def collect(bep_path, testlogs_root, invocation_id, checkout_sha, workflow_outco
             if not isinstance(result, dict):
                 raise EvidenceError("invalid_test_result")
             status = result.get("status")
-            item["targetStatus"] = status if isinstance(status, str) and status in STATUSES else "UNKNOWN"
+            item["targetStatus"] = (
+                status if isinstance(status, str) and status in STATUSES else "UNKNOWN"
+            )
             if item["targetStatus"] == "UNKNOWN":
                 issues.append("invalid_target_status")
             execution = result.get("executionInfo")
-            cached = (result.get("cachedLocally", False),
-                      execution.get("cachedRemotely", False) if isinstance(execution, dict) else None)
-            item["cache"] = dict(zip(("local", "remote"), (v if type(v) is bool else None for v in cached)))
-            item["provenance"] = "cached" if True in item["cache"].values() else "unknown"
+            cached = (
+                result.get("cachedLocally", False),
+                execution.get("cachedRemotely", False)
+                if isinstance(execution, dict)
+                else None,
+            )
+            item["cache"] = dict(
+                zip(
+                    ("local", "remote"),
+                    (v if type(v) is bool else None for v in cached),
+                )
+            )
+            item["provenance"] = (
+                "cached" if True in item["cache"].values() else "unknown"
+            )
             item["executionEvidence"] = execution_evidence(result)
             item.update(logStatus="missing_log_reference", methods=[], issues=[])
             outputs = result.get("testActionOutput", [])
             if not isinstance(outputs, list):
                 raise EvidenceError("invalid_log_reference")
-            logs = [value for value in outputs if isinstance(value, dict) and value.get("name") == "test.log"]
+            logs = [
+                value
+                for value in outputs
+                if isinstance(value, dict) and value.get("name") == "test.log"
+            ]
             if len(logs) != 1:
-                item["logStatus"] = "ambiguous_log_reference" if logs else "missing_log_reference"
+                item["logStatus"] = (
+                    "ambiguous_log_reference" if logs else "missing_log_reference"
+                )
             else:
                 try:
                     if testlogs_root is None:

@@ -41,7 +41,11 @@ def run_detect(key: str) -> tuple[str, str, str]:
             "SHARD": "3",
         }
         done = subprocess.run(
-            ["bash", "-c", detect_script()], env=env, check=True, capture_output=True, text=True
+            ["bash", "-c", detect_script()],
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
         )
         read = lambda path: path.read_text(encoding="utf-8") if path.exists() else ""
         return read(output), read(summary), done.stdout
@@ -73,8 +77,13 @@ class WindowsIntegrationDisclosureTest(unittest.TestCase):
 
     def test_docs_document_the_cross_shards(self) -> None:
         docs = DOCS.read_text(encoding="utf-8")
-        self.assertIn("(`Bazel test on windows-latest for x86_64-pc-windows-gnullvm shard N/4`,", docs)
-        self.assertIn("Without it every shard skips that step and still\n  reports success", docs)
+        self.assertIn(
+            "(`Bazel test on windows-latest for x86_64-pc-windows-gnullvm shard N/4`,",
+            docs,
+        )
+        self.assertIn(
+            "Without it every shard skips that step and still\n  reports success", docs
+        )
         # The nightly line is unchanged.
         self.assertIn("native Windows for every crate", docs)
 

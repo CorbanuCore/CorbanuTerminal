@@ -20,19 +20,25 @@ class LibtestRowsTest(unittest.TestCase):
             "test suite::skipped ... ignored, private reason\n"
             "test result: FAILED. 1 passed; 1 failed; 1 ignored; 0 measured\n"
         )
-        self.assertEqual(rows, [
-            {"name": "suite::success", "status": "ok"},
-            {"name": "suite::failure", "status": "FAILED"},
-            {"name": "suite::skipped", "status": "ignored"},
-        ])
+        self.assertEqual(
+            rows,
+            [
+                {"name": "suite::success", "status": "ok"},
+                {"name": "suite::failure", "status": "FAILED"},
+                {"name": "suite::skipped", "status": "ignored"},
+            ],
+        )
         self.assertEqual(issues, [])
         self.assertNotIn("private", json.dumps((rows, issues)))
 
     def test_should_panic_keeps_canonical_name(self):
-        self.assertEqual(self.parse(
-            "running 1 test\ntest suite::panics - should panic ... ok\n"
-            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured\n"
-        ), ([{"name": "suite::panics", "status": "ok"}], []))
+        self.assertEqual(
+            self.parse(
+                "running 1 test\ntest suite::panics - should panic ... ok\n"
+                "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured\n"
+            ),
+            ([{"name": "suite::panics", "status": "ok"}], []),
+        )
 
     def test_duplicate_name_including_should_panic_is_ambiguous(self):
         for second in ("test a ... FAILED", "test a - should panic ... FAILED"):
@@ -41,10 +47,13 @@ class LibtestRowsTest(unittest.TestCase):
                     f"running 2 tests\ntest a ... ok\n{second}\n"
                     "test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured\n"
                 )
-                self.assertEqual(rows, [
-                    {"name": "a", "status": "ok"},
-                    {"name": "a", "status": "FAILED"},
-                ])
+                self.assertEqual(
+                    rows,
+                    [
+                        {"name": "a", "status": "ok"},
+                        {"name": "a", "status": "FAILED"},
+                    ],
+                )
                 self.assertEqual(issues, ["duplicate_named_row"])
 
     def test_missing_or_mismatched_framing_is_incomplete(self):
@@ -64,12 +73,15 @@ class LibtestRowsTest(unittest.TestCase):
         self.assertIn("unframed_named_row", self.parse("test a ... ok\n")[1])
 
     def test_complete_multiple_batches_and_zero_tests(self):
-        self.assertEqual(self.parse(
-            "running 0 tests\n"
-            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured\n"
-            "running 1 test\ntest a ... ok\n"
-            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured\n"
-        ), ([{"name": "a", "status": "ok"}], []))
+        self.assertEqual(
+            self.parse(
+                "running 0 tests\n"
+                "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured\n"
+                "running 1 test\ntest a ... ok\n"
+                "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured\n"
+            ),
+            ([{"name": "a", "status": "ok"}], []),
+        )
 
     def test_unsupported_annotations_and_long_names_are_not_passes(self):
         for name in ("a - unknown annotation", "a" * 1025, "a" * 2050):

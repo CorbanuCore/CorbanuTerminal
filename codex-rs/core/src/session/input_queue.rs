@@ -1473,12 +1473,15 @@ mod tests {
                 .0,
             Vec::new()
         );
+        assert!(input_queue.has_pending_mailbox_items().await);
 
-        // The preserved item is intact for the next admitted turn.
+        // A subsequently admitted turn receives the preserved item normally.
+        let next_turn = Mutex::new(Some(ActiveTurn::default()));
         assert_eq!(
             input_queue.get_pending_input(&next_turn).await.0,
             vec![TurnInput::InterAgentCommunication(mail.into())]
         );
+        assert!(!input_queue.has_pending_mailbox_items().await);
     }
 
     #[tokio::test]
