@@ -109,11 +109,10 @@ fn make_env_block_holds_each_name_once() {
     assert_eq!(&block[block.len() - 2..], &[0, 0]);
 }
 
-/// D475 (#1921): the no-network environment gives git `GIT_ALLOW_PROTOCOL`
-/// (not the `GIT_ALLOW_PROTOCOLS` git never read) set to `file`, over a
-/// caller's value in any spelling.
+/// #2155: refuse every transport, including local-file submodule clones,
+/// over a caller's value in any spelling.
 #[test]
-fn no_network_env_allows_git_only_the_file_transport() {
+fn no_network_env_refuses_all_git_transports() {
     let mut env_map = env(&[("Git_Allow_Protocol", "ext:https")]);
 
     apply_no_network_env_vars(&mut env_map);
@@ -122,40 +121,111 @@ fn no_network_env_allows_git_only_the_file_transport() {
         spellings(&env_map, "GIT_ALLOW_PROTOCOL"),
         vec!["GIT_ALLOW_PROTOCOL".to_string()]
     );
-    assert_eq!(env_map.get("GIT_ALLOW_PROTOCOL"), Some(&"file".to_string()));
+    assert_eq!(env_map.get("GIT_ALLOW_PROTOCOL"), Some(&String::new()));
     assert_eq!(
         spellings(&env_map, "GIT_ALLOW_PROTOCOLS"),
         Vec::<String>::new()
     );
 }
 
-/// D475 (#1921), with real git: under the no-network environment git refuses
-/// an `https` remote before connecting, and still clones over `file://`.
+/// #2155: real git must refuse network and file transports even when config
+/// permits them. Local repository operations still work.
 #[test]
-fn no_network_env_git_refuses_https_and_clones_over_file() {
+fn no_network_env_git_refuses_network_and_local_submodule_clones() {
     let mut vars = HashMap::new();
     apply_no_network_env_vars(&mut vars);
     let dir = tempfile::tempdir().expect("tempdir");
-    let git = |args: &[&str]| {
-        std::process::Command::new("git")
+    let git = |args: &[&str], extra_env: &HashMap<String, String>| {
+        let mut command = std::process::Command::new("git");
+        for (key, _) in std::env::vars_os() {
+            if key
+                .to_string_lossy()
+                .to_ascii_uppercase()
+                .starts_with("GIT_")
+            {
+                command.env_remove(key);
+            }
+        }
+        command
             .args(args)
             .current_dir(dir.path())
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_GLOBAL", "NUL")
             .env("GIT_TERMINAL_PROMPT", "0")
-            .envs(&vars)
+            .env("GIT_AUTHOR_NAME", "Sandbox test")
+            .env("GIT_AUTHOR_EMAIL", "sandbox@example.invalid")
+            .env("GIT_COMMITTER_NAME", "Sandbox test")
+            .env("GIT_COMMITTER_EMAIL", "sandbox@example.invalid")
+            .envs(extra_env)
             .output()
             .expect("run git")
     };
+    let setup = |args: &[&str]| {
+        let output = git(args, &HashMap::new());
+        assert!(output.status.success(), "git {args:?}: {output:?}");
+        output
+    };
+    let refused = |args: &[&str], protocol: &str| {
+        let output = git(args, &vars);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "git {args:?}: {output:?}");
+        assert!(
+            stderr.contains(&format!("transport '{protocol}' not allowed")),
+            "git {args:?}: {stderr}"
+        );
+    };
 
-    let https = git(&["ls-remote", "https://127.0.0.1:9/x.git"]);
-    let stderr = String::from_utf8_lossy(&https.stderr);
-    assert!(!https.status.success(), "{stderr}");
-    assert!(stderr.contains("transport 'https' not allowed"), "{stderr}");
+    for (protocol, url) in [
+        ("https", "https://127.0.0.1:9/x.git"),
+        ("ssh", "ssh://127.0.0.1:9/x.git"),
+        ("git", "git://127.0.0.1:9/x.git"),
+        ("ext", "ext::must-not-run"),
+    ] {
+        let allow = format!("protocol.{protocol}.allow=always");
+        refused(&["-c", &allow, "ls-remote", url], protocol);
+    }
 
-    let init = git(&["init", "--quiet", "origin"]);
-    assert!(init.status.success(), "git init: {init:?}");
+    setup(&["init", "--quiet", "origin"]);
+    setup(&["-C", "origin", "commit", "--allow-empty", "-qm", "fixture"]);
     let origin = dir.path().join("origin");
-    let url = format!("file:///{}", origin.to_string_lossy().replace('\\', "/"));
-    let clone = git(&["clone", "--quiet", &url, "copy"]);
-    assert!(clone.status.success(), "git clone: {clone:?}");
-    assert!(dir.path().join("copy").join(".git").is_dir());
+    let origin = origin.to_str().expect("origin path");
+    setup(&["init", "--quiet", "parent"]);
+    setup(&[
+        "-C",
+        "parent",
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        origin,
+        "sub",
+    ]);
+    setup(&["-C", "parent", "commit", "-qam", "local submodule"]);
+    setup(&["clone", "--quiet", "parent", "update"]);
+
+    refused(
+        &[
+            "-C",
+            "update",
+            "submodule",
+            "update",
+            "--init",
+            "--recursive",
+        ],
+        "file",
+    );
+    refused(
+        &["clone", "--recurse-submodules", "parent", "recursive"],
+        "file",
+    );
+    let url = format!("file:///{}", origin.replace('\\', "/"));
+    refused(
+        &["-c", "protocol.file.allow=always", "clone", &url, "copy"],
+        "file",
+    );
+    refused(&["clone", origin, "local-copy"], "file");
+
+    let status = git(&["-C", "parent", "status", "--porcelain"], &vars);
+    assert!(status.status.success(), "git status: {status:?}");
+    assert!(status.stdout.is_empty(), "git status: {status:?}");
 }

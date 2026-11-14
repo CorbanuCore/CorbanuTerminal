@@ -190,11 +190,13 @@ fn apply_no_network_env_vars(env_map: &mut HashMap<String, String>) {
     env_map
         .entry("GIT_SSH_COMMAND".into())
         .or_insert_with(|| "cmd /c exit 1".into());
-    // D475 (#1921): git allows only its local `file` transport, so it refuses
-    // network transports and `ext` before connecting or running anything.
+    // #2155 (D550 candidate): an empty allow-list refuses every transport. Allowing `file`
+    // overrides protocol.file.allow=user and enables local-file submodule
+    // clones that git otherwise refuses. Config cannot narrow this allow-list.
     // Set over any value the caller passed, in any spelling (names ignore case
-    // on Windows). This was `GIT_ALLOW_PROTOCOLS`, a name git doesn't read.
-    set_env_var(env_map, "GIT_ALLOW_PROTOCOL", "file".into());
+    // on Windows). This also refuses direct local clones; local operations
+    // such as status and diff do not use a transport and remain available.
+    set_env_var(env_map, "GIT_ALLOW_PROTOCOL", String::new());
 }
 
 #[cfg(test)]
