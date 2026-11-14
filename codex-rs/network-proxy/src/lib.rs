@@ -19,6 +19,9 @@ mod destination;
 mod destination_contract;
 mod domain_matcher;
 mod environment_policy;
+#[cfg(test)]
+#[path = "hickory_compat_tests.rs"]
+mod hickory_compat_tests;
 mod http_proxy;
 mod mitm;
 mod mitm_hook;

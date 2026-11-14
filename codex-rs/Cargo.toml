@@ -823,6 +823,8 @@ opt-level = 0
 strip = "symbols"
 
 [patch.crates-io]
+# Retain Rama alpha APIs while upgrading its DNS adapter to patched Hickory.
+rama-dns = { path = "../third_party/rama-dns" }
 # Uncomment to debug local changes.
 # ratatui = { path = "../../ratatui" }
 crossterm = { git = "https://github.com/openai-oss-forks/crossterm", rev = "ed1cdab335221515706178d68495bba2aed1924f" }
