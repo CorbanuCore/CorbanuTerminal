@@ -4,7 +4,7 @@ One narrated video of what the independent functional run of 2026-11-14 showed f
 @citadelculture). It is an asset on the [`demos` prerelease](https://github.com/CorbanuCore/CorbanuTerminal/releases/tag/demos).
 
 - Video: [pf23-s04-reel-2026-11-14.mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf23-s04-reel-2026-11-14.mp4)
-  (3:56, 1920x1080, 30 fps, H.264/AAC, chapters embedded) · subtitles:
+  (3:56, 1920x1080, 30 fps, H.264/AAC, chapters embedded; SHA-256 `c17c0ee7fefd99fdb02d429d0d996a117daec95494c9b98ded50eae5c37186c3`) · subtitles:
   [pf23-s04-reel-2026-11-14.srt](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf23-s04-reel-2026-11-14.srt)
 - Security levels are behind the default-off `security_levels` flag; the clips run under Moderate after untrusted
   content.

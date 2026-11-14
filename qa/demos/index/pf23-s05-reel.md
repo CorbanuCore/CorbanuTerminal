@@ -4,7 +4,7 @@ One narrated video of what the independent functional run of 2026-11-14 showed f
 It is an asset on the [`demos` prerelease](https://github.com/CorbanuCore/CorbanuTerminal/releases/tag/demos).
 
 - Video: [pf23-s05-reel-2026-11-14.mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf23-s05-reel-2026-11-14.mp4)
-  (3:31, 1920x1080, 30 fps, H.264/AAC, chapters embedded) · subtitles:
+  (3:31, 1920x1080, 30 fps, H.264/AAC, chapters embedded; SHA-256 `635eedc15bc0a1bfc8b7e1219dbdb25b298028e0ed4234f58b8b6da6189f2be3`) · subtitles:
   [pf23-s05-reel-2026-11-14.srt](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf23-s05-reel-2026-11-14.srt)
 - Security levels are behind the default-off `security_levels` flag; the clips run under Moderate after untrusted
   content.
