@@ -159,10 +159,13 @@ pub fn bundled_skills_enabled_from_stack(config_layer_stack: &ConfigLayerStack) 
 pub fn skill_config_rules_from_stack(config_layer_stack: &ConfigLayerStack) -> SkillConfigRules {
     let mut entries = Vec::new();
     for layer in config_layer_stack.all_layers_low_to_high() {
+        // Like project config, a project-declared agent role's layer does not
+        // change skill settings (D525, #2052).
         if !matches!(
             layer.name,
             ConfigLayerSource::User { .. } | ConfigLayerSource::SessionFlags
-        ) {
+        ) || layer.project_role_file().is_some()
+        {
             continue;
         }
 

@@ -154,7 +154,7 @@ pub(crate) fn discover_handlers(
         );
 
         for layer in config_layer_stack.layers_low_to_high() {
-            let (hook_source, is_managed) = hook_metadata_for_config_layer_source(&layer.name);
+            let (hook_source, is_managed) = hook_metadata_for_config_layer(layer);
             let policy_path = config_toml_source_path(layer);
             let policy_source = HookHandlerSource {
                 path: &policy_path,
@@ -458,6 +458,11 @@ fn load_toml_hooks_from_layer(
 }
 
 fn config_toml_source_path(layer: &ConfigLayerEntry) -> AbsolutePathBuf {
+    // A project-declared agent role's hooks are keyed by its file, so trust
+    // given in one checkout does not carry to another (D525, #2052).
+    if let Some(role_file) = layer.project_role_file() {
+        return role_file.clone();
+    }
     match &layer.name {
         ConfigLayerSource::PackagedDefaults { file }
         | ConfigLayerSource::System { file }
@@ -1031,6 +1036,15 @@ fn hook_trusted_hash(is_managed: bool, state: Option<&HookStateToml>) -> Option<
     (!is_managed)
         .then(|| state.and_then(|state| state.trusted_hash.as_deref()))
         .flatten()
+}
+
+/// A project-declared agent role's layer gets project hook handling: listed
+/// as a project hook and reviewed like one (D525, #2052).
+fn hook_metadata_for_config_layer(layer: &ConfigLayerEntry) -> (HookSource, bool) {
+    if layer.project_role_file().is_some() {
+        return (HookSource::Project, false);
+    }
+    hook_metadata_for_config_layer_source(&layer.name)
 }
 
 fn hook_metadata_for_config_layer_source(source: &ConfigLayerSource) -> (HookSource, bool) {

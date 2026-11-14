@@ -37,7 +37,7 @@ pub async fn load_agent_roles(
     for layer in layers {
         let mut layer_roles: BTreeMap<String, AgentRoleConfig> = BTreeMap::new();
         let mut declared_role_files = BTreeSet::new();
-        let source = AgentRoleSource::from_layer(&layer.name);
+        let source = AgentRoleSource::from_layer_entry(layer);
         let config_folder = layer.config_folder();
         let agents_toml = match agents_toml_from_layer(&layer.config, config_folder.as_deref()) {
             Ok(agents_toml) => agents_toml,
