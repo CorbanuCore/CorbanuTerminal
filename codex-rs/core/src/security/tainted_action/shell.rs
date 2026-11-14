@@ -95,6 +95,9 @@ pub(super) struct SimpleCommand {
     pub(super) after: Joint,
     /// Assignment flow keeps conditional operators across line continuations.
     pub(super) assignment_after: Joint,
+    /// #1973: the command began in quoted/escaped text this lexer splits.
+    /// Such text cannot prove an assignment; keep its old reading as well.
+    pub(super) assignment_quoted: bool,
     /// #1974: it is lexed inside a `( ... )` subshell, so an assignment in
     /// it does not reach the parent shell.
     pub(super) in_subshell: bool,
@@ -1228,6 +1231,7 @@ impl Lexer {
 
     fn arg(&mut self, arg: &str) {
         let chars: Vec<char> = arg.chars().collect();
+        let quoted = assignment_quotes(&chars);
         let mut index = 0;
         // #989: arithmetic text (`$((...))`, `((...))`) up to here holds no
         // command words, so its parameter operators do not count. Not over
@@ -1250,6 +1254,11 @@ impl Lexer {
         while index < chars.len() {
             work::step();
             let ch = chars[index];
+            // Only add uncertainty. Quoted RHS text joined to `r=` does
+            // not start a new word; a fake command after a quoted `;` does.
+            if self.current.words.is_empty() && self.word.is_empty() && quoted[index] {
+                self.current.assignment_quoted = true;
+            }
             let next = chars.get(index + 1).copied();
             let previous = index.checked_sub(1).map(|at| chars[at]);
             let parameter_brace = match ch {
@@ -1525,6 +1534,31 @@ impl Lexer {
             index += 1;
         }
     }
+}
+
+/// #1973: mark text that cannot establish an assignment just because the
+/// quote-stripping lexer exposes it. This conservative side scan never
+/// changes words or command boundaries, including nested code's old reading.
+fn assignment_quotes(chars: &[char]) -> Vec<bool> {
+    let mut quote = None;
+    let mut escaped = false;
+    chars
+        .iter()
+        .map(|&ch| {
+            work::step();
+            let protected = quote.is_some() || escaped || matches!(ch, '\'' | '"' | '\\');
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' && quote != Some('\'') {
+                escaped = true;
+            } else if quote == Some(ch) {
+                quote = None;
+            } else if quote.is_none() && matches!(ch, '\'' | '"') {
+                quote = Some(ch);
+            }
+            protected
+        })
+        .collect()
 }
 
 /// #1772 item 2: the index of the quote closing the one at `start`, when

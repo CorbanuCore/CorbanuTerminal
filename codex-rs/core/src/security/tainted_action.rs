@@ -2551,6 +2551,12 @@ impl Classifier {
                 )
             });
         if assigns {
+            // #1973: quote removal can invent an assignment (`echo 'x;r=o'`).
+            // Ask on that uncertainty, but retain all existing variable/path
+            // findings: replacing the old value could hide a protected path.
+            if simple.assignment_quoted {
+                self.note(ProtectedActionKind::UnseenCode);
+            }
             // #1974: an assignment that may not run, or that runs only in
             // a subshell, does not resolve the variable in the parent shell
             // (`false && r=x`, `a || r=x`, `(r=x)`, an `if` body, a
@@ -4177,6 +4183,10 @@ mod tainted_action_keyword_brace_tests;
 #[cfg(test)]
 #[path = "tainted_action_git_quoted_tests.rs"]
 mod tainted_action_git_quoted_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_quoted_assignment_tests.rs"]
+mod tainted_action_quoted_assignment_tests;
 
 #[cfg(test)]
 #[path = "tainted_action_post_taint_tests.rs"]
