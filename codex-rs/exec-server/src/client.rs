@@ -346,6 +346,9 @@ pub(crate) struct LazyRemoteExecServerClient {
     current_client: Arc<StdMutex<Option<ExecServerClient>>>,
     reconnect: Arc<StdMutex<Option<Arc<ConnectionAttempt>>>>,
     environment_connection_state_tx: watch::Sender<EnvironmentConnectionState>,
+    /// PF-27-S02: a stdio executor was started before secretless launch was armed, so it holds
+    /// this process's full environment (see `client_transport::stdio_command_process`).
+    stdio_started_unarmed: Arc<AtomicBool>,
 }
 
 impl LazyRemoteExecServerClient {
@@ -364,6 +367,7 @@ impl LazyRemoteExecServerClient {
                 EnvironmentConnectionState::Disconnected,
             )
             .0,
+            stdio_started_unarmed: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -441,6 +445,7 @@ impl LazyRemoteExecServerClient {
     }
 
     pub(crate) async fn get(&self) -> Result<ExecServerClient, ExecServerError> {
+        self.refuse_unprotected_stdio_executor()?;
         if matches!(self.recovery_policy, RecoveryPolicy::FailFast) {
             let client = match self.cached_client() {
                 Some(client) => client,
@@ -556,8 +561,30 @@ impl LazyRemoteExecServerClient {
         )
     }
 
+    /// PF-27-S02: a stdio executor cannot be restarted in place, so one started before secretless
+    /// launch was armed (a security level changed during this run) is refused from then on: it
+    /// would hand Corbanu's full environment to everything it starts.
+    fn refuse_unprotected_stdio_executor(&self) -> Result<(), ExecServerError> {
+        if self.stdio_started_unarmed.load(Ordering::Acquire)
+            && codex_protocol::secretless_launch::is_armed()
+        {
+            return Err(ExecServerError::Protocol(
+                "this executor was started before secretless agent launch was turned on, so it \
+                 still holds Corbanu's full environment; restart Corbanu to use it"
+                    .to_string(),
+            ));
+        }
+        Ok(())
+    }
+
     #[tracing::instrument(name = "codex.exec_server.remote.connect", skip_all)]
     async fn connect_once(&self) -> ConnectionResult {
+        if is_stdio_transport(&self.transport_params)
+            && !codex_protocol::secretless_launch::is_armed()
+        {
+            // Recorded before the spawn: arming is one-way, so this can only over-refuse.
+            self.stdio_started_unarmed.store(true, Ordering::Release);
+        }
         let result = ExecServerClient::connect_for_transport(
             self.transport_params.clone(),
             self.http_client_factory.clone(),
@@ -569,6 +596,16 @@ impl LazyRemoteExecServerClient {
                 .attach_environment_connection_state(self.environment_connection_state_tx.clone());
         }
         result
+    }
+}
+
+/// A transport that starts an executor process on this host (possibly once deferred readiness
+/// is reported).
+fn is_stdio_transport(transport: &ExecServerTransportParams) -> bool {
+    match transport {
+        ExecServerTransportParams::StdioCommand { .. } => true,
+        ExecServerTransportParams::Deferred(deferred) => is_stdio_transport(&deferred.transport),
+        _ => false,
     }
 }
 
