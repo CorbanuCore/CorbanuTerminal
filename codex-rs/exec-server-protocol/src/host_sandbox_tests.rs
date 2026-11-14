@@ -17,7 +17,15 @@ fn info(shell: (&str, &str), cwd: Option<&str>, host: Option<HostSandboxInfo>) -
             name: shell.0.to_string(),
             path: shell.1.to_string(),
         },
+        // Upstream's other fields, as a legacy executor reports them.
+        executor_version: "0.0.0".to_string(),
+        provider_id: None,
         cwd: cwd.map(|cwd| PathUri::parse(cwd).expect("cwd uri")),
+        user_home_dir: None,
+        platform_os: None,
+        prepend_path_dirs: Vec::new(),
+        temporary_directories: None,
+        temp_dir: None,
         capabilities: EnvironmentCapabilities::default(),
         host_sandbox: host,
     }
