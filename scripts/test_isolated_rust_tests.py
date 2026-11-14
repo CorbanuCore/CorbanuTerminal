@@ -134,6 +134,31 @@ class IsolatedRustTests(unittest.TestCase):
     def test_attached_package_and_filter_values_are_not_release_flags(self):
         runner.validate_debug_run(["-pcodex-keyring-store", "-Etest(guard)", "-j4"], {})
 
+    def test_mcp_suites_build_full_cli_with_isolated_environment(self):
+        for package in ("codex-mcp", "codex-rmcp-client"):
+            with self.subTest(package=package):
+                calls = []
+
+                def fake_cargo(argv, *, cwd, env, check):
+                    calls.append(argv)
+                    self.assertEqual(env["CORBANU_TEST_NO_NATIVE_KEYRING"], "1")
+                    self.assertNotIn("CORBANU_HOME", env)
+                    self.assertTrue(Path(env["CODEX_HOME"]).is_dir())
+                    return subprocess.CompletedProcess(argv, 0)
+
+                with (
+                    patch.dict(os.environ, {"CORBANU_HOME": "host-canary"}, clear=True),
+                    patch.object(runner.shutil, "which", return_value="/synthetic/cargo"),
+                    patch.object(runner.subprocess, "run", side_effect=fake_cargo),
+                ):
+                    self.assertEqual(runner.main(["-p", package, "--offline"]), 0)
+                self.assertEqual(len(calls), 2)
+                self.assertEqual(
+                    calls[0],
+                    ["/synthetic/cargo", "build", *runner._SUITE_HELPERS, "--offline"],
+                )
+                self.assertEqual(calls[1][1:3], ["nextest", "run"])
+
     def test_missing_cargo_is_explicit(self):
         with patch.object(runner.shutil, "which", return_value=None):
             self.assertEqual(runner.main([]), 2)
