@@ -144,6 +144,10 @@ async fn callback(authorization_url: &str, issuer: &str, provider_error: bool) -
     Ok(())
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "traced_test captures synthetic in-memory events; redacting the test sink would hide privacy regressions"
+)]
 #[traced_test]
 #[tokio::test]
 async fn enterprise_callback_errors_and_sdk_logs_exclude_credentials() -> Result<()> {
@@ -258,6 +262,10 @@ fn enterprise_callback_requires_loopback() -> Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "traced_test captures synthetic in-memory events; redacting the test sink would hide privacy regressions"
+)]
 #[traced_test]
 #[tokio::test]
 async fn enterprise_public_api_storage_and_privacy() -> Result<()> {

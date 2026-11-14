@@ -279,6 +279,10 @@ async fn keyring_failure_does_not_reuse_the_pinned_refresh_token() -> Result<()>
     Ok(())
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "traced_test captures synthetic in-memory events; redacting the test sink would hide privacy regressions"
+)]
 #[traced_test]
 #[tokio::test]
 async fn enterprise_credential_errors_and_keyring_traces_hide_account_key() -> Result<()> {

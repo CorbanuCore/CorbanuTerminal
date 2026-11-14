@@ -468,6 +468,10 @@ async fn rejected_refresh_token_requires_reauthorization() -> Result<()> {
 }
 
 #[tokio::test(flavor = "current_thread")]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "traced_test captures synthetic in-memory events; redacting the test sink would hide privacy regressions"
+)]
 #[traced_test]
 async fn rejection_callback_failure_keeps_reauthentication_and_redacts_diagnostics() -> Result<()> {
     let (env, server, initial) = test_context().await?;
