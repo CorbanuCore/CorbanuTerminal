@@ -134,6 +134,12 @@ struct ResumeConfigState {
     workspace_roots: Option<Vec<AbsolutePathBuf>>,
     persisted_metadata: Option<ThreadMetadata>,
     persisted_settings: Option<PersistedResumeSettings>,
+    // Corbanu inputs also read from history: the JSONL runtime (3e4dad7717),
+    // the recorded account (PF-84) and legacy permissions.
+    persisted_runtime: Option<PersistedThreadRuntime>,
+    inherited_provider_account: Option<String>,
+    approval_policy: Option<codex_protocol::protocol::AskForApproval>,
+    permission_profile: Option<codex_protocol::models::PermissionProfile>,
 }
 
 struct PreparedResumeConfig {
@@ -383,22 +389,35 @@ fn apply_persisted_thread_runtime(
     }
 }
 
-/// The service tier a cold resume runs on, or `None` to keep the loaded config's.
+/// The service tier a cold resume runs on, or `None` to keep the loaded
+/// config's (3e4dad7717): an explicit tier or model keeps it; a saved tier is
+/// restored only for the model it was chosen for (`runtime` is the newest
+/// recorded model), never for a newer one; a session without a settings record
+/// never chose a tier, so it resumes on standard routing rather than today's
+/// unrelated global default.
 fn resumed_service_tier(
     persisted: Option<&codex_protocol::protocol::ThreadSettingsSnapshot>,
+    runtime: Option<&PersistedThreadRuntime>,
     restore_service_tier: bool,
     explicit_model_override: bool,
 ) -> Option<Option<String>> {
-    if !restore_service_tier {
+    if !restore_service_tier || explicit_model_override {
         return None;
     }
-    match persisted {
-        Some(settings) => Some(settings.service_tier.clone()),
-        // A session without a settings record never chose a tier: resume it on
-        // standard routing rather than today's unrelated global default (3e4dad7717).
-        None if !explicit_model_override => Some(None),
-        None => None,
-    }
+    let same_model = |settings: &codex_protocol::protocol::ThreadSettingsSnapshot| {
+        runtime.is_none_or(|runtime| {
+            runtime.model == settings.model
+                && runtime
+                    .model_provider
+                    .as_ref()
+                    .is_none_or(|provider| provider == &settings.model_provider_id)
+        })
+    };
+    Some(
+        persisted
+            .filter(|settings| same_model(settings))
+            .and_then(|settings| settings.service_tier.clone()),
+    )
 }
 
 fn prepend_missing_resume_settings(context: &mut Vec<RolloutItem>, history: &[RolloutItem]) {
@@ -462,6 +481,56 @@ fn has_permission_override(
         || request_overrides.is_some_and(|overrides| {
             overrides.contains_key("sandbox_mode") || overrides.contains_key("default_permissions")
         })
+}
+
+/// Pre-sync Corbanu threads never recorded which thread owns a settings
+/// snapshot, so upstream's owner-checked restore (#57227) finds no raw
+/// permission profile for them and would resume them on today's defaults
+/// with only their approval policy restored. Fail closed as main did
+/// (`merge_persisted_permissions`): when the history has no snapshot owned by
+/// `thread_id`, no profile was restored and the caller chose no permissions,
+/// restore the permission profile of the newest settings record or turn
+/// context, with its approval policy unless the caller chose one, so a
+/// restricted thread stays restricted.
+fn restore_legacy_permissions(
+    history: &[RolloutItem],
+    thread_id: ThreadId,
+    request_overrides: Option<&HashMap<String, serde_json::Value>>,
+    approval_policy_requested: bool,
+    typesafe_overrides: &mut ConfigOverrides,
+) {
+    if latest_owned_thread_settings(history, thread_id).is_some()
+        || typesafe_overrides.persisted_permission_profile_id.is_some()
+        || typesafe_overrides.persisted_permission_profile.is_some()
+        || has_permission_override(request_overrides, typesafe_overrides)
+        || request_overrides.is_some_and(|overrides| {
+            overrides.keys().any(|key| {
+                key == "permission_profiles"
+                    || key == "sandbox_workspace_write"
+                    || key.starts_with("sandbox_workspace_write.")
+            })
+        })
+    {
+        return;
+    }
+    let persisted = history.iter().rev().find_map(|item| match item {
+        RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) => Some((
+            event.thread_settings.approval_policy,
+            event.thread_settings.permission_profile.clone(),
+        )),
+        RolloutItem::TurnContext(turn_context) => Some((
+            turn_context.approval_policy,
+            turn_context.permission_profile(),
+        )),
+        _ => None,
+    });
+    let Some((approval_policy, permission_profile)) = persisted else {
+        return;
+    };
+    if !approval_policy_requested {
+        typesafe_overrides.approval_policy = Some(approval_policy);
+    }
+    typesafe_overrides.permission_profile = Some(permission_profile);
 }
 
 fn apply_persisted_permission_profile(
@@ -4654,6 +4723,15 @@ impl ThreadRequestProcessor {
             workspace_roots: typesafe_overrides.workspace_roots.clone(),
             persisted_metadata,
             persisted_settings,
+            persisted_runtime: match &thread_history {
+                InitialHistory::Resumed(resumed) => {
+                    latest_persisted_thread_runtime(&resumed.history)
+                }
+                _ => None,
+            },
+            inherited_provider_account: typesafe_overrides.inherited_provider_account.clone(),
+            approval_policy: typesafe_overrides.approval_policy,
+            permission_profile: typesafe_overrides.permission_profile.clone(),
         };
         let mut config = match prepared_config.take() {
             Some(prepared) if prepared.state == config_state => prepared.config,
@@ -4709,8 +4787,13 @@ impl ThreadRequestProcessor {
         if clear_reasoning_effort {
             config.model_reasoning_effort = None;
         }
+        let persisted_runtime = match &thread_history {
+            InitialHistory::Resumed(resumed) => latest_persisted_thread_runtime(&resumed.history),
+            _ => None,
+        };
         if let Some(service_tier) = resumed_service_tier(
             persisted_model_settings,
+            persisted_runtime.as_ref(),
             restore_service_tier,
             has_explicit_model_resume_override,
         ) {
@@ -5011,6 +5094,7 @@ impl ThreadRequestProcessor {
         let InitialHistory::Resumed(resumed_history) = thread_history else {
             return (None, None);
         };
+        let approval_policy_requested = typesafe_overrides.approval_policy.is_some();
         if let Some(persisted_settings) = persisted_settings {
             if typesafe_overrides.approval_policy.is_none() {
                 typesafe_overrides.approval_policy = Some(persisted_settings.approval_policy);
@@ -5028,6 +5112,13 @@ impl ThreadRequestProcessor {
                 typesafe_overrides,
             );
         }
+        restore_legacy_permissions(
+            &resumed_history.history,
+            resumed_history.conversation_id,
+            request_overrides.as_ref(),
+            approval_policy_requested,
+            typesafe_overrides,
+        );
         let had_explicit_model_override =
             has_model_resume_override(request_overrides.as_ref(), typesafe_overrides);
         let persisted_metadata = match self.state_db.as_ref() {
@@ -6110,6 +6201,15 @@ impl ThreadRequestProcessor {
                 &mut typesafe_overrides,
             );
         }
+        restore_legacy_permissions(
+            latest_context
+                .as_deref()
+                .unwrap_or_else(|| source_history_items.as_ref()),
+            source_thread_id,
+            request_overrides.as_ref(),
+            !restore_approval_policy,
+            &mut typesafe_overrides,
+        );
         let (inherited_options, inherited_settings) = inherited_fork.unzip();
         let options = if let Some(options) = inherited_options {
             *options

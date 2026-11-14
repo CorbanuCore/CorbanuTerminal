@@ -1041,12 +1041,14 @@ mod thread_processor_behavior_tests {
                 panic!("fixture")
             };
             event.thread_settings.service_tier = tier.map(str::to_string);
+            let runtime = latest_persisted_thread_runtime(&history);
             let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &history[0] else {
                 panic!("fixture")
             };
             assert_eq!(
                 resumed_service_tier(
                     Some(&event.thread_settings),
+                    runtime.as_ref(),
                     /*restore_service_tier*/ true,
                     /*explicit_model_override*/ false,
                 ),
@@ -1056,7 +1058,7 @@ mod thread_processor_behavior_tests {
         // No settings record: standard routing, never today's global default.
         assert_eq!(
             resumed_service_tier(
-                /*persisted*/ None, /*restore_service_tier*/ true,
+                /*persisted*/ None, /*runtime*/ None, /*restore_service_tier*/ true,
                 /*explicit_model_override*/ false,
             ),
             Some(None)
@@ -1065,26 +1067,67 @@ mod thread_processor_behavior_tests {
 
     #[test]
     fn resume_service_tier_keeps_explicit_tier_or_model_override() {
-        let history = persisted_workspace_permission_history();
+        let mut history = persisted_workspace_permission_history();
+        let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &mut history[0] else {
+            panic!("fixture")
+        };
+        event.thread_settings.service_tier = Some("priority".to_string());
+        let runtime = latest_persisted_thread_runtime(&history);
         let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &history[0] else {
             panic!("fixture")
         };
-        // An explicit tier (typed or in the request config) keeps the loaded config's.
+        for (restore_service_tier, explicit_model_override) in [(false, false), (true, true)] {
+            assert_eq!(
+                resumed_service_tier(
+                    Some(&event.thread_settings),
+                    runtime.as_ref(),
+                    restore_service_tier,
+                    explicit_model_override,
+                ),
+                None,
+                "an explicit tier or model keeps the loaded config's tier"
+            );
+        }
         assert_eq!(
             resumed_service_tier(
-                Some(&event.thread_settings),
-                /*restore_service_tier*/ false,
-                /*explicit_model_override*/ false,
-            ),
-            None
-        );
-        // An explicit model without a settings record keeps the loaded config's tier too.
-        assert_eq!(
-            resumed_service_tier(
-                /*persisted*/ None, /*restore_service_tier*/ true,
+                /*persisted*/ None, /*runtime*/ None, /*restore_service_tier*/ true,
                 /*explicit_model_override*/ true,
             ),
             None
+        );
+    }
+
+    #[test]
+    fn resume_service_tier_never_restores_a_tier_from_an_older_model() {
+        let mut history = persisted_workspace_permission_history();
+        let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &mut history[0] else {
+            panic!("fixture")
+        };
+        event.thread_settings.service_tier = Some("priority".to_string());
+        history.push(RolloutItem::TurnContext(
+            serde_json::from_value(serde_json::json!({
+                "cwd": test_path_buf("/tmp/persisted-workspace"),
+                "approval_policy": "never",
+                "sandbox_policy": {"type": "danger-full-access"},
+                "model": "gpt-5.5",
+                "model_provider": "openai",
+                "summary": "auto",
+            }))
+            .expect("turn context"),
+        ));
+        let runtime = latest_persisted_thread_runtime(&history).expect("runtime");
+        assert_eq!(runtime.model, "gpt-5.5");
+        let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &history[0] else {
+            panic!("fixture")
+        };
+        assert_eq!(
+            resumed_service_tier(
+                Some(&event.thread_settings),
+                Some(&runtime),
+                /*restore_service_tier*/ true,
+                /*explicit_model_override*/ false,
+            ),
+            Some(None)
         );
     }
 
@@ -1130,6 +1173,7 @@ mod thread_processor_behavior_tests {
         assert_eq!(
             resumed_service_tier(
                 Some(settings),
+                /*runtime*/ None,
                 /*restore_service_tier*/ true,
                 /*explicit_model_override*/ false,
             ),
@@ -1192,6 +1236,110 @@ mod thread_processor_behavior_tests {
         );
         assert_eq!(typesafe_overrides.persisted_permission_profile, None);
         assert_eq!(typesafe_overrides.persisted_permission_profile_id, None);
+    }
+
+    #[test]
+    fn resume_restores_legacy_ownerless_permissions_together() {
+        // Pre-sync Corbanu threads have no owned snapshot: fail closed by
+        // restoring the newest record's profile with its approval policy.
+        let history = persisted_workspace_permission_history();
+        let thread_id = ThreadId::new();
+        let settings =
+            PersistedResumeSettings::from_history(&history, thread_id).expect("legacy settings");
+        let mut typesafe_overrides = ConfigOverrides::default();
+        apply_persisted_permission_profile(
+            &settings,
+            /*request_overrides*/ None,
+            &mut typesafe_overrides,
+        );
+        assert_eq!(typesafe_overrides.persisted_permission_profile, None);
+        restore_legacy_permissions(
+            &history,
+            thread_id,
+            /*request_overrides*/ None,
+            /*approval_policy_requested*/ false,
+            &mut typesafe_overrides,
+        );
+        assert_eq!(
+            typesafe_overrides.approval_policy,
+            Some(codex_protocol::protocol::AskForApproval::Never)
+        );
+        assert_eq!(
+            typesafe_overrides.permission_profile,
+            Some(codex_protocol::models::PermissionProfile::workspace_write())
+        );
+
+        // A requested approval policy is kept; the profile is still restored.
+        let mut typesafe_overrides = ConfigOverrides {
+            approval_policy: Some(codex_protocol::protocol::AskForApproval::OnRequest),
+            ..Default::default()
+        };
+        restore_legacy_permissions(
+            &history,
+            thread_id,
+            /*request_overrides*/ None,
+            /*approval_policy_requested*/ true,
+            &mut typesafe_overrides,
+        );
+        assert_eq!(
+            typesafe_overrides.approval_policy,
+            Some(codex_protocol::protocol::AskForApproval::OnRequest)
+        );
+        assert_eq!(
+            typesafe_overrides.permission_profile,
+            Some(codex_protocol::models::PermissionProfile::workspace_write())
+        );
+    }
+
+    #[test]
+    fn legacy_permission_restore_yields_to_owned_snapshots_and_overrides() {
+        let thread_id = ThreadId::new();
+        let mut owned = persisted_workspace_permission_history();
+        let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &mut owned[0] else {
+            panic!("fixture")
+        };
+        event.thread_id = Some(thread_id);
+        let mut typesafe_overrides = ConfigOverrides::default();
+        restore_legacy_permissions(
+            &owned,
+            thread_id,
+            /*request_overrides*/ None,
+            /*approval_policy_requested*/ false,
+            &mut typesafe_overrides,
+        );
+        assert_eq!(typesafe_overrides.permission_profile, None);
+
+        let legacy = persisted_workspace_permission_history();
+        let mut typesafe_overrides = ConfigOverrides {
+            permission_profile: Some(codex_protocol::models::PermissionProfile::Disabled),
+            ..Default::default()
+        };
+        restore_legacy_permissions(
+            &legacy,
+            thread_id,
+            /*request_overrides*/ None,
+            /*approval_policy_requested*/ false,
+            &mut typesafe_overrides,
+        );
+        assert_eq!(
+            typesafe_overrides.permission_profile,
+            Some(codex_protocol::models::PermissionProfile::Disabled)
+        );
+        assert_eq!(typesafe_overrides.approval_policy, None);
+
+        let request = HashMap::from([(
+            "sandbox_workspace_write.network_access".to_string(),
+            serde_json::json!(true),
+        )]);
+        let mut typesafe_overrides = ConfigOverrides::default();
+        restore_legacy_permissions(
+            &legacy,
+            thread_id,
+            Some(&request),
+            /*approval_policy_requested*/ false,
+            &mut typesafe_overrides,
+        );
+        assert_eq!(typesafe_overrides.permission_profile, None);
     }
 
     #[test]
