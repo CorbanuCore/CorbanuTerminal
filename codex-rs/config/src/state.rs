@@ -602,7 +602,11 @@ impl ConfigLayerStack {
                 } else if table.remove("plugins").is_none() {
                     continue;
                 }
+                // D525 (#2052): a project-declared role's launch-flags layer keeps its
+                // mark, so project-config rules still apply to it after the rebuild.
+                let project_role_file = layer.project_role_file.take();
                 *layer = ConfigLayerEntry::new(ConfigLayerSource::SessionFlags, config);
+                layer.project_role_file = project_role_file;
             }
         } else {
             let index = self.layers.partition_point(|layer| {
