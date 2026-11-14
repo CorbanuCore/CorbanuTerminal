@@ -17,6 +17,9 @@ product_spec:
   heading: "Product principles"
   requirement_excerpt: "Maintain continuous Codex parity without removing Corbanu-specific behavior."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/.codex-work/contrib-1111-2101"
+    branch: "maint/contrib-2101-1111"
+    base_commit: "787027b83ffa53875f49e40a2886284d26557075"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/sync-upstream-rust-v0.167.0"
     branch: "sync/upstream-rust-v0.167.0"
     base_commit: "781b935ff783178f146d02815f8fc01332ae21a4"
@@ -91,6 +94,12 @@ monthly sync (D305).
 
 Slice workers branch from the sync branch, one slice each, and are recorded in the ledger's `owner` column.
 
+November 11 coordinator allocation under the owner-approved contributor integration (#2106):
+PF-85-S01 is assigned solely to the coordinator in the exact contributor worktree above,
+starting at #2101's preserved author head. Remaining work is the MCP pending discovery-timeout
+compatibility repair and its tests. Other S01 slices remain queued; this allocation creates no
+parallel execution lane and does not waive sync-branch CI or final SG1–SG3 qualification.
+
 ## Useful code references
 
 | Path or symbol | Why it matters |
@@ -103,7 +112,7 @@ Slice workers branch from the sync branch, one slice each, and are recorded in t
 
 | Feature ID | Current sprint records | Completion evidence |
 | --- | --- | --- |
-| PF-85 | [PF-85-S00](../../sprints/current/upstream-sync/pf-85-s00-setup-and-skeleton.md), [PF-85-S01](../../sprints/current/upstream-sync/pf-85-s01-tier1-below-core.md), [PF-85-S02](../../sprints/current/upstream-sync/pf-85-s02-tier2-core.md), [PF-85-S03](../../sprints/current/upstream-sync/pf-85-s03-security-port.md), [PF-85-S04](../../sprints/current/upstream-sync/pf-85-s04-tier3-tui-app-server-exec-cli.md), [PF-85-S05](../../sprints/current/upstream-sync/pf-85-s05-qualification-and-merge.md), [PF-85-S06](../../sprints/current/upstream-sync/pf-85-s06-cadence.md) | pending |
+| PF-85 | [PF-85-S00](../../sprints/archive/upstream-sync/pf-85-s00-setup-and-skeleton.md), [PF-85-S01](../../sprints/current/upstream-sync/pf-85-s01-tier1-below-core.md), [PF-85-S02](../../sprints/current/upstream-sync/pf-85-s02-tier2-core.md), [PF-85-S03](../../sprints/current/upstream-sync/pf-85-s03-security-port.md), [PF-85-S04](../../sprints/current/upstream-sync/pf-85-s04-tier3-tui-app-server-exec-cli.md), [PF-85-S05](../../sprints/current/upstream-sync/pf-85-s05-qualification-and-merge.md), [PF-85-S06](../../sprints/current/upstream-sync/pf-85-s06-cadence.md) | pending |
 
 PF-85 is the sync of `rust-v0.167.0` into `main`. S3a's paths are resolved inside S01 and S02; the S03 port starts at
 the S02 exit and runs alongside S04 (plan §6). That needs `parallel_sprint_limit` 2, `parallel_lanes` naming two lanes
