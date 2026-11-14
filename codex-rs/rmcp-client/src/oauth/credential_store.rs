@@ -19,11 +19,11 @@
 use std::sync::Arc;
 use std::sync::Weak;
 
+use super::DefaultKeyringStore;
 use anyhow::Context;
 use anyhow::Result;
 use codex_config::McpServerOAuthConfig;
 use codex_config::types::AuthKeyringBackendKind;
-use codex_keyring_store::DefaultKeyringStore;
 use codex_keyring_store::KeyringStore;
 use futures::future::BoxFuture;
 use oauth2::Scope;

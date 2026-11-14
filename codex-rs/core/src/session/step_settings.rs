@@ -176,18 +176,24 @@ impl ResolvedStepSettings {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ModelInfoOverrides {
     pub(crate) context_window: Option<i64>,
+    /// Corbanu: a provider's default output-token limit for the model.
+    pub(crate) max_output_tokens: Option<i64>,
     pub(crate) auto_compact_token_limit: Option<i64>,
     pub(crate) tool_output_token_limit: Option<usize>,
     pub(crate) base_instructions: Option<String>,
+    /// Corbanu: `model_supports_reasoning_summaries` from config.
+    pub(crate) supports_reasoning_summaries: Option<bool>,
 }
 
 impl From<ModelsManagerConfig> for ModelInfoOverrides {
     fn from(config: ModelsManagerConfig) -> Self {
         Self {
             context_window: config.model_context_window,
+            max_output_tokens: config.model_max_output_tokens,
             auto_compact_token_limit: config.model_auto_compact_token_limit,
             tool_output_token_limit: config.tool_output_token_limit,
             base_instructions: config.base_instructions,
+            supports_reasoning_summaries: config.model_supports_reasoning_summaries,
         }
     }
 }
@@ -199,10 +205,12 @@ impl ModelInfoOverrides {
     ) -> ModelsManagerConfig {
         ModelsManagerConfig {
             model_context_window: self.context_window,
+            model_max_output_tokens: self.max_output_tokens,
             model_auto_compact_token_limit: self.auto_compact_token_limit,
             tool_output_token_limit: self.tool_output_token_limit,
             base_instructions: self.base_instructions.clone(),
             personality,
+            model_supports_reasoning_summaries: self.supports_reasoning_summaries,
             // The models manager already owns its catalog.
             model_catalog: None,
         }

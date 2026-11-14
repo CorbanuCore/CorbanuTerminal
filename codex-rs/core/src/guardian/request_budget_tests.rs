@@ -66,7 +66,7 @@ async fn request_histogram_counts_admitted_steps_without_counting_retry_preparat
             .await;
         let request = session
             .services
-            .model_client
+            .model_client()
             .build_responses_request(
                 &prompt,
                 &step.settings.model_info,

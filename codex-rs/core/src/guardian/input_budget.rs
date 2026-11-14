@@ -35,6 +35,13 @@ pub(crate) struct PendingReviewContext {
     pub context: ComposedContext,
 }
 
+/// Corbanu PF-30-S02: the standing of the parent whose transcript the pending
+/// review carries. The finalized prompt is marked with it, so the reviewer's
+/// history never gives the parent's transcript human standing. A missing entry
+/// counts as another agent's data.
+#[derive(Clone, Copy)]
+pub(crate) struct PendingReviewOrigin(pub crate::security::ingress::MessageOrigin);
+
 pub(super) use codex_guardian_reviewer::CheckpointRecovery;
 
 /// Restart a reused reviewer before paying for a summary we would discard.
@@ -166,7 +173,7 @@ pub(crate) async fn finalize(
         session.get_prompt_base_instructions().await,
         session.current_window_uses_incremental_tools(step).await,
     );
-    let request = session.services.model_client.build_responses_request(
+    let request = session.services.model_client().build_responses_request(
         &prompt,
         model,
         /*effort*/ None,
@@ -366,6 +373,27 @@ pub(crate) async fn finalize(
         context: pending.context.retained_instructions(),
         history_version,
     });
+    // Corbanu PF-30-S02: mark the exact final prompt, after budgeting rewrote it.
+    // Messages delivered as response items are recorded without an origin, so they
+    // have no standing at all.
+    let origin = session
+        .services
+        .thread_extension_data
+        .remove::<PendingReviewOrigin>()
+        .map_or(
+            crate::security::ingress::MessageOrigin::External(
+                codex_protocol::provenance::SourceKind::ChildAgent,
+            ),
+            |origin| origin.0,
+        );
+    for item in input.iter() {
+        if let TurnInput::UserInput { content, .. } = item {
+            session
+                .services
+                .model_client()
+                .mark_agent_input(content, origin);
+        }
+    }
     session
         .services
         .thread_extension_data

@@ -116,7 +116,10 @@ impl ExtensionAccounting {
         // conversation it works for, labelled as such.
         let recorded = crate::accounting::collecting_owner(&owner).await.ok()?;
         let label = format!("{}{label}", recorded.label_prefix);
-        owner.try_ensure_rollout_materialized().await.ok()?;
+        owner
+            .try_ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
+            .await
+            .ok()?;
         let sampling = Sampling::start_at_path(
             recorded.db,
             recorded.thread,
@@ -221,7 +224,11 @@ impl ExtensionAccounting {
         let Ok(recorded) = crate::accounting::collecting_owner(&owner).await else {
             return false;
         };
-        if owner.try_ensure_rollout_materialized().await.is_err() {
+        if owner
+            .try_ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
+            .await
+            .is_err()
+        {
             return false;
         }
         let label = format!("{}{}", recorded.label_prefix, request.label);

@@ -22,7 +22,7 @@ async fn failed_persistence_fences_old_snapshots_but_allows_fresh_pins() -> Resu
         return Ok(());
     }
     let keyring = TestKeyring::default();
-    keyring::set_default_credential_builder(Box::new(keyring.clone()));
+    crate::oauth::fixture_keyring::install(Box::new(keyring.clone()));
     let issuer = "https://idp.example";
     let assertion = format!(
         "{}.{}.signature",
@@ -99,7 +99,7 @@ async fn logout_invalidates_pending_login_across_processes() -> Result<()> {
     let home = PathBuf::from(std::env::var("CODEX_HOME")?);
     let keyring = FileKeyring(home.join("test-keyring"));
     fs::create_dir_all(&keyring.0)?;
-    keyring::set_default_credential_builder(Box::new(keyring));
+    crate::oauth::fixture_keyring::install(Box::new(keyring));
     if let Ok(issuer) = std::env::var(LOGOUT_ISSUER) {
         if std::env::var_os(REPLACE_CREDENTIAL).is_some() {
             crate::save_oauth_tokens(
@@ -375,7 +375,7 @@ fn stored(issuer: &str) -> Result<Option<StoredOAuthTokens>> {
 }
 
 // Only synthetic fixture credentials are persisted here. Every process still uses
-// DefaultKeyringStore and the production credential lock, serializer and logout API.
+// the synthetic store and production credential lock, serializer and logout API.
 struct FileKeyring(PathBuf);
 struct FileCredential(PathBuf);
 

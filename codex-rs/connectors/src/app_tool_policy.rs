@@ -64,7 +64,8 @@ impl<'a> AppToolPolicyEvaluator<'a> {
     }
 
     /// The approval mode the tool would have without any `approve` setting:
-    /// the next setting in the same order, else Auto (#1001 D52).
+    /// the next setting in the same order as [`Self::policy`] (managed, tool,
+    /// link, app default, global default), else Auto (#1001 D52).
     pub fn approval_without_approve(&self, input: AppToolPolicyInput<'_>) -> AppToolApproval {
         let not_approve = |mode: &AppToolApproval| *mode != AppToolApproval::Approve;
         let managed = managed_app_tool_approval(
@@ -90,6 +91,13 @@ impl<'a> AppToolPolicyEvaluator<'a> {
             .or_else(|| {
                 tool_config
                     .and_then(|tool| tool.approval_mode)
+                    .filter(not_approve)
+            })
+            .or_else(|| {
+                input
+                    .link_id
+                    .and_then(|link_id| app?.links.as_ref()?.links.get(link_id))
+                    .and_then(|link| link.default_tools_approval_mode)
                     .filter(not_approve)
             })
             .or_else(|| {

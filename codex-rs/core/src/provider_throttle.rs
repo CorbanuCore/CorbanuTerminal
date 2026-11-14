@@ -635,7 +635,7 @@ impl AdmittedProviderRequest {
                 codex_home: &codex_home,
                 provider_id: turn_context.config.model_provider_id.as_str(),
                 provider: turn_context.provider.info(),
-                model: turn_context.model_info.slug.as_str(),
+                model: turn_context.model_info().slug.as_str(),
                 auth_mode,
                 thread_id: Some(sess.thread_id.to_string()),
                 turn_id: Some(turn_context.sub_id.clone()),
