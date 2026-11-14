@@ -84,7 +84,8 @@ pub(crate) fn environment_hook_sources(
 /// hooks run `-c` then too). Its environment there is already the launch
 /// allowlist plus the hook's own variables: the in-process executor builds it
 /// with `shell_environment::create_env`, which applies the allowlist once
-/// armed. A remote executor's shell and environment are that machine's own.
+/// armed. An executor behind a client keeps its own shell and environment (see the
+/// `exec-server/src/client_transport.rs` ledger row for one started on this host).
 fn hook_uses_login_shell(allow_login_shell: bool, remote: bool) -> bool {
     allow_login_shell && (remote || !codex_protocol::secretless_launch::is_armed())
 }
