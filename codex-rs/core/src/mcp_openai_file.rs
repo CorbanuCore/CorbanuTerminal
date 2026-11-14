@@ -241,8 +241,12 @@ async fn build_uploaded_argument_value(
         .cwd()
         .join(file_path)
         .map_err(|error| contextualize_error(error.to_string()))?;
-    let additional_permissions =
-        turn_context.granted_permissions(&turn_environment.selection.environment_id);
+    // #245: stored grants with protected paths stripped at read time, as file tools read them.
+    let additional_permissions = crate::tools::handlers::read_granted_permissions(
+        sess,
+        &turn_environment.selection.environment_id,
+    )
+    .await;
     let file_system_policy = effective_file_system_sandbox_policy(
         &turn_environment
             .permission_profile()

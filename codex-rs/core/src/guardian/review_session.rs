@@ -617,6 +617,11 @@ async fn run_review_on_session(
                 .services
                 .thread_extension_data
                 .remove::<super::input_budget::PendingReviewContext>();
+            review_session
+                .session
+                .services
+                .thread_extension_data
+                .remove::<super::input_budget::PendingReviewOrigin>();
             return ReviewSessionResult {
                 outcome,
                 disposition: SessionDisposition::Discard,
@@ -645,6 +650,11 @@ async fn run_review_on_session(
         .services
         .thread_extension_data
         .remove::<super::PendingReviewRouting>();
+    review_session
+        .session
+        .services
+        .thread_extension_data
+        .remove::<super::input_budget::PendingReviewOrigin>();
     // Finalizing input consumes this context; failures before admission leave it pending.
     let transcript_admitted = review_session
         .session
