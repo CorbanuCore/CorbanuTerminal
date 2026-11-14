@@ -14,7 +14,7 @@ branch: "maint/contrib-2133-1112"
 base_commit: "02a3f70862ae62d555f08cff741cbec2f17bb894"
 depends_on: "PF-23-S01"
 created: 2026-11-12
-updated: 2026-11-12
+updated: 2026-11-14
 ---
 
 # PF-23-S05 — Assignment provenance
@@ -61,9 +61,12 @@ silently declaring complete shell analysis. Track any out-of-scope limitations.
 - [x] Source merged as `23ac70e1f16561df98a4d198b5df9d531ca9b683`; @araupooo thanked and credited.
 - [x] [Source evidence and retained limitations](../../../../qa/security-levels/sprints/PF-23-S05/source-integration.md) recorded.
 
+- [x] 19 frozen cases run code-blind in Tart guests on `1dea8b3b03` (2026-11-14):
+  [functional record](../../../../qa/security-levels/sprints/PF-23-S05/functional-20261114.md); 18 pass after
+  evidence review and local-model replays, case 11 inconclusive; findings outside S05: #2166, #2167.
+
 ## Remaining
 
-- [ ] Execute frozen cases in enforced isolation after Opus recharge.
 - [ ] Independent functional evidence review, true-TUI/demo and applicable live-repository evidence.
 - [ ] Complete remaining functional evidence; archive only after all gates pass.
 
