@@ -550,11 +550,14 @@ async fn issue_1057_grants_that_widen_the_patch_policy_are_carried() {
         ),
         "the grant is recorded"
     );
-    let turn_environment = turn
+    let mut turn_environment = turn
         .initial_environments
         .primary()
         .cloned()
         .expect("test turn should have a primary environment");
+    // A patch goes through unasked only where a platform sandbox runs it
+    // (Windows tests default to none).
+    turn_environment.config_mut().windows_sandbox_level = WindowsSandboxLevel::RestrictedToken;
     let path = PathUri::from_abs_path(&outside_root.join("new.txt"));
     let action = ApplyPatchAction::new_add_for_test(&path, "content".to_string());
     let step_context = StepContext::for_test(Arc::clone(&turn));
