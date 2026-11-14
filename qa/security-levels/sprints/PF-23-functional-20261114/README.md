@@ -47,7 +47,7 @@ a case or an expected result:
 | [3](packet/amendment-3.md) | Coordinator check on the gate account: Moderate keeps commands in its sandbox even with full access, so `sudo` (and any chroot) can run only under Permissive full access. | S04 |
 | [4](packet/amendment-4.md) | Local-model replay of S04 steps the hosted model declined. | G4R |
 | [5](packet/amendment-5.md) | Local-model replay of S05 steps the hosted model declined, plus the same forms on two more fixture targets. | G5R, G5S |
-| [6](packet/amendment-6.md) | Direct comparisons no group had recorded: a credential file directly and through `chroot /`; resume on the same and on another route. | G6X |
+| [6](packet/amendment-6.md) | Direct comparisons no group had recorded: a credential file directly and through `chroot /`; resume on the same and on another route (the latter turned out to open a new conversation). | G6X |
 | [7](packet/amendment-7.md) | The `.env` comparison on the reference build. | G6Y |
 
 Attempts 1 and 2 are kept as failed attempts: their reports are in [reports/attempt1](reports/attempt1) and
@@ -78,7 +78,8 @@ on the Mac under `.codex-work/func-pf23-20261114/runs/`.
 
 ## Issues filed
 
-#2165 (rules and `sudo chroot /`), #2166 (resume on another route loses the untrusted-content state), #2167
+#2165 (rules and `sudo chroot /`), #2166 (`resume --last` after a provider switch silently starts a new
+conversation; first filed as a lost untrusted-content state and corrected after review), #2167
 (project `.env` read without asking after untrusted content; predates both sprints).
 
 ## Limits

@@ -16,6 +16,6 @@ with their dependencies, lanes and worktrees.
 - PF-27-S09: completed 2026-10-10, accepted by Travis with known limits, and archived
   ([S09](../../archive/p1-security-hardening/pf-27-s09-windows-model-client-auth.md)).
 - [PF-23-S04](pf-23-s04-chroot-classification.md): `draft`; #1837 source integrated; frozen functional cases run 2026-11-14 (case 5 failed, #2165; Linux leg blocked); reel recorded; owner decisions open.
-- [PF-23-S05](pf-23-s05-assignment-classification.md): `in_progress`; #2133 integrated; 19 frozen functional cases run 2026-11-14: 18 pass after evidence review, case 11 inconclusive (findings #2166, #2167 outside S05); reel recorded.
+- [PF-23-S05](pf-23-s05-assignment-classification.md): `in_progress`; #2133 integrated; 19 frozen functional cases run 2026-11-14: 14 passed, 3 with limits, 1 partly, case 11 inconclusive (findings #2166, #2167 outside S05); reel recorded.
 - [PF-84-S07](pf-84-s07-selected-account-recovery.md): `draft`; Stage A preserved in #2115. Reservation returned with a recorded handoff while the same coordinator serially integrates PF-23-S04; Stage B decision and independent functional qualification remain open.
 - Everything else: `draft` until allocated.
