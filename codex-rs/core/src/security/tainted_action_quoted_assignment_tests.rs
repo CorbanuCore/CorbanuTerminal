@@ -76,6 +76,7 @@ fn issue_1973_review_ambiguous_quote_contexts_ask() {
         r#"r$'='o; git fetch e"$r""#,
         r#"a=1 $'r=o'; git fetch e"$r""#,
         r#"$(echo r=o); git fetch e"$r""#,
+        r#"$(echo r)=o; git fetch e"$r""#,
         r#""$(echo r=o)"; git fetch e"$r""#,
         r#"r$(echo =)o; git fetch e"$r""#,
         r#"r`echo =`o; git fetch e"$r""#,
