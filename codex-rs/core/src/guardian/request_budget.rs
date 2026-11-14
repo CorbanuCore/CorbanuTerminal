@@ -69,7 +69,7 @@ pub(crate) async fn prepare_prompt(
         .as_ref()
         .filter(|retained| retained.history_version != history_version)
     {
-        let baseline = session.services.model_client.build_responses_request(
+        let baseline = session.services.model_client().build_responses_request(
             prompt,
             model,
             /*effort*/ None,
@@ -147,7 +147,7 @@ pub(crate) async fn prepare_prompt(
             .input
             .extend(restored.iter().map(|envelope| envelope.item.clone()));
     }
-    let request = session.services.model_client.build_responses_request(
+    let request = session.services.model_client().build_responses_request(
         prompt,
         model,
         /*effort*/ None,
