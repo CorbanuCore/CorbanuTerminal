@@ -95,8 +95,8 @@ pub(super) struct SimpleCommand {
     pub(super) after: Joint,
     /// Assignment flow keeps conditional operators across line continuations.
     pub(super) assignment_after: Joint,
-    /// #1973: the command began in quoted/escaped text this lexer splits.
-    /// Such text cannot prove an assignment; keep its old reading as well.
+    /// #1973: an assignment name or equals sign came from quoted, escaped
+    /// or substituted text. Keep its old reading, but do not trust it alone.
     pub(super) assignment_quoted: bool,
     /// #1974: it is lexed inside a `( ... )` subshell, so an assignment in
     /// it does not reach the parent shell.
