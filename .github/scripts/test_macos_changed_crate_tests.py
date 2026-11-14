@@ -44,7 +44,9 @@ class SelectionTest(unittest.TestCase):
         for suffix in ("src/hickory.rs", "src/chain.rs", "Cargo.toml"):
             with self.subTest(suffix=suffix):
                 self.assertEqual(
-                    macos.changed_packages([f"third_party/rama-dns/{suffix}"], PACKAGES),
+                    macos.changed_packages(
+                        [f"third_party/rama-dns/{suffix}"], PACKAGES
+                    ),
                     ["codex-network-proxy"],
                 )
 
