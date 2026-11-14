@@ -49,6 +49,9 @@ use serde_json::Value;
 use serde_json::json;
 use tempfile::TempDir;
 
+#[path = "issue_2167_dotenv.rs"]
+mod issue_2167_dotenv;
+
 #[path = "pf_23_s01_issue942_tests.rs"]
 mod issue_942;
 
@@ -1223,7 +1226,7 @@ async fn issue_442_env_file_matched_by_name_is_denied_and_explained() -> anyhow:
     let (test, captured) = start_turn_in(
         /*home*/ None,
         SecurityLevel::Aggressive,
-        AskForApproval::Never,
+        AskForApproval::OnRequest,
         vec![
             shell_step(
                 "call-make",
@@ -1264,15 +1267,43 @@ async fn issue_442_env_file_matched_by_name_is_denied_and_explained() -> anyhow:
     // #1312: the denied creation is explained too, although its command
     // exited 0 (`echo made=$?` ran last).
     let mut warnings = Vec::new();
-    while let EventMsg::Warning(warning) = wait_for_event(&test.codex, |event| {
-        matches!(event, EventMsg::TurnComplete(_))
-            || matches!(event, EventMsg::Warning(warning)
-                if warning.message.starts_with("Security level Aggressive"))
-    })
-    .await
-    {
-        warnings.push(warning.message);
+    let mut approvals = 0;
+    loop {
+        match wait_for_event(&test.codex, |event| {
+            matches!(
+                event,
+                EventMsg::TurnComplete(_) | EventMsg::ExecApprovalRequest(_)
+            ) || matches!(event, EventMsg::Warning(warning)
+                    if warning.message.starts_with("Security level Aggressive"))
+        })
+        .await
+        {
+            EventMsg::Warning(warning) => warnings.push(warning.message),
+            EventMsg::ExecApprovalRequest(request) => {
+                // #2167: the first command's output taints the session.
+                // Approving the subsequent credential read still cannot
+                // lift Aggressive's denial or suppress its explanation.
+                approvals += 1;
+                assert!(
+                    request
+                        .reason
+                        .as_deref()
+                        .unwrap_or_default()
+                        .contains("credential access")
+                );
+                test.codex
+                    .submit(Op::ExecApproval {
+                        id: request.effective_approval_id(),
+                        turn_id: None,
+                        decision: codex_protocol::protocol::ReviewDecision::Approved,
+                    })
+                    .await?;
+            }
+            EventMsg::TurnComplete(_) => break,
+            other => panic!("unexpected event: {other:?}"),
+        }
     }
+    assert_eq!(approvals, 1);
     let [made_warning, warning] = warnings.as_slice() else {
         panic!("expected two warnings before the turn ended: {warnings:?}");
     };
