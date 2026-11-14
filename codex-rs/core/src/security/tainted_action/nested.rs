@@ -850,16 +850,24 @@ impl Classifier {
                 // eval. Always judge their joined text as a shell script,
                 // even if the words themselves contain no further quotes.
                 if resolved_name == "zstyle"
-                    && let Some(offset) = code_tables::style_eval_option(&texts[at + 1..])
+                    && let Some(offset) =
+                        code_tables::style_eval_option(&texts[at + 1..], /*cut*/ false)
                 {
                     let option_at = at + 1 + offset;
                     found.deferred = true;
-                    if offset != 0 || texts[option_at] != "-e" {
-                        // Expansion can change both the option and the value
-                        // boundary. Do not guess which words will run.
-                        found.unreadable = true;
-                    }
                     let from = (option_at + 3).min(texts.len());
+                    // A quoted scalar is one operand: with no value words,
+                    // it cannot supply code. A splitting expansion can also
+                    // supply the context, style and code in fewer source words.
+                    let boundary_unknown = command.words[at + 1..from].iter().any(|word| {
+                        work::step();
+                        matches!(
+                            code_tables::Seen::of(word),
+                            code_tables::Seen::Many | code_tables::Seen::Pattern
+                        )
+                    });
+                    found.unreadable |= boundary_unknown
+                        || ((offset != 0 || texts[option_at] != "-e") && from < texts.len());
                     let line = joined(
                         String::new(),
                         &texts[from..],
@@ -2000,6 +2008,16 @@ fn fish_codes(texts: &[String], at: usize, cut: &mut bool) -> Vec<String> {
 /// option holds it (`--exec=git`, `-xgit`, #1276), or as one part of a word
 /// `eval` splits (`eval 'git -C' { …`).
 fn cut_matters(words: &[Word]) -> bool {
+    // #2001: '(' can cut off a style option. A fixed earlier context
+    // still prevents a group in an ordinary value from becoming '-e'.
+    let texts: Vec<String> = words.iter().map(|word| word.text.clone()).collect();
+    if texts.iter().enumerate().any(|(at, text)| {
+        work::step();
+        basename(text).eq_ignore_ascii_case("zstyle")
+            && code_tables::style_eval_option(&texts[at + 1..], /*cut*/ true).is_some()
+    }) {
+        return true;
+    }
     let judged = |text: &str| {
         let name = basename(text);
         name == "git"

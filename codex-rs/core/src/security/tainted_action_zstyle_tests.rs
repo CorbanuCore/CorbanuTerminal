@@ -58,6 +58,8 @@ fn issue_2001_review_dynamic_eval_options_ask() {
         "zstyle \"$(printf %s -e)\" :x y 'eval $q'; zstyle -s :x y v",
         "o=-e; zstyle $o :x y 'zm* zsh/st?t'; zstyle -s :x y v; stat -A functions x",
         "zstyle -$o :x y 'eval $q'; zstyle -s :x y v",
+        "zstyle -e \"$@\"",
+        "zstyle -e $args",
         "setopt nullglob; zstyle :zz* -e :x y 'eval $q'; zstyle -s :x y v",
         "e=(); zstyle :x$^e -e :x y 'eval $q'; zstyle -s :x y v",
         "e=(); zstyle :x${^e} -e :x y 'eval $q'; zstyle -s :x y v",
@@ -101,13 +103,25 @@ fn issue_2001_style_may_load_stat_before_table_writes() {
 #[test]
 fn issue_2001_literal_styles_and_visible_code_stay_quiet() {
     for line in [
+        "zstyle",
+        "zstyle \"$c\" y n",
+        "zstyle -e \"$c\" \"$s\"",
+        "zstyle :x y *(N)",
+        "zstyle ':completion:*' menu select",
         "zstyle :x y 'eval $q'; zstyle -s :x y v",
         "zstyle -- :x y 'eval $q'; zstyle -s :x y v",
         "zstyle \":ctx:$x\" y 'eval $q'; zstyle -s \":ctx:$x\" y v",
         "zstyle -e :x y 'print -r -- ok'; zstyle -s :x y v",
         "zstyle -e :x y print -r -- ok",
     ] {
-        assert_eq!(verdicts(line), vec![None; 4], "{line}");
+        // Main already asks on this pattern value in all four readings.
+        // Keep that protected verdict instead of expecting it to go quiet.
+        let expected = if line == "zstyle :x y *(N)" {
+            Some(ProtectedActionKind::UnseenCode)
+        } else {
+            None
+        };
+        assert_eq!(verdicts(line), vec![expected; 4], "{line}");
     }
 }
 
@@ -136,6 +150,13 @@ fn issue_2001_deferred_style_scan_is_linear() {
             let line = (0..50 * scale)
                 .map(|index| format!("zstyle -e :x y{index} 'eval $q{index}'; "))
                 .collect::<String>();
+            let _ = verdicts(&line);
+        });
+        work::assert_linear("disappearing style operands", |scale| {
+            let line = format!(
+                "zstyle {}-e :x y 'eval $q'",
+                ":missing* ".repeat(100 * scale)
+            );
             let _ = verdicts(&line);
         });
     });

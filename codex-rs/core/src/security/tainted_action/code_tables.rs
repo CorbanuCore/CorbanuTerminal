@@ -199,7 +199,7 @@ pub(super) fn may_load_stat(command: &[String], commands: &[shell::SimpleCommand
                 name == "enable"
                     // #2001: a later style lookup may run arbitrary code,
                     // including a disguised load of the stat builtin.
-                    || (name == "zstyle" && style_eval_option(&words[at + 1..]).is_some())
+                    || (name == "zstyle" && style_eval_option(&words[at + 1..], /*cut*/ false).is_some())
                     || (!matches!(name, "[" | "[[")
                         && name.contains(['$', '`', '*', '?', '[', '{', '(']))
                     || name.contains(shell::UNSEEN_OUTPUT)
@@ -229,10 +229,16 @@ fn style_may_evaluate(option: &str) -> bool {
 /// A leading expansion may disappear (nullglob or an empty rc-expanded
 /// array), moving a later operand into the option position. Stop once a
 /// fixed word prevents that shift. Each operand is inspected at most once.
-pub(super) fn style_eval_option(options: &[String]) -> Option<usize> {
+pub(super) fn style_eval_option(options: &[String], cut: bool) -> Option<usize> {
+    if cut && options.is_empty() {
+        return Some(0);
+    }
     for (index, option) in options.iter().enumerate() {
         work::step();
-        if style_may_evaluate(option) {
+        // A cut at '(' may hide the whole option or erase its partial
+        // prefix, as in `zstyle x(#c0)-e`. Earlier fixed operands still
+        // prevent it from becoming the first option.
+        if style_may_evaluate(option) || (cut && index + 1 == options.len()) {
             return Some(index);
         }
         if !option.contains(GLOB)
