@@ -3068,6 +3068,8 @@ prefix_rule(pattern=["python3", "src/notes.py", "list"], decision="allow")
         },
     )
     .await;
+}
+
 #[tokio::test]
 async fn windows_powershell_policy_classifies_only_independent_literal_commands() {
     for (script, expected) in [
