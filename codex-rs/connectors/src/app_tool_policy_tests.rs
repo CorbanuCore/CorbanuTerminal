@@ -653,6 +653,42 @@ fn link_privacy_mode_overrides_app_default_and_preserves_tool_settings() {
     }
 }
 
+/// #1001 D52 on upstream's per-link default: without the tool's `approve`
+/// setting, a link's default comes before the app's, as in `policy`; a link's
+/// own `approve` is skipped too.
+#[test]
+fn approval_without_approve_takes_the_link_default_before_the_app_default() {
+    let apps_config = serde_json::from_value(serde_json::json!({
+        "calendar": {
+            "default_tools_approval_mode": "auto",
+            "tools": { "events/list": { "approval_mode": "approve" } },
+            "links": {
+                "link_prompt": { "default_tools_approval_mode": "prompt" },
+                "link_approve": { "default_tools_approval_mode": "approve" },
+            },
+        },
+    }))
+    .expect("apps config");
+    let evaluator = AppToolPolicyEvaluator::from_parts(
+        Some(apps_config),
+        /*requirements_apps_config*/ None,
+    );
+    for (link_id, approval) in [
+        (Some("link_prompt"), AppToolApproval::Prompt),
+        (Some("link_approve"), AppToolApproval::Auto),
+        (None, AppToolApproval::Auto),
+    ] {
+        assert_eq!(
+            evaluator.approval_without_approve(AppToolPolicyInput {
+                link_id,
+                ..input("events/list", /*tool_title*/ None)
+            }),
+            approval,
+            "{link_id:?}"
+        );
+    }
+}
+
 #[test]
 fn link_privacy_mode_preserves_managed_connector_requirements() {
     let apps_config = serde_json::from_value(serde_json::json!({
@@ -1090,6 +1126,7 @@ fn approval_without_approve_skips_each_approve_setting() {
                         "events/create".to_string(),
                         AppToolRequirementToml {
                             approval_mode: Some(AppToolApproval::Approve),
+                            analytics_result_source: None,
                         },
                     )]),
                 }),

@@ -7,6 +7,13 @@ use codex_protocol::shell_environment::create_env_from_vars;
 use std::borrow::Cow;
 
 impl CapturedSnapshot<'_> {
+    /// Corbanu #310: drop the exports whose names `keep` rejects, so they are
+    /// neither rendered nor prepared. Only the snapshot file changes; the
+    /// captured environment is untouched.
+    pub fn retain_exports(&mut self, mut keep: impl FnMut(&str) -> bool) {
+        self.exports.retain(|export| keep(export.key));
+    }
+
     /// Render native functions, options, and aliases; the executor restores environment separately.
     pub fn render_state(&self) -> String {
         format!("{}{}", self.state, self.aliases)

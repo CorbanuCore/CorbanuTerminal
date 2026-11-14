@@ -12,6 +12,25 @@ use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ModelInfo;
 
+/// Where items injected into a running turn come from (D532): only the running turn's own
+/// outputs skip the admission check steering and agent mail pass.
+#[derive(Clone, Copy)]
+enum InjectionSource<'a> {
+    RunningTurn,
+    Extension,
+    Context(&'a TurnContext),
+}
+
+impl crate::codex_thread::CodexThread {
+    /// Admits extension work separately from outputs produced by the running turn.
+    pub async fn inject_extension_if_running(
+        &self,
+        input: Vec<ResponseItem>,
+    ) -> Result<(), Vec<ResponseItem>> {
+        self.session.inject_extension_if_running(input).await
+    }
+}
+
 /// Uploaded files need the admission checks on typed turn input before entering history.
 pub(crate) fn validate_injected_response_item(item: &ResponseItem) -> CodexResult<()> {
     if let ResponseItem::Message { content, .. } = item
@@ -31,37 +50,47 @@ pub(crate) fn validate_injected_response_item(item: &ResponseItem) -> CodexResul
     Ok(())
 }
 
-enum InjectionSource<'a> {
-    RunningTurn,
-    Extension,
-    Context(&'a TurnContext),
-}
-
-impl crate::codex_thread::CodexThread {
-    /// Admits extension work separately from outputs produced by the running turn.
-    pub async fn inject_extension_if_running(
-        &self,
-        input: Vec<ResponseItem>,
-    ) -> Result<(), Vec<ResponseItem>> {
-        self.session.inject_extension_if_running(input).await
-    }
-}
-
 impl Session {
-    pub async fn inject_if_running(
+    /// Returns the input if there is no active turn to inject into.
+    pub(crate) async fn inject_if_running<T: Into<ResponseItemEnvelope>>(
         &self,
-        input: Vec<ResponseItem>,
-    ) -> Result<(), Vec<ResponseItem>> {
+        input: Vec<T>,
+    ) -> Result<(), Vec<T>> {
         self.inject_running_items(input, InjectionSource::RunningTurn)
             .await
     }
 
-    pub(crate) async fn inject_extension_if_running(
+    pub(crate) async fn inject_extension_if_running<T: Into<ResponseItemEnvelope>>(
         &self,
-        input: Vec<ResponseItem>,
-    ) -> Result<(), Vec<ResponseItem>> {
+        input: Vec<T>,
+    ) -> Result<(), Vec<T>> {
         self.inject_running_items(input, InjectionSource::Extension)
             .await
+    }
+
+    /// D532: whether items from `source` must wait for the next turn instead of joining the
+    /// running one (a review or compaction task, or a turn whose authority changed).
+    async fn injection_deferred(
+        &self,
+        active_turn: &crate::state::ActiveTurn,
+        source: InjectionSource<'_>,
+    ) -> bool {
+        let Some(task) = active_turn.task.as_ref() else {
+            return false;
+        };
+        let needs_admission = match source {
+            InjectionSource::RunningTurn => false,
+            InjectionSource::Extension => true,
+            // The RPC supplies a fresh context. Only the captured task context
+            // proves these items belong to work already running in this turn.
+            InjectionSource::Context(context) => !std::ptr::eq(context, task.turn_context.as_ref()),
+        };
+        if !needs_admission {
+            return false;
+        }
+        let state = self.state.lock().await;
+        task.kind != crate::state::TaskKind::Regular
+            || !Self::authorization_matches(&state.session_configuration, &task.turn_context)
     }
 
     /// Returns the input if there is no active turn to inject into.
@@ -69,50 +98,23 @@ impl Session {
         clippy::await_holding_invalid_type,
         reason = "active turn checks and turn state updates must remain atomic"
     )]
-<<<<<<< HEAD
-    async fn inject_running_items(
-||||||| 413492cd6c
-    pub async fn inject_if_running(
-=======
-    pub(crate) async fn inject_if_running<T: Into<ResponseItemEnvelope>>(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    async fn inject_running_items<T: Into<ResponseItemEnvelope>>(
         &self,
-<<<<<<< HEAD
-        input: Vec<ResponseItem>,
-        source: InjectionSource<'_>,
-    ) -> Result<(), Vec<ResponseItem>> {
-||||||| 413492cd6c
-        input: Vec<ResponseItem>,
-    ) -> Result<(), Vec<ResponseItem>> {
-=======
         input: Vec<T>,
+        source: InjectionSource<'_>,
     ) -> Result<(), Vec<T>> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let mut active = self.active_turn.lock().await;
         match active.as_mut().filter(|turn| turn.finishing.is_none()) {
             Some(active_turn) => {
-                let state = self.state.lock().await;
-                if active_turn.task.as_ref().is_some_and(|task| {
-                    let needs_admission = match source {
-                        InjectionSource::RunningTurn => false,
-                        InjectionSource::Extension => true,
-                        // The RPC supplies a fresh context. Only the captured task context
-                        // proves these items belong to work already running in this turn.
-                        InjectionSource::Context(context) => {
-                            !std::ptr::eq(context, task.turn_context.as_ref())
-                        }
-                    };
-                    needs_admission
-                        && (task.kind != crate::state::TaskKind::Regular
-                            || !Self::authorization_matches(
-                                &state.session_configuration,
-                                &task.turn_context,
-                            ))
-                }) {
+                if self.injection_deferred(active_turn, source).await {
                     self.input_queue
                         .defer_input_for_turn_state(
                             active_turn.turn_state.as_ref(),
-                            input.into_iter().map(TurnInput::ResponseItem).collect(),
+                            input
+                                .into_iter()
+                                .map(Into::into)
+                                .map(PendingTurnInput::ResponseItem)
+                                .collect(),
                             /*final_output_json_schema*/ None,
                         )
                         .await;
@@ -142,88 +144,37 @@ impl Session {
     pub(crate) async fn inject_hook_context_if_running(
         &self,
         input: Vec<ResponseItem>,
-<<<<<<< HEAD
-    ) -> Result<(), TryStartTurnIfIdleError> {
-        if input.is_empty() {
-            return Ok(());
-        }
-        // #507: no automatic idle turn while the kill switch is on; turning
-        // it off starts nothing either (nothing here watches for that).
-        if self.services.model_client().kill_switch_on() {
-            return Err(TryStartTurnIfIdleError::new(
-                TryStartTurnIfIdleRejectionReason::KillSwitch,
-                input,
-            ));
-        }
-        if self.input_queue.has_trigger_turn_mailbox_items().await {
-            return Err(TryStartTurnIfIdleError::new(
-                TryStartTurnIfIdleRejectionReason::PendingTriggerTurn,
-                input,
-            ));
-        }
-        if self.collaboration_mode().await.mode == ModeKind::Plan {
-            return Err(TryStartTurnIfIdleError::new(
-                TryStartTurnIfIdleRejectionReason::PlanMode,
-                input,
-            ));
-        }
-
-        let turn_state = {
-            let mut active_turn = self.active_turn.lock().await;
-            if active_turn.is_some() {
-                return Err(TryStartTurnIfIdleError::new(
-                    TryStartTurnIfIdleRejectionReason::Busy,
-                    input,
-                ));
-            }
-            let active_turn = active_turn.get_or_insert_with(ActiveTurn::default);
-            Arc::clone(&active_turn.turn_state)
-||||||| 413492cd6c
-    ) -> Result<(), TryStartTurnIfIdleError> {
-        if input.is_empty() {
-            return Ok(());
-        }
-        if self.input_queue.has_trigger_turn_mailbox_items().await {
-            return Err(TryStartTurnIfIdleError::new(
-                TryStartTurnIfIdleRejectionReason::PendingTriggerTurn,
-                input,
-            ));
-        }
-        if self.collaboration_mode().await.mode == ModeKind::Plan {
-            return Err(TryStartTurnIfIdleError::new(
-                TryStartTurnIfIdleRejectionReason::PlanMode,
-                input,
-            ));
-        }
-
-        let turn_state = {
-            let mut active_turn = self.active_turn.lock().await;
-            if active_turn.is_some() {
-                return Err(TryStartTurnIfIdleError::new(
-                    TryStartTurnIfIdleRejectionReason::Busy,
-                    input,
-                ));
-            }
-            let active_turn = active_turn.get_or_insert_with(ActiveTurn::default);
-            Arc::clone(&active_turn.turn_state)
-=======
     ) -> Result<(), Vec<ResponseItem>> {
         let mut active = self.active_turn.lock().await;
         let Some(active_turn) = active.as_mut() else {
             return Err(input);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
         if active_turn.task.is_none() {
             return Err(input);
         }
+        let input = input
+            .into_iter()
+            .map(ResponseItemEnvelope::new)
+            .map(PendingTurnInput::ResponseItem)
+            .collect();
+        // D532: background hook results are not the running turn's own output.
+        if self
+            .injection_deferred(active_turn, InjectionSource::Extension)
+            .await
+        {
+            self.input_queue
+                .defer_input_for_turn_state(
+                    active_turn.turn_state.as_ref(),
+                    input,
+                    /*final_output_json_schema*/ None,
+                )
+                .await;
+            return Ok(());
+        }
         self.input_queue
             .extend_pending_input_and_accept_mailbox_delivery_for_turn_state(
                 active_turn.turn_state.as_ref(),
-                input
-                    .into_iter()
-                    .map(ResponseItemEnvelope::new)
-                    .map(PendingTurnInput::ResponseItem)
-                    .collect(),
+                input,
             )
             .await;
         Ok(())
@@ -245,6 +196,23 @@ impl Session {
             .collect::<Vec<_>>();
         let mut active = self.active_turn.lock().await;
         if let Some(active_turn) = active.as_mut().filter(|turn| turn.finishing.is_none()) {
+            // D532: the client's context is fresh, so these items need admission.
+            if self
+                .injection_deferred(active_turn, InjectionSource::Context(turn_context))
+                .await
+            {
+                self.input_queue
+                    .defer_input_for_turn_state(
+                        active_turn.turn_state.as_ref(),
+                        items
+                            .into_iter()
+                            .map(PendingTurnInput::ResponseItem)
+                            .collect(),
+                        /*final_output_json_schema*/ None,
+                    )
+                    .await;
+                return;
+            }
             self.input_queue
                 .extend_pending_input_and_accept_mailbox_delivery_for_turn_state(
                     active_turn.turn_state.as_ref(),
@@ -331,6 +299,59 @@ impl Session {
             }));
         }
         (annotated_items, image_preparations)
+    }
+
+    /// #1927: held user input a running turn refused goes to that turn's deferred input (it
+    /// is re-admitted when the turn ends); with no running turn it returns to re-admission.
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "active turn checks and turn state updates must remain atomic"
+    )]
+    pub(crate) async fn defer_held_input(
+        &self,
+        input: PendingTurnInput,
+        final_output_json_schema: Option<serde_json::Value>,
+    ) {
+        let active = self.active_turn.lock().await;
+        if let Some(active_turn) = active
+            .as_ref()
+            .filter(|turn| turn.task.is_some() && turn.finishing.is_none())
+        {
+            self.input_queue
+                .defer_input_for_turn_state(
+                    active_turn.turn_state.as_ref(),
+                    vec![input],
+                    final_output_json_schema,
+                )
+                .await;
+            return;
+        }
+        drop(active);
+        self.input_queue
+            .requeue_interrupted_input(input, final_output_json_schema)
+            .await;
+    }
+
+    /// Corbanu: records annotated items under a host-chosen origin (PF-30), e.g. compaction
+    /// output as the model's own.
+    pub(crate) async fn record_annotated_conversation_items_from(
+        &self,
+        turn_context: &TurnContext,
+        model_info: &ModelInfo,
+        items: Vec<ResponseItemEnvelope>,
+        origin: Option<crate::security::ingress::MessageOrigin>,
+    ) {
+        let (annotated_items, image_preparations) = self
+            .prepare_annotated_conversation_items_for_history(turn_context, model_info, items)
+            .await;
+        self.record_prepared_conversation_items_from(
+            turn_context,
+            model_info,
+            annotated_items,
+            image_preparations,
+            origin,
+        )
+        .await;
     }
 
     /// Injects items into active work, or records them without starting a turn.

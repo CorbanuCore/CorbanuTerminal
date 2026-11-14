@@ -11,6 +11,7 @@ import ast
 import re
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 
 CODEX_RS = Path(__file__).resolve().parents[2] / "codex-rs"
@@ -18,9 +19,9 @@ LIST_RE = re.compile(r"^\s*unit_test_alone\s*=\s*(\[[^\]]*\])", re.MULTILINE)
 TEST_FN_RE = r"#\[\s*(?:\w+::)*test\b[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*(?:async\s+)?fn\s+{}\s*\("
 
 
-def alone_lists() -> dict[Path, list[str]]:
+def alone_lists(root: Path = CODEX_RS) -> dict[Path, list[str]]:
     found = {}
-    for build in sorted(CODEX_RS.rglob("BUILD.bazel")):
+    for build in sorted(root.rglob("BUILD.bazel")):
         match = LIST_RE.search(build.read_text(encoding="utf-8"))
         if match:
             names = ast.literal_eval(re.sub(r"#[^\n]*", "", match.group(1)))
@@ -30,7 +31,22 @@ def alone_lists() -> dict[Path, list[str]]:
 
 class UnitTestAloneTest(unittest.TestCase):
     def test_lists_are_found(self) -> None:
-        self.assertIn(CODEX_RS / "state" / "BUILD.bazel", alone_lists())
+        # Prove the scanner with a fixture, not one crate's current scheduling
+        # choice. The real-tree test below still checks every declared name.
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            build = root / "state" / "BUILD.bazel"
+            build.parent.mkdir()
+            build.write_text(
+                'codex_rust_crate(\n'
+                '    unit_test_alone = [\n'
+                '        # Preserve full test names.\n'
+                '        "runtime::fixture",\n'
+                '    ],\n'
+                ')\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(alone_lists(root), {build: ["runtime::fixture"]})
 
     def test_every_listed_test_exists_once(self) -> None:
         for build, names in alone_lists().items():

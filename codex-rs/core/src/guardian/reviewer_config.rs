@@ -150,11 +150,17 @@ async fn resolve_review_model_from_catalog(
             .map(|entry| Arc::unwrap_or_clone(entry.model))
             .collect(),
     );
-    let default_review_model_id = turn.provider.approval_review_preferred_model();
+    // Corbanu: never send the OpenAI-only default reviewer model to an unrelated
+    // provider; such providers review with the active model instead.
+    let default_review_model_id = turn.provider.resolve_background_helper_model(
+        turn.provider.approval_review_preferred_model(),
+        codex_model_provider::DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL,
+        context.model_info.slug.as_str(),
+    );
     let review_model = codex_guardian_reviewer::select_review_model(
         &context.model_info,
         context.reasoning_effort.as_ref(),
-        default_review_model_id,
+        default_review_model_id.as_str(),
         &available_models,
     );
     // Resolve a separate reviewer against the current catalog on every attempt.
@@ -163,15 +169,14 @@ async fn resolve_review_model_from_catalog(
         if !review_model.catalog_contains_auto_review && !review_model.model_overridden {
             Arc::clone(&context.model_info)
         } else {
+            // Corbanu: Bedrock's synthesized metadata is replaced from its static catalog.
             Arc::new(
-                session
-                    .services
-                    .models_manager
-                    .get_model_info(
-                        review_model.model.as_str(),
-                        &turn.config.to_models_manager_config(),
-                    )
-                    .await,
+                crate::model_info_for_provider::model_info_for_config(
+                    &session.services.models_manager,
+                    review_model.model.as_str(),
+                    &turn.config,
+                )
+                .await,
             )
         };
     (review_model, guardian_model_info)

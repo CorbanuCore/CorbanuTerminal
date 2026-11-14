@@ -19,6 +19,8 @@
 mod credential_store;
 mod ema_identity;
 mod enterprise_generation;
+#[cfg(test)]
+pub(crate) mod fixture_keyring;
 mod issuer_binding;
 mod output_gate;
 mod refresh_lock;
@@ -72,8 +74,11 @@ use self::store_lock::OAuthStore;
 use self::store_lock::OAuthStoreLock;
 use self::store_lock::OAuthStoreLockFailure;
 
+#[cfg(test)]
+pub(crate) use self::fixture_keyring::DefaultKeyringStore;
 use codex_config::McpServerOAuthConfig;
-use codex_keyring_store::DefaultKeyringStore;
+#[cfg(not(test))]
+pub(crate) use codex_keyring_store::DefaultKeyringStore;
 use codex_keyring_store::KeyringStore;
 use rmcp::transport::auth::AuthorizationManager;
 use tokio::sync::Mutex;
