@@ -259,6 +259,13 @@ impl ToolRuntime<ApplyPatchRequest, ApplyPatchRuntimeOutput> for ApplyPatchRunti
         req.turn_environment.workspace_roots()
     }
 
+    fn turn_environment<'a>(
+        &self,
+        req: &'a ApplyPatchRequest,
+    ) -> Option<&'a crate::session::turn_context::TurnEnvironment> {
+        Some(&req.turn_environment)
+    }
+
     fn sandbox_cwd<'a>(&self, req: &'a ApplyPatchRequest) -> Option<&'a PathUri> {
         Some(&req.action.cwd)
     }

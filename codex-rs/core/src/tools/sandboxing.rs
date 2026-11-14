@@ -487,6 +487,14 @@ pub(crate) enum ToolError {
 pub(crate) trait ToolRuntime<Req, Out>: Approvable<Req> + Sandboxable {
     fn workspace_roots<'a>(&self, req: &'a Req) -> &'a [PathUri];
 
+    /// #2050: the environment the request runs in, so the orchestrator can
+    /// refuse work for a remote machine without a sandbox. Required, so a
+    /// new runtime says where its work runs.
+    fn turn_environment<'a>(
+        &self,
+        req: &'a Req,
+    ) -> Option<&'a crate::session::turn_context::TurnEnvironment>;
+
     fn network_approval_spec(&self, _req: &Req, _ctx: &ToolCtx) -> Option<NetworkApprovalSpec> {
         None
     }

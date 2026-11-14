@@ -12,6 +12,34 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def require_supported_bash() -> None:
+    requirement = (
+        "CI path tests require Bash 4.4 or newer for mapfile -d. "
+        "Put a supported bash first on PATH."
+    )
+    try:
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                'printf "%s %s" "${BASH_VERSINFO[0]}" "${BASH_VERSINFO[1]}"',
+            ],
+            env={**os.environ, "BASH_ENV": os.devnull},
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise RuntimeError(f"{requirement} Could not query bash on PATH.") from error
+    version = re.fullmatch(r"([0-9]+) ([0-9]+)", result.stdout.strip())
+    if version is None:
+        raise RuntimeError(f"{requirement} Could not read the Bash version.")
+    major, minor = map(int, version.groups())
+    if (major, minor) < (4, 4):
+        raise RuntimeError(f"{requirement} Found Bash {major}.{minor}.")
+
+
 class PrChangedPathsTest(unittest.TestCase):
     """Run the workflow's Git path reader and area classifier together."""
 
@@ -38,6 +66,10 @@ class PrChangedPathsTest(unittest.TestCase):
         "with\rcarriage-return",
         "café",
     )
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        require_supported_bash()
 
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
@@ -185,6 +217,19 @@ class PrChangedPathsTest(unittest.TestCase):
                     self.assertEqual(
                         self.detect([f"{area}/{name}.rs"]), self.expected(*enabled)
                     )
+
+    def test_vendor_only_dns_changes_select_windows_and_rust(self) -> None:
+        for suffix in ("src/hickory.rs", "src/chain.rs", "Cargo.toml"):
+            with self.subTest(suffix=suffix):
+                self.assertEqual(
+                    self.detect([f"third_party/rama-dns/{suffix}"]),
+                    self.expected(
+                        "codex", "windows_native_tests", "windows_native_sandbox"
+                    ),
+                )
+        self.assertEqual(
+            self.detect(["third_party/rama-dns-other/src/lib.rs"]), self.expected()
+        )
 
     def test_newline_in_unrelated_path_does_not_create_another_area(self) -> None:
         self.assertEqual(

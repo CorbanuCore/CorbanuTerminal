@@ -7,8 +7,9 @@ before checkout with no executed steps, which created red status noise without
 testing the code.
 
 Which Rust tests a PR runs: the tests of the crates it changes, on Linux
-(below, #1972); codex-core's security suites on Linux and macOS; native
-Windows tests for some crates. The whole Linux suite runs only postmerge
+(below, #1972), and for five crates also on macOS (non-blocking, #1989);
+codex-core's security suites on Linux and macOS; native Windows tests for some
+crates. The whole Linux suite runs only postmerge
 (`rust-ci-full`) and in the nightly Bazel job, so a PR that breaks a crate it
 doesn't change (through a dependency) shows up on `main`.
 
@@ -78,6 +79,12 @@ doesn't change (through a dependency) shows up on `main`.
   with it), until those are fixed. It has no compile cache: about 22 minutes to
   build, then about 5 (core) or 13 (app-server) minutes of tests (60-minute
   timeout).
+- Windows gnullvm cross shards
+  (`Bazel test on windows-latest for x86_64-pc-windows-gnullvm shard N/4`,
+  `bazel.yml` `test-windows-shard`), meant to run the `*-windows-cross`
+  targets: their `bazel test shard` step runs only with authenticated
+  BuildBuddy execution. Without it every shard skips that step and still
+  reports success, with a notice and job summary saying so.
 - Argument comment lint on changed crates
   (`rust-ci / Argument comment lint - changed crates`, #636): runs the
   `/*param*/` lint, test code included, on every `codex-rs` crate whose `.rs`
@@ -109,6 +116,24 @@ doesn't change (through a dependency) shows up on `main`.
   runs; 85-minute timeout. Measured on the #1972 trials: about 15 minutes for
   rmcp-client, 24 for codex-core and 46 for every crate at once (an upstream
   sync), against the roughly 35 minutes `CI required` already takes.
+- Tests of the changed crates on macOS
+  (`rust-ci changed crate tests (macOS) / <crate>`, #1989, owner decision
+  D503): the same `cargo nextest run -p <crate>` on macos-15, one crate per
+  leg, for the crates with macOS-only code paths that no other job tests on
+  macOS: `codex-sandboxing` (Seatbelt), `codex-exec-server` (macOS process and
+  file-system sandboxes), `codex-keyring-store` (Keychain),
+  `codex-process-hardening` and `codex-network-proxy` (native certificates,
+  the credential broker's memory scan). It selects them as the Linux job does
+  (`.github/scripts/macos_changed_crate_tests.py`, using the shared
+  `cargo_packages` list); a change to the job, its scripts or actions, the
+  workspace `Cargo.toml`, the toolchain or nextest config runs all five.
+  Known macOS failures are listed with their issues in
+  `.github/macos-changed-crate-known-failures.txt`, excluded, and named in the
+  job summary (#2069). It is a separate workflow, not part of
+  `CI required`, until it has a cost and flake record. It restores the macOS
+  core security sccache (saves nothing). Trial (#2068): 1.6 to 7 minutes per
+  crate; `codex-login` (14 minutes, it builds codex-core) and `codex-vault` (no
+  macOS-only code) passed but are left out.
 - Core security tests (`rust-ci / Core security tests — ubuntu-24.04` and
   `— macos-15`, #512, #553, #902): codex-core's `security::` unit tests and
   selected integration suites on Linux and macOS, on every `codex-rs` change.
@@ -170,8 +195,8 @@ See [Rust toolchain bump](rust-toolchain-bump.md) for what to update and when.
 
 ## Disabled Until Runners Exist
 
-- macOS Bazel checks, and macOS Rust checks other than the core security tests,
-  outside the manual release builder.
+- macOS Bazel checks, and macOS Rust checks other than the core security tests
+  and the five crates above, outside the manual release builder.
 - Linux ARM64 Rust, Bazel, and V8 push/PR checks outside the manual release
   builder.
 - Self-hosted runner jobs for unavailable Linux, macOS, Windows, and ARM64

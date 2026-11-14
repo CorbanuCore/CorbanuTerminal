@@ -723,9 +723,10 @@ impl ProviderAuthCommandFixture {
         let tempdir = tempfile::tempdir()?;
         let tokens_file = tempdir.path().join("tokens.txt");
         let mut token_file_contents = String::new();
+        let line_ending = if cfg!(windows) { "\r\n" } else { "\n" };
         for token in tokens {
             token_file_contents.push_str(token);
-            token_file_contents.push('\n');
+            token_file_contents.push_str(line_ending);
         }
         std::fs::write(&tokens_file, token_file_contents)?;
 
@@ -760,12 +761,18 @@ mv tokens.next tokens.txt
 setlocal EnableExtensions DisableDelayedExpansion
 
 set "first_line="
-<tokens.txt set /p first_line=
+<tokens.txt set /p "first_line="
 if not defined first_line exit /b 1
 
-echo(%first_line%
-if defined PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH (echo %PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH%>>refresh-signals.txt) else (echo 0>>refresh-signals.txt)
-more +1 tokens.txt > tokens.next
+setlocal EnableDelayedExpansion
+echo(!first_line!
+endlocal
+set "refresh_signal=0"
+if defined PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH set "refresh_signal=%PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH%"
+>>refresh-signals.txt echo(%refresh_signal%
+rem Match the login fixture: more.com fails in batched Windows test runs.
+type nul > tokens.next
+for /f "usebackq skip=1 delims=" %%L in ("tokens.txt") do >>tokens.next echo(%%L
 move /y tokens.next tokens.txt >nul
 "#,
             )?;
@@ -806,6 +813,26 @@ move /y tokens.next tokens.txt >nul
             .map(ToString::to_string)
             .collect()
     }
+}
+
+#[test]
+fn provider_auth_command_fixture_records_refresh_signals() -> anyhow::Result<()> {
+    let fixture = ProviderAuthCommandFixture::new(&["first-token", "second-token"])?;
+    for (refresh, expected) in [(false, "first-token"), (true, "second-token")] {
+        let mut command = std::process::Command::new(&fixture.command);
+        command
+            .args(&fixture.args)
+            .current_dir(fixture.tempdir.path())
+            .env_remove("PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH");
+        if refresh {
+            command.env("PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH", "1");
+        }
+        let output = command.output()?;
+        assert!(output.status.success(), "synthetic auth fixture failed");
+        assert_eq!(String::from_utf8(output.stdout)?.trim(), expected);
+    }
+    assert_eq!(fixture.refresh_signals(), ["0", "1"]);
+    Ok(())
 }
 
 fn non_zero_u64(value: u64) -> NonZeroU64 {
@@ -1429,6 +1456,64 @@ async fn provider_auth_command_refreshes_after_401() {
 
     send_provider_auth_request(&server, auth_fixture.auth()).await;
     assert_eq!(auth_fixture.refresh_signals(), ["0", "1"]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn provider_auth_command_does_not_refresh_plan_entitlement_401() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = MockServer::start().await;
+    let auth_fixture = ProviderAuthCommandFixture::new(&["first-token", "second-token"])?;
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .and(header("authorization", "Bearer first-token"))
+        .respond_with(ResponseTemplate::new(401).set_body_json(json!({
+            "error": {"type": "invalid_request_error", "message": "context tokens exceed this plan"}
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let provider = ModelProviderInfo {
+        base_url: Some(format!("{}/v1", server.uri())),
+        auth: Some(auth_fixture.auth()),
+        env_key: None,
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        ..ModelProviderInfo::create_anthropic_provider()
+    };
+    let test = test_codex()
+        .with_config(move |config| {
+            config.model = Some("claude-opus-5".to_owned());
+            config.model_provider_id = "anthropic".to_owned();
+            config.model_provider = provider;
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    test.codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "hello".to_owned(),
+                text_elements: vec![],
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        })
+        .await?;
+    let mut saw_entitlement_error = false;
+    loop {
+        match test.codex.next_event().await?.msg {
+            EventMsg::Error(error) => {
+                assert!(error.message.contains("plan"), "expected plan guidance");
+                saw_entitlement_error = true;
+            }
+            EventMsg::TurnComplete(_) => break,
+            _ => {}
+        }
+    }
+    assert!(saw_entitlement_error);
+    assert_eq!(auth_fixture.refresh_signals(), ["0"]);
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

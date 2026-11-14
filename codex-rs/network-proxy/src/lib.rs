@@ -12,6 +12,9 @@ mod destination;
 // (tests/destination_contract.rs compiles the same file).
 #[allow(dead_code)]
 mod destination_contract;
+#[cfg(test)]
+#[path = "hickory_compat_tests.rs"]
+mod hickory_compat_tests;
 mod http_proxy;
 mod mitm;
 mod mitm_hook;

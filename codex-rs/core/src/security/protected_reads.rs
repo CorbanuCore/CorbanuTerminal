@@ -747,6 +747,7 @@ pub(crate) async fn denial_explanation(
                 &inputs.codex_home,
                 lines,
                 accept,
+                DenialPathScope::ProtectedPath,
             )
         };
         word(&|path| matcher.is_read_denied(path))
@@ -880,7 +881,21 @@ pub(super) fn unlistable_path_in_lines(
         .filter(|line| line.contains(name))
         .cloned()
         .collect();
-    path_in_lines(command, cwd, user_home, codex_home, &lines, unlistable)
+    path_in_lines(
+        command,
+        cwd,
+        user_home,
+        codex_home,
+        &lines,
+        unlistable,
+        DenialPathScope::HomeListing,
+    )
+}
+
+#[derive(Clone, Copy)]
+enum DenialPathScope {
+    ProtectedPath,
+    HomeListing,
 }
 
 /// The path one of `denial_lines` reports, as it spells it, that `accept`
@@ -892,6 +907,7 @@ fn path_in_lines(
     codex_home: &Path,
     denial_lines: &[String],
     accept: &dyn Fn(&Path) -> bool,
+    scope: DenialPathScope,
 ) -> Option<String> {
     if denial_lines.is_empty() {
         return None;
@@ -910,7 +926,7 @@ fn path_in_lines(
     );
     denial_lines
         .iter()
-        .flat_map(|line| paths_in_denial_line(line))
+        .flat_map(|line| paths_in_denial_line(line, scope))
         .find(|spelled| {
             bases
                 .iter()
@@ -922,7 +938,7 @@ fn path_in_lines(
 /// denied`, `ls: cannot open directory '/x': …`), between the program and
 /// the reason (`ls: /x: Operation not permitted`), or before the reason
 /// when the program's name was split off (#1194).
-fn paths_in_denial_line(line: &str) -> Vec<String> {
+fn paths_in_denial_line(line: &str, scope: DenialPathScope) -> Vec<String> {
     let mut paths = Vec::new();
     for (open, close) in [('‘', '’'), ('\'', '\''), ('"', '"'), ('`', '\'')] {
         let mut rest = line;
@@ -938,6 +954,12 @@ fn paths_in_denial_line(line: &str) -> Vec<String> {
     let fields: Vec<&str> = line.split(": ").collect();
     if fields.len() >= 3 {
         paths.push(fields[1..fields.len() - 1].join(": "));
+        // #1334: a prefixless home path can contain ": ". Only the exact-home
+        // listing matcher may try this ambiguous spelling: a general read
+        // matcher could join a program prefix beneath a protected operand.
+        if matches!(scope, DenialPathScope::HomeListing) {
+            paths.push(fields[..fields.len() - 1].join(": "));
+        }
     } else if fields.len() == 2 {
         // #1194: BSD `ls` and `find` write `ls: ` and `/x: Operation not
         // permitted` separately, and unified exec merges stdout and stderr

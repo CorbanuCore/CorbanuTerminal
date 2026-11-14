@@ -38,6 +38,39 @@ described below, because that sandbox can't block reads. With the default
 sandbox selected, nothing changes: if its setup hasn't run yet, the first
 sandboxed command runs it.
 
+### Remote Windows machines
+
+The same rule applies where the commands actually run (#2050, D510). When
+this session's environment is a remote machine (an exec-server, for example
+a Windows PC driven from a Mac or Linux computer), that machine's
+exec-server reports its operating system and whether the default Windows
+sandbox is set up there. Under Moderate or Aggressive, if it is Windows and
+it has no Windows sandbox for this session, every agent command, typing into
+a running command there and every file tool access there is refused, naming
+the level and the environment. "No Windows sandbox for this session" means
+either that this computer's config asks for none (no `[windows] sandbox`
+setting: the remote machine uses the setting of the computer that sends the
+work) or that it asks for the default sandbox and that machine has not set
+it up. To fix it:
+
+- On the remote machine, run Corbanu Terminal with the same Corbanu home as
+  its exec-server, open `/permissions`, choose a mode that uses the sandbox
+  and pick "Set up default sandbox" (it needs Administrator permission
+  there).
+- On this computer, set `[windows] sandbox = "elevated"` and start a new
+  session with `/new`.
+- Or switch to Permissive in `/security` (it applies after a restart).
+
+An exec-server older than this version can't report its sandbox. Under
+Moderate or Aggressive, work for such a machine is refused too (fail
+closed), unless it clearly runs on Linux or macOS (a POSIX working folder or
+shell, and a default shell other than PowerShell or cmd), and so is one that
+reports an operating system this version doesn't know: update Corbanu
+Terminal on that machine. Remote Linux
+and macOS machines use their own sandbox and are unchanged. A Windows
+computer without its own sandbox still refuses commands for every
+environment, remote Linux ones included (#2049).
+
 ## Windows non-admin sandbox
 
 On Windows, Corbanu Terminal can sandbox commands in two ways. The **default
@@ -201,6 +234,16 @@ names by drive letter, or through a link, is. A global or system
 git config that lies in such a folder is recorded too. A new, changed or
 removed file there is flagged like a changed repository, and so is one
 that appears where a config points (a new repository's `.githooks`, say).
+The one network path that is read is a global or system git config whose
+own path is on a network share or mapped network drive, such as
+`.gitconfig` in a home folder on a share (D517). It is read on a
+background thread, and each check waits at most about 2 seconds in all
+for such configs; one not read in time, or whose read fails, counts as
+changed after every command (it is flagged, and the command is held up by
+no more than that wait). The include paths such a config names are never
+opened on a share or mapped network drive, nor by a path without a drive
+or server (`/x`), so settings in an included file there aren't checked.
+A config on this machine is read as before.
 For Husky, the files named after git hooks in the folder above `_` count,
 and so does the `_` folder below any hooks folder. Rewriting a file with
 the same content (as `npm install` does when it reruns Husky) isn't a

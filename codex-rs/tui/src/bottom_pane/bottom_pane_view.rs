@@ -94,6 +94,11 @@ pub(crate) trait BottomPaneView: Renderable {
         None
     }
 
+    /// Stable identity of the selected row across list and tab changes.
+    fn selected_item_id(&self) -> Option<&str> {
+        None
+    }
+
     /// Search text for a list that is refreshed while the user is interacting.
     fn search_query(&self) -> Option<&str> {
         None

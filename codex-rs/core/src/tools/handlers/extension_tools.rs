@@ -192,6 +192,7 @@ async fn to_extension_call(invocation: &ToolInvocation) -> ExtensionToolCall {
             crate::security::protected_surface::protect_file_tool_context(
                 &invocation.session,
                 &invocation.turn,
+                environment,
                 invocation
                     .turn
                     .file_system_sandbox_context(additional_permissions, environment),

@@ -653,14 +653,13 @@ impl TurnContext {
                 .windows_sandbox_private_desktop,
             windows_sandbox_proxy_settings_mode: None,
             use_legacy_landlock: self.config.features.use_legacy_landlock(),
-            // #1976 (D491): refused where the host has no platform sandbox.
-            unsandboxed_refusal: crate::security::windows_unsandboxed::applies(
+            // #1976 (D491): refused where the host has no platform sandbox;
+            // #2050: for a remote environment, where its executor has none.
+            unsandboxed_refusal: crate::security::windows_unsandboxed::environment_file_refusal(
                 self.config.security_level,
                 self.windows_sandbox_level,
-            )
-            .then(|| {
-                crate::security::windows_unsandboxed::file_refusal(self.config.security_level)
-            }),
+                environment,
+            ),
         }
     }
 

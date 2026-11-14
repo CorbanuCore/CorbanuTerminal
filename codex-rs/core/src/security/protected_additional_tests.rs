@@ -722,6 +722,12 @@ async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_
         fn workspace_roots<'a>(&self, _req: &'a ()) -> &'a [PathUri] {
             &[]
         }
+        fn turn_environment<'a>(
+            &self,
+            _req: &'a (),
+        ) -> Option<&'a crate::session::turn_context::TurnEnvironment> {
+            None
+        }
         async fn run(
             &mut self,
             _req: &(),

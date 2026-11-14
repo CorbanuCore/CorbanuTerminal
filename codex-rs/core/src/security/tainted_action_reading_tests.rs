@@ -1,7 +1,7 @@
-//! #1772, PR #1794 review 2: the two readings. The classifier's own
-//! lexing reads redirections newly (`shell::simple_commands_read` with
-//! `main_reading` off); its second judgment and the helper lexers
-//! (`shell::simple_commands`) read exactly as main. These tests use the
+//! #1772, PR #1794 review 2: the two pre-#1975 readings. `Redirections`
+//! enables #1772's changes; `Legacy` and the helper lexers
+//! (`shell::simple_commands`) read exactly as pre-#1772 main. Both retain
+//! the old brace handling and form #1975's verdict floor. These tests use the
 //! fix's own functions, so they are declared by `tainted_action.rs`, not
 //! with the behaviour tests of `tainted_action_redirect_tests.rs` (which
 //! also build on main for the fix-reverted run).
@@ -23,7 +23,11 @@ fn lexed(line: &str) -> Vec<Read> {
 fn lexed_read(line: &str, main_reading: bool) -> Vec<Read> {
     commands(shell::simple_commands_read(
         &[line.to_string()],
-        main_reading,
+        if main_reading {
+            shell::Reading::Legacy
+        } else {
+            shell::Reading::Redirections
+        },
     ))
 }
 
@@ -201,8 +205,11 @@ const READ_NEWLY: &[&str] = &[
 #[test]
 fn issue_1772_main_reading_is_mains() {
     for line in READ_NEWLY {
-        let main = shell::simple_commands_read(&[line.to_string()], /*main_reading*/ true);
-        assert!(!main.read_newly, "{line}: main's reading read newly");
+        let main = shell::simple_commands_read(&[line.to_string()], shell::Reading::Legacy);
+        assert!(
+            !main.redirections_read_newly,
+            "{line}: main's reading read newly"
+        );
         assert!(
             main.commands
                 .iter()
@@ -215,7 +222,8 @@ fn issue_1772_main_reading_is_mains() {
             "{line}: the helper lexers read otherwise than main's reading"
         );
         assert!(
-            shell::simple_commands_read(&[line.to_string()], /*main_reading*/ false).read_newly,
+            shell::simple_commands_read(&[line.to_string()], shell::Reading::Redirections)
+                .redirections_read_newly,
             "{line}: the new reading is not reported"
         );
     }
@@ -243,7 +251,8 @@ fn issue_1772_main_reading_is_mains() {
     // Lines read the same both ways are judged once.
     for line in ["ls >out", "cat <a", "git status 2>/dev/null"] {
         assert!(
-            !shell::simple_commands_read(&[line.to_string()], /*main_reading*/ false).read_newly,
+            !shell::simple_commands_read(&[line.to_string()], shell::Reading::Redirections)
+                .redirections_read_newly,
             "{line}"
         );
     }
@@ -260,7 +269,11 @@ fn mains_verdict(files: &[(&str, &str)], argv: &[&str]) -> Option<ProtectedActio
     let action = action_in(root.path(), argv);
     let homes = Homes::new(Path::new(HOME), Some(root.path()));
     judged(
-        &action, homes, /*as_named*/ false, /*main_reading*/ true,
+        &action,
+        homes,
+        /*as_named*/ false,
+        shell::Reading::Legacy,
+        AssignmentReading::Possible,
     )
     .found
 }
@@ -275,7 +288,11 @@ fn new_verdict(files: &[(&str, &str)], argv: &[&str]) -> Option<ProtectedActionK
     let action = action_in(root.path(), argv);
     let homes = Homes::new(Path::new(HOME), Some(root.path()));
     judged(
-        &action, homes, /*as_named*/ false, /*main_reading*/ false,
+        &action,
+        homes,
+        /*as_named*/ false,
+        shell::Reading::Redirections,
+        AssignmentReading::Reaching,
     )
     .found
 }
