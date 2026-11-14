@@ -99,7 +99,9 @@ impl AccountRequestProcessor {
 
     async fn rate_limit_reset_backend_client(&self) -> Result<BackendClient, JSONRPCErrorError> {
         // #658: the account the session runs on, never another one.
-        let Some((auth, http_client_factory)) = crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager).await
+        let Some((auth, http_client_factory)) =
+            crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager)
+                .await
         else {
             return Err(self.session_auth_missing(
                 "codex account authentication required for rate limit reset credits",

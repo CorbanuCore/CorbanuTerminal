@@ -719,8 +719,7 @@ impl AccountRequestProcessor {
             self.auth_manager
                 .is_login_method_allowed(ForcedLoginMethod::Chatgpt)
         };
-        if !chatgpt_login_allowed
-        {
+        if !chatgpt_login_allowed {
             return Err(invalid_request(
                 "ChatGPT login is disabled. Use API key login instead.",
             ));
@@ -1311,7 +1310,9 @@ impl AccountRequestProcessor {
         params: GetAccountRateLimitsParams,
     ) -> Result<GetAccountRateLimitsResponse, JSONRPCErrorError> {
         // #658: the account the session runs on, never another one.
-        let Some((auth, http_client_factory)) = crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager).await
+        let Some((auth, http_client_factory)) =
+            crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager)
+                .await
         else {
             return Err(self.session_auth_missing(
                 "codex account authentication required to read rate limits",
@@ -1428,7 +1429,9 @@ impl AccountRequestProcessor {
             .transpose()?;
 
         // #658: the account the session runs on, never another one.
-        let Some((auth, http_client_factory)) = crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager).await
+        let Some((auth, http_client_factory)) =
+            crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager)
+                .await
         else {
             return Err(self.session_auth_missing(
                 "codex account authentication required to read token usage",
@@ -1516,7 +1519,9 @@ impl AccountRequestProcessor {
         &self,
     ) -> Result<GetWorkspaceMessagesResponse, JSONRPCErrorError> {
         // #658: the account the session runs on, never another one.
-        let Some((auth, http_client_factory)) = crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager).await
+        let Some((auth, http_client_factory)) =
+            crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager)
+                .await
         else {
             return Err(self.session_auth_missing(
                 "codex account authentication required to read workspace messages",
@@ -1610,7 +1615,9 @@ impl AccountRequestProcessor {
         params: SendAddCreditsNudgeEmailParams,
     ) -> Result<AddCreditsNudgeEmailStatus, JSONRPCErrorError> {
         // #658: the account the session runs on, never another one.
-        let Some((auth, http_client_factory)) = crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager).await
+        let Some((auth, http_client_factory)) =
+            crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager)
+                .await
         else {
             return Err(self.session_auth_missing(
                 "codex account authentication required to notify workspace owner",

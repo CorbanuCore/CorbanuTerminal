@@ -28,8 +28,11 @@ impl AppsRequestProcessor {
             .collect::<Vec<_>>();
         let mut config = self.load_apps_config(thread_id.as_deref()).await?;
         // #658: the account the session runs on.
-        let auth = match crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager)
-            .await {
+        let auth = match crate::request_processors::session_auth_with_http_client_factory(
+            &self.auth_manager,
+        )
+        .await
+        {
             Some((auth, factory)) => {
                 config.application_network_policy = factory.network_policy().clone();
                 Some(auth)

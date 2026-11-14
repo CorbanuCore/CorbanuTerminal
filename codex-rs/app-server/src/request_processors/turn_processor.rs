@@ -1,13 +1,13 @@
 use super::thread_input::ensure_direct_input_allowed_from_client;
 use super::*;
-use codex_core::accounting_extensions::SentModelRequest;
-use codex_model_provider_info::WireApi;
-use codex_model_provider_info::built_in_model_providers;
 use codex_app_server_protocol::ImageReference as V2ImageReference;
 use codex_app_server_protocol::ThreadGuardianAssessment;
 use codex_app_server_protocol::ThreadGuardianReviewParams;
 use codex_app_server_protocol::ThreadGuardianReviewResponse;
 use codex_app_server_protocol::ThreadItem;
+use codex_core::accounting_extensions::SentModelRequest;
+use codex_model_provider_info::WireApi;
+use codex_model_provider_info::built_in_model_providers;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputBody;
@@ -623,6 +623,7 @@ impl TurnRequestProcessor {
             thread.as_ref(),
             app_server_client_name.as_deref(),
         )
+        .await?;
         self.config_manager
             .check_thread_model_provider_for_input(thread.config().await.as_ref())
             .await

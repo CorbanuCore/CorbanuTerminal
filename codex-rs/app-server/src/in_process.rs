@@ -1016,8 +1016,8 @@ mod tests {
                         .await
                         .expect("request transport should work")
                         .expect("thread/start should succeed");
-                    let parsed: ThreadStartResponse =
-                        serde_json::from_value(response).expect("thread/start response should parse");
+                    let parsed: ThreadStartResponse = serde_json::from_value(response)
+                        .expect("thread/start response should parse");
                     assert_eq!(parsed.thread.source, expected_source);
                     client
                         .shutdown()

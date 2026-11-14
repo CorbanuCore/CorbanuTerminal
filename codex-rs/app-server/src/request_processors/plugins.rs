@@ -1029,7 +1029,11 @@ impl PluginRequestProcessor {
         });
 
         let mut config = self.load_latest_config(config_cwd).await?;
-        let auth = match crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager).await {
+        let auth = match crate::request_processors::session_auth_with_http_client_factory(
+            &self.auth_manager,
+        )
+        .await
+        {
             Some((auth, factory)) => {
                 config.application_network_policy = factory.network_policy().clone();
                 Some(auth)
@@ -1507,7 +1511,11 @@ impl PluginRequestProcessor {
         };
         let config_cwd = marketplace_path.as_path().parent().map(Path::to_path_buf);
         let mut config = self.load_latest_config(config_cwd.clone()).await?;
-        let auth = match crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager).await {
+        let auth = match crate::request_processors::session_auth_with_http_client_factory(
+            &self.auth_manager,
+        )
+        .await
+        {
             Some((auth, factory)) => {
                 config.application_network_policy = factory.network_policy().clone();
                 Some(auth)
@@ -1599,7 +1607,11 @@ impl PluginRequestProcessor {
         install_attempt_id: Option<String>,
     ) -> Result<PluginInstallResponse, JSONRPCErrorError> {
         let mut config = self.load_latest_config(/*fallback_cwd*/ None).await?;
-        let auth = match crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager).await {
+        let auth = match crate::request_processors::session_auth_with_http_client_factory(
+            &self.auth_manager,
+        )
+        .await
+        {
             Some((auth, factory)) => {
                 config.application_network_policy = factory.network_policy().clone();
                 Some(auth)
