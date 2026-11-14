@@ -342,6 +342,12 @@ class WindowsSandboxNextestGroupTest(unittest.TestCase):
             sorted(core_elevated_tests()),
             [
                 "issue_1139_moderate_git_folder_writes_name_the_level",
+                "issue_2167_builtin_file_read_asks_before_open",
+                "issue_2167_fresh_approval_respects_level_read_denials",
+                "issue_2167_mcp_file_path_asks_before_dispatch",
+                "issue_2167_permissive_file_routes_are_unchanged",
+                "issue_2167_shell_read_asks_and_cancel_keeps_value_out",
+                "issue_2167_shell_read_with_approvals_off",
                 "pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write",
                 "pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory",
                 "pf_30_s01_source_envelopes_label_tool_output_and_keep_human_prompt",

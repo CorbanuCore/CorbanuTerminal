@@ -252,7 +252,7 @@ fn is_runner(line: &str) -> bool {
 /// change, as on a secondary drive's root by default: the sandbox account's
 /// unrestricted token may write there, its commands' restricted tokens may
 /// not.
-fn authenticated_users_folder() -> TempDir {
+fn authenticated_users_folder() -> test_root::TestRoot {
     let dir = user_owned_test_root();
     let output = std::process::Command::new(system32_exe("icacls.exe"))
         .arg(dir.path())

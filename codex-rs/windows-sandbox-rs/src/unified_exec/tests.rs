@@ -259,8 +259,8 @@ fn current_user_sid() -> String {
 /// Administrators, and the current user, like a typical user-profile directory.
 /// This keeps sandbox filesystem tests independent of the ACLs a runner puts on
 /// the checkout (#158).
-fn user_owned_test_root() -> TempDir {
-    let root = TempDir::new_in(sandbox_cwd()).expect("create user-owned test root");
+fn user_owned_test_root() -> test_root::TestRoot {
+    let root = test_root::TestRoot::new();
     let output = std::process::Command::new(system32_exe("icacls.exe"))
         .arg(root.path())
         .args([
@@ -3501,6 +3501,9 @@ fn legacy_capture_command_log_redacts_credentials() {
         sandbox_log(codex_home.path())
     );
 }
+
+#[path = "test_root.rs"]
+mod test_root;
 
 /// #1507: other process-creation routes out of a legacy session.
 #[path = "launch_path_tests.rs"]

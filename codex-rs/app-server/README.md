@@ -1191,6 +1191,8 @@ For a detached review, use `"delivery": "detached"`. The response is the same sh
 
 The review thread runs with the parent thread's current settings (permissions, approval policy, Windows sandbox and security level, including changes made since the parent started), not with the config the server started with; `review_model`, when set, picks its model.
 
+A detached review currently uses the default execution environment, even if its parent uses a non-default or remote environment. Its inherited working-folder path is interpreted there. For a review in the parent's execution environment, use inline delivery.
+
 Detached review is unsupported when the parent thread is paginated.
 
 For an inline review, Codex streams the usual `turn/started` notification followed by an `item/started`

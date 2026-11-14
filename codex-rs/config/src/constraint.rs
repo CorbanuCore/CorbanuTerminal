@@ -16,6 +16,12 @@ pub enum ConstraintError {
         requirement_source: RequirementSource,
     },
 
+    #[error("cannot update `{field_name}`: {reason}")]
+    SessionInvariant {
+        field_name: &'static str,
+        reason: String,
+    },
+
     #[error("field `{field_name}` cannot be empty")]
     EmptyField { field_name: String },
 
