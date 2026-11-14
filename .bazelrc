@@ -280,13 +280,5 @@ build:release --features=cargo-release-profile
 build:release --host_features=cargo-release-profile
 # Bubblewrap and voice set release options on their own native rules.
 
-# Compatibility for Corbanu's V8 canary and artifact workflows. The named
-# artifact transitions own source/release settings; do not change global defaults.
-common:rusty-v8-upstream-libcxx --@v8//:v8_use_rusty_v8_custom_libcxx=True
-common:v8-target-x64 --@v8//bazel/config:v8_target_cpu=x64
-common:v8-target-arm64 --@v8//bazel/config:v8_target_cpu=arm64
-common:v8-release-compat --@v8//:v8_enable_pointer_compression=False
-common:v8-release-compat --@v8//:v8_enable_sandbox=False
-
 # Optional per-user local overrides.
 try-import %workspace%/user.bazelrc
