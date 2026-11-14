@@ -30,7 +30,7 @@ LOCK = "LEGACY_PROCESS_TEST_LOCK"
 CORE_PACKAGE = "codex-core"
 CORE_DIR = CODEX_RS / "core"
 # A codex-core test runs the elevated setup only with its helpers staged.
-CORE_ELEVATED_MARK = "stage_windows_sandbox_helpers"
+CORE_ELEVATED_MARKS = ("stage_windows_sandbox_helpers", "stage_windows_sandbox_cli")
 WINDOWS = "cfg(windows)"
 
 FN_RE = re.compile(
@@ -222,7 +222,12 @@ def crate_guard_users() -> dict[str, str]:
 
 @functools.cache
 def core_elevated_tests() -> dict[str, str]:
-    return guard_users(crate_sources(CORE_DIR), CORE_ELEVATED_MARK)
+    sources = crate_sources(CORE_DIR)
+    return {
+        name: path
+        for mark in CORE_ELEVATED_MARKS
+        for name, path in guard_users(sources, mark).items()
+    }
 
 
 def crate_sources(crate_dir: Path = CRATE_DIR) -> dict[str, str]:
@@ -348,7 +353,7 @@ class WindowsSandboxNextestGroupTest(unittest.TestCase):
         self.assertEqual(
             missing_from_group(tests, terms),
             [],
-            f"codex-core tests that call {CORE_ELEVATED_MARK}() are missing from the "
+            f"codex-core tests that call {CORE_ELEVATED_MARKS} are missing from the "
             f"Windows codex-core {GROUP} override in {NEXTEST_TOML.relative_to(REPO_ROOT)}",
         )
 
@@ -390,6 +395,7 @@ class WindowsSandboxNextestGroupTest(unittest.TestCase):
                 "windows_elevated_powershell_preserves_relative_paths",
                 "windows_elevated_temp_only_core_and_direct_spawn_enforce_carveouts",
                 "windows_elevated_unified_exec_enforces_large_recursive_deny_reads",
+                "windows_sandbox_cli_preserves_managed_deny_reads_across_launches",
             ],
         )
 
