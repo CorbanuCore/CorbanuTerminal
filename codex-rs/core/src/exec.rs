@@ -523,6 +523,27 @@ pub(crate) fn refuse_mxc_without_corbanu_protections(
     Ok(())
 }
 
+/// D541 (a), provisional, for MCP: a server that advertises the
+/// sandbox-state capability runs its own processes under the state it is
+/// sent, and with `use_mxc` that is the MXC sandbox, which gets none of
+/// Corbanu's protected-file read blocks. The call is refused while one of
+/// them applies, as for the agent's commands (D446 is command/exec's only).
+pub(crate) fn refuse_mxc_mcp_sandbox_state(
+    use_mxc: bool,
+    permission_profile: &PermissionProfile,
+    contract_armed: bool,
+) -> Result<()> {
+    if !use_mxc {
+        return Ok(());
+    }
+    refuse_mxc_without_corbanu_protections(
+        SandboxType::WindowsMxc,
+        permission_profile,
+        contract_armed,
+        /*folders*/ &[],
+    )
+}
+
 /// #1863: main refused a `\\localhost` working folder for command/exec at
 /// every sandbox level, because its path URI lost `localhost`. Upstream's
 /// path URIs now keep such a folder, so command/exec refuses it here, with
