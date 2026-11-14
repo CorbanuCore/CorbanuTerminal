@@ -906,10 +906,11 @@ fn pf_30_s03_review_bypasses_are_closed() {
     ] {
         assert_eq!(script(command), Some(expected), "{command}");
     }
-    // A pathological glob is matched in linear work (#1102).
+    // A pathological glob is matched in linear work (#1102). It can match
+    // a dotenv credential such as `.env.Z` (#2167).
     work::assert_linear("glob", |scale| {
         let glob = format!("ls .{}Z", "*".repeat(15 * scale));
-        assert_eq!(script(&glob), None);
+        assert_eq!(script(&glob), Some(Credentials));
     });
     // Globs in a custom home's own path.
     assert_eq!(
