@@ -102,76 +102,12 @@ async fn attestation_generate_round_trip_adds_header_to_responses_websocket_hand
     let thread_request_id = mcp
         .send_thread_start_request_with_auto_env(thread_start_params)
         .await?;
-<<<<<<< HEAD
-    let mut attestation_requests = 0;
-    let thread_response = timeout(
-        DEFAULT_READ_TIMEOUT,
-        read_response_answering_attestation(
-            &mut mcp,
-            RequestId::Integer(thread_request_id),
-            &mut attestation_requests,
-        ),
-    )
-    .await??;
-    let ThreadStartResponse { thread, .. } = to_response(thread_response)?;
-
-    let turn_request_id = mcp
-        .send_turn_start_request(TurnStartParams {
-            thread_id: thread.id,
-            client_user_message_id: None,
-            input: vec![V2UserInput::Text {
-                text: "Hello".to_string(),
-                text_elements: Vec::new(),
-            }],
-            ..Default::default()
-        })
-        .await?;
-    let turn_response = timeout(
-        DEFAULT_READ_TIMEOUT,
-        read_response_answering_attestation(
-            &mut mcp,
-            RequestId::Integer(turn_request_id),
-            &mut attestation_requests,
-        ),
-    )
-    .await??;
-    let _: TurnStartResponse = to_response(turn_response)?;
-
-||||||| 413492cd6c
-    let thread_response: JSONRPCResponse = timeout(
-        DEFAULT_READ_TIMEOUT,
-        mcp.read_stream_until_response_message(RequestId::Integer(thread_request_id)),
-    )
-    .await??;
-    let ThreadStartResponse { thread, .. } = to_response(thread_response)?;
-
-    let turn_request_id = mcp
-        .send_turn_start_request(TurnStartParams {
-            thread_id: thread.id,
-            client_user_message_id: None,
-            input: vec![V2UserInput::Text {
-                text: "Hello".to_string(),
-                text_elements: Vec::new(),
-            }],
-            ..Default::default()
-        })
-        .await?;
-    let turn_response: JSONRPCResponse = timeout(
-        DEFAULT_READ_TIMEOUT,
-        mcp.read_stream_until_response_message(RequestId::Integer(turn_request_id)),
-    )
-    .await??;
-    let _: TurnStartResponse = to_response(turn_response)?;
-
-    let mut attestation_requests = 0;
-=======
     let mut turn_request_id = None;
     let mut turn_started = false;
     let mut turn_completed = false;
     let mut attestation_requests = 0;
     // Prewarming can request attestation before thread/start or turn/start responds.
     // Service those requests immediately instead of buffering them behind RPC responses.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     timeout(DEFAULT_READ_TIMEOUT, async {
         loop {
             match mcp.read_next_message().await? {
@@ -240,35 +176,6 @@ async fn attestation_generate_round_trip_adds_header_to_responses_websocket_hand
 
     websocket_server.shutdown().await;
     Ok(())
-}
-
-async fn read_response_answering_attestation(
-    mcp: &mut TestAppServer,
-    target_request_id: RequestId,
-    attestation_requests: &mut usize,
-) -> Result<JSONRPCResponse> {
-    loop {
-        match mcp.read_next_message().await? {
-            JSONRPCMessage::Response(response) if response.id == target_request_id => {
-                return Ok(response);
-            }
-            JSONRPCMessage::Request(request) => {
-                let request = ServerRequest::try_from(request)?;
-                let ServerRequest::AttestationGenerate { request_id, .. } = request else {
-                    bail!("expected attestation/generate request, got {request:?}");
-                };
-                *attestation_requests += 1;
-                mcp.send_response(
-                    request_id,
-                    serde_json::to_value(AttestationGenerateResponse {
-                        token: ATTESTATION_HEADER.to_string(),
-                    })?,
-                )
-                .await?;
-            }
-            _ => {}
-        }
-    }
 }
 
 fn create_chatgpt_websocket_config(codex_home: &Path, server_uri: &str) -> std::io::Result<()> {

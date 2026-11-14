@@ -302,21 +302,10 @@ impl TestAppServer {
             }
         }
 
-<<<<<<< HEAD
         // Caller environment overrides must never turn an ordinary test into
         // a live-profile/native-Keychain test. Native qualification is separate.
         crate::test_environment::isolate_profile(cmd.as_std_mut(), codex_home);
 
-        let mut process = cmd
-            .kill_on_drop(true)
-            .spawn()
-            .context("codex-mcp-server proc should start")?;
-||||||| 413492cd6c
-        let mut process = cmd
-            .kill_on_drop(true)
-            .spawn()
-            .context("codex-mcp-server proc should start")?;
-=======
         cmd.kill_on_drop(true);
         let mut retries = 0;
         let mut process = loop {
@@ -331,7 +320,6 @@ impl TestAppServer {
             retries += 1;
             tokio::time::sleep(Duration::from_millis(10)).await;
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let stdin = process
             .stdin
             .take()
