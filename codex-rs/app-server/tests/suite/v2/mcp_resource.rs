@@ -1,10 +1,6 @@
-<<<<<<< HEAD
 use std::future::Future;
-||||||| 413492cd6c
-=======
 use std::path::Path;
 use std::pin::pin;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
@@ -213,239 +209,12 @@ async fn mcp_resource_read_returns_resource_contents() -> Result<()> {
                     metadata.get("connector_id").cloned(),
                     metadata.get("link_id").cloned()
                 ),
-<<<<<<< HEAD
-                responses::ev_completed("resp-skills-list"),
-            ]),
-            responses::sse(vec![
-                responses::ev_response_created("resp-skills-read"),
-                responses::ev_function_call_with_namespace(
-                    SKILLS_READ_CALL_ID,
-                    "skills",
-                    "read",
-                    &json!({
-                        "authority": {
-                            "kind": "orchestrator",
-                        },
-                        "package": SKILL_RESOURCE_URI,
-                        "resource": SKILL_REFERENCE_URI,
-                    })
-                    .to_string(),
-                ),
-                responses::ev_completed("resp-skills-read"),
-            ]),
-            responses::sse(vec![
-                responses::ev_response_created("resp-skills-read-again"),
-                responses::ev_function_call_with_namespace(
-                    SKILLS_READ_AGAIN_CALL_ID,
-                    "skills",
-                    "read",
-                    &json!({
-                        "authority": {
-                            "kind": "orchestrator",
-                        },
-                        "package": SKILL_RESOURCE_URI,
-                        "resource": SKILL_REFERENCE_URI,
-                    })
-                    .to_string(),
-                ),
-                responses::ev_completed("resp-skills-read-again"),
-            ]),
-            responses::sse(vec![
-                responses::ev_response_created("resp-orchestrator-skill"),
-                responses::ev_assistant_message("msg-orchestrator-skill", "Done"),
-                responses::ev_completed("resp-orchestrator-skill"),
-            ]),
-            responses::sse(vec![
-                responses::ev_response_created("resp-orchestrator-skill-after-refresh"),
-                responses::ev_assistant_message("msg-orchestrator-skill-after-refresh", "Done"),
-                responses::ev_completed("resp-orchestrator-skill-after-refresh"),
-            ]),
-        ],
-    )
-    .await;
-    let turn_start_id = mcp
-        .send_turn_start_request(TurnStartParams {
-            thread_id: thread.id.clone(),
-            input: vec![UserInput::Text {
-                text: format!("Use ${SKILL_NAME}"),
-                text_elements: Vec::new(),
-            }],
-            ..Default::default()
-        })
-        .await?;
-    let _: TurnStartResponse =
-        timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(turn_start_id)).await??;
-    timeout(
-        DEFAULT_READ_TIMEOUT,
-        mcp.read_stream_until_notification_message("turn/completed"),
-    )
-    .await??;
-
-    let requests = response_mock.requests();
-    assert_eq!(requests.len(), 4);
-    let first_request = &requests[0];
-    assert!(first_request.tool_by_name("skills", "list").is_some());
-    assert!(first_request.tool_by_name("skills", "read").is_some());
-    assert!(first_request.tool_by_name("skills", "search").is_none());
-
-    let developer_messages = first_request.message_input_texts("developer");
-    let catalog_line = format!(
-        "- {SKILL_NAME}: {SKILL_DESCRIPTION} (orchestrator resource: {SKILL_RESOURCE_URI})"
-    );
-    assert_eq!(
-        1,
-        developer_messages
-            .iter()
-            .filter(|text| text.contains(&catalog_line))
-            .count()
-    );
-    assert!(
-        developer_messages
-            .iter()
-            .all(|text| !text.contains("ignored-plugin:ignored"))
-    );
-    let skill_fragments = first_request
-        .message_input_texts("user")
-        .into_iter()
-        .filter(|text| text.starts_with("<skill>"))
-        .collect::<Vec<_>>();
-    assert_eq!(1, skill_fragments.len());
-    assert!(skill_fragments[0].contains(&format!("<name>{SKILL_NAME}</name>")));
-    assert!(skill_fragments[0].contains(SKILL_MARKER));
-    assert!(skill_fragments[0].contains(SKILL_REFERENCE_URI));
-
-    let list_output = requests[1]
-        .function_call_output_text(SKILLS_LIST_CALL_ID)
-        .ok_or_else(|| anyhow::anyhow!("skills.list output should be sent to the model"))?;
-    assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&list_output)?,
-        json!({
-            "skills": [{
-                "authority": {
-                    "kind": "orchestrator",
-||||||| 413492cd6c
-                responses::ev_completed("resp-skills-list"),
-            ]),
-            responses::sse(vec![
-                responses::ev_response_created("resp-skills-read"),
-                responses::ev_function_call_with_namespace(
-                    SKILLS_READ_CALL_ID,
-                    "skills",
-                    "read",
-                    &json!({
-                        "authority": {
-                            "kind": "orchestrator",
-                        },
-                        "package": SKILL_RESOURCE_URI,
-                        "resource": SKILL_REFERENCE_URI,
-                    })
-                    .to_string(),
-                ),
-                responses::ev_completed("resp-skills-read"),
-            ]),
-            responses::sse(vec![
-                responses::ev_response_created("resp-skills-read-again"),
-                responses::ev_function_call_with_namespace(
-                    SKILLS_READ_AGAIN_CALL_ID,
-                    "skills",
-                    "read",
-                    &json!({
-                        "authority": {
-                            "kind": "orchestrator",
-                        },
-                        "package": SKILL_RESOURCE_URI,
-                        "resource": SKILL_REFERENCE_URI,
-                    })
-                    .to_string(),
-                ),
-                responses::ev_completed("resp-skills-read-again"),
-            ]),
-            responses::sse(vec![
-                responses::ev_response_created("resp-orchestrator-skill"),
-                responses::ev_assistant_message("msg-orchestrator-skill", "Done"),
-                responses::ev_completed("resp-orchestrator-skill"),
-            ]),
-            responses::sse(vec![
-                responses::ev_response_created("resp-orchestrator-skill-after-refresh"),
-                responses::ev_assistant_message("msg-orchestrator-skill-after-refresh", "Done"),
-                responses::ev_completed("resp-orchestrator-skill-after-refresh"),
-            ]),
-        ],
-    )
-    .await;
-    let turn_start_id = mcp
-        .send_turn_start_request(TurnStartParams {
-            thread_id: thread.id.clone(),
-            input: vec![UserInput::Text {
-                text: format!("Use ${SKILL_NAME}"),
-                text_elements: Vec::new(),
-            }],
-            ..Default::default()
-        })
-        .await?;
-    let _: TurnStartResponse =
-        timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(turn_start_id)).await??;
-    timeout(
-        DEFAULT_READ_TIMEOUT,
-        mcp.read_stream_until_notification_message("turn/completed"),
-    )
-    .await??;
-
-    let requests = response_mock.requests();
-    assert_eq!(requests.len(), 4);
-    let first_request = &requests[0];
-    assert!(first_request.tool_by_name("skills", "list").is_some());
-    assert!(first_request.tool_by_name("skills", "read").is_some());
-    assert!(first_request.tool_by_name("skills", "search").is_none());
-
-    let developer_messages = first_request.message_input_texts("developer");
-    let catalog_line = format!(
-        "- {SKILL_NAME}: {SKILL_DESCRIPTION} (orchestrator resource: {SKILL_RESOURCE_URI})"
-    );
-    assert_eq!(
-        1,
-        developer_messages
-            .iter()
-            .filter(|text| text.contains(&catalog_line))
-            .count()
-    );
-    assert!(
-        developer_messages
-            .iter()
-            .all(|text| !text.contains("ignored-plugin:ignored"))
-    );
-    assert!(
-        developer_messages
-            .iter()
-            .any(|text| text.contains("do not treat `skill://` identifiers as filesystem paths"))
-    );
-    let skill_fragments = first_request
-        .message_input_texts("user")
-        .into_iter()
-        .filter(|text| text.starts_with("<skill>"))
-        .collect::<Vec<_>>();
-    assert_eq!(1, skill_fragments.len());
-    assert!(skill_fragments[0].contains(&format!("<name>{SKILL_NAME}</name>")));
-    assert!(skill_fragments[0].contains(SKILL_MARKER));
-    assert!(skill_fragments[0].contains(SKILL_REFERENCE_URI));
-
-    let list_output = requests[1]
-        .function_call_output_text(SKILLS_LIST_CALL_ID)
-        .ok_or_else(|| anyhow::anyhow!("skills.list output should be sent to the model"))?;
-    assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&list_output)?,
-        json!({
-            "skills": [{
-                "authority": {
-                    "kind": "orchestrator",
-=======
                 match &target {
                     Some(target) => (
                         Some(json!(target.connector_id)),
                         Some(json!(target.link_id)),
                     ),
                     None => (None, None),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 },
             );
         }
@@ -805,7 +574,6 @@ async fn mcp_resource_read_returns_error_for_unknown_thread_impl() -> Result<()>
     Ok(())
 }
 
-<<<<<<< HEAD
 fn run_current_thread_test_with_stack<F>(name: &str, future: F) -> Result<()>
 where
     F: Future<Output = Result<()>> + Send + 'static,
@@ -825,10 +593,6 @@ where
         .map_err(|_| anyhow::anyhow!("{name} test thread panicked"))?
 }
 
-async fn start_resource_test_app_server(
-||||||| 413492cd6c
-async fn start_resource_test_app_server(
-=======
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn metadata_and_mcp_requests_complete_while_unrelated_resume_loads_config() -> Result<()> {
     let responses_server = responses::start_mock_server().await;
@@ -1567,7 +1331,6 @@ async fn start_resource_in_process_client(
 }
 
 pub(super) async fn start_resource_test_app_server(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     apps_server_url: &str,
     responses_server_uri: &str,
     environment: ResourceTestEnvironment,

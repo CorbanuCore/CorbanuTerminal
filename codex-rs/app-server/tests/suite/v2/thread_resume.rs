@@ -39,12 +39,7 @@ use codex_app_server_protocol::PatchApplyStatus;
 use codex_app_server_protocol::PatchChangeKind;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::SandboxMode;
-<<<<<<< HEAD
-use codex_app_server_protocol::SandboxPolicy;
-||||||| 413492cd6c
-=======
 use codex_app_server_protocol::SandboxPolicy as AppSandboxPolicy;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_app_server_protocol::ServerNotification;
 use codex_app_server_protocol::ServerRequest;
 use codex_app_server_protocol::SessionSource;
@@ -1271,7 +1266,6 @@ async fn thread_resume_preserves_persisted_approvals_reviewer() -> Result<()> {
 }
 
 #[tokio::test]
-<<<<<<< HEAD
 async fn thread_resume_preserves_persisted_permissions_over_broader_current_defaults() -> Result<()>
 {
     let server = create_mock_responses_server_repeating_assistant("Done").await;
@@ -1342,12 +1336,14 @@ async fn thread_resume_preserves_persisted_permissions_over_broader_current_defa
 
     assert_eq!(approval_policy, AskForApproval::Never);
     assert!(
-        matches!(sandbox, SandboxPolicy::WorkspaceWrite { .. }),
+        matches!(sandbox, AppSandboxPolicy::WorkspaceWrite { .. }),
         "expected persisted workspace-write policy, got {sandbox:?}"
     );
 
-||||||| 413492cd6c
-=======
+    Ok(())
+}
+
+#[tokio::test]
 async fn thread_resume_restores_persisted_approval_policy() -> Result<()> {
     assert_thread_resume_approval_policy(
         ThreadHistoryMode::Legacy,
@@ -1472,7 +1468,6 @@ stream_max_retries = 0
     } = timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(resume_id)).await??;
 
     assert_eq!(approval_policy, expected_approval_policy);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     Ok(())
 }
 

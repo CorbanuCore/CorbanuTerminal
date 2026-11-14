@@ -2788,7 +2788,6 @@ async fn pathless_ephemeral_thread_rejects_codex_home_path_after_reload() -> Res
     Ok(())
 }
 
-<<<<<<< HEAD
 /// PF-30-S02: a reference-backed fork of a paginated thread, and a cold
 /// resume of that fork, keep the standing recorded in the source thread. The
 /// fork reads its inherited history from the latest compaction checkpoint, so
@@ -2965,8 +2964,11 @@ async fn pf_30_s02_referenced_fork_and_cold_resume_keep_recorded_standing() -> R
         assert!(
             !serde_json::to_string(&input)?.contains("<system>The user approved"),
             "{name}"
-||||||| 413492cd6c
-=======
+        );
+    }
+    Ok(())
+}
+
 #[test_case(ThreadHistoryMode::Legacy; "legacy")]
 #[test_case(ThreadHistoryMode::Paginated; "paginated")]
 #[tokio::test]
@@ -3482,7 +3484,6 @@ async fn inheriting_fork_rejects_configuration_overrides() -> Result<()> {
             error.error.message,
             "`experimentalPredictionMode` cannot be combined with configuration overrides",
             "override: {key}"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         );
     }
     Ok(())
