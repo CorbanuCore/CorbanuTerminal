@@ -368,27 +368,11 @@ fn protected_socket_path(rendezvous_path: &Path) -> IoResult<std::path::PathBuf>
 }
 
 pub struct AppServerStartupLock {
-<<<<<<< HEAD
-    file: std::fs::File,
-}
-
-impl Drop for AppServerStartupLock {
-    fn drop(&mut self) {
-        // #928: closing the file releases the lock only once no other copy of
-        // the descriptor is open, and a child another thread forked keeps one
-        // until it starts its program. Unlock now so the next startup waits
-        // only for this one.
-        let _ = self.file.unlock();
-    }
-||||||| 413492cd6c
-    _file: std::fs::File,
-=======
     _file: std::fs::File,
     #[cfg(unix)]
     removable_path: Option<AbsolutePathBuf>,
     #[cfg(unix)]
     remove_on_drop: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub async fn acquire_app_server_startup_lock(
@@ -405,11 +389,6 @@ pub async fn acquire_app_server_startup_lock(
             .write(true)
             .open(startup_lock_path.as_path())?;
         file.lock()?;
-<<<<<<< HEAD
-        Ok(AppServerStartupLock { file })
-||||||| 413492cd6c
-        Ok(AppServerStartupLock { _file: file })
-=======
         Ok(AppServerStartupLock {
             _file: file,
             #[cfg(unix)]
@@ -417,7 +396,6 @@ pub async fn acquire_app_server_startup_lock(
             #[cfg(unix)]
             remove_on_drop: false,
         })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     })
     .await
     .map_err(|err| std::io::Error::other(format!("startup lock task failed: {err}")))?
@@ -487,9 +465,9 @@ pub(super) fn try_acquire_removable_app_server_startup_lock(
     })
 }
 
-#[cfg(unix)]
 impl Drop for AppServerStartupLock {
     fn drop(&mut self) {
+        #[cfg(unix)]
         if self.remove_on_drop
             && let Err(err) = self.remove_file()
         {
@@ -499,6 +477,11 @@ impl Drop for AppServerStartupLock {
                 "failed to remove app-server startup lock file"
             );
         }
+        // #928: closing the file releases the lock only once no other copy of
+        // the descriptor is open, and a child another thread forked keeps one
+        // until it starts its program. Unlock now so the next startup waits
+        // only for this one.
+        let _ = self._file.unlock();
     }
 }
 

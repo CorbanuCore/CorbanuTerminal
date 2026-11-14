@@ -33,14 +33,8 @@ fn client_management_handle(
         current_enrollment: Arc::new(RemoteControlEnrollmentState::new(/*enrollment*/ None)),
         pairing_persistence_key: watch::channel(None).0,
         pairing_persistence_key_required: false,
-<<<<<<< HEAD
-        auth_manager,
-        desired_state_stored_hook: None,
-||||||| 413492cd6c
-        auth_manager,
-=======
         auth_manager: auth::RemoteControlAuth::capture(auth_manager).0,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        desired_state_stored_hook: None,
     }
 }
 

@@ -101,6 +101,8 @@ impl RemoteControl {
             pairing_persistence_key: self.client_name.clone(),
             pairing_persistence_key_required: self.requires_client_name,
             auth_manager: auth_manager.clone(),
+            #[cfg(test)]
+            desired_state_stored_hook: None,
         });
         let websocket = RemoteControlWebsocket::new(
             websocket::RemoteControlWebsocketConfig {
@@ -190,10 +192,10 @@ impl RemoteControlHandle {
         self.inner.status.subscribe()
     }
 
-    pub fn enable_ephemeral(
+    pub async fn enable_ephemeral(
         &self,
     ) -> Result<RemoteControlStatusChangedNotification, RemoteControlEnableError> {
-        self.inner.session().enable_ephemeral()
+        self.inner.session().enable_ephemeral().await
     }
 
     pub async fn disable_ephemeral(&self) -> RemoteControlStatusChangedNotification {
