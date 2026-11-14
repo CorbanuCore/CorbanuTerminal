@@ -16,7 +16,9 @@ from tempfile import TemporaryDirectory
 
 CODEX_RS = Path(__file__).resolve().parents[2] / "codex-rs"
 LIST_RE = re.compile(r"^\s*unit_test_alone\s*=\s*(\[[^\]]*\])", re.MULTILINE)
-TEST_FN_RE = r"#\[\s*(?:\w+::)*test\b[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*(?:async\s+)?fn\s+{}\s*\("
+TEST_FN_RE = (
+    r"#\[\s*(?:\w+::)*test\b[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*(?:async\s+)?fn\s+{}\s*\("
+)
 
 
 def alone_lists(root: Path = CODEX_RS) -> dict[Path, list[str]]:
@@ -38,12 +40,12 @@ class UnitTestAloneTest(unittest.TestCase):
             build = root / "state" / "BUILD.bazel"
             build.parent.mkdir()
             build.write_text(
-                'codex_rust_crate(\n'
-                '    unit_test_alone = [\n'
-                '        # Preserve full test names.\n'
+                "codex_rust_crate(\n"
+                "    unit_test_alone = [\n"
+                "        # Preserve full test names.\n"
                 '        "runtime::fixture",\n'
-                '    ],\n'
-                ')\n',
+                "    ],\n"
+                ")\n",
                 encoding="utf-8",
             )
             self.assertEqual(alone_lists(root), {build: ["runtime::fixture"]})
@@ -59,7 +61,9 @@ class UnitTestAloneTest(unittest.TestCase):
                     fn = name.rsplit("::", 1)[-1]
                     pattern = re.compile(TEST_FN_RE.format(re.escape(fn)))
                     hits = sum(len(pattern.findall(text)) for text in sources)
-                    self.assertEqual(hits, 1, f"{name}: {hits} test functions named {fn}")
+                    self.assertEqual(
+                        hits, 1, f"{name}: {hits} test functions named {fn}"
+                    )
 
 
 if __name__ == "__main__":
