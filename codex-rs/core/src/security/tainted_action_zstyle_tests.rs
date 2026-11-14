@@ -51,6 +51,23 @@ fn issue_2001_style_code_is_read_before_lookup() {
 }
 
 #[test]
+fn issue_2001_review_dynamic_eval_options_ask() {
+    for line in [
+        "o=-e; zstyle $o :x y 'eval $q'; zstyle -s :x y v",
+        "zstyle \"$o\" :x y 'eval $q'; zstyle -s :x y v",
+        "zstyle \"$(printf %s -e)\" :x y 'eval $q'; zstyle -s :x y v",
+        "o=-e; zstyle $o :x y 'zm* zsh/st?t'; zstyle -s :x y v; stat -A functions x",
+        "zstyle -$o :x y 'eval $q'; zstyle -s :x y v",
+    ] {
+        assert_eq!(
+            verdicts(line),
+            vec![Some(ProtectedActionKind::UnseenCode); 4],
+            "{line}"
+        );
+    }
+}
+
+#[test]
 fn issue_2001_style_may_load_stat_before_table_writes() {
     for lookup in ["-s :x y v", "-a :x y v", "-b :x y v", "-T :x y", "-t :x y"] {
         for writer in ["stat -A functions x", "stat -H aliases x"] {
@@ -69,6 +86,7 @@ fn issue_2001_literal_styles_and_visible_code_stay_quiet() {
     for line in [
         "zstyle :x y 'eval $q'; zstyle -s :x y v",
         "zstyle -- :x y 'eval $q'; zstyle -s :x y v",
+        "zstyle \":ctx:$x\" y 'eval $q'; zstyle -s \":ctx:$x\" y v",
         "zstyle -e :x y 'print -r -- ok'; zstyle -s :x y v",
         "zstyle -e :x y print -r -- ok",
     ] {
@@ -98,7 +116,9 @@ fn issue_2001_preserves_stronger_findings_in_stored_code() {
 fn issue_2001_deferred_style_scan_is_linear() {
     tracing::subscriber::with_default(tracing::subscriber::NoSubscriber::default(), || {
         work::assert_linear("deferred styles", |scale| {
-            let line = "zstyle -e :x y 'eval $q'; ".repeat(50 * scale);
+            let line = (0..50 * scale)
+                .map(|index| format!("zstyle -e :x y{index} 'eval $q{index}'; "))
+                .collect::<String>();
             let _ = verdicts(&line);
         });
     });

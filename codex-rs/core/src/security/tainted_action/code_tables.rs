@@ -200,13 +200,25 @@ pub(super) fn may_load_stat(command: &[String], commands: &[shell::SimpleCommand
                     // #2001: a later style lookup may run arbitrary code,
                     // including a disguised load of the stat builtin.
                     || (name == "zstyle"
-                        && words.get(at + 1).is_some_and(|option| option == "-e"))
+                        && words.get(at + 1).is_some_and(|option| style_may_evaluate(option)))
                     || (!matches!(name, "[" | "[[")
                         && name.contains(['$', '`', '*', '?', '[', '{', '(']))
                     || name.contains(shell::UNSEEN_OUTPUT)
             })
         })
     })
+}
+
+/// #2001: the first style operand may become `-e` after expansion. A
+/// fixed context prefix (`:ctx:$x`) cannot become an option. Patterns and
+/// unseen leading values are conservative; no old verdict is removed.
+pub(super) fn style_may_evaluate(option: &str) -> bool {
+    option == "-e"
+        || option.starts_with(['$', '`', '*', '?', '[', '{', '='])
+        || option.starts_with(shell::UNSEEN_OUTPUT)
+        || (option.starts_with('-')
+            && (option.contains(['$', '`', '*', '?', '[', '{'])
+                || option.contains(shell::UNSEEN_OUTPUT)))
 }
 
 /// D410: whether `text`, quotes and backslashes aside, names `zmodload`
