@@ -1,9 +1,9 @@
 //! Crash-safe Telegram update inbox and bounded replay protection.
 //!
 //! An update is persisted as pending before a handler may mutate app-server
-//! state. It becomes completed only after the handler succeeds. Pending raw
-//! updates are replayed on process start, while completed ids form a bounded
-//! fast deduplication window. This closes both crash gaps: accepting an update
+//! state. Completed handlers are recorded separately as success or failure.
+//! Pending raw updates are replayed on process start, while terminal ids form
+//! bounded fast deduplication windows. This closes both crash gaps: accepting an update
 //! and losing it before dispatch, or replaying it after app-server acceptance.
 
 use std::collections::BTreeMap;
@@ -29,6 +29,8 @@ struct PersistedUpdates {
     completed_update_ids: Vec<u64>,
     #[serde(default)]
     pending: Vec<Update>,
+    #[serde(default)]
+    failed_update_ids: Vec<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,20 +52,34 @@ pub struct UpdateDeduplicator {
 struct State {
     completed: HashSet<u64>,
     completed_order: VecDeque<u64>,
+    failed: HashSet<u64>,
+    failed_order: VecDeque<u64>,
     pending: BTreeMap<u64, Update>,
     in_flight: HashSet<u64>,
 }
 
+#[derive(Clone, Copy)]
+enum Completion {
+    Success,
+    Failure,
+}
+
 impl State {
-    fn mark_completed(&mut self, id: u64) {
+    fn mark_completed(&mut self, id: u64, completion: Completion) {
         self.pending.remove(&id);
         self.in_flight.remove(&id);
-        if self.completed.insert(id) {
-            self.completed_order.push_back(id);
+        // Both terminal outcomes deduplicate, but failures are never successes.
+        // Each history is bounded independently of the unresolved inbox.
+        let (ids, order) = match completion {
+            Completion::Success => (&mut self.completed, &mut self.completed_order),
+            Completion::Failure => (&mut self.failed, &mut self.failed_order),
+        };
+        if ids.insert(id) {
+            order.push_back(id);
         }
-        while self.completed_order.len() > DEDUP_WINDOW {
-            if let Some(oldest) = self.completed_order.pop_front() {
-                self.completed.remove(&oldest);
+        while order.len() > DEDUP_WINDOW {
+            if let Some(oldest) = order.pop_front() {
+                ids.remove(&oldest);
             }
         }
     }
@@ -81,7 +97,10 @@ impl UpdateDeduplicator {
             Ok(contents) => match serde_json::from_str::<PersistedUpdates>(&contents) {
                 Ok(persisted) => {
                     for id in persisted.completed_update_ids {
-                        state.mark_completed(id);
+                        state.mark_completed(id, Completion::Success);
+                    }
+                    for id in persisted.failed_update_ids {
+                        state.mark_completed(id, Completion::Failure);
                     }
                     for update in persisted.pending {
                         state.pending.insert(u64::from(update.id.0), update);
@@ -117,7 +136,10 @@ impl UpdateDeduplicator {
         };
         let (before, snapshot) = {
             let mut state = self.inner.lock().await;
-            if state.completed.contains(&id) || state.in_flight.contains(&id) {
+            if state.completed.contains(&id)
+                || state.failed.contains(&id)
+                || state.in_flight.contains(&id)
+            {
                 info!(update_id = id, "dropping duplicate Telegram update");
                 return BeginUpdate::Duplicate;
             }
@@ -143,6 +165,16 @@ impl UpdateDeduplicator {
 
     /// Mark an update applied only after its handler completed successfully.
     pub async fn complete_update(&self, update_id: u64) -> anyhow::Result<()> {
+        self.finish_update(update_id, Completion::Success).await
+    }
+
+    /// A handler returned an error, so its attempt is terminal. Do not replay
+    /// potentially completed mutations merely because a later step failed.
+    pub async fn fail_update(&self, update_id: u64) -> anyhow::Result<()> {
+        self.finish_update(update_id, Completion::Failure).await
+    }
+
+    async fn finish_update(&self, update_id: u64, completion: Completion) -> anyhow::Result<()> {
         let _persist_permit = self
             .persist_lock
             .acquire()
@@ -151,7 +183,7 @@ impl UpdateDeduplicator {
         let (before, snapshot) = {
             let mut state = self.inner.lock().await;
             let before = state.clone();
-            state.mark_completed(update_id);
+            state.mark_completed(update_id, completion);
             (before, persisted_snapshot(&state))
         };
         if let Err(err) = self.persist_snapshot(snapshot).await {
@@ -161,7 +193,7 @@ impl UpdateDeduplicator {
         Ok(())
     }
 
-    /// Release a failed handler's in-process claim. The raw update remains
+    /// Release an unresolved receipt's in-process claim. The raw update remains
     /// pending on disk and will be replayed by the next connector start.
     pub async fn release_update(&self, update_id: u64) {
         let Ok(_persist_permit) = self.persist_lock.acquire().await else {
@@ -208,5 +240,6 @@ fn persisted_snapshot(state: &State) -> PersistedUpdates {
     PersistedUpdates {
         completed_update_ids: state.completed_order.iter().copied().collect(),
         pending: state.pending.values().cloned().collect(),
+        failed_update_ids: state.failed_order.iter().copied().collect(),
     }
 }

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
+use pretty_assertions::assert_eq;
 use teloxide::types::Update;
 
 use crate::dedup::BeginUpdate;
@@ -126,6 +127,148 @@ async fn corrupt_state_file_starts_empty_and_is_set_aside() {
     );
     assert!(telegram_dir.join("updates-7.json.corrupt").exists());
     let _ = std::fs::remove_dir_all(codex_home);
+}
+
+#[tokio::test]
+async fn unresolved_updates_still_enforce_pending_capacity() {
+    let home = unique_temp_dir("codex-telegram-pending-capacity");
+    let inbox = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
+    for id in 0..crate::dedup::INBOX_CAPACITY as u64 {
+        assert_eq!(
+            inbox.begin_update(&message_update(id)).await,
+            BeginUpdate::Accepted
+        );
+        inbox.release_update(id).await;
+    }
+    let restarted = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
+    assert_eq!(
+        restarted.pending_updates().await.len(),
+        crate::dedup::INBOX_CAPACITY
+    );
+    assert_eq!(
+        restarted.begin_update(&message_update(/*id*/ 999)).await,
+        BeginUpdate::InboxFull
+    );
+    // An already retained update can still resolve while the inbox is full.
+    assert_eq!(
+        restarted.begin_update(&message_update(/*id*/ 0)).await,
+        BeginUpdate::Accepted
+    );
+    restarted.fail_update(/*update_id*/ 0).await.unwrap();
+    assert_eq!(
+        restarted.begin_update(&message_update(/*id*/ 999)).await,
+        BeginUpdate::Accepted
+    );
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+#[tokio::test]
+async fn failed_history_is_bounded_and_distinct_from_success() {
+    let home = unique_temp_dir("codex-telegram-failed-window");
+    let inbox = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
+    for id in 0..=DEDUP_WINDOW as u64 {
+        assert_eq!(
+            inbox.begin_update(&message_update(id)).await,
+            BeginUpdate::Accepted
+        );
+        inbox.fail_update(id).await.unwrap();
+    }
+    let state: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(home.join("telegram/updates-123.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        state,
+        serde_json::json!({
+            "completed_update_ids": [],
+            "failed_update_ids": (1..=DEDUP_WINDOW as u64).collect::<Vec<_>>(),
+            "pending": []
+        })
+    );
+    let restarted = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
+    assert_eq!(
+        restarted.begin_update(&message_update(/*id*/ 0)).await,
+        BeginUpdate::Accepted
+    );
+    assert_eq!(
+        restarted.begin_update(&message_update(/*id*/ 1)).await,
+        BeginUpdate::Duplicate
+    );
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+#[tokio::test]
+async fn failed_terminal_write_keeps_pending_claim_and_durable_replay() {
+    let home = unique_temp_dir("codex-telegram-failed-persistence");
+    let inbox = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
+    assert_eq!(
+        inbox.begin_update(&message_update(/*id*/ 42)).await,
+        BeginUpdate::Accepted
+    );
+    let dir = home.join("telegram");
+    let saved = home.join("saved");
+    std::fs::rename(&dir, &saved).unwrap();
+    std::fs::write(&dir, "not a directory").unwrap();
+    assert!(inbox.fail_update(/*update_id*/ 42).await.is_err());
+    assert_eq!(
+        inbox.pending_updates().await,
+        vec![message_update(/*id*/ 42)]
+    );
+    assert_eq!(
+        inbox.begin_update(&message_update(/*id*/ 42)).await,
+        BeginUpdate::Duplicate
+    );
+    std::fs::remove_file(&dir).unwrap();
+    std::fs::rename(saved, dir).unwrap();
+    let restarted = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
+    assert_eq!(
+        restarted.pending_updates().await,
+        vec![message_update(/*id*/ 42)]
+    );
+    assert_eq!(
+        restarted.begin_update(&message_update(/*id*/ 42)).await,
+        BeginUpdate::Accepted
+    );
+    restarted.fail_update(/*update_id*/ 42).await.unwrap();
+    assert!(restarted.pending_updates().await.is_empty());
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+#[tokio::test]
+async fn legacy_success_and_pending_records_still_load() {
+    let home = unique_temp_dir("codex-telegram-legacy");
+    std::fs::create_dir_all(home.join("telegram")).unwrap();
+    std::fs::write(
+        home.join("telegram/updates-123.json"),
+        serde_json::json!({
+            "update_ids": [1], "pending": [message_update(/*id*/ 2)]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let inbox = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
+    assert_eq!(
+        inbox.begin_update(&message_update(/*id*/ 1)).await,
+        BeginUpdate::Duplicate
+    );
+    assert_eq!(
+        inbox.pending_updates().await,
+        vec![message_update(/*id*/ 2)]
+    );
+    assert_eq!(
+        inbox.begin_update(&message_update(/*id*/ 2)).await,
+        BeginUpdate::Accepted
+    );
+    inbox.fail_update(/*update_id*/ 2).await.unwrap();
+    let state: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(home.join("telegram/updates-123.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        state,
+        serde_json::json!({
+            "completed_update_ids": [1], "failed_update_ids": [2], "pending": []
+        })
+    );
+    std::fs::remove_dir_all(home).unwrap();
 }
 
 fn message_update(id: u64) -> Update {
