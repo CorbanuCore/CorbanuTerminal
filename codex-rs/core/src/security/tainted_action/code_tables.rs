@@ -194,14 +194,61 @@ pub(super) fn may_load_stat(command: &[String], commands: &[shell::SimpleCommand
             work::step();
             names_stat_load(word)
         }) || [false, true].into_iter().any(|zsh| {
-            each_command(&run_words(&simple.words, simple, zsh), |_, name| {
+            let words = run_words(&simple.words, simple, zsh);
+            each_command(&words, |at, name| {
                 name == "enable"
+                    // #2001: a later style lookup may run arbitrary code,
+                    // including a disguised load of the stat builtin.
+                    || (name == "zstyle" && style_eval_option(&words[at + 1..], /*cut*/ false).is_some())
                     || (!matches!(name, "[" | "[[")
                         && name.contains(['$', '`', '*', '?', '[', '{', '(']))
                     || name.contains(shell::UNSEEN_OUTPUT)
             })
         })
     })
+}
+
+/// #2001: the first style operand may become `-e` after expansion. A
+/// fixed context prefix (`:ctx:$x`) cannot become an option. Patterns and
+/// unseen leading values are conservative; no old verdict is removed.
+fn style_may_evaluate(option: &str) -> bool {
+    option == "-e"
+        || option.starts_with(['$', '`', '='])
+        || option.starts_with(GLOB)
+        || may_match(option)
+        // Repetition can erase a literal prefix, and ksh groups may start
+        // with @ or !. Do not use a table-name prefix to rule these out.
+        || option.contains(['(', '#'])
+        || option.starts_with(shell::UNSEEN_OUTPUT)
+        || (option.starts_with('-')
+            && (option.contains(['$', '`'])
+                || option.contains(GLOB)
+                || option.contains(shell::UNSEEN_OUTPUT)))
+}
+
+/// A leading expansion may disappear (nullglob or an empty rc-expanded
+/// array), moving a later operand into the option position. Stop once a
+/// fixed word prevents that shift. Each operand is inspected at most once.
+pub(super) fn style_eval_option(options: &[String], cut: bool) -> Option<usize> {
+    if cut && options.is_empty() {
+        return Some(0);
+    }
+    for (index, option) in options.iter().enumerate() {
+        work::step();
+        // A cut at '(' may hide the whole option or erase its partial
+        // prefix, as in `zstyle x(#c0)-e`. Earlier fixed operands still
+        // prevent it from becoming the first option.
+        if style_may_evaluate(option) || (cut && index + 1 == options.len()) {
+            return Some(index);
+        }
+        if !option.contains(GLOB)
+            && !option.contains(['$', '`'])
+            && !option.contains(shell::UNSEEN_OUTPUT)
+        {
+            break;
+        }
+    }
+    None
 }
 
 /// D410: whether `text`, quotes and backslashes aside, names `zmodload`
