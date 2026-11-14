@@ -284,7 +284,11 @@ async fn streamable_http_session_recovery_retries_initialize_failure() -> anyhow
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn streamable_http_401_does_not_trigger_recovery() -> anyhow::Result<()> {
     let (_server, base_url) = spawn_streamable_http_server().await?;
-    let client = create_client(&base_url).await?;
+    let http_client = FailFirstInitializeHttpClient::new(
+        Environment::default_for_tests().get_http_client(),
+        /*failures_remaining*/ 0,
+    );
+    let client = create_client_with_http_client(&base_url, Arc::new(http_client.clone())).await?;
 
     let warmup = call_echo_tool(&client, "warmup").await?;
     assert_eq!(warmup, expected_echo_result("warmup"));
@@ -297,17 +301,24 @@ async fn streamable_http_401_does_not_trigger_recovery() -> anyhow::Result<()> {
     )
     .await?;
 
-    let first_error = call_echo_tool(&client, "unauthorized").await.unwrap_err();
-    assert!(codex_rmcp_client::is_authentication_required_error(
-        &first_error
-    ));
+    let mut expected = CallToolResult::error(vec![ContentBlock::text("Authentication required")]);
+    expected.meta = Some(MetaObject::from(serde_json::Map::from_iter([(
+        "mcp/www_authenticate".to_string(),
+        json!([""]),
+    )])));
+    assert_eq!(call_echo_tool(&client, "unauthorized").await?, expected);
+    assert_eq!(
+        call_echo_tool(&client, "still-unauthorized").await?,
+        expected
+    );
 
-    let second_error = call_echo_tool(&client, "still-unauthorized")
-        .await
-        .unwrap_err();
-    assert!(codex_rmcp_client::is_authentication_required_error(
-        &second_error
-    ));
+    // Each failed call consumes exactly one rejection; neither retries the tool
+    // nor initializes a new session. A later user call reuses the original one.
+    assert_eq!(
+        call_echo_tool(&client, "next-user-call").await?,
+        expected_echo_result("next-user-call"),
+    );
+    assert_eq!(http_client.initialize_attempts(), 1);
 
     Ok(())
 }
