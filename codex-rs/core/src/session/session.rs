@@ -397,15 +397,13 @@ impl SessionConfiguration {
             if crate::windows_sandbox::windows_sandbox_strength(windows_sandbox_level)
                 < crate::windows_sandbox::windows_sandbox_strength(self.windows_sandbox_level)
             {
-                return Err(ConstraintError::InvalidValue {
+                return Err(ConstraintError::SessionInvariant {
                     field_name: "windows_sandbox_level",
-                    candidate: format!("{windows_sandbox_level:?}"),
-                    allowed: format!(
-                        "this session's Windows sandbox ({:?}) or a stronger one; a weaker one \
-                         applies from the next session",
+                    reason: format!(
+                        "this session keeps its Windows sandbox ({:?}); the weaker \
+                         {windows_sandbox_level:?} sandbox applies from the next session",
                         self.windows_sandbox_level
                     ),
-                    requirement_source: codex_config::RequirementSource::Unknown,
                 });
             }
             if windows_sandbox_level != next_configuration.windows_sandbox_level {

@@ -48,6 +48,7 @@ async fn issue_2000_windows_sandbox_only_gets_stronger_mid_session() {
             panic!("{weaker:?} lowered a running session's Windows sandbox");
         };
         assert!(err.to_string().contains("next session"), "{err}");
+        assert!(!err.to_string().contains("<unspecified>"), "{err}");
     }
     let Err(err) = restricted.apply(&with_level(WindowsSandboxLevel::Disabled)) else {
         panic!("the non-admin sandbox was turned off mid-session");

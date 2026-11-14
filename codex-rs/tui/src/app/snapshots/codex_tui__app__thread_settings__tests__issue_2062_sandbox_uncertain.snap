@@ -1,0 +1,5 @@
+---
+source: tui/src/app/thread_settings_tests.rs
+expression: text
+---
+■ The Windows sandbox settings were saved, but their use by this session could not be confirmed. Start a new session with /new to use the saved settings.
