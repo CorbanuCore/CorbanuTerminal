@@ -217,6 +217,9 @@ pub(super) fn style_may_evaluate(option: &str) -> bool {
         || option.starts_with(['$', '`', '='])
         || option.starts_with(GLOB)
         || may_match(option)
+        // Repetition can erase a literal prefix, and ksh groups may start
+        // with @ or !. Do not use a table-name prefix to rule these out.
+        || option.contains(['(', '#'])
         || option.starts_with(shell::UNSEEN_OUTPUT)
         || (option.starts_with('-')
             && (option.contains(['$', '`'])
