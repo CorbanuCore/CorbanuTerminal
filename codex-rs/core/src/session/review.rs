@@ -13,22 +13,6 @@ pub(super) async fn spawn_review_thread(
     let model = config
         .review_model
         .clone()
-<<<<<<< HEAD
-        .unwrap_or_else(|| parent_turn_context.model_info.slug.clone());
-    let review_model_info = crate::model_info_for_provider::model_info_for_config(
-        &sess.services.models_manager,
-        &model,
-        &config,
-    )
-    .await;
-||||||| 413492cd6c
-        .unwrap_or_else(|| parent_turn_context.model_info.slug.clone());
-    let review_model_info = sess
-        .services
-        .models_manager
-        .get_model_info(&model, &config.to_models_manager_config())
-        .await;
-=======
         .unwrap_or_else(|| parent_turn_context.model_info().slug.clone());
     let available_models = sess
         .services
@@ -38,12 +22,12 @@ pub(super) async fn spawn_review_thread(
             config.http_client_factory(),
         )
         .await;
-    let review_model_info = sess
-        .services
-        .models_manager
-        .get_model_info(&model, &config.to_models_manager_config())
-        .await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let review_model_info = crate::model_info_for_provider::model_info_for_config(
+        &sess.services.models_manager,
+        &model,
+        &config,
+    )
+    .await;
     // For reviews, disable web_search and view_image regardless of global settings.
     let mut review_features = sess.features.clone();
     let _ = review_features.disable(Feature::WebSearchRequest);
@@ -155,41 +139,7 @@ pub(super) async fn spawn_review_thread(
         step_settings,
         available_models,
         turn_metadata_state,
-<<<<<<< HEAD
-        extension_data,
-        turn_skills: TurnSkillsContext::new(parent_turn_context.turn_skills.snapshot.clone()),
-        turn_timing_state: Arc::new(TurnTimingState::default()),
-        parent_completion_expected: Arc::new(AtomicBool::new(false)),
-        terminal_error: Arc::new(Mutex::new(None)),
-        model_edit_protocol_state: Arc::new(
-            crate::session::turn_context::ModelEditProtocolState::default(),
-        ),
-        explicit_tool_budget_state: Arc::new(
-            crate::session::turn_context::ExplicitToolBudgetState::default(),
-        ),
-        malformed_tool_call_state: Arc::new(
-            crate::session::turn_context::MalformedToolCallState::default(),
-        ),
-        repeated_tool_call_state: Arc::new(
-            crate::session::turn_context::RepeatedToolCallState::default(),
-        ),
-        pending_tool_calls: Arc::default(),
-        server_model_warning_emitted: AtomicBool::new(false),
-        provider_cache_pressure_warning_emitted: AtomicBool::new(false),
-        model_verification_emitted: AtomicBool::new(false),
-        accounting_gap_warning_emitted: AtomicBool::new(false),
-    };
-||||||| 413492cd6c
-        extension_data,
-        turn_skills: TurnSkillsContext::new(parent_turn_context.turn_skills.snapshot.clone()),
-        turn_timing_state: Arc::new(TurnTimingState::default()),
-        terminal_error: Arc::new(Mutex::new(None)),
-        server_model_warning_emitted: AtomicBool::new(false),
-        model_verification_emitted: AtomicBool::new(false),
-    };
-=======
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     // Seed the child task with the review prompt as the initial user message.
     let input = vec![TurnInput::UserInput {

@@ -38,6 +38,7 @@ use rmcp::model::CustomNotification;
 use rmcp::model::ElicitRequestParams;
 use rmcp::model::ElicitResult;
 use rmcp::model::ElicitationAction;
+use rmcp::model::ErrorCode;
 use rmcp::model::Extensions;
 use rmcp::model::InitializeRequestParams;
 use rmcp::model::ListResourceTemplatesRequest;
@@ -58,6 +59,8 @@ use rmcp::model::ServerPeerInfo;
 use rmcp::model::ServerResult;
 use rmcp::model::Tool;
 use rmcp::service::ClientCacheConfig;
+use rmcp::service::ClientInitializeError;
+use rmcp::service::ClientLifecycleMode;
 use rmcp::service::ClientServiceExt;
 use rmcp::service::RequestHandle;
 use rmcp::service::RoleClient;
@@ -425,9 +428,19 @@ pub struct RmcpClient {
     elicitation_pause_state: ElicitationPauseState,
     tool_list_revision: Arc<AtomicU64>,
     cancel_requests_on_drop: AtomicBool,
+    discover_timeout: Option<Duration>,
 }
 
 impl RmcpClient {
+    /// Bounds how long an opted-in 2026-07-28 stdio server may take to answer
+    /// `server/discover` before it is started again with legacy `initialize`. Without it,
+    /// the startup timeout passed to `initialize` bounds the discover wait. The legacy
+    /// `initialize` then gets that startup timeout again, on its own.
+    pub fn with_discover_timeout(mut self, discover_timeout: Option<Duration>) -> Self {
+        self.discover_timeout = discover_timeout;
+        self
+    }
+
     /// Extend tool-call cancellation to catalog, resource, and custom requests on a shared connection.
     pub fn enable_request_cancellation(&self) {
         self.cancel_requests_on_drop.store(true, Ordering::Relaxed);
@@ -467,6 +480,14 @@ impl RmcpClient {
     pub async fn new_in_process_client(
         factory: Arc<dyn InProcessTransportFactory>,
     ) -> io::Result<Self> {
+        Self::new_in_process_client_with_protocol_mode(factory, McpProtocolMode::Legacy).await
+    }
+
+    /// Constructs an in-process client with an explicitly selected compatibility policy.
+    pub async fn new_in_process_client_with_protocol_mode(
+        factory: Arc<dyn InProcessTransportFactory>,
+        protocol_mode: McpProtocolMode,
+    ) -> io::Result<Self> {
         let transport_recipe = TransportRecipe::InProcess { factory };
         let transport = Self::create_pending_transport(&transport_recipe)
             .await
@@ -478,13 +499,14 @@ impl RmcpClient {
             }),
             stdio_process: None,
             transport_recipe,
-            protocol_mode: McpProtocolMode::Legacy,
+            protocol_mode,
             requires_read_only_tools: false,
             initialize_context: Mutex::new(None),
             session_recovery_lock: Semaphore::new(/*permits*/ 1),
             elicitation_pause_state: ElicitationPauseState::new(),
             tool_list_revision: Arc::default(),
             cancel_requests_on_drop: AtomicBool::new(false),
+            discover_timeout: None,
         })
     }
 
@@ -561,6 +583,7 @@ impl RmcpClient {
             elicitation_pause_state: ElicitationPauseState::new(),
             tool_list_revision: Arc::default(),
             cancel_requests_on_drop: AtomicBool::new(false),
+            discover_timeout: None,
         })
     }
 
@@ -670,6 +693,7 @@ impl RmcpClient {
             elicitation_pause_state: ElicitationPauseState::new(),
             tool_list_revision: Arc::default(),
             cancel_requests_on_drop: AtomicBool::new(false),
+            discover_timeout: None,
         })
     }
 
@@ -1560,10 +1584,10 @@ impl RmcpClient {
     )> {
         // Request IDs and remembered cancellations belong to this connection, including
         // when a failed initialization or expired HTTP session creates a new transport.
-        let client_service = || {
+        let client_service_for = |legacy_initialize: bool| {
             let send_elicitation = Arc::clone(&initialize_context.send_elicitation);
             let mut info = initialize_context.client_info.clone();
-            if self.protocol_mode == McpProtocolMode::DiscoverLocalStdio {
+            if legacy_initialize || self.protocol_mode == McpProtocolMode::DiscoverLocalStdio {
                 info.protocol_version = McpProtocolMode::Legacy.preferred_protocol_version();
             }
             ElicitationClientService::new(
@@ -1572,6 +1596,7 @@ impl RmcpClient {
                 self.elicitation_pause_state.clone(),
             )
         };
+        let client_service = || client_service_for(/*legacy_initialize*/ false);
         let _initialize_deadline = match &self.transport_recipe {
             TransportRecipe::StreamableHttp {
                 initialize_deadline,
@@ -1587,22 +1612,25 @@ impl RmcpClient {
             }
             TransportRecipe::InProcess { .. } | TransportRecipe::Stdio { .. } => None,
         };
-        let lifecycle = self.protocol_mode.client_lifecycle();
-        let connect_stdio = |transport: StdioServerTransport, lifecycle| {
-            client_service()
-                .serve_with_lifecycle(
-                    track_tool_list_changes(
-                        OrderedByteTransport::new(transport),
-                        Arc::clone(&self.tool_list_revision),
-                    ),
-                    lifecycle,
-                )
-                .boxed()
+        // An opted-in 2026-07-28 server whose transport can be opened again waits for
+        // `server/discover` without rmcp's fixed 10 s `Auto` limit, so a late reply can't
+        // reach the `initialize` that `Auto` sends on the same transport (#1950). The legacy
+        // fallback after it runs on a fresh transport; see `legacy_fallback` below.
+        let legacy_fallback = self.protocol_mode == McpProtocolMode::V20260728
+            && matches!(
+                pending_transport,
+                PendingTransport::InProcess { .. } | PendingTransport::Stdio { .. }
+            );
+        let lifecycle = if legacy_fallback {
+            ClientLifecycleMode::Discover {
+                preferred_versions: vec![ProtocolVersion::V_2026_07_28],
+            }
+        } else {
+            self.protocol_mode.client_lifecycle()
         };
-        let mut discovery = None;
-        let (transport, oauth_runtime) = match pending_transport {
-            PendingTransport::InProcess { transport } => (
-                client_service()
+        let connect_in_process =
+            |service: ElicitationClientService, transport: tokio::io::DuplexStream, lifecycle| {
+                service
                     .serve_with_lifecycle(
                         track_tool_list_changes(
                             OrderedByteTransport::new(
@@ -1612,7 +1640,25 @@ impl RmcpClient {
                         ),
                         lifecycle,
                     )
-                    .boxed(),
+                    .boxed()
+            };
+        let connect_stdio =
+            |service: ElicitationClientService, transport: StdioServerTransport, lifecycle| {
+                service
+                    .serve_with_lifecycle(
+                        track_tool_list_changes(
+                            OrderedByteTransport::new(transport),
+                            Arc::clone(&self.tool_list_revision),
+                        ),
+                        lifecycle,
+                    )
+                    .boxed()
+            };
+        let mut discovery = None;
+        let mut first_process = None;
+        let (transport, oauth_runtime) = match pending_transport {
+            PendingTransport::InProcess { transport } => (
+                connect_in_process(client_service(), transport, lifecycle),
                 None,
             ),
             PendingTransport::Stdio { mut transport } => {
@@ -1621,8 +1667,15 @@ impl RmcpClient {
                         .watch_discovery(timeout)
                         .map(|reply| (reply, transport.process_ref()));
                 }
-                let lifecycle = transport.protocol_mode().client_lifecycle();
-                (connect_stdio(*transport, lifecycle), None)
+                let lifecycle = if legacy_fallback {
+                    // Keep the process past the discover phase, so the fallback can stop it
+                    // before it starts the next one.
+                    first_process = Some((transport.process_ref(), transport.process_handle()));
+                    lifecycle
+                } else {
+                    transport.protocol_mode().client_lifecycle()
+                };
+                (connect_stdio(client_service(), *transport, lifecycle), None)
             }
             PendingTransport::StreamableHttp { transport } => (
                 client_service()
@@ -1659,38 +1712,122 @@ impl RmcpClient {
             ),
         };
 
-        let handshake = async {
-            let mut result = transport.await;
-            if let (Some((mut reply, process)), Err(error)) = (discovery, &result)
-                && let Some(mode) = stdio_handshake::restart_mode(error, reply.try_recv().ok())?
-            {
-                process
-                    .terminate(StdioTermination::Restart)
+        let service_result = if legacy_fallback {
+            // The discover wait is `discover_timeout_sec` when set, else the startup timeout.
+            // A server that rejects discover as legacy, or doesn't answer in time, is stopped
+            // and gets a legacy `initialize` on a fresh transport, within the startup timeout
+            // again. That second phase also covers stopping the first server and starting the
+            // next one, so an executor that never finishes either can't hang startup (#2019).
+            // A server that never answers discover can take up to about twice the startup
+            // timeout to start.
+            let discover_wait = self.discover_timeout.or(timeout);
+            // Dropping the discover future on timeout drops its transport, so no late reply
+            // can reach the fresh one.
+            let discovered = match discover_wait {
+                Some(wait) => time::timeout(wait, transport)
                     .await
-                    .context("stop stdio server before handshake restart")?;
-                let fresh = self.launch_stdio_replacement(mode).await?;
-                // A confirmed modern helper doesn't need another legacy probe timer.
-                // Windows can still select initialize if it could not contain the new process.
-                let lifecycle = match fresh.protocol_mode() {
-                    McpProtocolMode::DiscoverLocalStdio => {
-                        rmcp::service::ClientLifecycleMode::Discover {
-                            preferred_versions: vec![ProtocolVersion::V_2026_07_28],
-                        }
-                    }
-                    mode => mode.client_lifecycle(),
-                };
-                result = connect_stdio(fresh, lifecycle).await;
+                    .map_err(|_elapsed| wait),
+                None => Ok(transport.await),
+            };
+            let fallback = match discovered {
+                Ok(Ok(service)) => Ok(service),
+                Ok(Err(error)) if is_legacy_discover_rejection(&error) => {
+                    Err(LegacyFallback::Rejected(Box::new(error)))
+                }
+                Ok(Err(source)) => return Err(HandshakeError { source }.into()),
+                Err(wait) => Err(LegacyFallback::NoDiscoverReply { wait }),
+            };
+            match fallback {
+                Ok(service) => Ok(service),
+                Err(fallback) => {
+                    let restart_and_initialize = async {
+                        let result = match first_process {
+                            Some((process, keep_alive)) => {
+                                // A failed stop is logged and the next server starts anyway: a
+                                // Windows server outside a job, for one, is terminated but can't
+                                // be waited for.
+                                if let Err(error) =
+                                    process.terminate(StdioTermination::Restart).await
+                                {
+                                    warn!(
+                                        "failed to stop MCP stdio server before the legacy initialize fallback: {error}"
+                                    );
+                                }
+                                drop(keep_alive);
+                                // The replacement registers with this client's process slot, so
+                                // a `shutdown()` either stops it or keeps it from starting.
+                                let fresh = self
+                                    .launch_stdio_replacement(McpProtocolMode::Legacy)
+                                    .await
+                                    .context(
+                                        "failed to start the MCP server again for the legacy initialize fallback",
+                                    )?;
+                                connect_stdio(
+                                    client_service_for(/*legacy_initialize*/ true),
+                                    fresh,
+                                    ClientLifecycleMode::Initialize,
+                                )
+                                .await
+                            }
+                            None => {
+                                // A `shutdown()` during the discover wait must not open another
+                                // connection.
+                                if matches!(*self.state.lock().await, ClientState::Closed) {
+                                    return Err(anyhow!("MCP client is shut down"));
+                                }
+                                let PendingTransport::InProcess { transport } =
+                                    Self::create_pending_transport(&self.transport_recipe)
+                                        .await
+                                        .context(
+                                            "failed to open the MCP server again for the legacy initialize fallback",
+                                        )?
+                                else {
+                                    unreachable!(
+                                        "an in-process recipe opens an in-process transport"
+                                    );
+                                };
+                                connect_in_process(
+                                    client_service_for(/*legacy_initialize*/ true),
+                                    transport,
+                                    ClientLifecycleMode::Initialize,
+                                )
+                                .await
+                            }
+                        };
+                        result.map_err(|error| fallback.into_error(error))
+                    };
+                    handshake_within(
+                        timeout,
+                        restart_and_initialize,
+                        " during the legacy initialize fallback",
+                    )
+                    .await
+                }
             }
-            result.map_err(|source| HandshakeError { source }.into())
-        };
-        let service_result = match timeout {
-            Some(duration) => time::timeout(duration, handshake)
-                .await
-                .with_context(|| {
-                    format!("timed out handshaking with MCP server after {duration:?}")
-                })
-                .flatten(),
-            None => handshake.await,
+        } else {
+            let handshake = async {
+                let mut result = transport.await;
+                if let (Some((mut reply, process)), Err(error)) = (discovery, &result)
+                    && let Some(mode) = stdio_handshake::restart_mode(error, reply.try_recv().ok())?
+                {
+                    process
+                        .terminate(StdioTermination::Restart)
+                        .await
+                        .context("stop stdio server before handshake restart")?;
+                    let fresh = self.launch_stdio_replacement(mode).await?;
+                    // A confirmed modern helper doesn't need another legacy probe timer.
+                    // Windows can still select initialize if it could not contain the new process.
+                    let lifecycle = match fresh.protocol_mode() {
+                        McpProtocolMode::DiscoverLocalStdio => ClientLifecycleMode::Discover {
+                            preferred_versions: vec![ProtocolVersion::V_2026_07_28],
+                        },
+                        mode => mode.client_lifecycle(),
+                    };
+                    result = connect_stdio(client_service(), fresh, lifecycle).await;
+                }
+                result.map_err(|source| HandshakeError { source }.into())
+            };
+            handshake_within(timeout, handshake, "").await
         };
         let service = match service_result {
             Ok(service) => service,
@@ -2078,6 +2215,66 @@ async fn create_oauth_transport_and_runtime(
         oauth_runtime: runtime,
     })
 }
+
+/// Mirrors rmcp's `Auto` classification: a correlated JSON-RPC error from `server/discover`
+/// that is not a 2026-07-28 rejection identifies a legacy server.
+fn is_legacy_discover_rejection(error: &ClientInitializeError) -> bool {
+    matches!(
+        error,
+        ClientInitializeError::JsonRpcError(error)
+            if error.code != ErrorCode::MISSING_REQUIRED_CLIENT_CAPABILITY
+                && error.code != ErrorCode::HEADER_MISMATCH
+    )
+}
+
+/// Why an opted-in server is started again with legacy `initialize`.
+enum LegacyFallback {
+    /// The server rejected `server/discover` the way `Auto` treats as legacy.
+    Rejected(Box<ClientInitializeError>),
+    /// The server did not answer `server/discover` within `wait`.
+    NoDiscoverReply { wait: Duration },
+}
+
+impl LegacyFallback {
+    fn into_error(self, fallback: ClientInitializeError) -> anyhow::Error {
+        match self {
+            Self::Rejected(discover) => HandshakeError {
+                source: ClientInitializeError::LegacyFallbackFailed {
+                    discover,
+                    fallback: Box::new(fallback),
+                },
+            }
+            .into(),
+            Self::NoDiscoverReply { wait } => anyhow::Error::from(HandshakeError {
+                source: fallback,
+            })
+            .context(format!(
+                "MCP server did not answer server/discover within {wait:?}; legacy initialize failed"
+            )),
+        }
+    }
+}
+
+/// Runs one handshake phase within `timeout`; `phase` is appended to the timeout message.
+async fn handshake_within<T>(
+    timeout: Option<Duration>,
+    handshake: impl Future<Output = Result<T>>,
+    phase: &str,
+) -> Result<T> {
+    match timeout {
+        Some(duration) => time::timeout(duration, handshake)
+            .await
+            .with_context(|| {
+                format!("timed out handshaking with MCP server after {duration:?}{phase}")
+            })
+            .flatten(),
+        None => handshake.await,
+    }
+}
+
+#[cfg(test)]
+#[path = "rmcp_client_lifecycle_tests.rs"]
+mod lifecycle_tests;
 
 #[cfg(test)]
 #[path = "tool_input_tests.rs"]

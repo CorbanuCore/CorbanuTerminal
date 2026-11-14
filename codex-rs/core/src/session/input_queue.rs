@@ -571,6 +571,19 @@ impl InputQueue {
         }
     }
 
+    /// #1927: held input that could not be placed yet goes back to the front of re-admission.
+    pub(crate) async fn requeue_interrupted_input(
+        &self,
+        input: TurnInput,
+        final_output_json_schema: Option<serde_json::Value>,
+    ) {
+        self.interrupted_deferred_input
+            .lock()
+            .await
+            .push_front((input, final_output_json_schema));
+        self.interrupted_input_ready.notify_one();
+    }
+
     /// Interrupted input returns to submission admission, never directly to a task's queue.
     pub(crate) async fn next_interrupted_deferred_input(
         &self,

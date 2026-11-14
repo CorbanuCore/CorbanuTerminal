@@ -12,6 +12,7 @@ use tracing::Instrument;
 use tracing::debug_span;
 use tracing::info_span;
 
+use crate::session::TurnInput;
 use crate::session::session::Session;
 use crate::session::thread_settings;
 use crate::session::turn_input;
@@ -45,64 +46,18 @@ use codex_protocol::protocol::TurnAbortReason;
 use codex_protocol::protocol::WarningEvent;
 use codex_protocol::request_permissions::RequestPermissionsResponse;
 use codex_protocol::request_user_input::RequestUserInputResponse;
-<<<<<<< HEAD
-use codex_protocol::user_input::UserInput;
-||||||| 413492cd6c
-=======
 use codex_thread_store::PersistContext;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 use crate::context_manager::is_user_turn_boundary;
 use codex_protocol::dynamic_tools::DynamicToolResponse;
 use codex_protocol::mcp::RequestId as ProtocolRequestId;
-use codex_protocol::protocol::AdditionalContextEntry;
 use codex_rmcp_client::ElicitationAction;
 use codex_rmcp_client::ElicitationResponse;
 use serde_json::Value;
-use std::collections::BTreeMap;
-use std::collections::HashMap;
 use std::sync::Arc;
-#[cfg(test)]
-use std::sync::Mutex;
-#[cfg(test)]
-use std::sync::OnceLock;
 use tracing::debug;
 use tracing::info;
 use tracing::warn;
-
-#[cfg(test)]
-struct ActiveTurnNotSteerableDeferHook {
-    reached: tokio::sync::oneshot::Sender<()>,
-    release: tokio::sync::oneshot::Receiver<()>,
-}
-
-#[cfg(test)]
-static ACTIVE_TURN_NOT_STEERABLE_DEFER_HOOK: OnceLock<
-    Mutex<Option<ActiveTurnNotSteerableDeferHook>>,
-> = OnceLock::new();
-
-#[cfg(test)]
-pub(crate) fn set_active_turn_not_steerable_defer_hook_for_test(
-    reached: tokio::sync::oneshot::Sender<()>,
-    release: tokio::sync::oneshot::Receiver<()>,
-) {
-    let hook = ACTIVE_TURN_NOT_STEERABLE_DEFER_HOOK.get_or_init(|| Mutex::new(None));
-    *hook.lock().expect("defer hook lock") =
-        Some(ActiveTurnNotSteerableDeferHook { reached, release });
-}
-
-#[cfg(test)]
-async fn active_turn_not_steerable_defer_hook_for_test() {
-    let hook = ACTIVE_TURN_NOT_STEERABLE_DEFER_HOOK
-        .get_or_init(|| Mutex::new(None))
-        .lock()
-        .expect("defer hook lock")
-        .take();
-    if let Some(hook) = hook {
-        let _ = hook.reached.send(());
-        let _ = hook.release.await;
-    }
-}
 
 pub async fn interrupt(sess: &Arc<Session>) {
     sess.interrupt_task().await;
@@ -124,493 +79,6 @@ pub async fn realtime_conversation_list_voices(sess: &Session, sub_id: String) {
     .await;
 }
 
-<<<<<<< HEAD
-pub async fn user_input_or_turn(
-    sess: &Arc<Session>,
-    sub_id: String,
-    op: Op,
-    client_user_message_id: Option<String>,
-    parent_turn_id: Option<String>,
-) {
-    user_input_or_turn_inner(sess, sub_id, op, client_user_message_id, parent_turn_id).await;
-}
-
-pub async fn update_thread_settings(
-    sess: &Arc<Session>,
-    sub_id: String,
-    thread_settings: ThreadSettingsOverrides,
-) {
-    let updates = thread_settings_update(sess, thread_settings).await;
-    match sess.update_settings(updates).await {
-        Ok(()) => {
-            sess.send_event_raw_without_materializing_rollout(Event {
-                id: sub_id,
-                msg: thread_settings_applied_event(sess).await,
-            })
-            .await;
-        }
-        Err(err) => {
-            sess.send_event_raw(Event {
-                id: sub_id,
-                msg: EventMsg::Error(ErrorEvent {
-                    message: format!("invalid thread settings override: {err}"),
-                    codex_error_info: Some(CodexErrorInfo::BadRequest),
-                }),
-            })
-            .await;
-        }
-    }
-}
-
-async fn thread_settings_update(
-    sess: &Session,
-    thread_settings: ThreadSettingsOverrides,
-) -> SessionSettingsUpdate {
-    let ThreadSettingsOverrides {
-        environments,
-        profile_workspace_roots,
-        approval_policy,
-        approvals_reviewer,
-        sandbox_policy,
-        permission_profile,
-        active_permission_profile,
-        windows_sandbox_level,
-        model,
-        model_provider,
-        effort,
-        summary,
-        service_tier,
-        collaboration_mode,
-        personality,
-    } = thread_settings;
-    let collaboration_mode = match collaboration_mode {
-        Some(collaboration_mode) => collaboration_mode,
-        None => {
-            let state = sess.state.lock().await;
-            // Model and reasoning effort live in CollaborationMode settings today, so
-            // partial thread-settings updates refresh those fields on the active mode.
-            state
-                .session_configuration
-                .collaboration_mode
-                .with_updates(model, effort, /*developer_instructions*/ None)
-        }
-    };
-    SessionSettingsUpdate {
-        environments,
-        profile_workspace_roots,
-        approval_policy,
-        approvals_reviewer,
-        sandbox_policy,
-        permission_profile,
-        active_permission_profile,
-        windows_sandbox_level,
-        collaboration_mode: Some(collaboration_mode),
-        model_provider,
-        reasoning_summary: summary,
-        service_tier,
-        personality,
-        ..Default::default()
-    }
-}
-
-pub(super) async fn thread_settings_applied_event(sess: &Session) -> EventMsg {
-    let snapshot = {
-        let state = sess.state.lock().await;
-        state.session_configuration.thread_config_snapshot()
-    };
-    EventMsg::ThreadSettingsApplied(ThreadSettingsAppliedEvent {
-        thread_settings: snapshot.into_thread_settings_snapshot(),
-    })
-}
-
-pub(super) async fn user_input_or_turn_inner(
-    sess: &Arc<Session>,
-    sub_id: String,
-    op: Op,
-    client_user_message_id: Option<String>,
-    parent_turn_id: Option<String>,
-) {
-    let Op::UserInput {
-        items,
-        final_output_json_schema,
-        responsesapi_client_metadata,
-        additional_context,
-        thread_settings,
-    } = op
-    else {
-        unreachable!();
-    };
-    if !items.is_empty() {
-        sess.services
-            .agent_control
-            .note_native_operator_input(sess.thread_id);
-    }
-    let emit_thread_settings_applied = thread_settings != ThreadSettingsOverrides::default();
-    let mut updates = if emit_thread_settings_applied {
-        thread_settings_update(sess, thread_settings).await
-    } else {
-        SessionSettingsUpdate::default()
-    };
-    updates.final_output_json_schema = Some(final_output_json_schema);
-
-    let Ok(current_context) = sess.new_turn_with_sub_id(sub_id.clone(), updates).await else {
-        // new_turn_with_sub_id already emits the error event.
-        return;
-    };
-    if emit_thread_settings_applied {
-        sess.send_event_raw_without_materializing_rollout(Event {
-            id: sub_id.clone(),
-            msg: thread_settings_applied_event(sess).await,
-        })
-        .await;
-    }
-    sess.maybe_emit_model_warnings_for_turn(current_context.as_ref())
-        .await;
-    match sess
-        .steer_input(
-            items.clone(),
-            additional_context.clone(),
-            /*expected_turn_id*/ None,
-            client_user_message_id.clone(),
-            responsesapi_client_metadata.clone(),
-        )
-        .await
-    {
-        Ok(_) => {
-            current_context.session_telemetry.user_prompt(&items);
-        }
-        Err(SteerInputError::NoActiveTurn(items)) => {
-            if let Some(id) = parent_turn_id {
-                current_context.turn_metadata_state.set_parent_turn_id(id);
-            }
-            spawn_regular_turn_for_no_active_input(
-                sess,
-                &current_context,
-                items,
-                additional_context,
-                client_user_message_id,
-                responsesapi_client_metadata,
-                /*record_user_prompt*/ true,
-            )
-            .await;
-        }
-        Err(
-            err @ (SteerInputError::AuthorizationChanged(_)
-            | SteerInputError::ActiveTurnNotSteerable { .. }),
-        ) => {
-            let items = match err {
-                SteerInputError::AuthorizationChanged(items) => items,
-                _ => items,
-            };
-            #[cfg(test)]
-            active_turn_not_steerable_defer_hook_for_test().await;
-
-            match sess
-                .defer_user_input_until_active_turn_finished(
-                    items.clone(),
-                    additional_context.clone(),
-                    client_user_message_id.clone(),
-                    current_context.final_output_json_schema.clone(),
-                )
-                .await
-            {
-                Ok(_) => {
-                    current_context.session_telemetry.user_prompt(&items);
-                }
-                Err(SteerInputError::NoActiveTurn(items)) => {
-                    let Ok(current_context) = sess
-                        .new_turn_with_sub_id(
-                            sub_id.clone(),
-                            SessionSettingsUpdate {
-                                final_output_json_schema: Some(
-                                    current_context.final_output_json_schema.clone(),
-                                ),
-                                ..Default::default()
-                            },
-                        )
-                        .await
-                    else {
-                        return;
-                    };
-                    if let Some(id) = parent_turn_id {
-                        current_context.turn_metadata_state.set_parent_turn_id(id);
-                    }
-                    spawn_regular_turn_for_no_active_input(
-                        sess,
-                        &current_context,
-                        items,
-                        additional_context,
-                        client_user_message_id,
-                        responsesapi_client_metadata,
-                        /*record_user_prompt*/ true,
-                    )
-                    .await;
-                }
-                Err(err) => {
-                    sess.send_event_raw(Event {
-                        id: sub_id,
-                        msg: EventMsg::Error(err.to_error_event()),
-                    })
-                    .await;
-                }
-            }
-        }
-        Err(err) => {
-            sess.send_event_raw(Event {
-                id: sub_id,
-                msg: EventMsg::Error(err.to_error_event()),
-            })
-            .await;
-        }
-    }
-}
-
-async fn spawn_regular_turn_for_no_active_input(
-    sess: &Arc<Session>,
-    current_context: &Arc<crate::session::turn_context::TurnContext>,
-    items: Vec<UserInput>,
-    additional_context: BTreeMap<String, AdditionalContextEntry>,
-    client_user_message_id: Option<String>,
-    responsesapi_client_metadata: Option<HashMap<String, String>>,
-    record_user_prompt: bool,
-) {
-    if let Some(responsesapi_client_metadata) = responsesapi_client_metadata {
-        current_context
-            .turn_metadata_state
-            .set_responsesapi_client_metadata(responsesapi_client_metadata);
-    }
-    if record_user_prompt {
-        current_context.session_telemetry.user_prompt(&items);
-    }
-    sess.refresh_mcp_if_dirty().await;
-    let additional_context_input = {
-        let mut state = sess.state.lock().await;
-        state.additional_context.merge(additional_context)
-    };
-    let mut task_input = additional_context_input
-        .into_iter()
-        .map(ResponseItem::from)
-        .map(TurnInput::ResponseItem)
-        .collect::<Vec<_>>();
-    // Queue-only collaboration mail must join the next admitted turn before its first model
-    // request. Leaving it in the session mailbox until after the user's request has already been
-    // sampled creates an unnecessary continuation and can loop when that continuation has no new
-    // model output. The submission loop serializes this idle-to-active boundary, so draining here
-    // also preserves mailbox order relative to the newly admitted user input.
-    let (mailbox_input, mailbox_parent_turn_id) =
-        sess.input_queue.drain_ready_mailbox_input_items().await;
-    task_input.extend(mailbox_input);
-    if let Some(parent_turn_id) = mailbox_parent_turn_id {
-        current_context
-            .turn_metadata_state
-            .set_parent_turn_id(parent_turn_id);
-    }
-    if !items.is_empty() {
-        task_input.push(TurnInput::UserInput {
-            content: items,
-            client_id: client_user_message_id,
-        });
-    }
-    sess.spawn_task(
-        Arc::clone(current_context),
-        task_input,
-        crate::tasks::RegularTask::new(),
-    )
-    .await;
-}
-
-||||||| 413492cd6c
-pub async fn user_input_or_turn(
-    sess: &Arc<Session>,
-    sub_id: String,
-    op: Op,
-    client_user_message_id: Option<String>,
-    parent_turn_id: Option<String>,
-) {
-    user_input_or_turn_inner(sess, sub_id, op, client_user_message_id, parent_turn_id).await;
-}
-
-pub async fn update_thread_settings(
-    sess: &Arc<Session>,
-    sub_id: String,
-    thread_settings: ThreadSettingsOverrides,
-) {
-    let updates = thread_settings_update(sess, thread_settings).await;
-    match sess.update_settings(updates).await {
-        Ok(()) => {
-            sess.send_event_raw_without_materializing_rollout(Event {
-                id: sub_id,
-                msg: thread_settings_applied_event(sess).await,
-            })
-            .await;
-        }
-        Err(err) => {
-            sess.send_event_raw(Event {
-                id: sub_id,
-                msg: EventMsg::Error(ErrorEvent {
-                    message: format!("invalid thread settings override: {err}"),
-                    codex_error_info: Some(CodexErrorInfo::BadRequest),
-                }),
-            })
-            .await;
-        }
-    }
-}
-
-async fn thread_settings_update(
-    sess: &Session,
-    thread_settings: ThreadSettingsOverrides,
-) -> SessionSettingsUpdate {
-    let ThreadSettingsOverrides {
-        environments,
-        profile_workspace_roots,
-        approval_policy,
-        approvals_reviewer,
-        sandbox_policy,
-        permission_profile,
-        active_permission_profile,
-        windows_sandbox_level,
-        model,
-        effort,
-        summary,
-        service_tier,
-        collaboration_mode,
-        personality,
-    } = thread_settings;
-    let collaboration_mode = match collaboration_mode {
-        Some(collaboration_mode) => collaboration_mode,
-        None => {
-            let state = sess.state.lock().await;
-            // Model and reasoning effort live in CollaborationMode settings today, so
-            // partial thread-settings updates refresh those fields on the active mode.
-            state
-                .session_configuration
-                .collaboration_mode
-                .with_updates(model, effort, /*developer_instructions*/ None)
-        }
-    };
-    SessionSettingsUpdate {
-        environments,
-        profile_workspace_roots,
-        approval_policy,
-        approvals_reviewer,
-        sandbox_policy,
-        permission_profile,
-        active_permission_profile,
-        windows_sandbox_level,
-        collaboration_mode: Some(collaboration_mode),
-        reasoning_summary: summary,
-        service_tier,
-        personality,
-        ..Default::default()
-    }
-}
-
-pub(super) async fn thread_settings_applied_event(sess: &Session) -> EventMsg {
-    let snapshot = {
-        let state = sess.state.lock().await;
-        state.session_configuration.thread_config_snapshot()
-    };
-    EventMsg::ThreadSettingsApplied(ThreadSettingsAppliedEvent {
-        thread_settings: snapshot.into_thread_settings_snapshot(),
-    })
-}
-
-pub(super) async fn user_input_or_turn_inner(
-    sess: &Arc<Session>,
-    sub_id: String,
-    op: Op,
-    client_user_message_id: Option<String>,
-    parent_turn_id: Option<String>,
-) {
-    let Op::UserInput {
-        items,
-        final_output_json_schema,
-        responsesapi_client_metadata,
-        additional_context,
-        thread_settings,
-    } = op
-    else {
-        unreachable!();
-    };
-    let emit_thread_settings_applied = thread_settings != ThreadSettingsOverrides::default();
-    let mut updates = if emit_thread_settings_applied {
-        thread_settings_update(sess, thread_settings).await
-    } else {
-        SessionSettingsUpdate::default()
-    };
-    updates.final_output_json_schema = Some(final_output_json_schema);
-
-    let Ok(current_context) = sess.new_turn_with_sub_id(sub_id.clone(), updates).await else {
-        // new_turn_with_sub_id already emits the error event.
-        return;
-    };
-    if emit_thread_settings_applied {
-        sess.send_event_raw_without_materializing_rollout(Event {
-            id: sub_id.clone(),
-            msg: thread_settings_applied_event(sess).await,
-        })
-        .await;
-    }
-    sess.maybe_emit_model_warnings_for_turn(current_context.as_ref())
-        .await;
-    match sess
-        .steer_input(
-            items.clone(),
-            additional_context.clone(),
-            /*expected_turn_id*/ None,
-            client_user_message_id.clone(),
-            responsesapi_client_metadata.clone(),
-        )
-        .await
-    {
-        Ok(_) => {
-            current_context.session_telemetry.user_prompt(&items);
-        }
-        Err(SteerInputError::NoActiveTurn(items)) => {
-            if let Some(id) = parent_turn_id {
-                current_context.turn_metadata_state.set_parent_turn_id(id);
-            }
-            if let Some(responsesapi_client_metadata) = responsesapi_client_metadata {
-                current_context
-                    .turn_metadata_state
-                    .set_responsesapi_client_metadata(responsesapi_client_metadata);
-            }
-            current_context.session_telemetry.user_prompt(&items);
-            let additional_context_input = {
-                let mut state = sess.state.lock().await;
-                state.additional_context.merge(additional_context)
-            };
-            let mut task_input = additional_context_input
-                .into_iter()
-                .map(ResponseItem::from)
-                .map(TurnInput::ResponseItem)
-                .collect::<Vec<_>>();
-            if !items.is_empty() {
-                task_input.push(TurnInput::UserInput {
-                    content: items,
-                    client_id: client_user_message_id,
-                });
-            }
-            sess.spawn_task(
-                Arc::clone(&current_context),
-                task_input,
-                crate::tasks::RegularTask::new(),
-            )
-            .await;
-        }
-        Err(err) => {
-            sess.send_event_raw(Event {
-                id: sub_id,
-                msg: EventMsg::Error(err.to_error_event()),
-            })
-            .await;
-        }
-    }
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 /// Queues an inter-agent message, then lets the shared pending-work scheduler
 /// decide whether an idle session should start a regular turn.
 pub async fn inter_agent_communication(
@@ -621,17 +89,7 @@ pub async fn inter_agent_communication(
 ) {
     let trigger_turn = communication.trigger_turn;
     sess.input_queue
-<<<<<<< HEAD
-        .enqueue_mailbox_communication_for_session(
-            sess,
-            communication,
-            parent_turn_id.filter(|_| trigger_turn),
-        )
-||||||| 413492cd6c
-        .enqueue_mailbox_communication(communication, parent_turn_id.filter(|_| trigger_turn))
-=======
-        .enqueue_mailbox_communication(communication, start_options)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        .enqueue_mailbox_communication_for_session(sess, communication, start_options)
         .await;
     crate::agent_communication::emit_agent_communication_receive(&sub_id);
     if trigger_turn
@@ -719,78 +177,6 @@ pub async fn resolve_elicitation(
     }
 }
 
-<<<<<<< HEAD
-/// Propagate a user's exec approval decision to the session.
-/// Also optionally applies an execpolicy amendment.
-pub async fn exec_approval(
-    sess: &Arc<Session>,
-    approval_id: String,
-    turn_id: Option<String>,
-    decision: ReviewDecision,
-) {
-    let event_turn_id = turn_id.unwrap_or_else(|| approval_id.clone());
-    let mut stale_amendment = false;
-    if let ReviewDecision::ApprovedExecpolicyAmendment {
-        proposed_execpolicy_amendment,
-    } = &decision
-    {
-        // #945: only an answer to an open prompt may save a rule. One with no
-        // open prompt (its turn ended) is dropped by `notify_approval` anyway.
-        let persisted = match sess.pending_approval_shown_under(&approval_id).await {
-            Some(shown_under) => Some(
-                sess.persist_execpolicy_amendment(proposed_execpolicy_amendment, shown_under)
-                    .await,
-            ),
-            None => {
-                tracing::warn!(
-                    "not saving a \"don't ask again\" rule for {approval_id}: no prompt is open"
-                );
-                None
-            }
-        };
-        match persisted {
-            None => {}
-            // #945: the prompt was shown before a security transition. The
-            // rule is not saved; D50 (#1001): nor does the answer approve the
-            // command, which is asked about again under the new level.
-            Some(Ok(None)) => {
-                let message = "The security level changed while this approval was open, so \
-                               \"don't ask again\" was not saved and the answer was not used."
-                    .to_string();
-                sess.send_event_raw(Event {
-                    id: event_turn_id.clone(),
-                    msg: EventMsg::Warning(WarningEvent { message }),
-                })
-                .await;
-                stale_amendment = true;
-            }
-            Some(Ok(Some(crate::exec_policy::AmendmentScope::Saved))) => {
-                sess.record_execpolicy_amendment_message(
-                    &event_turn_id,
-                    proposed_execpolicy_amendment,
-||||||| 413492cd6c
-/// Propagate a user's exec approval decision to the session.
-/// Also optionally applies an execpolicy amendment.
-pub async fn exec_approval(
-    sess: &Arc<Session>,
-    approval_id: String,
-    turn_id: Option<String>,
-    decision: ReviewDecision,
-) {
-    let event_turn_id = turn_id.unwrap_or_else(|| approval_id.clone());
-    if let ReviewDecision::ApprovedExecpolicyAmendment {
-        proposed_execpolicy_amendment,
-    } = &decision
-    {
-        match sess
-            .persist_execpolicy_amendment(proposed_execpolicy_amendment)
-            .await
-        {
-            Ok(()) => {
-                sess.record_execpolicy_amendment_message(
-                    &event_turn_id,
-                    proposed_execpolicy_amendment,
-=======
 impl Session {
     /// Claim the prompt before applying a decision that can outlive the requesting execution.
     pub(crate) async fn resolve_exec_approval(
@@ -805,7 +191,7 @@ impl Session {
         else {
             return;
         };
-        let decision = pending.validate(decision);
+        let mut decision = pending.validate(decision);
         if decision == ReviewDecision::Abort {
             let turn_id = if pending.kind == ExecApprovalKind::HumanCommand {
                 Some(&pending.turn_id)
@@ -817,82 +203,52 @@ impl Session {
                     turn_id,
                     TurnAbortReason::Interrupted,
                     /*error*/ None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 )
                 .await;
             }
-<<<<<<< HEAD
-            Some(Ok(Some(crate::exec_policy::AmendmentScope::Session))) => {
-                let message = "This command contains a credential, so the approval applies to \
-                               this session only and was not saved to your rules."
-                    .to_string();
-                let warning = EventMsg::Warning(WarningEvent { message });
-                sess.send_event_raw(Event {
-                    id: event_turn_id.clone(),
-                    msg: warning,
-                })
-                .await;
-            }
-            Some(Err(err)) => {
-                let message = format!("Failed to apply execpolicy amendment: {err}");
-                tracing::warn!("{message}");
-                let warning = EventMsg::Warning(WarningEvent { message });
-                sess.send_event_raw(Event {
-                    id: event_turn_id.clone(),
-                    msg: warning,
-                })
-                .await;
-            }
-||||||| 413492cd6c
-            Err(err) => {
-                let message = format!("Failed to apply execpolicy amendment: {err}");
-                tracing::warn!("{message}");
-                let warning = EventMsg::Warning(WarningEvent { message });
-                sess.send_event_raw(Event {
-                    id: event_turn_id.clone(),
-                    msg: warning,
-                })
-                .await;
-            }
-=======
         } else if let ReviewDecision::ApprovedExecpolicyAmendment {
             proposed_execpolicy_amendment,
-        } = &decision
-            && let Err(err) = self
-                .persist_execpolicy_amendment(proposed_execpolicy_amendment)
-                .await
+        } = decision.clone()
         {
-            let message = format!("Failed to apply execpolicy amendment: {err}");
-            tracing::warn!("{message}");
-            self.send_event_raw(Event {
-                id: turn_id.unwrap_or(approval_id),
-                msg: EventMsg::Warning(WarningEvent { message }),
-            })
-            .await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            let event_turn_id = turn_id.unwrap_or(approval_id);
+            // #945: the rule is saved only under the policy marker this open prompt was shown
+            // under (`take_pending_approval` found the prompt open).
+            let warning = match self
+                .persist_execpolicy_amendment(&proposed_execpolicy_amendment, pending.shown_under)
+                .await
+            {
+                // #945: the prompt was shown before a security transition. The rule is not
+                // saved; D50 (#1001): nor does the answer approve the command, which is asked
+                // about again under the new level.
+                Ok(None) => {
+                    decision = ReviewDecision::Approved;
+                    Some(
+                        "The security level changed while this approval was open, so \
+                         \"don't ask again\" was not saved and the answer was not used."
+                            .to_string(),
+                    )
+                }
+                Ok(Some(crate::exec_policy::AmendmentScope::Saved)) => None,
+                Ok(Some(crate::exec_policy::AmendmentScope::Session)) => Some(
+                    "This command contains a credential, so the approval applies to this \
+                     session only and was not saved to your rules."
+                        .to_string(),
+                ),
+                Err(err) => {
+                    let message = format!("Failed to apply execpolicy amendment: {err}");
+                    tracing::warn!("{message}");
+                    Some(message)
+                }
+            };
+            if let Some(message) = warning {
+                self.send_event_raw(Event {
+                    id: event_turn_id,
+                    msg: EventMsg::Warning(WarningEvent { message }),
+                })
+                .await;
+            }
         }
-<<<<<<< HEAD
-    }
-    let decision = if stale_amendment {
-        ReviewDecision::Approved
-    } else {
-        decision
-    };
-    match decision {
-        ReviewDecision::Abort => {
-            sess.interrupt_task().await;
-        }
-        other => sess.notify_approval(&approval_id, other).await,
-||||||| 413492cd6c
-    }
-    match decision {
-        ReviewDecision::Abort => {
-            sess.interrupt_task().await;
-        }
-        other => sess.notify_approval(&approval_id, other).await,
-=======
         let _ = pending.sender.send(decision);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
@@ -1020,16 +376,10 @@ pub(super) async fn shutdown_session_runtime(sess: &Arc<Session>) {
         sess.mcp_refresh.close();
         sess.services.mcp_runtime.shutdown().await;
     }
-<<<<<<< HEAD
-    sess.guardian_review_session.shutdown().await;
-    // PF-23-S03: run end revokes this session's brokered credentials.
-    crate::security::transition::RevocationSink::revoke(sess.as_ref());
-||||||| 413492cd6c
-    sess.guardian_review_session.shutdown().await;
-=======
 
     sess.drain_code_mode_messages().await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    // PF-23-S03: run end revokes this session's brokered credentials.
+    crate::security::transition::RevocationSink::revoke(sess.as_ref());
 
     crate::hook_runtime::run_session_end_hooks(sess).await;
     emit_thread_stop_lifecycle(sess).await;
@@ -1138,6 +488,105 @@ pub async fn review(
     }
 }
 
+/// #1927: re-admits input an interrupted turn held for the next turn. User input starts a
+/// turn or steers the running one like any submission; response items join a running turn as
+/// extension work (admission checked) or are recorded; agent mail is queued again.
+async fn readmit_interrupted_input(
+    sess: &Arc<Session>,
+    input: TurnInput,
+    final_output_json_schema: Option<Value>,
+) {
+    let submission_id = super::new_submission_id();
+    match input {
+        TurnInput::UserInput {
+            content,
+            client_id,
+            metadata,
+        } => {
+            let held = TurnInput::UserInput {
+                content: content.clone(),
+                client_id: client_id.clone(),
+                metadata: metadata.clone(),
+            };
+            let request = codex_protocol::turn_input::TurnInputRequest {
+                input: codex_protocol::turn_input::TurnInput::UserInput { content, client_id },
+                user_item_uuid: metadata.response_item_uuid,
+                thread_settings: Default::default(),
+                start: codex_protocol::turn_input::TurnStartOptions {
+                    final_output_json_schema: final_output_json_schema.clone(),
+                    ..Default::default()
+                },
+                additional_context: Default::default(),
+                responsesapi_client_metadata: Default::default(),
+                trace: None,
+            };
+            let result = turn_input::handle(
+                sess,
+                request,
+                codex_protocol::turn_input::TurnInputMode::StartOrSteer,
+                submission_id.clone(),
+            )
+            .await;
+            let message = match result {
+                // A running turn that cannot take the input now (a review or compaction, other
+                // permissions under D532, another output schema) holds it as deferred input,
+                // as a refused follow-up does under D529 (a). A natural turn end re-admits it;
+                // a turn that fails records it without starting a turn (open ledger row).
+                Ok(codex_protocol::turn_input::TurnInputSubmission::NotSubmitted {
+                    reason:
+                        codex_protocol::turn_input::NotSubmittedReason::AuthorizationChanged
+                        | codex_protocol::turn_input::NotSubmittedReason::ActiveTurnNotSteerable {
+                            ..
+                        }
+                        | codex_protocol::turn_input::NotSubmittedReason::ActiveTurnOutputSchemaMismatch,
+                }) => {
+                    sess.defer_held_input(held, final_output_json_schema).await;
+                    return;
+                }
+                Ok(codex_protocol::turn_input::TurnInputSubmission::NotSubmitted { reason }) => {
+                    format!("Held input was not submitted: {reason:?}")
+                }
+                Ok(_) => return,
+                Err(err) => format!("Held input was not submitted: {err}"),
+            };
+            warn!("{message}");
+            sess.send_event_raw(Event {
+                id: submission_id,
+                msg: EventMsg::Warning(WarningEvent { message }),
+            })
+            .await;
+        }
+        TurnInput::ResponseItem(item) | TurnInput::FunctionCallOutput(item) => {
+            if let Err(items) = sess.inject_extension_if_running(vec![item]).await {
+                // Never interleave with a turn that is still finishing.
+                let finishing = sess
+                    .active_turn
+                    .lock()
+                    .await
+                    .as_ref()
+                    .and_then(|turn| turn.finishing.clone());
+                let items = match finishing {
+                    Some(finishing) => {
+                        finishing.cancelled().await;
+                        // A turn may have started during the wait: join it if so.
+                        match sess.inject_extension_if_running(items).await {
+                            Ok(()) => return,
+                            Err(items) => items,
+                        }
+                    }
+                    None => items,
+                };
+                let context = sess.new_default_turn().await;
+                sess.record_annotated_conversation_items(&context, context.model_info(), items)
+                    .await;
+            }
+        }
+        TurnInput::InterAgentCommunication(communication) => {
+            inter_agent_communication(sess, submission_id, communication, Default::default()).await;
+        }
+    }
+}
+
 pub(super) async fn submission_loop(
     sess: Arc<Session>,
     config: Arc<Config>,
@@ -1145,47 +594,6 @@ pub(super) async fn submission_loop(
 ) {
     // Session shutdown and tree shutdown both use the existing teardown handler.
     let mut shutdown_received = false;
-<<<<<<< HEAD
-    loop {
-        let sub = tokio::select! {
-            sub = rx_sub.recv() => match sub {
-                Ok(sub) => sub,
-                Err(_) => break,
-            },
-            (input, final_output_json_schema) = sess.input_queue.next_interrupted_deferred_input() => {
-                let (op, client_user_message_id) = match input {
-                    TurnInput::UserInput { content, client_id } => (Op::UserInput {
-                        items: content,
-                        final_output_json_schema,
-                        responsesapi_client_metadata: None,
-                        additional_context: Default::default(),
-                        thread_settings: Default::default(),
-                    }, client_id),
-                    TurnInput::ResponseItem(item) => {
-                        if let Err(items) = sess.inject_extension_if_running(vec![item]).await {
-                            let context = sess.new_default_turn().await;
-                            sess.record_conversation_items(&context, &items).await;
-                        }
-                        continue;
-                    }
-                    TurnInput::InterAgentCommunication(communication) => (
-                        Op::InterAgentCommunication { communication }, None,
-                    ),
-                };
-                Submission {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    op,
-                    parent_turn_id: None,
-                    client_user_message_id,
-                    trace: None,
-                }
-            }
-        };
-        debug!(?sub, "Submission");
-||||||| 413492cd6c
-    while let Ok(sub) = rx_sub.recv().await {
-        debug!(?sub, "Submission");
-=======
     let mut mailbox = sess.input_queue.mailbox_updates();
     if let Some(updates) = &mut mailbox {
         updates.mark_changed();
@@ -1201,6 +609,12 @@ pub(super) async fn submission_loop(
                 Ok(sub) => sub,
                 Err(_) => break,
             },
+            // #1927: input an interrupted turn held for re-admission goes back through
+            // submission admission, never directly into a task's queue.
+            (input, final_output_json_schema) = sess.input_queue.next_interrupted_deferred_input() => {
+                readmit_interrupted_input(&sess, input, final_output_json_schema).await;
+                continue;
+            }
             update = async {
                 match &mut mailbox {
                     Some(updates) => updates.changed().await.map(|()| *updates.borrow_and_update()),
@@ -1209,7 +623,7 @@ pub(super) async fn submission_loop(
             } => {
                 match update {
                     Ok(true) => {
-                        sess.input_queue.notify_mailbox();
+                        sess.input_queue.admit_controller_mailbox(&sess).await;
                         if sess.features.enabled(Feature::WakeOnAgentMessages)
                             || sess.has_outstanding_durable_sleep()
                         {
@@ -1231,7 +645,6 @@ pub(super) async fn submission_loop(
             op = ?sub.op,
             "Submission"
         );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let dispatch_span = submission_dispatch_span(&sub);
         let should_exit = async {
             match sub.op {
@@ -1344,6 +757,11 @@ pub(super) async fn submission_loop(
                         &result,
                         Ok(codex_protocol::turn_input::SuspendTurnOutcome::Suspended { .. })
                     );
+                    if should_exit {
+                        // #872: nothing writes this thread's items after its suspension. Noted
+                        // before the reply, so a resume of this thread id is not affected.
+                        crate::home_access::note_thread_ended(sess.thread_id());
+                    }
                     let _ = reply.send(result);
                     should_exit
                 }
@@ -1507,14 +925,10 @@ pub(super) async fn submission_loop(
             );
             warn!("failed to shutdown thread persistence after submission channel closed: {err}");
         }
-<<<<<<< HEAD
         crate::home_access::note_thread_ended(sess.thread_id());
-||||||| 413492cd6c
-=======
         sess.services
             .rollout_thread_trace
             .record_ended(codex_rollout_trace::RolloutStatus::Aborted);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
     debug!("Agent loop exited");
 }
