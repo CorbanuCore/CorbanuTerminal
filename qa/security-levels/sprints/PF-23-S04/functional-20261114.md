@@ -38,7 +38,7 @@ Totals (11 cases): 5 passed (2, 3, 4, 9, 10); 3 passed in their decision legs wi
 - **Project `.env` after untrusted content (case 5, Moderate).** `sudo -n chroot / /bin/cat <workspace>/.env` did not
   ask. Follow-ups X1 and X3 show the direct `cat .env` does not ask either, on the candidate and on the reference
   build `152f62bf6e`, while home credential files ask directly and through `chroot /` (G4R R1.3-R1.4; also G6X X1.4-X1.5,
-  where the model wrote another account's home path). So chroot recognition is not the cause; the project `.env` is not treated as a credential after untrusted content, against the Moderate doc and
+  where the executor's request expanded `~` to another account's home path). So chroot recognition is not the cause; the project `.env` is not treated as a credential after untrusted content, against the Moderate doc and
   #841. Filed as #2167.
 - The pf23 test programs (unknown binaries) never asked, directly or through chroot, in Moderate: unknown readable
   programs are not "code the host cannot read". Not a chroot difference.

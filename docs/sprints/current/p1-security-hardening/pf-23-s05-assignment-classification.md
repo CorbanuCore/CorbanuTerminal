@@ -62,8 +62,8 @@ silently declaring complete shell analysis. Track any out-of-scope limitations.
 - [x] [Source evidence and retained limitations](../../../../qa/security-levels/sprints/PF-23-S05/source-integration.md) recorded.
 
 - [x] 19 frozen cases run code-blind in Tart guests on `1dea8b3b03` (2026-11-14):
-  [functional record](../../../../qa/security-levels/sprints/PF-23-S05/functional-20261114.md); 14 passed, 3 passed
-  with limits, 17 partly exercised, 11 inconclusive; findings outside S05: #2166 (resume UX), #2167;
+  [functional record](../../../../qa/security-levels/sprints/PF-23-S05/functional-20261114.md); 14 cases passed, 3 passed
+  with limits, case 17 partly, case 11 inconclusive; findings outside S05: #2166 (resume UX), #2167;
   [reel](../../../../qa/demos/index/pf23-s05-reel.md).
 
 ## Remaining
