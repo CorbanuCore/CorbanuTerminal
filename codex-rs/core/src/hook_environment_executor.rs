@@ -79,15 +79,18 @@ pub(crate) fn environment_hook_sources(
         .collect()
 }
 
-/// PF-27-S02: while secretless launch is armed, a hook on Corbanu's host never
-/// starts a login shell, whose profile files can export secrets (main's config
-/// hooks run `-c` then too). Its environment there is already the launch
-/// allowlist plus the hook's own variables: the in-process executor builds it
-/// with `shell_environment::create_env`, which applies the allowlist once
-/// armed. An executor behind a client keeps its own shell and environment (see the
-/// `exec-server/src/client_transport.rs` ledger row for one started on this host).
-fn hook_uses_login_shell(allow_login_shell: bool, remote: bool) -> bool {
-    allow_login_shell && (remote || !codex_protocol::secretless_launch::is_armed())
+/// PF-27-S02: while secretless launch is armed, a hook never starts a login
+/// shell, whose profile files can export secrets (main's config hooks run `-c`
+/// then too). That includes hooks on an executor behind a client: Core cannot
+/// tell whether one runs on this host (a stdio executor from
+/// `environments.toml`, a localhost websocket), so it fails closed. A hook's
+/// environment on Corbanu's host is the launch allowlist plus its own
+/// variables: the in-process executor builds it with
+/// `shell_environment::create_env`, which applies the allowlist once armed,
+/// and a stdio executor is itself started with only that allowlist
+/// (`exec-server/src/client_transport.rs`).
+fn hook_uses_login_shell(allow_login_shell: bool) -> bool {
+    allow_login_shell && !codex_protocol::secretless_launch::is_armed()
 }
 
 struct EnvironmentCommandExecutor {
@@ -211,10 +214,7 @@ impl HookEnvironmentExecutor for EnvironmentCommandExecutor {
             };
             let argv = shell.derive_exec_args(
                 &script,
-                hook_uses_login_shell(
-                    environment.config().allow_login_shell,
-                    environment.environment.is_remote(),
-                ),
+                hook_uses_login_shell(environment.config().allow_login_shell),
             );
             // Keep network attribution registered until the hook and its output are complete.
             let (params, _execution_network) = self

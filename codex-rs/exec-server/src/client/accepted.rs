@@ -252,6 +252,8 @@ impl LazyRemoteExecServerClient {
             refresh_lock: std::sync::Arc::new(tokio::sync::Mutex::new(())),
             environment_connection_state_tx,
             connection_observer: Default::default(),
+            // An accepted (inbound) connection starts no process here.
+            stdio_started_unarmed: Default::default(),
         }
     }
 
