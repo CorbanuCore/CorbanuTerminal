@@ -13,6 +13,11 @@ fn issue_2167_dotenv_shell_read_routes_are_credentials() {
         "cat .ENV",
         "cat .en[v]",
         "cat .env.*",
+        "cat .env?local",
+        "cat .env[.]local",
+        "cat .[e]nv.production",
+        "head .env?prod*",
+        "cat .env.exampl[e]",
         "cat < .env",
         "p=.env; cat \"$p\"",
         "cd project && cat .env",
@@ -68,6 +73,7 @@ fn issue_2167_dotenv_mcp_file_reads_are_credentials() {
         "/work/project/.env",
         "./project/.env.local",
         ".envrc",
+        ".env[.]local",
         #[cfg(windows)]
         r"C:\work\project\.env",
     ] {

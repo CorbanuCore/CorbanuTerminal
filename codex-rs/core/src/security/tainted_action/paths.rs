@@ -608,6 +608,9 @@ impl Homes {
             || codex_protocol::permissions::is_credential_file_name(std::ffi::OsStr::new(name))
             || glob_matches(name, ".env")
             || glob_matches(name, ".envrc")
+            || (name.contains(['*', '?', '['])
+                && !name.starts_with(['*', '?', '['])
+                && glob_match(name, ".env.", GlobMatch::NamePrefix))
             || (glob_matches(name, "hosts.yml")
                 && segments.iter().any(|segment| glob_any(segment, "gh")))
             || name.starts_with("id_rsa")
@@ -746,6 +749,18 @@ fn glob_matches(pattern: &str, name: &str) -> bool {
 /// The glob match itself, leading wildcards included. Iterative with one
 /// backtrack point, so it is linear-times-linear whatever the pattern.
 pub(super) fn glob_any(pattern: &str, name: &str) -> bool {
+    glob_match(pattern, name, GlobMatch::WholeName)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum GlobMatch {
+    WholeName,
+    // #2167: a pattern that can start with ".env." may read any credential
+    // suffix. Match the prefix without enumerating files or possible suffixes.
+    NamePrefix,
+}
+
+fn glob_match(pattern: &str, name: &str, mode: GlobMatch) -> bool {
     // The pattern's text before its first glob character must start the
     // name, and without glob characters the match below is equality. Checked
     // first, byte by byte, this skips the match's two allocations and stops
@@ -756,6 +771,9 @@ pub(super) fn glob_any(pattern: &str, name: &str) -> bool {
     let mut at = 0;
     loop {
         work::step();
+        if mode == GlobMatch::NamePrefix && at == name_bytes.len() {
+            return true;
+        }
         match pattern_bytes.get(at) {
             None => return at == name_bytes.len(),
             Some(b'*' | b'?' | b'[') => break,
@@ -795,6 +813,9 @@ pub(super) fn glob_any(pattern: &str, name: &str) -> bool {
         } else {
             return false;
         }
+    }
+    if mode == GlobMatch::NamePrefix {
+        return true;
     }
     while p < pattern.len() && pattern[p] == '*' {
         work::step();

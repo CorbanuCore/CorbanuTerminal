@@ -178,7 +178,8 @@ impl ViewImageHandler {
                 return Err(FunctionCallError::RespondToModel(refusal));
             }
             crate::security::protected_surface::Admission::AskHuman(check) => {
-                let question = format!("Allow reading `{path}`? {}", check.reason());
+                let shown_path = crate::security::protected_reads::shown_path(&path);
+                let question = format!("Allow reading {shown_path:?}? {}", check.reason());
                 let approved = crate::security::protected_surface::ask_human(
                     &session, &turn, &call_id, question,
                 )

@@ -215,11 +215,17 @@ async fn issue_2167_mcp_file_path_asks_before_dispatch(level: SecurityLevel) -> 
     Ok(())
 }
 
-#[test_case(SecurityLevel::Moderate; "moderate")]
-#[test_case(SecurityLevel::Aggressive; "aggressive")]
+#[test_case(SecurityLevel::Moderate, "Cancel", "you declined credential access"; "moderate_cancel")]
+#[test_case(SecurityLevel::Aggressive, "Cancel", "you declined credential access"; "aggressive_cancel")]
+#[test_case(SecurityLevel::Moderate, "Allow once", "image content omitted because it could not be processed"; "moderate_allow")]
+#[test_case(SecurityLevel::Aggressive, "Allow once", "unable to"; "aggressive_still_denies")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg_attr(windows, serial_test::serial(codex_home))]
-async fn issue_2167_builtin_file_read_asks_before_open(level: SecurityLevel) -> anyhow::Result<()> {
+async fn issue_2167_builtin_file_read_asks_before_open(
+    level: SecurityLevel,
+    decision: &str,
+    expected: &str,
+) -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     let (test, captured) = dotenv_turn(
         level,
@@ -236,13 +242,10 @@ async fn issue_2167_builtin_file_read_asks_before_open(level: SecurityLevel) -> 
             .question
             .contains("credential access after untrusted content")
     );
-    answer(&test, &request, "Cancel").await;
+    answer(&test, &request, decision).await;
     assert!(next_question(&test).await.is_none());
     let output = output_text(captured.requests().last().expect("result"), "call-image");
-    assert!(
-        output.contains("you declined credential access"),
-        "{output}"
-    );
+    assert!(output.contains(expected), "{level:?} {decision}: {output}");
     assert!(!output.contains(SECRET), "{output}");
     Ok(())
 }
