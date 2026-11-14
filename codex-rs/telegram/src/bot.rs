@@ -152,8 +152,8 @@ pub async fn run_bot(
         .try_dispatch_with_listener(listener, listener_error_handler)
         .await
         .context("Telegram dispatcher failed")?;
-    if fatal_polling.is_fatal() {
-        return Err(crate::error::TelegramError::PollingConflict.into());
+    if let Some(error) = fatal_polling.error() {
+        return Err(error.into());
     }
     Ok(())
 }
