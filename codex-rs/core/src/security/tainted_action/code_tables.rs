@@ -214,10 +214,13 @@ pub(super) fn may_load_stat(command: &[String], commands: &[shell::SimpleCommand
 /// unseen leading values are conservative; no old verdict is removed.
 pub(super) fn style_may_evaluate(option: &str) -> bool {
     option == "-e"
-        || option.starts_with(['$', '`', '*', '?', '[', '{', '='])
+        || option.starts_with(['$', '`', '='])
+        || option.starts_with(GLOB)
+        || may_match(option)
         || option.starts_with(shell::UNSEEN_OUTPUT)
         || (option.starts_with('-')
-            && (option.contains(['$', '`', '*', '?', '[', '{'])
+            && (option.contains(['$', '`'])
+                || option.contains(GLOB)
                 || option.contains(shell::UNSEEN_OUTPUT)))
 }
 

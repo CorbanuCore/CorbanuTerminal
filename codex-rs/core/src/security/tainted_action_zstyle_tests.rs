@@ -58,6 +58,13 @@ fn issue_2001_review_dynamic_eval_options_ask() {
         "zstyle \"$(printf %s -e)\" :x y 'eval $q'; zstyle -s :x y v",
         "o=-e; zstyle $o :x y 'zm* zsh/st?t'; zstyle -s :x y v; stat -A functions x",
         "zstyle -$o :x y 'eval $q'; zstyle -s :x y v",
+        "touch -- -e; zstyle (-e) :x y 'eval $q'; zstyle -s :x y v",
+        "zstyle -(e) :x y 'eval $q'; zstyle -s :x y v",
+        "zstyle -e(N) :x y 'eval $q'; zstyle -s :x y v",
+        "setopt extendedglob; zstyle ^:x :x y 'eval $q'; zstyle -s :x y v",
+        "setopt extendedglob; zstyle -e# :x y 'eval $q'; zstyle -s :x y v",
+        "setopt extendedglob; zstyle a#-e :x y 'eval $q'; zstyle -s :x y v",
+        "zstyle (-e) :x y 'zm* zsh/st?t'; zstyle -s :x y v; stat -A functions x",
     ] {
         assert_eq!(
             verdicts(line),
