@@ -147,6 +147,7 @@ async fn assert_overload_retry_after(status: &str, reject_enrollment: bool) {
         );
         remote_handle
             .enable_ephemeral()
+            .await
             .expect("remote control should enable again");
         assert!(
             timeout(Duration::from_secs(2), listener.accept())
@@ -171,6 +172,7 @@ async fn assert_overload_retry_after(status: &str, reject_enrollment: bool) {
         remote_handle.disable_ephemeral().await;
         remote_handle
             .enable_ephemeral()
+            .await
             .expect("remote control should enable again");
         let (stream, _) = timeout(Duration::from_secs(45), listener.accept())
             .await
@@ -326,6 +328,7 @@ async fn reconnect_backoff_covers_refresh_and_resets_after_healthy_connection() 
     // Re-enable immediately, before the websocket task can observe the disabled state.
     remote_handle
         .enable_ephemeral()
+        .await
         .expect("remote control should enable again");
     let mut websocket =
         accept_remote_control_connection_with_timeout(&listener, Duration::from_secs(2)).await;

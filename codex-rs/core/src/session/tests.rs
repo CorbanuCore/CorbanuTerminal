@@ -9762,7 +9762,7 @@ async fn load_latest_config_for_session(session: &Session) -> Config {
         .expect("load latest config for session")
 }
 
-async fn make_session_with_config_and_rx(
+pub(crate) async fn make_session_with_config_and_rx(
     mutator: impl FnOnce(&mut Config),
 ) -> anyhow::Result<(Arc<Session>, async_channel::Receiver<Event>)> {
     let codex_home = tempfile::tempdir().expect("create temp dir");

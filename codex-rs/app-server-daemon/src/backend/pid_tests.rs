@@ -232,50 +232,26 @@ async fn stop_waits_for_live_reservation_to_resolve() {
         .await
         .expect("open pid lock file");
     assert!(try_lock_file(&reservation).expect("lock reservation"));
-<<<<<<< HEAD
     let released = Arc::new(AtomicBool::new(false));
-    let cleanup = tokio::spawn({
+    let release_reservation = tokio::spawn({
         let released = Arc::clone(&released);
         async move {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-            // #349: the starter gives up its reservation: it removes the pid
-            // file while it still holds the lock, then releases it. (Released
-            // first, `stop` itself could remove the then stale empty pid file.)
-            tokio::fs::remove_file(pid_file)
-                .await
-                .expect("remove pid file");
+            tokio::time::sleep(Duration::from_millis(/*millis*/ 50)).await;
+            // Let stop() remove the stale PID file under the reservation lock.
+            // Deleting it here would race with the backend's read on Windows.
             released.store(true, Ordering::SeqCst);
             drop(reservation);
         }
-||||||| 413492cd6c
-    let cleanup = tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        drop(reservation);
-        tokio::fs::remove_file(pid_file)
-            .await
-            .expect("remove pid file");
-=======
-    let release_reservation = tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(/*millis*/ 50)).await;
-        // Let stop() remove the stale PID file under the reservation lock.
-        // Deleting it here would race with the backend's read on Windows.
-        drop(reservation);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     });
 
     backend.stop().await.expect("stop");
-<<<<<<< HEAD
+    // #349: stop() must wait for the starter's reservation.
     assert!(
         released.load(Ordering::SeqCst),
         "stop returned while the reservation was live"
     );
-    cleanup.await.expect("cleanup task");
-||||||| 413492cd6c
-    cleanup.await.expect("cleanup task");
-=======
     release_reservation.await.expect("release reservation task");
     assert!(!pid_file.exists());
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]

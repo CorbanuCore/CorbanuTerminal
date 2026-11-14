@@ -1721,7 +1721,7 @@ async fn build_extension_turn_input_items(
         return Some(Vec::new());
     }
 
-    let environment_accessors = step_context.environments();
+    let environment_accessors = step_context.environments(sess).await;
     let environments = environment_accessors
         .iter()
         .enumerate()

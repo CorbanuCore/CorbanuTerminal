@@ -32,10 +32,10 @@ struct Interleaving {
 /// Runs `first` on `handle`; once it has stored `stored`, and before it
 /// publishes its status, starts `racing` on a clone and polls it once.
 async fn interleave(
-    mut handle: RemoteControlHandle,
+    mut handle: RemoteControlSession,
     stored: RemoteControlDesiredState,
-    first: impl FnOnce(RemoteControlHandle) -> Rpc,
-    racing: impl FnOnce(RemoteControlHandle) -> Rpc + Send + 'static,
+    first: impl FnOnce(RemoteControlSession) -> Rpc,
+    racing: impl FnOnce(RemoteControlSession) -> Rpc + Send + 'static,
 ) -> Interleaving {
     // The racing RPC runs on a clone made before the hook is installed, so
     // it doesn't call the hook itself.
@@ -76,7 +76,7 @@ async fn handle_with_state_db(
     codex_home: &TempDir,
     desired_state: RemoteControlDesiredState,
     status: RemoteControlConnectionStatus,
-) -> RemoteControlHandle {
+) -> RemoteControlSession {
     let mut handle = remote_control_handle_with_current_enrollment(
         TEST_REMOTE_CONTROL_URL,
         remote_control_auth_manager(),
@@ -89,7 +89,7 @@ async fn handle_with_state_db(
     handle
 }
 
-fn enable_ephemeral(handle: RemoteControlHandle) -> Rpc {
+fn enable_ephemeral(handle: RemoteControlSession) -> Rpc {
     Box::pin(async move {
         handle
             .enable_ephemeral()
@@ -98,12 +98,12 @@ fn enable_ephemeral(handle: RemoteControlHandle) -> Rpc {
     })
 }
 
-fn disable_ephemeral(handle: RemoteControlHandle) -> Rpc {
+fn disable_ephemeral(handle: RemoteControlSession) -> Rpc {
     Box::pin(async move { handle.disable_ephemeral().await })
 }
 
 /// The status and whether remote control is desired, once both RPCs finished.
-fn settled(handle: &RemoteControlHandle) -> (RemoteControlConnectionStatus, bool) {
+fn settled(handle: &RemoteControlSession) -> (RemoteControlConnectionStatus, bool) {
     (
         handle.status().status,
         handle.desired_state_tx.borrow().is_enabled(),

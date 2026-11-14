@@ -55,13 +55,13 @@ fn race(remote_control_url: &str, racing_enable: bool) -> Race {
             server_name: "test-server".to_string(),
         },
         /*state_db*/ None,
-        remote_control_auth_manager(),
+        RemoteControlAuth::capture(remote_control_auth_manager()).0,
         RemoteControlChannels {
             transport_event_tx,
             status_publisher: status_publisher.clone(),
             current_enrollment: test_current_enrollment(/*enrollment*/ None),
             pairing_persistence_key: watch::channel(None).0,
-            desired_state_persistence_lock: Arc::new(Semaphore::new(1)),
+            persistence: RemoteControlPersistence::default(),
         },
         shutdown_token.clone(),
         desired_state_tx.clone(),
@@ -177,9 +177,9 @@ async fn connect_returned_disabled(racing_enable: bool) -> RemoteControlConnecti
 
 /// `run_connection()`'s branch: a disable ends a live connection.
 async fn connection_ended_by_disable(racing_enable: bool) -> RemoteControlConnectionStatus {
-    let race = race("http://127.0.0.1:1/", racing_enable);
+    let mut race = race("http://127.0.0.1:1/", racing_enable);
     let (client, _server) = connected_websocket_pair().await;
-    let websocket = race.websocket.as_ref().expect("the loop");
+    let websocket = race.websocket.as_mut().expect("the loop");
     let (reason, ()) = tokio::join!(
         websocket.run_connection(client, race.shutdown_token.child_token()),
         async { disable(&race.desired_state_tx, &race.status_publisher) },

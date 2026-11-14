@@ -57,32 +57,15 @@ phase where they reconcile startup response data with later events.
 
 ## Backpressure and shutdown
 
-<<<<<<< HEAD
-- Command/control queues are bounded and use
-  `DEFAULT_IN_PROCESS_CHANNEL_CAPACITY` by default.
-- The in-process event stream is non-blocking; high-volume deltas are
-  coalesced before delivery to UI surfaces.
-||||||| 413492cd6c
-- Queues are bounded and use `DEFAULT_IN_PROCESS_CHANNEL_CAPACITY` by default.
-- Full queues return explicit overload behavior instead of unbounded growth.
-=======
 - Command queues and the embedded runtime remain bounded, using
   `DEFAULT_IN_PROCESS_CHANNEL_CAPACITY` by default.
 - The facade's local consumer event queue is unbounded and preserves notification
   order. This keeps the worker draining the bounded runtime while a caller waits
   for a request, preventing unread notifications from blocking its response.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+- High-volume streaming deltas are coalesced before delivery to UI surfaces.
 - `shutdown()` performs a bounded graceful shutdown and then aborts if timeout
   is exceeded.
-<<<<<<< HEAD
 
 Critical server requests and completion notifications are delivered immediately
 on the event stream. Streaming transcript/output deltas are flushed on a short
 timer or before critical state notifications.
-||||||| 413492cd6c
-
-If the client falls behind on event consumption, the worker emits
-`InProcessServerEvent::Lagged` and may reject pending server requests so
-approval flows do not hang indefinitely behind a saturated queue.
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

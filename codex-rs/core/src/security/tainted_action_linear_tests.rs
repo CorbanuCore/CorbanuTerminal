@@ -42,16 +42,19 @@ fn fixture(path: &str) -> PathBuf {
 
 /// The verdict on `command` run in `/work`.
 fn kind(command: &[String]) -> Option<ProtectedActionKind> {
-    let action = ApprovalAction::Shell {
+    let action = ApprovalAction::ExecCommand {
         id: "call".into(),
         environment_id: "local".into(),
         command: command.to_vec(),
+        hook_command: String::new(),
         cwd: PathUri::from_abs_path(
             &AbsolutePathBuf::from_absolute_path_checked(fixture("/work")).expect("absolute"),
         ),
         sandbox_permissions: SandboxPermissions::UseDefault,
         additional_permissions: None,
         justification: None,
+        tty: false,
+        proposed_execpolicy_amendment: None,
     };
     classify_with(&action, &fixture(HOME), Some(&fixture(USER_HOME)))
 }
