@@ -1194,6 +1194,7 @@ timeout = 900
                 },
                 FileSystemPath::GlobPattern {
                     pattern: project_roots_glob_pattern("*.token".as_ref()),
+                    scan: None,
                 },
             ]
             .map(|path| FileSystemSandboxEntry::new(path, FileSystemAccessMode::Deny)),
@@ -1248,6 +1249,7 @@ timeout = 900
             FileSystemSandboxEntry::new(
                 FileSystemPath::GlobPattern {
                     pattern: r"C:\workspace\private\**".into(),
+                    scan: None,
                 },
                 FileSystemAccessMode::Deny,
             ),
@@ -1320,12 +1322,6 @@ timeout = 900
         )
         .await?;
     let mut saw_exec_command_begin = false;
-<<<<<<< HEAD
-    let mut exec_command_end = None;
-    if !managed_network {
-||||||| 413492cd6c
-    if !managed_network {
-=======
     let mut exec_command_begin_command = None;
     let mut saw_patch_denial_approval = false;
     let mut command_end = None;
@@ -1345,7 +1341,6 @@ timeout = 900
         Duration::from_secs(/*secs*/ 5)
     };
     if !managed_network_enabled {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         loop {
             let event = timeout(event_timeout, test.codex.next_event())
                 .await
@@ -1367,14 +1362,6 @@ timeout = 900
                         output_ready.notify_one();
                     }
                 }
-<<<<<<< HEAD
-                EventMsg::ExecCommandEnd(event) if event.call_id == CALL_ID => {
-                    exec_command_end = Some(event);
-                }
-                EventMsg::TurnComplete(_) => break,
-||||||| 413492cd6c
-                EventMsg::TurnComplete(_) => break,
-=======
                 EventMsg::ExecApprovalRequest(approval) if deny_read => {
                     assert_eq!(approval.call_id, CALL_ID);
                     test.codex
@@ -1460,7 +1447,6 @@ timeout = 900
                     drain_poll_started = true;
                 }
                 EventMsg::TurnComplete(_) if !cancel_after_exit => turn_finished = true,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 _ => {}
             }
             if turn_finished && (!wait_for_end || command_end.is_some()) {
@@ -1470,7 +1456,9 @@ timeout = 900
     }
     if wait_for_end {
         assert_eq!(
-            command_end.map(|end| (end.exit_code, end.aggregated_output)),
+            command_end
+                .as_ref()
+                .map(|end| (end.exit_code, end.aggregated_output.clone())),
             Some((0, COMPLETE_OUTPUT.to_string()))
         );
         assert!(test.codex.list_background_terminals().await.is_empty());
@@ -1961,7 +1949,7 @@ timeout = 900
             // Issue #443: a command the sandbox stopped as it started is
             // still shown: begin, then end with its exit code.
             assert!(saw_exec_command_begin);
-            assert_eq!(exec_command_end.map(|end| end.exit_code), Some(1));
+            assert_eq!(command_end.as_ref().map(|end| end.exit_code), Some(1));
             assert!(output.contains("Process exited with code 1"));
             assert_eq!(process_read_requests, 0, "unexpected compatibility read");
         }
@@ -1977,7 +1965,7 @@ timeout = 900
         }
         PushedExecScenario::LegacyExit => {
             assert!(saw_exec_command_begin);
-            assert_eq!(exec_command_end.map(|end| end.exit_code), Some(1));
+            assert_eq!(command_end.as_ref().map(|end| end.exit_code), Some(1));
             assert!(output.contains("Process exited with code 1"));
             assert_eq!(process_read_requests, 1, "expected compatibility read");
         }

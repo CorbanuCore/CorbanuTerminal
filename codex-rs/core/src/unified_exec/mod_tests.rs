@@ -890,70 +890,6 @@ async fn stdin_approval_preserves_the_reviewed_terminal() -> anyhow::Result<()> 
     use codex_protocol::protocol::ReviewDecision;
 
     skip_if_sandbox!(Ok(()));
-<<<<<<< HEAD
-    skip_if_no_remote_env!(Ok(()));
-
-    let remote_test_env = remote_test_env().await?;
-    let (_, mut turn) = make_session_and_context().await;
-    let TurnEnvironmentState::Ready(environment) = &mut turn.environments.environments[0] else {
-        panic!("expected ready primary environment");
-    };
-    environment.environment = Arc::new(remote_test_env.environment().clone());
-
-    #[allow(deprecated)]
-    let cwd = turn.cwd.clone();
-    let request = test_exec_request(
-        &turn,
-        vec!["bash".to_string(), "-lc".to_string(), "echo ok".to_string()],
-        cwd,
-        shell_env(),
-    );
-
-    let manager = UnifiedExecProcessManager::default();
-    let err = manager
-        .open_session_with_prepared_exec_env(
-            /*process_id*/ 1234,
-            &request,
-            codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
-            /*network_policy_decider*/ None,
-            /*network_denial_observer*/ None,
-            /*tty*/ true,
-            Box::new(TestSpawnLifecycle {
-                inherited_fds: vec![42],
-            }),
-            turn.environments
-||||||| 413492cd6c
-    skip_if_no_remote_env!(Ok(()));
-
-    let remote_test_env = remote_test_env().await?;
-    let (_, mut turn) = make_session_and_context().await;
-    let TurnEnvironmentState::Ready(environment) = &mut turn.environments.environments[0] else {
-        panic!("expected ready primary environment");
-    };
-    environment.environment = Arc::new(remote_test_env.environment().clone());
-
-    #[allow(deprecated)]
-    let cwd = turn.cwd.clone();
-    let request = test_exec_request(
-        &turn,
-        vec!["bash".to_string(), "-lc".to_string(), "echo ok".to_string()],
-        cwd,
-        shell_env(),
-    );
-
-    let manager = UnifiedExecProcessManager::default();
-    let err = manager
-        .open_session_with_prepared_exec_env(
-            /*process_id*/ 1234,
-            &request,
-            codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
-            /*network_policy_decider*/ None,
-            /*tty*/ true,
-            Box::new(TestSpawnLifecycle {
-                inherited_fds: vec![42],
-            }),
-            turn.environments
-=======
     let (session, mut turn, events) = make_session_and_context_with_auth_and_config_and_rx(
         codex_login::CodexAuth::from_api_key("Test API Key"),
         Vec::new(),
@@ -979,7 +915,6 @@ async fn stdin_approval_preserves_the_reviewed_terminal() -> anyhow::Result<()> 
         let entry = store.processes.get_mut(&process_id).unwrap();
         entry.permissions = TerminalPermissions::for_launch(
             turn.initial_environments
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 .primary()
                 .expect("turn environment"),
             &turn,
@@ -1170,6 +1105,8 @@ async fn stdin_approval_observes_strict_review_enabled_while_queued() -> anyhow:
         codex_exec_server::LOCAL_ENVIRONMENT_ID,
         Default::default(),
         /*strict_auto_review*/ true,
+        // D520: granted under the policy in force now.
+        context.session.services.authority_marker(),
     );
     drop(interaction);
     assert!(matches!(

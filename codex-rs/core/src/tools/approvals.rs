@@ -174,6 +174,16 @@ pub(crate) enum ApprovalCacheKey {
 }
 
 impl ApprovalAction {
+    /// #722 (D246): a permission hook may not allow a remote network request
+    /// without a prompt; the automatic reviewer or the person decides it.
+    fn permission_hook_may_allow(
+        &self,
+        environments: &crate::environment_selection::TurnEnvironmentSnapshot,
+    ) -> bool {
+        !matches!(self, Self::NetworkAccess { environment_id, .. }
+            if crate::tools::network_approval::is_remote_environment(environments, environment_id))
+    }
+
     fn hook_environment_id(&self) -> &str {
         match self {
             Self::ExecCommand { environment_id, .. }
@@ -631,6 +641,8 @@ impl Session {
             _ => ctx.call_id.clone(),
         };
 
+        let hook_may_allow =
+            !human_only && action.permission_hook_may_allow(ctx.review_context.environments());
         // Hook denials always win. Managed checkpoints require a person even
         // when a hook allows the action or the session uses automatic review.
         let mut resolution = match run_permission_request_hooks(
@@ -644,7 +656,7 @@ impl Session {
         {
             // A hook can still refuse a post-taint action, but only the person
             // can allow it (PF-30-S03).
-            Some(PermissionRequestDecision::Allow) if !human_only => ApprovalResolution {
+            Some(PermissionRequestDecision::Allow) if hook_may_allow => ApprovalResolution {
                 decision: ReviewDecision::Approved,
                 source: ApprovalResolutionSource::Hook,
                 cancellation_reason: None,

@@ -271,7 +271,7 @@ impl Inputs {
             .post_taint_state()
             .filter(|state| state.level == codex_security_policy::SecurityLevel::Aggressive)?;
         if turn
-            .environments
+            .initial_environments
             .primary()
             .is_some_and(|environment| environment.environment.is_remote())
         {
@@ -280,7 +280,7 @@ impl Inputs {
         #[allow(deprecated)]
         let turn_cwd = turn.cwd.clone();
         let workspace_roots = turn
-            .environments
+            .initial_environments
             .primary()
             .map(|environment| {
                 environment

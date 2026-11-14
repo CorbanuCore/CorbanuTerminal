@@ -341,6 +341,7 @@ fn present(gate: &OutputGate, msg: EventMsg) -> Option<EventMsg> {
                         message: "Corbanu withheld an event that held a protected value."
                             .to_string(),
                         codex_error_info: None,
+                        misalignment: None,
                     })
                 }),
             ),

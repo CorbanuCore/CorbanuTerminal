@@ -1758,3 +1758,41 @@ fn d541_mxc_refused_when_corbanu_protections_apply() {
         assert!(err.to_string().contains("prefer_mxc"), "{err}");
     }
 }
+
+/// D541 (a), provisional, for MCP: sandbox state that would have an MCP
+/// server run its processes under MXC is refused while a Corbanu protection
+/// MXC can't apply is active; other sandbox state is untouched.
+#[test]
+fn d541_mcp_sandbox_state_with_mxc_refused_when_corbanu_protections_apply() {
+    let temp_dir = tempfile::TempDir::new().expect("tempdir");
+    let plain = PermissionProfile::workspace_write();
+    let denying = PermissionProfile::from_runtime_permissions(
+        &FileSystemSandboxPolicy::restricted(vec![
+            FileSystemSandboxEntry {
+                path: FileSystemPath::Special {
+                    value: codex_protocol::permissions::FileSystemSpecialPath::Root,
+                },
+                access: FileSystemAccessMode::Read,
+                missing_path_behavior: None,
+            },
+            FileSystemSandboxEntry {
+                path: temp_dir.path().join("secret").abs().into(),
+                access: FileSystemAccessMode::Deny,
+                missing_path_behavior: None,
+            },
+        ]),
+        NetworkSandboxPolicy::Restricted,
+    );
+
+    refuse_mxc_mcp_sandbox_state(
+        /*use_mxc*/ false, &denying, /*contract_armed*/ true,
+    )
+    .expect("only MXC is refused");
+    refuse_mxc_mcp_sandbox_state(/*use_mxc*/ true, &plain, /*contract_armed*/ false)
+        .expect("MXC is used when no Corbanu protection applies");
+    for (profile, contract_armed) in [(&plain, true), (&denying, false)] {
+        let err = refuse_mxc_mcp_sandbox_state(/*use_mxc*/ true, profile, contract_armed)
+            .expect_err("MXC is refused");
+        assert!(err.to_string().contains("prefer_mxc"), "{err}");
+    }
+}

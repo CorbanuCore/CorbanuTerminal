@@ -162,15 +162,10 @@ fn exec_env_policy_excludes_non_inheritable_and_runtime_variables() {
             ignore_default_excludes: policy.ignore_default_excludes,
             exclude: vec![
                 CODEX_PERMISSION_PROFILE_ENV_VAR.to_string(),
-<<<<<<< HEAD
-                "ZAI_API_KEY".to_string(),
-||||||| 413492cd6c
-            exclude: vec![CODEX_PERMISSION_PROFILE_ENV_VAR.to_string()],
-=======
                 CODEX_VERSION_ENV_VAR.to_string(),
                 codex_apply_patch::CODEX_APPLY_PATCH_PRESERVE_LINE_ENDINGS_ENV_VAR.to_string(),
                 PLUGIN_METRICS_OUTPUT_ENV_VAR.to_string(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                "ZAI_API_KEY".to_string(),
             ],
             r#set: HashMap::from([("KEEP".to_string(), "value".to_string())]),
             include_only: Vec::new(),
@@ -371,23 +366,11 @@ async fn output_collection_stays_bounded_across_repeated_drains() {
         Instant::now() + Duration::from_secs(5),
     );
     let produce = async {
-<<<<<<< HEAD
-        for byte in *b"abc" {
-            output_buffer.lock().await.push_chunk(
-                vec![byte; crate::unified_exec::UNIFIED_EXEC_OUTPUT_MAX_BYTES],
-            );
-||||||| 413492cd6c
-        for byte in [b'a', b'b', b'c'] {
-            output_buffer.lock().await.push_chunk(
-                vec![byte; crate::unified_exec::UNIFIED_EXEC_OUTPUT_MAX_BYTES],
-            );
-=======
         for chunk in chunks {
             output_buffer
                 .lock()
                 .await
                 .push_chunk(ExecOutputStream::Stdout, chunk);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             output_notify.notify_one();
             tokio::time::timeout(Duration::from_secs(1), async {
                 loop {
@@ -408,25 +391,9 @@ async fn output_collection_stays_bounded_across_repeated_drains() {
     };
 
     let (collected, ()) = tokio::join!(collect, produce);
-<<<<<<< HEAD
-    let mut expected = HeadTailBuffer::default();
-    for byte in *b"abc" {
-        expected.push_chunk(vec![
-            byte;
-            crate::unified_exec::UNIFIED_EXEC_OUTPUT_MAX_BYTES
-        ]);
-||||||| 413492cd6c
-    let mut expected = HeadTailBuffer::default();
-    for byte in [b'a', b'b', b'c'] {
-        expected.push_chunk(vec![
-            byte;
-            crate::unified_exec::UNIFIED_EXEC_OUTPUT_MAX_BYTES
-        ]);
-=======
     let mut expected = HeadTailBuffer::<10>::default();
     for chunk in chunks {
         expected.push_chunk(chunk);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
     assert_eq!(collected, expected);
     assert_eq!(output_buffer.lock().await.transcript, expected);
@@ -511,28 +478,13 @@ async fn failed_initial_end_for_unstored_process_uses_fallback_output() {
     )
     .expect("parse command")
     .prepare(ExecCommandLifetime::Interactive)
+    .await
     .expect("prepare command");
     let request = ExecCommandRequest {
         prepared,
         process_id: 123,
         network: None,
-<<<<<<< HEAD
-        tty: true,
-        sandbox_permissions: crate::sandboxing::SandboxPermissions::UseDefault,
-        additional_permissions: None,
-        additional_permissions_preapproved: false,
-        justification: None,
-        prefix_rule: None,
         handler_basis: None,
-||||||| 413492cd6c
-        tty: true,
-        sandbox_permissions: crate::sandboxing::SandboxPermissions::UseDefault,
-        additional_permissions: None,
-        additional_permissions_preapproved: false,
-        justification: None,
-        prefix_rule: None,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     let output_buffer = Arc::new(tokio::sync::Mutex::new(OutputBuffers::default()));

@@ -1260,6 +1260,19 @@ async fn augment_mcp_tool_request_meta_with_sandbox_state(
     else {
         return Ok(meta);
     };
+    let use_mxc = prepared_call
+        .config()
+        .environment_use_mxc
+        .get(server_environment_id)
+        .copied()
+        .unwrap_or(false);
+    // D541 (a), provisional: not under MXC while Corbanu's protected-file
+    // read blocks apply.
+    crate::exec::refuse_mxc_mcp_sandbox_state(
+        use_mxc,
+        prepared_call.permission_profile(),
+        crate::security::launch_contract::active().is_some(),
+    )?;
     // TODO(anp): Build this metadata from the server's captured
     // TurnEnvironment::sandbox_context instead of the runtime-wide Landlock value.
     prepared_call
@@ -1270,12 +1283,7 @@ async fn augment_mcp_tool_request_meta_with_sandbox_state(
                 codex_linux_sandbox_exe: prepared_call.config().codex_linux_sandbox_exe.clone(),
                 sandbox_cwd,
                 use_legacy_landlock: prepared_call.config().use_legacy_landlock,
-                use_mxc: prepared_call
-                    .config()
-                    .environment_use_mxc
-                    .get(server_environment_id)
-                    .copied()
-                    .unwrap_or(false),
+                use_mxc,
             },
         )
         .await?;

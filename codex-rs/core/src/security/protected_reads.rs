@@ -347,7 +347,7 @@ impl ReadPolicyInputs {
             })?;
         // Local paths only: a remote command's paths are not this host's.
         if turn
-            .environments
+            .initial_environments
             .primary()
             .is_some_and(|environment| environment.environment.is_remote())
         {
@@ -356,7 +356,7 @@ impl ReadPolicyInputs {
         #[allow(deprecated)]
         let turn_cwd = turn.cwd.clone();
         let workspace_roots = turn
-            .environments
+            .initial_environments
             .primary()
             .map(|environment| {
                 environment
@@ -389,7 +389,9 @@ impl ReadPolicyInputs {
         denials.deny_home_listing();
         let policy = denials.apply(&self.profile)?.file_system_sandbox_policy();
         // A malformed pattern denies every path; explain nothing then.
-        ReadDenyMatcher::try_new(&policy, cwd).ok().flatten()
+        ReadDenyMatcher::try_new_for_local_paths(&policy, cwd)
+            .ok()
+            .flatten()
     }
 
     /// The session's protected paths, as the read policy is built from them.
@@ -725,7 +727,7 @@ pub(crate) async fn denial_explanation(
         let matcher = inputs.matcher(&cwd)?;
         // #1312: the steps that go by the output or the folder alone, not
         // by a path the command names, need a failed command.
-        if failed && matcher.is_read_denied(&cwd) {
+        if failed && matcher.is_local_path_read_denied(&cwd) {
             return Some(ProtectedNote::Read(cwd.display().to_string()));
         }
         let word = |denied: &dyn Fn(&Path) -> bool| {
@@ -750,7 +752,7 @@ pub(crate) async fn denial_explanation(
                 DenialPathScope::ProtectedPath,
             )
         };
-        word(&|path| matcher.is_read_denied(path))
+        word(&|path| matcher.is_local_path_read_denied(path))
             .map(ProtectedNote::Read)
             .or_else(|| word(&|path| matcher.is_listing_denied(path)).map(ProtectedNote::Listing))
             // #506: `ls` run in the Corbanu home itself (the denial names the
@@ -776,7 +778,9 @@ pub(crate) async fn denial_explanation(
                     inputs.user_home.as_deref(),
                     &inputs.codex_home,
                     &denial_lines,
-                    &|path| matcher.is_listing_denied(path) && !matcher.is_read_denied(path),
+                    &|path| {
+                        matcher.is_listing_denied(path) && !matcher.is_local_path_read_denied(path)
+                    },
                 )
                 .map(ProtectedNote::Listing)
             })
@@ -847,7 +851,8 @@ pub(crate) async fn denial_explanation(
                     return None;
                 }
                 let lines = &denial_lines[..denial_lines.len().min(MAX_REPORTED_LINES)];
-                in_lines(lines, &|path| matcher.is_read_denied(path)).map(ProtectedNote::Read)
+                in_lines(lines, &|path| matcher.is_local_path_read_denied(path))
+                    .map(ProtectedNote::Read)
             })
     })
     .await?;
@@ -1066,7 +1071,7 @@ pub(crate) async fn protected_note_in_command(
     let (command, cwd) = (command.to_vec(), cwd.to_path_buf());
     off_thread(move || {
         let matcher = inputs.matcher(&cwd)?;
-        if matcher.is_read_denied(&cwd) {
+        if matcher.is_local_path_read_denied(&cwd) {
             return Some(ProtectedNote::Read(cwd.display().to_string()));
         }
         let word = |denied: &dyn Fn(&Path) -> bool| {
@@ -1080,7 +1085,7 @@ pub(crate) async fn protected_note_in_command(
                 /*skip_patterns*/ false,
             )
         };
-        word(&|path| matcher.is_read_denied(path))
+        word(&|path| matcher.is_local_path_read_denied(path))
             .map(ProtectedNote::Read)
             // #554: Windows does not enforce the listing denial (its sandbox
             // ignores the entry), so it says nothing about listings there.
@@ -1288,8 +1293,8 @@ pub(crate) async fn file_tool_denial_explanation(
     let (own_policy, protected_policy) = (policy(own)?, policy(protected)?);
     let cwd = own
         .cwd
-        .as_ref()
-        .and_then(|cwd| cwd.to_abs_path().ok())
+        .to_abs_path()
+        .ok()
         .unwrap_or_else(|| inputs.turn_cwd.clone());
     let contract = super::launch_contract::active();
     let path = path.to_path_buf();

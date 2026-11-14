@@ -74,7 +74,8 @@ async fn intercept_for_test(
         fs.as_ref(),
         turn_environment,
         session,
-        turn,
+        StepContext::for_test(turn),
+        tokio_util::sync::CancellationToken::new(),
         /*tracker*/ None,
         "shell-apply-patch-test",
         "exec_command",
@@ -312,21 +313,29 @@ async fn approval_keys_include_move_destination() {
     assert_eq!(keys.len(), 2);
 }
 
-/// #713: a patch whose paths aren't native to this host skips path matching,
-/// but a restricted turn must still ask for it instead of auto-approving it.
+/// #713: a patch whose paths aren't native to this host is never
+/// auto-approved under a restricted turn: it is asked for, or (where the host
+/// can't check the path at all) refused with a message.
 #[tokio::test]
 async fn foreign_patch_paths_are_not_auto_approved_under_a_restricted_turn() {
-    use crate::apply_patch::apply_patch;
+    use crate::session::tests::make_session_and_context_with_auth_and_config_and_rx;
     use crate::tools::sandboxing::ExecApprovalRequirement;
     use codex_protocol::models::PermissionProfile;
     use codex_protocol::protocol::AskForApproval;
 
-    let (_session, mut turn) = make_session_and_context().await;
-    turn.approval_policy = crate::config::Constrained::allow_any(AskForApproval::OnRequest);
-    turn.permission_profile = PermissionProfile::workspace_write();
-    // Make the platform sandbox available on every OS (Windows tests default
-    // to no sandbox, where the old fallback would ask anyway).
-    turn.windows_sandbox_level = codex_protocol::config_types::WindowsSandboxLevel::RestrictedToken;
+    let (session, turn, _events) = make_session_and_context_with_auth_and_config_and_rx(
+        codex_login::CodexAuth::from_api_key("Test API Key"),
+        Vec::new(),
+        |config| {
+            config.permissions.approval_policy =
+                crate::config::Constrained::allow_any(AskForApproval::OnRequest);
+            config
+                .permissions
+                .set_permission_profile(PermissionProfile::workspace_write())
+                .expect("test setup should allow permission profile");
+        },
+    )
+    .await;
     let foreign = if cfg!(windows) {
         "file:///tmp/remote/new.txt"
     } else {
@@ -335,21 +344,36 @@ async fn foreign_patch_paths_are_not_auto_approved_under_a_restricted_turn() {
     let path = PathUri::parse(foreign).expect("foreign path URI");
     assert!(path.to_abs_path().is_err(), "{foreign} must not be native");
     let action = ApplyPatchAction::new_add_for_test(&path, "content".to_string());
+    let mut turn_environment = turn
+        .initial_environments
+        .primary()
+        .cloned()
+        .expect("test turn should have a primary environment");
+    // Make the platform sandbox available on every OS (Windows tests default
+    // to no sandbox, where the patch would be asked for anyway).
+    turn_environment.config_mut().windows_sandbox_level = WindowsSandboxLevel::RestrictedToken;
+    let step_context = StepContext::for_test(Arc::clone(&turn));
 
-    let (_, _, policy) = patch_permissions_without_path_matching(&turn, &action);
-    let InternalApplyPatchInvocation::DelegateToRuntime(apply) =
-        apply_patch(&turn, &policy, action).await
-    else {
-        panic!("expected the patch to go to the runtime");
-    };
-    assert!(!apply.auto_approved);
+    let requirement =
+        match prepare_verified_patch(action, turn_environment, &session, &step_context).await {
+            Ok((request, _handler_basis)) => request.exec_approval_requirement,
+            // Refusing the foreign patch outright (the model is told why) is
+            // also not auto-approval.
+            Err(FunctionCallError::RespondToModel(message))
+                if message.starts_with("failed to check patch permissions") =>
+            {
+                return;
+            }
+            Err(error) => panic!("unexpected error: {error:?}"),
+        };
     assert!(
         matches!(
-            apply.exec_approval_requirement,
+            requirement,
             ExecApprovalRequirement::NeedsApproval { .. }
+                | ExecApprovalRequirement::NeedsHumanApproval { .. }
+                | ExecApprovalRequirement::Forbidden { .. }
         ),
-        "{:?}",
-        apply.exec_approval_requirement
+        "{requirement:?}"
     );
 }
 
@@ -359,7 +383,7 @@ async fn shell_intercept_uses_consecutive_grammar_failures_and_rejects_after_fal
     let session = Arc::new(session);
     let turn = Arc::new(turn);
     let turn_environment = turn
-        .environments
+        .initial_environments
         .primary()
         .cloned()
         .expect("test turn should have a primary environment");
@@ -495,7 +519,6 @@ fn write_permissions_for_paths_keep_dirs_outside_workspace_root() {
     );
 }
 
-<<<<<<< HEAD
 /// #1057: the grants that widen the patch's policy (and so may let it
 /// through unasked) are read once and carried by the request, so a
 /// transition after that read is noticed by the orchestrator (it refuses a
@@ -503,10 +526,11 @@ fn write_permissions_for_paths_keep_dirs_outside_workspace_root() {
 #[tokio::test]
 async fn issue_1057_grants_that_widen_the_patch_policy_are_carried() {
     let (session, turn) = make_session_and_context().await;
+    let turn = Arc::new(turn);
     let outside = TempDir::new().expect("tempdir");
     let outside_root = outside.path().abs();
-    session
-        .record_granted_request_permissions_for_turn(
+    assert!(
+        session.record_granted_request_permissions_for_turn(
             &codex_protocol::request_permissions::RequestPermissionsResponse {
                 permissions: codex_protocol::request_permissions::RequestPermissionProfile {
                     file_system: Some(
@@ -521,37 +545,43 @@ async fn issue_1057_grants_that_widen_the_patch_policy_are_carried() {
                 strict_auto_review: false,
             },
             codex_exec_server::LOCAL_ENVIRONMENT_ID,
-            /*originating_turn_state*/ None,
+            &turn,
             session.services.authority_marker(),
-        )
-        .await;
-    let turn_environment = turn
-        .environments
+        ),
+        "the grant is recorded"
+    );
+    let mut turn_environment = turn
+        .initial_environments
         .primary()
         .cloned()
         .expect("test turn should have a primary environment");
+    // A patch goes through unasked only where a platform sandbox runs it
+    // (Windows tests default to none).
+    turn_environment.config_mut().windows_sandbox_level = WindowsSandboxLevel::RestrictedToken;
     let path = PathUri::from_abs_path(&outside_root.join("new.txt"));
     let action = ApplyPatchAction::new_add_for_test(&path, "content".to_string());
+    let step_context = StepContext::for_test(Arc::clone(&turn));
 
-    let (_, effective, policy) = effective_patch_permissions(
-        &session,
-        &turn,
-        &turn_environment.environment_id,
-        &action,
-        turn_environment.cwd(),
-    )
-    .await
-    .expect("native paths");
+    let (request, _handler_basis) =
+        prepare_verified_patch(action, turn_environment, &session, &step_context)
+            .await
+            .expect("native paths");
 
-    assert_ne!(
-        policy,
-        turn.file_system_sandbox_policy(),
-        "the grant widens the policy"
+    assert!(
+        matches!(
+            request.exec_approval_requirement,
+            crate::tools::sandboxing::ExecApprovalRequirement::Skip { .. }
+        ),
+        "the grant widens the policy, so the patch goes through unasked: {:?}",
+        request.exec_approval_requirement
     );
-    assert!(effective.additional_permissions.is_some(), "and is carried");
-    assert!(effective.permissions_preapproved);
-||||||| 413492cd6c
-=======
+    assert!(
+        request.additional_permissions.is_some(),
+        "and the grant is carried"
+    );
+    assert!(request.permissions_preapproved);
+}
+
 #[test]
 fn write_permissions_for_paths_do_not_widen_workspace_root_target() {
     let tmp = TempDir::new().expect("tmp");
@@ -622,5 +652,4 @@ fn write_permissions_for_windows_paths_uses_executor_uris() {
             FileSystemAccessMode::Write,
         )]),
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
