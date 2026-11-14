@@ -727,8 +727,10 @@ impl LocalProcessTerminator {
                 job,
                 discovery_root: Some(root),
             } => job.terminate_and_wait(root, Duration::from_secs(1)),
-            _ => Err(io::Error::other(
-                "cannot restart an uncontained Windows MCP server",
+            // The caller terminates it instead; see `after_uncontained_terminate`.
+            _ => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "cannot wait for an uncontained Windows MCP server to exit",
             )),
         }
     }
@@ -753,6 +755,18 @@ impl LocalProcessTerminator {
 
     #[cfg(not(any(unix, windows)))]
     fn terminate(&self) {}
+}
+
+/// Reports a discovery stop after the caller has terminated a server the stop couldn't handle.
+///
+/// A Windows server outside a job can be terminated but not waited for (`Unsupported`). That's
+/// all a shutdown needs, so it isn't an error there. A restart still reports it, because the
+/// next server can briefly overlap the first. Every other error is a real failure.
+fn after_uncontained_terminate(reason: StdioTermination, error: io::Error) -> io::Result<()> {
+    match (reason, error.kind()) {
+        (StdioTermination::Shutdown, io::ErrorKind::Unsupported) => Ok(()),
+        _ => Err(error),
+    }
 }
 
 impl StdioServerProcessHandle {
@@ -799,9 +813,10 @@ impl StdioServerProcessHandle {
             return Err(io::Error::other("missing local MCP discovery process"));
         };
         // Stop an uncontained replacement, but don't permit a retry on it.
-        terminator
-            .terminate_discovery(reason)
-            .inspect_err(|_| terminator.terminate())
+        terminator.terminate_discovery(reason).or_else(|error| {
+            terminator.terminate();
+            after_uncontained_terminate(reason, error)
+        })
     }
 
     pub(crate) async fn terminate(&self) -> io::Result<()> {
@@ -1074,6 +1089,34 @@ mod tests {
     use codex_protocol::config_types::ShellEnvironmentPolicy;
     use codex_protocol::shell_environment;
     use pretty_assertions::assert_eq;
+
+    #[test]
+    fn shutdown_of_a_server_that_cannot_be_waited_for_is_not_an_error() {
+        let cannot_wait = || io::Error::new(io::ErrorKind::Unsupported, "cannot wait");
+        let kind = |result: io::Result<()>| result.map_err(|error| error.kind());
+
+        assert_eq!(
+            kind(after_uncontained_terminate(
+                StdioTermination::Shutdown,
+                cannot_wait()
+            )),
+            Ok(())
+        );
+        assert_eq!(
+            kind(after_uncontained_terminate(
+                StdioTermination::Restart,
+                cannot_wait()
+            )),
+            Err(io::ErrorKind::Unsupported)
+        );
+        assert_eq!(
+            kind(after_uncontained_terminate(
+                StdioTermination::Shutdown,
+                io::Error::other("terminate failed")
+            )),
+            Err(io::ErrorKind::Other)
+        );
+    }
 
     #[test]
     fn remote_env_policy_uses_core_env_without_remote_source_vars() {
