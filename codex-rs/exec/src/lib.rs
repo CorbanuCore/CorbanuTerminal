@@ -770,11 +770,13 @@ pub async fn run_main_enforced(
     // PF-84-S06 (#570): a session on a named sign-in account checks the
     // restrictions against that account at thread start and never reads or
     // logs out the default login. A resumed thread's account is known only
-    // later, so `exec resume` leaves the default login in place too; this
+    // later, so `exec resume` leaves the default login in place too, and so
+    // does `exec fork` (the fork inherits the source thread's account); this
     // process then never uses a ruled-out default login, and a thread on it
     // is refused at thread start with the reason.
     let leaves_default_login = config.runs_on_named_sign_in_account()
-        || (config.named_accounts_enabled() && matches!(command, Some(ExecCommand::Resume(_))));
+        || (config.named_accounts_enabled()
+            && matches!(command, Some(ExecCommand::Resume(_) | ExecCommand::Fork(_))));
     if leaves_default_login {
         codex_login::leave_default_login_unenforced();
     } else if !is_workload_identity_selected()
