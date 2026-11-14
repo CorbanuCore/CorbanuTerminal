@@ -171,7 +171,14 @@ pub(super) async fn configure(
     config.application_auth_route_config = policy_config.application_auth_route_config;
     config.forced_login_method = policy_config.forced_login_method;
     config.forced_chatgpt_workspace_id = policy_config.forced_chatgpt_workspace_id;
-    config_manager.update_managed_config_loader(policy_auth_manager, config);
+    // Without the environment API key, one manager serves both, as upstream's
+    // shared policy manager did, so a refreshed sign-in is never left stale.
+    let managed_config_auth_manager = if enable_codex_api_key_env {
+        policy_auth_manager
+    } else {
+        Arc::clone(&auth_manager)
+    };
+    config_manager.update_managed_config_loader(managed_config_auth_manager, config);
     codex_login::default_client::set_default_client_residency_requirement(
         config.enforce_residency.value(),
     );

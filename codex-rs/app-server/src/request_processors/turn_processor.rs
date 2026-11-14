@@ -242,8 +242,12 @@ impl TurnRequestProcessor {
         cancellation: &CancellationToken,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         let (thread_id, thread) = self.load_thread(&params.thread_id).await?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref())
-            .await?;
+        self.ensure_direct_input_allowed(
+            request_id,
+            thread.as_ref(),
+            /*app_server_client_name*/ None,
+        )
+        .await?;
         self.config_manager
             .check_thread_model_provider_for_input(thread.config().await.as_ref())
             .await
@@ -318,8 +322,12 @@ impl TurnRequestProcessor {
         params: TurnSettingsUpdateParams,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         let (_, thread) = self.load_thread(&params.thread_id).await?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref())
-            .await?;
+        self.ensure_direct_input_allowed(
+            request_id,
+            thread.as_ref(),
+            /*app_server_client_name*/ None,
+        )
+        .await?;
         let (reply, outcome) = oneshot::channel();
         self.submit_core_op(
             request_id,
@@ -447,8 +455,12 @@ impl TurnRequestProcessor {
         params: ReviewStartParams,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         let (_, thread) = self.load_thread(&params.thread_id).await?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref())
-            .await?;
+        self.ensure_direct_input_allowed(
+            request_id,
+            thread.as_ref(),
+            /*app_server_client_name*/ None,
+        )
+        .await?;
         self.config_manager
             .check_thread_model_provider_for_input(thread.config().await.as_ref())
             .await
@@ -1067,8 +1079,12 @@ impl TurnRequestProcessor {
         params: ThreadSettingsUpdateParams,
     ) -> Result<Option<ThreadSettingsUpdateResponse>, JSONRPCErrorError> {
         let (thread_id, thread) = self.load_thread(&params.thread_id).await?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref())
-            .await?;
+        self.ensure_direct_input_allowed(
+            request_id,
+            thread.as_ref(),
+            /*app_server_client_name*/ None,
+        )
+        .await?;
         let cwd = resolve_request_cwd(params.cwd)?;
         let environment_override = self
             .build_environment_override(
@@ -1165,8 +1181,12 @@ impl TurnRequestProcessor {
         params: ThreadInjectItemsParams,
     ) -> Result<ThreadInjectItemsResponse, JSONRPCErrorError> {
         let (_, thread) = self.load_thread(&params.thread_id).await?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref())
-            .await?;
+        self.ensure_direct_input_allowed(
+            request_id,
+            thread.as_ref(),
+            /*app_server_client_name*/ None,
+        )
+        .await?;
 
         let items = params
             .items
@@ -1420,8 +1440,12 @@ impl TurnRequestProcessor {
         thread_id: &str,
     ) -> Result<Option<(ThreadId, Arc<CodexThread>)>, JSONRPCErrorError> {
         let (thread_id, thread) = self.load_thread(thread_id).await?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref())
-            .await?;
+        self.ensure_direct_input_allowed(
+            request_id,
+            thread.as_ref(),
+            /*app_server_client_name*/ None,
+        )
+        .await?;
 
         match self
             .ensure_conversation_listener(

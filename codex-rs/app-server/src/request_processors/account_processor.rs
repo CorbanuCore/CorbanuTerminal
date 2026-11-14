@@ -1387,7 +1387,8 @@ impl AccountRequestProcessor {
         // Match desktop's account readiness check before exposing account-bound CTA content.
         // Normal rate limits remain available when older backends omit identity or banner data.
         // Login can change while the backend read is in flight.
-        let active_auth = self.auth_manager.auth().await;
+        // #658: the session's account, which the rate limits above were read for.
+        let active_auth = self.auth_manager.session_auth().await;
         let matches_active_account = active_auth.is_some_and(|auth| {
             !auth.is_fedramp_account()
                 && response.account_id.is_some()
