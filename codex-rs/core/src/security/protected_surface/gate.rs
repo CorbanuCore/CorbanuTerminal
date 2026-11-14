@@ -222,12 +222,14 @@ pub(crate) async fn ask_human_answer(
                 option(CANCEL, "Do not run it."),
             ]),
         }],
+        // The call waits for the answer.
+        is_blocking: true,
         auto_resolution_ms: None,
     };
     session
         .request_user_input(turn, call_id.to_string(), args)
         .await
-        .and_then(|mut response| response.answers.remove(&id))
+        .and_then(|mut accepted| accepted.response.answers.remove(&id))
         .map(|answer| answer.answers == [ALLOW])
 }
 
@@ -255,7 +257,7 @@ pub(crate) async fn check_dispatch(
         }
         Coverage::PolicyRequest
             if invocation.tool_name.name != "request_permissions"
-                || crate::guardian::routes_approval_to_guardian(&invocation.turn) =>
+                || automatic_reviewer_answers(invocation) =>
         {
             (Route::PolicyRequest, ProtectedActionKind::SecurityPolicy)
         }
@@ -269,7 +271,7 @@ pub(crate) async fn check_dispatch(
     };
     let admission = admit(
         &invocation.session,
-        invocation.turn.approval_policy.value(),
+        invocation.turn.approval_policy(),
         route,
         &invocation.call_id,
         move || Some(kind),
@@ -299,6 +301,19 @@ fn is_tainted(session: &Session) -> bool {
         .is_some_and(|state| state.taint_generation > 0)
 }
 
+/// Whether an automatic reviewer, not the person, answers this step's
+/// approval prompts. sync D543 (a): main's guardian routing rule
+/// (`routes_approval_to_guardian`, removed upstream), on upstream's step
+/// settings: on-request or granular approvals with the auto reviewer.
+fn automatic_reviewer_answers(invocation: &ToolInvocation) -> bool {
+    let settings = &invocation.step_context.settings;
+    matches!(
+        settings.approval_policy(),
+        codex_protocol::protocol::AskForApproval::OnRequest
+            | codex_protocol::protocol::AskForApproval::Granular(_)
+    ) && settings.approvals_reviewer() == codex_protocol::config_types::ApprovalsReviewer::AutoReview
+}
+
 /// D334 (#1702), D388: a follow-up task or V1 `send_input` to an agent with
 /// a turn running joins its work; to any other agent it starts a new turn, so
 /// it asks like a restart. The turn can still end between this check and the
@@ -326,13 +341,12 @@ async fn followup_target_is_running(invocation: &ToolInvocation) -> bool {
     else {
         return false;
     };
-    invocation
-        .session
-        .services
-        .agent_control
-        .get_status(thread_id)
-        .await
-        == AgentStatus::Running
+    // Only the local backend reports a turn; any other counts as not
+    // running (asks like a restart).
+    let Some(local) = invocation.session.services.agent_control.local() else {
+        return false;
+    };
+    local.get_status(thread_id).await == AgentStatus::Running
 }
 
 /// One line per post-taint decision (PF-26 counts these); never arguments.

@@ -1140,7 +1140,7 @@ fn issue_611_a_separate_database_folder_is_denied_like_the_home() {
             .unwrap()
             .file_system_sandbox_policy();
         let path = databases.join(name);
-        let read = denials.matcher().unwrap().is_read_denied(&path);
+        let read = denials.matcher().unwrap().is_local_path_read_denied(&path);
         let write = !policy.can_write_path_with_cwd(&path, cwd.as_path());
         (read, write)
     };
@@ -1217,14 +1217,14 @@ fn issue_651_glob_syntax_and_backups_of_the_database_folder() {
         databases.join("later.sqlite-wal"),
         backups.join("state_5.sqlite"),
     ] {
-        assert!(matcher.is_read_denied(&denied), "{}", denied.display());
+        assert!(matcher.is_local_path_read_denied(&denied), "{}", denied.display());
     }
     for readable in [
         databases.join("notes.txt"),
         inside.join("file").to_path_buf(),
         fx.user_home.join("db1/later.sqlite"),
     ] {
-        assert!(!matcher.is_read_denied(&readable), "{}", readable.display());
+        assert!(!matcher.is_local_path_read_denied(&readable), "{}", readable.display());
     }
 
     // A Corbanu home whose path holds glob syntax.
@@ -1239,8 +1239,8 @@ fn issue_651_glob_syntax_and_backups_of_the_database_folder() {
         &profile,
     );
     let matcher = denials.matcher().expect("a valid matcher");
-    assert!(matcher.is_read_denied(&home.join("later.sqlite")));
-    assert!(!matcher.is_read_denied(&fx.user_home.join("home/later.sqlite")));
+    assert!(matcher.is_local_path_read_denied(&home.join("later.sqlite")));
+    assert!(!matcher.is_local_path_read_denied(&fx.user_home.join("home/later.sqlite")));
 
     // Working in the home: neither may be created.
     let in_home = abs(&fx.codex_home);
@@ -1330,7 +1330,7 @@ fn issue_651_a_missing_database_folder_is_denied_whole() {
         .into_iter()
         .chain([databases])
     {
-        assert!(matcher.is_read_denied(&path), "{}", path.display());
+        assert!(matcher.is_local_path_read_denied(&path), "{}", path.display());
         assert!(
             !policy.can_write_path_with_cwd(&path, project.as_path()),
             "{}",
@@ -2771,7 +2771,7 @@ fn issue_651_a_shared_database_folder_is_denied_entry_by_entry() {
             .unwrap()
             .file_system_sandbox_policy();
         let path = databases.join(name);
-        let read = denials.matcher().unwrap().is_read_denied(&path);
+        let read = denials.matcher().unwrap().is_local_path_read_denied(&path);
         let write = !policy.can_write_path_with_cwd(&path, project.as_path());
         (read, write)
     };

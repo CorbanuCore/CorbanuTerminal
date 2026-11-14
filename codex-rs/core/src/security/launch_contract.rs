@@ -619,7 +619,7 @@ impl LaunchContract {
                 file_system.writable_root_spellings_with_cwd(self.codex_home.as_path(), cwd);
             for path in std::iter::once(self.codex_home.clone()).chain(spellings) {
                 file_system.entries.push(FileSystemSandboxEntry::new(
-                    FileSystemPath::Path { path },
+                    FileSystemPath::Path { path: path.into() },
                     FileSystemAccessMode::Read,
                 ));
             }
@@ -630,10 +630,10 @@ impl LaunchContract {
     /// agent commands from reading `path`. Explanation only.
     pub(crate) fn keeps_unreadable(&self, path: &Path, cwd: &Path) -> bool {
         let policy = FileSystemSandboxPolicy::restricted(self.protected_entries());
-        ReadDenyMatcher::try_new(&policy, cwd)
+        ReadDenyMatcher::try_new_for_local_paths(&policy, cwd)
             .ok()
             .flatten()
-            .is_some_and(|matcher| matcher.is_read_denied(path))
+            .is_some_and(|matcher| matcher.is_local_path_read_denied(path))
     }
 
     /// #1077: what `path` is when this contract keeps it unreadable at every
@@ -647,15 +647,15 @@ impl LaunchContract {
                 .iter()
                 .map(|path| {
                     FileSystemSandboxEntry::skip_missing_path(
-                        FileSystemPath::Path { path: path.clone() },
+                        FileSystemPath::Path { path: path.clone().into() },
                         FileSystemAccessMode::Deny,
                     )
                 })
                 .collect();
-            ReadDenyMatcher::try_new(&FileSystemSandboxPolicy::restricted(entries), cwd)
+            ReadDenyMatcher::try_new_for_local_paths(&FileSystemSandboxPolicy::restricted(entries), cwd)
                 .ok()
                 .flatten()
-                .is_some_and(|matcher| matcher.is_read_denied(path))
+                .is_some_and(|matcher| matcher.is_local_path_read_denied(path))
         };
         Some(if among(&self.cli_token_paths) {
             KeptFile::CliToken
@@ -712,7 +712,7 @@ impl LaunchContract {
         self.protected_paths()
             .into_iter()
             .map(|path| {
-                let path_entry = FileSystemPath::Path { path: path.clone() };
+                let path_entry = FileSystemPath::Path { path: path.clone().into() };
                 let path = &path;
                 // PF-27-S06: the Windows sandbox drops every skip-if-missing
                 // entry, so a path that exists is denied outright there. So

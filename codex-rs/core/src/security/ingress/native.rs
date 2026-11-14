@@ -67,7 +67,7 @@ fn message_key(item: &ResponseItem) -> Option<ContentDigest> {
     let texts: Vec<&str> = content
         .iter()
         .filter_map(|part| match part {
-            ContentItem::InputText { text } | ContentItem::OutputText { text }
+            ContentItem::InputText { text } | ContentItem::OutputText { text, .. }
                 if text != crate::context_manager::IMAGE_CONTENT_OMITTED_PLACEHOLDER
                     && text != crate::context_manager::AUDIO_CONTENT_OMITTED_PLACEHOLDER =>
             {
@@ -531,7 +531,11 @@ impl NativeIngress {
             let route = match item {
                 ResponseItem::Message { .. } => "transcript",
                 ResponseItem::AgentMessage { .. } => "child",
-                ResponseItem::FunctionCallOutput { call_id, .. }
+                // An output without a call id is unregistered like any other.
+                ResponseItem::FunctionCallOutput {
+                    call_id: Some(call_id),
+                    ..
+                }
                 | ResponseItem::CustomToolCallOutput { call_id, .. } => {
                     match self.calls.get(&ContentDigest::of(call_id.as_bytes())) {
                         Some(SourceKind::Mcp) => "mcp",
@@ -640,6 +644,8 @@ impl NativeIngress {
                 match item {
                     ResponseItem::Message { id, .. } | ResponseItem::AgentMessage { id, .. } => {
                         Ok(ResponseItem::Message {
+                            encrypted_content: None,
+                            status: None,
                             id: id.clone(),
                             role: "user".into(),
                             content: vec![ContentItem::InputText { text }],
@@ -647,10 +653,18 @@ impl NativeIngress {
                             internal_chat_message_metadata_passthrough: None,
                         })
                     }
-                    ResponseItem::FunctionCallOutput { id, call_id, .. } => {
+                    ResponseItem::FunctionCallOutput {
+                        id,
+                        call_id,
+                        name,
+                        namespace,
+                        ..
+                    } => {
                         Ok(ResponseItem::FunctionCallOutput {
                             id: id.clone(),
                             call_id: call_id.clone(),
+                            name: name.clone(),
+                            namespace: namespace.clone(),
                             output: FunctionCallOutputPayload::from_text(text),
                             internal_chat_message_metadata_passthrough: None,
                         })

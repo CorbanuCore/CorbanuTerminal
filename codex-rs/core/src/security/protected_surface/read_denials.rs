@@ -1060,7 +1060,7 @@ impl ReadDenials {
             self.paths()
                 .map(|path| {
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::Path { path: path.clone() },
+                        FileSystemPath::Path { path: path.clone().into() },
                         FileSystemAccessMode::Deny,
                     )
                 })
@@ -1072,7 +1072,7 @@ impl ReadDenials {
             .cwd
             .as_ref()
             .map_or_else(|| Path::new("/"), AbsolutePathBuf::as_path);
-        ReadDenyMatcher::new(&FileSystemSandboxPolicy::restricted(entries), cwd)
+        ReadDenyMatcher::new_for_local_paths(&FileSystemSandboxPolicy::restricted(entries), cwd)
     }
 
     /// Every denied path, existing first.
@@ -1107,13 +1107,13 @@ impl ReadDenials {
                 .iter()
                 .map(|path| {
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::Path { path: path.clone() },
+                        FileSystemPath::Path { path: path.clone().into() },
                         FileSystemAccessMode::Deny,
                     )
                 })
                 .chain(self.fixed.iter().map(|path| {
                     FileSystemSandboxEntry::skip_missing_path(
-                        FileSystemPath::Path { path: path.clone() },
+                        FileSystemPath::Path { path: path.clone().into() },
                         FileSystemAccessMode::Deny,
                     )
                 }))
@@ -1135,7 +1135,7 @@ impl ReadDenials {
                 )
                 .chain(self.moderate_marker.iter().map(|path| {
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::Path { path: path.clone() },
+                        FileSystemPath::Path { path: path.clone().into() },
                         FileSystemAccessMode::Deny,
                     )
                 }))
@@ -1188,7 +1188,7 @@ impl ReadDenials {
             })
             .map(|path| {
                 FileSystemSandboxEntry::skip_missing_path(
-                    FileSystemPath::Path { path: path.clone() },
+                    FileSystemPath::Path { path: path.clone().into() },
                     FileSystemAccessMode::Write,
                 )
             })
@@ -1213,7 +1213,7 @@ impl ReadDenials {
                     .chain(writes.links().spellings(path.as_path(), cwd))
                     .map(move |path| {
                         FileSystemSandboxEntry::skip_missing_path(
-                            FileSystemPath::Path { path },
+                            FileSystemPath::Path { path: path.into() },
                             access,
                         )
                     })
@@ -1561,10 +1561,19 @@ pub(crate) fn protect_file_tool_context(
     mut context: codex_file_system::FileSystemSandboxContext,
 ) -> codex_file_system::FileSystemSandboxContext {
     // #1976 (D491): under the live level, not only the configured one.
-    if let Some(refusal) = crate::security::windows_unsandboxed::session_file_refusal(
-        session,
-        context.windows_sandbox_level,
-    ) {
+    // (sync D543 (a): upstream's context names the selected backend, not a
+    // level; no Windows sandbox, or MXC (D522 (a)), counts as none.)
+    let windows_sandbox_level = match context.windows_sandbox_selection {
+        codex_file_system::WindowsSandboxSelection::Disabled
+        | codex_file_system::WindowsSandboxSelection::Mxc => {
+            codex_protocol::config_types::WindowsSandboxLevel::Disabled
+        }
+        codex_file_system::WindowsSandboxSelection::RestrictedToken
+        | codex_file_system::WindowsSandboxSelection::Elevated => turn.windows_sandbox_level,
+    };
+    if let Some(refusal) =
+        crate::security::windows_unsandboxed::session_file_refusal(session, windows_sandbox_level)
+    {
         context.unsandboxed_refusal = Some(refusal);
     }
     let Some(state) = session
@@ -1576,15 +1585,9 @@ pub(crate) fn protect_file_tool_context(
         return context;
     };
     let aggressive = state.level == codex_security_policy::SecurityLevel::Aggressive;
-    let Ok(profile) = PermissionProfile::try_from(context.permissions.clone()) else {
-        // Unreadable permissions: no file access at all (fail closed).
-        context.permissions = PermissionProfile::from_runtime_permissions(
-            &FileSystemSandboxPolicy::restricted(Vec::new()),
-            codex_protocol::permissions::NetworkSandboxPolicy::Restricted,
-        )
-        .into();
-        return context;
-    };
+    // sync D543 (a): upstream's context carries a `PermissionProfile`
+    // already, so the conversion main guarded cannot fail.
+    let profile = context.permissions.clone();
     #[allow(deprecated)]
     let turn_cwd = turn.cwd.clone();
     let workspace_roots: Vec<AbsolutePathBuf> = context
@@ -1626,7 +1629,7 @@ pub(crate) fn post_taint_read_policy(
     #[allow(deprecated)]
     let turn_cwd = turn.cwd.clone();
     let workspace_roots: Vec<AbsolutePathBuf> = turn
-        .environments
+        .initial_environments
         .primary()
         .map(|environment| {
             environment
@@ -1699,7 +1702,7 @@ impl<'a> Readability<'a> {
             || self
                 .patterns
                 .as_ref()
-                .is_some_and(|matcher| matcher.is_read_denied(path))
+                .is_some_and(|matcher| matcher.is_local_path_read_denied(path))
         {
             return false;
         }
@@ -1719,7 +1722,7 @@ impl<'a> Readability<'a> {
                     && self.resolved.can_read_path_with_cwd(&real, cwd)
                     && !patterns
                         .as_ref()
-                        .is_some_and(|matcher| matcher.is_read_denied(&real))
+                        .is_some_and(|matcher| matcher.is_local_path_read_denied(&real))
             })
     }
 }
@@ -1763,7 +1766,7 @@ fn pattern_matcher(policy: &FileSystemSandboxPolicy, cwd: &Path) -> Option<ReadD
     if patterns.is_empty() {
         return None;
     }
-    ReadDenyMatcher::new(&FileSystemSandboxPolicy::restricted(patterns), cwd)
+    ReadDenyMatcher::new_for_local_paths(&FileSystemSandboxPolicy::restricted(patterns), cwd)
 }
 
 /// `policy` with each path entry also under its real location, with the
@@ -1781,29 +1784,34 @@ fn with_real_locations(policy: &FileSystemSandboxPolicy) -> FileSystemSandboxPol
     for entry in &policy.entries {
         if entry.access == FileSystemAccessMode::Deny
             && let FileSystemPath::Path { path } = &entry.path
+            && let Ok(path) = path.to_abs_path()
         {
-            let real = real_location(path).unwrap_or_else(|| path.clone());
-            denied.push((path.clone(), real));
+            let real = real_location(&path).unwrap_or_else(|| path.clone());
+            denied.push((path, real));
         }
     }
     for entry in &policy.entries {
         let real = match &entry.path {
-            FileSystemPath::Path { path } => real_location(path)
-                .filter(|real| real != path)
-                .filter(|real| {
-                    entry.access == FileSystemAccessMode::Deny
-                        || denied
-                            .iter()
-                            .filter(|(spelled, real_denied)| {
-                                real.as_path().starts_with(spelled.as_path())
-                                    || real.as_path().starts_with(real_denied.as_path())
-                            })
-                            .all(|(spelled, real_denied)| {
-                                path.as_path().starts_with(spelled.as_path())
-                                    || path.as_path().starts_with(real_denied.as_path())
-                            })
-                })
-                .map(|path| FileSystemPath::Path { path }),
+            // A path that is not this host's (no native form) has no real
+            // location here.
+            FileSystemPath::Path { path } => path.to_abs_path().ok().and_then(|path| {
+                real_location(&path)
+                    .filter(|real| *real != path)
+                    .filter(|real| {
+                        entry.access == FileSystemAccessMode::Deny
+                            || denied
+                                .iter()
+                                .filter(|(spelled, real_denied)| {
+                                    real.as_path().starts_with(spelled.as_path())
+                                        || real.as_path().starts_with(real_denied.as_path())
+                                })
+                                .all(|(spelled, real_denied)| {
+                                    path.as_path().starts_with(spelled.as_path())
+                                        || path.as_path().starts_with(real_denied.as_path())
+                                })
+                    })
+                    .map(|path| FileSystemPath::Path { path: path.into() })
+            }),
             FileSystemPath::GlobPattern { pattern, scan } => {
                 real_pattern(pattern).map(|pattern| FileSystemPath::GlobPattern {
                     pattern,

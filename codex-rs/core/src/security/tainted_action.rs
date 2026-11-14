@@ -453,9 +453,7 @@ pub(crate) fn approval_hint(
     action: &ApprovalAction,
     kind: ProtectedActionKind,
 ) -> Option<&'static str> {
-    let (ApprovalAction::Shell { command, .. } | ApprovalAction::ExecCommand { command, .. }) =
-        action
-    else {
+    let ApprovalAction::ExecCommand { command, .. } = action else {
         return None;
     };
     if kind != ProtectedActionKind::UnseenCode {
@@ -652,10 +650,10 @@ fn judged(
     indirect::reset_sudo_option_boundary_changed();
     let avoids_zsh = as_named
         && match action {
-            ApprovalAction::Shell { command, .. } | ApprovalAction::ExecCommand { command, .. } => {
+            ApprovalAction::ExecCommand { command, .. } => {
                 named_shell::avoids_zsh(command) || named_shell::grammar_proves_data(command)
             }
-            ApprovalAction::ApplyPatch { .. } => false,
+            _ => false,
         };
     judged_avoiding_read(action, homes, avoids_zsh, reading)
 }
@@ -686,8 +684,7 @@ fn judged_avoiding_read(
     let mut classifier = Classifier::new(homes, avoids_zsh);
     classifier.reading = reading;
     match action {
-        ApprovalAction::Shell { command, cwd, .. }
-        | ApprovalAction::ExecCommand { command, cwd, .. } => {
+        ApprovalAction::ExecCommand { command, cwd, .. } => {
             // #1261: see `reads_follow`.
             classifier.reads_follow = classifier.homes.windows_paths()
                 && !classifier.homes.is_windows_view()
@@ -722,6 +719,10 @@ fn judged_avoiding_read(
                 }
             }
         }
+        // sync D543 (a): main's approval actions were only commands and
+        // patches. Any other upstream action that reaches this judge is
+        // judged as unseen code (fail closed: the person decides).
+        _ => classifier.note(ProtectedActionKind::UnseenCode),
     }
     // D410: a `stat` writing a table where the action may load its builtin.
     if classifier.stat_pending && classifier.stat_builtin {

@@ -124,7 +124,7 @@ impl NativeIngress {
                 let content = content
                     .iter()
                     .map(|part| match part {
-                        ContentItem::InputText { text } | ContentItem::OutputText { text } => {
+                        ContentItem::InputText { text } | ContentItem::OutputText { text, .. } => {
                             ContentItem::InputText {
                                 text: self.label(kind, "message", text, now),
                             }
@@ -133,6 +133,8 @@ impl NativeIngress {
                     })
                     .collect();
                 Some(ResponseItem::Message {
+                    encrypted_content: None,
+                    status: None,
                     id: id.clone(),
                     role: "user".into(),
                     content,
@@ -171,8 +173,20 @@ impl NativeIngress {
                     internal_chat_message_metadata_passthrough: None,
                 })
             }
+            // An output without a call id belongs to no recorded call: it
+            // is labelled as unknown external content.
             ResponseItem::FunctionCallOutput {
-                call_id, output, ..
+                call_id: None,
+                output,
+                ..
+            } => {
+                let text = output.body.to_text().unwrap_or_default();
+                Some(self.labelled_message(SourceKind::Unknown, "function_call_output", &text, now))
+            }
+            ResponseItem::FunctionCallOutput {
+                call_id: Some(call_id),
+                output,
+                ..
             }
             | ResponseItem::CustomToolCallOutput {
                 call_id, output, ..
@@ -183,12 +197,16 @@ impl NativeIngress {
             }
             ResponseItem::FunctionCallOutput {
                 id,
-                call_id,
+                call_id: Some(call_id),
+                name,
+                namespace,
                 output,
                 ..
             } => Some(ResponseItem::FunctionCallOutput {
                 id: id.clone(),
-                call_id: call_id.clone(),
+                call_id: Some(call_id.clone()),
+                name: name.clone(),
+                namespace: namespace.clone(),
                 output: self.label_output(call_id, output, now),
                 internal_chat_message_metadata_passthrough: None,
             }),
@@ -237,6 +255,7 @@ impl NativeIngress {
             },
             // Host request structure and provider-encrypted compaction state.
             ResponseItem::AdditionalTools { .. }
+            | ResponseItem::ConfigurationUpdate { .. }
             | ResponseItem::Compaction { .. }
             | ResponseItem::CompactionTrigger {}
             | ResponseItem::ContextCompaction { .. } => Some(item.clone()),
@@ -260,6 +279,8 @@ impl NativeIngress {
             text
         };
         ResponseItem::Message {
+            encrypted_content: None,
+            status: None,
             id: None,
             role: "user".into(),
             content: vec![ContentItem::InputText {
