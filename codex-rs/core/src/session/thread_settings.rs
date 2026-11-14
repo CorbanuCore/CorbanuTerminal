@@ -112,6 +112,7 @@ pub(super) fn prepare_update(
         active_permission_profile,
         windows_sandbox_level,
         model,
+        model_provider,
         effort,
         summary,
         service_tier,
@@ -138,6 +139,8 @@ pub(super) fn prepare_update(
         permission_profile,
         active_permission_profile,
         windows_sandbox_level,
+        // #578: a provider switch from thread settings.
+        model_provider,
         disabled_plugin_ids,
         ..Default::default()
     }
