@@ -1022,7 +1022,8 @@ impl Environment {
     pub async fn force_info(&self) -> Result<EnvironmentInfo, ExecServerError> {
         match &self.remote_client {
             Some(client) => client.get().await?.force_environment_info().await,
-            None => Ok(EnvironmentInfo::local()),
+            // #2050 (D510): as `info`, with this host's platform sandbox.
+            None => Ok(local_environment_info()),
         }
     }
 

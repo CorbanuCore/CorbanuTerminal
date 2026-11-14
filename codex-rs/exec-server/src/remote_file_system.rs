@@ -605,9 +605,6 @@ impl Drop for FileWriteRegistration {
     }
 }
 
-// Older executors sandbox any supplied policy. Omit unrestricted read policies only when
-// their explicit paths are valid for the read target's convention. The executor rejects foreign
-// targets itself; keep uncertain policies intact so it also validates their explicit paths.
 /// #2050 (D510) on upstream's sandbox selection: the Windows sandbox level the executor applies
 /// for this context. MXC counts as no Windows sandbox here, as in the local refusal (D522 (a)).
 fn host_sandbox_level(
@@ -624,6 +621,9 @@ fn host_sandbox_level(
     }
 }
 
+// Older executors sandbox any supplied policy. Omit unrestricted read policies only when
+// their explicit paths are valid for the read target's convention. The executor rejects foreign
+// targets itself; keep uncertain policies intact so it also validates their explicit paths.
 async fn read_sandbox<'a>(
     client: &ExecServerClient,
     path: &PathUri,
