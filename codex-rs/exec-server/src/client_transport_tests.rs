@@ -169,22 +169,27 @@ fn stdio_executor_env(
 
 /// PF-27-S02: once secretless launch is armed, an executor started over stdio
 /// (`environments.toml`) gets only the launch allowlist from Corbanu's
-/// environment plus its own configured `env`; it is the base environment of
+/// environment plus its own configured `env` (without values that embed a URL
+/// password); it is the base environment of
 /// every command, hook and MCP server it runs.
 #[test]
 fn pf_27_s02_armed_stdio_executor_starts_with_the_launch_allowlist() {
     in_secretless_launch_child(
         "client_transport::tests::pf_27_s02_armed_stdio_executor_starts_with_the_launch_allowlist",
         || {
-            let configured = std::collections::HashMap::from([(
-                "EXECUTOR_OWN_TOKEN".to_string(),
-                "configured".to_string(),
-            )]);
+            let configured = std::collections::HashMap::from([
+                ("EXECUTOR_OWN_TOKEN".to_string(), "configured".to_string()),
+                (
+                    "EXECUTOR_PROXY".to_string(),
+                    "http://user:pw@proxy.invalid".to_string(),
+                ),
+            ]);
             let observe = |env: &std::collections::HashMap<String, String>| {
                 (
                     env.get("PF27_PROBE_API_TOKEN").cloned(),
                     env.get("PF27_PROBE_PLAIN").cloned(),
                     env.get("EXECUTOR_OWN_TOKEN").cloned(),
+                    env.contains_key("EXECUTOR_PROXY"),
                     env.keys().any(|name| name.eq_ignore_ascii_case("PATH")),
                 )
             };
@@ -195,6 +200,7 @@ fn pf_27_s02_armed_stdio_executor_starts_with_the_launch_allowlist() {
                     Some("host-secret".to_string()),
                     Some("host-plain".to_string()),
                     Some("configured".to_string()),
+                    true,
                     true
                 )
             );
@@ -202,7 +208,7 @@ fn pf_27_s02_armed_stdio_executor_starts_with_the_launch_allowlist() {
             let armed = stdio_executor_env(configured);
             assert_eq!(
                 observe(&armed),
-                (None, None, Some("configured".to_string()), true)
+                (None, None, Some("configured".to_string()), false, true)
             );
         },
     );
