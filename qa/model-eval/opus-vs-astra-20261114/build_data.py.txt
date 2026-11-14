@@ -98,10 +98,10 @@ if rub:
         vals = {}
         for m in M:
             for g in M:
-                xs = [r[g][m][d] for r in rub.values() if g in r and m in r[g]]
+                xs = [r[g][m][d] for t, r in rub.items() if t != "b1r" and g in r and m in r[g]]
                 vals[f"{m}-by-{g}"] = round(sum(xs) / len(xs), 2) if xs else None
         groups.append((d.replace("_", " "), vals))
-    charts.append({"title": "Figure 3. Track B blinded rubric (1–5, mean over tasks): each model's work as scored by each grader",
+    charts.append({"title": "Figure 3. Track B blinded rubric (1–5, mean over B1–B4): each model's work as scored by each grader",
                    "groups": groups,
                    "series": [("opus-by-opus", "Opus work, Opus grader", "#c2410c"),
                               ("opus-by-astra", "Opus work, Astra grader", "#fdba74"),
@@ -114,7 +114,7 @@ wall, toks = [], []
 for c in cases:
     wall.append((c["id"], {m: round(c["runs"][m]["wall"] / 60, 1) for m in M}))
     toks.append((c["id"], {m: round((c["runs"][m]["tokens"] or 0) / 1000) for m in M}))
-for t in ["b1", "b2", "b3", "b4"]:
+for t in ["b1", "b2", "b3", "b4", "b1r"]:
     w, k = {}, {}
     for m in M:
         mp = B / "runs" / "trackB" / f"{t}-{m}.meta"

@@ -1,0 +1,31 @@
+The bug is real and now fixed. Guardian stops a turn in the background and waits up to 100 ms for it to finish. A turn the user starts in that window could have its steering input and queued agent messages taken by the turn being stopped. Now the stopping turn only takes its own input. The regression test fails before the fix and passes after, the focused tests pass, and clippy and fmt are clean on the pinned toolchain.
+
+**Cause:** `run_turn` polled whatever turn was currently active, without checking whose it was. Once guardian's stop had removed the old turn, a new user turn could take its place. The stopping turn's next poll then took the new turn's steer and mail, and the new turn lost them.
+
+**Fix** (in `codex-rs/core/src/session/`):
+- **`input_queue.rs`:** `get_pending_input_for_running_task` now takes the calling turn's id. If the active turn belongs to a different task, or its task isn't installed yet, it returns nothing and touches neither that turn's input nor the mailbox. Turn startup and the test-only helper behave as before.
+- **`turn.rs`:** `run_turn` passes its own turn id (`turn_context.sub_id`). A task is always installed before it can poll, so a running turn still gets its own input.
+- **`stale_poll_mail_tests.rs`:** adds the regression test `guardian_stopping_turn_does_not_take_the_new_turns_input`. Existing callers now pass a turn id.
+- **Release note:** added `qa/release/unreleased/notes/2046-stopping-turn-leaves-new-turn-input.md`, reusing the heading from the #2033 note. `release_notes.py check` passes.
+
+**The test** follows the #1999/#2033 style. It starts a turn, runs guardian's stop in a detached task, and waits (bounded) for the old turn to be removed. It then starts a new turn, steers it and queues a trigger agent message. Finally it lets the stopping turn poll inside the 100 ms window. It checks that the stopping turn got nothing and the new turn still has both items.
+
+**Evidence** (all with `CARGO_TARGET_DIR` set as instructed, `-j8`, `CORBANU_HOME`/`CODEX_HOME` unset, `RUST_MIN_STACK=8388608`):
+
+| Check | Command | Result |
+|---|---|---|
+| Before fix (commit `ee542f47cf`) | `cargo test -p codex-core --lib guardian_stopping_turn` | **FAILED**: "the stopping turn took the new turn's input"; the stopping turn returned the new turn's steer and the agent message |
+| After fix (commit `b838ef0a4c`) | `cargo test -p codex-core --lib -- session:: tasks:: tools::handlers::multi_agents guardian:: agent::` | 804 passed, 0 failed, including the new test and `stopped_turn_poll_leaves_mail_queued_on_every_stop_path` |
+| Clippy | `cargo clippy -p codex-core --all-targets -- -D warnings` | exit 0 |
+| Format | `just fmt`, then `cargo fmt -- --check` | clean |
+
+**Toolchain:** the shell's `PATH` puts Rust 1.95 first, but the repo pins 1.99.1. On 1.95, clippy reports 10 `nonminimal_bool` errors in files I didn't touch (`security/tainted_action/*`, `tools/sandboxing.rs`). So I ran the after-fix tests, clippy and fmt with 1.99.1 first on `PATH`. The before-fix run used 1.95, and an earlier after-fix run of the same 804 tests on 1.95 also passed.
+
+**Open-file limit:** the shell's limit is 256. A full `codex-core --lib` run under it had 595 failures across unrelated modules and a test hung past 60 s, so I stopped that run; I didn't capture the failure messages. My guess is the low limit caused them. In one parallel run at that limit, `guardian_review_retries_two_parse_failures_then_approves` failed once, then passed 3 of 3 times on its own. With `ulimit -n 10240` the focused set passed cleanly. I did not complete a full-suite run.
+
+**Commits:** `ee542f47cf` (test), then `b838ef0a4c` (fix and release note). Nothing pushed.
+
+**Unsure or not done:**
+- The test depends on the stopping turn polling inside the real 100 ms window. If the machine were slow enough to miss it, the test would fail (the turn never polls); it would not falsely pass.
+- `has_pending_input` (used by the regular-task loop) still checks the active turn without a turn id. A stopping turn could see the new turn's input there and loop once more. It can no longer take that input, and its cancellation stops it, so I left this alone to keep the change scoped.
+- There's no live interactive (TUI) test; the evidence is the unit and integration tests above.

@@ -60,7 +60,7 @@ Rubric means over the 4 tasks (1–5; correctness / security & rules / test qual
 | Astra | Opus | 4.25 | 4.25 | 3.50 | 3.25 | 3.50 | 4.75 | 23.5 |
 | Astra | Astra | 4.25 | 4.50 | 3.25 | 5.00 | 4.50 | 4.75 | 26.2 |
 
-**Grader agreement:** 3 of 4 preferences agree; 26 of 36 paired dimension scores are exactly equal (mean absolute difference 0.33).
+**Grader agreement:** 3 of 4 preferences agree; 32 of 48 paired dimension scores are exactly equal (mean absolute difference 0.40).
 
 **Self-preference:** each grader gave its own model's work a higher total than the other grader did. The gap was +3, +2, +3 and +7 for B1–B4. That is mild but consistent, so pair the graders whenever models are being compared.
 
@@ -69,7 +69,19 @@ Notes:
 - **B4:** see `trackB/b4-postgrade-probe.md`. On the base, `! { echo ok; } | bash` and `time { echo ok; } | bash` are judged UnseenCode (bash and zsh, plain and named). Opus's change judges them as nothing, which breaks the task's never-quieter rule. Astra's change keeps them.
 - **Scope:** Astra added extra QA/evidence documents in B1, B2 and B4, which the graders marked down on scope. Opus left smaller diffs.
 
-B1 variance rerun: see the section below.
+### B1 variance rerun
+
+We ran B1 a second time for each model, from fresh clones with identical briefs:
+
+| | Opus 5.5 High | Astra High |
+|---|---|---|
+| Hidden check | PASS (2/2; own test fails before, passes after) | PASS (2/2; own test fails before, passes after) |
+| Wall time, run 1 → run 2 | 28 → 38 min | 31 → 27 min |
+| Tokens, run 1 → run 2 | 124k → 116k | 292k → 205k |
+| Rubric total, Opus grader / Astra grader | 27 / 27 | 25 / 26 |
+| Preferred by | — | both graders (on correctness) |
+
+The outcome is stable. Wall time swapped between runs, so the timing differences are within noise. In its second run, Opus correctly identified the toolchain mismatch that had misled it in run 1.
 
 ## Cost
 
@@ -77,7 +89,8 @@ B1 variance rerun: see the section below.
 |---|---|---|
 | Track A (10 reviews) | 27 min, 969k tokens | 29 min, 877k tokens |
 | Track B (4 tasks) | 88 min, 533k tokens | 91 min, 756k tokens |
-| Grading (5 runs each) | 9 min, 377k tokens | 9 min, 318k tokens (+1 superseded B1 re-grade) |
+| B1 rerun | 38 min, 116k tokens | 27 min, 205k tokens |
+| Grading (6 runs each) | 10 min, 437k tokens | 10 min, 376k tokens (+1 superseded B1 re-grade) |
 
 Opus uses limited Claude-plan capacity (it was in a multi-day cooldown until today). Astra uses the OpenAI provider. Token counts are each harness's own report.
 
@@ -98,13 +111,13 @@ Opus uses limited Claude-plan capacity (it was in a multi-day cooldown until tod
 | Ordinary bug fixes | **Astra-OK** | B1 both pass, both graders prefer Astra; B2 same miss for both |
 | CI / flake | **Astra-OK** | A08/A09 equal; little implementation evidence |
 | Docs | **Astra-OK (not tested)** | no direct evidence; low risk under normal review |
-| Grading / triage | **Astra-OK; pair with Opus for model comparisons** | agreement 3/4, mean score gap 0.33, mild self-preference |
+| Grading / triage | **Astra-OK; pair with Opus for model comparisons** | agreement 3/4, mean score gap 0.40, mild self-preference |
 
 "Astra-OK" changes which model does the work, not who approves it. The independent Opus 5.5 High review before merge and the corbanu-security approval on owned paths stay as they are.
 
 ## Caveats
 
-- Small n: 8 + 2 cases in Track A and 4 tasks in Track B, mostly one run per model.
+- Small n: 8 + 2 cases in Track A and 4 tasks in Track B, one run per model except B1 (run twice).
 - Defect selection: A01, A03 and A05 were first found by Astra on 11-11; A04, A06, A07 and A08 by Opus.
 - Track A reviews were static and offline.
 - In B1/B2 the hidden tests were added as an extra module next to each solution's own tests. B4 has no reference fix. Only lib test suites were run, not `--test all`.

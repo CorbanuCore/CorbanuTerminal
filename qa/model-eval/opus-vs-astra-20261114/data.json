@@ -5,7 +5,7 @@
   "<b>Question.</b> Can Astra High (gpt-6-astra, reasoning high) take some of the work Opus 5.5 High does now, so we get more done? We tested both models on our own work. Track A: reviews of 10 past pull requests where we already know the answer. Track B: 4 identical implementation tasks, checked with hidden tests and graded blind by one Opus grader and one Astra grader.",
   "<b>Short answer: yes, for most everyday work, with Opus still doing the final review.</b> Astra was at least as good as Opus on almost everything we measured. Neither model was reliable enough to work without a second reviewer.",
   "<b>Reviews (Track A).</b> Astra found more of the known bugs: 6 of 8 fully, against Opus's 3 fully and 2 partly. It was strongest on security-classifier code (3 of 3; Opus 0 fully, 1 partly). Opus raised more additional real issues (23 against 14) and was stronger on agent-control/TUI code. Both missed one dependency-upgrade bug. Opus wrongly approved one buggy change. Astra blocked one 'clean' control, and two graders later judged its reason a real, previously unnoticed issue (#1944, see Decisions).",
-  "<b>Implementation (Track B).</b> Both models passed the hidden checks on 3 of 4 tasks, and both missed the same detail on the fourth (B2: the open model picker should keep the tab the person was on). On the blind rubric, both graders preferred Astra's work on B1 and B4 and Opus's on B3, and split on B2. On the security-classifier task (B4), Opus's change made 4 shell lines quieter than before, against the task's explicit rule; Astra kept the old verdict as a floor. Opus's sync resolution (B3) and its tests were better. Each model took 1.5 hours of wall time; Astra used about 40% more tokens.",
+  "<b>Implementation (Track B).</b> Both models passed the hidden checks on 3 of 4 tasks, and both missed the same detail on the fourth (B2: the open model picker should keep the tab the person was on). On the blind rubric, both graders preferred Astra's work on B1 and B4 and Opus's on B3, and split on B2. On the security-classifier task (B4), Opus's change made 4 shell lines quieter than before, against the task's explicit rule; Astra kept the old verdict as a floor. Opus's sync resolution (B3) and its tests were better. A second run of B1 gave the same outcome for both models. Wall time was similar, and Astra used about 40\u201375% more tokens per task.",
   "<b>Careful:</b> this is a small sample: 8 known bugs, 2 controls and 4 tasks, mostly one run each. Three of the known bugs were first found by Astra, and four by Opus. The graders showed a mild lean towards their own model's work. Treat the differences as tendencies, not rankings."
  ],
  "trackA": {
@@ -309,7 +309,8 @@
    "<b>B2 (#2102, TUI).</b> Both solutions fail the same hidden snapshot test. When OpenAI comes back while the model picker is open on the Claude Plan tab, both pickers jump to the OpenAI tab; the merged fix keeps the person's tab, which the issue asks for. Each solution's own \"keeps tab\" test covered a different case. The graders split, each preferring its own model's work. Astra also added a QA reliability note, and Opus left a tidier diff.",
    "<b>B3 (sync conflict, codex-agent-roles).</b> Both resolutions are byte-identical to the maintainers' merged resolution in <code>agent-roles/src</code>. Both compile, pass clippy and pass the hidden behaviour test (3/3). Opus also added 97 lines of tests; Astra added none. Both graders preferred Opus's.",
    "<b>B4 (#2018, security classifier, fresh issue).</b> Both pass the full classifier suite (905 and 907 tests) and clippy, and both have new tests that fail before and pass after. Both graders preferred Astra's. Opus's simpler fix makes <code>! { echo ok; } | bash</code> and <code>time { echo ok; } | bash</code> quieter than before (UnseenCode \u2192 nothing). We confirmed this with a probe after grading; it breaks the task's \"never quieter\" rule. Astra kept the old verdict as a floor, which gives up part of the issue's precision goal but stays safe.",
-   "<b>Graders.</b> They agreed on 3 of 4 preferences, gave exactly the same score on 26 of 36 paired dimension scores, and differed by 0.33 points on average. Each gave its own model's work a higher total, by 2 to 7 points out of 30 per task, so blind grading by a single model would slightly favour that model. Using both graders evens this out."
+   "<b>Graders.</b> They agreed on 3 of 4 preferences, gave exactly the same score on 32 of 48 paired dimension scores, and differed by 0.40 points on average. Each gave its own model's work a higher total, by 2 to 7 points out of 30 per task, so blind grading by a single model would slightly favour that model. Using both graders evens this out.",
+   "<b>Variance (B1 run twice).</b> We ran B1 a second time for each model, from fresh clones. Both again passed the hidden tests, with own tests failing before and passing after. Both graders again preferred Astra's on correctness, although both gave Opus's work a slightly higher total (27 against 25 and 26). Run times swapped between the runs (Opus 28 then 38 minutes; Astra 31 then 27). Astra again used more tokens (292k and 205k, against Opus's 124k and 116k). In its second run, Opus correctly spotted the toolchain mismatch that had misled it in the first."
   ],
   "hidden": [
    {
@@ -359,11 +360,23 @@
      "pass": true,
      "text": "PASS: 907 classifier tests pass, 0 fail; 2 new tests fail before, pass after; clippy clean"
     }
+   },
+   {
+    "task": "B1 rerun",
+    "desc": "#2046 again, fresh clone (variance check)",
+    "opus": {
+     "pass": true,
+     "text": "PASS: merged fix's tests 2/2; own test fails before, passes after (38 min, 116k tokens)"
+    },
+    "astra": {
+     "pass": true,
+     "text": "PASS: merged fix's tests 2/2; own test fails before, passes after (27 min, 205k tokens)"
+    }
    }
   ],
   "rubric_charts": [
    {
-    "title": "Figure 3. Track B blinded rubric (1\u20135, mean over tasks): each model's work as scored by each grader",
+    "title": "Figure 3. Track B blinded rubric (1\u20135, mean over B1\u2013B4): each model's work as scored by each grader",
     "groups": [
      [
       "correctness",
@@ -547,6 +560,13 @@
      "opus": 21.3,
      "astra": 23.6
     }
+   ],
+   [
+    "B1R",
+    {
+     "opus": 37.7,
+     "astra": 27.2
+    }
    ]
   ],
   "tokens": [
@@ -647,6 +667,13 @@
      "opus": 159,
      "astra": 151
     }
+   ],
+   [
+    "B1R",
+    {
+     "opus": 116,
+     "astra": 205
+    }
    ]
   ]
  },
@@ -690,7 +717,7 @@
    [
     "Grading / triage",
     "Astra-OK, paired with Opus for model comparisons",
-    "Graders agreed on 3 of 4 preferences, with a mean score gap of 0.33. Each leaned slightly to its own model (+2 to +7 of 30), so don't let one model grade its own work alone."
+    "Graders agreed on 3 of 4 preferences, with a mean score gap of 0.40. Each leaned slightly to its own model (+2 to +7 of 30), so don't let one model grade its own work alone."
    ]
   ],
   "notes_html": [

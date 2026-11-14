@@ -36,7 +36,7 @@ diffs, n, exact = [], 0, 0
 for t, p in prefs.items():
     lines.append(f"| {t.upper()} | {p.get('opus', '-')} | {p.get('astra', '-')} | {'yes' if p.get('opus') == p.get('astra') else 'no'} |")
 for t, r in rub.items():
-    if "opus" in r and "astra" in r:
+    if "opus" in r and "astra" in r and t != "b1r":
         for m in ("opus", "astra"):
             for d in DIMS:
                 a, b = r["opus"][m][d], r["astra"][m][d]
@@ -49,7 +49,7 @@ for t, r in rub.items():
         gaps.append((t.upper(), mo, ma, mo - ma))
 lines.append("")
 if n:
-    lines.append(f"Score agreement over {n} paired dimension scores: exact {exact}/{n}, mean absolute difference {sum(diffs) / n:.2f}.")
+    lines.append(f"Score agreement (B1-B4) over {n} paired dimension scores: exact {exact}/{n}, mean absolute difference {sum(diffs) / n:.2f}.")
 lines.append("")
 lines.append("Self-preference check (totals out of 30): margin = Opus work total minus Astra work total.")
 lines.append("")
