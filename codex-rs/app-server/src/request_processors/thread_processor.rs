@@ -21,11 +21,8 @@ use crate::thread_sample::SampleTask;
 use crate::thread_sample::SampleThread;
 use crate::thread_sample::generate_sample;
 use codex_app_server_protocol::SelectedCapabilityRoot;
-<<<<<<< HEAD
 use codex_app_server_protocol::THREAD_UNMATERIALIZED_ERROR_CODE;
 use codex_app_server_protocol::THREAD_UNMATERIALIZED_INCLUDE_TURNS_MESSAGE;
-||||||| 413492cd6c
-=======
 use codex_app_server_protocol::ThreadHistoryMode as ApiThreadHistoryMode;
 use codex_app_server_protocol::ThreadItem;
 use codex_app_server_protocol::ThreadItemsListAnchor;
@@ -35,7 +32,6 @@ use codex_app_server_protocol::ThreadRevertResponse;
 use codex_app_server_protocol::ThreadRevertedNotification;
 use codex_app_server_protocol::ThreadSampleParams;
 use codex_app_server_protocol::ThreadSampleResponse;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_app_server_protocol::ThreadSection;
 use codex_app_server_protocol::ThreadSectionAppearance;
 use codex_app_server_protocol::ThreadSectionChangedNotification;
@@ -43,28 +39,16 @@ use codex_app_server_protocol::ThreadSectionMoveParams;
 use codex_app_server_protocol::ThreadSectionMoveResponse;
 use codex_config::types::WindowsSandboxModeToml;
 use codex_extension_api::ExtensionDataInit;
-<<<<<<< HEAD
-use codex_protocol::AgentPath;
-||||||| 413492cd6c
-=======
 use codex_extension_api::ThreadIdleCause;
+use codex_protocol::AgentPath;
 use codex_protocol::SanitizedGitUrl;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::config_types::MultiAgentMode;
 use codex_protocol::crew::AgentClass;
 use codex_protocol::crew::RetentionPolicy;
 use codex_protocol::error::CodexErrorDetails;
-<<<<<<< HEAD
-use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
-use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
+use codex_protocol::mcp::ClientMcpExtensions;
 use codex_protocol::protocol::SessionSource as CoreSessionSource;
 use codex_protocol::protocol::SubAgentSource as CoreSubAgentSource;
-||||||| 413492cd6c
-use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
-use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
-=======
-use codex_protocol::mcp::ClientMcpExtensions;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::protocol::ThreadHistoryMode;
 use codex_thread_store::PersistContext;
 use std::ops::ControlFlow;
@@ -150,6 +134,12 @@ struct ResumeConfigState {
     workspace_roots: Option<Vec<AbsolutePathBuf>>,
     persisted_metadata: Option<ThreadMetadata>,
     persisted_settings: Option<PersistedResumeSettings>,
+    // Corbanu inputs also read from history: the JSONL runtime (3e4dad7717),
+    // the recorded account (PF-84) and legacy permissions.
+    persisted_runtime: Option<PersistedThreadRuntime>,
+    inherited_provider_account: Option<String>,
+    approval_policy: Option<codex_protocol::protocol::AskForApproval>,
+    permission_profile: Option<codex_protocol::models::PermissionProfile>,
 }
 
 struct PreparedResumeConfig {
@@ -331,7 +321,6 @@ fn merge_persisted_resume_metadata(
     }
 }
 
-<<<<<<< HEAD
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PersistedThreadRuntime {
     model: String,
@@ -400,45 +389,35 @@ fn apply_persisted_thread_runtime(
     }
 }
 
-fn merge_persisted_service_tier(
-    history: &[RolloutItem],
-    request_overrides: Option<&HashMap<String, serde_json::Value>>,
-    typesafe_overrides: &mut ConfigOverrides,
-) {
-    if typesafe_overrides.service_tier.is_some()
-        || request_overrides.is_some_and(|overrides| overrides.contains_key("service_tier"))
-        || has_model_resume_override(request_overrides, typesafe_overrides)
-    {
-        return;
+/// The service tier a cold resume runs on, or `None` to keep the loaded
+/// config's (3e4dad7717): an explicit tier or model keeps it; a saved tier is
+/// restored only for the model it was chosen for (`runtime` is the newest
+/// recorded model), never for a newer one; a session without a settings record
+/// never chose a tier, so it resumes on standard routing rather than today's
+/// unrelated global default.
+fn resumed_service_tier(
+    persisted: Option<&codex_protocol::protocol::ThreadSettingsSnapshot>,
+    runtime: Option<&PersistedThreadRuntime>,
+    restore_service_tier: bool,
+    explicit_model_override: bool,
+) -> Option<Option<String>> {
+    if !restore_service_tier || explicit_model_override {
+        return None;
     }
-    let runtime = latest_persisted_thread_runtime(history);
-    let tier = history
-        .iter()
-        .rev()
-        .find_map(|item| match item {
-            RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) => {
-                let settings = &event.thread_settings;
-                // TurnContext does not carry a tier. Never restore a tier from an older model.
-                Some(
-                    if runtime.as_ref().is_some_and(|runtime| {
-                        runtime.model == settings.model
-                            && runtime
-                                .model_provider
-                                .as_ref()
-                                .is_none_or(|provider| provider == &settings.model_provider_id)
-                    }) {
-                        settings.service_tier.clone()
-                    } else {
-                        None
-                    },
-                )
-            }
-            _ => None,
+    let same_model = |settings: &codex_protocol::protocol::ThreadSettingsSnapshot| {
+        runtime.is_none_or(|runtime| {
+            runtime.model == settings.model
+                && runtime
+                    .model_provider
+                    .as_ref()
+                    .is_none_or(|provider| provider == &settings.model_provider_id)
         })
-        .flatten();
-    // Explicit standard routing also shields legacy sessions without a tier record from
-    // today's unrelated global default. No history/schema migration is needed.
-    typesafe_overrides.service_tier = Some(tier);
+    };
+    Some(
+        persisted
+            .filter(|settings| same_model(settings))
+            .and_then(|settings| settings.service_tier.clone()),
+    )
 }
 
 fn prepend_missing_resume_settings(context: &mut Vec<RolloutItem>, history: &[RolloutItem]) {
@@ -455,101 +434,6 @@ fn prepend_missing_resume_settings(context: &mut Vec<RolloutItem>, history: &[Ro
     }
 }
 
-fn merge_persisted_approvals_reviewer(
-    history: &[RolloutItem],
-    request_overrides: Option<&HashMap<String, serde_json::Value>>,
-    typesafe_overrides: &mut ConfigOverrides,
-) {
-    if typesafe_overrides.approvals_reviewer.is_some()
-        || request_overrides.is_some_and(|overrides| overrides.contains_key("approvals_reviewer"))
-    {
-        return;
-    }
-
-    typesafe_overrides.approvals_reviewer = history.iter().rev().find_map(|item| match item {
-        RolloutItem::TurnContext(turn_context) => turn_context.approvals_reviewer,
-        RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) => {
-            Some(event.thread_settings.approvals_reviewer)
-        }
-        _ => None,
-    });
-}
-
-fn has_permission_resume_override(
-    request_overrides: Option<&HashMap<String, serde_json::Value>>,
-    typesafe_overrides: &ConfigOverrides,
-) -> bool {
-    typesafe_overrides.approval_policy.is_some()
-        || typesafe_overrides.sandbox_mode.is_some()
-        || typesafe_overrides.permission_profile.is_some()
-        || typesafe_overrides.default_permissions.is_some()
-        || request_overrides.is_some_and(|overrides| {
-            [
-                "approval_policy",
-                "sandbox_mode",
-                "default_permissions",
-                "permission_profiles",
-                "sandbox_workspace_write",
-            ]
-            .iter()
-            .any(|key| overrides.contains_key(*key))
-        })
-}
-
-/// Restores the last acknowledged permission contract when `thread/resume` does not carry an
-/// explicit permission override. This keeps a restricted thread restricted even when the current
-/// user's defaults are broader than the settings persisted in that thread.
-fn merge_persisted_permissions(
-    history: &[RolloutItem],
-    request_overrides: Option<&HashMap<String, serde_json::Value>>,
-    typesafe_overrides: &mut ConfigOverrides,
-) {
-    if has_permission_resume_override(request_overrides, typesafe_overrides) {
-        return;
-    }
-
-    let persisted = history.iter().rev().find_map(|item| match item {
-        RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) => Some((
-            event.thread_settings.approval_policy,
-            event.thread_settings.permission_profile.clone(),
-        )),
-        RolloutItem::TurnContext(turn_context) => Some((
-            turn_context.approval_policy,
-            turn_context.permission_profile(),
-        )),
-        _ => None,
-    });
-    let Some((approval_policy, permission_profile)) = persisted else {
-        return;
-    };
-
-    typesafe_overrides.approval_policy = Some(approval_policy);
-    typesafe_overrides.permission_profile = Some(permission_profile);
-}
-
-||||||| 413492cd6c
-fn merge_persisted_approvals_reviewer(
-    history: &[RolloutItem],
-    request_overrides: Option<&HashMap<String, serde_json::Value>>,
-    typesafe_overrides: &mut ConfigOverrides,
-) {
-    if typesafe_overrides.approvals_reviewer.is_some()
-        || request_overrides.is_some_and(|overrides| overrides.contains_key("approvals_reviewer"))
-    {
-        return;
-    }
-
-    typesafe_overrides.approvals_reviewer = history.iter().rev().find_map(|item| match item {
-        RolloutItem::TurnContext(turn_context) => turn_context.approvals_reviewer,
-        RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) => {
-            Some(event.thread_settings.approvals_reviewer)
-        }
-        _ => None,
-    });
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 fn normalize_thread_list_cwd_filters(
     cwd: Option<ThreadListCwdFilter>,
 ) -> Result<Option<Vec<PathBuf>>, JSONRPCErrorError> {
@@ -597,6 +481,56 @@ fn has_permission_override(
         || request_overrides.is_some_and(|overrides| {
             overrides.contains_key("sandbox_mode") || overrides.contains_key("default_permissions")
         })
+}
+
+/// Pre-sync Corbanu threads never recorded which thread owns a settings
+/// snapshot, so upstream's owner-checked restore (#57227) finds no raw
+/// permission profile for them and would resume them on today's defaults
+/// with only their approval policy restored. Fail closed as main did
+/// (`merge_persisted_permissions`): when the history has no snapshot owned by
+/// `thread_id`, no profile was restored and the caller chose no permissions,
+/// restore the permission profile of the newest settings record or turn
+/// context, with its approval policy unless the caller chose one, so a
+/// restricted thread stays restricted.
+fn restore_legacy_permissions(
+    history: &[RolloutItem],
+    thread_id: ThreadId,
+    request_overrides: Option<&HashMap<String, serde_json::Value>>,
+    approval_policy_requested: bool,
+    typesafe_overrides: &mut ConfigOverrides,
+) {
+    if latest_owned_thread_settings(history, thread_id).is_some()
+        || typesafe_overrides.persisted_permission_profile_id.is_some()
+        || typesafe_overrides.persisted_permission_profile.is_some()
+        || has_permission_override(request_overrides, typesafe_overrides)
+        || request_overrides.is_some_and(|overrides| {
+            overrides.keys().any(|key| {
+                key == "permission_profiles"
+                    || key == "sandbox_workspace_write"
+                    || key.starts_with("sandbox_workspace_write.")
+            })
+        })
+    {
+        return;
+    }
+    let persisted = history.iter().rev().find_map(|item| match item {
+        RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) => Some((
+            event.thread_settings.approval_policy,
+            event.thread_settings.permission_profile.clone(),
+        )),
+        RolloutItem::TurnContext(turn_context) => Some((
+            turn_context.approval_policy,
+            turn_context.permission_profile(),
+        )),
+        _ => None,
+    });
+    let Some((approval_policy, permission_profile)) = persisted else {
+        return;
+    };
+    if !approval_policy_requested {
+        typesafe_overrides.approval_policy = Some(approval_policy);
+    }
+    typesafe_overrides.permission_profile = Some(permission_profile);
 }
 
 fn apply_persisted_permission_profile(
@@ -1350,7 +1284,6 @@ impl ThreadRequestProcessor {
             .map(|response| Some(response.into()))
     }
 
-<<<<<<< HEAD
     pub(crate) async fn thread_turns_items_list(
         &self,
         params: ThreadTurnsItemsListParams,
@@ -1359,7 +1292,7 @@ impl ThreadRequestProcessor {
             .thread_items_list_response_inner(ThreadItemsListParams {
                 thread_id: params.thread_id,
                 turn_id: Some(params.turn_id),
-                cursor: params.cursor,
+                cursor: params.cursor.map(ThreadItemsListCursor::Opaque),
                 limit: params.limit,
                 sort_direction: params.sort_direction,
             })
@@ -1369,8 +1302,11 @@ impl ThreadRequestProcessor {
                 data: response.data.into_iter().map(|entry| entry.item).collect(),
                 next_cursor: response.next_cursor,
                 backwards_cursor: response.backwards_cursor,
-||||||| 413492cd6c
-=======
+            }
+            .into(),
+        ))
+    }
+
     pub(crate) async fn thread_items_read(
         &self,
         params: ThreadItemsReadParams,
@@ -1404,7 +1340,6 @@ impl ThreadRequestProcessor {
                 data: page.items,
                 next_cursor: page.next_cursor,
                 active_realtime_session_at_page_start: page.active_realtime_session_at_page_start,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
             .into(),
         ))
@@ -1651,14 +1586,10 @@ impl ThreadRequestProcessor {
             session_start_source,
             reopened_by_prompt_edit,
             thread_source,
-<<<<<<< HEAD
             spawn_agent_parent_thread_id,
             spawn_agent_role,
-||||||| 413492cd6c
-=======
             project_id,
             daybreak_enabled,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             environments,
         } = params;
         if matches!(
@@ -1747,17 +1678,11 @@ impl ThreadRequestProcessor {
                 history_mode.map(Into::into),
                 session_start_source,
                 thread_source.map(Into::into),
-<<<<<<< HEAD
                 spawn_agent_parent_thread_id,
                 spawn_agent_role,
-                environments,
-||||||| 413492cd6c
-                environments,
-=======
                 project_id,
                 daybreak_enabled,
                 environment_requests,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 service_name,
                 allow_provider_model_fallback,
                 experimental_raw_events,
@@ -1838,17 +1763,11 @@ impl ThreadRequestProcessor {
         history_mode: Option<ThreadHistoryMode>,
         session_start_source: Option<codex_app_server_protocol::ThreadStartSource>,
         thread_source: Option<codex_protocol::protocol::ThreadSource>,
-<<<<<<< HEAD
         spawn_agent_parent_thread_id: Option<String>,
         spawn_agent_role: Option<String>,
-        environment_selections: Option<Vec<TurnEnvironmentSelection>>,
-||||||| 413492cd6c
-        environment_selections: Option<Vec<TurnEnvironmentSelection>>,
-=======
         project_id: Option<String>,
         daybreak_enabled: Option<bool>,
         environment_requests: Option<Vec<TurnEnvironmentRequest>>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         service_name: Option<String>,
         allow_provider_model_fallback: bool,
         experimental_raw_events: bool,
@@ -1934,16 +1853,6 @@ impl ThreadRequestProcessor {
                 .map_err(|err| config_load_error(&err))?;
         }
 
-<<<<<<< HEAD
-        // With strict rules the thread fails to start and its error says why;
-        // "custom rules not applied" would wrongly suggest it ran without them.
-        if !config.strict_rules
-            && let Ok(Some(err)) =
-                codex_core::check_execpolicy_for_warnings(&config.config_layer_stack).await
-||||||| 413492cd6c
-        if let Ok(Some(err)) =
-            codex_core::check_execpolicy_for_warnings(&config.config_layer_stack).await
-=======
         // Thread config can include project-local warnings absent at initialization.
         let mut config_warnings = config
             .startup_warnings
@@ -1955,9 +1864,11 @@ impl ThreadRequestProcessor {
                 range: None,
             })
             .collect::<Vec<_>>();
-        if let Ok(Some(err)) =
-            codex_core::check_execpolicy_for_warnings(&config.config_layer_stack).await
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        // With strict rules the thread fails to start and its error says why;
+        // "custom rules not applied" would wrongly suggest it ran without them.
+        if !config.strict_rules
+            && let Ok(Some(err)) =
+                codex_core::check_execpolicy_for_warnings(&config.config_layer_stack).await
         {
             config_warnings.push(crate::exec_policy_config_warning(&err));
         }
@@ -4463,20 +4374,12 @@ impl ThreadRequestProcessor {
         params: &ThreadResumeParams,
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
-<<<<<<< HEAD
-        supports_openai_form_elicitation: bool,
-    ) -> Result<(), JSONRPCErrorError> {
-        let resume_started_at = std::time::Instant::now();
-        trace_thread_processor_timing("thread_resume_start", resume_started_at);
-
-||||||| 413492cd6c
-        supports_openai_form_elicitation: bool,
-    ) -> Result<(), JSONRPCErrorError> {
-=======
         client_mcp_extensions: ClientMcpExtensions,
         prepared_config: &mut Option<PreparedResumeConfig>,
     ) -> Result<ControlFlow<()>, JSONRPCErrorError> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let resume_started_at = std::time::Instant::now();
+        trace_thread_processor_timing("thread_resume_start", resume_started_at);
+
         if let Ok(thread_id) = ThreadId::from_string(&params.thread_id)
             && self
                 .pending_thread_unloads
@@ -4495,53 +4398,8 @@ impl ThreadRequestProcessor {
         let redact_resume_payloads =
             should_redact_thread_resume_payloads(app_server_client_name.as_deref());
 
-<<<<<<< HEAD
-        let _thread_list_state_permit = match self.acquire_thread_list_state_permit().await {
-            Ok(permit) => permit,
-            Err(error) => {
-                self.outgoing.send_error(request_id, error).await;
-                return Ok(());
-            }
-        };
-        trace_thread_processor_timing("thread_resume_after_list_permit", resume_started_at);
-        let stored_thread_from_running_probe = match self
-            .resume_running_thread(
-                &request_id,
-                &params,
-                app_server_client_name.clone(),
-                app_server_client_version.clone(),
-            )
-            .await
-        {
-            Ok(RunningThreadResumeResult::Handled) => return Ok(()),
-            Ok(RunningThreadResumeResult::NotRunning(stored_thread)) => stored_thread,
-            Err(error) => {
-                self.outgoing.send_error(request_id, error).await;
-                return Ok(());
-||||||| 413492cd6c
-        let _thread_list_state_permit = match self.acquire_thread_list_state_permit().await {
-            Ok(permit) => permit,
-            Err(error) => {
-                self.outgoing.send_error(request_id, error).await;
-                return Ok(());
-            }
-        };
-        let stored_thread_from_running_probe = match self
-            .resume_running_thread(
-                &request_id,
-                &params,
-                app_server_client_name.clone(),
-                app_server_client_version.clone(),
-            )
-            .await
-        {
-            Ok(RunningThreadResumeResult::Handled) => return Ok(()),
-            Ok(RunningThreadResumeResult::NotRunning(stored_thread)) => stored_thread,
-            Err(error) => {
-                self.outgoing.send_error(request_id, error).await;
-                return Ok(());
-=======
         let _thread_list_state_permit = self.acquire_thread_list_state_permit().await?;
+        trace_thread_processor_timing("thread_resume_after_list_permit", resume_started_at);
         let stored_thread_from_running_probe = match target {
             ThreadResumeTarget::Client(request_id) => match self
                 .resume_running_thread(
@@ -4576,7 +4434,6 @@ impl ThreadRequestProcessor {
                     return Ok(ControlFlow::Break(()));
                 }
                 None
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
         };
         trace_thread_processor_timing("thread_resume_after_running_probe", resume_started_at);
@@ -4811,10 +4668,6 @@ impl ThreadRequestProcessor {
             developer_instructions,
             personality,
         );
-<<<<<<< HEAD
-        typesafe_overrides.provider_account = provider_account;
-||||||| 413492cd6c
-=======
         if typesafe_overrides.approval_policy.is_none()
             && let Some(value) = request_overrides
                 .as_mut()
@@ -4825,14 +4678,9 @@ impl ThreadRequestProcessor {
             })?;
             typesafe_overrides.approval_policy = Some(approval_policy);
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        typesafe_overrides.provider_account = provider_account;
         let has_explicit_model_resume_override =
             has_model_resume_override(request_overrides.as_ref(), &typesafe_overrides);
-<<<<<<< HEAD
-        let persisted_reasoning_effort = self
-||||||| 413492cd6c
-        let persisted_metadata = self
-=======
         let persisted_model_settings = latest_persisted_model_settings(&thread_history);
         let has_override = |key| {
             request_overrides
@@ -4850,8 +4698,7 @@ impl ThreadRequestProcessor {
             }
             InitialHistory::New | InitialHistory::Cleared | InitialHistory::Forked(_) => None,
         };
-        let persisted_metadata = self
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let (persisted_metadata, persisted_reasoning_effort) = self
             .load_and_apply_persisted_resume_metadata(
                 &thread_history,
                 persisted_settings.as_ref(),
@@ -4869,50 +4716,22 @@ impl ThreadRequestProcessor {
             );
         }
 
-<<<<<<< HEAD
-        // Derive a Config using the same logic as new conversation, honoring overrides if provided.
-        let mut config = match self
-            .config_manager
-            .load_for_cwd(request_overrides, typesafe_overrides, history_cwd)
-            .await
-        {
-            Ok(config) => config,
-            Err(err) => {
-                let error = config_load_error(&err);
-                self.outgoing.send_error(request_id, error).await;
-                return Ok(());
-            }
-        };
-        if !has_explicit_model_resume_override && matches!(persisted_reasoning_effort, Some(None)) {
-||||||| 413492cd6c
-        // Derive a Config using the same logic as new conversation, honoring overrides if provided.
-        let mut config = match self
-            .config_manager
-            .load_for_cwd(request_overrides, typesafe_overrides, history_cwd)
-            .await
-        {
-            Ok(config) => config,
-            Err(err) => {
-                let error = config_load_error(&err);
-                self.outgoing.send_error(request_id, error).await;
-                return Ok(());
-            }
-        };
-        if !has_explicit_model_resume_override
-            && persisted_metadata
-                .as_ref()
-                .is_some_and(|metadata| metadata.reasoning_effort.is_none())
-        {
-=======
-        let clear_reasoning_effort = !has_explicit_model_resume_override
-            && persisted_metadata
-                .as_ref()
-                .is_some_and(|metadata| metadata.reasoning_effort.is_none());
+        let clear_reasoning_effort =
+            !has_explicit_model_resume_override && matches!(persisted_reasoning_effort, Some(None));
         let config_state = ResumeConfigState {
             history_cwd: history_cwd.clone(),
             workspace_roots: typesafe_overrides.workspace_roots.clone(),
             persisted_metadata,
             persisted_settings,
+            persisted_runtime: match &thread_history {
+                InitialHistory::Resumed(resumed) => {
+                    latest_persisted_thread_runtime(&resumed.history)
+                }
+                _ => None,
+            },
+            inherited_provider_account: typesafe_overrides.inherited_provider_account.clone(),
+            approval_policy: typesafe_overrides.approval_policy,
+            permission_profile: typesafe_overrides.permission_profile.clone(),
         };
         let mut config = match prepared_config.take() {
             Some(prepared) if prepared.state == config_state => prepared.config,
@@ -4966,13 +4785,21 @@ impl ThreadRequestProcessor {
             }
         };
         if clear_reasoning_effort {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             config.model_reasoning_effort = None;
         }
+        let persisted_runtime = match &thread_history {
+            InitialHistory::Resumed(resumed) => latest_persisted_thread_runtime(&resumed.history),
+            _ => None,
+        };
+        if let Some(service_tier) = resumed_service_tier(
+            persisted_model_settings,
+            persisted_runtime.as_ref(),
+            restore_service_tier,
+            has_explicit_model_resume_override,
+        ) {
+            config.service_tier = service_tier;
+        }
         if let Some(settings) = persisted_model_settings {
-            if restore_service_tier {
-                config.service_tier.clone_from(&settings.service_tier);
-            }
             if restore_summary {
                 config.model_reasoning_summary = settings.reasoning_summary;
             }
@@ -5003,13 +4830,10 @@ impl ThreadRequestProcessor {
                 session_configured,
                 ..
             }) => {
-<<<<<<< HEAD
                 trace_thread_processor_timing(
                     "thread_resume_after_resume_thread_with_history",
                     resume_started_at,
                 );
-||||||| 413492cd6c
-=======
                 let ThreadResumeTarget::Client(request_id) = target else {
                     // Observe lifecycle events without attaching a client subscription.
                     self.thread_watch_manager
@@ -5029,7 +4853,6 @@ impl ThreadRequestProcessor {
                     return Ok(ControlFlow::Break(()));
                 };
                 let request_id = request_id.clone();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 if let Err(err) = Self::set_app_server_client_info(
                     codex_thread.as_ref(),
                     app_server_client_name,
@@ -5264,28 +5087,40 @@ impl ThreadRequestProcessor {
         persisted_settings: Option<&PersistedResumeSettings>,
         request_overrides: &mut Option<HashMap<String, serde_json::Value>>,
         typesafe_overrides: &mut ConfigOverrides,
-    ) -> Option<Option<codex_protocol::openai_models::ReasoningEffort>> {
+    ) -> (
+        Option<ThreadMetadata>,
+        Option<Option<codex_protocol::openai_models::ReasoningEffort>>,
+    ) {
         let InitialHistory::Resumed(resumed_history) = thread_history else {
-            return None;
+            return (None, None);
         };
-<<<<<<< HEAD
-        merge_persisted_permissions(
+        let approval_policy_requested = typesafe_overrides.approval_policy.is_some();
+        if let Some(persisted_settings) = persisted_settings {
+            if typesafe_overrides.approval_policy.is_none() {
+                typesafe_overrides.approval_policy = Some(persisted_settings.approval_policy);
+            }
+            if typesafe_overrides.approvals_reviewer.is_none()
+                && !request_overrides
+                    .as_ref()
+                    .is_some_and(|overrides| overrides.contains_key("approvals_reviewer"))
+            {
+                typesafe_overrides.approvals_reviewer = persisted_settings.approvals_reviewer;
+            }
+            apply_persisted_permission_profile(
+                persisted_settings,
+                request_overrides.as_ref(),
+                typesafe_overrides,
+            );
+        }
+        restore_legacy_permissions(
             &resumed_history.history,
+            resumed_history.conversation_id,
             request_overrides.as_ref(),
-            typesafe_overrides,
-        );
-        merge_persisted_approvals_reviewer(
-            &resumed_history.history,
-            request_overrides.as_ref(),
+            approval_policy_requested,
             typesafe_overrides,
         );
         let had_explicit_model_override =
             has_model_resume_override(request_overrides.as_ref(), typesafe_overrides);
-        merge_persisted_service_tier(
-            &resumed_history.history,
-            request_overrides.as_ref(),
-            typesafe_overrides,
-        );
         let persisted_metadata = match self.state_db.as_ref() {
             Some(state_db_ctx) => state_db_ctx
                 .get_thread(resumed_history.conversation_id)
@@ -5310,51 +5145,14 @@ impl ThreadRequestProcessor {
             && let Some(runtime) = latest_persisted_thread_runtime(&resumed_history.history)
         {
             apply_persisted_thread_runtime(request_overrides, typesafe_overrides, &runtime);
-            return Some(runtime.reasoning_effort);
+            let reasoning_effort = runtime.reasoning_effort;
+            return (persisted_metadata, Some(reasoning_effort));
         }
 
-        persisted_metadata.map(|metadata| metadata.reasoning_effort)
-||||||| 413492cd6c
-        merge_persisted_approvals_reviewer(
-            &resumed_history.history,
-            request_overrides.as_ref(),
-            typesafe_overrides,
-        );
-        let state_db_ctx = self.state_db.clone()?;
-        let persisted_metadata = state_db_ctx
-            .get_thread(resumed_history.conversation_id)
-            .await
-            .ok()
-            .flatten()?;
-        merge_persisted_resume_metadata(request_overrides, typesafe_overrides, &persisted_metadata);
-        Some(persisted_metadata)
-=======
-        if let Some(persisted_settings) = persisted_settings {
-            if typesafe_overrides.approval_policy.is_none() {
-                typesafe_overrides.approval_policy = Some(persisted_settings.approval_policy);
-            }
-            if typesafe_overrides.approvals_reviewer.is_none()
-                && !request_overrides
-                    .as_ref()
-                    .is_some_and(|overrides| overrides.contains_key("approvals_reviewer"))
-            {
-                typesafe_overrides.approvals_reviewer = persisted_settings.approvals_reviewer;
-            }
-            apply_persisted_permission_profile(
-                persisted_settings,
-                request_overrides.as_ref(),
-                typesafe_overrides,
-            );
-        }
-        let state_db_ctx = self.state_db.clone()?;
-        let persisted_metadata = state_db_ctx
-            .get_thread(resumed_history.conversation_id)
-            .await
-            .ok()
-            .flatten()?;
-        merge_persisted_resume_metadata(request_overrides, typesafe_overrides, &persisted_metadata);
-        Some(persisted_metadata)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let reasoning_effort = persisted_metadata
+            .as_ref()
+            .map(|metadata| metadata.reasoning_effort);
+        (persisted_metadata, reasoning_effort)
     }
 
     #[expect(
@@ -5687,11 +5485,6 @@ impl ThreadRequestProcessor {
         prepared_model_context: Option<ResumedHistory>,
     ) -> Result<(InitialHistory, StoredThread), JSONRPCErrorError> {
         if matches!(stored_thread.history_mode, ThreadHistoryMode::Paginated) {
-<<<<<<< HEAD
-            let mut model_context = self
-||||||| 413492cd6c
-            let model_context = self
-=======
             if let Some(context) = prepared_model_context
                 && context.conversation_id == stored_thread.thread_id
                 && context.rollout_path == stored_thread.rollout_path
@@ -5710,8 +5503,7 @@ impl ThreadRequestProcessor {
             {
                 return Ok((InitialHistory::Resumed(context), stored_thread));
             }
-            let model_context = self
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            let mut model_context = self
                 .thread_store
                 .load_latest_model_context(StoreLoadThreadHistoryParams {
                     thread_id: stored_thread.thread_id,
@@ -6301,7 +6093,6 @@ impl ThreadRequestProcessor {
             /*personality*/ None,
         );
         typesafe_overrides.ephemeral = ephemeral.then_some(true);
-<<<<<<< HEAD
         // PF-84 (#555): a fork runs on the account its source thread runs on
         // (the loaded thread's, else the newest one it recorded), as a spawned
         // worker does. An explicit account of the same provider beats it; an
@@ -6313,55 +6104,13 @@ impl ThreadRequestProcessor {
         // decides whether named accounts apply, and with them off the loader
         // refuses a recorded named account, as for a resume (#588).
         typesafe_overrides.provider_account = provider_account;
-        let loaded_source = self.thread_manager.get_thread(source_thread_id).await.ok();
-        let reviewer_from_history = paginated_source
-            && typesafe_overrides.approvals_reviewer.is_none()
-||||||| 413492cd6c
-        let latest_context = if paginated_source
-            && typesafe_overrides.approvals_reviewer.is_none()
-=======
+        let cut_at_earlier_turn =
+            paginated_source && (last_turn_id.is_some() || before_turn_id.is_some());
         let restore_approval_policy = typesafe_overrides.approval_policy.is_none();
         let restore_approvals_reviewer = typesafe_overrides.approvals_reviewer.is_none()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             && !request_overrides
                 .as_ref()
                 .is_some_and(|overrides| overrides.contains_key("approvals_reviewer"));
-<<<<<<< HEAD
-        let cut_at_earlier_turn =
-            paginated_source && (last_turn_id.is_some() || before_turn_id.is_some());
-        let latest_context = if loaded_source.is_none() && cut_at_earlier_turn {
-            Some(
-                self.thread_store
-                    .load_latest_model_context(StoreLoadThreadHistoryParams {
-                        thread_id: source_thread_id,
-                        include_archived: true,
-                    })
-                    .await
-                    .map_err(thread_store_resume_read_error)?
-                    .items,
-            )
-||||||| 413492cd6c
-                .is_some_and(|overrides| overrides.contains_key("approvals_reviewer"))
-        {
-            if let Ok(parent) = self.thread_manager.get_thread(source_thread_id).await {
-                typesafe_overrides.approvals_reviewer =
-                    Some(parent.config_snapshot().await.approvals_reviewer);
-                None
-            } else if last_turn_id.is_some() || before_turn_id.is_some() {
-                Some(
-                    self.thread_store
-                        .load_latest_model_context(StoreLoadThreadHistoryParams {
-                            thread_id: source_thread_id,
-                            include_archived: true,
-                        })
-                        .await
-                        .map_err(thread_store_resume_read_error)?
-                        .items,
-                )
-            } else {
-                None
-            }
-=======
         let restore_permission_profile =
             !has_permission_override(request_overrides.as_ref(), &typesafe_overrides);
         let needs_latest_settings =
@@ -6373,52 +6122,9 @@ impl ThreadRequestProcessor {
             } else {
                 None
             }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         } else {
             None
         };
-<<<<<<< HEAD
-        let current_source_history = latest_context
-            .as_deref()
-            .unwrap_or_else(|| source_history_items.as_ref());
-        typesafe_overrides.inherited_provider_account = match loaded_source.as_ref() {
-            Some(source) => source.config_snapshot().await.provider_account,
-            None => {
-                recorded_provider_account(current_source_history, /*resumed_provider_id*/ None)
-            }
-        };
-        if reviewer_from_history && let Some(source) = loaded_source.as_ref() {
-            typesafe_overrides.approvals_reviewer =
-                Some(source.config_snapshot().await.approvals_reviewer);
-        }
-        merge_persisted_approvals_reviewer(
-            current_source_history,
-            request_overrides.as_ref(),
-            &mut typesafe_overrides,
-        );
-        // Derive a Config using the same logic as new conversation, honoring overrides if provided.
-        let config = self
-            .config_manager
-            .load_for_cwd(request_overrides, typesafe_overrides, history_cwd)
-            .await
-            .map_err(|err| config_load_error(&err))?;
-        let goals_enabled = config.features.enabled(Feature::Goals);
-||||||| 413492cd6c
-        merge_persisted_approvals_reviewer(
-            latest_context
-                .as_deref()
-                .unwrap_or_else(|| source_history_items.as_ref()),
-            request_overrides.as_ref(),
-            &mut typesafe_overrides,
-        );
-        // Derive a Config using the same logic as new conversation, honoring overrides if provided.
-        let config = self
-            .config_manager
-            .load_for_cwd(request_overrides, typesafe_overrides, history_cwd)
-            .await
-            .map_err(|err| config_load_error(&err))?;
-        let goals_enabled = config.features.enabled(Feature::Goals);
-=======
         let latest_context = if paginated_source
             && needs_latest_settings
             && loaded_parent.is_none()
@@ -6436,6 +6142,31 @@ impl ThreadRequestProcessor {
             ))
         } else {
             None
+        };
+        typesafe_overrides.inherited_provider_account = match loaded_parent.as_ref() {
+            Some(source) => source.config_snapshot().await.provider_account,
+            None => {
+                let source_current_context = match latest_context.as_ref() {
+                    Some(context) => Some(Arc::clone(context)),
+                    None if cut_at_earlier_turn => Some(Arc::new(
+                        self.thread_store
+                            .load_latest_model_context(StoreLoadThreadHistoryParams {
+                                thread_id: source_thread_id,
+                                include_archived: true,
+                            })
+                            .await
+                            .map_err(thread_store_resume_read_error)?
+                            .items,
+                    )),
+                    None => None,
+                };
+                recorded_provider_account(
+                    source_current_context
+                        .as_deref()
+                        .unwrap_or_else(|| source_history_items.as_ref()),
+                    /*resumed_provider_id*/ None,
+                )
+            }
         };
         // The fork cutoff can remove the only TurnContext that records the selected version.
         // Recover it from the untrimmed source or live parent, independently of permission overrides.
@@ -6470,6 +6201,15 @@ impl ThreadRequestProcessor {
                 &mut typesafe_overrides,
             );
         }
+        restore_legacy_permissions(
+            latest_context
+                .as_deref()
+                .unwrap_or_else(|| source_history_items.as_ref()),
+            source_thread_id,
+            request_overrides.as_ref(),
+            !restore_approval_policy,
+            &mut typesafe_overrides,
+        );
         let (inherited_options, inherited_settings) = inherited_fork.unzip();
         let options = if let Some(options) = inherited_options {
             *options
@@ -6486,7 +6226,6 @@ impl ThreadRequestProcessor {
             }
         };
         let goals_enabled = options.config.features.enabled(Feature::Goals);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         let fallback_model_provider = options.config.model_provider_id.clone();
         let parent_trace = self.request_trace_context(&request_id).await;
@@ -7453,7 +7192,6 @@ pub(super) fn core_thread_write_error(operation: &str, err: CodexErr) -> JSONRPC
     }
 }
 
-<<<<<<< HEAD
 fn direct_spawn_agent_path(
     parent_agent_path: &AgentPath,
     agent_role: Option<&str>,
@@ -7503,12 +7241,7 @@ fn sanitize_agent_path_segment(value: &str) -> String {
     }
 }
 
-fn thread_store_archive_error(operation: &str, err: ThreadStoreError) -> JSONRPCErrorError {
-||||||| 413492cd6c
-fn thread_store_archive_error(operation: &str, err: ThreadStoreError) -> JSONRPCErrorError {
-=======
 fn thread_store_mutation_error(operation: &str, err: ThreadStoreError) -> JSONRPCErrorError {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     match err {
         ThreadStoreError::InvalidRequest { message } | ThreadStoreError::Conflict { message } => {
             invalid_request(message)
