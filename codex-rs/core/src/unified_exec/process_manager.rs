@@ -1767,9 +1767,7 @@ impl UnifiedExecProcessManager {
             call_id: context.call_id.clone(),
             tool_name: ToolName::plain("exec_command"),
         };
-        let result = orchestrator
-            .run(&mut runtime, &req, &tool_ctx)
-            .await;
+        let result = orchestrator.run(&mut runtime, &req, &tool_ctx).await;
         let shown_by_review = runtime.shown_by_review();
         let start_rejected = runtime.start_rejected();
         let result = result

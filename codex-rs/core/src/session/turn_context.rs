@@ -1232,11 +1232,12 @@ impl TurnContext {
         };
         // #2050 (D510): for a remote environment, where its executor has none (the remote file
         // system refuses unless the executor reports a platform sandbox for this level).
-        context.unsandboxed_refusal = crate::security::windows_unsandboxed::environment_file_refusal(
-            self.config.security_level,
-            windows_sandbox_level,
-            environment,
-        );
+        context.unsandboxed_refusal =
+            crate::security::windows_unsandboxed::environment_file_refusal(
+                self.config.security_level,
+                windows_sandbox_level,
+                environment,
+            );
         context
     }
 
