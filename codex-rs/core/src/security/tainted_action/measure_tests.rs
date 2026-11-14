@@ -170,14 +170,17 @@ fn action(shell: &str, script: &str, cwd: &Path) -> ApprovalAction {
     let cwd = AbsolutePathBuf::from_absolute_path_checked(cwd)
         .or_else(|_| AbsolutePathBuf::from_absolute_path_checked(fixture("/")))
         .expect("absolute");
-    ApprovalAction::Shell {
+    ApprovalAction::ExecCommand {
         id: "measure".into(),
         environment_id: "local".into(),
         command: vec![shell.to_string(), "-lc".to_string(), script.to_string()],
+        hook_command: String::new(),
         cwd: PathUri::from_abs_path(&cwd),
         sandbox_permissions: SandboxPermissions::UseDefault,
         additional_permissions: None,
         justification: None,
+        tty: false,
+        proposed_execpolicy_amendment: None,
     }
 }
 
