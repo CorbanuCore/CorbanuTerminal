@@ -61,6 +61,8 @@ impl PartialOrd for ConfigLayerSource {
 pub struct ConfigLayerMetadata {
     pub name: ConfigLayerSource,
     pub version: String,
+    /// Project role file carried through diagnostic/API projections of a layer.
+    pub project_role_file: Option<AbsolutePathBuf>,
 }
 
 /// A materialized configuration layer and its provenance.
@@ -68,6 +70,8 @@ pub struct ConfigLayerMetadata {
 pub struct ConfigLayer {
     pub name: ConfigLayerSource,
     pub version: String,
+    /// Project role file carried through diagnostic/API projections of a layer.
+    pub project_role_file: Option<AbsolutePathBuf>,
     pub config: JsonValue,
     pub disabled_reason: Option<String>,
 }

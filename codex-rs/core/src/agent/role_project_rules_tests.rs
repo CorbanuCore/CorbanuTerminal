@@ -353,6 +353,54 @@ async fn project_config_and_roles_can_narrow_the_provider_allowlist() {
     assert_eq!(allowed(&project_child), Some(vec!["openai".to_string()]));
 }
 
+#[tokio::test]
+async fn issue_2150_preflight_identifies_project_role_file() {
+    let fixture = Fixture::new();
+    let role_path = fixture.write_project_role("model = 'gpt-6-sol'\n");
+    let config = fixture.child("relay").await;
+    let sources = crate::protected_preflight::sources_from_config(&config);
+    let role_layer = sources
+        .config_layers
+        .iter()
+        .find(|layer| layer.toml.get("model").and_then(toml::Value::as_str) == Some("gpt-6-sol"))
+        .expect("role model layer");
+
+    assert_eq!(
+        (role_layer.label.clone(), role_layer.path.clone()),
+        (format!("project role file ({})", role_path.display()), None)
+    );
+
+    fixture.write_user_role("model = 'gpt-6-sol'\n");
+    let user_config = fixture.child("helper").await;
+    let user_sources = crate::protected_preflight::sources_from_config(&user_config);
+    let user_layer = user_sources
+        .config_layers
+        .iter()
+        .find(|layer| layer.toml.get("model").and_then(toml::Value::as_str) == Some("gpt-6-sol"))
+        .expect("user role model layer");
+    assert_eq!(
+        (user_layer.label.as_str(), user_layer.path.as_deref()),
+        ("launch flags", None)
+    );
+}
+
+#[tokio::test]
+async fn issue_2150_empty_project_lists_warn_without_an_operator_list() {
+    let fixture = Fixture::new();
+    fixture.write_project_config(&allowlist(&["openai"]));
+    fixture.write_project_role(&allowlist(&["anthropic"]));
+
+    let config = fixture.child("relay").await;
+
+    assert_eq!(allowed(&config), Some(Vec::new()));
+    let warning = config
+        .startup_warnings
+        .iter()
+        .find(|warning| warning.starts_with("No provider is allowed for spawned agents"))
+        .expect("empty policy warning");
+    insta::assert_snapshot!("issue_2150_empty_provider_warning", warning);
+}
+
 const ENABLE_DEPLOY_SKILL: &str = "[[skills.config]]\nname = \"deploy\"\nenabled = true\n";
 
 #[tokio::test]
