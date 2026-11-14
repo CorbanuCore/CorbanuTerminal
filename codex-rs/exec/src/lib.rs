@@ -11,13 +11,9 @@ mod event_processor;
 mod event_processor_with_human_output;
 pub(crate) mod event_processor_with_jsonl_output;
 pub(crate) mod exec_events;
-<<<<<<< HEAD
 mod json_usage;
 mod panic_watch;
-||||||| 413492cd6c
-=======
 mod worktree;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 pub use cli::Cli;
 pub use cli::Command;
@@ -88,22 +84,13 @@ use codex_core::config::resolve_profile_v2_config_path;
 use codex_core::find_thread_meta_by_name_str;
 use codex_core::format_exec_policy_error_with_source;
 use codex_core::path_utils;
-<<<<<<< HEAD
-use codex_core::windows_sandbox::WindowsSandboxLevelExt;
-||||||| 413492cd6c
-=======
 use codex_core::read_session_meta_line;
+use codex_core::windows_sandbox::WindowsSandboxLevelExt;
 use codex_features::Feature;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_feedback::CodexFeedback;
 use codex_git_utils::get_git_repo_root;
-<<<<<<< HEAD
-||||||| 413492cd6c
-use codex_login::AuthConfig;
-=======
 use codex_history::RolloutItem;
 use codex_history::RolloutLine;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_login::default_client::set_default_client_residency_requirement;
 use codex_login::default_client::set_default_originator;
 use codex_login::enforce_login_restrictions;
@@ -116,15 +103,11 @@ use codex_protocol::SessionId;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::SandboxMode;
-<<<<<<< HEAD
 use codex_protocol::config_types::WindowsSandboxLevel;
-||||||| 413492cd6c
-=======
 use codex_protocol::mcp_approval_meta::APPROVAL_KIND_KEY;
 use codex_protocol::mcp_approval_meta::APPROVAL_KIND_MCP_TOOL_CALL;
 use codex_protocol::mcp_approval_meta::CANCELLATION_REASON_KEY;
 use codex_protocol::mcp_approval_meta::McpApprovalCancellationReason;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::protocol::AskForApproval;
@@ -353,23 +336,12 @@ pub async fn run_main_enforced(
         json: json_mode,
         prompt,
         output_schema: output_schema_path,
-<<<<<<< HEAD
         account,
         home_wait_secs,
-        config_overrides,
-||||||| 413492cd6c
-        config_overrides,
-=======
         mut config_overrides,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     } = cli;
-<<<<<<< HEAD
     // #616: wait out an unreadable Corbanu home instead of ending the turn.
     codex_core::home_access::set_home_wait_window(std::time::Duration::from_secs(home_wait_secs));
-    let shared = shared.into_inner();
-||||||| 413492cd6c
-    let shared = shared.into_inner();
-=======
     if cyber_access_program.is_some() {
         match command.as_ref() {
             Some(ExecCommand::Review(_)) => {
@@ -383,7 +355,6 @@ pub async fn run_main_enforced(
     }
     let mut shared = shared.into_inner();
     shared.take_auto_review_config_overrides(&mut config_overrides);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let SharedCliOptions {
         images,
         model: model_cli_arg,
@@ -391,14 +362,8 @@ pub async fn run_main_enforced(
         oss_provider,
         config_profile_v2,
         sandbox_mode: sandbox_mode_cli_arg,
-<<<<<<< HEAD
-        mut dangerously_bypass_approvals_and_sandbox,
-||||||| 413492cd6c
-        dangerously_bypass_approvals_and_sandbox,
-=======
         auto_review: _,
-        dangerously_bypass_approvals_and_sandbox,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        mut dangerously_bypass_approvals_and_sandbox,
         bypass_hook_trust,
         cwd,
         mut add_dir,
@@ -616,43 +581,10 @@ pub async fn run_main_enforced(
     .await;
     trace_exec_timing("after_bootstrap_config", run_main_started_at);
     let bootstrap_config_toml = &bootstrap_config.config_toml;
-<<<<<<< HEAD
     if let Some(enforced) = enforced {
         cli_kv_overrides
             .extend(enforced.env_overrides(&bootstrap_config_toml.shell_environment_policy));
     }
-
-    let chatgpt_base_url = bootstrap_config_toml
-        .chatgpt_base_url
-        .clone()
-        .unwrap_or_else(|| "https://chatgpt.com/backend-api/".to_string());
-    let auth_route_config = resolve_bootstrap_auth_route_config(
-        bootstrap_config_toml,
-        bootstrap_config
-            .config_layer_stack
-            .requirements()
-            .feature_requirements
-            .as_ref(),
-    )?;
-    let cloud_config_bundle = cloud_config_bundle_loader_for_storage(
-        codex_home.to_path_buf(),
-||||||| 413492cd6c
-
-    let chatgpt_base_url = bootstrap_config_toml
-        .chatgpt_base_url
-        .clone()
-        .unwrap_or_else(|| "https://chatgpt.com/backend-api/".to_string());
-    let auth_route_config = resolve_bootstrap_auth_route_config(
-        bootstrap_config_toml,
-        bootstrap_config
-            .config_layer_stack
-            .requirements()
-            .feature_requirements
-            .as_ref(),
-    )?;
-    let cloud_config_bundle = cloud_config_bundle_loader_for_storage(
-        codex_home.to_path_buf(),
-=======
     let bootstrap_auth_config = embedded_network_policy
         .bind_bootstrap_auth(bootstrap_auth_config(&codex_home, &bootstrap_config)?);
     // API keys cannot fetch workspace-managed configuration. Preserve the
@@ -661,16 +593,10 @@ pub async fn run_main_enforced(
     let cloud_config_bundle = managed_config_bundle_loader_for_storage(
         bootstrap_auth_config,
         bootstrap_config.config_layer_stack.requirements_toml(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         /*enable_codex_api_key_env*/ false,
     )
-<<<<<<< HEAD
-    .await;
-    trace_exec_timing("after_cloud_config_bundle", run_main_started_at);
-||||||| 413492cd6c
-    .await;
-=======
     .await?;
+    trace_exec_timing("after_cloud_config_bundle", run_main_started_at);
     if let Some(worktree) = managed_worktree.as_ref() {
         // Destination auth can fetch source policy that the host bootstrap could not.
         let source_config = ConfigBuilder::default()
@@ -692,7 +618,6 @@ pub async fn run_main_enforced(
             );
         }
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let run_cli_overrides = cli_kv_overrides.clone();
     let run_loader_overrides = loader_overrides.clone();
     let run_cloud_config_bundle = cloud_config_bundle.clone();
@@ -797,8 +722,12 @@ pub async fn run_main_enforced(
         build_config,
     )
     .await?;
-<<<<<<< HEAD
     trace_exec_timing("after_build_exec_config", run_main_started_at);
+    embedded_network_policy.activate(&mut config);
+    let daybreak_override = cli_kv_overrides
+        .iter()
+        .any(|(key, _)| key == "daybreak")
+        .then_some(config.daybreak_enabled);
     // PF-84 (#425): exec cannot switch providers, so another provider's
     // account that no spawned agent can use is refused, not ignored.
     if let Some(message) = codex_core::config::unused_other_provider_account_error(&config) {
@@ -818,14 +747,6 @@ pub async fn run_main_enforced(
             }
         }
     }
-||||||| 413492cd6c
-=======
-    embedded_network_policy.activate(&mut config);
-    let daybreak_override = cli_kv_overrides
-        .iter()
-        .any(|(key, _)| key == "daybreak")
-        .then_some(config.daybreak_enabled);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let resume_approvals_reviewer_override = cli_kv_overrides
         .iter()
         .any(|(key, _)| key == "approvals_reviewer")
@@ -846,34 +767,20 @@ pub async fn run_main_enforced(
 
     set_default_client_residency_requirement(config.enforce_residency.value());
 
-<<<<<<< HEAD
     // PF-84-S06 (#570): a session on a named sign-in account checks the
     // restrictions against that account at thread start and never reads or
     // logs out the default login. A resumed thread's account is known only
-    // later, so `exec resume` leaves the default login in place too; this
+    // later, so `exec resume` leaves the default login in place too, and so
+    // does `exec fork` (the fork inherits the source thread's account); this
     // process then never uses a ruled-out default login, and a thread on it
     // is refused at thread start with the reason.
     let leaves_default_login = config.runs_on_named_sign_in_account()
-        || (config.named_accounts_enabled() && matches!(command, Some(ExecCommand::Resume(_))));
+        || (config.named_accounts_enabled()
+            && matches!(command, Some(ExecCommand::Resume(_) | ExecCommand::Fork(_))));
     if leaves_default_login {
         codex_login::leave_default_login_unenforced();
-    } else if let Err(err) = enforce_login_restrictions(&config.default_login_restrictions()).await
-||||||| 413492cd6c
-    let auth_route_config = config.auth_route_config();
-    if let Err(err) = enforce_login_restrictions(&AuthConfig {
-        codex_home: config.codex_home.to_path_buf(),
-        auth_credentials_store_mode: config.cli_auth_credentials_store_mode,
-        keyring_backend_kind: config.auth_keyring_backend_kind(),
-        forced_login_method: config.forced_login_method,
-        forced_chatgpt_workspace_id: config.forced_chatgpt_workspace_id.clone(),
-        chatgpt_base_url: Some(config.chatgpt_base_url.clone()),
-        auth_route_config,
-    })
-    .await
-=======
-    if !is_workload_identity_selected()
-        && let Err(err) = enforce_login_restrictions(&config.auth_config()).await
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    } else if !is_workload_identity_selected()
+        && let Err(err) = enforce_login_restrictions(&config.default_login_restrictions()).await
     {
         eprintln!("{err}");
         std::process::exit(1);
@@ -1268,481 +1175,17 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
         .map_err(|err| {
             anyhow::anyhow!("failed to initialize in-process app-server client: {err}")
         })?;
-<<<<<<< HEAD
     trace_exec_timing("after_in_process_start", exec_session_started_at);
     // #494: every exit after this point, early errors included, must shut
     // the client down so the app-server's cleanup (the plugin sync's `git`
     // and other drains) runs before exec returns.
     let session = async {
-        // Handle resume subcommand through existing `thread/list` + `thread/resume`
-        // APIs so exec no longer reaches into rollout storage directly.
-        let (primary_thread_id, fallback_session_configured) =
+        let mut daybreak_enabled = config.daybreak_enabled;
+        // Resolve resume and fork through existing app-server thread lifecycle APIs.
+        let (history_mode, fallback_session_configured) =
             if let Some(ExecCommand::Resume(args)) = command.as_ref() {
                 trace_exec_timing("before_resolve_resume_thread_id", exec_session_started_at);
                 if let Some(thread_id) = resolve_resume_thread_id(
-||||||| 413492cd6c
-
-    // Handle resume subcommand through existing `thread/list` + `thread/resume`
-    // APIs so exec no longer reaches into rollout storage directly.
-    let (primary_thread_id, fallback_session_configured) = if let Some(ExecCommand::Resume(args)) =
-        command.as_ref()
-    {
-        if let Some(thread_id) =
-            resolve_resume_thread_id(&client, &config, state_db.as_ref(), args).await?
-        {
-            let response: ThreadResumeResponse = send_request_with_response(
-                &client,
-                ClientRequest::ThreadResume {
-                    request_id: request_ids.next(),
-                    params: thread_resume_params_from_config(
-                        &config,
-                        thread_id,
-                        resume_approvals_reviewer_override,
-                    ),
-                },
-                "thread/resume",
-            )
-            .await
-            .map_err(anyhow::Error::msg)?;
-            let session_configured =
-                session_configured_from_thread_resume_response(&response, &config)
-                    .map_err(anyhow::Error::msg)?;
-            (session_configured.thread_id, session_configured)
-        } else {
-            let response: ThreadStartResponse = send_request_with_response(
-                &client,
-                ClientRequest::ThreadStart {
-                    request_id: request_ids.next(),
-                    params: thread_start_params_from_config(&config),
-                },
-                "thread/start",
-            )
-            .await
-            .map_err(anyhow::Error::msg)?;
-            let session_configured =
-                session_configured_from_thread_start_response(&response, &config)
-                    .map_err(anyhow::Error::msg)?;
-            (session_configured.thread_id, session_configured)
-        }
-    } else {
-        let response: ThreadStartResponse = send_request_with_response(
-            &client,
-            ClientRequest::ThreadStart {
-                request_id: request_ids.next(),
-                params: thread_start_params_from_config(&config),
-            },
-            "thread/start",
-        )
-        .await
-        .map_err(anyhow::Error::msg)?;
-        let session_configured = session_configured_from_thread_start_response(&response, &config)
-            .map_err(anyhow::Error::msg)?;
-        (session_configured.thread_id, session_configured)
-    };
-
-    let primary_thread_id_for_span = primary_thread_id.to_string();
-    // Use the start/resume response as the authoritative bootstrap payload.
-    // Waiting for a later streamed `SessionConfigured` event adds up to 10s of
-    // avoidable startup latency on the in-process path.
-    let session_configured = fallback_session_configured;
-
-    exec_span.record("thread.id", primary_thread_id_for_span.as_str());
-
-    // Print the effective configuration and initial request so users can see what Codex
-    // is using.
-    event_processor.print_config_summary(&config, &prompt_summary, &session_configured);
-    if !json_mode
-        && let Some(message) =
-            codex_core::config::system_bwrap_warning(config.permissions.permission_profile())
-    {
-        event_processor.process_warning(message);
-    }
-
-    info!("Codex initialized with event: {session_configured:?}");
-
-    let (interrupt_tx, mut interrupt_rx) = mpsc::unbounded_channel::<()>();
-    tokio::spawn(async move {
-        if tokio::signal::ctrl_c().await.is_ok() {
-            tracing::debug!("Keyboard interrupt");
-            let _ = interrupt_tx.send(());
-        }
-    });
-
-    let task_id = match initial_operation {
-        InitialOperation::UserTurn {
-            items,
-            output_schema,
-        } => {
-            let response: TurnStartResponse = send_request_with_response(
-                &client,
-                ClientRequest::TurnStart {
-                    request_id: request_ids.next(),
-                    params: TurnStartParams {
-                        thread_id: primary_thread_id_for_span.clone(),
-                        client_user_message_id: None,
-                        input: items.into_iter().map(Into::into).collect(),
-                        responsesapi_client_metadata: None,
-                        additional_context: None,
-                        environments: None,
-                        cwd: Some(default_cwd),
-                        runtime_workspace_roots: None,
-                        approval_policy: Some(default_approval_policy.into()),
-                        approvals_reviewer: None,
-                        sandbox_policy: None,
-                        permissions: None,
-                        model: None,
-                        service_tier: None,
-                        effort: default_effort,
-                        summary: None,
-                        personality: None,
-                        output_schema,
-                        collaboration_mode: None,
-                        multi_agent_mode: None,
-                    },
-                },
-                "turn/start",
-            )
-            .await
-            .map_err(anyhow::Error::msg)?;
-            let task_id = response.turn.id;
-            info!("Sent prompt with event ID: {task_id}");
-            task_id
-        }
-        InitialOperation::Review { review_request } => {
-            let response: ReviewStartResponse = send_request_with_response(
-                &client,
-                ClientRequest::ReviewStart {
-                    request_id: request_ids.next(),
-                    params: ReviewStartParams {
-                        thread_id: primary_thread_id_for_span.clone(),
-                        target: review_target_to_api(review_request.target),
-                        delivery: None,
-                    },
-                },
-                "review/start",
-            )
-            .await
-            .map_err(anyhow::Error::msg)?;
-            let _ = event_processor.process_server_notification(ServerNotification::TurnStarted(
-                TurnStartedNotification {
-                    thread_id: response.review_thread_id.clone(),
-                    turn: response.turn.clone(),
-                },
-            ));
-            let task_id = response.turn.id;
-            info!("Sent review request with event ID: {task_id}");
-            task_id
-        }
-    };
-    exec_span.record("turn.id", task_id.as_str());
-
-    // Run the loop until the task is complete.
-    // Track whether a fatal error was reported by the server so we can
-    // exit with a non-zero status for automation-friendly signaling.
-    let mut error_seen = false;
-    let mut interrupt_channel_open = true;
-    let primary_thread_id_for_requests = primary_thread_id.to_string();
-    loop {
-        let server_event = tokio::select! {
-            maybe_interrupt = interrupt_rx.recv(), if interrupt_channel_open => {
-                if maybe_interrupt.is_none() {
-                    interrupt_channel_open = false;
-                    continue;
-                }
-                if let Err(err) = send_request_with_response::<TurnInterruptResponse>(
-=======
-
-    let mut daybreak_enabled = config.daybreak_enabled;
-    // Resolve resume and fork through existing app-server thread lifecycle APIs.
-    let (history_mode, fallback_session_configured) = if let Some(ExecCommand::Resume(args)) =
-        command.as_ref()
-    {
-        if let Some(thread_id) =
-            resolve_resume_thread_id(&client, &config, state_db.as_ref(), args).await?
-        {
-            let response: ThreadResumeResponse = send_request_with_response(
-                &client,
-                ClientRequest::ThreadResume {
-                    request_id: request_ids.next(),
-                    params: thread_resume_params_from_config(
-                        &config,
-                        thread_id,
-                        resume_approvals_reviewer_override,
-                    ),
-                },
-                "thread/resume",
-            )
-            .await
-            .map_err(anyhow::Error::msg)?;
-            let session_configured =
-                session_configured_from_thread_resume_response(&response, &config)
-                    .map_err(anyhow::Error::msg)?;
-            daybreak_enabled = daybreak_override
-                .or(response.thread.daybreak_enabled)
-                .unwrap_or(false);
-            (response.thread.history_mode, session_configured)
-        } else {
-            let response = start_thread(&client, &mut request_ids, &config, &thread_source)
-                .await
-                .map_err(anyhow::Error::msg)?;
-            let session_configured =
-                session_configured_from_thread_start_response(&response, &config)
-                    .map_err(anyhow::Error::msg)?;
-            (response.thread.history_mode, session_configured)
-        }
-    } else if let Some(ExecCommand::Fork(args)) = command.as_ref() {
-        let source_args = crate::cli::ResumeArgs {
-            session_id: Some(args.session_id.clone()),
-            last: false,
-            all: true,
-            images: Vec::new(),
-            prompt: None,
-        };
-        let source_thread_id =
-            resolve_resume_thread_id(&client, &config, state_db.as_ref(), &source_args)
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("Session not found: {}", args.session_id))?;
-        let source_daybreak = if config.ephemeral && daybreak_override.is_none() {
-            let response: ThreadReadResponse = send_request_with_response(
-                &client,
-                ClientRequest::ThreadRead {
-                    request_id: request_ids.next(),
-                    params: ThreadReadParams {
-                        thread_id: source_thread_id.clone(),
-                        include_turns: false,
-                    },
-                },
-                "thread/read",
-            )
-            .await
-            .map_err(anyhow::Error::msg)?;
-            response.thread.daybreak_enabled
-        } else {
-            None
-        };
-        let permissions = permissions_selection_from_config(&config);
-        let sandbox = permissions.is_none().then(|| {
-            sandbox_mode_from_permission_profile(
-                &config.permissions.effective_permission_profile(),
-                config.cwd.as_path(),
-            )
-        });
-        let response: ThreadForkResponse = send_request_with_response(
-            &client,
-            ClientRequest::ThreadFork {
-                request_id: request_ids.next(),
-                params: ThreadForkParams {
-                    thread_id: source_thread_id,
-                    model: config.model.clone(),
-                    model_provider: Some(config.model_provider_id.clone()),
-                    cwd: Some(config.cwd.to_string_lossy().to_string()),
-                    runtime_workspace_roots: Some(config.workspace_roots.clone()),
-                    approval_policy: Some(config.permissions.approval_policy.value().into()),
-                    approvals_reviewer: resume_approvals_reviewer_override,
-                    sandbox: sandbox.flatten(),
-                    permissions,
-                    config: thread_config_overrides_from_config(&config),
-                    ephemeral: config.ephemeral,
-                    thread_source: Some(thread_source.clone()),
-                    exclude_turns: true,
-                    defer_goal_continuation: !config.ephemeral,
-                    ..ThreadForkParams::default()
-                },
-            },
-            "thread/fork",
-        )
-        .await
-        .map_err(anyhow::Error::msg)?;
-        let session_configured = session_configured_from_thread_response(
-            &response.thread.session_id,
-            &response.thread.id,
-            response.thread.forked_from_id.as_deref(),
-            response.thread.parent_thread_id.as_deref(),
-            response.thread.thread_source.clone().map(Into::into),
-            response.thread.name.clone(),
-            response.thread.path.clone(),
-            response.model,
-            response.model_provider,
-            response.service_tier,
-            response.approval_policy.to_core(),
-            response.approvals_reviewer.to_core(),
-            config.permissions.effective_permission_profile(),
-            response.active_permission_profile.map(Into::into),
-            response.cwd,
-            response.reasoning_effort,
-        )
-        .map_err(anyhow::Error::msg)?;
-        daybreak_enabled = daybreak_override
-            .or(response.thread.daybreak_enabled)
-            .or(source_daybreak)
-            .unwrap_or(false);
-        (response.thread.history_mode, session_configured)
-    } else {
-        let response = start_thread(&client, &mut request_ids, &config, &thread_source)
-            .await
-            .map_err(anyhow::Error::msg)?;
-        let session_configured = session_configured_from_thread_start_response(&response, &config)
-            .map_err(anyhow::Error::msg)?;
-        (response.thread.history_mode, session_configured)
-    };
-
-    let primary_thread_id = fallback_session_configured.thread_id;
-    if let Some(worktree) = managed_worktree.as_ref() {
-        worktree
-            .manager
-            .bind_thread(&worktree.checkout, &primary_thread_id.to_string())?;
-    }
-
-    let primary_thread_id_for_span = primary_thread_id.to_string();
-    // Use the start/resume response as the authoritative bootstrap payload.
-    // Waiting for a later streamed `SessionConfigured` event adds up to 10s of
-    // avoidable startup latency on the in-process path.
-    let session_configured = fallback_session_configured;
-
-    exec_span.record("thread.id", primary_thread_id_for_span.as_str());
-
-    // Print the effective configuration and initial request so users can see what Codex
-    // is using.
-    event_processor.print_config_summary(&config, &prompt_summary, &session_configured);
-    if !json_mode
-        && let Some(message) = codex_core::config::system_bwrap_warning(
-            &config.permissions.effective_permission_profile(),
-            &config.cwd,
-        )
-    {
-        event_processor.process_warning(message);
-    }
-
-    info!("Codex initialized with event: {session_configured:?}");
-
-    let (interrupt_tx, mut interrupt_rx) = mpsc::unbounded_channel::<()>();
-    tokio::spawn(async move {
-        if tokio::signal::ctrl_c().await.is_ok() {
-            tracing::debug!("Keyboard interrupt");
-            let _ = interrupt_tx.send(());
-        }
-    });
-
-    let task_id = match initial_operation {
-        InitialOperation::ForkOnly => {
-            request_shutdown(&client, &mut request_ids, &primary_thread_id_for_span)
-                .await
-                .map_err(anyhow::Error::msg)?;
-            client
-                .shutdown()
-                .await
-                .map_err(|err| anyhow::anyhow!("in-process app-server shutdown failed: {err}"))?;
-            event_processor.print_final_output();
-            return Ok(());
-        }
-        InitialOperation::UserTurn {
-            items,
-            output_schema,
-        } => {
-            let cyber_access_program = match cyber_access_program {
-                Some(program) => Some(program),
-                None if config.features.enabled(Feature::CliDaybreak) => {
-                    daybreak::program_for_turn(
-                        &config.features,
-                        &client,
-                        &mut request_ids,
-                        &session_configured.model,
-                        &session_configured.model_provider_id,
-                        config
-                            .model_providers
-                            .get(&session_configured.model_provider_id),
-                        daybreak_enabled,
-                    )
-                    .await?
-                }
-                None => None,
-            };
-            let response: TurnStartResponse = send_request_with_response(
-                &client,
-                ClientRequest::TurnStart {
-                    request_id: request_ids.next(),
-                    params: TurnStartParams {
-                        disabled_plugin_ids: None,
-                        thread_id: primary_thread_id_for_span.clone(),
-                        turn_trigger: Some("exec".to_string()),
-                        parent_turn_id: None,
-                        root_turn_id: None,
-                        client_user_message_id: None,
-                        input: items.into_iter().map(Into::into).collect(),
-                        tool_output: None,
-                        responsesapi_client_metadata: None,
-                        responsesapi_client_metadata_patch: None,
-                        additional_context: None,
-                        environments: None,
-                        cwd: Some(default_cwd),
-                        runtime_workspace_roots: None,
-                        approval_policy: Some(default_approval_policy.into()),
-                        approvals_reviewer: None,
-                        sandbox_policy: None,
-                        permissions: None,
-                        model: None,
-                        service_tier: None,
-                        service_tier_for_turn: None,
-                        effort: default_effort,
-                        summary: None,
-                        personality: None,
-                        output_schema,
-                        collaboration_mode: None,
-                        multi_agent_mode: None,
-                        cyber_access_program,
-                    },
-                },
-                "turn/start",
-            )
-            .await
-            .map_err(anyhow::Error::msg)?;
-            let task_id = response.turn.id;
-            info!("Sent prompt with event ID: {task_id}");
-            task_id
-        }
-        InitialOperation::Review { review_request } => {
-            let response: ReviewStartResponse = send_request_with_response(
-                &client,
-                ClientRequest::ReviewStart {
-                    request_id: request_ids.next(),
-                    params: ReviewStartParams {
-                        thread_id: primary_thread_id_for_span.clone(),
-                        target: review_target_to_api(review_request.target),
-                        delivery: None,
-                    },
-                },
-                "review/start",
-            )
-            .await
-            .map_err(anyhow::Error::msg)?;
-            let _ = event_processor.process_server_notification(ServerNotification::TurnStarted(
-                TurnStartedNotification {
-                    thread_id: response.review_thread_id.clone(),
-                    turn: response.turn.clone(),
-                },
-            ));
-            let task_id = response.turn.id;
-            info!("Sent review request with event ID: {task_id}");
-            task_id
-        }
-    };
-    exec_span.record("turn.id", task_id.as_str());
-
-    // Run the loop until the task is complete.
-    // Track whether a fatal error was reported by the server so we can
-    // exit with a non-zero status for automation-friendly signaling.
-    let mut error_seen = false;
-    let mut interrupt_channel_open = true;
-    let primary_thread_id_for_requests = primary_thread_id.to_string();
-    loop {
-        let server_event = tokio::select! {
-            maybe_interrupt = interrupt_rx.recv(), if interrupt_channel_open => {
-                if maybe_interrupt.is_none() {
-                    interrupt_channel_open = false;
-                    continue;
-                }
-                if let Err(err) = send_request_with_response::<TurnInterruptResponse>(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     &client,
                     &config,
                     state_db.as_ref(),
@@ -1774,42 +1217,139 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
                     let session_configured =
                         session_configured_from_thread_resume_response(&response, &config)
                             .map_err(anyhow::Error::msg)?;
-                    (session_configured.thread_id, session_configured)
+                    daybreak_enabled = daybreak_override
+                        .or(response.thread.daybreak_enabled)
+                        .unwrap_or(false);
+                    (response.thread.history_mode, session_configured)
                 } else {
                     trace_exec_timing("after_resolve_resume_thread_id", exec_session_started_at);
-                    let response: ThreadStartResponse = send_request_with_response(
-                        &client,
-                        ClientRequest::ThreadStart {
-                            request_id: request_ids.next(),
-                            params: thread_start_params_from_config(&config),
-                        },
-                        "thread/start",
-                    )
-                    .await
-                    .map_err(anyhow::Error::msg)?;
+                    let response =
+                        start_thread(&client, &mut request_ids, &config, &thread_source)
+                            .await
+                            .map_err(anyhow::Error::msg)?;
                     trace_exec_timing("after_thread_start_fallback", exec_session_started_at);
                     let session_configured =
                         session_configured_from_thread_start_response(&response, &config)
                             .map_err(anyhow::Error::msg)?;
-                    (session_configured.thread_id, session_configured)
+                    (response.thread.history_mode, session_configured)
                 }
-            } else {
-                let response: ThreadStartResponse = send_request_with_response(
+            } else if let Some(ExecCommand::Fork(args)) = command.as_ref() {
+                let source_args = crate::cli::ResumeArgs {
+                    session_id: Some(args.session_id.clone()),
+                    last: false,
+                    all: true,
+                    images: Vec::new(),
+                    prompt: None,
+                };
+                let source_thread_id = resolve_resume_thread_id(
                     &client,
-                    ClientRequest::ThreadStart {
+                    &config,
+                    state_db.as_ref(),
+                    &source_args,
+                    resume_model_override_requested,
+                )
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Session not found: {}", args.session_id))?;
+                let source_daybreak = if config.ephemeral && daybreak_override.is_none() {
+                    let response: ThreadReadResponse = send_request_with_response(
+                        &client,
+                        ClientRequest::ThreadRead {
+                            request_id: request_ids.next(),
+                            params: ThreadReadParams {
+                                thread_id: source_thread_id.clone(),
+                                include_turns: false,
+                            },
+                        },
+                        "thread/read",
+                    )
+                    .await
+                    .map_err(anyhow::Error::msg)?;
+                    response.thread.daybreak_enabled
+                } else {
+                    None
+                };
+                let permissions = permissions_selection_from_config(&config);
+                let sandbox = permissions.is_none().then(|| {
+                    sandbox_mode_from_permission_profile(
+                        &config.permissions.effective_permission_profile(),
+                        config.cwd.as_path(),
+                    )
+                });
+                let response: ThreadForkResponse = send_request_with_response(
+                    &client,
+                    ClientRequest::ThreadFork {
                         request_id: request_ids.next(),
-                        params: thread_start_params_from_config(&config),
+                        params: ThreadForkParams {
+                            thread_id: source_thread_id,
+                            model: config.model.clone(),
+                            model_provider: Some(config.model_provider_id.clone()),
+                            // PF-84: the named account, as for thread/start and resume.
+                            provider_account: config.provider_account_override.clone(),
+                            cwd: Some(config.cwd.to_string_lossy().to_string()),
+                            runtime_workspace_roots: Some(config.workspace_roots.clone()),
+                            approval_policy: Some(
+                                config.permissions.approval_policy.value().into(),
+                            ),
+                            approvals_reviewer: resume_approvals_reviewer_override,
+                            sandbox: sandbox.flatten(),
+                            permissions,
+                            config: thread_config_overrides_from_config(&config),
+                            ephemeral: config.ephemeral,
+                            thread_source: Some(thread_source.clone()),
+                            exclude_turns: true,
+                            defer_goal_continuation: !config.ephemeral,
+                            ..ThreadForkParams::default()
+                        },
                     },
-                    "thread/start",
+                    "thread/fork",
                 )
                 .await
                 .map_err(anyhow::Error::msg)?;
+                trace_exec_timing("after_thread_fork", exec_session_started_at);
+                if let Some(account) = response.provider_account.as_deref() {
+                    event_processor.set_provider_account(&config, account);
+                }
+                let session_configured = session_configured_from_thread_response(
+                    &response.thread.session_id,
+                    &response.thread.id,
+                    response.thread.forked_from_id.as_deref(),
+                    response.thread.parent_thread_id.as_deref(),
+                    response.thread.thread_source.clone().map(Into::into),
+                    response.thread.name.clone(),
+                    response.thread.path.clone(),
+                    response.model,
+                    response.model_provider,
+                    response.service_tier,
+                    response.approval_policy.to_core(),
+                    response.approvals_reviewer.to_core(),
+                    config.permissions.effective_permission_profile(),
+                    response.active_permission_profile.map(Into::into),
+                    response.cwd,
+                    response.reasoning_effort,
+                )
+                .map_err(anyhow::Error::msg)?;
+                daybreak_enabled = daybreak_override
+                    .or(response.thread.daybreak_enabled)
+                    .or(source_daybreak)
+                    .unwrap_or(false);
+                (response.thread.history_mode, session_configured)
+            } else {
+                let response = start_thread(&client, &mut request_ids, &config, &thread_source)
+                    .await
+                    .map_err(anyhow::Error::msg)?;
                 trace_exec_timing("after_thread_start", exec_session_started_at);
                 let session_configured =
                     session_configured_from_thread_start_response(&response, &config)
                         .map_err(anyhow::Error::msg)?;
-                (session_configured.thread_id, session_configured)
+                (response.thread.history_mode, session_configured)
             };
+
+        let primary_thread_id = fallback_session_configured.thread_id;
+        if let Some(worktree) = managed_worktree.as_ref() {
+            worktree
+                .manager
+                .bind_thread(&worktree.checkout, &primary_thread_id.to_string())?;
+        }
 
         let primary_thread_id_for_span = primary_thread_id.to_string();
         // Use the start/resume response as the authoritative bootstrap payload.
@@ -1819,14 +1359,15 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
 
         exec_span.record("thread.id", primary_thread_id_for_span.as_str());
 
-<<<<<<< HEAD
         // Print the effective configuration and initial request so users can see what Codex
         // is using.
         event_processor.print_config_summary(&config, &prompt_summary, &session_configured);
         trace_exec_timing("after_print_config_summary", exec_session_started_at);
         if !json_mode
-            && let Some(message) =
-                codex_core::config::system_bwrap_warning(config.permissions.permission_profile())
+            && let Some(message) = codex_core::config::system_bwrap_warning(
+                &config.permissions.effective_permission_profile(),
+                &config.cwd,
+            )
         {
             event_processor.process_warning(message);
         }
@@ -1838,76 +1379,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             if json_mode {
                 eprintln!("warning: {message}");
             } else {
-||||||| 413492cd6c
-                if should_process_notification(
-                    &notification,
-                    &primary_thread_id_for_requests,
-                    &task_id,
-                ) {
-                    maybe_backfill_turn_completed_items(
-                        config.ephemeral,
-                        &client,
-                        &mut request_ids,
-                        &mut notification,
-                    )
-                    .await;
-
-                    match event_processor.process_server_notification(notification) {
-                        CodexStatus::Running => {}
-                        CodexStatus::InitiateShutdown => {
-                            if let Err(err) = request_shutdown(
-                                &client,
-                                &mut request_ids,
-                                &primary_thread_id_for_requests,
-                            )
-                            .await
-                            {
-                                warn!("thread/unsubscribe failed during shutdown: {err}");
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-            InProcessServerEvent::Lagged { skipped } => {
-                let message = lagged_event_warning_message(skipped);
-                warn!("{message}");
-=======
-                if should_process_notification(
-                    &notification,
-                    &primary_thread_id_for_requests,
-                    &task_id,
-                ) {
-                    maybe_backfill_turn_completed_items(
-                        config.ephemeral,
-                        history_mode,
-                        &client,
-                        &mut request_ids,
-                        &mut notification,
-                    )
-                    .await;
-
-                    match event_processor.process_server_notification(notification) {
-                        CodexStatus::Running => {}
-                        CodexStatus::InitiateShutdown => {
-                            if let Err(err) = request_shutdown(
-                                &client,
-                                &mut request_ids,
-                                &primary_thread_id_for_requests,
-                            )
-                            .await
-                            {
-                                warn!("thread/unsubscribe failed during shutdown: {err}");
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-            InProcessServerEvent::Lagged { skipped } => {
-                let message = lagged_event_warning_message(skipped);
-                warn!("{message}");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 event_processor.process_warning(message);
             }
         }
@@ -1928,20 +1399,52 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             panic_watch::PANIC_STALL_TIMEOUT,
         );
         let task_id = match initial_operation {
+            InitialOperation::ForkOnly => {
+                request_shutdown(&client, &mut request_ids, &primary_thread_id_for_span)
+                    .await
+                    .map_err(anyhow::Error::msg)?;
+                // #494: the client is shut down (and accounting settled) below,
+                // after the session, on this exit too.
+                return Ok::<bool, anyhow::Error>(false);
+            }
             InitialOperation::UserTurn {
                 items,
                 output_schema,
             } => {
+                let cyber_access_program = match cyber_access_program {
+                    Some(program) => Some(program),
+                    None if config.features.enabled(Feature::CliDaybreak) => {
+                        daybreak::program_for_turn(
+                            &config.features,
+                            &client,
+                            &mut request_ids,
+                            &session_configured.model,
+                            &session_configured.model_provider_id,
+                            config
+                                .model_providers
+                                .get(&session_configured.model_provider_id),
+                            daybreak_enabled,
+                        )
+                        .await?
+                    }
+                    None => None,
+                };
                 trace_exec_timing("before_turn_start", exec_session_started_at);
                 let response: TurnStartResponse = send_request_with_response(
                     &client,
                     ClientRequest::TurnStart {
                         request_id: request_ids.next(),
                         params: TurnStartParams {
+                            disabled_plugin_ids: None,
                             thread_id: primary_thread_id_for_span.clone(),
+                            turn_trigger: Some("exec".to_string()),
+                            parent_turn_id: None,
+                            root_turn_id: None,
                             client_user_message_id: None,
                             input: items.into_iter().map(Into::into).collect(),
+                            tool_output: None,
                             responsesapi_client_metadata: None,
+                            responsesapi_client_metadata_patch: None,
                             additional_context: None,
                             environments: None,
                             cwd: Some(default_cwd),
@@ -1952,12 +1455,14 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
                             permissions: None,
                             model: None,
                             service_tier: None,
+                            service_tier_for_turn: None,
                             effort: default_effort,
                             summary: None,
                             personality: None,
                             output_schema,
                             collaboration_mode: None,
                             multi_agent_mode: None,
+                            cyber_access_program,
                         },
                     },
                     "turn/start",
@@ -2089,6 +1594,7 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
                     ) {
                         maybe_backfill_turn_completed_items(
                             config.ephemeral,
+                            history_mode,
                             &client,
                             &mut request_ids,
                             &mut notification,
