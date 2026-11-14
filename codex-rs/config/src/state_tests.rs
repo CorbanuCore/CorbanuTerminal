@@ -396,3 +396,34 @@ fn with_user_config_updates_matching_user_layer_without_replacing_active_profile
         Some("on-request")
     );
 }
+
+/// D525 (#2052): rebuilding launch-flags layers for session plugins keeps a
+/// project-declared role layer's mark, so project-config rules still apply.
+#[test]
+fn session_plugins_keep_a_project_role_layers_mark() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let role_file = test_user_config_path(&temp_dir, "reviewer.toml");
+    let person = ConfigLayerEntry::new(
+        ConfigLayerSource::SessionFlags,
+        toml::from_str("plugins = {}").expect("config TOML should parse"),
+    );
+    let role = ConfigLayerEntry::new(
+        ConfigLayerSource::SessionFlags,
+        toml::from_str("model = \"gpt-5\"").expect("config TOML should parse"),
+    )
+    .with_project_role_file(role_file.clone());
+    let stack = ConfigLayerStack::new(
+        vec![person, role],
+        ConfigRequirements::default(),
+        ConfigRequirementsToml::default(),
+    )
+    .expect("launch flags stack should be valid")
+    .with_session_plugins(TomlValue::Table(Default::default()))
+    .expect("session plugins should apply");
+
+    let marks: Vec<Option<&AbsolutePathBuf>> = stack
+        .all_layers_low_to_high()
+        .map(ConfigLayerEntry::project_role_file)
+        .collect();
+    assert_eq!(marks, vec![None, Some(&role_file)]);
+}

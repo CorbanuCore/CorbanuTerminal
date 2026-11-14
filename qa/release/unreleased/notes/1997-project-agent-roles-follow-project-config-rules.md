@@ -14,6 +14,5 @@
 - Not changed: roles you declare yourself (in `CODEX_HOME/agents/` or your user
   config), roles from managed config and built-in roles. If one of your
   projects' roles chose a provider, declare that role in your user config.
-- Not covered yet: other rules that apply only to project config (feature
-  defaults, project MCP servers, hooks) don't apply to project roles yet; see
-  #2052.
+- The other rules that apply to project config now apply to project roles
+  too; see the D525 (#2052) entry.

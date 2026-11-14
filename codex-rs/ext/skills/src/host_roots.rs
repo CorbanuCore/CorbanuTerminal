@@ -334,7 +334,9 @@ async fn repo_agents_skill_roots(
 fn project_root_markers_from_stack(config_layer_stack: &ConfigLayerStack) -> Vec<String> {
     let mut merged = TomlValue::Table(toml::map::Map::new());
     for layer in config_layer_stack.layers_low_to_high() {
-        if matches!(layer.name, ConfigLayerSource::Project { .. }) {
+        // A project, and an agent role file it declares (D525), can't move
+        // the project root.
+        if layer.is_project_scoped() {
             continue;
         }
         merge_toml_values(&mut merged, &layer.config);

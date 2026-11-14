@@ -246,3 +246,45 @@ fn later_path_rule_reenables_one_skill_disabled_by_name() {
         [PathUri::from_abs_path(&second_path)].into_iter().collect()
     );
 }
+
+/// D525 (#2052): a project-declared agent role's layer (launch flags in name
+/// only) does not change skill settings, like project config; the same layer
+/// without a role file (a person's launch flags) still does.
+#[test]
+fn project_role_layer_does_not_change_skill_settings() {
+    let codex_home = TempDir::new().expect("temp dir");
+    let skill_path = codex_home.path().join("skills/demo/SKILL.md");
+    let role_file = codex_home
+        .path()
+        .join("project/.codex/agents/reviewer.toml")
+        .abs();
+    let rules = |project_role_file: Option<AbsolutePathBuf>| {
+        let layer = ConfigLayerEntry::new(
+            ConfigLayerSource::SessionFlags,
+            toml::from_str(&path_toggle_config(&skill_path, /*enabled*/ false))
+                .expect("valid role config"),
+        );
+        let layer = match project_role_file {
+            Some(role_file) => layer.with_project_role_file(role_file),
+            None => layer,
+        };
+        let stack = ConfigLayerStack::new(
+            vec![user_layer(&codex_home, ""), layer],
+            Default::default(),
+            ConfigRequirementsToml::default(),
+        )
+        .expect("valid config stack");
+        skill_config_rules_from_stack(&stack)
+    };
+
+    assert_eq!(
+        rules(/*project_role_file*/ None),
+        SkillConfigRules {
+            entries: vec![SkillConfigRule {
+                selector: SkillConfigRuleSelector::Path(PathUri::from_abs_path(&skill_path.abs())),
+                enabled: false,
+            }],
+        }
+    );
+    assert_eq!(rules(Some(role_file)), SkillConfigRules::default());
+}

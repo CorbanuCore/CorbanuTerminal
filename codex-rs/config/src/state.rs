@@ -124,6 +124,9 @@ pub struct ConfigLayerEntry {
     pub disabled_reason: Option<String>,
     raw_toml: Option<RawTomlLayer>,
     hooks_config_folder_override: Option<AbsolutePathBuf>,
+    /// The role file of a project-declared agent role whose settings this
+    /// launch-flag layer holds (D525, #2052): project-config rules apply.
+    project_role_file: Option<AbsolutePathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -142,6 +145,7 @@ impl ConfigLayerEntry {
             disabled_reason: None,
             raw_toml: None,
             hooks_config_folder_override: None,
+            project_role_file: None,
         }
     }
 
@@ -162,6 +166,7 @@ impl ConfigLayerEntry {
                 base_dir: raw_toml_base_dir,
             }),
             hooks_config_folder_override: None,
+            project_role_file: None,
         }
     }
 
@@ -178,6 +183,7 @@ impl ConfigLayerEntry {
             disabled_reason: Some(disabled_reason.into()),
             raw_toml: None,
             hooks_config_folder_override: None,
+            project_role_file: None,
         }
     }
 
@@ -201,6 +207,24 @@ impl ConfigLayerEntry {
     ) -> Self {
         self.hooks_config_folder_override = hooks_config_folder_override;
         self
+    }
+
+    /// Marks this layer as holding a project-declared agent role's file, so
+    /// rules for project config apply to it (D525, #2052).
+    pub fn with_project_role_file(mut self, role_file: AbsolutePathBuf) -> Self {
+        self.project_role_file = Some(role_file);
+        self
+    }
+
+    /// The role file, when this layer holds a project-declared agent role.
+    pub fn project_role_file(&self) -> Option<&AbsolutePathBuf> {
+        self.project_role_file.as_ref()
+    }
+
+    /// Whether this layer comes from a project's repository contents: its
+    /// `.codex/config.toml` or an agent role file the project declared.
+    pub fn is_project_scoped(&self) -> bool {
+        matches!(self.name, ConfigLayerSource::Project { .. }) || self.project_role_file.is_some()
     }
 
     pub fn metadata(&self) -> ConfigLayerMetadata {
@@ -578,7 +602,11 @@ impl ConfigLayerStack {
                 } else if table.remove("plugins").is_none() {
                     continue;
                 }
+                // D525 (#2052): a project-declared role's launch-flags layer keeps its
+                // mark, so project-config rules still apply to it after the rebuild.
+                let project_role_file = layer.project_role_file.take();
                 *layer = ConfigLayerEntry::new(ConfigLayerSource::SessionFlags, config);
+                layer.project_role_file = project_role_file;
             }
         } else {
             let index = self.layers.partition_point(|layer| {
