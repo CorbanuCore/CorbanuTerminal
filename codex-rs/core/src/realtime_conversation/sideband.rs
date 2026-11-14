@@ -59,6 +59,9 @@ pub(super) fn spawn_webrtc_sideband_input_task(
         let mut reconnecting = false;
         let mut rapid_disconnects = 0_u32;
         let mut pending_outbound = None;
+        // #824: when the sideband stopped for good, taken before closing a
+        // transport (which can wait up to `TRANSPORT_CLOSE_TIMEOUT`).
+        let mut ended_at_ms = None;
         let transcript_state = match &session_initialization {
             RealtimeSidebandSessionInitialization::ExistingCall {
                 initial_connection: Some(connection),
@@ -132,6 +135,7 @@ pub(super) fn spawn_webrtc_sideband_input_task(
 
             // Stop when the call is inactive or cancellation has been requested.
             if !realtime_active.load(Ordering::Relaxed) || stop_token.is_cancelled() {
+                ended_at_ms = Some(chrono::Utc::now().timestamp_millis());
                 close_sideband_transport(&connection).await;
                 break;
             }
@@ -159,6 +163,7 @@ pub(super) fn spawn_webrtc_sideband_input_task(
 
             // Cancellation returns Terminal, so close the socket before checking for TransportLost.
             if !realtime_active.load(Ordering::Relaxed) || stop_token.is_cancelled() {
+                ended_at_ms = Some(chrono::Utc::now().timestamp_millis());
                 close_sideband_transport(&connection).await;
                 break;
             }
@@ -199,6 +204,7 @@ pub(super) fn spawn_webrtc_sideband_input_task(
             }
         }
 
+        let ended_at_ms = ended_at_ms.unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
         if let RealtimeSidebandSessionInitialization::ExistingCall { initial_connection } =
             &mut session_initialization
             && let Some(connection) = initial_connection.take()
@@ -207,7 +213,7 @@ pub(super) fn spawn_webrtc_sideband_input_task(
             close_sideband_transport(&connection).await;
         }
         if let Some(record) = record {
-            record.end(chrono::Utc::now().timestamp_millis()).await;
+            record.end(ended_at_ms).await;
         }
         let transcript_tail = transcript_state.take_transcript_tail().await;
         flush_realtime_transcript_tail(&model_client, &transcript_tail_flush, &transcript_tail)
