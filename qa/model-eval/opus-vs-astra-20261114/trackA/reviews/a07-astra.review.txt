@@ -1,0 +1,12 @@
+1. **High — [event_dispatch.rs:5693](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a07/codex-rs/tui/src/app/event_dispatch.rs:5693): Sending from another pane can change the target’s workspace permissions.**  
+   The new handler copies the target’s cwd and permission profile, but `submit_thread_op` supplies the **currently displayed pane’s workspace roots** (`thread_routing.rs:938`). These are sent as an explicit override and replace the target’s roots. For example, sending to a child scoped to `/work/A` while viewing a pane scoped to `/work/B` can grant the child workspace access to B and remove its access to A. Preserve the target’s server-side roots by omitting this override, or explicitly pass its own roots. Add coverage with different source and target workspaces.
+
+2. **Medium — [event_dispatch.rs:5694](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a07/codex-rs/tui/src/app/event_dispatch.rs:5694): Capacity rejection loses the task and falsely marks the target running.**  
+   When execution slots are full, `submit_thread_op` handles `CapacityUnavailable` by displaying an error and returning `Ok(())`. This branch then persists `Running` even though no turn started and no task was queued. No corresponding completion event will clear that state. Return an explicit submission outcome, retain rejected input for recovery, and update running status only after acceptance. Test with saturated execution capacity.
+
+3. **Medium — [event_dispatch.rs:5693](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a07/codex-rs/tui/src/app/event_dispatch.rs:5693): Rejected steering uses the wrong input-recovery queue.**  
+   Sending to a child during review or compaction can reject steering. The shared helper then calls `enqueue_rejected_steer()` on the displayed chat widget, but this new route never registered its task in that widget’s pending inputs. Consequently, the child’s task is lost; if the displayed pane has a pending steer, that unrelated message can instead be moved into its retry queue. Preserve the payload against the target thread and propagate steering rejection explicitly. Cover a background child with a non-steerable turn.
+
+Review was local and read-only; no builds or tests were run.
+
+VERDICT: REQUEST_CHANGES

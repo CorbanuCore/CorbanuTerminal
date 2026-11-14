@@ -1,0 +1,29 @@
+I found no regressions. The change only adds prompts: chroot stays the command word, every earlier check still runs, and new recursion is limited by the existing depth and size limits, which ask when exceeded. I saw no out-of-bounds indexing or performance problem. But the fix can be bypassed by simple spellings the classifier already understands elsewhere, so it is incomplete for the issue it targets. I found these by reading the code only; I didn't build or run anything.
+
+**1. Medium: `chroot` is found only as the plain command or directly after `eval`. Trivial rewordings still hide its command.**
+- **Where:** `codex-rs/core/src/security/tainted_action.rs:2571-2577` and `:2606-2607`, together with `indirect.rs:807`.
+- **What's wrong:** chroots are looked for in only two places: in `programs(words)` (`from` 0) and right after `eval` (`operands = eval index + 1`). The classifier already handles other ways a line can carry a command. `carried_command` (around line 2775) handles `eval --`, `eval eval`, `trap`, `coproc` and `repeat`. `after_modifiers` handles zsh's `noglob`, `nocorrect` and `-`. The new chroot code checks neither.
+- **Example:** in `eval -- chroot / ./x`, `programs(["--","chroot",...])` returns `--` as the command. `chroot_commands` and `chroot_runs_unjudged` therefore never see the chroot. So these lines likely stay quiet, just as `chroot / ./x` was quiet before this change, while their plain forms now ask:
+  - `eval -- chroot / ./x`
+  - `eval eval chroot / ./x`
+  - `noglob chroot / ./x` (zsh)
+  - `trap 'chroot / ./x' EXIT`
+  - `coproc chroot / ./x`
+  - `eval -- chroot /tmp/r ls`, which also skips the new "another root" prompt
+- **Fix:** run `chroot_commands` and `chroot_runs_unjudged` from the start of each carried span and from the start after the zsh modifiers, not only from `eval index + 1`. This means computing `carried_command` and `after_modifiers` before the chroot block. Add these spellings to `issue1808_chroot_judges_its_command`.
+
+**2. Low–medium: with `--skip-chdir`, the chroot's command is checked as if it ran in a known folder.**
+- **Where:** `tainted_action.rs:2597-2603`.
+- **What's wrong:** with `--skip-chdir`, the only check is `self.command(run, &folders.cwd, depth + 1)`. That inner check starts with fresh folder state, so it loses two kinds of information:
+  - The outer line's uncertainty about its folder (`folders.unseen`, `lost` and `unseen_in_substitution`).
+  - A folder set by a wrapper option before chroot (`env -C`, `sudo -D` or `--chdir`).
+- **Example:** `cd "$X" && cp x .zshrc` asks, but these are likely quiet because `.zshrc` is resolved against a known working folder:
+  - `cd "$X" && chroot --skip-chdir / cp x .zshrc`
+  - `sudo -D /home/fixture chroot --skip-chdir / tee -a .zshrc`
+- **Fix:** do what the nested-script reader does (`nested.rs:327`). Wrap the folder check in `self.unknown_folder += 1` / `-= 1` when the outer folder is uncertain or when `unknown_folder::elsewhere_at` finds a folder option before the chroot. Alternatively, have `skip_chdir` ask in those cases.
+
+**3. Nit:** `docs/sprints/current/p1-security-hardening/pf-23-s04-chroot-classification.md:77` needs a blank line before `## Exit evidence`.
+
+The tests only cover chroot as the plain command and after `eval`, so they would not catch problem 1. The release note's claim that commands launched "directly through `chroot /`" are inspected doesn't hold for `noglob chroot /` or `eval -- chroot /`.
+
+VERDICT: REQUEST_CHANGES

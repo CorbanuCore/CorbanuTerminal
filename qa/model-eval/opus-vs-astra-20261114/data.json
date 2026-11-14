@@ -1,0 +1,516 @@
+{
+ "title": "Opus 5.5 High vs Astra High on our own work (2026-11-14)",
+ "status": "Version 1 (progress): Track A (review benchmark) is scored. Track B (paired implementation and blind grading) is still running; its sections fill in when it finishes. Prepared by bench-1114.",
+ "summary_html": [
+  "<b>Question.</b> Can Astra High (gpt-6-astra, reasoning high) take some of the work Opus 5.5 High does now, so we get more done? We tested both models on our real work: reviews of past pull requests where we already know the bug (Track A), and the same implementation tasks given to both (Track B).",
+  "<b>Track A result.</b> Astra High found more of the known bugs: 6 of 8 fully, against Opus's 3 fully and 2 partly. On the three security-classifier changes, Astra found the known bug all 3 times; Opus found none fully and one partly. Opus did better on reading user-interface and agent-control code, where it found more of each bug's related parts. Both missed the dependency-upgrade bug (#1962). Each model gave one wrong verdict on top of that: Opus approved a change with a real bug (#1055), and Astra blocked a clean change (#1944) over a point that is technically right but low-impact.",
+  "<b>Careful:</b> 8 bugs and 2 clean controls, one run per model, is a small sample. Three of the eight bugs were first found by Astra during the November 11 reviews, so this set may favour Astra. Read the result as \"Astra is a credible first reviewer\", not \"Astra is better than Opus\"."
+ ],
+ "trackA": {
+  "intro_html": [
+   "We took 8 past pull requests where an independent review found a real bug that was then confirmed and fixed, plus 2 merged pull requests where nothing was ever found (controls). We put each one back at the exact version that had the bug. Each model got the same neutral brief (\"find defects, give severity and file:line, end with a verdict\"), with no hint of the bug, in a copy of the repository that contained no later history. We wrote the answer key and froze it (sha256 recorded) before any model ran.",
+   "<b>Scoring:</b> \"found\" means the review named the bug's mechanism and place. \"Partly\" means the right area or one of two main bugs. Extra findings were checked against the code. When we could not settle one by reading, it was marked uncertain and sent to blinded grading."
+  ],
+  "notes_html": [
+   "<b>Where each model was stronger.</b> Astra found three security-classifier bugs that Opus missed or only partly found (#1837, #1055, #2133), including the exact line in #2133. Opus covered more related parts in the agent-control bug (#1175: it also found the kill-switch re-check) and partly found the #1171 bug that Astra missed. Both found the dropped network settings in the sync resolution (#2043) and the Windows test bug (#1889).",
+   "<b>Both missed #1962</b>, a lock-file-only upgrade of assert_cmd. In the new version, an unchanged helper's call panics where it used to return an error. The new version's source was not on disk and the network was off, so this tests prior knowledge more than review skill.",
+   "<b>Wrong verdicts:</b> Opus approved #1055, which has a real defect. Astra blocked the clean control #1944, saying <code>GIT_ALLOW_PROTOCOL=file</code> re-allows local-file submodule clones that git blocks by default. Git's documentation supports that, but the sandboxed command could read those files directly anyway, so a blocking verdict is too strong. Astra was more willing to block; Opus was more willing to approve."
+  ],
+  "cases": [
+   {
+    "id": "A01",
+    "label": "#1837 chroot stdin (security)",
+    "runs": {
+     "opus": {
+      "detect": "missed",
+      "verdict": "REQ",
+      "verdict_ok": true,
+      "wall": 402,
+      "tokens": 140112
+     },
+     "astra": {
+      "detect": "full",
+      "verdict": "REQ",
+      "verdict_ok": true,
+      "wall": 260,
+      "tokens": 123208
+     }
+    }
+   },
+   {
+    "id": "A02",
+    "label": "#1962 assert_cmd bump (test infra)",
+    "runs": {
+     "opus": {
+      "detect": "missed",
+      "verdict": "APP",
+      "verdict_ok": false,
+      "wall": 48,
+      "tokens": 68800
+     },
+     "astra": {
+      "detect": "missed",
+      "verdict": "APP",
+      "verdict_ok": false,
+      "wall": 97,
+      "tokens": 68279
+     }
+    }
+   },
+   {
+    "id": "A03",
+    "label": "#1055 work counter (test/perf)",
+    "runs": {
+     "opus": {
+      "detect": "missed",
+      "verdict": "APP",
+      "verdict_ok": false,
+      "wall": 59,
+      "tokens": 76277
+     },
+     "astra": {
+      "detect": "full",
+      "verdict": "REQ",
+      "verdict_ok": true,
+      "wall": 101,
+      "tokens": 68792
+     }
+    }
+   },
+   {
+    "id": "A04",
+    "label": "#2043 sync: network settings (security)",
+    "runs": {
+     "opus": {
+      "detect": "full",
+      "verdict": "REQ",
+      "verdict_ok": true,
+      "wall": 185,
+      "tokens": 108652
+     },
+     "astra": {
+      "detect": "full",
+      "verdict": "REQ",
+      "verdict_ok": true,
+      "wall": 250,
+      "tokens": 105571
+     }
+    }
+   },
+   {
+    "id": "A05",
+    "label": "#2133 assignment provenance (security)",
+    "runs": {
+     "opus": {
+      "detect": "partial",
+      "verdict": "REQ",
+      "verdict_ok": true,
+      "wall": 220,
+      "tokens": 113385
+     },
+     "astra": {
+      "detect": "full",
+      "verdict": "REQ",
+      "verdict_ok": true,
+      "wall": 327,
+      "tokens": 120655
+     }
+    }
+   },
+   {
+    "id": "A06",
+    "label": "#1171 .git message (logic)",
+    "runs": {
+     "opus": {
+      "detect": "partial",
+      "verdict": "REQ",
+      "verdict_ok": true,
+      "wall": 172,
+      "tokens": 88533
+     },
+     "astra": {
+      "detect": "missed",
+      "verdict": "REQ",
+      "verdict_ok": true,
+      "wall": 164,
+      "tokens": 78248
+     }
+    }
+   },
+   {
+    "id": "A07",
+    "label": "#1175 pane settings leak (agent control)",
+    "runs": {
+     "opus": {
+      "detect": "full",
+      "verdict": "REQ",
+      "verdict_ok": true,
+      "wall": 180,
+      "tokens": 119271
+     },
+     "astra": {
+      "detect": "full",
+      "verdict": "REQ",
+      "verdict_ok": true,
+      "wall": 187,
+      "tokens": 94735
+     }
+    }
+   },
+   {
+    "id": "A08",
+    "label": "#1889 Windows test DACL (test quality)",
+    "runs": {
+     "opus": {
+      "detect": "full",
+      "verdict": "REQ",
+      "verdict_ok": true,
+      "wall": 61,
+      "tokens": 75479
+     },
+     "astra": {
+      "detect": "full",
+      "verdict": "REQ",
+      "verdict_ok": true,
+      "wall": 98,
+      "tokens": 66364
+     }
+    }
+   },
+   {
+    "id": "A09",
+    "label": "#1878 nextest group (control)",
+    "runs": {
+     "opus": {
+      "detect": "clean",
+      "verdict": "APP",
+      "verdict_ok": true,
+      "wall": 165,
+      "tokens": 89090
+     },
+     "astra": {
+      "detect": "clean",
+      "verdict": "APP",
+      "verdict_ok": true,
+      "wall": 97,
+      "tokens": 65753
+     }
+    }
+   },
+   {
+    "id": "A10",
+    "label": "#1944 GIT_ALLOW_PROTOCOL (control)",
+    "runs": {
+     "opus": {
+      "detect": "clean",
+      "verdict": "APP",
+      "verdict_ok": true,
+      "wall": 113,
+      "tokens": 89047
+     },
+     "astra": {
+      "detect": "fp",
+      "verdict": "REQ",
+      "verdict_ok": false,
+      "wall": 187,
+      "tokens": 85534
+     }
+    }
+   }
+  ],
+  "totals": {
+   "opus": {
+    "full": 3,
+    "partial": 2,
+    "missed": 3,
+    "verdict_ok": 8,
+    "n": 10,
+    "real_extras": 16,
+    "uncertain_extras": 7,
+    "false_alarms": 0,
+    "sev_ok": 5,
+    "wall": 1605,
+    "tokens": 968646,
+    "detect_txt": "3 full, 2 partial, 3 missed (of 8)",
+    "score_txt": "4.0 / 8",
+    "verdict_txt": "8 / 10",
+    "wall_txt": "27 min total (2.7 min per review)",
+    "tok_txt": "969k total (97k per review)",
+    "sev_txt": "5 of 5 found defects"
+   },
+   "astra": {
+    "full": 6,
+    "partial": 0,
+    "missed": 2,
+    "verdict_ok": 8,
+    "n": 10,
+    "real_extras": 8,
+    "uncertain_extras": 6,
+    "false_alarms": 1,
+    "sev_ok": 6,
+    "wall": 1768,
+    "tokens": 877139,
+    "detect_txt": "6 full, 0 partial, 2 missed (of 8)",
+    "score_txt": "6.0 / 8",
+    "verdict_txt": "8 / 10",
+    "wall_txt": "29 min total (2.9 min per review)",
+    "tok_txt": "877k total (88k per review)",
+    "sev_txt": "6 of 6 found defects"
+   }
+  },
+  "metric_rows": [
+   [
+    "Known defects found (full = 1, partial = \u00bd)",
+    "score_txt"
+   ],
+   [
+    "Breakdown",
+    "detect_txt"
+   ],
+   [
+    "Correct verdict (10 PRs)",
+    "verdict_txt"
+   ],
+   [
+    "Severity calibrated",
+    "sev_txt"
+   ],
+   [
+    "Real extra findings",
+    "real_extras"
+   ],
+   [
+    "Uncertain extra findings",
+    "uncertain_extras"
+   ],
+   [
+    "False alarms (wrong blocking claims or wrong verdict on a clean PR)",
+    "false_alarms"
+   ],
+   [
+    "Wall time",
+    "wall_txt"
+   ],
+   [
+    "Tokens",
+    "tok_txt"
+   ]
+  ]
+ },
+ "trackB": {
+  "intro_html": [
+   "Four tasks, each done once by each model, in separate copies of the repository from the same starting commit. B1 and B2 re-implement fixes we merged recently (#2046 guardian stop gap, #2102 provider picker refresh), starting from the issue text alone. B3 resolves a real upstream-sync conflict (codex-agent-roles, as in #2059). B4 is a fresh open issue (#2018, classifier brace groups). Hidden check: the merged fix's own tests (or compile and clippy for B3), run on each solution afterwards. Rubric: two blinded graders (one Opus, one Astra) scored each pair of solutions labelled only X and Y."
+  ],
+  "notes_html": [
+   "Track B is still running at version 1."
+  ],
+  "hidden": [],
+  "rubric_charts": []
+ },
+ "cost": {
+  "notes_html": [
+   "Track A per review: see the table above. Times are wall-clock on the same machine, with an Opus run and an Astra run going at the same time."
+  ],
+  "wall": [
+   [
+    "A01",
+    {
+     "opus": 6.7,
+     "astra": 4.3
+    }
+   ],
+   [
+    "A02",
+    {
+     "opus": 0.8,
+     "astra": 1.6
+    }
+   ],
+   [
+    "A03",
+    {
+     "opus": 1.0,
+     "astra": 1.7
+    }
+   ],
+   [
+    "A04",
+    {
+     "opus": 3.1,
+     "astra": 4.2
+    }
+   ],
+   [
+    "A05",
+    {
+     "opus": 3.7,
+     "astra": 5.5
+    }
+   ],
+   [
+    "A06",
+    {
+     "opus": 2.9,
+     "astra": 2.7
+    }
+   ],
+   [
+    "A07",
+    {
+     "opus": 3.0,
+     "astra": 3.1
+    }
+   ],
+   [
+    "A08",
+    {
+     "opus": 1.0,
+     "astra": 1.6
+    }
+   ],
+   [
+    "A09",
+    {
+     "opus": 2.8,
+     "astra": 1.6
+    }
+   ],
+   [
+    "A10",
+    {
+     "opus": 1.9,
+     "astra": 3.1
+    }
+   ]
+  ],
+  "tokens": [
+   [
+    "A01",
+    {
+     "opus": 140,
+     "astra": 123
+    }
+   ],
+   [
+    "A02",
+    {
+     "opus": 69,
+     "astra": 68
+    }
+   ],
+   [
+    "A03",
+    {
+     "opus": 76,
+     "astra": 69
+    }
+   ],
+   [
+    "A04",
+    {
+     "opus": 109,
+     "astra": 106
+    }
+   ],
+   [
+    "A05",
+    {
+     "opus": 113,
+     "astra": 121
+    }
+   ],
+   [
+    "A06",
+    {
+     "opus": 89,
+     "astra": 78
+    }
+   ],
+   [
+    "A07",
+    {
+     "opus": 119,
+     "astra": 95
+    }
+   ],
+   [
+    "A08",
+    {
+     "opus": 75,
+     "astra": 66
+    }
+   ],
+   [
+    "A09",
+    {
+     "opus": 89,
+     "astra": 66
+    }
+   ],
+   [
+    "A10",
+    {
+     "opus": 89,
+     "astra": 86
+    }
+   ]
+  ]
+ },
+ "recommendation": {
+  "rows": [
+   [
+    "First-pass code review",
+    "Astra-OK",
+    "Track A: Astra found 6 of 8 known bugs fully (Opus 3 fully, 2 partly); one false block on a clean PR."
+   ],
+   [
+    "Final security review (sign-off)",
+    "Opus-only for now",
+    "Astra is strong at finding security bugs, but security sign-off is a policy step, and one blocked control and n=8 are too little to change who signs. Use Astra as a second reviewer before Opus."
+   ],
+   [
+    "Security code changes",
+    "pending Track B",
+    ""
+   ],
+   [
+    "Sync conflict resolution",
+    "pending Track B",
+    "Track A: both found the dropped network settings in #2043."
+   ],
+   [
+    "Ordinary bug fixes",
+    "pending Track B",
+    ""
+   ],
+   [
+    "CI / flake work",
+    "pending Track B",
+    "Track A: both found the Windows test bug (#1889)."
+   ],
+   [
+    "Docs",
+    "pending Track B",
+    ""
+   ],
+   [
+    "Grading / triage",
+    "pending Track B",
+    ""
+   ]
+  ],
+  "notes_html": [
+   "Version 1: the recommendations above come from Track A only and will be revised with Track B."
+  ]
+ },
+ "caveats_html": [
+  "Small sample: 8 known bugs and 2 controls, one run per model per case. One different answer moves a total by 12 percentage points.",
+  "Selection bias: the bugs in #1837, #1055 and #2133 were first found by Astra High reviews on November 11; the bugs in #2043, #1171, #1175 and #1889 were first found by Opus. Per-case results are shown so readers can see this.",
+  "Reviews were read-only, with no builds or tests. Both models could read the repository and the local cargo registry, but not the network.",
+  "The Opus log header does not print the reasoning effort for the claude-plan provider. The same <code>model_reasoning_effort=\"high\"</code> flag that our standing reviewers use was passed to both models.",
+  "Scoring of extra findings is our judgement against the code; uncertain ones go to blinded graders."
+ ],
+ "decisions_html": [
+  "Filled in the final version."
+ ]
+}

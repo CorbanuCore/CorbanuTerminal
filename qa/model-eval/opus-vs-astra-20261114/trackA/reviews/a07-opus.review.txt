@@ -1,0 +1,39 @@
+I found two blocking defects and two smaller issues. The person's task now really does arrive as a plain user message, but it goes through `submit_thread_op`, which is built for the pane currently on screen. That pane's settings leak into the target pane's turn, and several ways the turn fails to start are reported as success.
+
+**1. High: the turn takes workspace roots, and sometimes the sandbox, from the visible pane** (`app/event_dispatch.rs:5667-5693`, via `app/thread_routing.rs:920-940`)
+
+The comment at 5667 says sending a task from Spawn status changes neither the pane's approval nor its permission settings. Only the approval policy and reviewer actually come from the target's `session`. Inside `try_submit_active_thread_op_via_app_server`:
+- **Workspace roots:** `runtime_workspace_roots` is always set from `self.chat_widget.config_ref().permissions.user_visible_workspace_roots()`. That is the visible pane (usually Main), not the target, and `turn/start` replaces the thread's roots with whatever it is given.
+- **Sandbox fallback:** when `session.active_permission_profile` is `None`, `turn_permissions_override_from_config` uses Main's config plus the global `runtime_permission_profile_override`. It can send `LegacySandbox(<Main's effective profile>)` to the agent.
+- **Scenario:** an Orc is spawned under workspace-write with a legacy sandbox (no named profile). The person then runs `/permissions` in Main and picks full access, so the runtime override equals Main's effective profile. The person sends a task to the Orc from Spawn status. The Orc's turn starts with Main's full-access sandbox and Main's roots, and the setting sticks for its later turns.
+- **Why it's new:** the old mailbox path never touched the agent's turn context. Typing directly in the pane uses that pane's own restored config.
+- **Fix:** build the `turn/start` from the target's `session`: `session.runtime_workspace_roots`, and `session.permission_profile` (or `Preserve`) when no named profile is reported. Alternatively, add a thread-scoped submit that never reads `self.chat_widget` config. Add a test where the target's roots and sandbox differ from Main's.
+
+**2. Medium: a turn that never started is reported as Running** (`app/event_dispatch.rs:5693-5709`)
+
+`submit_thread_op` returns `Ok(())` in several cases where no turn starts:
+- the target's active turn can't be steered (thread_routing 857);
+- a steer race fails (`note_thread_steer_failure`);
+- all execution slots are in use (970);
+- the turn is deferred for a pending permission confirmation (918);
+- the thread is not handled ("Not available in TUI yet", 641).
+
+In each case the new handler still sets `spawn_status_by_thread` to Running, marks navigation as running, records the last task and persists. Nothing will clear that state, because no turn events follow.
+
+Two of these paths also act on the visible pane:
+- **Wrong pane's queue:** at 857, `self.chat_widget.enqueue_rejected_steer()` pops the visible pane's pending steer. Scenario: the Orc is running a turn that can't be steered (for example a review) while Main has a queued steer. Main's steer is moved to the rejected queue, and the person's task is silently dropped while showing Running.
+- **Wrong pane deferred:** at 918, `defer_turn_for_permission_confirmation` also acts on the visible pane.
+
+Fix: make the submit path report whether a turn actually started or a steer was accepted. Only update status on that result, and never touch `self.chat_widget` queues for a thread that isn't displayed.
+
+**3. Low: one kill-switch-related case isn't re-checked or tested** (`app/event_dispatch.rs:5620-5640`)
+
+The kill switch is checked before `materialize_saved_native_spawn_thread_for_task`, which can spawn a new agent thread (an await). The old path re-checked after materializing. Core's `refuse_under_kill_switch` blocks the model call, so this isn't a bypass. Still, a replacement agent can be created and marked Running while the switch is on. Re-check `kill_switch_on_now()` after materializing.
+
+**4. Low: missing tests** (`app/tests/dispatch_integration.rs:490`, `app/tests.rs:2323`)
+
+Nothing covers the new refusals: kill switch on, read-only or unreconciled crew, empty task, or the size cap. Nothing checks that the target's approval, permission settings and workspace roots are preserved, which is what would have caught finding 1. The integration test only checks that the message text and wrapper are right.
+
+The other behaviour changes look intended for D95: a task sent while the kill switch is on is now refused instead of held in the mailbox, and an agent's matching dispatch acknowledgement is no longer consumed.
+
+VERDICT: REQUEST_CHANGES

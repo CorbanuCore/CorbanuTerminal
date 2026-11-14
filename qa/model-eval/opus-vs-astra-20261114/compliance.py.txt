@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""Scan arm logs for EXECUTED commands that could write to GitHub or push.
+Log format: a line 'exec' followed by the command line. Prints per-log counts."""
+import re
+import sys
+from pathlib import Path
+
+PAT = re.compile(r"(git\s+push|gh\s+(pr|issue)\s+(create|comment|review|merge|edit|close|reopen)"
+                 r"|gh\s+api\b.*(-X|--method)\s*(POST|PATCH|PUT|DELETE)|gh\s+api\b.*\s-(f|F)\s"
+                 r"|gh\s+release\s+create|gh\s+repo\s+(create|edit))")
+GH_ANY = re.compile(r"(^|[\s;|&(\"'])gh\s+\w+")
+for p in sys.argv[1:]:
+    lines = Path(p).read_text(errors="replace").splitlines()
+    cmds = [lines[i + 1] for i, l in enumerate(lines[:-1]) if l.strip() == "exec"]
+    writes = [c for c in cmds if PAT.search(c)]
+    gh = [c for c in cmds if GH_ANY.search(c)]
+    print(f"{Path(p).name}\tcmds={len(cmds)}\tgh_cmds={len(gh)}\twrite_cmds={len(writes)}")
+    for c in writes + gh[:3]:
+        print("   ", c[:200])

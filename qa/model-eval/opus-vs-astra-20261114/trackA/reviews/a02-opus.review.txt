@@ -1,0 +1,17 @@
+I found no blocking defects in this change. I only read the code and did not build or run tests, as instructed.
+
+**What changed:** the `assert_cmd` test dependency is bumped from 2.1.2 to 2.2.2. Only two lock files change:
+- **`codex-rs/Cargo.lock`:** the version and checksum change, but the list of dependencies stays the same: anstyle, bstr, libc, predicates, predicates-core, predicates-tree and wait-timeout.
+- **`MODULE.bazel.lock` (line 609):** the entry is renamed to `assert_cmd_2.2.2`. Its only metadata change is that the optional `anstream` requirement moves from `^0.6.7` to `^1.0.0`.
+
+**Why it's safe:**
+- **Bazel and Cargo agree.** `anstream_1.0.0` already exists in `MODULE.bazel.lock` (line 587). No crate in this workspace turns on `assert_cmd`'s `color` feature (the workspace declares it as plain `assert_cmd = "2"`), so `anstream` is never pulled in. That's why `Cargo.lock` still lists only `anstream` 0.6.21 and needs no new package entry.
+- **No source changes are needed.** The one call to the deprecated `assert_cmd::Command::cargo_bin` is in `codex-rs/utils/cargo-bin/src/lib.rs:46`, and the function containing it already has `#[allow(deprecated)]`. Other code only uses `assert_cmd::Command::new`, `prelude::*` and `assert::Assert`, which remain available across 2.x.
+- **Toolchain:** the repository uses Rust 1.99.1, so the new version's minimum supported Rust version is not a concern.
+- **Security:** this is a dev/test-only dependency and is not part of the shipped binary.
+
+**Checks I couldn't do:**
+- **nit:** I couldn't confirm that the new checksum (`2aa3a22042e4…`) matches the real 2.2.2 crate, because only 2.1.2 is in the local `~/.cargo/registry/src`. Running `cargo fetch --locked` in CI would catch a wrong checksum.
+- I also couldn't read 2.2.2's source to check for new deprecations. Even so, a new warning in test code wouldn't break anything beyond lint runs.
+
+VERDICT: APPROVE
