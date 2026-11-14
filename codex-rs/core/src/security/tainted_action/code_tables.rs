@@ -199,8 +199,7 @@ pub(super) fn may_load_stat(command: &[String], commands: &[shell::SimpleCommand
                 name == "enable"
                     // #2001: a later style lookup may run arbitrary code,
                     // including a disguised load of the stat builtin.
-                    || (name == "zstyle"
-                        && words.get(at + 1).is_some_and(|option| style_may_evaluate(option)))
+                    || (name == "zstyle" && style_eval_option(&words[at + 1..]).is_some())
                     || (!matches!(name, "[" | "[[")
                         && name.contains(['$', '`', '*', '?', '[', '{', '(']))
                     || name.contains(shell::UNSEEN_OUTPUT)
@@ -212,7 +211,7 @@ pub(super) fn may_load_stat(command: &[String], commands: &[shell::SimpleCommand
 /// #2001: the first style operand may become `-e` after expansion. A
 /// fixed context prefix (`:ctx:$x`) cannot become an option. Patterns and
 /// unseen leading values are conservative; no old verdict is removed.
-pub(super) fn style_may_evaluate(option: &str) -> bool {
+fn style_may_evaluate(option: &str) -> bool {
     option == "-e"
         || option.starts_with(['$', '`', '='])
         || option.starts_with(GLOB)
@@ -225,6 +224,25 @@ pub(super) fn style_may_evaluate(option: &str) -> bool {
             && (option.contains(['$', '`'])
                 || option.contains(GLOB)
                 || option.contains(shell::UNSEEN_OUTPUT)))
+}
+
+/// A leading expansion may disappear (nullglob or an empty rc-expanded
+/// array), moving a later operand into the option position. Stop once a
+/// fixed word prevents that shift. Each operand is inspected at most once.
+pub(super) fn style_eval_option(options: &[String]) -> Option<usize> {
+    for (index, option) in options.iter().enumerate() {
+        work::step();
+        if style_may_evaluate(option) {
+            return Some(index);
+        }
+        if !option.contains(GLOB)
+            && !option.contains(['$', '`'])
+            && !option.contains(shell::UNSEEN_OUTPUT)
+        {
+            break;
+        }
+    }
+    None
 }
 
 /// D410: whether `text`, quotes and backslashes aside, names `zmodload`

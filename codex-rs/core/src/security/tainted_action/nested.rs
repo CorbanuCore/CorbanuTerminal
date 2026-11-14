@@ -850,16 +850,16 @@ impl Classifier {
                 // eval. Always judge their joined text as a shell script,
                 // even if the words themselves contain no further quotes.
                 if resolved_name == "zstyle"
-                    && let Some(option) = texts.get(at + 1)
-                    && code_tables::style_may_evaluate(option)
+                    && let Some(offset) = code_tables::style_eval_option(&texts[at + 1..])
                 {
+                    let option_at = at + 1 + offset;
                     found.deferred = true;
-                    if option != "-e" {
+                    if offset != 0 || texts[option_at] != "-e" {
                         // Expansion can change both the option and the value
                         // boundary. Do not guess which words will run.
                         found.unreadable = true;
                     }
-                    let from = (at + 4).min(texts.len());
+                    let from = (option_at + 3).min(texts.len());
                     let line = joined(
                         String::new(),
                         &texts[from..],
