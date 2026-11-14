@@ -22,7 +22,7 @@ fn abs(path: &str) -> PathUri {
 }
 
 fn script_with(shell: &str, line: &str) -> Option<ProtectedActionKind> {
-    let action = ApprovalAction::Shell {
+    let action = ApprovalAction::ExecCommand {
         id: "call".into(),
         environment_id: "local".into(),
         command: [shell, "-lc", line]
@@ -33,6 +33,9 @@ fn script_with(shell: &str, line: &str) -> Option<ProtectedActionKind> {
         sandbox_permissions: SandboxPermissions::UseDefault,
         additional_permissions: None,
         justification: None,
+        hook_command: String::new(),
+        tty: false,
+        proposed_execpolicy_amendment: None,
     };
     classify_with(&action, &fixture(HOME), Some(&fixture(USER_HOME)))
 }
@@ -54,7 +57,7 @@ fn in_workspace(files: &[(&str, &str)], line: &str) -> Option<ProtectedActionKin
         std::fs::write(path, text).expect("file");
     }
     let cwd = work.to_string_lossy().into_owned();
-    let action = ApprovalAction::Shell {
+    let action = ApprovalAction::ExecCommand {
         id: "call".into(),
         environment_id: "local".into(),
         command: ["bash", "-lc", line]
@@ -65,6 +68,9 @@ fn in_workspace(files: &[(&str, &str)], line: &str) -> Option<ProtectedActionKin
         sandbox_permissions: SandboxPermissions::UseDefault,
         additional_permissions: None,
         justification: None,
+        hook_command: String::new(),
+        tty: false,
+        proposed_execpolicy_amendment: None,
     };
     classify_with(&action, &fixture(HOME), Some(work))
 }

@@ -25,16 +25,19 @@ fn fixture(path: &str) -> std::path::PathBuf {
 /// The classification of `bash -lc script`, and the comparisons it made.
 fn classified(script: &str) -> (Option<ProtectedActionKind>, Vec<Comparison>) {
     RECORDED.with(|recorded| recorded.borrow_mut().clear());
-    let action = ApprovalAction::Shell {
+    let action = ApprovalAction::ExecCommand {
         id: "call".into(),
         environment_id: "local".into(),
         command: vec!["bash".into(), "-lc".into(), script.into()],
+        hook_command: String::new(),
         cwd: PathUri::from_abs_path(
             &AbsolutePathBuf::from_absolute_path_checked(fixture("/work")).expect("absolute"),
         ),
         sandbox_permissions: SandboxPermissions::UseDefault,
         additional_permissions: None,
         justification: None,
+        tty: false,
+        proposed_execpolicy_amendment: None,
     };
     let kind = classify_with(
         &action,
@@ -101,16 +104,19 @@ fn empty_scripts_cannot_multiply_the_comparisons() {
         command.push(String::new());
     }
     RECORDED.with(|recorded| recorded.borrow_mut().clear());
-    let action = ApprovalAction::Shell {
+    let action = ApprovalAction::ExecCommand {
         id: "call".into(),
         environment_id: "local".into(),
         command,
+        hook_command: String::new(),
         cwd: PathUri::from_abs_path(
             &AbsolutePathBuf::from_absolute_path_checked(fixture("/work")).expect("absolute"),
         ),
         sandbox_permissions: SandboxPermissions::UseDefault,
         additional_permissions: None,
         justification: None,
+        tty: false,
+        proposed_execpolicy_amendment: None,
     };
     let _ = classify_with(
         &action,

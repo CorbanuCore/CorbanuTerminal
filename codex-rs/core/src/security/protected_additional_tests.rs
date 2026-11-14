@@ -52,7 +52,9 @@ fn fixture() -> Fixture {
 fn entry(path: &std::path::Path, access: FileSystemAccessMode) -> FileSystemSandboxEntry {
     FileSystemSandboxEntry::new(
         FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).unwrap(),
+            path: codex_utils_path_uri::PathUri::from_abs_path(
+                &AbsolutePathBuf::from_absolute_path(path).unwrap(),
+            ),
         },
         access,
     )
@@ -641,75 +643,68 @@ fn issue_524_a_failed_check_is_refused_and_explained() {
 
 /// Issue #513 (Travis, 2026-10-11), the orchestrator with a probe tool:
 /// under Moderate an additional write to the project's `.agents` runs only
-/// when a person was asked about it now. Answered without asking (the
-/// approval cache, a preapproved grant) it is refused and explained. The
-/// person's prompt says which file approving opens.
+/// when a person was asked about it now. The person's prompt says which file
+/// approving opens; answered without asking (here the approval cache, from
+/// that person's "for this session") the same write is refused and explained.
 #[tokio::test]
 async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_file() {
+    use crate::session::turn_context::TurnEnvironment;
     use crate::tools::sandboxing::ApprovalAction;
-    use crate::tools::sandboxing::ApprovalCtx;
     use crate::tools::sandboxing::ExecApprovalRequirement;
     use crate::tools::sandboxing::ToolError;
     use codex_protocol::protocol::AskForApproval;
+    use codex_protocol::protocol::EventMsg;
     use codex_protocol::protocol::ReviewDecision;
     use codex_utils_path_uri::PathUri;
     use std::sync::Arc;
+    use std::sync::Mutex;
 
     struct Probe {
         additional: AdditionalPermissionProfile,
-        person: bool,
-        reasons: Vec<Option<String>>,
+        cwd: PathUri,
         ran: bool,
     }
-    impl crate::tools::sandboxing::Approvable<()> for Probe {
-        type ApprovalKey = String;
-
+    impl crate::tools::sandboxing::Approvable<TurnEnvironment> for Probe {
         fn additional_permissions<'a>(
             &self,
-            _req: &'a (),
+            _req: &'a TurnEnvironment,
         ) -> Option<&'a AdditionalPermissionProfile> {
             // The probe owns the profile; the trait wants it borrowed from
             // the request, so leak one per call (a test only).
             Some(Box::leak(Box::new(self.additional.clone())))
         }
-        fn sandbox_permissions(&self, _req: &()) -> crate::sandboxing::SandboxPermissions {
+        fn sandbox_permissions(
+            &self,
+            _req: &TurnEnvironment,
+        ) -> crate::sandboxing::SandboxPermissions {
             crate::sandboxing::SandboxPermissions::WithAdditionalPermissions
         }
-        fn exec_approval_requirement(&self, _req: &()) -> Option<ExecApprovalRequirement> {
+        fn exec_approval_requirement(
+            &self,
+            _req: &TurnEnvironment,
+        ) -> Option<ExecApprovalRequirement> {
             Some(ExecApprovalRequirement::NeedsApproval {
                 reason: None,
                 proposed_execpolicy_amendment: None,
             })
         }
-        fn approval_keys(&self, _req: &()) -> Vec<Self::ApprovalKey> {
-            vec!["probe".to_string()]
-        }
-        fn start_approval_async<'a>(
-            &'a mut self,
-            _req: &'a (),
-            ctx: ApprovalCtx<'a>,
-        ) -> futures::future::BoxFuture<'a, ReviewDecision> {
-            self.reasons.push(ctx.retry_reason);
-            if self.person {
-                crate::tools::sandboxing::note_person_asked();
-            }
-            Box::pin(async { ReviewDecision::ApprovedForSession })
-        }
         fn approval_action(
             &self,
-            _req: &(),
-            ctx: &ApprovalCtx<'_>,
+            _req: &TurnEnvironment,
+            call_id: &str,
         ) -> std::io::Result<ApprovalAction> {
-            Ok(ApprovalAction::Shell {
-                id: ctx.call_id.to_string(),
+            Ok(ApprovalAction::ExecCommand {
+                id: call_id.to_string(),
                 environment_id: codex_exec_server::LOCAL_ENVIRONMENT_ID.to_string(),
                 command: vec!["true".into()],
-                #[allow(deprecated)]
-                cwd: PathUri::from_abs_path(&ctx.turn.cwd),
+                hook_command: "true".to_string(),
+                cwd: self.cwd.clone(),
                 sandbox_permissions:
                     crate::sandboxing::SandboxPermissions::WithAdditionalPermissions,
                 additional_permissions: Some(self.additional.clone()),
                 justification: None,
+                tty: false,
+                proposed_execpolicy_amendment: None,
             })
         }
     }
@@ -718,9 +713,9 @@ async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_
             codex_sandboxing::SandboxablePreference::Auto
         }
     }
-    impl crate::tools::sandboxing::ToolRuntime<(), ()> for Probe {
-        fn workspace_roots<'a>(&self, _req: &'a ()) -> &'a [PathUri] {
-            &[]
+    impl crate::tools::sandboxing::ToolRuntime<TurnEnvironment, ()> for Probe {
+        fn turn_environment<'a>(&self, req: &'a TurnEnvironment) -> &'a TurnEnvironment {
+            req
         }
         fn turn_environment<'a>(
             &self,
@@ -730,7 +725,7 @@ async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_
         }
         async fn run(
             &mut self,
-            _req: &(),
+            _req: &TurnEnvironment,
             _attempt: &crate::tools::sandboxing::SandboxAttempt<'_>,
             _ctx: &crate::tools::sandboxing::ToolCtx,
         ) -> Result<(), ToolError> {
@@ -739,74 +734,104 @@ async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_
         }
     }
 
-    for person in [true, false] {
-        let session = crate::session::tests::make_session_with_config(|config| {
-            config.security_level = SecurityLevel::Moderate;
-            config
-                .features
-                .enable(codex_features::Feature::SourceEnvelopes)
-                .expect("source envelopes");
-        })
-        .await
-        .expect("session");
-        let _control = session
-            .services
-            .agent_control
-            .clone()
-            .with_effective_security_policy(
-                SecurityLevel::Moderate,
-                session.thread_id,
-                /*inherits_from_spawn_parent*/ false,
-            )
-            .expect("policy");
-        let turn = session.new_default_turn().await;
-        #[allow(deprecated)]
-        let agents = turn.cwd.join(".agents");
+    let (session, events) = crate::session::tests::make_session_with_config_and_rx(|config| {
+        config.security_level = SecurityLevel::Moderate;
+        config
+            .features
+            .enable(codex_features::Feature::SourceEnvelopes)
+            .expect("source envelopes");
+        config
+            .permissions
+            .approval_policy
+            .set(AskForApproval::OnRequest)
+            .expect("approval policy");
+    })
+    .await
+    .expect("session");
+    let _control = session
+        .services
+        .agent_control
+        .local()
+        .expect("the local agent backend")
+        .clone()
+        .with_effective_security_policy(
+            SecurityLevel::Moderate,
+            session.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
+        .expect("policy");
+    *session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
+    // The person answers "for this session" and records the prompt's reason.
+    let reasons = Arc::new(Mutex::new(Vec::new()));
+    let answerer = tokio::spawn({
+        let session = Arc::clone(&session);
+        let reasons = Arc::clone(&reasons);
+        async move {
+            while let Ok(event) = events.recv().await {
+                let EventMsg::ExecApprovalRequest(request) = event.msg else {
+                    continue;
+                };
+                reasons.lock().expect("lock").push(request.reason.clone());
+                let id = request.approval_id.unwrap_or(request.call_id);
+                session
+                    .notify_approval(&id, ReviewDecision::ApprovedForSession)
+                    .await;
+            }
+        }
+    });
+    let turn = session.new_default_turn().await;
+    let environment = turn
+        .initial_environments
+        .primary()
+        .expect("a primary environment")
+        .clone();
+    #[allow(deprecated)]
+    let agents = turn.cwd.join(".agents");
+    let tool_ctx = crate::tools::sandboxing::ToolCtx {
+        cancellation_token: tokio_util::sync::CancellationToken::new(),
+        session: Arc::clone(&session),
+        step_context: crate::session::step_context::StepContext::for_test(Arc::clone(&turn)),
+        call_id: "probe-call".to_string(),
+        tool_name: codex_tools::ToolName::plain("probe"),
+    };
+    let mut results = Vec::new();
+    for _ in 0..2 {
         let mut probe = Probe {
             additional: write(agents.as_path()),
-            person,
-            reasons: Vec::new(),
+            cwd: environment.cwd().clone(),
             ran: false,
         };
-        let tool_ctx = crate::tools::sandboxing::ToolCtx {
-            session: Arc::clone(&session),
-            turn: Arc::clone(&turn),
-            call_id: "probe-call".to_string(),
-            tool_name: codex_tools::ToolName::plain("probe"),
-        };
         let result = crate::tools::orchestrator::ToolOrchestrator::new()
-            .run(
-                &mut probe,
-                &(),
-                &tool_ctx,
-                turn.as_ref(),
-                AskForApproval::OnRequest,
-            )
+            .run(&mut probe, &environment, &tool_ctx)
             .await;
-        // A person is shown which file approving opens.
-        assert_eq!(probe.reasons.len(), 1, "person={person}");
-        let reason = probe.reasons[0].clone().unwrap_or_default();
-        assert!(
-            reason.contains("Approving lets this command write"),
-            "{reason}"
-        );
-        assert!(reason.contains(".agents"), "{reason}");
-        if person {
-            assert!(result.is_ok(), "{:?}", result.err());
-            assert!(probe.ran);
-        } else {
-            let Err(ToolError::Rejected(message)) = result else {
-                panic!("expected a refusal");
-            };
-            assert!(
-                message.starts_with("Security level Moderate blocked writing to"),
-                "{message}"
-            );
-            assert!(
-                message.contains("Only a person's own approval"),
-                "{message}"
-            );
-            assert!(!probe.ran);
-        }
+        results.push((result.map(|_| ()), probe.ran));
     }
+    answerer.abort();
+
+    // Asked now: a person is shown which file approving opens, and it runs.
+    let reasons = reasons.lock().expect("lock").clone();
+    assert_eq!(reasons.len(), 1, "{reasons:?}");
+    let reason = reasons[0].clone().unwrap_or_default();
+    assert!(
+        reason.contains("Approving lets this command write"),
+        "{reason}"
+    );
+    assert!(reason.contains(".agents"), "{reason}");
+    let (first, first_ran) = &results[0];
+    assert!(first.is_ok(), "{first:?}");
+    assert!(*first_ran);
+    // Answered from the cache, nobody asked: refused and explained.
+    let (second, second_ran) = &results[1];
+    let Err(ToolError::Rejected(message)) = second else {
+        panic!("expected a refusal: {second:?}");
+    };
+    assert!(
+        message.starts_with("Security level Moderate blocked writing to"),
+        "{message}"
+    );
+    assert!(
+        message.contains("Only a person's own approval"),
+        "{message}"
+    );
+    assert!(!*second_ran);
 }

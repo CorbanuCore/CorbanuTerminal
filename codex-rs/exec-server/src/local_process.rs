@@ -1674,6 +1674,60 @@ mod tests {
         );
     }
 
+    /// PF-27-S02: once secretless launch is armed in this process, the
+    /// in-process executor (Corbanu's local environment, which also runs
+    /// environment hooks) gives a child only the launch allowlist from this
+    /// process's environment, plus the caller's own variables (a hook's
+    /// configured `env`), whatever the policy inherits.
+    #[test]
+    fn pf_27_s02_armed_child_env_keeps_the_launch_allowlist_and_the_overlay() {
+        const CHILD: &str = "CODEX_EXEC_SERVER_SECRETLESS_LAUNCH_CHILD";
+        const TEST: &str = "local_process::tests::pf_27_s02_armed_child_env_keeps_the_launch_allowlist_and_the_overlay";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+                .args(["--exact", TEST, "--nocapture"])
+                .env(CHILD, "1")
+                .env("PF27_PROBE_API_TOKEN", "host-secret")
+                .env("PF27_PROBE_PLAIN", "host-plain")
+                .output()
+                .expect("run child test");
+            assert!(
+                output.status.success()
+                    && String::from_utf8_lossy(&output.stdout).contains("1 passed"),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let mut params = test_exec_params(HashMap::from([(
+            "HOOK_OWN_TOKEN".to_string(),
+            "hook-configured".to_string(),
+        )]));
+        params.env_policy = Some(ExecEnvPolicy {
+            inherit: ShellEnvironmentPolicyInherit::All,
+            ignore_default_excludes: true,
+            exclude: Vec::new(),
+            r#set: HashMap::new(),
+            include_only: Vec::new(),
+        });
+        let unarmed = child_env(&params);
+        assert_eq!(
+            unarmed.get("PF27_PROBE_API_TOKEN").map(String::as_str),
+            Some("host-secret")
+        );
+        codex_protocol::secretless_launch::arm();
+        let armed = child_env(&params);
+        assert_eq!(
+            (
+                armed.get("PF27_PROBE_API_TOKEN"),
+                armed.get("PF27_PROBE_PLAIN"),
+                armed.get("HOOK_OWN_TOKEN").map(String::as_str),
+                armed.keys().any(|name| name.eq_ignore_ascii_case("PATH")),
+            ),
+            (None, None, Some("hook-configured"), true)
+        );
+    }
+
     #[test]
     fn child_env_applies_policy_then_overlay() {
         let thread_id =
