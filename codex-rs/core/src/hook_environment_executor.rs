@@ -79,6 +79,16 @@ pub(crate) fn environment_hook_sources(
         .collect()
 }
 
+/// PF-27-S02: while secretless launch is armed, a hook on Corbanu's host never
+/// starts a login shell, whose profile files can export secrets (main's config
+/// hooks run `-c` then too). Its environment there is already the launch
+/// allowlist plus the hook's own variables: the in-process executor builds it
+/// with `shell_environment::create_env`, which applies the allowlist once
+/// armed. A remote executor's shell and environment are that machine's own.
+fn hook_uses_login_shell(allow_login_shell: bool, remote: bool) -> bool {
+    allow_login_shell && (remote || !codex_protocol::secretless_launch::is_armed())
+}
+
 struct EnvironmentCommandExecutor {
     environments: TurnEnvironmentSnapshot,
     session: Arc<Session>,
@@ -198,7 +208,13 @@ impl HookEnvironmentExecutor for EnvironmentCommandExecutor {
                 ),
                 ShellType::Cmd => bail!("environment command hooks require PowerShell on Windows"),
             };
-            let argv = shell.derive_exec_args(&script, environment.config().allow_login_shell);
+            let argv = shell.derive_exec_args(
+                &script,
+                hook_uses_login_shell(
+                    environment.config().allow_login_shell,
+                    environment.environment.is_remote(),
+                ),
+            );
             // Keep network attribution registered until the hook and its output are complete.
             let (params, _execution_network) = self
                 .launch_params(environment, argv, env)
@@ -258,3 +274,7 @@ impl HookEnvironmentExecutor for EnvironmentCommandExecutor {
         .boxed()
     }
 }
+
+#[cfg(test)]
+#[path = "hook_environment_executor_tests.rs"]
+mod tests;
