@@ -119,6 +119,11 @@ pub(super) struct SimpleCommand {
     /// is checked once.
     pub(super) shells_checked: usize,
     pub(super) shell_seen: bool,
+    /// #2192: the lexer split one of its words at a character the shell
+    /// does not split on (`,`, a non-ASCII space such as U+00A0). The shell
+    /// reads `,r=o` and `x=1,r=o` as one word, so the `r=o` the lexer reads
+    /// there is no assignment.
+    pub(super) split_inside_word: bool,
 }
 
 /// Lexed simple commands, in the order they finish (a substitution comes
@@ -751,6 +756,8 @@ struct Lexer {
     /// #1975: see `Lexed::braces_read_newly`.
     braces_read_newly: bool,
     keyword_braces: bool,
+    /// #2192: the last split was at a character the shell does not split on.
+    split_pending: bool,
 }
 
 impl Lexer {
@@ -813,6 +820,12 @@ impl Lexer {
     }
 
     fn flush(&mut self) {
+        // #2192: text right after such a split is part of the shell's word
+        // before it (`,r=o`, `x=1,r=o`); a split at the end of a word is
+        // not (`sep=,`).
+        if std::mem::take(&mut self.split_pending) && !self.word.is_empty() {
+            self.current.split_inside_word = true;
+        }
         if !self.word.is_empty() {
             let index = Some(self.current.words.len());
             let redirect_word = std::mem::take(&mut self.redirect_word_next);
@@ -1519,7 +1532,12 @@ impl Lexer {
                     }
                     self.operator(&chars, index);
                 }
-                ch if ch.is_whitespace() || matches!(ch, '<' | '>' | ',') => self.flush(),
+                ch if ch.is_whitespace() || matches!(ch, '<' | '>' | ',') => {
+                    self.flush();
+                    // #2192: bash and zsh split words only at blanks (space,
+                    // tab) and operators.
+                    self.split_pending = !matches!(ch, ' ' | '\t' | '<' | '>');
+                }
                 ch => self.word.push(literal_char(ch)),
             }
             index += 1;
