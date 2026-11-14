@@ -95,6 +95,9 @@ pub(super) struct SimpleCommand {
     pub(super) after: Joint,
     /// Assignment flow keeps conditional operators across line continuations.
     pub(super) assignment_after: Joint,
+    /// #1973: the command began in quoted/escaped text this lexer splits.
+    /// Such text cannot prove an assignment; keep its old reading as well.
+    pub(super) assignment_quoted: bool,
     /// #1974: it is lexed inside a `( ... )` subshell, so an assignment in
     /// it does not reach the parent shell.
     pub(super) in_subshell: bool,
@@ -645,6 +648,8 @@ enum Start {
 struct Open {
     outer: SimpleCommand,
     outer_word: String,
+    outer_assignment_equals: bool,
+    outer_assignment_protected: bool,
     outer_assignment_joint: Option<Joint>,
     outer_list_start: usize,
     /// The outer word already holds a lookup's output.
@@ -703,6 +708,9 @@ struct Lexer {
     feeds_finished: Vec<bool>,
     current: SimpleCommand,
     word: String,
+    /// Whether the current word has already reached its assignment value.
+    assignment_equals: bool,
+    assignment_protected: bool,
     /// The word being built holds a lookup's output.
     looked_up: bool,
     /// #1283: the word being built is hidden from the quote-aware reading.
@@ -856,6 +864,8 @@ impl Lexer {
                 self.current.operated.push(self.current.words.len());
             }
             let word = std::mem::take(&mut self.word);
+            self.assignment_equals = false;
+            self.assignment_protected = false;
             let joint = self.joint.take();
             if self.current.words.is_empty() {
                 self.current.after = joint.unwrap_or_default();
@@ -1075,6 +1085,8 @@ impl Lexer {
             },
         );
         let outer_word = std::mem::take(&mut self.word);
+        let outer_assignment_equals = std::mem::take(&mut self.assignment_equals);
+        let outer_assignment_protected = std::mem::take(&mut self.assignment_protected);
         let outer_looked_up = std::mem::take(&mut self.looked_up);
         let outer_hidden = std::mem::take(&mut self.hidden);
         let outer_operated = std::mem::take(&mut self.operated);
@@ -1085,6 +1097,8 @@ impl Lexer {
         self.open.push(Open {
             outer,
             outer_word,
+            outer_assignment_equals,
+            outer_assignment_protected,
             outer_assignment_joint: self.assignment_joint,
             outer_list_start: self.list_start,
             outer_looked_up,
@@ -1126,6 +1140,8 @@ impl Lexer {
             // unseen.
             self.current = open.outer;
             self.word = open.outer_word;
+            self.assignment_equals = open.outer_assignment_equals;
+            self.assignment_protected = open.outer_assignment_protected;
             self.looked_up = open.outer_looked_up;
             self.hidden = open.outer_hidden;
             self.operated = open.outer_operated;
@@ -1175,6 +1191,8 @@ impl Lexer {
             self.current.fed_by.extend(inner);
         }
         self.word = open.outer_word;
+        self.assignment_equals = open.outer_assignment_equals;
+        self.assignment_protected = open.outer_assignment_protected;
         self.looked_up = open.outer_looked_up;
         self.hidden = open.outer_hidden || spliced.is_some();
         self.operated = open.outer_operated;
@@ -1228,6 +1246,7 @@ impl Lexer {
 
     fn arg(&mut self, arg: &str) {
         let chars: Vec<char> = arg.chars().collect();
+        let quoted = assignment_quotes(&chars);
         let mut index = 0;
         // #989: arithmetic text (`$((...))`, `((...))`) up to here holds no
         // command words, so its parameter operators do not count. Not over
@@ -1250,6 +1269,16 @@ impl Lexer {
         while index < chars.len() {
             work::step();
             let ch = chars[index];
+            // Shell assignment names and their equals sign must be plain,
+            // including in later words (`a=1 'r=o'`). Quoting the value
+            // after the equals sign is ordinary assignment syntax.
+            if !self.assignment_equals {
+                self.assignment_protected |= quoted[index];
+                if ch == '=' {
+                    self.current.assignment_quoted |= self.assignment_protected;
+                }
+            }
+            self.assignment_equals |= ch == '=';
             let next = chars.get(index + 1).copied();
             let previous = index.checked_sub(1).map(|at| chars[at]);
             let parameter_brace = match ch {
@@ -1518,6 +1547,9 @@ impl Lexer {
                         self.just_closed_group = None;
                     }
                     self.operator(&chars, index);
+                    // An escaped separator also invents the next command,
+                    // even when its first character is no longer escaped.
+                    self.assignment_protected = quoted[index];
                 }
                 ch if ch.is_whitespace() || matches!(ch, '<' | '>' | ',') => self.flush(),
                 ch => self.word.push(literal_char(ch)),
@@ -1525,6 +1557,91 @@ impl Lexer {
             index += 1;
         }
     }
+}
+
+/// #1973: mark text that cannot establish an assignment just because the
+/// quote-stripping lexer exposes it. This conservative side scan never
+/// changes words or command boundaries, including nested code's old reading.
+fn assignment_quotes(chars: &[char]) -> Vec<bool> {
+    let mut quote = None;
+    let mut ansi = false;
+    let mut escaped = false;
+    let mut comment = false;
+    let mut word_start = true;
+    let mut uncertain = false;
+    let mut nested = Vec::new();
+    let mut code_depth = 0usize;
+    chars
+        .iter()
+        .enumerate()
+        .map(|(index, &ch)| {
+            work::step();
+            let previous = index.checked_sub(1).map(|at| chars[at]);
+            let next = chars.get(index + 1).copied();
+            if comment {
+                comment = ch != '\n';
+                word_start = !comment;
+                return uncertain || comment;
+            }
+            if quote.is_none() && !escaped && nested.is_empty() && ch == '#' && word_start {
+                comment = true;
+                return true;
+            }
+            // Heredoc bodies and quotes inside expansions need a fuller
+            // grammar. Preserve uncertainty after them, but do not make an
+            // ordinary comment, arithmetic counter or mktemp opaque.
+            uncertain |= (quote.is_none() && ch == '<' && next == Some('<'))
+                || (!nested.is_empty() && matches!(ch, '\'' | '"'))
+                // Shell comments and case patterns can contain a closing
+                // parenthesis without ending a substitution. An outer quote
+                // cannot be paired reliably after that apparent close.
+                || (ch == ')' && quote.is_some() && nested.last() == Some(&'('))
+                || (ch == '#' && code_depth != 0)
+                || (ch == '#' && quote.is_none() && previous == Some(')'));
+            let continuation = (ch == '\\' && next == Some('\n')) || (escaped && ch == '\n');
+            let protected = uncertain
+                || quote.is_some()
+                || (!continuation && (escaped || matches!(ch, '\'' | '"' | '\\')))
+                || (ch == '$' && matches!(next, Some('\'' | '"')));
+            let plain = !escaped && quote.is_none() && nested.is_empty();
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' && (quote != Some('\'') || ansi) {
+                escaped = true;
+            } else if quote == Some(ch) {
+                quote = None;
+                ansi = false;
+            } else if quote.is_none() && matches!(ch, '\'' | '"') {
+                quote = Some(ch);
+                ansi = ch == '\'' && previous == Some('$');
+            } else if quote != Some('\'') {
+                if ch == '`' {
+                    if nested.last() == Some(&'`') {
+                        nested.pop();
+                        code_depth -= 1;
+                    } else {
+                        nested.push(ch);
+                        code_depth += 1;
+                    }
+                } else if matches!(ch, '(' | '{' | '[')
+                    && (previous == Some('$') || !nested.is_empty())
+                {
+                    nested.push(ch);
+                    code_depth += usize::from(ch == '(');
+                } else if matches!(
+                    (nested.last(), ch),
+                    (Some('('), ')') | (Some('{'), '}') | (Some('['), ']')
+                ) {
+                    nested.pop();
+                    code_depth -= usize::from(ch == ')');
+                }
+            }
+            if !continuation {
+                word_start = plain && matches!(ch, ' ' | '\t' | '\n' | ';' | '&' | '|' | '(');
+            }
+            protected
+        })
+        .collect()
 }
 
 /// #1772 item 2: the index of the quote closing the one at `start`, when

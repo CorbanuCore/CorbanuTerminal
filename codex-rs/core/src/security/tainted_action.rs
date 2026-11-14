@@ -2576,6 +2576,12 @@ impl Classifier {
                         .chars()
                         .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
                 {
+                    // #1973: quote removal can invent an assignment.
+                    // Retain old values and stronger path findings, but ask
+                    // when such a word is about to resolve a variable.
+                    if simple.assignment_quoted {
+                        self.note(ProtectedActionKind::UnseenCode);
+                    }
                     if !reaches_parent && self.assignments != AssignmentReading::Possible {
                         self.assignments_read_newly = true;
                         variables.insert(name.to_string(), shell::UNSEEN_OUTPUT.to_string());
@@ -4177,6 +4183,10 @@ mod tainted_action_keyword_brace_tests;
 #[cfg(test)]
 #[path = "tainted_action_git_quoted_tests.rs"]
 mod tainted_action_git_quoted_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_quoted_assignment_tests.rs"]
+mod tainted_action_quoted_assignment_tests;
 
 #[cfg(test)]
 #[path = "tainted_action_post_taint_tests.rs"]
