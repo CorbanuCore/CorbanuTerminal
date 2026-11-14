@@ -63,6 +63,7 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
             crate::security::protected_surface::protect_file_tool_context(
                 sess,
                 &step_context.turn,
+                environment,
                 step_context
                     .turn
                     .file_system_sandbox_context(/*additional_permissions*/ None, environment),
@@ -266,11 +267,7 @@ async fn build_uploaded_argument_value(
             turn_context.file_system_sandbox_context(additional_permissions, turn_environment)
         }),
     };
-    // #1976 (D491): the host read below would run outside any sandbox.
-    if let Some(refusal) = sandbox
-        .as_ref()
-        .and_then(|sandbox| sandbox.unsandboxed_refusal.as_ref())
-    {
+    if let Some(refusal) = refused_here(turn_environment, sandbox.as_ref()) {
         return Err(contextualize_error(refusal.clone()));
     }
     // #519: a protected read that the sandbox would not run is checked on the host.
@@ -418,6 +415,29 @@ async fn build_uploaded_argument_value(
     Ok(JsonValue::Object(payload))
 }
 
+/// #1976 (D491): on this host the read below would run outside any sandbox,
+/// so its refusal ends the upload here, and so does a Windows client's own
+/// missing sandbox for every environment, as before (#2049). #2050:
+/// otherwise a remote executor's file system judges the refusal against the
+/// executor's own report (`RemoteFileSystem`): it refuses there, or reads
+/// inside that executor's sandbox (a remote Linux or macOS machine).
+/// Sync: upstream's context names the selected backend; MXC counts as no
+/// Windows sandbox (D522 (a)), as in `TurnContext::file_system_sandbox_context`.
+fn refused_here<'a>(
+    environment: &crate::session::turn_context::TurnEnvironment,
+    read_sandbox: Option<&'a FileSystemSandboxContext>,
+) -> Option<&'a String> {
+    let sandbox = read_sandbox?;
+    let refusal = sandbox.unsandboxed_refusal.as_ref()?;
+    let client_without_sandbox = cfg!(windows)
+        && matches!(
+            sandbox.windows_sandbox_selection,
+            codex_file_system::WindowsSandboxSelection::Disabled
+                | codex_file_system::WindowsSandboxSelection::Mxc
+        );
+    (!environment.environment.is_remote() || client_without_sandbox).then_some(refusal)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -441,6 +461,46 @@ mod tests {
         primary.selection.cwd = PathUri::from_abs_path(&cwd);
         primary.selection.workspace_roots.clear();
         primary.config_mut().workspace_roots.clear();
+    }
+
+    /// #2050: only a local refusal ends an upload before the read; a remote
+    /// environment's file system judges it against the executor's report.
+    #[tokio::test]
+    async fn issue_2050_only_a_local_refusal_ends_an_upload_early() {
+        let environment = |url: Option<String>| {
+            crate::session::turn_context::TurnEnvironment::for_tests(
+                "env".to_string(),
+                Arc::new(codex_exec_server::Environment::create_for_tests(url).expect("env")),
+                codex_utils_path_uri::PathUri::parse("file:///work").expect("cwd"),
+                Vec::new(),
+                /*shell*/ None,
+            )
+        };
+        let mut sandbox = FileSystemSandboxContext::from_permission_profile(
+            codex_protocol::models::PermissionProfile::Disabled,
+            codex_utils_path_uri::PathUri::parse("file:///work").expect("cwd"),
+        );
+        sandbox.unsandboxed_refusal = Some("refused".to_string());
+        let refused = Some(&"refused".to_string());
+        let local = environment(None);
+        let remote = environment(Some("ws://127.0.0.1:9".to_string()));
+        for level in [
+            codex_protocol::config_types::WindowsSandboxLevel::Disabled,
+            codex_protocol::config_types::WindowsSandboxLevel::Elevated,
+        ] {
+            sandbox.windows_sandbox_selection = level.into();
+            assert_eq!(refused_here(&local, Some(&sandbox)), refused);
+            // A Windows client without its own sandbox still refuses here
+            // for a remote environment (#2049); otherwise the executor's
+            // report decides.
+            let client_without_sandbox = cfg!(windows)
+                && level == codex_protocol::config_types::WindowsSandboxLevel::Disabled;
+            assert_eq!(
+                refused_here(&remote, Some(&sandbox)),
+                refused.filter(|_| client_without_sandbox)
+            );
+        }
+        assert_eq!(refused_here(&local, /*read_sandbox*/ None), None);
     }
 
     #[tokio::test]
@@ -647,6 +707,7 @@ mod tests {
         let sandbox = crate::security::protected_surface::protect_file_tool_context(
             &session,
             &step_context.turn,
+            environment,
             step_context
                 .turn
                 .file_system_sandbox_context(/*additional_permissions*/ None, environment),

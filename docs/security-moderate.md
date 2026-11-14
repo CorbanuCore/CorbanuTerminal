@@ -221,7 +221,9 @@ The kill switch (`/security` → `g`) works under every level.
 
 - On Windows, Moderate needs a Windows sandbox: without one, every agent
   command and file tool access is refused, with the steps to set the default
-  sandbox up (#1976; see `docs/sandbox.md`).
+  sandbox up (#1976; see `docs/sandbox.md`). The same applies when the
+  session works on a remote Windows machine without one, from any computer
+  (#2050), and to a remote machine whose exec-server is too old to say.
 - If your own settings turn the sandbox off (full access), commands that the
   protected-file rules don't cover run without one. Choose a sandbox in your
   settings to keep every command in it.

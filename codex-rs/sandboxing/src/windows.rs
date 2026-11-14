@@ -14,6 +14,21 @@ use codex_windows_sandbox::DenyReadTargets;
 use crate::SandboxType;
 use crate::compatibility_sandbox_policy_for_permission_profile;
 
+/// #2050: whether the default (elevated) Windows sandbox is set up on this
+/// machine for the Corbanu home this process runs with (the one its elevated
+/// launches use). Always `false` off Windows.
+pub fn windows_elevated_sandbox_set_up() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        codex_utils_home_dir::find_codex_home()
+            .is_ok_and(|codex_home| codex_windows_sandbox::sandbox_setup_is_complete(&codex_home))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        false
+    }
+}
+
 /// Resolved filesystem overrides for the Windows sandbox backends.
 ///
 /// The elevated Windows backend consumes extra deny-read paths plus explicit

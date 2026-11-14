@@ -84,13 +84,46 @@ impl RemoteFileSystem {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    /// The connected client for an operation under `sandbox`. #2050 (D510):
+    /// a context carrying `unsandboxed_refusal` (a protected security level)
+    /// is refused here, with that text, unless the executor reports a
+    /// platform sandbox for it; an executor that cannot report one, or does
+    /// not answer, is refused too (fail closed). Executors that confine it
+    /// re-check on their side.
+    async fn client_for(
+        &self,
+        sandbox: Option<&FileSystemSandboxContext>,
+    ) -> FileSystemResult<crate::client::ExecServerClient> {
+        let client = self.client.get().await.map_err(map_remote_error)?;
+        let Some((refusal, context)) = sandbox.and_then(|context| {
+            context
+                .unsandboxed_refusal
+                .as_ref()
+                .map(|refusal| (refusal, context))
+        }) else {
+            return Ok(client);
+        };
+        let confined = client.environment_info().await.is_ok_and(|info| {
+            info.host_sandbox_verdict(host_sandbox_level(context.windows_sandbox_selection))
+                == crate::HostSandboxVerdict::Confined
+        });
+        if confined {
+            Ok(client)
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                refusal.clone(),
+            ))
+        }
+    }
+
     async fn canonicalize(
         &self,
         path: &PathUri,
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<PathUri> {
         trace!("remote fs canonicalize");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let response = client
             .fs_canonicalize(FsCanonicalizeParams {
                 path: path.clone(),
@@ -108,7 +141,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<Vec<u8>> {
         trace!("remote fs read_file");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let response = client
             .fs_read_file(FsReadFileParams {
                 path: path.clone(),
@@ -131,7 +164,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<FileSystemReadStream> {
         trace!("remote fs read_file_stream");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let sandbox = read_sandbox(&client, path, sandbox).await?;
         file_stream::open(client, path.clone(), sandbox).await
     }
@@ -144,7 +177,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<()> {
         trace!("remote fs write_file");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let result = client
             .fs_write_file(FsWriteFileParams {
                 path: path.clone(),
@@ -165,7 +198,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<()> {
         trace!("remote fs create_directory");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let result = client
             .fs_create_directory(FsCreateDirectoryParams {
                 path: path.clone(),
@@ -226,7 +259,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<FileMetadata> {
         trace!("remote fs get_metadata");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let response = client
             .fs_get_metadata(FsGetMetadataParams {
                 path: path.clone(),
@@ -251,7 +284,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<Vec<ReadDirectoryEntry>> {
         trace!("remote fs read_directory");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let response = client
             .fs_read_directory(FsReadDirectoryParams {
                 path: path.clone(),
@@ -277,7 +310,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<WalkOutcome> {
         trace!("remote fs walk");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         client
             .fs_walk(FsWalkParams {
                 path: path.clone(),
@@ -295,7 +328,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<()> {
         trace!("remote fs remove");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let result = client
             .fs_remove(FsRemoveParams {
                 path: path.clone(),
@@ -318,7 +351,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<()> {
         trace!("remote fs copy");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let result = client
             .fs_copy(FsCopyParams {
                 source_path: source_path.clone(),
@@ -357,7 +390,8 @@ impl ExecutorFileSystem for RemoteFileSystem {
         sandbox: Option<&'a FileSystemSandboxContext>,
     ) -> ExecutorFileSystemFuture<'a, u64> {
         Box::pin(async move {
-            let client = self.client.get().await.map_err(map_remote_error)?;
+            // #2050 (D510): streamed writes are refused like every other sandboxed operation.
+            let client = self.client_for(sandbox).await?;
             let _invalidation = MetadataInvalidation(self);
             let mut contents = contents.map(|chunk| {
                 let chunk = chunk?;
@@ -571,6 +605,22 @@ impl Drop for FileWriteRegistration {
     }
 }
 
+/// #2050 (D510) on upstream's sandbox selection: the Windows sandbox level the executor applies
+/// for this context. MXC counts as no Windows sandbox here, as in the local refusal (D522 (a)).
+fn host_sandbox_level(
+    selection: codex_file_system::WindowsSandboxSelection,
+) -> codex_protocol::config_types::WindowsSandboxLevel {
+    use codex_file_system::WindowsSandboxSelection;
+    use codex_protocol::config_types::WindowsSandboxLevel;
+    match selection {
+        WindowsSandboxSelection::Disabled | WindowsSandboxSelection::Mxc => {
+            WindowsSandboxLevel::Disabled
+        }
+        WindowsSandboxSelection::RestrictedToken => WindowsSandboxLevel::RestrictedToken,
+        WindowsSandboxSelection::Elevated => WindowsSandboxLevel::Elevated,
+    }
+}
+
 // Older executors sandbox any supplied policy. Omit unrestricted read policies only when
 // their explicit paths are valid for the read target's convention. The executor rejects foreign
 // targets itself; keep uncertain policies intact so it also validates their explicit paths.
@@ -632,6 +682,10 @@ pub(crate) fn map_remote_error(error: ExecServerError) -> io::Error {
 #[cfg(all(test, any(unix, windows)))]
 #[path = "remote_file_system_path_uri_tests.rs"]
 mod path_uri_tests;
+
+#[cfg(test)]
+#[path = "remote_file_system_host_sandbox_tests.rs"]
+mod host_sandbox_tests;
 
 #[cfg(test)]
 mod tests {

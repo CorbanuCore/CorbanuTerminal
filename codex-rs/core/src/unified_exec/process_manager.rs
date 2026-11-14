@@ -833,6 +833,14 @@ impl UnifiedExecProcessManager {
                         context.step_context.turn.windows_sandbox_level,
                     )
                 },
+                // #2050 (D510): a remote process's environment, for judging
+                // typing into it where it runs; `None` on this host.
+                prepared.turn_environment.environment.is_remote().then(|| {
+                    (
+                        prepared.turn_environment.selection.environment_id.clone(),
+                        Arc::clone(&prepared.turn_environment.environment),
+                    )
+                }),
             )
             .await;
         }
@@ -1460,6 +1468,7 @@ impl UnifiedExecProcessManager {
         output_buffer: Arc<tokio::sync::Mutex<OutputBuffers>>,
         initial_exec_command_active: Arc<AtomicBool>,
         windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel,
+        remote_environment: Option<(String, Arc<codex_exec_server::Environment>)>,
     ) {
         let plugin_metrics_sidecar =
             metrics_sidecar.map(|sidecar| Arc::new(std::sync::Mutex::new(Some(sidecar))));
@@ -1478,6 +1487,7 @@ impl UnifiedExecProcessManager {
             session: Arc::downgrade(&context.session),
             last_used: started_at,
             windows_sandbox_level,
+            remote_environment,
         };
         let pruned_entry = {
             let mut store = self.process_store.lock().await;
@@ -1757,9 +1767,7 @@ impl UnifiedExecProcessManager {
             call_id: context.call_id.clone(),
             tool_name: ToolName::plain("exec_command"),
         };
-        let result = orchestrator
-            .run(&mut runtime, &req, &tool_ctx)
-            .await;
+        let result = orchestrator.run(&mut runtime, &req, &tool_ctx).await;
         let shown_by_review = runtime.shown_by_review();
         let start_rejected = runtime.start_rejected();
         let result = result
@@ -2091,6 +2099,23 @@ impl UnifiedExecProcessManager {
             .processes
             .get(&process_id)
             .map(|entry| entry.windows_sandbox_level)
+    }
+
+    /// #2050: the remote environment a process runs in, with the Windows
+    /// sandbox level it started with; `None` for a process on this host or
+    /// an unknown one.
+    pub(crate) async fn process_remote_environment(
+        &self,
+        process_id: i32,
+    ) -> Option<(
+        String,
+        Arc<codex_exec_server::Environment>,
+        codex_protocol::config_types::WindowsSandboxLevel,
+    )> {
+        let store = self.process_store.lock().await;
+        let entry = store.processes.get(&process_id)?;
+        let (environment_id, environment) = entry.remote_environment.clone()?;
+        Some((environment_id, environment, entry.windows_sandbox_level))
     }
 
     pub(crate) async fn list_processes(&self) -> Vec<BackgroundTerminalInfo> {

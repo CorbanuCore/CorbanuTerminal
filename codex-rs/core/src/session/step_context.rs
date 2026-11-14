@@ -99,6 +99,7 @@ impl StepContext {
         crate::security::protected_surface::protect_file_tool_context(
             session,
             &self.turn,
+            environment,
             self.turn.file_system_sandbox_context(grants, environment),
         )
     }
