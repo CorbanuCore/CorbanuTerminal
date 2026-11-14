@@ -68,6 +68,10 @@ fn issue_1973_review_ambiguous_quote_contexts_ask() {
         "cat <<E\ndon't\nE\necho 'x;r=o'; git fetch e\"$r\"",
         r#"echo $'\'' 'x;r=o'; git fetch e"$r""#,
         "echo a #x;r=o\ngit fetch e\"$r\"",
+        r#"r""=o; git fetch e"$r""#,
+        r#"r\=o; git fetch e"$r""#,
+        r#"r'='o; git fetch e"$r""#,
+        r#"a=1 'r=o'; git fetch e"$r""#,
     ] {
         assert_eq!(
             verdicts(line),

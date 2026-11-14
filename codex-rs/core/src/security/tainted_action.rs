@@ -2551,12 +2551,6 @@ impl Classifier {
                 )
             });
         if assigns {
-            // #1973: quote removal can invent an assignment (`echo 'x;r=o'`).
-            // Ask on that uncertainty, but retain all existing variable/path
-            // findings: replacing the old value could hide a protected path.
-            if simple.assignment_quoted {
-                self.note(ProtectedActionKind::UnseenCode);
-            }
             // #1974: an assignment that may not run, or that runs only in
             // a subshell, does not resolve the variable in the parent shell
             // (`false && r=x`, `a || r=x`, `(r=x)`, an `if` body, a
@@ -2582,6 +2576,12 @@ impl Classifier {
                         .chars()
                         .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
                 {
+                    // #1973: quote removal can invent an assignment.
+                    // Retain old values and stronger path findings, but ask
+                    // when such a word is about to resolve a variable.
+                    if simple.assignment_quoted {
+                        self.note(ProtectedActionKind::UnseenCode);
+                    }
                     if !reaches_parent && self.assignments != AssignmentReading::Possible {
                         self.assignments_read_newly = true;
                         variables.insert(name.to_string(), shell::UNSEEN_OUTPUT.to_string());

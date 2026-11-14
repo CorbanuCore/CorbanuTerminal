@@ -648,6 +648,8 @@ enum Start {
 struct Open {
     outer: SimpleCommand,
     outer_word: String,
+    outer_assignment_equals: bool,
+    outer_assignment_protected: bool,
     outer_assignment_joint: Option<Joint>,
     outer_list_start: usize,
     /// The outer word already holds a lookup's output.
@@ -706,6 +708,9 @@ struct Lexer {
     feeds_finished: Vec<bool>,
     current: SimpleCommand,
     word: String,
+    /// Whether the current word has already reached its assignment value.
+    assignment_equals: bool,
+    assignment_protected: bool,
     /// The word being built holds a lookup's output.
     looked_up: bool,
     /// #1283: the word being built is hidden from the quote-aware reading.
@@ -859,6 +864,8 @@ impl Lexer {
                 self.current.operated.push(self.current.words.len());
             }
             let word = std::mem::take(&mut self.word);
+            self.assignment_equals = false;
+            self.assignment_protected = false;
             let joint = self.joint.take();
             if self.current.words.is_empty() {
                 self.current.after = joint.unwrap_or_default();
@@ -1078,6 +1085,8 @@ impl Lexer {
             },
         );
         let outer_word = std::mem::take(&mut self.word);
+        let outer_assignment_equals = std::mem::take(&mut self.assignment_equals);
+        let outer_assignment_protected = std::mem::take(&mut self.assignment_protected);
         let outer_looked_up = std::mem::take(&mut self.looked_up);
         let outer_hidden = std::mem::take(&mut self.hidden);
         let outer_operated = std::mem::take(&mut self.operated);
@@ -1088,6 +1097,8 @@ impl Lexer {
         self.open.push(Open {
             outer,
             outer_word,
+            outer_assignment_equals,
+            outer_assignment_protected,
             outer_assignment_joint: self.assignment_joint,
             outer_list_start: self.list_start,
             outer_looked_up,
@@ -1129,6 +1140,8 @@ impl Lexer {
             // unseen.
             self.current = open.outer;
             self.word = open.outer_word;
+            self.assignment_equals = open.outer_assignment_equals;
+            self.assignment_protected = open.outer_assignment_protected;
             self.looked_up = open.outer_looked_up;
             self.hidden = open.outer_hidden;
             self.operated = open.outer_operated;
@@ -1178,6 +1191,8 @@ impl Lexer {
             self.current.fed_by.extend(inner);
         }
         self.word = open.outer_word;
+        self.assignment_equals = open.outer_assignment_equals;
+        self.assignment_protected = open.outer_assignment_protected;
         self.looked_up = open.outer_looked_up;
         self.hidden = open.outer_hidden || spliced.is_some();
         self.operated = open.outer_operated;
@@ -1254,11 +1269,16 @@ impl Lexer {
         while index < chars.len() {
             work::step();
             let ch = chars[index];
-            // Only add uncertainty. Quoted RHS text joined to `r=` does
-            // not start a new word; a fake command after a quoted `;` does.
-            if self.current.words.is_empty() && self.word.is_empty() && quoted[index] {
-                self.current.assignment_quoted = true;
+            // Shell assignment names and their equals sign must be plain,
+            // including in later words (`a=1 'r=o'`). Quoting the value
+            // after the equals sign is ordinary assignment syntax.
+            if !self.assignment_equals {
+                self.assignment_protected |= quoted[index];
+                if ch == '=' {
+                    self.current.assignment_quoted |= self.assignment_protected;
+                }
             }
+            self.assignment_equals |= ch == '=';
             let next = chars.get(index + 1).copied();
             let previous = index.checked_sub(1).map(|at| chars[at]);
             let parameter_brace = match ch {
@@ -1529,7 +1549,7 @@ impl Lexer {
                     self.operator(&chars, index);
                     // An escaped separator also invents the next command,
                     // even when its first character is no longer escaped.
-                    self.current.assignment_quoted |= quoted[index];
+                    self.assignment_protected = quoted[index];
                 }
                 ch if ch.is_whitespace() || matches!(ch, '<' | '>' | ',') => self.flush(),
                 ch => self.word.push(literal_char(ch)),
@@ -1544,32 +1564,70 @@ impl Lexer {
 /// changes words or command boundaries, including nested code's old reading.
 fn assignment_quotes(chars: &[char]) -> Vec<bool> {
     let mut quote = None;
+    let mut ansi = false;
     let mut escaped = false;
+    let mut comment = false;
     let mut uncertain = false;
+    let mut nested = Vec::new();
     chars
         .iter()
         .enumerate()
         .map(|(index, &ch)| {
             work::step();
-            // Comments, heredocs, ANSI-C strings and nested expansions can
-            // contain quotes with different pairing rules. Do not try to
-            // prove later assignments with this deliberately small scanner.
-            // This only adds a finding; the old reading remains intact.
-            uncertain |= matches!(ch, '#' | '`' | '[')
-                || (ch == '<' && chars.get(index + 1) == Some(&'<'))
-                || (ch == '(' && chars.get(index + 1) == Some(&'('))
-                || (ch == '$'
-                    && matches!(chars.get(index + 1), Some('\'' | '"' | '(' | '{' | '[')));
-            let protected =
-                uncertain || quote.is_some() || escaped || matches!(ch, '\'' | '"' | '\\');
+            let previous = index.checked_sub(1).map(|at| chars[at]);
+            let next = chars.get(index + 1).copied();
+            if comment {
+                comment = ch != '\n';
+                return uncertain || comment;
+            }
+            if quote.is_none()
+                && !escaped
+                && nested.is_empty()
+                && ch == '#'
+                && previous.is_none_or(|before| {
+                    before.is_whitespace() || matches!(before, ';' | '&' | '|' | '(' | ')')
+                })
+            {
+                comment = true;
+                return true;
+            }
+            // Heredoc bodies and quotes inside expansions need a fuller
+            // grammar. Preserve uncertainty after them, but do not make an
+            // ordinary comment, arithmetic counter or mktemp opaque.
+            uncertain |= (quote.is_none() && ch == '<' && next == Some('<'))
+                || (!nested.is_empty() && matches!(ch, '\'' | '"'));
+            let continuation = (ch == '\\' && next == Some('\n')) || (escaped && ch == '\n');
+            let protected = uncertain
+                || quote.is_some()
+                || (!continuation && (escaped || matches!(ch, '\'' | '"' | '\\')))
+                || (ch == '$' && matches!(next, Some('\'' | '"')));
             if escaped {
                 escaped = false;
-            } else if ch == '\\' && quote != Some('\'') {
+            } else if ch == '\\' && (quote != Some('\'') || ansi) {
                 escaped = true;
             } else if quote == Some(ch) {
                 quote = None;
+                ansi = false;
             } else if quote.is_none() && matches!(ch, '\'' | '"') {
                 quote = Some(ch);
+                ansi = ch == '\'' && previous == Some('$');
+            } else if quote != Some('\'') {
+                if ch == '`' {
+                    if nested.last() == Some(&'`') {
+                        nested.pop();
+                    } else {
+                        nested.push(ch);
+                    }
+                } else if matches!(ch, '(' | '{' | '[')
+                    && (previous == Some('$') || !nested.is_empty())
+                {
+                    nested.push(ch);
+                } else if matches!(
+                    (nested.last(), ch),
+                    (Some('('), ')') | (Some('{'), '}') | (Some('['), ']')
+                ) {
+                    nested.pop();
+                }
             }
             protected
         })
