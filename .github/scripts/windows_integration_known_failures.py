@@ -17,7 +17,9 @@ from pathlib import Path
 from typing import NamedTuple
 
 LIST = Path(__file__).resolve().parents[1] / "windows-integration-known-failures.txt"
-LINE = re.compile(r"^(?P<package>[a-z0-9-]+) (?P<test>[A-Za-z0-9_:]+) #(?P<issue>[0-9]+)$")
+LINE = re.compile(
+    r"^(?P<package>[a-z0-9-]+) (?P<test>[A-Za-z0-9_:]+) #(?P<issue>[0-9]+)$"
+)
 
 
 # Cargo package -> its directory. A change to one of the job's own files runs
@@ -45,7 +47,9 @@ def load(path: Path = LIST) -> list[KnownFailure]:
             continue
         match = LINE.match(line)
         if match is None:
-            raise ValueError(f"{path.name}:{number}: expected '<package> <test> #<issue>': {raw!r}")
+            raise ValueError(
+                f"{path.name}:{number}: expected '<package> <test> #<issue>': {raw!r}"
+            )
         entries.append(KnownFailure(**match.groupdict()))
     return entries
 

@@ -98,6 +98,9 @@ impl PreparedExecCommand {
                 },
                 configured_shell,
                 command_platform,
+                // #443/#626 (D52): checked against the policy of the
+                // session's live level (Aggressive suspends approvals).
+                session.services.model_client().live_level_is_aggressive(),
             )
             .await
     }
@@ -211,8 +214,8 @@ impl<'a> ParsedExecCommand<'a> {
             environment: turn_environment,
             mut args,
             cwd,
+            native_cwd,
             sandbox_permissions,
-            ..
         } = self;
         // Remote environments may use a different OS and must build commands with their native
         // shell; fall back to the session shell when the environment did not report one.
@@ -256,6 +259,26 @@ impl<'a> ParsedExecCommand<'a> {
         let exec_permission_approvals_enabled =
             session.features().enabled(Feature::ExecPermissionApprovals);
         let requested_additional_permissions = args.additional_permissions.take();
+        // Issue #245: under Aggressive a protected path is never opened, so
+        // additional permissions naming one are refused before any grant is
+        // read. TODO(anp): Make permission matching operate on PathUri for
+        // remote environments.
+        let permission_cwd = native_cwd
+            .as_ref()
+            .unwrap_or(&step.turn.config.cwd)
+            .as_path();
+        if let Some(refusal) = crate::security::protected_reads::additional_permission_refusal(
+            session,
+            &step.turn,
+            requested_additional_permissions.as_ref(),
+            permission_cwd,
+        )
+        .await
+        {
+            crate::security::protected_reads::notify(session, &step.turn, refusal.clone()).await;
+            crate::security::protected_reads::record_permission_refusal(session);
+            return Err(FunctionCallError::RespondToModel(refusal));
+        }
         let sandbox_context =
             turn_environment.sandbox_context(/*additional_permissions*/ None);
         let permission_context = file_system_sandbox_policy_context_for_cwd(&sandbox_context, &cwd);

@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 """Test-only engine state machine; never copied into the application image."""
+
 import json
 import os
 import sys

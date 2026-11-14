@@ -10,9 +10,9 @@ from tempfile import TemporaryDirectory
 
 class RunBazelCiTest(unittest.TestCase):
     def test_sdk_stages_required_runtime_companions(self) -> None:
-        workflow = (
-            Path(__file__).parents[1] / "workflows" / "sdk.yml"
-        ).read_text(encoding="utf-8")
+        workflow = (Path(__file__).parents[1] / "workflows" / "sdk.yml").read_text(
+            encoding="utf-8"
+        )
 
         self.assertIn("//codex-rs/cli:codex", workflow)
         self.assertIn("//codex-rs/code-mode-host:codex-code-mode-host", workflow)
@@ -108,7 +108,9 @@ Path(os.environ["BAZEL_ARGS_CAPTURE"]).write_text(
 
             self.assertEqual(result.returncode, 2)
             self.assertIn("requires authenticated remote execution", result.stderr)
-            self.assertFalse(capture_path.exists(), "Bazel must not run with a false local fallback")
+            self.assertFalse(
+                capture_path.exists(), "Bazel must not run with a false local fallback"
+            )
 
     def test_keyless_native_windows_keeps_the_windows_test_skip_list(self) -> None:
         script = Path(__file__).with_name("run-bazel-ci.sh")
@@ -158,7 +160,9 @@ Path(os.environ["BAZEL_ARGS_CAPTURE"]).write_text(
             self.assertIn("--keep_going", args)
             self.assertNotIn("--config=ci-windows", args)
 
-    def run_with_exit_codes(self, exit_codes: list[int]) -> tuple[subprocess.CompletedProcess[str], int]:
+    def run_with_exit_codes(
+        self, exit_codes: list[int]
+    ) -> tuple[subprocess.CompletedProcess[str], int]:
         """Run the wrapper with a fake Bazel that exits with each code in turn."""
         script = Path(__file__).with_name("run-bazel-ci.sh")
 
@@ -172,7 +176,7 @@ Path(os.environ["BAZEL_ARGS_CAPTURE"]).write_text(
                 "java.log: NullPointerException at Example.java:1\n"
                 "args: --remote_header=x-buildbuddy-api-key=SECRET123 --config=ci\n"
                 "args: --remote_header x-buildbuddy-api-key=SECRET456\n"
-                "env: --client_env=BUILDBUDDY_API_KEY=\"SECRET789\"\n",
+                'env: --client_env=BUILDBUDDY_API_KEY="SECRET789"\n',
                 encoding="utf-8",
             )
             fake_bazel = temp_path / "bazel"

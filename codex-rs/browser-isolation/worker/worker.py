@@ -3,6 +3,7 @@
 No credentials, caller headers, host files, or browser profiles are accepted.
 All results remain untrusted. This is acquisition, not content sanitization.
 """
+
 import base64
 import contextlib
 import importlib.metadata
@@ -41,10 +42,16 @@ def verify_process_confinement():
     # Engine inspect can omit inherited defaults (notably disabled seccomp).
     # Check actual kernel state before any browser or untrusted input is loaded.
     with open("/proc/self/status") as handle:
-        status = dict(line.split(":", 1) for line in handle.read(16384).splitlines() if ":" in line)
-    if (status.get("Seccomp", "").strip() != "2"
-            or status.get("NoNewPrivs", "").strip() != "1"
-            or any(status.get(key, "").split() != ["65532"] * 4 for key in ("Uid", "Gid"))):
+        status = dict(
+            line.split(":", 1)
+            for line in handle.read(16384).splitlines()
+            if ":" in line
+        )
+    if (
+        status.get("Seccomp", "").strip() != "2"
+        or status.get("NoNewPrivs", "").strip() != "1"
+        or any(status.get(key, "").split() != ["65532"] * 4 for key in ("Uid", "Gid"))
+    ):
         raise ValueError("confinement")
     for key in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"):
         if key not in status or int(status[key].strip(), 16) != 0:
@@ -69,6 +76,7 @@ def probe():
             raise ValueError("network")
     # Launch the actual packaged Chromium, not just an interpreter/version probe.
     from playwright.sync_api import sync_playwright
+
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
         page = browser.new_page()
@@ -81,6 +89,7 @@ def probe():
 
 def acquire():
     from scrapling.fetchers import DynamicFetcher
+
     job = receive()
     if set(job) != {"url"} or not isinstance(job["url"], str) or len(job["url"]) > 4096:
         raise ValueError("request")
@@ -128,11 +137,21 @@ def acquire():
     with tempfile.TemporaryDirectory(prefix="profile-") as profile:
         with contextlib.redirect_stdout(sys.stderr):
             DynamicFetcher.fetch(
-                job["url"], headless=True, timeout=20000, google_search=False, retries=1,
-                user_data_dir=profile, page_setup=setup, page_action=capture,
+                job["url"],
+                headless=True,
+                timeout=20000,
+                google_search=False,
+                retries=1,
+                user_data_dir=profile,
+                page_setup=setup,
+                page_action=capture,
                 additional_args={"service_workers": "block", "accept_downloads": False},
-                extra_flags=["--no-sandbox", "--disable-background-networking",
-                             "--disable-extensions", "--disable-sync"],
+                extra_flags=[
+                    "--no-sandbox",
+                    "--disable-background-networking",
+                    "--disable-extensions",
+                    "--disable-sync",
+                ],
             )
     if not installed or captured is None:
         raise ValueError("acquisition")
