@@ -20,7 +20,10 @@ struct ControlledProcess {
 }
 
 impl ControlledProcess {
-    fn handle(first: FirstTerminate) -> (Arc<Self>, StdioServerProcessHandle) {
+    // Upstream's executor launcher hands out `Arc<StdioServerProcessHandle>`; cloning the
+    // `Arc` is the shared handle main's `Clone` gives, and the struct's `Drop` runs on the last
+    // one.
+    fn handle(first: FirstTerminate) -> (Arc<Self>, Arc<StdioServerProcessHandle>) {
         let process = Arc::new(Self {
             id: ProcessId::from("owned-test-process"),
             first,
