@@ -4189,3 +4189,7 @@ mod tainted_action_option_glob_tests;
 #[cfg(test)]
 #[path = "tainted_action_timing_probe_tests.rs"]
 mod tainted_action_timing_probe_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_assignment_boundary_tests.rs"]
+mod tainted_action_assignment_boundary_tests;
