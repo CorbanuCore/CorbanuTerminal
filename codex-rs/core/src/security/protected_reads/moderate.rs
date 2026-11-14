@@ -285,7 +285,17 @@ fn explain_denied(
             )
         })
         // #621: a path built at run time that the denial line reports.
-        .or_else(|| super::path_in_lines(command, cwd, user_home, codex_home, lines, &read));
+        .or_else(|| {
+            super::path_in_lines(
+                command,
+                cwd,
+                user_home,
+                codex_home,
+                lines,
+                &read,
+                super::DenialPathScope::ProtectedPath,
+            )
+        });
     if let Some(word) = read_word {
         let path = found.take();
         let kept = path

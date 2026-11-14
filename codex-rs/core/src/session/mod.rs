@@ -3206,13 +3206,49 @@ impl Session {
 
     /// Persist the event to rollout and send it to clients.
     pub(crate) async fn send_event(&self, turn_context: &TurnContext, msg: EventMsg) {
+        self.send_event_with_warning_ack(
+            turn_context,
+            msg,
+            /*on_warning_delivered*/ None::<fn()>,
+        )
+        .await;
+    }
+
+    /// Acknowledge a primary warning only after its gated form is enqueued,
+    /// before cancellation can interrupt any subsequent event processing.
+    pub(crate) async fn send_warning_with_delivery_ack(
+        &self,
+        turn_context: &TurnContext,
+        warning: WarningEvent,
+        on_delivered: impl FnOnce() + Send,
+    ) {
+        self.send_event_with_warning_ack(
+            turn_context,
+            EventMsg::Warning(warning),
+            Some(on_delivered),
+        )
+        .await;
+    }
+
+    async fn send_event_with_warning_ack(
+        &self,
+        turn_context: &TurnContext,
+        msg: EventMsg,
+        mut on_warning_delivered: Option<impl FnOnce() + Send>,
+    ) {
         // PF-28-S01: gate before traces, rollout, realtime mirroring and clients.
         for msg in crate::security::disclosure_gate::gate_event(&turn_context.sub_id, msg) {
-            self.send_gated_event(turn_context, msg).await;
+            self.send_gated_event(turn_context, msg, &mut on_warning_delivered)
+                .await;
         }
     }
 
-    async fn send_gated_event(&self, turn_context: &TurnContext, msg: EventMsg) {
+    async fn send_gated_event(
+        &self,
+        turn_context: &TurnContext,
+        msg: EventMsg,
+        on_warning_delivered: &mut Option<impl FnOnce() + Send>,
+    ) {
         if let Some((item_id, started_at_ms)) = msg.command_approval_start() {
             // The client can see the command before execution. Keep its first start
             // for the canonical lifecycle events that will be saved in history.
@@ -3262,7 +3298,8 @@ impl Session {
                 .analytics_events_client
                 .track_guardian_session_event(self.thread_id, &event);
         }
-        self.send_event_raw(event).await;
+        self.send_event_raw_with_persistence(event, /*persist*/ true, on_warning_delivered)
+            .await;
         self.maybe_notify_parent_of_terminal_turn(turn_context, &legacy_source)
             .await;
         self.maybe_mirror_event_text_to_realtime(&legacy_source)
@@ -3422,7 +3459,7 @@ impl Session {
     }
 
     pub(crate) async fn send_event_raw(&self, event: Event) {
-        self.send_event_raw_with_persistence(event, /*persist*/ true)
+        self.send_event_raw_with_persistence(event, /*persist*/ true, &mut None::<fn()>)
             .await;
     }
 
@@ -3430,7 +3467,7 @@ impl Session {
     /// notice about this session's own start that a later reopen must not
     /// replay as if it had happened again.
     pub(crate) async fn send_event_raw_unpersisted(&self, event: Event) {
-        self.send_event_raw_with_persistence(event, /*persist*/ false)
+        self.send_event_raw_with_persistence(event, /*persist*/ false, &mut None::<fn()>)
             .await;
     }
 
@@ -3444,15 +3481,22 @@ impl Session {
                 true
             }
         };
-        self.send_event_raw_with_persistence(event, persist).await;
+        self.send_event_raw_with_persistence(event, persist, &mut None::<fn()>)
+            .await;
     }
 
-    async fn send_event_raw_with_persistence(&self, event: Event, persist: bool) {
+    async fn send_event_raw_with_persistence(
+        &self,
+        event: Event,
+        persist: bool,
+        on_warning_delivered: &mut Option<impl FnOnce() + Send>,
+    ) {
         let mut event = event;
         match crate::security::disclosure_gate::gate_presented(event.msg) {
             Some(msg) => event.msg = msg,
             None => return,
         }
+        let is_warning = matches!(&event.msg, EventMsg::Warning(_));
         let flush_guardian_completion = persist
             && matches!(event.msg, EventMsg::TurnComplete(_))
             && self.is_private_guardian_reviewer().await;
@@ -3500,7 +3544,15 @@ impl Session {
         if flush_guardian_completion && let Err(err) = self.flush_rollout().await {
             warn!("failed to flush completed Guardian review: {err}");
         }
-        self.deliver_event_raw(event).await;
+        let delivered = self.deliver_event_raw(event).await;
+        // A withheld/replaced warning or a failed enqueue is not delivery.
+        // No await may separate successful enqueue from this acknowledgment.
+        if delivered
+            && is_warning
+            && let Some(on_delivered) = on_warning_delivered.take()
+        {
+            on_delivered();
+        }
     }
 
     /// Sets the agent status a later event would set, for tests that need a
@@ -3510,7 +3562,7 @@ impl Session {
         self.agent_status.send_replace(status);
     }
 
-    async fn deliver_event_raw(&self, event: Event) {
+    async fn deliver_event_raw(&self, event: Event) -> bool {
         if let Some(parent_tx) = self.parent_observer_event_tx.get() {
             let forwarded = match &event.msg {
                 EventMsg::RawResponseItem(item) => {
@@ -3539,8 +3591,12 @@ impl Session {
         if let Some(status) = agent_status_from_event(&event.msg) {
             self.agent_status.send_replace(status);
         }
-        if let Err(e) = self.tx_event.send(event).await {
-            debug!("dropping event because channel is closed: {e}");
+        match self.tx_event.send(event).await {
+            Ok(()) => true,
+            Err(e) => {
+                debug!("dropping event because channel is closed: {e}");
+                false
+            }
         }
     }
 
@@ -7399,6 +7455,10 @@ pub(crate) mod tests;
 #[cfg(test)]
 #[path = "pending_mailbox_wake_tests.rs"]
 mod pending_mailbox_wake_tests;
+
+#[cfg(test)]
+#[path = "stale_poll_mail_tests.rs"]
+mod stale_poll_mail_tests;
 
 #[cfg(test)]
 #[path = "account_switch_tests.rs"]

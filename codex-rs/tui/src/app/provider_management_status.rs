@@ -196,6 +196,7 @@ impl App {
         // The asynchronous discovery may have settled after the picker cached
         // its eligibility snapshot. Publish the same status result to both UIs.
         self.model_catalog.update_provider_statuses(&statuses);
+        self.chat_widget.refresh_open_model_picker();
         let selected_index = self.chat_widget.provider_manager_selected_index();
         let selected_provider =
             selected_index.and_then(|index| self.provider_manager_row_provider(index));
