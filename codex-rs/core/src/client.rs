@@ -3185,6 +3185,12 @@ impl ModelClientSession {
         Arc::clone(&self.turn_state)
     }
 
+    /// The provider this session's requests go through, with the credential
+    /// cache they use (a command-backed credential is cached per provider).
+    pub(crate) fn provider(&self) -> &SharedModelProvider {
+        &self.client.state.provider
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn serialized_request_body_bytes(
         &self,
