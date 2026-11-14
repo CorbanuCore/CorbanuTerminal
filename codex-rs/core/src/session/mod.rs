@@ -4744,7 +4744,7 @@ impl Session {
     /// it: without protected paths while the protected-path rules apply. A
     /// grant recorded before they applied (the level raised mid-session)
     /// cannot reopen one either.
-    async fn usable_grant(
+    pub(crate) async fn usable_grant(
         &self,
         granted: Option<AdditionalPermissionProfile>,
     ) -> Option<AdditionalPermissionProfile> {

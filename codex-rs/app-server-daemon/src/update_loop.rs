@@ -626,12 +626,7 @@ async fn run_installer_script(
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
-<<<<<<< HEAD
         .context("failed to invoke standalone Corbanu Terminal updater")?;
-||||||| 413492cd6c
-        .context("failed to invoke standalone Codex updater")?;
-=======
-        .context("failed to invoke standalone Codex updater")?;
     let mut stderr = child
         .stderr
         .take()
@@ -669,22 +664,10 @@ async fn run_installer_script(
     });
     #[cfg(windows)]
     let _installer_job = crate::backend::windows::installer_job(&child)?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut stdin = child
         .stdin
         .take()
         .context("standalone Codex updater stdin was unavailable")?;
-<<<<<<< HEAD
-    stdin
-        .write_all(&script)
-        .await
-        .context("failed to pass standalone Corbanu Terminal updater to shell")?;
-||||||| 413492cd6c
-    stdin
-        .write_all(&script)
-        .await
-        .context("failed to pass standalone Codex updater to shell")?;
-=======
     #[cfg(unix)]
     let mut terminate = std::pin::pin!(terminate);
     #[cfg(unix)]
@@ -694,19 +677,7 @@ async fn run_installer_script(
     };
     #[cfg(windows)]
     let write_result = Some(stdin.write_all(script).await);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     drop(stdin);
-<<<<<<< HEAD
-    let status = child
-        .wait()
-        .await
-        .context("failed to wait for standalone Corbanu Terminal updater")?;
-||||||| 413492cd6c
-    let status = child
-        .wait()
-        .await
-        .context("failed to wait for standalone Codex updater")?;
-=======
     #[cfg(unix)]
     if write_result.is_none() {
         cancel_installer(&mut child, package_root).await;
@@ -715,7 +686,7 @@ async fn run_installer_script(
     }
     if let Some(Err(err)) = write_result {
         stderr_task.abort();
-        return Err(err).context("failed to pass standalone Codex updater to shell");
+        return Err(err).context("failed to pass standalone Corbanu Terminal updater to shell");
     }
     #[cfg(unix)]
     let status = tokio::select! {
@@ -731,20 +702,14 @@ async fn run_installer_script(
         Ok(status) => status,
         Err(err) => {
             stderr_task.abort();
-            return Err(err).context("failed to wait for standalone Codex updater");
+            return Err(err).context("failed to wait for standalone Corbanu Terminal updater");
         }
     };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     if status.success() {
         stderr_task.abort();
         Ok(UpdateLoopControl::Continue)
     } else {
-<<<<<<< HEAD
-        anyhow::bail!("standalone Corbanu Terminal updater exited with status {status}")
-||||||| 413492cd6c
-        anyhow::bail!("standalone Codex updater exited with status {status}")
-=======
         let _ = tokio::time::timeout(INSTALLER_STDERR_DRAIN_TIMEOUT, &mut stderr_task).await;
         stderr_task.abort();
         let bytes = stderr_tail
@@ -754,10 +719,9 @@ async fn run_installer_script(
         let detail = String::from_utf8_lossy(&bytes);
         let detail = detail.trim();
         if detail.is_empty() {
-            anyhow::bail!("standalone Codex updater exited with status {status}")
+            anyhow::bail!("standalone Corbanu Terminal updater exited with status {status}")
         }
-        anyhow::bail!("standalone Codex updater exited with status {status}:\n{detail}")
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        anyhow::bail!("standalone Corbanu Terminal updater exited with status {status}:\n{detail}")
     }
 }
 
