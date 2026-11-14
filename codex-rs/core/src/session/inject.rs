@@ -301,6 +301,37 @@ impl Session {
         (annotated_items, image_preparations)
     }
 
+    /// #1927: held user input a running turn refused goes to that turn's deferred input (it
+    /// is re-admitted when the turn ends); with no running turn it returns to re-admission.
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "active turn checks and turn state updates must remain atomic"
+    )]
+    pub(crate) async fn defer_held_input(
+        &self,
+        input: PendingTurnInput,
+        final_output_json_schema: Option<serde_json::Value>,
+    ) {
+        let active = self.active_turn.lock().await;
+        if let Some(active_turn) = active
+            .as_ref()
+            .filter(|turn| turn.task.is_some() && turn.finishing.is_none())
+        {
+            self.input_queue
+                .defer_input_for_turn_state(
+                    active_turn.turn_state.as_ref(),
+                    vec![input],
+                    final_output_json_schema,
+                )
+                .await;
+            return;
+        }
+        drop(active);
+        self.input_queue
+            .requeue_interrupted_input(input, final_output_json_schema)
+            .await;
+    }
+
     /// Injects items into active work, or records them without starting a turn.
     pub(crate) async fn inject_no_new_turn(
         &self,

@@ -503,12 +503,17 @@ async fn readmit_interrupted_input(
             client_id,
             metadata,
         } => {
+            let held = TurnInput::UserInput {
+                content: content.clone(),
+                client_id: client_id.clone(),
+                metadata: metadata.clone(),
+            };
             let request = codex_protocol::turn_input::TurnInputRequest {
                 input: codex_protocol::turn_input::TurnInput::UserInput { content, client_id },
                 user_item_uuid: metadata.response_item_uuid,
                 thread_settings: Default::default(),
                 start: codex_protocol::turn_input::TurnStartOptions {
-                    final_output_json_schema,
+                    final_output_json_schema: final_output_json_schema.clone(),
                     ..Default::default()
                 },
                 additional_context: Default::default(),
@@ -523,6 +528,20 @@ async fn readmit_interrupted_input(
             )
             .await;
             let message = match result {
+                // A running turn that cannot take the input now (a review or compaction, other
+                // permissions under D532, another output schema) gets it for its next turn,
+                // as a refused follow-up does under D529 (a): held input is never dropped.
+                Ok(codex_protocol::turn_input::TurnInputSubmission::NotSubmitted {
+                    reason:
+                        codex_protocol::turn_input::NotSubmittedReason::AuthorizationChanged
+                        | codex_protocol::turn_input::NotSubmittedReason::ActiveTurnNotSteerable {
+                            ..
+                        }
+                        | codex_protocol::turn_input::NotSubmittedReason::ActiveTurnOutputSchemaMismatch,
+                }) => {
+                    sess.defer_held_input(held, final_output_json_schema).await;
+                    return;
+                }
                 Ok(codex_protocol::turn_input::TurnInputSubmission::NotSubmitted { reason }) => {
                     format!("Held input was not submitted: {reason:?}")
                 }
@@ -538,6 +557,16 @@ async fn readmit_interrupted_input(
         }
         TurnInput::ResponseItem(item) | TurnInput::FunctionCallOutput(item) => {
             if let Err(items) = sess.inject_extension_if_running(vec![item]).await {
+                // Never interleave with a turn that is still finishing.
+                let finishing = sess
+                    .active_turn
+                    .lock()
+                    .await
+                    .as_ref()
+                    .and_then(|turn| turn.finishing.clone());
+                if let Some(finishing) = finishing {
+                    finishing.cancelled().await;
+                }
                 let context = sess.new_default_turn().await;
                 sess.record_annotated_conversation_items(&context, context.model_info(), items)
                     .await;
@@ -720,6 +749,10 @@ pub(super) async fn submission_loop(
                         Ok(codex_protocol::turn_input::SuspendTurnOutcome::Suspended { .. })
                     );
                     let _ = reply.send(result);
+                    if should_exit {
+                        // #872: nothing writes this thread's items after its suspension.
+                        crate::home_access::note_thread_ended(sess.thread_id());
+                    }
                     should_exit
                 }
                 Op::ThreadSettings {

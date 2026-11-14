@@ -1402,6 +1402,14 @@ impl ThreadManager {
                 )
                 .await?;
         }
+        // D530 (a): a child pane on a controller without the local backend is refused before
+        // it is spawned.
+        if matches!(
+            request.options.session_source,
+            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. }))
+        ) {
+            request.agent_control.control().local_or_unsupported()?;
+        }
         let configured_child_security_level = request.options.config.security_level;
         let new_thread = Box::pin(self.state.spawn_thread(request)).await?;
         let agent_control = Arc::clone(&new_thread.thread.session.services.agent_control);
