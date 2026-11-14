@@ -8,16 +8,6 @@ pub(super) use request::ReviewAuthorization;
 use codex_analytics::GuardianApprovalRequestSource;
 use codex_analytics::GuardianReviewAnalyticsResult;
 use codex_core_plugins::PluginCommandAttribution;
-<<<<<<< HEAD
-use codex_model_provider::DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL;
-use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::CodexErrorInfo;
-||||||| 413492cd6c
-use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::CodexErrorInfo;
-=======
 use codex_features::Feature;
 use codex_guardian_reviewer::GuardianAssessment;
 use codex_guardian_reviewer::GuardianReviewError;
@@ -31,7 +21,6 @@ use codex_guardian_reviewer::run_before_review_deadline;
 use codex_guardian_reviewer::run_with_retry;
 use codex_prompts::ResolvedModelMessages;
 use codex_protocol::openai_models::GuardianScope;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ReviewDecision;
 use std::sync::Arc;
@@ -130,135 +119,10 @@ pub(super) async fn guardian_review_session_config(
         super::reviewer_config::resolve_review_model(session, context).await;
     let reviewer_config = session
         .services
-<<<<<<< HEAD
-        .models_manager
-        .list_models(
-            codex_models_manager::manager::RefreshStrategy::Offline,
-            turn.config.http_client_factory(),
-        )
-        .await;
-    let provider_review_model_id = turn.provider.approval_review_preferred_model();
-    let default_review_model_id = turn.provider.resolve_background_helper_model(
-        provider_review_model_id,
-        DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL,
-        turn.model_info.slug.as_str(),
-    );
-    let preferred_reasoning_effort = |supports_low: bool, fallback| {
-        if supports_low {
-            Some(codex_protocol::openai_models::ReasoningEffort::Low)
-        } else {
-            fallback
-        }
-    };
-    let model_override = turn.model_info.auto_review_model_override.as_deref();
-    let review_model_id = model_override.unwrap_or(default_review_model_id.as_str());
-    let review_model = available_models
-        .iter()
-        .find(|preset| preset.model == review_model_id);
-    let guardian_catalog_contains_auto_review = available_models
-        .iter()
-        .any(|preset| preset.model == default_review_model_id);
-    let guardian_review_model_overridden = model_override.is_some();
-    let guardian_review_model_override = model_override.map(str::to_string);
-    let (guardian_model, guardian_reasoning_effort) = if let Some(preset) = review_model {
-        let reasoning_effort = preferred_reasoning_effort(
-            preset
-                .supported_reasoning_efforts
-                .iter()
-                .any(|effort| effort.effort == codex_protocol::openai_models::ReasoningEffort::Low),
-            Some(preset.default_reasoning_effort.clone()),
-        );
-        (review_model_id.to_string(), reasoning_effort)
-    } else {
-        let reasoning_effort = preferred_reasoning_effort(
-            turn.model_info
-                .supported_reasoning_levels
-                .iter()
-                .any(|preset| preset.effort == codex_protocol::openai_models::ReasoningEffort::Low),
-            turn.reasoning_effort
-                .clone()
-                .or_else(|| turn.model_info.default_reasoning_level.clone()),
-        );
-        (
-            model_override
-                .unwrap_or(turn.model_info.slug.as_str())
-                .to_string(),
-            reasoning_effort,
-        )
-    };
-
-    let guardian_model_info = crate::model_info_for_provider::model_info_for_config(
-        &session.services.models_manager,
-        guardian_model.as_str(),
-        &turn.config,
-    )
-    .await;
-||||||| 413492cd6c
-        .models_manager
-        .list_models(
-            codex_models_manager::manager::RefreshStrategy::Offline,
-            turn.config.http_client_factory(),
-        )
-        .await;
-    let default_review_model_id = turn.provider.approval_review_preferred_model();
-    let preferred_reasoning_effort = |supports_low: bool, fallback| {
-        if supports_low {
-            Some(codex_protocol::openai_models::ReasoningEffort::Low)
-        } else {
-            fallback
-        }
-    };
-    let model_override = turn.model_info.auto_review_model_override.as_deref();
-    let review_model_id = model_override.unwrap_or(default_review_model_id);
-    let review_model = available_models
-        .iter()
-        .find(|preset| preset.model == review_model_id);
-    let guardian_catalog_contains_auto_review = available_models
-        .iter()
-        .any(|preset| preset.model == default_review_model_id);
-    let guardian_review_model_overridden = model_override.is_some();
-    let guardian_review_model_override = model_override.map(str::to_string);
-    let (guardian_model, guardian_reasoning_effort) = if let Some(preset) = review_model {
-        let reasoning_effort = preferred_reasoning_effort(
-            preset
-                .supported_reasoning_efforts
-                .iter()
-                .any(|effort| effort.effort == codex_protocol::openai_models::ReasoningEffort::Low),
-            Some(preset.default_reasoning_effort.clone()),
-        );
-        (review_model_id.to_string(), reasoning_effort)
-    } else {
-        let reasoning_effort = preferred_reasoning_effort(
-            turn.model_info
-                .supported_reasoning_levels
-                .iter()
-                .any(|preset| preset.effort == codex_protocol::openai_models::ReasoningEffort::Low),
-            turn.reasoning_effort
-                .clone()
-                .or_else(|| turn.model_info.default_reasoning_level.clone()),
-        );
-        (
-            model_override
-                .unwrap_or(turn.model_info.slug.as_str())
-                .to_string(),
-            reasoning_effort,
-        )
-    };
-
-    let guardian_model_info = session
-        .services
-        .models_manager
-        .get_model_info(
-            guardian_model.as_str(),
-            &turn.config.to_models_manager_config(),
-        )
-        .await;
-=======
         .thread_extension_data
         .get::<codex_guardian_reviewer::ReviewerConfig<crate::config::Config>>()
         .ok_or_else(|| anyhow::anyhow!("Guardian reviewer configuration is not installed"))?;
     let model_messages = ResolvedModelMessages::from_model(&guardian_model_info);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut spawn_config = build_guardian_review_session_config(
         (reviewer_config.0)(turn.config.as_ref())?,
         live_network_config,
