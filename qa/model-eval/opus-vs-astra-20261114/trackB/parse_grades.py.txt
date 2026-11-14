@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Parse grader SCORES blocks, unblind with blind-key.md, write grade/rubric.json + grade/agreement.md."""
+import json
+import re
+from pathlib import Path
+
+B = Path(__file__).resolve().parent
+DIMS = ["correctness", "security_rules", "test_quality", "scope", "clarity", "honesty"]
+key = {}
+for line in (B / "blind-key.md").read_text().splitlines():
+    m = re.match(r"\| (\w+) \| (opus|astra) \| (opus|astra) \|", line)
+    if m:
+        key[m.group(1).lower()] = {"X": m.group(2), "Y": m.group(3)}
+rub, prefs = {}, {}
+for t in ["b1", "b2", "b3", "b4", "b1r"]:
+    for g in ["opus", "astra"]:
+        f = B / "grade" / t / f"grader-{g}.md"
+        if not f.exists():
+            continue
+        s = f.read_text()
+        block = s[s.rfind("SCORES"):]
+        for side in ("X", "Y"):
+            m = re.search(rf"^{side} (.*)$", block, re.M)
+            if not m:
+                continue
+            sc = {k: int(v) for k, v in re.findall(r"(\w+)=(\d)", m.group(1))}
+            rub.setdefault(t, {}).setdefault(g, {})[key[t][side]] = sc
+        p = re.search(r"PREFERENCE:\s*(X|Y|tie)", block)
+        if p:
+            prefs.setdefault(t, {})[g] = key[t].get(p.group(1), "tie") if p.group(1) != "tie" else "tie"
+(B / "grade" / "rubric.json").write_text(json.dumps(rub, indent=1))
+(B / "grade" / "prefs.json").write_text(json.dumps(prefs, indent=1))
+# agreement + self-preference
+lines = ["| Task | Opus grader prefers | Astra grader prefers | Agree? |", "|---|---|---|---|"]
+diffs, n, exact = [], 0, 0
+for t, p in prefs.items():
+    lines.append(f"| {t.upper()} | {p.get('opus', '-')} | {p.get('astra', '-')} | {'yes' if p.get('opus') == p.get('astra') else 'no'} |")
+for t, r in rub.items():
+    if "opus" in r and "astra" in r:
+        for m in ("opus", "astra"):
+            for d in DIMS:
+                a, b = r["opus"][m][d], r["astra"][m][d]
+                diffs.append(abs(a - b)); n += 1; exact += a == b
+gaps = []
+for t, r in rub.items():
+    if "opus" in r and "astra" in r:
+        mo = sum(r["opus"]["opus"].values()) - sum(r["opus"]["astra"].values())
+        ma = sum(r["astra"]["opus"].values()) - sum(r["astra"]["astra"].values())
+        gaps.append((t.upper(), mo, ma, mo - ma))
+lines.append("")
+if n:
+    lines.append(f"Score agreement over {n} paired dimension scores: exact {exact}/{n}, mean absolute difference {sum(diffs) / n:.2f}.")
+lines.append("")
+lines.append("Self-preference check (totals out of 30): margin = Opus work total minus Astra work total.")
+lines.append("")
+lines.append("| Task | Margin by Opus grader | Margin by Astra grader | Gap (positive = each grader leans to its own model) |")
+lines.append("|---|---|---|---|")
+for g in gaps:
+    lines.append(f"| {g[0]} | {g[1]:+d} | {g[2]:+d} | {g[3]:+d} |")
+(B / "grade" / "agreement.md").write_text("\n".join(lines) + "\n")
+print("\n".join(lines))

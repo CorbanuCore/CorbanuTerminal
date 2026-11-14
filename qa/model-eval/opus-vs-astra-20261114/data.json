@@ -1,20 +1,23 @@
 {
  "title": "Opus 5.5 High vs Astra High on our own work (2026-11-14)",
- "status": "Version 1 (progress): Track A (review benchmark) is scored. Track B (paired implementation and blind grading) is still running; its sections fill in when it finishes. Prepared by bench-1114.",
+ "status": "Final version, 2026-11-14 (prepared by bench-1114). Track A (review benchmark) and Track B (paired implementation, hidden checks, blinded two-grader rubric) are complete. A small variance rerun of B1 is reported separately.",
  "summary_html": [
-  "<b>Question.</b> Can Astra High (gpt-6-astra, reasoning high) take some of the work Opus 5.5 High does now, so we get more done? We tested both models on our real work: reviews of past pull requests where we already know the bug (Track A), and the same implementation tasks given to both (Track B).",
-  "<b>Track A result.</b> Astra High found more of the known bugs: 6 of 8 fully, against Opus's 3 fully and 2 partly. On the three security-classifier changes, Astra found the known bug all 3 times; Opus found none fully and one partly. Opus did better on reading user-interface and agent-control code, where it found more of each bug's related parts. Both missed the dependency-upgrade bug (#1962). Each model gave one wrong verdict on top of that: Opus approved a change with a real bug (#1055), and Astra blocked a clean change (#1944) over a point that is technically right but low-impact.",
-  "<b>Careful:</b> 8 bugs and 2 clean controls, one run per model, is a small sample. Three of the eight bugs were first found by Astra during the November 11 reviews, so this set may favour Astra. Read the result as \"Astra is a credible first reviewer\", not \"Astra is better than Opus\"."
+  "<b>Question.</b> Can Astra High (gpt-6-astra, reasoning high) take some of the work Opus 5.5 High does now, so we get more done? We tested both models on our own work. Track A: reviews of 10 past pull requests where we already know the answer. Track B: 4 identical implementation tasks, checked with hidden tests and graded blind by one Opus grader and one Astra grader.",
+  "<b>Short answer: yes, for most everyday work, with Opus still doing the final review.</b> Astra was at least as good as Opus on almost everything we measured. Neither model was reliable enough to work without a second reviewer.",
+  "<b>Reviews (Track A).</b> Astra found more of the known bugs: 6 of 8 fully, against Opus's 3 fully and 2 partly. It was strongest on security-classifier code (3 of 3; Opus 0 fully, 1 partly). Opus raised more additional real issues (23 against 14) and was stronger on agent-control/TUI code. Both missed one dependency-upgrade bug. Opus wrongly approved one buggy change. Astra blocked one 'clean' control, and two graders later judged its reason a real, previously unnoticed issue (#1944, see Decisions).",
+  "<b>Implementation (Track B).</b> Both models passed the hidden checks on 3 of 4 tasks, and both missed the same detail on the fourth (B2: the open model picker should keep the tab the person was on). On the blind rubric, both graders preferred Astra's work on B1 and B4 and Opus's on B3, and split on B2. On the security-classifier task (B4), Opus's change made 4 shell lines quieter than before, against the task's explicit rule; Astra kept the old verdict as a floor. Opus's sync resolution (B3) and its tests were better. Each model took 1.5 hours of wall time; Astra used about 40% more tokens.",
+  "<b>Careful:</b> this is a small sample: 8 known bugs, 2 controls and 4 tasks, mostly one run each. Three of the known bugs were first found by Astra, and four by Opus. The graders showed a mild lean towards their own model's work. Treat the differences as tendencies, not rankings."
  ],
  "trackA": {
   "intro_html": [
    "We took 8 past pull requests where an independent review found a real bug that was then confirmed and fixed, plus 2 merged pull requests where nothing was ever found (controls). We put each one back at the exact version that had the bug. Each model got the same neutral brief (\"find defects, give severity and file:line, end with a verdict\"), with no hint of the bug, in a copy of the repository that contained no later history. We wrote the answer key and froze it (sha256 recorded) before any model ran.",
-   "<b>Scoring:</b> \"found\" means the review named the bug's mechanism and place. \"Partly\" means the right area or one of two main bugs. Extra findings were checked against the code. When we could not settle one by reading, it was marked uncertain and sent to blinded grading."
+   "<b>Scoring:</b> \"found\" means the review named the bug's mechanism and place; \"partly\" means the right area or one of two main bugs. Extra findings were checked against the code. The 13 we could not settle ourselves went, unattributed, to both graders, who rated all 13 real."
   ],
   "notes_html": [
    "<b>Where each model was stronger.</b> Astra found three security-classifier bugs that Opus missed or only partly found (#1837, #1055, #2133), including the exact line in #2133. Opus covered more related parts in the agent-control bug (#1175: it also found the kill-switch re-check) and partly found the #1171 bug that Astra missed. Both found the dropped network settings in the sync resolution (#2043) and the Windows test bug (#1889).",
    "<b>Both missed #1962</b>, a lock-file-only upgrade of assert_cmd. In the new version, an unchanged helper's call panics where it used to return an error. The new version's source was not on disk and the network was off, so this tests prior knowledge more than review skill.",
-   "<b>Wrong verdicts:</b> Opus approved #1055, which has a real defect. Astra blocked the clean control #1944, saying <code>GIT_ALLOW_PROTOCOL=file</code> re-allows local-file submodule clones that git blocks by default. Git's documentation supports that, but the sandboxed command could read those files directly anyway, so a blocking verdict is too strong. Astra was more willing to block; Opus was more willing to approve."
+   "<b>Verdicts.</b> Opus approved two changes that had real bugs (#1962, #1055); Astra approved one (#1962). On the control #1944, Astra requested changes. Its reason was that <code>GIT_ALLOW_PROTOCOL=file</code> re-allows local-file submodule clones that git blocks by default. Both blinded graders later judged this real (medium by the Opus grader, high by the Astra grader). So it is not a false alarm, and #1944 was probably not as clean as we thought. We show its verdict as debatable rather than wrong.",
+   "<b>Extra findings.</b> Beyond the known bugs, Opus raised 23 real issues and Astra 14, with no false ones (after grading). Opus tends to list more related problems; Astra tends to focus on the main defect. Using both as reviewers would combine the two."
   ],
   "cases": [
    {
@@ -209,9 +212,9 @@
       "tokens": 89047
      },
      "astra": {
-      "detect": "fp",
+      "detect": "newreal",
       "verdict": "REQ",
-      "verdict_ok": false,
+      "verdict_ok": null,
       "wall": 187,
       "tokens": 85534
      }
@@ -225,8 +228,8 @@
     "missed": 3,
     "verdict_ok": 8,
     "n": 10,
-    "real_extras": 16,
-    "uncertain_extras": 7,
+    "real_extras": 23,
+    "uncertain_extras": 0,
     "false_alarms": 0,
     "sev_ok": 5,
     "wall": 1605,
@@ -243,16 +246,16 @@
     "partial": 0,
     "missed": 2,
     "verdict_ok": 8,
-    "n": 10,
-    "real_extras": 8,
-    "uncertain_extras": 6,
-    "false_alarms": 1,
+    "n": 9,
+    "real_extras": 14,
+    "uncertain_extras": 0,
+    "false_alarms": 0,
     "sev_ok": 6,
     "wall": 1768,
     "tokens": 877139,
     "detect_txt": "6 full, 0 partial, 2 missed (of 8)",
     "score_txt": "6.0 / 8",
-    "verdict_txt": "8 / 10",
+    "verdict_txt": "8 / 9 (A10 debatable, excluded)",
     "wall_txt": "29 min total (2.9 min per review)",
     "tok_txt": "877k total (88k per review)",
     "sev_txt": "6 of 6 found defects"
@@ -302,14 +305,149 @@
    "Four tasks, each done once by each model, in separate copies of the repository from the same starting commit. B1 and B2 re-implement fixes we merged recently (#2046 guardian stop gap, #2102 provider picker refresh), starting from the issue text alone. B3 resolves a real upstream-sync conflict (codex-agent-roles, as in #2059). B4 is a fresh open issue (#2018, classifier brace groups). Hidden check: the merged fix's own tests (or compile and clippy for B3), run on each solution afterwards. Rubric: two blinded graders (one Opus, one Astra) scored each pair of solutions labelled only X and Y."
   ],
   "notes_html": [
-   "Track B is still running at version 1."
+   "<b>B1 (#2046, core concurrency).</b> Both solutions pass the merged fix's hidden tests (2/2), and each one's own test fails before and passes after. Both graders preferred Astra's: it holds the turn lock for the whole ownership check, with fuller assertions. Opus's report wrongly said strict clippy fails with the pinned toolchain; our rerun with 1.99.1 passes for both. The 1.95.0 default on the worker machines does fail, on 10 errors in files neither solution touched (see Decisions).",
+   "<b>B2 (#2102, TUI).</b> Both solutions fail the same hidden snapshot test. When OpenAI comes back while the model picker is open on the Claude Plan tab, both pickers jump to the OpenAI tab; the merged fix keeps the person's tab, which the issue asks for. Each solution's own \"keeps tab\" test covered a different case. The graders split, each preferring its own model's work. Astra also added a QA reliability note, and Opus left a tidier diff.",
+   "<b>B3 (sync conflict, codex-agent-roles).</b> Both resolutions are byte-identical to the maintainers' merged resolution in <code>agent-roles/src</code>. Both compile, pass clippy and pass the hidden behaviour test (3/3). Opus also added 97 lines of tests; Astra added none. Both graders preferred Opus's.",
+   "<b>B4 (#2018, security classifier, fresh issue).</b> Both pass the full classifier suite (905 and 907 tests) and clippy, and both have new tests that fail before and pass after. Both graders preferred Astra's. Opus's simpler fix makes <code>! { echo ok; } | bash</code> and <code>time { echo ok; } | bash</code> quieter than before (UnseenCode \u2192 nothing). We confirmed this with a probe after grading; it breaks the task's \"never quieter\" rule. Astra kept the old verdict as a floor, which gives up part of the issue's precision goal but stays safe.",
+   "<b>Graders.</b> They agreed on 3 of 4 preferences, gave exactly the same score on 26 of 36 paired dimension scores, and differed by 0.33 points on average. Each gave its own model's work a higher total, by 2 to 7 points out of 30 per task, so blind grading by a single model would slightly favour that model. Using both graders evens this out."
   ],
-  "hidden": [],
-  "rubric_charts": []
+  "hidden": [
+   {
+    "task": "B1",
+    "desc": "#2046 guardian stop gap (core, re-implement from issue)",
+    "opus": {
+     "pass": true,
+     "text": "PASS: merged fix's tests 2/2; own test fails before, passes after; clippy clean (pinned toolchain)"
+    },
+    "astra": {
+     "pass": true,
+     "text": "PASS: merged fix's tests 2/2; own test fails before, passes after; clippy clean (pinned toolchain)"
+    }
+   },
+   {
+    "task": "B2",
+    "desc": "#2102 provider picker refresh (TUI, re-implement from issue)",
+    "opus": {
+     "pass": false,
+     "text": "PARTIAL: merged fix's tests 1/2 (open picker jumps to the OpenAI tab instead of keeping the person's tab); own tests fail before, pass after; clippy clean"
+    },
+    "astra": {
+     "pass": false,
+     "text": "PARTIAL: merged fix's tests 1/2 (same tab jump); own tests fail before, pass after; clippy clean"
+    }
+   },
+   {
+    "task": "B3",
+    "desc": "sync conflict: codex-agent-roles (as #2059)",
+    "opus": {
+     "pass": true,
+     "text": "PASS: compiles, clippy clean, hidden behaviour test 3/3; source identical to the maintainers' resolution; added 97 lines of tests"
+    },
+    "astra": {
+     "pass": true,
+     "text": "PASS: compiles, clippy clean, hidden behaviour test 3/3; source identical to the maintainers' resolution; no tests added"
+    }
+   },
+   {
+    "task": "B4",
+    "desc": "#2018 classifier brace groups (fresh open issue, no reference)",
+    "opus": {
+     "pass": true,
+     "text": "PASS: 905 classifier tests pass, 0 fail; 3 new tests fail before, pass after; clippy clean"
+    },
+    "astra": {
+     "pass": true,
+     "text": "PASS: 907 classifier tests pass, 0 fail; 2 new tests fail before, pass after; clippy clean"
+    }
+   }
+  ],
+  "rubric_charts": [
+   {
+    "title": "Figure 3. Track B blinded rubric (1\u20135, mean over tasks): each model's work as scored by each grader",
+    "groups": [
+     [
+      "correctness",
+      {
+       "opus-by-opus": 4.0,
+       "opus-by-astra": 3.75,
+       "astra-by-opus": 4.25,
+       "astra-by-astra": 4.25
+      }
+     ],
+     [
+      "security rules",
+      {
+       "opus-by-opus": 3.75,
+       "opus-by-astra": 3.5,
+       "astra-by-opus": 4.25,
+       "astra-by-astra": 4.5
+      }
+     ],
+     [
+      "test quality",
+      {
+       "opus-by-opus": 4.25,
+       "opus-by-astra": 3.75,
+       "astra-by-opus": 3.5,
+       "astra-by-astra": 3.25
+      }
+     ],
+     [
+      "scope",
+      {
+       "opus-by-opus": 4.75,
+       "opus-by-astra": 5.0,
+       "astra-by-opus": 3.25,
+       "astra-by-astra": 5.0
+      }
+     ],
+     [
+      "clarity",
+      {
+       "opus-by-opus": 4.25,
+       "opus-by-astra": 4.25,
+       "astra-by-opus": 3.5,
+       "astra-by-astra": 4.5
+      }
+     ],
+     [
+      "honesty",
+      {
+       "opus-by-opus": 4.0,
+       "opus-by-astra": 3.75,
+       "astra-by-opus": 4.75,
+       "astra-by-astra": 4.75
+      }
+     ]
+    ],
+    "series": [
+     [
+      "opus-by-opus",
+      "Opus work, Opus grader",
+      "#c2410c"
+     ],
+     [
+      "opus-by-astra",
+      "Opus work, Astra grader",
+      "#fdba74"
+     ],
+     [
+      "astra-by-opus",
+      "Astra work, Opus grader",
+      "#1d4ed8"
+     ],
+     [
+      "astra-by-astra",
+      "Astra work, Astra grader",
+      "#93c5fd"
+     ]
+    ]
+   }
+  ]
  },
  "cost": {
   "notes_html": [
-   "Track A per review: see the table above. Times are wall-clock on the same machine, with an Opus run and an Astra run going at the same time."
+   "Totals: Track A, Opus 27 min and 969k tokens, Astra 29 min and 877k tokens (10 reviews each). Track B, Opus 88 min and 533k tokens, Astra 91 min and 756k tokens (4 tasks each). Opus runs on the Claude plan (limited capacity, with a multi-day cooldown this week); Astra runs on the OpenAI provider. The token counts are each harness's own report, and the two providers count differently."
   ],
   "wall": [
    [
@@ -380,6 +518,34 @@
     {
      "opus": 1.9,
      "astra": 3.1
+    }
+   ],
+   [
+    "B1",
+    {
+     "opus": 27.8,
+     "astra": 30.9
+    }
+   ],
+   [
+    "B2",
+    {
+     "opus": 33.0,
+     "astra": 33.1
+    }
+   ],
+   [
+    "B3",
+    {
+     "opus": 6.3,
+     "astra": 3.2
+    }
+   ],
+   [
+    "B4",
+    {
+     "opus": 21.3,
+     "astra": 23.6
     }
    ]
   ],
@@ -453,6 +619,34 @@
      "opus": 89,
      "astra": 86
     }
+   ],
+   [
+    "B1",
+    {
+     "opus": 124,
+     "astra": 292
+    }
+   ],
+   [
+    "B2",
+    {
+     "opus": 166,
+     "astra": 237
+    }
+   ],
+   [
+    "B3",
+    {
+     "opus": 84,
+     "astra": 76
+    }
+   ],
+   [
+    "B4",
+    {
+     "opus": 159,
+     "astra": 151
+    }
    ]
   ]
  },
@@ -461,56 +655,63 @@
    [
     "First-pass code review",
     "Astra-OK",
-    "Track A: Astra found 6 of 8 known bugs fully (Opus 3 fully, 2 partly); one false block on a clean PR."
+    "Track A: Astra found 6 of 8 known bugs fully (Opus 3 fully, 2 partly). Graders confirmed all its extra findings. Opus raised more extra issues, so the two complement each other."
    ],
    [
-    "Final security review (sign-off)",
+    "Final security review (sign-off, D318)",
     "Opus-only for now",
-    "Astra is strong at finding security bugs, but security sign-off is a policy step, and one blocked control and n=8 are too little to change who signs. Use Astra as a second reviewer before Opus."
+    "Policy step. Neither model was complete alone (A01 and A02 were missed by one or both). Add Astra as a second security lens before the Opus sign-off, especially for classifier code."
    ],
    [
-    "Security code changes",
-    "pending Track B",
-    ""
+    "Security code changes (classifier, sandbox)",
+    "Astra + Opus final review",
+    "B4: Astra kept the never-quieter rule and Opus broke it. Track A: Astra found 3 of 3 classifier bugs. But n=1 task, and these are high-stakes paths."
    ],
    [
     "Sync conflict resolution",
-    "pending Track B",
-    "Track A: both found the dropped network settings in #2043."
+    "Astra + Opus final review",
+    "B3: both byte-identical to the merged resolution (Opus added tests). A04: both caught the dropped network settings. Sync PRs touch security paths, so Opus keeps the final review."
    ],
    [
     "Ordinary bug fixes",
-    "pending Track B",
-    ""
+    "Astra-OK",
+    "B1: both passed the hidden tests, and both graders preferred Astra's. B2: both missed the same detail. Keep the normal independent review."
    ],
    [
     "CI / flake work",
-    "pending Track B",
-    "Track A: both found the Windows test bug (#1889)."
+    "Astra-OK",
+    "A08 (Windows test bug): both found it. A09 (CI control): both approved correctly. Little direct implementation evidence."
    ],
    [
     "Docs",
-    "pending Track B",
-    ""
+    "Astra-OK (not tested)",
+    "We did not test docs directly. Low risk with the normal review."
    ],
    [
     "Grading / triage",
-    "pending Track B",
-    ""
+    "Astra-OK, paired with Opus for model comparisons",
+    "Graders agreed on 3 of 4 preferences, with a mean score gap of 0.33. Each leaned slightly to its own model (+2 to +7 of 30), so don't let one model grade its own work alone."
    ]
   ],
   "notes_html": [
-   "Version 1: the recommendations above come from Track A only and will be revised with Track B."
+   "\"Astra-OK\" means Astra High may do the work. Every rule that applies today still applies, including the independent Opus 5.5 High review before merge and the corbanu-security approval on owned paths. The recommendations change which model does the work, not who approves it."
   ]
  },
  "caveats_html": [
-  "Small sample: 8 known bugs and 2 controls, one run per model per case. One different answer moves a total by 12 percentage points.",
-  "Selection bias: the bugs in #1837, #1055 and #2133 were first found by Astra High reviews on November 11; the bugs in #2043, #1171, #1175 and #1889 were first found by Opus. Per-case results are shown so readers can see this.",
-  "Reviews were read-only, with no builds or tests. Both models could read the repository and the local cargo registry, but not the network.",
-  "The Opus log header does not print the reasoning effort for the claude-plan provider. The same <code>model_reasoning_effort=\"high\"</code> flag that our standing reviewers use was passed to both models.",
-  "Scoring of extra findings is our judgement against the code; uncertain ones go to blinded graders."
+  "Small samples: 8 known bugs and 2 controls in Track A, and 4 tasks in Track B, mostly one run per model. One different outcome moves a Track A total by 12 percentage points.",
+  "Selection: three of the known bugs (A01, A03, A05) were first found by Astra High on November 11, and four (A04, A06, A07, A08) by Opus. Results are shown per case so this is visible.",
+  "Track A reviews were static (no builds) and offline. A02 depended on knowing about the assert_cmd 2.2 change, which could not be looked up.",
+  "Hidden checks: for B1 and B2, the merged fix's tests were added unchanged as an extra module, so they ran next to each solution's own tests. B4 has no reference fix. Integration-test suites (<code>--test all</code>) were not run, only the lib suites, to save time.",
+  "Blinding: graders saw X and Y with model names, token counts and arm paths removed. Writing style may still hint at the model. The experiment folder name contains 'astra' for both sides. For B2 the task itself is about model names, so we removed paths only.",
+  "The Opus log header does not print reasoning effort for the claude-plan provider. Both arms got the same <code>model_reasoning_effort=\"high\"</code> flag.",
+  "Astra's implementation logs each list exactly 78 commands, so its exec log may be capped. GitHub compliance therefore also relies on the clones having no remote and on our GitHub activity check, which found no writes by any arm.",
+  "Track A extra findings: 13 we could not settle ourselves went to both graders, unattributed. Both graders rated all 13 real."
  ],
  "decisions_html": [
-  "Filled in the final version."
+  "<b>Allow Astra High as the implementer and first-pass reviewer</b> for ordinary bug fixes, CI/flake work, docs, triage and sync conflicts, keeping today's independent Opus 5.5 High review before every merge. <i>Options:</i> (a) yes, as recommended; (b) only first-pass review, not implementation; (c) not yet, more data first. <i>Recommendation: (a).</i> This raises throughput where Opus capacity is the limit, and the safety net stays the same.",
+  "<b>Security work:</b> keep Opus as the only security sign-off (D318), but add Astra as a required second reviewer on security-classifier PRs. <i>Options:</i> (a) add Astra as a second lens, as recommended; (b) leave as is. <i>Recommendation: (a).</i> Astra found 3 of 3 classifier bugs in Track A, and Opus 0 fully.",
+  "<b>New finding to triage (the experiment could not file issues):</b> #1944 sets <code>GIT_ALLOW_PROTOCOL=file</code> in the Windows no-network sandbox. That makes git treat the file transport as always allowed, which lifts git's default <code>protocol.file.allow=user</code> guard for submodules, so a hostile <code>.gitmodules</code> can clone a local repository. Both graders judged it real (medium / high). Impact is limited, because the sandboxed command could read those files directly. <i>Recommendation:</i> file an issue; a fix could keep <code>file</code> but restrict it for submodules, e.g. by setting <code>GIT_PROTOCOL_FROM_USER=0</code>.",
+  "<b>Toolchain on worker machines:</b> the default <code>rustc</code> on PATH is 1.95.0, while <code>codex-rs/rust-toolchain.toml</code> pins 1.99.1. Under 1.95.0, strict clippy reports 10 errors in untouched code, and Opus reported that as a gate failure twice in this experiment. <i>Recommendation:</i> put the pinned toolchain first in the worker PATH (decision-free; a coordinator change).",
+  "<b>#2018 is still open.</b> Both experimental fixes exist only locally, in <code>.codex-work/bench-astra-20261114/wt/b4-*</code>. Astra's kept the never-quieter rule. The issue was offered to contributor @ryssroad, so check with them before a maintainer picks it up."
  ]
 }

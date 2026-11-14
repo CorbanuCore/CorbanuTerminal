@@ -1,0 +1,14 @@
+Committed locally as `ea2ae1d6c1bdca236a02dde2b6a36ab504b14d10`. Working tree is clean.
+
+- Removed conflicts from `agent-roles/src/loader.rs`, preserving upstream’s layout.
+- Ported Corbanu’s `base_instructions` support and blank-instruction rejection into `agent_role_config.rs`.
+- Updated the sync ledger with resolution and verification details.
+
+Validation:
+- **Before:** `rustfmt --check --edition 2024 codex-rs/agent-roles/src/lib.rs` failed on conflict markers.
+- **After:** scoped rustfmt applied; the same check passed.
+- Source comparison confirmed exact Corbanu-main parser/validator preservation and upstream loader/discovery/export parity.
+- `just test -p codex-agent-roles --offline -j8`: zero tests; exit 4.
+- `cargo check -p codex-agent-roles --all-targets -j8` before and after, and `cargo clippy -p codex-agent-roles --all-targets -j8 -- -D warnings`, were **blocked by uncached `crossterm` Git dependency in offline mode**.
+
+Compilation, Clippy, and the compile fail-before/pass-after gate remain unverified. No network or remote actions were taken; other crates were untouched.

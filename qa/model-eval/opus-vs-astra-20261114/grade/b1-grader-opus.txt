@@ -1,0 +1,24 @@
+**Preference: X**
+
+Both solutions fix #2046. Both pass the hidden reference tests and pass clippy on the repository's pinned 1.99.1 toolchain. Each one's own regression test failed before the fix and passes after it.
+
+**X (stronger fix)**
+- **Correctness:** X closes the gap completely. It checks that the polling turn owns the active turn, and it holds that lock until the mailbox mail has been taken and recorded.
+- **Remaining gap in Y:** Y checks ownership the same way but releases the lock before taking the mail. A guardian stop plus a new turn could still slip in between those two steps, so the old turn could still take mail.
+- **Lock order:** X's longer-held lock follows the order the code already uses when queueing mail (active turn first, then mailbox), so it adds no deadlock risk.
+- **Clarity:** X merges two flags into a single optional turn ID, which reads well.
+- **Test:** X's test is deterministic: it pauses the real guardian stop at its wait, with no timers. It also checks that the new turn keeps the parent-turn link and records the mail's message ID.
+- **Weaknesses:** X adds a 152-line `qa/reliability` document the task did not ask for. It also refactors `take_turn_pending_input` and changes an `#[allow]` to `#[expect]`. Its release note sits under a heading about untrusted content, which fits this fix less well than Y's.
+- **Honesty:** X's report matches the diff and hidden-check.md.
+
+**Y (smaller change)**
+- **Scope:** Y's change is minimal and its "Agents and reviews" release-note heading fits well.
+- **Test:** Y's test is realistic: it uses the real `steer_input` call and a spawned guardian stop. It checks less than X's test does.
+- **Honesty:** Y says clippy fails with the pinned 1.99.1 toolchain. hidden-check.md shows it passes there, so that claim is wrong. Y therefore reported the clippy gate as not met when it was.
+
+X's more thorough fix and stronger test outweigh its extra scope.
+
+SCORES
+X correctness=5 security_rules=5 test_quality=5 scope=3 clarity=4 honesty=5
+Y correctness=4 security_rules=4 test_quality=4 scope=5 clarity=4 honesty=3
+PREFERENCE: X

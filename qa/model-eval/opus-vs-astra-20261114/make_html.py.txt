@@ -11,7 +11,7 @@ MODELS = ["opus", "astra"]
 NAME = {"opus": "Opus 5.5 High", "astra": "Astra High"}
 COL = {"opus": "#c2410c", "astra": "#1d4ed8"}
 DET = {"full": ("#15803d", "found"), "partial": ("#ca8a04", "partly"), "missed": ("#b91c1c", "missed"),
-       "clean": ("#15803d", "clean"), "fp": ("#b91c1c", "flagged"), "pending": ("#9ca3af", "pending")}
+       "clean": ("#15803d", "clean"), "fp": ("#b91c1c", "flagged"), "newreal": ("#7c3aed", "new real issue"), "pending": ("#9ca3af", "pending")}
 e = html.escape
 
 
@@ -22,10 +22,11 @@ def svg(w, h, body, title):
 
 
 def legend(x, y, items):
-    out = []
-    for i, (c, label) in enumerate(items):
-        out.append(f'<rect x="{x + i * 130}" y="{y}" width="12" height="12" fill="{c}"/>'
-                   f'<text x="{x + i * 130 + 16}" y="{y + 10}">{e(label)}</text>')
+    out, cx = [], x
+    for c, label in items:
+        out.append(f'<rect x="{cx}" y="{y}" width="12" height="12" fill="{c}"/>'
+                   f'<text x="{cx + 16}" y="{y + 10}">{e(label)}</text>')
+        cx += 16 + 7 * len(label) + 18
     return "".join(out)
 
 
@@ -44,15 +45,15 @@ def grid_a(cases):
             col, word = DET.get(st, DET["pending"])
             v = r.get("verdict", "")
             ok = r.get("verdict_ok")
-            mark = "" if ok is None else (" ✓" if ok else " ✗")
+            mark = " ?" if ok is None else (" ✓" if ok else " ✗")
             x = lw + j * 130
             b.append(f'<rect x="{x}" y="{y + 2}" width="120" height="{rh - 4}" rx="4" fill="{col}"/>'
                      f'<text x="{x + 60}" y="{y + 17}" text-anchor="middle" fill="white">'
                      f'{e(word)} · {e(v[:3])}{mark}</text>')
     b.append(legend(4, h - 22, [(DET["full"][0], "found / clean"), (DET["partial"][0], "partly found"),
-                                (DET["missed"][0], "missed / flagged")]))
+                                (DET["missed"][0], "missed / flagged"), (DET["newreal"][0], "new real issue")]))
     return svg(lw + 270, h, "".join(b),
-               "Figure 1. Track A: did each model find the known defect? (APP/REQ = verdict; ✓ = correct verdict)")
+               "Figure 1. Track A: did each model find the known defect? (APP/REQ = verdict; ✓ correct, ✗ wrong, ? debatable)")
 
 
 def bars(groups, series, title, ymax=None, unit="", w=640, h=260, fmt="{:g}"):
@@ -63,9 +64,10 @@ def bars(groups, series, title, ymax=None, unit="", w=640, h=260, fmt="{:g}"):
     gw = pw / max(len(groups), 1)
     bw = min(28, (gw - 10) / max(len(series), 1))
     b = [f'<line x1="{left}" y1="{top + ph}" x2="{w - 10}" y2="{top + ph}" stroke="#555"/>']
-    for k in range(5):
-        v = ymax * k / 4
-        y = top + ph - ph * k / 4
+    nt = 5 if ymax == 5 else 4
+    for k in range(nt + 1):
+        v = ymax * k / nt
+        y = top + ph - ph * k / nt
         b.append(f'<line x1="{left}" y1="{y}" x2="{w - 10}" y2="{y}" stroke="#ddd"/>'
                  f'<text x="{left - 4}" y="{y + 4}" text-anchor="end">{fmt.format(round(v, 1))}{e(unit)}</text>')
     for gi, (label, d) in enumerate(groups):
@@ -117,12 +119,12 @@ def main():
     parts.append("<h2>Track B — paired implementation</h2>")
     parts.append("".join(f"<p>{p}</p>" for p in Bt["intro_html"]))
     hid = Bt["hidden"]
+    for dim_chart in Bt.get("rubric_charts", []):
+        parts.append(bars(dim_chart["groups"], [(k, l, c) for k, l, c in dim_chart["series"]],
+                          dim_chart["title"], ymax=5, w=880, h=280))
     rows = [[t["task"], t["desc"]] + [Markup(f'<span class="{"pass" if t[m]["pass"] else ("fail" if t[m]["pass"] is False else "pend")}">'
                                               f'{e(t[m]["text"])}</span>') for m in MODELS] for t in hid]
     parts.append("<h3>Figure 4. Hidden check per task</h3>" + table(["Task", "What", NAME["opus"], NAME["astra"]], rows))
-    for dim_chart in Bt.get("rubric_charts", []):
-        parts.append(bars(dim_chart["groups"], [(k, l, c) for k, l, c in dim_chart["series"]],
-                          dim_chart["title"], ymax=5, w=760, h=280))
     parts.append("".join(f"<p>{p}</p>" for p in Bt["notes_html"]))
     # Cost
     C = d["cost"]

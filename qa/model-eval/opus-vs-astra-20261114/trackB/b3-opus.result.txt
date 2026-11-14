@@ -1,0 +1,39 @@
+`codex-agent-roles` now compiles, and `cargo check` and `cargo clippy -- -D warnings` are both clean. Corbanu's `base_instructions` rule for agent role files is kept, now in upstream's file layout.
+
+## What I changed and why
+Upstream (#40487) moved agent role files into the new `codex-agent-roles` crate and moved the role-file parsing out of `loader.rs` into `agent_role_config.rs`. The two conflict blocks in `loader.rs` were Corbanu main's copy of that old parsing code.
+
+- **`codex-rs/agent-roles/src/loader.rs`**: I removed both conflict blocks. The file is now identical to upstream's (`git diff 086ccc833b -- src/loader.rs` shows nothing).
+- **`codex-rs/agent-roles/src/agent_role_config.rs`**: I ported main's one change to this logic (commit `baeb1bf86e`, "fix: replace hierarchy role base instructions"). This was the only main commit touching this logic since the merge base.
+  - A role file may set `base_instructions` (an alias of `instructions` in `ConfigToml`) instead of `developer_instructions`.
+  - A blank `base_instructions` is rejected.
+  - When neither is set, the error names both fields.
+  - The ported function is byte-identical to main's (checked with `diff` against `1855c92a:codex-rs/core/src/config/agent_roles.rs`).
+- **`codex-rs/agent-roles/tests/agent_role_file.rs`** (new): the crate had no tests, so I added four tests for the rule. They use only the crate's public API, so no new dependencies or lockfile changes were needed. Because of that they use std `assert_eq!` rather than `pretty_assertions`.
+- **`docs/management/upstreamSync/ledger-rust-v0.167.0.tsv`**: the `codex-rs/agent-roles/src/loader.rs` row is now owner `sync-s2c (maintainer)`, `resolved`, `ported`, with a note. The other columns are unchanged, and the row still has 17 fields.
+
+## Fail-before / pass-after
+Every run used `unset CORBANU_HOME CODEX_HOME`, the specified `CARGO_TARGET_DIR` and `-j8`. The command was `cargo test -p codex-agent-roles --test agent_role_file`.
+
+1. **Before (test committed on the conflicted tree):** the build failed with `error: encountered diff marker` at `agent-roles/src/loader.rs:219`.
+2. **Upstream's side only (conflicts removed, Corbanu rule not ported):** this state was run but not committed. 3 of 4 tests failed:
+   - `discovered_role_file_accepts_base_instructions_without_developer_instructions`
+   - `blank_base_instructions_are_rejected`
+   - `discovered_role_file_without_instructions_names_both_fields` (got "must define `developer_instructions`")
+   
+   `developer_instructions_rules_are_unchanged` passed. This shows a plain take-upstream resolution would have silently dropped the Corbanu rule.
+3. **After the port:** `cargo test -p codex-agent-roles` gives 4 passed, 0 failed.
+
+## Checks
+- `cargo check -p codex-agent-roles --all-targets`: passes.
+- `cargo clippy -p codex-agent-roles --all-targets -- -D warnings`: clean.
+- `cargo fmt -p codex-agent-roles`: applied, no further changes. It printed the usual stable-toolchain warning about `imports_granularity`.
+
+## Commits (local, branch `work-b3`)
+- `ce397d45d2`: the new tests
+- `908bff476a`: the conflict resolution, the port and the ledger row
+
+## Not done or unsure
+- I didn't touch `codex-core`, so nothing that uses this crate there is compiled. Main's Corbanu tests for this behaviour (`core/src/agent/role.rs` and `role_tests.rs`, which still have conflict markers) are unresolved and unrun.
+- I added no release-note fragment: this restores existing Corbanu behaviour on the sync branch rather than changing anything for users.
+- I didn't run Bazel. `defs.bzl` picks up `tests/*.rs` automatically, so the new test should need no `BUILD.bazel` change.
