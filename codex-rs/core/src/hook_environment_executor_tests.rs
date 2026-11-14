@@ -27,40 +27,41 @@ fn in_isolated_child(test: &str, check: impl FnOnce()) {
     );
 }
 
+/// Every hook, on Corbanu's host or behind an executor client (a stdio
+/// executor started from `environments.toml` runs on this host), loses the
+/// login shell once secretless launch is armed; before that the
+/// environment's `allow_login_shell` decides.
 #[test]
-fn pf_27_s02_armed_local_environment_hooks_never_use_a_login_shell() {
+fn pf_27_s02_armed_hooks_never_use_a_login_shell() {
     in_isolated_child(
-        "hook_environment_executor::tests::pf_27_s02_armed_local_environment_hooks_never_use_a_login_shell",
+        "hook_environment_executor::tests::pf_27_s02_armed_hooks_never_use_a_login_shell",
         || {
-            codex_protocol::secretless_launch::arm();
             let shell = crate::shell::Shell {
                 shell_type: ShellType::Bash,
                 shell_path: "/bin/bash".into(),
             };
-            let argv = |remote| {
-                shell.derive_exec_args(
-                    "true",
-                    hook_uses_login_shell(/*allow_login_shell*/ true, remote),
-                )
+            let argv = |allow_login_shell| {
+                shell.derive_exec_args("true", hook_uses_login_shell(allow_login_shell))
             };
+            let login = vec![
+                "/bin/bash".to_string(),
+                "-lc".to_string(),
+                "true".to_string(),
+            ];
+            let plain = vec![
+                "/bin/bash".to_string(),
+                "-c".to_string(),
+                "true".to_string(),
+            ];
             assert_eq!(
-                (argv(/*remote*/ false), argv(/*remote*/ true)),
-                (
-                    vec![
-                        "/bin/bash".to_string(),
-                        "-c".to_string(),
-                        "true".to_string()
-                    ],
-                    vec![
-                        "/bin/bash".to_string(),
-                        "-lc".to_string(),
-                        "true".to_string()
-                    ],
-                )
+                (argv(/*allow_login_shell*/ true), argv(/*allow_login_shell*/ false)),
+                (login, plain.clone())
             );
-            assert!(!hook_uses_login_shell(
-                /*allow_login_shell*/ false, /*remote*/ true
-            ));
+            codex_protocol::secretless_launch::arm();
+            assert_eq!(
+                (argv(/*allow_login_shell*/ true), argv(/*allow_login_shell*/ false)),
+                (plain.clone(), plain)
+            );
         },
     );
 }

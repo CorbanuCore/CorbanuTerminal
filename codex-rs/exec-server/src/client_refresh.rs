@@ -19,6 +19,7 @@
 
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
+use std::sync::atomic::Ordering;
 
 use futures::future::BoxFuture;
 use tokio::sync::OnceCell;
@@ -241,6 +242,10 @@ impl LazyRemoteExecServerClient {
                         "missing transport params for lazy exec-server connection".to_string(),
                     ))
                 })?;
+            if is_stdio_transport(transport) && !codex_protocol::secretless_launch::is_armed() {
+                // Recorded before the spawn: arming is one-way, so this can only over-refuse.
+                self.stdio_started_unarmed.store(true, Ordering::Release);
+            }
             let mut observation = ConnectionObservation {
                 started: None,
                 outcome: ConnectionAttemptOutcome::Cancelled,
@@ -314,3 +319,15 @@ impl Inner {
 #[cfg(test)]
 #[path = "client_refresh_tests.rs"]
 mod tests;
+
+/// A transport that starts an executor process on this host (possibly once deferred readiness
+/// is reported).
+fn is_stdio_transport(transport: &crate::client_api::ExecServerTransportParams) -> bool {
+    match transport {
+        crate::client_api::ExecServerTransportParams::StdioCommand { .. } => true,
+        crate::client_api::ExecServerTransportParams::Deferred(deferred) => {
+            is_stdio_transport(&deferred.transport)
+        }
+        _ => false,
+    }
+}

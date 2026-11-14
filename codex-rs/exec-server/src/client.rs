@@ -423,6 +423,9 @@ pub(crate) struct LazyRemoteExecServerClient {
     refresh_lock: Arc<Mutex<()>>,
     pub(super) connection_observer: Arc<OnceLock<ConnectionObserver>>,
     environment_connection_state_tx: watch::Sender<EnvironmentConnectionState>,
+    /// PF-27-S02: a stdio executor was started before secretless launch was armed, so it holds
+    /// this process's full environment (see `client_transport::stdio_command_process`).
+    pub(super) stdio_started_unarmed: Arc<AtomicBool>,
 }
 
 impl LazyRemoteExecServerClient {
@@ -443,6 +446,7 @@ impl LazyRemoteExecServerClient {
                 EnvironmentConnectionState::Disconnected,
             )
             .0,
+            stdio_started_unarmed: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -528,6 +532,7 @@ impl LazyRemoteExecServerClient {
     }
 
     pub(crate) async fn get(&self) -> Result<ExecServerClient, ExecServerError> {
+        self.refuse_unprotected_stdio_executor()?;
         if matches!(self.recovery_policy, RecoveryPolicy::FailFast) {
             let client = match self.cached_client() {
                 Some(client) => client,
@@ -625,6 +630,22 @@ impl LazyRemoteExecServerClient {
             *reconnect = None;
         }
         result.clone().map_err(ExecServerError::ConnectionAttempt)
+    }
+
+    /// PF-27-S02: a stdio executor cannot be restarted in place, so one started before secretless
+    /// launch was armed (a security level changed during this run) is refused from then on: it
+    /// would hand Corbanu's full environment to every command it runs.
+    fn refuse_unprotected_stdio_executor(&self) -> Result<(), ExecServerError> {
+        if self.stdio_started_unarmed.load(Ordering::Acquire)
+            && codex_protocol::secretless_launch::is_armed()
+        {
+            return Err(ExecServerError::Protocol(
+                "this executor was started before secretless agent launch was turned on, so it \
+                 still holds Corbanu's full environment; restart Corbanu to use it"
+                    .to_string(),
+            ));
+        }
+        Ok(())
     }
 
     fn connected_client(&self) -> Option<ExecServerClient> {
