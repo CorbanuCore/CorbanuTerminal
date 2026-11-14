@@ -17,6 +17,10 @@ mod tests;
 static FIXTURE: OnceLock<Box<CredentialBuilder>> = OnceLock::new();
 
 pub(crate) fn install(builder: Box<CredentialBuilder>) {
+    // Native denial only applies in debug builds (codex-keyring-store).
+    if !cfg!(debug_assertions) {
+        panic!("fixture injection requires a debug test build");
+    }
     assert_eq!(
         std::env::var("CORBANU_TEST_NO_NATIVE_KEYRING").as_deref(),
         Ok("1"),

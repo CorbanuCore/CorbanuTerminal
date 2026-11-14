@@ -6,6 +6,11 @@ use pretty_assertions::assert_eq;
 #[test]
 fn uninstalled_fixture_keeps_native_store_denied() {
     // Fail before any credential operation if not in the ordinary isolated lane.
+    // keyring-store honors the denial only in debug builds; a release-mode run
+    // would reach the real OS keychain, so refuse it outright.
+    if !cfg!(debug_assertions) {
+        panic!("run in the isolated debug test lane (`just test`)");
+    }
     assert_eq!(
         std::env::var("CORBANU_TEST_NO_NATIVE_KEYRING").as_deref(),
         Ok("1")
