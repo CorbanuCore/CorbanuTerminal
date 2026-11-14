@@ -49,7 +49,7 @@ mod oneshot;
 pub(crate) mod output;
 mod process;
 mod process_manager;
-pub(crate) use process_manager::exec_env_policy_from_shell_policy;
+pub(crate) use process_manager::exec_env_policy_for_config;
 mod process_state;
 mod shell_snapshot;
 mod stdin_approval;
@@ -108,23 +108,8 @@ pub(crate) struct ExecCommandRequest {
     pub prepared: PreparedExecCommand,
     pub process_id: i32,
     pub network: Option<NetworkProxy>,
-<<<<<<< HEAD
-    pub tty: bool,
-    pub sandbox_permissions: SandboxPermissions,
-    pub additional_permissions: Option<AdditionalPermissionProfile>,
-    pub additional_permissions_preapproved: bool,
-    pub justification: Option<String>,
-    pub prefix_rule: Option<Vec<String>>,
     /// #1057: the policy the handler read this request's grants under.
     pub handler_basis: Option<crate::tools::orchestrator::HandlerBasis>,
-||||||| 413492cd6c
-    pub tty: bool,
-    pub sandbox_permissions: SandboxPermissions,
-    pub additional_permissions: Option<AdditionalPermissionProfile>,
-    pub additional_permissions_preapproved: bool,
-    pub justification: Option<String>,
-    pub prefix_rule: Option<Vec<String>>,
-=======
 }
 
 /// The process and environment behind a terminal session ID at the time of lookup.
@@ -134,7 +119,6 @@ pub(crate) struct TerminalSession {
     process: Arc<UnifiedExecProcess>,
     call_id: String,
     pub(crate) environment_id: String,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[derive(Debug)]

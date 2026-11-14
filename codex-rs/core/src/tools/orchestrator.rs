@@ -56,6 +56,29 @@ pub(crate) struct ToolOrchestrator {
     handler_basis: Option<HandlerBasis>,
 }
 
+/// #1976 (D491): the Windows sandbox level an agent command in an
+/// environment with `sandbox_config` is judged on for the unsandboxed
+/// refusal. Judged on the sandbox the environment launches with, and (as on
+/// main, and as file tools are) on the turn's level: either without a
+/// sandbox counts as none. D522 (a): upstream's MXC backend counts as no
+/// sandbox, however it was selected.
+pub(crate) fn unsandboxed_check_level(
+    sandbox_config: &codex_protocol::protocol::EnvironmentConfig,
+    turn_level: WindowsSandboxLevel,
+) -> WindowsSandboxLevel {
+    let windows_sandbox_type = codex_protocol::sandbox::effective_windows_sandbox_type(
+        sandbox_config.windows_sandbox_type,
+        sandbox_config.windows_sandbox_level,
+    );
+    if windows_sandbox_type == SandboxType::WindowsMxc
+        || turn_level == WindowsSandboxLevel::Disabled
+    {
+        WindowsSandboxLevel::Disabled
+    } else {
+        sandbox_config.windows_sandbox_level
+    }
+}
+
 /// #1057: the policy a tool's handler read its `request_permissions` grants
 /// (and made its exec-policy decision) under, taken just before the grants
 /// were read, so a transition committed before the run reached the
@@ -286,18 +309,9 @@ impl ToolOrchestrator {
         // #1976 (D491): under Moderate or Aggressive on Windows without the
         // Windows sandbox, no agent command runs (read-only ones included),
         // before anyone is asked; checked each round, so a level raised while
-        // a person was asked counts too. Judged on the sandbox this run's
-        // environment launches with, and (as on main, and as file tools are)
-        // on the turn's level: either without a sandbox refuses. D522 (a),
-        // provisional: upstream's MXC backend counts as no sandbox, however
-        // it was selected.
-        let unsandboxed_level = if windows_sandbox_type == SandboxType::WindowsMxc
-            || turn_ctx.windows_sandbox_level == WindowsSandboxLevel::Disabled
-        {
-            WindowsSandboxLevel::Disabled
-        } else {
-            sandbox_config.windows_sandbox_level
-        };
+        // a person was asked counts too.
+        let unsandboxed_level =
+            unsandboxed_check_level(sandbox_config, turn_ctx.windows_sandbox_level);
         if let Some(refusal) = crate::security::windows_unsandboxed::session_command_refusal(
             &tool_ctx.session,
             unsandboxed_level,
