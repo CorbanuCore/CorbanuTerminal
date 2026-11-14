@@ -7457,6 +7457,10 @@ pub(crate) mod tests;
 mod pending_mailbox_wake_tests;
 
 #[cfg(test)]
+#[path = "stale_poll_mail_tests.rs"]
+mod stale_poll_mail_tests;
+
+#[cfg(test)]
 #[path = "account_switch_tests.rs"]
 mod account_switch_tests;
 
