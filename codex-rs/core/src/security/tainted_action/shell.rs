@@ -1309,7 +1309,15 @@ impl Lexer {
                     self.word.push(literal_char(ch));
                 }
                 '$' if next == Some('\'') => {
+                    let start = self.word.len();
                     index = ansi_c(&chars, index + 2, &mut self.word);
+                    // Decoding skips the per-character equals check. An
+                    // equals sign produced inside this quoted word cannot
+                    // establish an assignment name either.
+                    if !self.assignment_equals && self.word[start..].contains('=') {
+                        self.current.assignment_quoted = true;
+                        self.assignment_equals = true;
+                    }
                     continue;
                 }
                 '$' | '<' | '>' if next == Some('(') => {
@@ -1592,10 +1600,9 @@ fn assignment_quotes(chars: &[char]) -> Vec<bool> {
             // ordinary comment, arithmetic counter or mktemp opaque.
             uncertain |= (quote.is_none() && ch == '<' && next == Some('<'))
                 || (!nested.is_empty() && matches!(ch, '\'' | '"'))
-                // Shell comments and case patterns can contain a closing
-                // parenthesis without ending a substitution. An outer quote
-                // cannot be paired reliably after that apparent close.
-                || (ch == ')' && quote.is_some() && nested.last() == Some(&'('))
+                // A case pattern can close with ')' without ending the
+                // substitution. Do not trust quote pairing after case syntax.
+                || (code_depth != 0 && chars[index..].starts_with(&['c', 'a', 's', 'e']))
                 || (ch == '#' && code_depth != 0)
                 || (ch == '#' && quote.is_none() && previous == Some(')'));
             let continuation = (ch == '\\' && next == Some('\n')) || (escaped && ch == '\n');
