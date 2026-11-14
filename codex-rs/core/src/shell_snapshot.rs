@@ -22,6 +22,7 @@ use codex_network_proxy::brokered_credential_marker_env_keys;
 use codex_network_proxy::brokered_credential_value_env_keys;
 use codex_otel::SessionTelemetry;
 use codex_protocol::ThreadId;
+use codex_protocol::config_types::EnvironmentVariablePattern;
 use codex_protocol::config_types::ShellEnvironmentPolicy;
 use codex_protocol::shell_environment::CODEX_TOOL_CALL_ID_ENV_VAR;
 use codex_protocol::shell_environment::create_env_from_vars;
@@ -58,12 +59,9 @@ struct ShellSnapshotConfig {
     session_id: ThreadId,
     session_telemetry: SessionTelemetry,
     state_db: Option<StateDbHandle>,
-<<<<<<< HEAD
     /// Provider credential variables kept out of the snapshot shell, so a
     /// snapshot never re-exports them into model-run commands (issue #310).
     removed_env_vars: Vec<String>,
-||||||| 413492cd6c
-=======
     credential_broker: Option<watch::Receiver<SnapshotCredentialBrokerState>>,
     prefer_executor_snapshots: bool,
 }
@@ -74,7 +72,6 @@ pub(crate) enum SnapshotCredentialBrokerState {
     Inactive,
     Unavailable,
     Ready(NetworkProxy),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub(crate) struct ShellSnapshotFile {
@@ -113,18 +110,30 @@ struct FailOpenAlias {
 const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(10);
 const SNAPSHOT_RETENTION: Duration = Duration::from_secs(60 * 60 * 24 * 3); // 3 days retention.
 const SNAPSHOT_DIR: &str = "shell_snapshots";
-<<<<<<< HEAD
-const EXCLUDED_EXPORT_VARS: &[&str] = &["PWD", "OLDPWD"];
-// Shell snapshots are replayable files under the session home. Never persist
-// conventional credential-bearing environment variables into them. This is a
-// name-based protocol safeguard; runtime auth should still prefer the vault so
-// provider secrets do not enter the process environment in the first place.
-const SECRET_EXPORT_NAME_REGEX: &str = ".*(_API_KEY|_TOKEN|_SECRET|_PASSWORD|_PASSWD|_PRIVATE_KEY|_CREDENTIAL|_CREDENTIALS)|.*_SECRET_.*|API_KEY|TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE_KEY|CREDENTIAL|CREDENTIALS";
-const SECRET_EXPORT_SHELL_PATTERNS: &str = "*_API_KEY|*_TOKEN|*_SECRET|*_PASSWORD|*_PASSWD|*_PRIVATE_KEY|*_CREDENTIAL|*_CREDENTIALS|*_SECRET_*|API_KEY|TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE_KEY|CREDENTIAL|CREDENTIALS";
-||||||| 413492cd6c
-const EXCLUDED_EXPORT_VARS: &[&str] = &["PWD", "OLDPWD"];
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+/// #310: shell snapshots are replayable files under the session home. Never
+/// persist conventional credential-bearing variables into them, whatever the
+/// shell environment policy admits. A name-based safeguard; runtime auth should
+/// still prefer the vault so provider secrets do not enter the process
+/// environment in the first place. Matched case-insensitively.
+const SECRET_EXPORT_NAME_PATTERNS: &[&str] = &[
+    "*_API_KEY",
+    "*_TOKEN",
+    "*_SECRET",
+    "*_PASSWORD",
+    "*_PASSWD",
+    "*_PRIVATE_KEY",
+    "*_CREDENTIAL",
+    "*_CREDENTIALS",
+    "*_SECRET_*",
+    "API_KEY",
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "PRIVATE_KEY",
+    "CREDENTIAL",
+    "CREDENTIALS",
+];
 
 impl ShellSnapshot {
     pub(crate) fn new(
@@ -132,13 +141,9 @@ impl ShellSnapshot {
         session_id: ThreadId,
         session_telemetry: SessionTelemetry,
         state_db: Option<StateDbHandle>,
-<<<<<<< HEAD
-        removed_env_vars: Vec<String>,
-||||||| 413492cd6c
-=======
         credential_broker: Option<watch::Sender<SnapshotCredentialBrokerState>>,
         prefer_executor_snapshots: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        removed_env_vars: Vec<String>,
     ) -> Self {
         Self {
             config: Some(Arc::new(ShellSnapshotConfig {
@@ -146,13 +151,9 @@ impl ShellSnapshot {
                 session_id,
                 session_telemetry,
                 state_db,
-<<<<<<< HEAD
-                removed_env_vars,
-||||||| 413492cd6c
-=======
                 credential_broker: credential_broker.as_ref().map(watch::Sender::subscribe),
                 prefer_executor_snapshots,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                removed_env_vars,
             })),
             credential_broker,
         }
@@ -216,6 +217,13 @@ impl ShellSnapshot {
         shell_environment_policy: ShellEnvironmentPolicy,
         sandbox: Option<ShellSnapshotSandbox>,
     ) -> Option<Arc<ShellSnapshotFile>> {
+        // D544 (a): the sandboxed snapshot starts a login shell outside the
+        // PF-27-S02 launch contract (no refusal, no protected-read denial, no
+        // environment scrub). While the contract is armed it is skipped; a
+        // snapshot is only a speed-up, so skipping it fails closed.
+        if sandbox.is_some() && crate::security::launch_contract::active().is_some() {
+            return None;
+        }
         let snapshot_span = info_span!("shell_snapshot", thread_id = %config.session_id);
         async {
             let credential_broker = if let Some(receiver) = config.credential_broker.as_ref() {
@@ -255,13 +263,9 @@ impl ShellSnapshot {
                 &shell_environment_policy,
                 &shell,
                 config.state_db.clone(),
-<<<<<<< HEAD
-                &config.removed_env_vars,
-||||||| 413492cd6c
-=======
                 credential_broker,
                 sandbox.as_ref(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                &config.removed_env_vars,
             )
             .await;
             let success_tag = if snapshot.is_ok() { "true" } else { "false" };
@@ -287,13 +291,9 @@ impl ShellSnapshot {
         shell_environment_policy: &ShellEnvironmentPolicy,
         shell: &Shell,
         state_db: Option<StateDbHandle>,
-<<<<<<< HEAD
-        removed_env_vars: &[String],
-||||||| 413492cd6c
-=======
         credential_broker: Option<SnapshotCredentialBroker>,
         sandbox: Option<&ShellSnapshotSandbox>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        removed_env_vars: &[String],
     ) -> std::result::Result<ShellSnapshotFile, &'static str> {
         // File to store the snapshot
         let extension = match shell.shell_type {
@@ -323,13 +323,6 @@ impl ShellSnapshot {
         });
 
         // Make the new snapshot.
-<<<<<<< HEAD
-        if let Err(err) =
-            write_shell_snapshot(shell.shell_type, &temp_path, session_cwd, removed_env_vars).await
-        {
-||||||| 413492cd6c
-        if let Err(err) = write_shell_snapshot(shell.shell_type, &temp_path, session_cwd).await {
-=======
         let credentials = write_shell_snapshot(
             shell,
             &temp_path,
@@ -337,10 +330,10 @@ impl ShellSnapshot {
             shell_environment_policy,
             credential_broker.as_ref(),
             sandbox,
+            removed_env_vars,
         )
         .await
         .map_err(|err| {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             tracing::warn!(
                 "Failed to create shell snapshot for {}: {err:?}",
                 shell.name()
@@ -358,6 +351,7 @@ impl ShellSnapshot {
             session_cwd,
             credential_broker.as_ref(),
             sandbox,
+            removed_env_vars,
         )
         .await
         {
@@ -588,43 +582,24 @@ async fn write_shell_snapshot(
     shell: &Shell,
     output_path: &AbsolutePathBuf,
     cwd: &AbsolutePathBuf,
-<<<<<<< HEAD
-    removed_env_vars: &[String],
-) -> Result<()> {
-||||||| 413492cd6c
-) -> Result<()> {
-=======
     shell_environment_policy: &ShellEnvironmentPolicy,
     credential_broker: Option<&SnapshotCredentialBroker>,
     sandbox: Option<&ShellSnapshotSandbox>,
+    removed_env_vars: &[String],
 ) -> Result<Option<SnapshotCredentials>> {
     let shell_type = shell.shell_type;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     if shell_type == ShellType::PowerShell || shell_type == ShellType::Cmd {
         bail!("Shell snapshot not supported yet for {shell_type:?}");
     }
-<<<<<<< HEAD
-    let shell = get_shell(shell_type, /*path*/ None)
-        .with_context(|| format!("No available shell for {shell_type:?}"))?;
-
-    let raw_snapshot = capture_snapshot(&shell, cwd, removed_env_vars).await?;
-    let snapshot = strip_snapshot_preamble(&raw_snapshot)?;
-||||||| 413492cd6c
-    let shell = get_shell(shell_type, /*path*/ None)
-        .with_context(|| format!("No available shell for {shell_type:?}"))?;
-
-    let raw_snapshot = capture_snapshot(&shell, cwd).await?;
-    let snapshot = strip_snapshot_preamble(&raw_snapshot)?;
-=======
     let (snapshot, credentials) = capture_snapshot(
         shell,
         cwd,
         shell_environment_policy,
         credential_broker,
         sandbox,
+        removed_env_vars,
     )
     .await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     if let Some(parent) = output_path.parent() {
         let parent_display = parent.display();
@@ -644,47 +619,15 @@ async fn write_shell_snapshot(
 async fn capture_snapshot(
     shell: &Shell,
     cwd: &AbsolutePathBuf,
-<<<<<<< HEAD
-    removed_env_vars: &[String],
-) -> Result<String> {
-||||||| 413492cd6c
-async fn capture_snapshot(shell: &Shell, cwd: &AbsolutePathBuf) -> Result<String> {
-=======
     shell_environment_policy: &ShellEnvironmentPolicy,
     credential_broker: Option<&SnapshotCredentialBroker>,
     sandbox: Option<&ShellSnapshotSandbox>,
+    removed_env_vars: &[String],
 ) -> Result<(String, Option<SnapshotCredentials>)> {
     let broker_config_revision = credential_broker
         .map(|broker| broker.network_proxy.credential_broker_config_revision())
         .unwrap_or_default();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let shell_type = shell.shell_type;
-<<<<<<< HEAD
-    let script = match shell_type {
-        ShellType::Zsh => zsh_snapshot_script(removed_env_vars),
-        ShellType::Bash => bash_snapshot_script(removed_env_vars),
-        ShellType::Sh => sh_snapshot_script(removed_env_vars),
-        ShellType::PowerShell => powershell_snapshot_script(removed_env_vars),
-        ShellType::Cmd => bail!("Shell snapshotting is not yet supported for {shell_type:?}"),
-    };
-    run_script_with_timeout(
-        shell,
-        &script,
-        SNAPSHOT_TIMEOUT,
-        /*use_login_shell*/ true,
-        cwd,
-        removed_env_vars,
-    )
-    .await
-||||||| 413492cd6c
-    match shell_type {
-        ShellType::Zsh => run_shell_script(shell, &zsh_snapshot_script(), cwd).await,
-        ShellType::Bash => run_shell_script(shell, &bash_snapshot_script(), cwd).await,
-        ShellType::Sh => run_shell_script(shell, &sh_snapshot_script(), cwd).await,
-        ShellType::PowerShell => run_shell_script(shell, powershell_snapshot_script(), cwd).await,
-        ShellType::Cmd => bail!("Shell snapshotting is not yet supported for {shell_type:?}"),
-    }
-=======
     let shell_startup = if credential_broker.is_some_and(|broker| !broker.allow_login_shell) {
         SnapshotStartup::NonInteractive
     } else {
@@ -712,10 +655,17 @@ async fn capture_snapshot(shell: &Shell, cwd: &AbsolutePathBuf) -> Result<String
         cwd,
         credential_broker,
         sandbox,
+        removed_env_vars,
     )
     .await?;
-    let capture = CapturedSnapshot::parse(shell_type, raw_snapshot.as_bytes())
+    let mut capture = CapturedSnapshot::parse(shell_type, raw_snapshot.as_bytes())
         .ok_or_else(|| anyhow!("invalid shell snapshot capture"))?;
+    // #310: no secret-named export, nor a provider credential name, is written
+    // to the snapshot file, whatever the policy admits. Only the file changes:
+    // the captured environment, and so the broker's credential and alias
+    // handling for commands, is untouched.
+    let secret_exports = secret_export_patterns(removed_env_vars);
+    capture.retain_exports(|key| !secret_exports.iter().any(|pattern| pattern.matches(key)));
     let Some(credential_broker) = credential_broker else {
         return Ok((capture.render_script(shell_environment_policy), None));
     };
@@ -1063,7 +1013,6 @@ fn replace_provider_context_with_trusted(
             remove_env_value(env, &key);
         }
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn contains_env_key(env: &HashMap<String, String>, key: &str) -> bool {
@@ -1108,6 +1057,7 @@ async fn validate_snapshot(
     cwd: &AbsolutePathBuf,
     credential_broker: Option<&SnapshotCredentialBroker>,
     sandbox: Option<&ShellSnapshotSandbox>,
+    removed_env_vars: &[String],
 ) -> Result<()> {
     let snapshot_path_display = snapshot_path.display();
     let script = format!("set -e; . \"{snapshot_path_display}\"");
@@ -1117,16 +1067,46 @@ async fn validate_snapshot(
         SNAPSHOT_TIMEOUT,
         SnapshotShellMode::Validation(snapshot_path),
         cwd,
-<<<<<<< HEAD
-        /*removed_env_vars*/ &[],
-||||||| 413492cd6c
-=======
         credential_broker,
         sandbox,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        removed_env_vars,
     )
     .await
     .map(|_| ())
+}
+
+/// #310: export names never written to a snapshot file: the secret names and
+/// the provider credential names (`removed_env_vars`), case-insensitively. A
+/// configured name that is not a plain identifier is skipped, so it cannot act
+/// as a wildcard.
+fn secret_export_patterns(removed_env_vars: &[String]) -> Vec<EnvironmentVariablePattern> {
+    SECRET_EXPORT_NAME_PATTERNS
+        .iter()
+        .copied()
+        .chain(
+            removed_env_vars
+                .iter()
+                .map(String::as_str)
+                .filter(|name| is_plain_env_name(name)),
+        )
+        .map(EnvironmentVariablePattern::new_case_insensitive)
+        .collect()
+}
+
+fn is_plain_env_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
+        && chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
+}
+
+/// #310: whether `name` is a provider credential variable the snapshot shell
+/// does not inherit.
+fn is_removed_env_var(name: &str, removed_env_vars: &[String]) -> bool {
+    removed_env_vars
+        .iter()
+        .any(|removed| removed.eq_ignore_ascii_case(name))
 }
 
 async fn run_script_with_timeout(
@@ -1135,13 +1115,9 @@ async fn run_script_with_timeout(
     snapshot_timeout: Duration,
     shell_mode: SnapshotShellMode<'_>,
     cwd: &AbsolutePathBuf,
-<<<<<<< HEAD
-    removed_env_vars: &[String],
-||||||| 413492cd6c
-=======
     credential_broker: Option<&SnapshotCredentialBroker>,
     sandbox: Option<&ShellSnapshotSandbox>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    removed_env_vars: &[String],
 ) -> Result<String> {
     let suppress_startup_files =
         credential_broker.is_some() && matches!(shell_mode, SnapshotShellMode::Validation(_));
@@ -1168,6 +1144,8 @@ async fn run_script_with_timeout(
         };
         let mut env = prepared_env.unwrap_or_else(|| std::env::vars().collect());
         remove_env_value(&mut env, CODEX_TOOL_CALL_ID_ENV_VAR);
+        // #310: the snapshot shell never inherits the provider credentials.
+        env.retain(|name, _| !is_removed_env_var(name, removed_env_vars));
         return sandbox
             .run(
                 args,
@@ -1186,15 +1164,6 @@ async fn run_script_with_timeout(
     handler.args(&args[1..]);
     handler.stdin(Stdio::null());
     handler.current_dir(cwd);
-    for (name, _) in std::env::vars_os() {
-        if name.to_str().is_some_and(|name| {
-            removed_env_vars
-                .iter()
-                .any(|removed| removed.eq_ignore_ascii_case(name))
-        }) {
-            handler.env_remove(&name);
-        }
-    }
     #[cfg(unix)]
     {
         // The shared launcher needs the complete child environment.
@@ -1204,6 +1173,20 @@ async fn run_script_with_timeout(
     if let Some(env) = prepared_env {
         handler.env_clear();
         handler.envs(env);
+    }
+    // #310: the snapshot shell never inherits the provider credentials.
+    let removed = handler
+        .as_std()
+        .get_envs()
+        .map(|(name, _)| name.to_os_string())
+        .chain(std::env::vars_os().map(|(name, _)| name))
+        .filter(|name| {
+            name.to_str()
+                .is_some_and(|name| is_removed_env_var(name, removed_env_vars))
+        })
+        .collect::<Vec<_>>();
+    for name in removed {
+        handler.env_remove(name);
     }
     handler.env_remove(CODEX_TOOL_CALL_ID_ENV_VAR);
     codex_protocol::shell_environment::scrub_non_inheritable_env_vars(handler.as_std_mut());
@@ -1242,452 +1225,6 @@ async fn run_script_with_timeout(
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-<<<<<<< HEAD
-/// Names never exported from a snapshot: the fixed list plus `extra`
-/// (provider credential names, which a startup file may export under a name
-/// the secret patterns miss). Upper-cased, since the scripts compare
-/// upper-cased names; anything that isn't a plain identifier is dropped so a
-/// configured name can't change the patterns.
-fn excluded_export_names(extra: &[String]) -> String {
-    EXCLUDED_EXPORT_VARS
-        .iter()
-        .map(|name| (*name).to_string())
-        .chain(
-            extra
-                .iter()
-                .filter(|name| is_plain_env_name(name))
-                .map(|name| name.to_ascii_uppercase()),
-        )
-        .collect::<Vec<_>>()
-        .join("|")
-}
-
-fn is_plain_env_name(name: &str) -> bool {
-    let mut chars = name.chars();
-    chars
-        .next()
-        .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
-        && chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
-}
-
-fn excluded_exports_regex(extra: &[String]) -> String {
-    format!(
-        "{}|{SECRET_EXPORT_NAME_REGEX}",
-        excluded_export_names(extra)
-    )
-}
-
-fn ascii_case_insensitive_regex(regex: &str) -> String {
-    regex
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphabetic() {
-                format!(
-                    "[{}{}]",
-                    character.to_ascii_uppercase(),
-                    character.to_ascii_lowercase()
-                )
-            } else {
-                character.to_string()
-            }
-        })
-        .collect()
-}
-
-fn excluded_exports_shell_patterns(extra: &[String]) -> String {
-    format!(
-        "{}|{SECRET_EXPORT_SHELL_PATTERNS}",
-        excluded_export_names(extra)
-    )
-}
-
-fn zsh_snapshot_script(removed_env_vars: &[String]) -> String {
-    let excluded = excluded_exports_regex(removed_env_vars);
-    let script = r##"if [[ -n "$ZDOTDIR" ]]; then
-  rc="$ZDOTDIR/.zshrc"
-else
-  rc="$HOME/.zshrc"
-fi
-[[ -r "$rc" ]] && . "$rc"
-print '# Snapshot file'
-print '# Unset all aliases to avoid conflicts with functions'
-print 'unalias -a 2>/dev/null || true'
-print '# Functions'
-functions
-print ''
-setopt_count=$(setopt | wc -l | tr -d ' ')
-print "# setopts $setopt_count"
-setopt | sed 's/^/setopt /'
-print ''
-alias_count=$(alias -L | wc -l | tr -d ' ')
-print "# aliases $alias_count"
-alias -L
-print ''
-export_lines=$(export -p | awk '
-/^(export|declare -x|typeset -x) / {
-  line=$0
-  name=line
-  sub(/^(export|declare -x|typeset -x) /, "", name)
-  if (name ~ /^-[A-Za-z]*r[A-Za-z]* /) {
-    next
-  }
-  if (name ~ /^-[A-Za-z]*T[A-Za-z]* /) {
-    sub(/^-[A-Za-z]*T[A-Za-z]* /, "", name)
-    sub(/ [A-Za-z_][A-Za-z0-9_]*=.*/, "", name)
-  }
-  sub(/=.*/, "", name)
-  if (toupper(name) ~ /^(EXCLUDED_EXPORTS)$/) {
-    next
-  }
-  if (name ~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
-    print line
-  }
-}')
-export_count=$(printf '%s\n' "$export_lines" | sed '/^$/d' | wc -l | tr -d ' ')
-print "# exports $export_count"
-if [[ -n "$export_lines" ]]; then
-  print -r -- "$export_lines"
-fi
-"##;
-    script.replace("EXCLUDED_EXPORTS", &excluded)
-}
-
-fn bash_snapshot_script(removed_env_vars: &[String]) -> String {
-    let excluded = ascii_case_insensitive_regex(&excluded_exports_regex(removed_env_vars));
-    let script = r##"if [ -z "$BASH_ENV" ] && [ -r "$HOME/.bashrc" ]; then
-  . "$HOME/.bashrc"
-fi
-echo '# Snapshot file'
-echo '# Unset all aliases to avoid conflicts with functions'
-unalias -a 2>/dev/null || true
-echo '# Functions'
-declare -f
-echo ''
-bash_opts=$(set -o | awk '$2=="on"{print $1}')
-bash_opt_count=$(printf '%s\n' "$bash_opts" | sed '/^$/d' | wc -l | tr -d ' ')
-echo "# setopts $bash_opt_count"
-if [ -n "$bash_opts" ]; then
-  printf 'set -o %s\n' $bash_opts
-fi
-echo ''
-alias_count=$(alias -p | wc -l | tr -d ' ')
-echo "# aliases $alias_count"
-alias -p
-echo ''
-export_lines=$(
-  # Keep credential-name filtering independent of commands and shell options
-  # that .bashrc may shadow or change.
-  while IFS= read -r name; do
-    if [[ "$name" =~ ^(EXCLUDED_EXPORTS)$ ]]; then
-      continue
-    fi
-    if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-      continue
-    fi
-    declare -xp "$name" 2>/dev/null || true
-  done < <(compgen -e)
-)
-export_count=$(printf '%s\n' "$export_lines" | sed '/^$/d' | wc -l | tr -d ' ')
-echo "# exports $export_count"
-if [ -n "$export_lines" ]; then
-  printf '%s\n' "$export_lines"
-fi
-"##;
-    script.replace("EXCLUDED_EXPORTS", &excluded)
-}
-
-fn sh_snapshot_script(removed_env_vars: &[String]) -> String {
-    let excluded = excluded_exports_regex(removed_env_vars);
-    let excluded_shell_patterns = excluded_exports_shell_patterns(removed_env_vars);
-    let script = r##"if [ -n "$ENV" ] && [ -r "$ENV" ]; then
-  . "$ENV"
-fi
-echo '# Snapshot file'
-echo '# Unset all aliases to avoid conflicts with functions'
-unalias -a 2>/dev/null || true
-echo '# Functions'
-if command -v typeset >/dev/null 2>&1; then
-  typeset -f
-elif command -v declare >/dev/null 2>&1; then
-  declare -f
-fi
-echo ''
-if set -o >/dev/null 2>&1; then
-  sh_opts=$(set -o | awk '$2=="on"{print $1}')
-  sh_opt_count=$(printf '%s\n' "$sh_opts" | sed '/^$/d' | wc -l | tr -d ' ')
-  echo "# setopts $sh_opt_count"
-  if [ -n "$sh_opts" ]; then
-    printf 'set -o %s\n' $sh_opts
-  fi
-else
-  echo '# setopts 0'
-fi
-echo ''
-if alias >/dev/null 2>&1; then
-  alias_count=$(alias | wc -l | tr -d ' ')
-  echo "# aliases $alias_count"
-  alias
-  echo ''
-else
-  echo '# aliases 0'
-fi
-if export -p >/dev/null 2>&1; then
-  export_lines=$(export -p | awk '
-/^(export|declare -x|typeset -x) / {
-  line=$0
-  name=line
-  sub(/^(export|declare -x|typeset -x) /, "", name)
-  sub(/=.*/, "", name)
-  if (toupper(name) ~ /^(EXCLUDED_EXPORTS)$/) {
-    next
-  }
-  if (name ~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
-    print line
-  }
-}')
-  export_count=$(printf '%s\n' "$export_lines" | sed '/^$/d' | wc -l | tr -d ' ')
-  echo "# exports $export_count"
-  if [ -n "$export_lines" ]; then
-    printf '%s\n' "$export_lines"
-  fi
-else
-  export_count=$(env | sort | awk -F= '$1 ~ /^[A-Za-z_][A-Za-z0-9_]*$/ { count++ } END { print count }')
-  echo "# exports $export_count"
-  env | sort | while IFS='=' read -r key value; do
-    upper_key=$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')
-    case "$upper_key" in
-      ""|[0-9]*|*[!A-Za-z0-9_]*|EXCLUDED_SHELL_PATTERNS) continue ;;
-    esac
-    escaped=$(printf "%s" "$value" | sed "s/'/'\"'\"'/g")
-    printf "export %s='%s'\n" "$key" "$escaped"
-  done
-fi
-"##;
-    script
-        .replace("EXCLUDED_EXPORTS", &excluded)
-        .replace("EXCLUDED_SHELL_PATTERNS", &excluded_shell_patterns)
-}
-
-fn powershell_snapshot_script(removed_env_vars: &[String]) -> String {
-    let excluded = excluded_exports_regex(removed_env_vars);
-    r##"$ErrorActionPreference = 'Stop'
-Write-Output '# Snapshot file'
-Write-Output '# Unset all aliases to avoid conflicts with functions'
-Write-Output 'Remove-Item Alias:* -ErrorAction SilentlyContinue'
-Write-Output '# Functions'
-Get-ChildItem Function: | ForEach-Object {
-    "function {0} {{`n{1}`n}}" -f $_.Name, $_.Definition
-}
-Write-Output ''
-$aliases = Get-Alias
-Write-Output ("# aliases " + $aliases.Count)
-$aliases | ForEach-Object {
-    "Set-Alias -Name {0} -Value {1}" -f $_.Name, $_.Definition
-}
-Write-Output ''
-$envVars = Get-ChildItem Env: | Where-Object { $_.Name -notmatch '^(EXCLUDED_EXPORTS)$' }
-Write-Output ("# exports " + $envVars.Count)
-$envVars | ForEach-Object {
-    $escaped = $_.Value -replace "'", "''"
-    "`$env:{0}='{1}'" -f $_.Name, $escaped
-}
-"##
-    .replace("EXCLUDED_EXPORTS", &excluded)
-}
-
-||||||| 413492cd6c
-fn excluded_exports_regex() -> String {
-    EXCLUDED_EXPORT_VARS.join("|")
-}
-
-fn zsh_snapshot_script() -> String {
-    let excluded = excluded_exports_regex();
-    let script = r##"if [[ -n "$ZDOTDIR" ]]; then
-  rc="$ZDOTDIR/.zshrc"
-else
-  rc="$HOME/.zshrc"
-fi
-[[ -r "$rc" ]] && . "$rc"
-print '# Snapshot file'
-print '# Unset all aliases to avoid conflicts with functions'
-print 'unalias -a 2>/dev/null || true'
-print '# Functions'
-functions
-print ''
-setopt_count=$(setopt | wc -l | tr -d ' ')
-print "# setopts $setopt_count"
-setopt | sed 's/^/setopt /'
-print ''
-alias_count=$(alias -L | wc -l | tr -d ' ')
-print "# aliases $alias_count"
-alias -L
-print ''
-export_lines=$(export -p | awk '
-/^(export|declare -x|typeset -x) / {
-  line=$0
-  name=line
-  sub(/^(export|declare -x|typeset -x) /, "", name)
-  if (name ~ /^-[A-Za-z]*r[A-Za-z]* /) {
-    next
-  }
-  if (name ~ /^-[A-Za-z]*T[A-Za-z]* /) {
-    sub(/^-[A-Za-z]*T[A-Za-z]* /, "", name)
-    sub(/ [A-Za-z_][A-Za-z0-9_]*=.*/, "", name)
-  }
-  sub(/=.*/, "", name)
-  if (name ~ /^(EXCLUDED_EXPORTS)$/) {
-    next
-  }
-  if (name ~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
-    print line
-  }
-}')
-export_count=$(printf '%s\n' "$export_lines" | sed '/^$/d' | wc -l | tr -d ' ')
-print "# exports $export_count"
-if [[ -n "$export_lines" ]]; then
-  print -r -- "$export_lines"
-fi
-"##;
-    script.replace("EXCLUDED_EXPORTS", &excluded)
-}
-
-fn bash_snapshot_script() -> String {
-    let excluded = excluded_exports_regex();
-    let script = r##"if [ -z "$BASH_ENV" ] && [ -r "$HOME/.bashrc" ]; then
-  . "$HOME/.bashrc"
-fi
-echo '# Snapshot file'
-echo '# Unset all aliases to avoid conflicts with functions'
-unalias -a 2>/dev/null || true
-echo '# Functions'
-declare -f
-echo ''
-bash_opts=$(set -o | awk '$2=="on"{print $1}')
-bash_opt_count=$(printf '%s\n' "$bash_opts" | sed '/^$/d' | wc -l | tr -d ' ')
-echo "# setopts $bash_opt_count"
-if [ -n "$bash_opts" ]; then
-  printf 'set -o %s\n' $bash_opts
-fi
-echo ''
-alias_count=$(alias -p | wc -l | tr -d ' ')
-echo "# aliases $alias_count"
-alias -p
-echo ''
-export_lines=$(
-  while IFS= read -r name; do
-    if [[ "$name" =~ ^(EXCLUDED_EXPORTS)$ ]]; then
-      continue
-    fi
-    if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-      continue
-    fi
-    declare -xp "$name" 2>/dev/null || true
-  done < <(compgen -e)
-)
-export_count=$(printf '%s\n' "$export_lines" | sed '/^$/d' | wc -l | tr -d ' ')
-echo "# exports $export_count"
-if [ -n "$export_lines" ]; then
-  printf '%s\n' "$export_lines"
-fi
-"##;
-    script.replace("EXCLUDED_EXPORTS", &excluded)
-}
-
-fn sh_snapshot_script() -> String {
-    let excluded = excluded_exports_regex();
-    let script = r##"if [ -n "$ENV" ] && [ -r "$ENV" ]; then
-  . "$ENV"
-fi
-echo '# Snapshot file'
-echo '# Unset all aliases to avoid conflicts with functions'
-unalias -a 2>/dev/null || true
-echo '# Functions'
-if command -v typeset >/dev/null 2>&1; then
-  typeset -f
-elif command -v declare >/dev/null 2>&1; then
-  declare -f
-fi
-echo ''
-if set -o >/dev/null 2>&1; then
-  sh_opts=$(set -o | awk '$2=="on"{print $1}')
-  sh_opt_count=$(printf '%s\n' "$sh_opts" | sed '/^$/d' | wc -l | tr -d ' ')
-  echo "# setopts $sh_opt_count"
-  if [ -n "$sh_opts" ]; then
-    printf 'set -o %s\n' $sh_opts
-  fi
-else
-  echo '# setopts 0'
-fi
-echo ''
-if alias >/dev/null 2>&1; then
-  alias_count=$(alias | wc -l | tr -d ' ')
-  echo "# aliases $alias_count"
-  alias
-  echo ''
-else
-  echo '# aliases 0'
-fi
-if export -p >/dev/null 2>&1; then
-  export_lines=$(export -p | awk '
-/^(export|declare -x|typeset -x) / {
-  line=$0
-  name=line
-  sub(/^(export|declare -x|typeset -x) /, "", name)
-  sub(/=.*/, "", name)
-  if (name ~ /^(EXCLUDED_EXPORTS)$/) {
-    next
-  }
-  if (name ~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
-    print line
-  }
-}')
-  export_count=$(printf '%s\n' "$export_lines" | sed '/^$/d' | wc -l | tr -d ' ')
-  echo "# exports $export_count"
-  if [ -n "$export_lines" ]; then
-    printf '%s\n' "$export_lines"
-  fi
-else
-  export_count=$(env | sort | awk -F= '$1 ~ /^[A-Za-z_][A-Za-z0-9_]*$/ { count++ } END { print count }')
-  echo "# exports $export_count"
-  env | sort | while IFS='=' read -r key value; do
-    case "$key" in
-      ""|[0-9]*|*[!A-Za-z0-9_]*|EXCLUDED_EXPORTS) continue ;;
-    esac
-    escaped=$(printf "%s" "$value" | sed "s/'/'\"'\"'/g")
-    printf "export %s='%s'\n" "$key" "$escaped"
-  done
-fi
-"##;
-    script.replace("EXCLUDED_EXPORTS", &excluded)
-}
-
-fn powershell_snapshot_script() -> &'static str {
-    r##"$ErrorActionPreference = 'Stop'
-Write-Output '# Snapshot file'
-Write-Output '# Unset all aliases to avoid conflicts with functions'
-Write-Output 'Remove-Item Alias:* -ErrorAction SilentlyContinue'
-Write-Output '# Functions'
-Get-ChildItem Function: | ForEach-Object {
-    "function {0} {{`n{1}`n}}" -f $_.Name, $_.Definition
-}
-Write-Output ''
-$aliases = Get-Alias
-Write-Output ("# aliases " + $aliases.Count)
-$aliases | ForEach-Object {
-    "Set-Alias -Name {0} -Value {1}" -f $_.Name, $_.Definition
-}
-Write-Output ''
-$envVars = Get-ChildItem Env:
-Write-Output ("# exports " + $envVars.Count)
-$envVars | ForEach-Object {
-    $escaped = $_.Value -replace "'", "''"
-    "`$env:{0}='{1}'" -f $_.Name, $escaped
-}
-"##
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 /// Removes shell snapshots that either lack a matching session rollout file or
 /// whose rollouts have not been updated within the retention window.
 /// The active session id is exempt from cleanup.
