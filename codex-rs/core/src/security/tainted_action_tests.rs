@@ -1198,9 +1198,18 @@ async fn pf_30_s03_orchestrator_rechecks_after_the_prompt() {
             call_id: "probe-call".to_string(),
             tool_name: codex_tools::ToolName::plain("probe"),
         };
-        let result = crate::tools::orchestrator::ToolOrchestrator::new()
-            .run(&mut probe, &environment, &tool_ctx)
-            .await;
+        // A prompt that is never sent (or never answered) fails the test
+        // instead of hanging it (#2187 review).
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(60),
+            crate::tools::orchestrator::ToolOrchestrator::new().run(
+                &mut probe,
+                &environment,
+                &tool_ctx,
+            ),
+        )
+        .await
+        .expect("the probe run finished");
         answerer.abort();
         let prompts = prompts.load(Ordering::SeqCst);
         let label = format!("{during_prompt} kill_switch={kill_switch}");

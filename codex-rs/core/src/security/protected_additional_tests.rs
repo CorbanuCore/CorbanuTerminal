@@ -644,8 +644,12 @@ fn issue_524_a_failed_check_is_refused_and_explained() {
 /// Issue #513 (Travis, 2026-10-11), the orchestrator with a probe tool:
 /// under Moderate an additional write to the project's `.agents` runs only
 /// when a person was asked about it now. The person's prompt says which file
-/// approving opens; answered without asking (here the approval cache, from
-/// that person's "for this session") the same write is refused and explained.
+/// approving opens; answered without asking (here a run preapproved as an
+/// allow rule makes it) the same write is refused and explained. A stored
+/// session grant of that write does not even preapprove it: the grant is
+/// read through the protected-path strip (#245). The person picks the most lasting answer
+/// the prompt offers (this prompt offers no "for this session", #2187
+/// review).
 #[tokio::test]
 async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_file() {
     use crate::session::turn_context::TurnEnvironment;
@@ -661,6 +665,7 @@ async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_
 
     struct Probe {
         additional: AdditionalPermissionProfile,
+        requirement: ExecApprovalRequirement,
         cwd: PathUri,
         ran: bool,
     }
@@ -683,10 +688,7 @@ async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_
             &self,
             _req: &TurnEnvironment,
         ) -> Option<ExecApprovalRequirement> {
-            Some(ExecApprovalRequirement::NeedsApproval {
-                reason: None,
-                proposed_execpolicy_amendment: None,
-            })
+            Some(self.requirement.clone())
         }
         fn approval_action(
             &self,
@@ -755,7 +757,8 @@ async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_
         )
         .expect("policy");
     *session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
-    // The person answers "for this session" and records the prompt's reason.
+    // The person records the prompt's reason and gives the most lasting
+    // answer it offers.
     let reasons = Arc::new(Mutex::new(Vec::new()));
     let answerer = tokio::spawn({
         let session = Arc::clone(&session);
@@ -766,10 +769,14 @@ async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_
                     continue;
                 };
                 reasons.lock().expect("lock").push(request.reason.clone());
+                let offered = request.available_decisions.clone().unwrap_or_default();
+                let decision = if offered.contains(&ReviewDecision::ApprovedForSession) {
+                    ReviewDecision::ApprovedForSession
+                } else {
+                    ReviewDecision::Approved
+                };
                 let id = request.approval_id.unwrap_or(request.call_id);
-                session
-                    .notify_approval(&id, ReviewDecision::ApprovedForSession)
-                    .await;
+                session.notify_approval(&id, decision).await;
             }
         }
     });
@@ -788,18 +795,81 @@ async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_
         call_id: "probe-call".to_string(),
         tool_name: codex_tools::ToolName::plain("probe"),
     };
+    let run = |additional: AdditionalPermissionProfile, requirement: ExecApprovalRequirement| {
+        let tool_ctx = &tool_ctx;
+        let environment = &environment;
+        async move {
+            let mut probe = Probe {
+                additional,
+                requirement,
+                cwd: environment.cwd().clone(),
+                ran: false,
+            };
+            // A prompt that is never sent (or never answered) fails the test
+            // instead of hanging it (#2187 review).
+            let result = tokio::time::timeout(
+                std::time::Duration::from_secs(60),
+                crate::tools::orchestrator::ToolOrchestrator::new().run(
+                    &mut probe,
+                    environment,
+                    tool_ctx,
+                ),
+            )
+            .await
+            .expect("the probe run finished");
+            (result.map(|_| ()), probe.ran)
+        }
+    };
     let mut results = Vec::new();
-    for _ in 0..2 {
-        let mut probe = Probe {
-            additional: write(agents.as_path()),
-            cwd: environment.cwd().clone(),
-            ran: false,
-        };
-        let result = crate::tools::orchestrator::ToolOrchestrator::new()
-            .run(&mut probe, &environment, &tool_ctx)
-            .await;
-        results.push((result.map(|_| ()), probe.ran));
-    }
+    // Asked now.
+    results.push(
+        run(
+            write(agents.as_path()),
+            ExecApprovalRequirement::NeedsApproval {
+                reason: None,
+                proposed_execpolicy_amendment: None,
+            },
+        )
+        .await,
+    );
+    // A stored session grant of the same write, read as a handler does,
+    // does not cover it.
+    assert!(
+        session.record_granted_request_permissions_for_turn(
+            &codex_protocol::request_permissions::RequestPermissionsResponse {
+                permissions: write(agents.as_path()).into(),
+                scope: codex_protocol::request_permissions::PermissionGrantScope::Session,
+                strict_auto_review: false,
+            },
+            &environment.selection.environment_id,
+            turn.as_ref(),
+            session.services.authority_marker(),
+        ),
+        "the grant is recorded"
+    );
+    let granted = crate::tools::handlers::apply_granted_turn_permissions(
+        &session,
+        &environment,
+        environment.cwd(),
+        crate::sandboxing::SandboxPermissions::WithAdditionalPermissions,
+        Some(write(agents.as_path())),
+    )
+    .await;
+    assert!(
+        !granted.permissions_preapproved,
+        "a stored grant does not cover a protected write"
+    );
+    // Not asked: the same write preapproved (as an allow rule makes it).
+    results.push(
+        run(
+            write(agents.as_path()),
+            ExecApprovalRequirement::Skip {
+                bypass_sandbox: false,
+                proposed_execpolicy_amendment: None,
+            },
+        )
+        .await,
+    );
     answerer.abort();
 
     // Asked now: a person is shown which file approving opens, and it runs.
@@ -814,7 +884,7 @@ async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_
     let (first, first_ran) = &results[0];
     assert!(first.is_ok(), "{first:?}");
     assert!(*first_ran);
-    // Answered from the cache, nobody asked: refused and explained.
+    // Preapproved, nobody asked: refused and explained.
     let (second, second_ran) = &results[1];
     let Err(ToolError::Rejected(message)) = second else {
         panic!("expected a refusal: {second:?}");
