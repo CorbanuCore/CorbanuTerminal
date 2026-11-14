@@ -11,7 +11,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-85-S02"
 created: 2026-11-07
-updated: 2026-11-07
+updated: 2026-11-14
 ---
 
 # PF-85-S04 — Tier 3: TUI, app-server, exec, CLI
@@ -39,6 +39,11 @@ updated: 2026-11-07
 - [ ] Dependencies are completed.
 - [ ] Worktree, branch, and base commit are exact and match the plan.
 - [ ] If parallel, owner/lane/scopes are disjoint and the receiving integration gate is recorded.
+- [x] Early start authorized (coordinator, 2026-11-14): S04 starts before the `depends_on` PF-85-S02 exit, in
+  parallel with the last S3a rows and main merge #3 (#2176). Order: S4c app-server, then S4d exec; S4e stays
+  contributor-friendly. Claim on #1631; status on #1532.
+- [x] PF-85-S02's library work (S2a/S2b/S2c) is merged on the sync branch; its tests are deferred to the
+  compile pass, so S4 slice PRs carry no S2 test evidence and core-test failures there are expected-red.
 
 ## Done
 
