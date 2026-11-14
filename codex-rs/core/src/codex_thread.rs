@@ -42,13 +42,7 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::ProfileWorkspaceRoot;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort;
-<<<<<<< HEAD
-use codex_protocol::protocol::AdditionalContextEntry;
 use codex_protocol::protocol::AgentMessageKind;
-||||||| 413492cd6c
-use codex_protocol::protocol::AdditionalContextEntry;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EnvironmentConfig;
 use codex_protocol::protocol::EnvironmentConfigState;
@@ -127,97 +121,10 @@ pub struct ThreadConfigSnapshot {
     pub parent_thread_id: Option<ThreadId>,
     pub thread_source: Option<ThreadSource>,
     pub originator: String,
-<<<<<<< HEAD
     /// PF-84: the live account as `<provider>:<name>` (`default` included),
     /// so workers the client starts for this thread inherit it.
     pub provider_account: Option<String>,
-}
-
-/// Explains why `CodexThread::try_start_turn_if_idle` rejected an automatic
-/// idle turn.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TryStartTurnIfIdleRejectionReason {
-    /// User/client-triggered mailbox work is already queued and must take
-    /// priority over extension-initiated idle work.
-    PendingTriggerTurn,
-    /// The thread is in Plan mode, where automatic idle work must not start a
-    /// new model turn.
-    PlanMode,
-    /// Another turn or task is active, or the idle reservation was lost before
-    /// the automatic turn could start.
-    Busy,
-    /// #507: the security kill switch is on. Automatic idle work (a goal
-    /// continuation) waits for a turn someone starts after it is turned off.
-    KillSwitch,
-}
-
-/// Rejection returned when an extension asks to start automatic idle work but
-/// the thread is not eligible to run it.
-#[derive(Debug)]
-pub struct TryStartTurnIfIdleError {
-    reason: TryStartTurnIfIdleRejectionReason,
-    input: Vec<ResponseItem>,
-}
-
-impl TryStartTurnIfIdleError {
-    pub(crate) fn new(reason: TryStartTurnIfIdleRejectionReason, input: Vec<ResponseItem>) -> Self {
-        Self { reason, input }
-    }
-
-    /// Returns the stable reason the automatic idle turn was rejected.
-    pub fn reason(&self) -> TryStartTurnIfIdleRejectionReason {
-        self.reason
-    }
-
-    /// Consumes the rejection and returns the original model-visible input
-    /// unchanged, so callers can retry, drop, or log it explicitly.
-    pub fn into_input(self) -> Vec<ResponseItem> {
-        self.input
-    }
-||||||| 413492cd6c
-}
-
-/// Explains why `CodexThread::try_start_turn_if_idle` rejected an automatic
-/// idle turn.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TryStartTurnIfIdleRejectionReason {
-    /// User/client-triggered mailbox work is already queued and must take
-    /// priority over extension-initiated idle work.
-    PendingTriggerTurn,
-    /// The thread is in Plan mode, where automatic idle work must not start a
-    /// new model turn.
-    PlanMode,
-    /// Another turn or task is active, or the idle reservation was lost before
-    /// the automatic turn could start.
-    Busy,
-}
-
-/// Rejection returned when an extension asks to start automatic idle work but
-/// the thread is not eligible to run it.
-#[derive(Debug)]
-pub struct TryStartTurnIfIdleError {
-    reason: TryStartTurnIfIdleRejectionReason,
-    input: Vec<ResponseItem>,
-}
-
-impl TryStartTurnIfIdleError {
-    pub(crate) fn new(reason: TryStartTurnIfIdleRejectionReason, input: Vec<ResponseItem>) -> Self {
-        Self { reason, input }
-    }
-
-    /// Returns the stable reason the automatic idle turn was rejected.
-    pub fn reason(&self) -> TryStartTurnIfIdleRejectionReason {
-        self.reason
-    }
-
-    /// Consumes the rejection and returns the original model-visible input
-    /// unchanged, so callers can retry, drop, or log it explicitly.
-    pub fn into_input(self) -> Vec<ResponseItem> {
-        self.input
-    }
-=======
     pub disabled_plugin_ids: Vec<String>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl ThreadConfigSnapshot {
@@ -662,7 +569,6 @@ impl CodexThread {
             .await
     }
 
-<<<<<<< HEAD
     /// Durably enqueue a provider-neutral message for another native agent in this thread's tree.
     ///
     /// Persistent crew products use this bridge rather than maintaining their own dispatch queue.
@@ -690,7 +596,8 @@ impl CodexThread {
             ));
         }
 
-        let control = &self.session.services.agent_control;
+        // D530 (a): the durable mailbox is the local backend's.
+        let control = self.session.services.agent_control.local_or_unsupported()?;
         let author = self
             .session_source
             .get_agent_path()
@@ -698,7 +605,7 @@ impl CodexThread {
         // #1248: set only when the target is the root of another tree, where `author` is a
         // path in the sender's own tree and would read as one of the recipient's.
         let mut author_label = None;
-        let recipient = match control.ensure_agent_known(target_thread_id) {
+        let recipient = match control.runtime.ensure_agent_known(target_thread_id) {
             Ok(target) => target.agent_path.ok_or_else(|| {
                 CodexErr::InvalidRequest(format!(
                     "target agent {target_thread_id} is missing an agent path"
@@ -760,19 +667,24 @@ impl CodexThread {
         control
             .admit_inter_agent_communication(target_thread_id, &communication)
             .await?;
-        control
-            .ensure_v2_agent_loaded(self.config().await.as_ref().clone(), target_thread_id)
+        let _residency_pin = control
+            .ensure_v2_agent_loaded(
+                self.config().await.as_ref().clone(),
+                target_thread_id,
+                /*parent*/ None,
+            )
             .await?;
         control
             .send_persisted_inter_agent_communication(
                 target_thread_id,
                 communication,
-                /*parent_turn_id*/ None,
+                TurnStartOptions::default(),
+                /*message_delivery*/ None,
             )
             .await?;
         Ok((stable_message_id, effective_trigger_turn))
-||||||| 413492cd6c
-=======
+    }
+
     /// Starts a regular turn only when the thread is idle.
     ///
     /// Core declines the input without recording or enqueueing it when idle
@@ -941,14 +853,20 @@ impl CodexThread {
         request: impl Into<WithTurnExtensionData<TurnInputRequest>>,
         mode: TurnInputMode,
     ) -> CodexResult<TurnInputSubmission> {
-        if !matches!(mode, TurnInputMode::Steer { .. }) {
+        let request = request.into();
+        // S2c contract: a person's input is never refused for agent execution capacity; only
+        // work that starts a worker turn by itself is.
+        let human_input = matches!(
+            request.request.input,
+            codex_protocol::turn_input::TurnInput::UserInput { .. }
+        );
+        if !human_input && !matches!(mode, TurnInputMode::Steer { .. }) {
             self.ensure_execution_capacity_for_turn_start(
                 self.session.services.agent_control.as_ref(),
             )
             .await?;
         }
         self.io.submit_turn_input(request, mode).await
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Persist whether this thread is eligible for future memory generation.
@@ -958,28 +876,14 @@ impl CodexThread {
 
     /// Injects model-visible items into the currently active turn.
     ///
-<<<<<<< HEAD
-    /// New work is deferred until the turn boundary if the active task cannot
-    /// admit it under the latest authorization.
-    /// It returns the unchanged items when this thread has no active turn.
-||||||| 413492cd6c
-    /// This is the thread-level bridge to `Session::inject_if_running` for
-    /// callers that only hold a `CodexThread`.
-    /// It returns the unchanged items when this thread has no active turn.
-=======
-    /// This is the thread-level bridge to `Session::inject_if_running` for
-    /// callers that only hold a `CodexThread`.
+    /// This is the thread-level bridge to `Session::inject_extension_if_running` for
+    /// callers that only hold a `CodexThread`. New work is deferred until the turn boundary
+    /// if the active task cannot admit it under the latest authorization (D532).
     /// Returns the unchanged batch when there is no active turn or an item requires typed turn input.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub async fn inject_if_running(
         &self,
         items: Vec<ResponseItem>,
     ) -> Result<(), Vec<ResponseItem>> {
-<<<<<<< HEAD
-        self.session.inject_extension_if_running(items).await
-||||||| 413492cd6c
-        self.session.inject_if_running(items).await
-=======
         if items
             .iter()
             .try_for_each(validate_injected_response_item)
@@ -987,8 +891,8 @@ impl CodexThread {
         {
             return Err(items);
         }
-        self.session.inject_if_running(items).await
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        // D532: work from outside the running turn needs admission.
+        self.session.inject_extension_if_running(items).await
     }
 
     /// Environment selections captured by the active turn, before later settings updates.
@@ -1161,20 +1065,9 @@ impl CodexThread {
             permission_profile,
             active_permission_profile,
             windows_sandbox_level,
-<<<<<<< HEAD
-            collaboration_mode: Some(collaboration_mode),
-            model_provider,
-            reasoning_summary: summary,
-            service_tier,
-            personality,
-||||||| 413492cd6c
-            collaboration_mode: Some(collaboration_mode),
-            reasoning_summary: summary,
-            service_tier,
-            personality,
-=======
             disabled_plugin_ids,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            // #578: a provider switch from thread settings.
+            model_provider,
             ..Default::default()
         }
     }
@@ -1223,7 +1116,6 @@ impl CodexThread {
         self.session.token_usage_info().await
     }
 
-<<<<<<< HEAD
     /// PF-84: this thread's provider-reported usage per named account, `None`
     /// unless named accounts recorded some.
     pub async fn account_token_usage(
@@ -1235,15 +1127,31 @@ impl CodexThread {
     /// Records a user-role session-prefix message without creating a new user turn boundary.
     #[cfg(test)]
     pub(crate) async fn inject_user_message_without_turn(&self, message: String) {
-        self.inject_message_without_turn(message, /*origin*/ None)
+        let item = ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText { text: message }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        };
+        self.inject_item_without_turn(item, /*origin*/ None).await;
+    }
+
+    /// Records a context fragment without creating a new user turn boundary.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) async fn inject_fragment_without_turn(&self, fragment: impl ContextualUserFragment) {
+        self.inject_item_without_turn(ContextualUserFragment::into(fragment), /*origin*/ None)
             .await;
     }
 
     /// A sub-agent's result notification: agent data, never human or host text
     /// (`source_envelopes`; first registration wins).
-    pub(crate) async fn inject_agent_result_without_turn(&self, message: String) {
-        self.inject_message_without_turn(
-            message,
+    pub(crate) async fn inject_agent_result_fragment_without_turn(
+        &self,
+        fragment: impl ContextualUserFragment,
+    ) {
+        self.inject_item_without_turn(
+            ContextualUserFragment::into(fragment),
             Some(crate::security::ingress::MessageOrigin::External(
                 codex_protocol::provenance::SourceKind::ChildAgent,
             )),
@@ -1251,39 +1159,17 @@ impl CodexThread {
         .await;
     }
 
-    async fn inject_message_without_turn(
+    async fn inject_item_without_turn(
         &self,
-        message: String,
+        item: ResponseItem,
         origin: Option<crate::security::ingress::MessageOrigin>,
     ) {
-        let item = ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText { text: message }],
-            phase: None,
-            internal_chat_message_metadata_passthrough: None,
-        };
         if let Some(origin) = origin {
             self.session
                 .services
                 .model_client()
                 .register_message_origin(std::slice::from_ref(&item), origin);
         }
-||||||| 413492cd6c
-    /// Records a user-role session-prefix message without creating a new user turn boundary.
-    pub(crate) async fn inject_user_message_without_turn(&self, message: String) {
-        let item = ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText { text: message }],
-            phase: None,
-            internal_chat_message_metadata_passthrough: None,
-        };
-=======
-    /// Records a context fragment without creating a new user turn boundary.
-    pub(crate) async fn inject_fragment_without_turn(&self, fragment: impl ContextualUserFragment) {
-        let item = ContextualUserFragment::into(fragment);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.session
             .inject_no_new_turn(vec![item], /*current_turn_context*/ None)
             .await;
@@ -1459,7 +1345,6 @@ impl CodexThread {
         self.session.thread_config_snapshot().await
     }
 
-<<<<<<< HEAD
     /// PF-84-S06 (#658): whether a client is attached to this thread. A user
     /// thread nobody is attached to (one the user left, kept loaded for a
     /// while) does not count toward the account the process's own backend
@@ -1469,8 +1354,8 @@ impl CodexThread {
             .services
             .active_auth
             .set_user_attached(attached);
-||||||| 413492cd6c
-=======
+    }
+
     pub async fn resume_config_snapshot(&self) -> (ThreadConfigSnapshot, Option<String>) {
         self.session.resume_config_snapshot().await
     }
@@ -1502,7 +1387,6 @@ impl CodexThread {
     /// Returns the MCP extensions declared by the client that created this runtime.
     pub fn client_mcp_extensions(&self) -> ClientMcpExtensions {
         self.session.services.client_mcp_extensions.clone()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Returns the files that supplied the thread's loaded model instructions.
@@ -1728,7 +1612,7 @@ impl CodexThread {
             }
             None => None,
         };
-        let _ = self.session.services.auth_manager.auth().await;
+        let _ = self.session.services.auth_manager().auth().await;
         self.session.refresh_mcp_if_dirty().await;
         codex_mcp::McpResourceClient::new(Arc::clone(&self.session.services.mcp_runtime))
             .open_event_stream(name, &arguments, meta)

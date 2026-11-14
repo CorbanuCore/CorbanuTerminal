@@ -232,7 +232,13 @@ impl NetworkProxySpec {
                     "scoped OpenAI credential route is invalid",
                 )
             })?;
-        let state = self.build_state_with_audit_metadata(audit_metadata)?;
+        // As main: the credential route's state is for this host's proxy, local binding off
+        // unless configured.
+        let state = self.build_state_with_audit_metadata(
+            audit_metadata,
+            codex_utils_path_uri::Platform::native(),
+            codex_network_proxy::LocalBindingPolicy::DefaultFalse,
+        )?;
         state.install_scoped_credential_route(route).map_err(|_| {
             std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
@@ -321,7 +327,13 @@ impl NetworkProxySpec {
         });
         let route = IsolatedCredentialRoute::new(capability_id, authority, dispatcher)
             .map_err(|_| std::io::Error::other("isolated credential route is invalid"))?;
-        let state = self.build_state_with_audit_metadata(audit_metadata)?;
+        // As main: the credential route's state is for this host's proxy, local binding off
+        // unless configured.
+        let state = self.build_state_with_audit_metadata(
+            audit_metadata,
+            codex_utils_path_uri::Platform::native(),
+            codex_network_proxy::LocalBindingPolicy::DefaultFalse,
+        )?;
         state
             .install_isolated_credential_route(route)
             .map_err(|_| std::io::Error::other("isolated credential route is unavailable"))?;

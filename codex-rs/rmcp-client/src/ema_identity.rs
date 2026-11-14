@@ -3,13 +3,13 @@
 
 use std::sync::Arc;
 
+use crate::oauth::DefaultKeyringStore;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
 use anyhow::bail;
 use codex_config::McpEmaTokenEndpointAuthMethod;
 use codex_exec_server::HttpClient;
-use codex_keyring_store::DefaultKeyringStore;
 use codex_keyring_store::KeyringStore;
 use oauth2::TokenResponse;
 use rmcp::transport::AuthorizationManager;

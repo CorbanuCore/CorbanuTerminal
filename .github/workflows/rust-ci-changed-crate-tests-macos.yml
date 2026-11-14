@@ -31,6 +31,7 @@ on:
       - "codex-rs/exec-server/**"
       - "codex-rs/keyring-store/**"
       - "codex-rs/network-proxy/**"
+      - "third_party/rama-dns/**"
       - "codex-rs/process-hardening/**"
       - "codex-rs/sandboxing/**"
 

@@ -141,9 +141,6 @@ use codex_protocol::models::ImageReference;
 use codex_protocol::models::InternalChatMessageMetadataPassthrough;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::SandboxEnforcement;
-use codex_protocol::models::format_allow_prefixes;
-use codex_protocol::openai_models::ModelBilling;
-use codex_protocol::openai_models::ModelCapabilityTier;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ModelPreset;
@@ -3723,22 +3720,6 @@ impl Session {
             Arc::clone(&task.turn_context),
             task.cancellation_token.child_token(),
         ))
-    }
-
-    pub(crate) async fn record_execpolicy_amendment_message(
-        &self,
-        sub_id: &str,
-        amendment: &ExecPolicyAmendment,
-    ) {
-        let Some(prefixes) = format_allow_prefixes(vec![amendment.command.clone()]) else {
-            warn!("execpolicy amendment for {sub_id} had no command prefix");
-            return;
-        };
-        let message: ResponseItem =
-            ContextualUserFragment::into(ApprovedCommandPrefixSaved::new(prefixes));
-        let turn_context = self.turn_context_for_sub_id(sub_id).await;
-        self.inject_no_new_turn(vec![message], turn_context.as_deref())
-            .await;
     }
 
     /// `shown_under` (#945): the policy marker an allowing answer's prompt

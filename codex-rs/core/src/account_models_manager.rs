@@ -27,6 +27,7 @@ use codex_models_manager::manager::ModelsManagerFuture;
 use codex_models_manager::manager::RefreshStrategy;
 use codex_models_manager::manager::SharedModelsManager;
 use codex_protocol::config_types::CollaborationModeMask;
+use codex_protocol::openai_models::CatalogModel;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ModelsResponse;
@@ -141,6 +142,33 @@ impl ModelsManager for AccountModelsManager {
         })
     }
 
+    fn model_catalog_with_origins(
+        &self,
+        refresh_strategy: RefreshStrategy,
+        http_client_factory: HttpClientFactory,
+    ) -> ModelsManagerFuture<'_, Vec<CatalogModel>> {
+        let inner = self.inner();
+        let refresh_strategy = self.strategy(refresh_strategy);
+        Box::pin(async move {
+            inner
+                .model_catalog_with_origins(refresh_strategy, http_client_factory)
+                .await
+        })
+    }
+
+    fn refresh_after_auth_change(
+        &self,
+        http_client_factory: HttpClientFactory,
+    ) -> ModelsManagerFuture<'_, ()> {
+        let inner = self.inner();
+        let offline = self.strategy(RefreshStrategy::Online) == RefreshStrategy::Offline;
+        Box::pin(async move {
+            if !offline {
+                inner.refresh_after_auth_change(http_client_factory).await;
+            }
+        })
+    }
+
     fn get_remote_models(&self) -> ModelsManagerFuture<'_, Vec<ModelInfo>> {
         let inner = self.inner();
         Box::pin(async move { inner.get_remote_models().await })
@@ -198,7 +226,7 @@ impl ModelsManager for AccountModelsManager {
         &'a self,
         model: &'a str,
         config: &'a ModelsManagerConfig,
-    ) -> ModelsManagerFuture<'a, ModelInfo> {
+    ) -> ModelsManagerFuture<'a, CatalogModel> {
         let inner = self.inner();
         Box::pin(async move { inner.get_model_info(model, config).await })
     }

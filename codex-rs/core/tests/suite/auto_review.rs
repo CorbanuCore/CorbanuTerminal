@@ -691,12 +691,8 @@ fn remote_model_with_auto_review_override(slug: &str, review_model: &str) -> Mod
         supports_image_detail_original: false,
         context_window: Some(272_000),
         max_context_window: None,
-<<<<<<< HEAD
         max_output_tokens: None,
-||||||| 413492cd6c
-=======
         guardian: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         auto_compact_token_limit: None,
         comp_hash: None,
         effective_context_window_percent: 95,
