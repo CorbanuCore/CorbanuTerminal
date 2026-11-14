@@ -111,7 +111,6 @@ fn parses_config_isolation_flags() {
 }
 
 #[test]
-<<<<<<< HEAD
 fn help_uses_corbanu_command_and_compatible_home_identity() {
     let error = Cli::try_parse_from(["corbanu", "--help"]).expect_err("help exits early");
     let help = error.to_string();
@@ -122,8 +121,9 @@ fn help_uses_corbanu_command_and_compatible_home_identity() {
     assert!(!help.contains("Usage: codex exec"));
     assert!(!help.contains("$PFTERMINAL_HOME/config.toml"));
     assert!(!help.contains("$CODEX_HOME/config.toml"));
-||||||| 413492cd6c
-=======
+}
+
+#[test]
 fn approve_for_me_flag_applies_to_resume_when_passed_at_exec_root() {
     for flag in ["--approve-for-me", "--not-so-yolo"] {
         let cli = Cli::parse_from(["codex-exec", flag, "resume", "--last"]);
@@ -163,5 +163,4 @@ fn worktree_flag_is_accepted_before_fork_subcommand() {
 
     assert!(cli.worktree);
     assert!(matches!(cli.command, Some(Command::Fork(_))));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
