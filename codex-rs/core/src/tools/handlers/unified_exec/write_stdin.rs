@@ -1,5 +1,4 @@
 use crate::function_tool::FunctionCallError;
-<<<<<<< HEAD
 use crate::security::protected_surface::Admission;
 use crate::security::protected_surface::Route;
 use crate::security::protected_surface::TypedWindow;
@@ -13,10 +12,7 @@ use crate::security::protected_surface::note_interrupt;
 use crate::security::tainted_action::ProtectedActionKind;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
-||||||| 413492cd6c
-=======
 use crate::tools::context::ToolEnvironments;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
 use crate::tools::context::boxed_tool_output;
@@ -40,15 +36,6 @@ use super::post_unified_exec_tool_use_payload;
 
 #[derive(Debug, Deserialize)]
 struct WriteStdinArgs {
-<<<<<<< HEAD
-    // The model is trained on `session_id`.
-    #[serde(deserialize_with = "super::deserialize_integral_i32")]
-    session_id: i32,
-||||||| 413492cd6c
-    // The model is trained on `session_id`.
-    session_id: i32,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     #[serde(default)]
     chars: String,
     #[serde(
@@ -70,7 +57,7 @@ impl WriteStdinArgs {
                 "write_stdin handler received unsupported payload".to_string(),
             ));
         };
-        parse_arguments(arguments)
+        parse_arguments_for_tool("write_stdin", arguments)
     }
 }
 
@@ -109,12 +96,7 @@ impl WriteStdinHandler {
             cancellation_token,
             call_id,
             payload,
-<<<<<<< HEAD
-            call_id,
-||||||| 413492cd6c
-=======
             environments,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             ..
         } = invocation;
 
@@ -123,37 +105,47 @@ impl WriteStdinHandler {
                 "write_stdin requires a terminal session".to_string(),
             ));
         };
-<<<<<<< HEAD
-
-        let args: WriteStdinArgs = parse_arguments_for_tool("write_stdin", &arguments)?;
+        let args = WriteStdinArgs::parse(&payload)?;
+        // The process the write goes to (the model's `session_id`).
+        let process_id = terminal.process_id;
         // #1976 (D491): nothing is typed into a process without the Windows
         // sandbox under Moderate or Aggressive (one started before the level
         // rose); polling and interrupts still work. #2000: a process started
         // before the session's Windows sandbox was set up still runs without
         // it, so typing into it is judged by the sandbox it started with.
+        // D522 (a): the terminal's environment launching with MXC counts as
+        // no sandbox, as for commands.
         let typing = !args.chars.is_empty() && !is_interrupt(&args.chars);
-        if typing
-            && let Some(refusal) = crate::security::windows_unsandboxed::session_typing_refusal(
+        if typing {
+            let windows_sandbox_level = step_context
+                .environments
+                .turn_environments()
+                .find(|environment| environment.selection.environment_id == terminal.environment_id)
+                .map_or(turn.windows_sandbox_level, |environment| {
+                    crate::tools::orchestrator::unsandboxed_check_level(
+                        environment.config(),
+                        turn.windows_sandbox_level,
+                    )
+                });
+            if let Some(refusal) = crate::security::windows_unsandboxed::session_typing_refusal(
                 &session,
-                turn.windows_sandbox_level,
+                windows_sandbox_level,
                 session
                     .services
                     .unified_exec_manager
-                    .process_windows_sandbox_level(args.session_id)
+                    .process_windows_sandbox_level(process_id)
                     .await,
-            )
-        {
-            crate::security::inspection::record_refusal(
-                session.thread_id(),
-                crate::security::windows_unsandboxed::INSPECTED_TYPING,
-                crate::security::windows_unsandboxed::inspected_outcome(
-                    session.services.model_client().live_level(),
-                ),
-            );
-            return Err(FunctionCallError::RespondToModel(refusal));
-        }
-        if !args.chars.is_empty() && !is_interrupt(&args.chars) {
-            typed_link_check(&session, &turn, &args).await?;
+            ) {
+                crate::security::inspection::record_refusal(
+                    session.thread_id(),
+                    crate::security::windows_unsandboxed::INSPECTED_TYPING,
+                    crate::security::windows_unsandboxed::inspected_outcome(
+                        session.services.model_client().live_level(),
+                    ),
+                );
+                return Err(FunctionCallError::RespondToModel(refusal));
+            }
+            typed_link_check(&session, &turn, process_id, &args).await?;
         }
         // PF-23-S01: writes to one process, interrupts included, are judged
         // and sent one at a time.
@@ -161,24 +153,18 @@ impl WriteStdinHandler {
         let _typing = if args.chars.is_empty() || post_taint.is_none() {
             None
         } else {
-            let guard = lock_typed_input(session.thread_id(), args.session_id).await;
+            let guard = lock_typed_input(session.thread_id(), process_id).await;
             if is_interrupt(&args.chars) {
                 if post_taint.is_some_and(|state| state.taint_generation > 0) {
-                    note_interrupt(session.thread_id(), args.session_id);
+                    note_interrupt(session.thread_id(), process_id);
                 }
             } else {
-                post_taint_check(&session, &turn, &call_id, &args).await?;
+                post_taint_check(&session, &turn, &call_id, process_id, &args).await?;
             }
             Some(guard)
         };
-||||||| 413492cd6c
-
-        let args: WriteStdinArgs = parse_arguments(&arguments)?;
-=======
-        let args = WriteStdinArgs::parse(&payload)?;
         let context =
             UnifiedExecContext::new(session.clone(), step_context, cancellation_token, call_id);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let response = session
             .services
             .unified_exec_manager
@@ -226,6 +212,7 @@ impl WriteStdinHandler {
 async fn typed_link_check(
     session: &Session,
     turn: &TurnContext,
+    session_id: i32,
     args: &WriteStdinArgs,
 ) -> Result<(), FunctionCallError> {
     use crate::security::protected_links;
@@ -243,7 +230,7 @@ async fn typed_link_check(
     {
         return Ok(());
     }
-    let process_id = args.session_id.to_string();
+    let process_id = session_id.to_string();
     let Some(cwd) = session
         .services
         .unified_exec_manager
@@ -271,9 +258,10 @@ async fn post_taint_check(
     session: &Session,
     turn: &TurnContext,
     call_id: &str,
+    session_id: i32,
     args: &WriteStdinArgs,
 ) -> Result<(), FunctionCallError> {
-    let process_id = args.session_id.to_string();
+    let process_id = session_id.to_string();
     let processes = session.services.unified_exec_manager.list_processes().await;
     let live: Vec<i32> = processes
         .iter()
@@ -296,7 +284,7 @@ async fn post_taint_check(
     // human once under Moderate, and a grant under Aggressive.
     let thread = session.thread_id();
     let ask_unconfined = match state.as_ref() {
-        Some(state) => match confined::typing(thread, args.session_id, state) {
+        Some(state) => match confined::typing(thread, session_id, state) {
             confined::Typing::Clear => false,
             confined::Typing::AskOnce => true,
             confined::Typing::Refused(refusal) => {
@@ -307,13 +295,13 @@ async fn post_taint_check(
     };
     // Judged with what was typed since untrusted content arrived, so a
     // command split across calls is seen whole.
-    let window = TypedWindow::open(session.thread_id(), args.session_id, &args.chars, &live);
+    let window = TypedWindow::open(session.thread_id(), session_id, &args.chars, &live);
     let codex_home = turn.config.codex_home.to_path_buf();
     let (texts, unreadable) = (window.texts(), window.unreadable());
     let command = process.command.clone();
     let admission = admit(
         session,
-        turn.approval_policy.value(),
+        turn.approval_policy(),
         Route::WriteStdin,
         call_id,
         move || {
@@ -367,7 +355,7 @@ async fn post_taint_check(
         .resolve(session, approved)
         .map_err(FunctionCallError::RespondToModel)?;
     if ask_unconfined && let Some(state) = &state {
-        confined::note_allowed(thread, args.session_id, state);
+        confined::note_allowed(thread, session_id, state);
     }
     window.clear();
     Ok(())
@@ -377,17 +365,13 @@ async fn post_taint_check(
 const TYPED_TEXT_SHOWN: usize = 300;
 
 impl CoreToolRuntime for WriteStdinHandler {
-<<<<<<< HEAD
     fn repeated_identical_calls_are_polling(&self) -> bool {
         true
     }
-||||||| 413492cd6c
-=======
+
     fn live_environment_resolver(&self) -> Option<LiveEnvironmentResolver> {
         Some(super::terminal_session_for_input)
     }
-
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     fn matches_kind(&self, payload: &ToolPayload) -> bool {
         matches!(payload, ToolPayload::Function { .. })
     }
@@ -421,8 +405,13 @@ mod tests {
             r#"{"session_id":29757.0,"chars":"","yield_time_ms":120000.0,"max_output_tokens":3000.0}"#,
         )
         .expect("integral JSON floats should be compatible with integer tool fields");
+        let terminal: super::super::TerminalSessionArgs = parse_arguments_for_tool(
+            "write_stdin",
+            r#"{"session_id":29757.0,"chars":""}"#,
+        )
+        .expect("an integral JSON float session id should be accepted");
 
-        assert_eq!(args.session_id, 29_757);
+        assert_eq!(terminal.session_id, 29_757);
         assert_eq!(args.yield_time_ms, 120_000);
         assert_eq!(args.max_output_tokens, Some(3_000));
     }
@@ -433,7 +422,6 @@ mod tests {
             parse_arguments_for_tool("write_stdin", r#"{"session_id":42,"chars":"continue"}"#)
                 .expect("ordinary integer arguments should remain valid");
 
-        assert_eq!(args.session_id, 42);
         assert_eq!(
             args.yield_time_ms,
             super::super::default_write_stdin_yield_time_ms()
@@ -443,7 +431,7 @@ mod tests {
 
     #[test]
     fn rejects_fractional_integer_fields() {
-        let error = parse_arguments_for_tool::<WriteStdinArgs>(
+        let error = parse_arguments_for_tool::<super::super::TerminalSessionArgs>(
             "write_stdin",
             r#"{"session_id":42.5,"yield_time_ms":1000}"#,
         )

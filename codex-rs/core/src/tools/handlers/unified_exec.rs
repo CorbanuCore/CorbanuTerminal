@@ -31,14 +31,15 @@ pub(crate) use exec_command::ExecCommandHandlerOptions;
 pub use write_stdin::WriteStdinHandler;
 
 /// Terminal tools expose the unified-exec process ID as `session_id`.
+#[derive(Debug, Deserialize)]
+pub(super) struct TerminalSessionArgs {
+    #[serde(deserialize_with = "deserialize_integral_i32")]
+    pub(super) session_id: i32,
+}
+
 pub(crate) fn terminal_session_for_input(
     invocation: &ToolInvocation,
 ) -> BoxFuture<'_, Result<ToolEnvironments, FunctionCallError>> {
-    #[derive(Deserialize)]
-    struct TerminalSessionArgs {
-        session_id: i32,
-    }
-
     Box::pin(async move {
         let ToolPayload::Function { arguments } = &invocation.payload else {
             return Err(FunctionCallError::Fatal(
@@ -78,15 +79,9 @@ pub(crate) struct ExecCommandArgs {
     #[serde(default = "default_exec_yield_time_ms")]
     #[serde(deserialize_with = "deserialize_integral_u64")]
     yield_time_ms: u64,
-<<<<<<< HEAD
-    #[serde(default, deserialize_with = "deserialize_optional_integral_usize")]
-||||||| 413492cd6c
-    #[serde(default)]
-=======
     #[serde(default)]
     timeout_ms: Option<u64>,
-    #[serde(default)]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    #[serde(default, deserialize_with = "deserialize_optional_integral_usize")]
     max_output_tokens: Option<usize>,
     #[serde(default)]
     sandbox_permissions: Option<SandboxPermissions>,
