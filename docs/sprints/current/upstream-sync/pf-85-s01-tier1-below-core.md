@@ -7,7 +7,7 @@ plan_feature: "PF-85"
 execution_order: 2
 owner: "Coordinator, contributor integration #2106"
 parallel_lane: "upstream-sync"
-write_scope: "codex-rs/codex-mcp/, codex-rs/rmcp-client/, docs/plans/active/upstream-sync-rust-v0.167.0.md, docs/sprints/current/upstream-sync/, docs/sprints/archive/upstream-sync/, docs/management/upstreamSync/, qa/release/unreleased/notes/"
+write_scope: "codex-rs/codex-mcp/, codex-rs/rmcp-client/, docs/plans/active/upstream-sync-rust-v0.167.0.md, docs/sprints/current/upstream-sync/, docs/sprints/archive/upstream-sync/, docs/management/upstreamSync/, qa/release/unreleased/notes/2101-mcp-discovery-budget.md"
 integration_gate: "Coordinator receives #2101 into sync/upstream-rust-v0.167.0 only after independent exact-head review, isolated affected-crate tests and applicable CI; the final main merge still requires PF-85-S05 and SG1-SG3. No parallel slice implementation is allocated."
 worktree: "/Volumes/CorbanuDrive/Corbanu/.codex-work/contrib-1111-2101"
 branch: "maint/contrib-2101-1111"

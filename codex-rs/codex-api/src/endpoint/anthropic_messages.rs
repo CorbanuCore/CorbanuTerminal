@@ -46,6 +46,13 @@ const REQUEST_ID_HEADER: &str = "x-request-id";
 pub(crate) mod accounting;
 use accounting::AnthropicUsageObserver;
 
+#[path = "anthropic_reasoning.rs"]
+mod reasoning;
+
+#[cfg(test)]
+#[path = "anthropic_reasoning_tests.rs"]
+mod reasoning_tests;
+
 pub struct AnthropicMessagesClient<T: HttpTransport> {
     session: EndpointSession<T>,
     sse_telemetry: Option<Arc<dyn SseTelemetry>>,
@@ -218,6 +225,12 @@ struct AnthropicUsage {
     output_tokens: Option<i64>,
     cache_creation_input_tokens: Option<i64>,
     cache_read_input_tokens: Option<i64>,
+    #[serde(
+        default,
+        rename = "output_tokens_details",
+        deserialize_with = "reasoning::decode"
+    )]
+    reasoning_output_tokens: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -269,6 +282,17 @@ impl AnthropicUsage {
             output = value;
         }
 
+        // Cumulative optional detail: absence/invalid data preserves a prior
+        // valid breakdown. Never invent a subset larger than total output.
+        let reasoning = self
+            .reasoning_output_tokens
+            .filter(|value| *value <= output)
+            .or_else(|| {
+                (0..=output)
+                    .contains(&current.reasoning_output_tokens)
+                    .then_some(current.reasoning_output_tokens)
+            })
+            .unwrap_or_default();
         let input = non_cached_input
             .saturating_add(cached_input)
             .saturating_add(cache_write_input);
@@ -277,7 +301,7 @@ impl AnthropicUsage {
             cached_input_tokens: cached_input,
             cache_write_input_tokens: cache_write_input,
             output_tokens: output,
-            reasoning_output_tokens: 0,
+            reasoning_output_tokens: reasoning,
             total_tokens: input.saturating_add(output),
             codex_rollout_budget_units: None,
         }
@@ -1209,7 +1233,7 @@ mod tests {
     use tokio_test::io::Builder as IoBuilder;
     use tokio_util::io::ReaderStream;
 
-    async fn collect_events(chunks: &[&[u8]]) -> Vec<Result<ResponseEvent, ApiError>> {
+    pub(super) async fn collect_events(chunks: &[&[u8]]) -> Vec<Result<ResponseEvent, ApiError>> {
         let mut builder = IoBuilder::new();
         for chunk in chunks {
             builder.read(chunk);

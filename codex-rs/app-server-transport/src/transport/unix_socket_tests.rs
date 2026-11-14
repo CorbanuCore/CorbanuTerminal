@@ -105,7 +105,7 @@ async fn long_control_socket_paths_connect_to_distinct_daemons() {
 
 #[tokio::test]
 async fn control_socket_acceptor_upgrades_and_forwards_websocket_text_messages_and_pings() {
-    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let temp_dir = socket_test_dir();
     let socket_path = test_socket_path(temp_dir.path());
     let (transport_event_tx, mut transport_event_rx) =
         mpsc::channel::<TransportEvent>(CHANNEL_CAPACITY);
@@ -536,7 +536,7 @@ async fn control_socket_rejects_writable_parent_without_changing_permissions() {
 async fn control_socket_file_is_private_after_bind() {
     use std::os::unix::fs::PermissionsExt;
 
-    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let temp_dir = socket_test_dir();
     let socket_path = test_socket_path(temp_dir.path());
     let parent = socket_path.as_path().parent().unwrap();
     std::fs::create_dir_all(parent).unwrap();
@@ -655,6 +655,38 @@ async fn control_socket_pins_directory_until_shutdown() {
     std::fs::rename(directory, moved).expect("directory unpinned after cleanup");
 }
 
+#[cfg(unix)]
+#[test]
+fn socket_test_dir_fits_sun_path_and_stays_private_under_a_long_temp_root() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // A temp root as long as the isolated runner's on macOS, or longer.
+    let outer = tempfile::TempDir::new().expect("outer temp dir");
+    let long_root = outer.path().join("r".repeat(120));
+    std::fs::create_dir(&long_root).expect("long temp root");
+    assert!(
+        test_socket_path(&long_root).as_path().as_os_str().len() > MAX_SOCKET_PATH_BYTES,
+        "the root must be too long for the socket without the fallback"
+    );
+
+    let temp_dir = socket_test_dir_in(&long_root);
+    let dir = temp_dir.path().to_path_buf();
+    let socket_path = test_socket_path(&dir);
+    assert!(socket_path.as_path().as_os_str().len() <= MAX_SOCKET_PATH_BYTES);
+    let mode = std::fs::metadata(&dir)
+        .expect("fixture dir")
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o700);
+
+    // A second fixture never shares the first one's directory.
+    let other = socket_test_dir_in(&long_root);
+    assert_ne!(other.path(), dir.as_path());
+
+    drop(temp_dir);
+    assert!(!dir.exists(), "the fixture directory is removed on drop");
+}
+
 fn absolute_path(path: &str) -> AbsolutePathBuf {
     AbsolutePathBuf::from_absolute_path(path).expect("absolute path")
 }
@@ -671,6 +703,44 @@ fn test_socket_path(temp_dir: &Path) -> AbsolutePathBuf {
             .join("app-server-control.sock"),
     )
     .expect("socket path should resolve")
+}
+
+/// Longest Unix socket path `bind` accepts: `sockaddr_un.sun_path` minus its
+/// NUL (108 bytes on Linux, 104 on macOS and the BSDs).
+#[cfg(unix)]
+const MAX_SOCKET_PATH_BYTES: usize = if cfg!(any(target_os = "linux", target_os = "android")) {
+    107
+} else {
+    103
+};
+
+/// #2108: the isolated test runner nests TMPDIR inside the per-user macOS temp
+/// root, which pushes `test_socket_path` past `sun_path` (`InvalidInput: path
+/// must be shorter than SUN_LEN`). The fixture stays a randomly named directory
+/// removed on drop; it moves to a private (0700) one under `/tmp` only when
+/// TMPDIR is too long for the socket.
+fn socket_test_dir() -> tempfile::TempDir {
+    socket_test_dir_in(&std::env::temp_dir())
+}
+
+fn socket_test_dir_in(root: &Path) -> tempfile::TempDir {
+    let temp_dir = tempfile::TempDir::new_in(root).expect("temp dir");
+    #[cfg(unix)]
+    if test_socket_path(temp_dir.path())
+        .as_path()
+        .as_os_str()
+        .len()
+        > MAX_SOCKET_PATH_BYTES
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        // `/tmp` is shared, so the fallback must be private whatever the umask.
+        return tempfile::Builder::new()
+            .permissions(std::fs::Permissions::from_mode(0o700))
+            .tempdir_in("/tmp")
+            .expect("short temp dir");
+    }
+    temp_dir
 }
 
 fn test_startup_lock_path(temp_dir: &Path) -> AbsolutePathBuf {

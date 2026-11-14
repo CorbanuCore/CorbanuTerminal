@@ -53,14 +53,10 @@ mod critical_path_analytics;
 #[cfg(unix)]
 mod curated_mcp_sync;
 mod current_time;
-<<<<<<< HEAD
-mod default_login_left_in_place;
-||||||| 413492cd6c
-=======
 mod cyber_access_program;
 mod daemon_update_recovery;
 mod daybreak_access;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+mod default_login_left_in_place;
 mod dynamic_tools;
 mod environment_add;
 mod environment_info;
@@ -113,12 +109,8 @@ mod model_provider_capabilities_read;
 #[path = "model_provider_enforcement_tests.rs"]
 mod model_provider_enforcement;
 mod multi_agent_v2_developer_instructions;
-<<<<<<< HEAD
 mod named_session_account_backend;
-||||||| 413492cd6c
-=======
 mod otel;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod output_schema;
 mod permission_profile_list;
 mod plan_item;
@@ -131,12 +123,8 @@ mod plugin_search;
 mod plugin_share;
 mod plugin_uninstall;
 mod process_exec;
-<<<<<<< HEAD
-mod provider_account_inheritance;
-||||||| 413492cd6c
-=======
 mod projects;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+mod provider_account_inheritance;
 mod rate_limit_reset_credits;
 mod rate_limits;
 #[path = "rate_limits_identity_tests.rs"]
@@ -163,12 +151,8 @@ mod server_diagnostics;
 mod session_end;
 mod skills_list;
 mod sleep;
-<<<<<<< HEAD
-mod thread_agent_message;
-||||||| 413492cd6c
-=======
 mod sqlite_recovery;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+mod thread_agent_message;
 mod thread_archive;
 mod thread_attachments;
 mod thread_delete;

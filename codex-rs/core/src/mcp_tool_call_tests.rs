@@ -976,7 +976,8 @@ fn custom_mcp_tool_question_offers_session_remember_and_always_allow() {
 }
 
 /// #942: a call whose later calls need a fresh approval offers neither
-/// "Allow for this session" nor "Allow and don't ask me again".
+/// "Allow for this session" nor "Allow and don't ask me again"
+/// (maybe_request_mcp_tool_approval clears both when one is needed).
 #[test]
 fn once_only_prompt_offers_no_lasting_approval() {
     let question = build_mcp_tool_approval_question(
@@ -985,9 +986,8 @@ fn once_only_prompt_offers_no_lasting_approval() {
         "post_note",
         /*connector_name*/ None,
         prompt_options(
-            /*allow_session_remember*/ true, /*allow_persistent_approval*/ true,
-        )
-        .once_only(),
+            /*allow_session_remember*/ false, /*allow_persistent_approval*/ false,
+        ),
         /*question_override*/ None,
     );
 
@@ -2792,25 +2792,6 @@ async fn maybe_persist_mcp_tool_approval_preserves_plugin_default_activation() {
         "[features]\nplugins = true\n",
     )
     .expect("seed config");
-<<<<<<< HEAD
-    let config = ConfigBuilder::default()
-        .codex_home(codex_home.to_path_buf())
-        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
-        .build()
-        .await
-        .expect("load config");
-    turn_context.config = Arc::new(config);
-    session.services.plugins_manager.clear_cache();
-||||||| 413492cd6c
-    let config = ConfigBuilder::default()
-        .codex_home(codex_home.to_path_buf())
-        .build()
-        .await
-        .expect("load config");
-    turn_context.config = Arc::new(config);
-    session.services.plugins_manager.clear_cache();
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let key = McpToolApprovalKey {
         server: "sample".to_string(),
         plugin_id: Some("sample@test".to_string()),
@@ -3367,19 +3348,11 @@ async fn strict_auto_review_forces_guardian_for_mcp_policy_skip() {
         .set(AskForApproval::UnlessTrusted)
         .expect("test setup should allow updating approval policy");
     let mut config = (*turn_context.config).clone();
-<<<<<<< HEAD
     config.model_provider = codex_model_provider_info::ModelProviderInfo::create_openai_provider(
         Some(format!("{}/v1", server.uri())),
     );
     config.model_provider.supports_websockets = false;
-    config.approvals_reviewer = ApprovalsReviewer::AutoReview;
-||||||| 413492cd6c
-    config.model_provider.base_url = Some(format!("{}/v1", server.uri()));
-    config.approvals_reviewer = ApprovalsReviewer::AutoReview;
-=======
-    config.model_provider.base_url = Some(format!("{}/v1", server.uri()));
     config.approvals_reviewer = ApprovalsReviewer::User;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let config = Arc::new(config);
     let models_manager = models_manager_with_provider(
         config.codex_home.to_path_buf(),
@@ -3425,6 +3398,7 @@ async fn strict_auto_review_forces_guardian_for_mcp_policy_skip() {
         codex_exec_server::LOCAL_ENVIRONMENT_ID,
         Default::default(),
         /*strict_auto_review*/ true,
+        session.services.authority_marker(),
     );
     let step_context = StepContext::for_test(Arc::clone(&turn_context));
     let decision = maybe_request_mcp_tool_approval(
@@ -3436,19 +3410,11 @@ async fn strict_auto_review_forces_guardian_for_mcp_policy_skip() {
         &ToolName::namespaced(&invocation.server, &invocation.tool),
         &HookToolName::new("mcp__test__tool"),
         &metadata,
-<<<<<<< HEAD
-        &approval_config(&turn_context),
-        McpToolApprovalPolicy::for_server(AppToolApproval::Auto),
-        /*note*/ None,
-||||||| 413492cd6c
-        &approval_config(&turn_context),
-        McpToolApprovalPolicy::for_server(AppToolApproval::Auto),
-=======
         &captured_mcp_config,
         &captured_mcp_config.permission_profile,
         test_environment_id(&turn_context),
         McpToolApprovalPolicy::for_server(AppToolApproval::Approve),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        /*note*/ None,
     )
     .await;
 
@@ -3540,6 +3506,7 @@ async fn assert_mcp_user_approval_persistence(
                 turn_context.config.permissions.permission_profile(),
                 test_environment_id(&turn_context),
                 McpToolApprovalPolicy::for_server(AppToolApproval::Auto),
+                /*note*/ None,
             )
             .await
         }
@@ -3806,7 +3773,6 @@ async fn approve_mode_skips_guardian_in_every_permission_mode() {
     }
 }
 
-<<<<<<< HEAD
 /// #945: an MCP "for session" answer that arrives after a security transition
 /// was for a stale prompt. It is not remembered, even when another tool call
 /// checked the approval cache under the new policy meanwhile.
@@ -3820,7 +3786,12 @@ async fn issue_945_mcp_for_session_answer_after_a_level_change_is_not_remembered
 
     let (session, turn_context) = make_session_and_context().await;
     let controller = crate::security::TrustedSecurityController::initialize(
-        &session.services.agent_control.effective_security_policy(),
+        &session
+            .services
+            .agent_control
+            .local()
+            .expect("the local agent backend")
+            .effective_security_policy(),
         crate::security::PersistedHumanSecurityState::new(
             SecuritySettings::new(SecurityLevel::Permissive),
             PolicyPrincipal::new(PrincipalKind::Human, "human:issue-945").unwrap(),
@@ -3834,7 +3805,9 @@ async fn issue_945_mcp_for_session_answer_after_a_level_change_is_not_remembered
     .expect("initialize the session's policy tree");
     let key = McpToolApprovalKey {
         server: "memory".to_string(),
+        plugin_id: None,
         connector_id: None,
+        link_id: None,
         tool_name: "create_entities".to_string(),
     };
 
@@ -3849,8 +3822,8 @@ async fn issue_945_mcp_for_session_answer_after_a_level_change_is_not_remembered
     drop(session.services.approval_cache().await);
 
     for decision in [
-        McpToolApprovalDecision::AcceptForSession,
-        McpToolApprovalDecision::AcceptAndRemember,
+        ReviewDecision::ApprovedForSession,
+        ReviewDecision::ApprovedMcpPolicyAmendment,
     ] {
         apply_mcp_tool_approval_decision(
             &session,
@@ -3872,7 +3845,7 @@ async fn issue_945_mcp_for_session_answer_after_a_level_change_is_not_remembered
     apply_mcp_tool_approval_decision(
         &session,
         &turn_context,
-        &McpToolApprovalDecision::AcceptForSession,
+        &ReviewDecision::ApprovedForSession,
         Some(key.clone()),
         /*persistent_approval_key*/ None,
         session.services.authority_marker(),
@@ -3889,7 +3862,12 @@ fn issue_1001_controller(session: &Session) -> crate::security::TrustedSecurityC
     use codex_security_policy::SecurityLevel;
     use codex_security_policy::SecuritySettings;
     crate::security::TrustedSecurityController::initialize(
-        &session.services.agent_control.effective_security_policy(),
+        &session
+            .services
+            .agent_control
+            .local()
+            .expect("the local agent backend")
+            .effective_security_policy(),
         crate::security::PersistedHumanSecurityState::new(
             SecuritySettings::new(SecurityLevel::Permissive),
             PolicyPrincipal::new(PrincipalKind::Human, "human:issue-1001").unwrap(),
@@ -3916,7 +3894,7 @@ fn issue_1001_raise(
 fn accepted() -> McpCallOutcome {
     McpCallOutcome::Run(
         McpToolApprovalApplication::Apply {
-            decision: McpToolApprovalDecision::Accept,
+            decision: ReviewDecision::Approved,
             policy: McpToolApprovalPolicy::for_server(AppToolApproval::Auto),
             shown_under: None,
             record_under_aggressive: false,
@@ -3970,7 +3948,7 @@ async fn issue_1001_mcp_call_approved_before_a_level_change_is_asked_again() {
         async {
             McpCallOutcome::Skip {
                 message: "user rejected MCP tool call".to_string(),
-                metrics: true,
+                metrics: SkipMetrics::Status,
             }
         }
     })
@@ -4013,7 +3991,7 @@ async fn issue_1001_ask(
     events: &async_channel::Receiver<codex_protocol::protocol::Event>,
     asked_again: bool,
     label: &str,
-) -> (Option<McpToolApprovalDecision>, RequestUserInputQuestion) {
+) -> (Option<ReviewDecision>, RequestUserInputQuestion) {
     let invocation = McpInvocation {
         server: "custom_server".to_string(),
         tool: "post_message".to_string(),
@@ -4038,11 +4016,15 @@ async fn issue_1001_ask(
             maybe_request_mcp_tool_approval(
                 &session,
                 &StepContext::for_test(Arc::clone(&turn_context)),
+                &CancellationToken::new(),
                 "call-1001",
                 &invocation,
+                &ToolName::namespaced(&invocation.server, &invocation.tool),
                 &HookToolName::new("mcp__custom_server__post_message"),
                 &metadata,
                 &approval_config(&turn_context),
+                turn_context.config.permissions.permission_profile(),
+                test_environment_id(&turn_context),
                 McpToolApprovalPolicy::for_server(AppToolApproval::Auto),
                 asked_again.then_some(MCP_ASKED_AGAIN_NOTE),
             )
@@ -4073,7 +4055,13 @@ async fn issue_1001_ask(
             },
         )
         .await;
-    (request.await.expect("approval task"), question)
+    (
+        request
+            .await
+            .expect("approval task")
+            .map(|approval| approval.decision),
+        question,
+    )
 }
 
 async fn issue_1001_session() -> (
@@ -4084,10 +4072,13 @@ async fn issue_1001_session() -> (
     let (session, mut turn_context, events) = make_session_and_context_with_rx().await;
     *session.active_turn.lock().await = Some(ActiveTurn::default());
     let turn = Arc::get_mut(&mut turn_context).expect("single turn context ref");
-    turn.approval_policy
+    let config = Arc::make_mut(&mut turn.config);
+    config
+        .permissions
+        .approval_policy
         .set(AskForApproval::OnRequest)
         .expect("test setup should allow updating approval policy");
-    Arc::make_mut(&mut turn.config)
+    config
         .features
         .disable(Feature::ToolCallMcpElicitation)
         .expect("disable MCP elicitation");
@@ -4115,7 +4106,7 @@ async fn issue_1001_mcp_question_asked_again_says_why() {
         "Allow",
     )
     .await;
-    assert_eq!(decision, Some(McpToolApprovalDecision::Accept));
+    assert_eq!(decision, Some(ReviewDecision::Approved));
     assert!(
         again.question.starts_with(MCP_ASKED_AGAIN_NOTE),
         "{}",
@@ -4146,7 +4137,7 @@ async fn issue_1011_lasting_answer_the_prompt_did_not_offer_allows_once() {
             .any(|option| option.label == MCP_TOOL_APPROVAL_ACCEPT_FOR_SESSION),
         "offered under Permissive"
     );
-    assert_eq!(decision, Some(McpToolApprovalDecision::AcceptForSession));
+    assert_eq!(decision, Some(ReviewDecision::ApprovedForSession));
 
     let client = (*session.services.model_client())
         .clone()
@@ -4170,7 +4161,7 @@ async fn issue_1011_lasting_answer_the_prompt_did_not_offer_allows_once() {
         "not offered: {:?}",
         question.options
     );
-    assert_eq!(decision, Some(McpToolApprovalDecision::Accept));
+    assert_eq!(decision, Some(ReviewDecision::Approved));
 }
 
 /// #1011 (item 1): the limit by itself, for each lasting answer.
@@ -4181,13 +4172,17 @@ fn issue_1011_prompt_options_limit_lasting_answers_to_what_was_offered() {
         allow_persistent_approval: true,
     };
     for decision in [
-        McpToolApprovalDecision::AcceptForSession,
-        McpToolApprovalDecision::AcceptAndRemember,
+        ReviewDecision::ApprovedForSession,
+        ReviewDecision::ApprovedMcpPolicyAmendment,
     ] {
         assert_eq!(all.limit(decision.clone()), decision);
         assert_eq!(
-            all.once_only().limit(decision),
-            McpToolApprovalDecision::Accept
+            McpToolApprovalPromptOptions {
+                allow_session_remember: false,
+                allow_persistent_approval: false,
+            }
+            .limit(decision),
+            ReviewDecision::Approved
         );
     }
     let session_only = McpToolApprovalPromptOptions {
@@ -4195,12 +4190,12 @@ fn issue_1011_prompt_options_limit_lasting_answers_to_what_was_offered() {
         allow_persistent_approval: false,
     };
     assert_eq!(
-        session_only.limit(McpToolApprovalDecision::AcceptAndRemember),
-        McpToolApprovalDecision::Accept
+        session_only.limit(ReviewDecision::ApprovedMcpPolicyAmendment),
+        ReviewDecision::Approved
     );
     assert_eq!(
-        session_only.limit(McpToolApprovalDecision::AcceptForSession),
-        McpToolApprovalDecision::AcceptForSession
+        session_only.limit(ReviewDecision::ApprovedForSession),
+        ReviewDecision::ApprovedForSession
     );
 }
 
@@ -4214,14 +4209,16 @@ async fn issue_1001_dont_ask_again_under_aggressive_is_recorded() {
     std::fs::create_dir_all(&codex_home).expect("home");
     let key = |tool: &str| McpToolApprovalKey {
         server: "custom_server".to_string(),
+        plugin_id: None,
         connector_id: None,
+        link_id: None,
         tool_name: tool.to_string(),
     };
     let remember = async |tool: &str, record_under_aggressive| {
         apply_mcp_tool_approval_decision(
             &session,
             &turn_context,
-            &McpToolApprovalDecision::AcceptAndRemember,
+            &ReviewDecision::ApprovedMcpPolicyAmendment,
             Some(key(tool)),
             Some(key(tool)),
             session.services.authority_marker(),
@@ -4339,6 +4336,7 @@ async fn issue_1057_elicitation_message(
     turn_context: &Arc<TurnContext>,
     events: &async_channel::Receiver<codex_protocol::protocol::Event>,
     policy: McpToolApprovalPolicy,
+    note: Option<&'static str>,
 ) -> String {
     let invocation = McpInvocation {
         server: "project_server".to_string(),
@@ -4364,13 +4362,17 @@ async fn issue_1057_elicitation_message(
             maybe_request_mcp_tool_approval(
                 &session,
                 &StepContext::for_test(Arc::clone(&turn_context)),
+                &CancellationToken::new(),
                 "call-1057",
                 &invocation,
+                &ToolName::namespaced(&invocation.server, &invocation.tool),
                 &HookToolName::new("mcp__project_server__post_message"),
                 &metadata,
                 &approval_config(&turn_context),
+                turn_context.config.permissions.permission_profile(),
+                test_environment_id(&turn_context),
                 policy,
-                /*note*/ None,
+                note,
             )
             .await
         }
@@ -4424,10 +4426,13 @@ async fn issue_1057_always_allow_lasting_only_the_session_says_so() {
     let (session, mut turn_context, events) = make_session_and_context_with_rx().await;
     *session.active_turn.lock().await = Some(ActiveTurn::default());
     let turn = Arc::get_mut(&mut turn_context).expect("single turn context ref");
-    turn.approval_policy
+    let config = Arc::make_mut(&mut turn.config);
+    config
+        .permissions
+        .approval_policy
         .set(AskForApproval::OnRequest)
         .expect("test setup should allow updating approval policy");
-    Arc::make_mut(&mut turn.config)
+    config
         .features
         .enable(Feature::ToolCallMcpElicitation)
         .expect("enable MCP elicitation");
@@ -4438,6 +4443,7 @@ async fn issue_1057_always_allow_lasting_only_the_session_says_so() {
         &events,
         McpToolApprovalPolicy::for_server(AppToolApproval::Auto)
             .session_only_under_aggressive(/*session_only_under_aggressive*/ true),
+        /*note*/ None,
     )
     .await;
     insta::assert_snapshot!("issue_1057_session_only_note", session_only);
@@ -4448,6 +4454,7 @@ async fn issue_1057_always_allow_lasting_only_the_session_says_so() {
         &turn_context,
         &events,
         McpToolApprovalPolicy::for_server(AppToolApproval::Auto),
+        /*note*/ None,
     )
     .await;
     assert!(
@@ -4457,6 +4464,21 @@ async fn issue_1057_always_allow_lasting_only_the_session_says_so() {
     assert_eq!(
         session_only,
         format!("{} {unchanged}", aggressive::SESSION_ONLY_NOTE)
+    );
+
+    // D50: a question asked again after a security transition says why in the
+    // elicitation form too, as in the request_user_input question.
+    let asked_again = issue_1057_elicitation_message(
+        &session,
+        &turn_context,
+        &events,
+        McpToolApprovalPolicy::for_server(AppToolApproval::Auto),
+        Some(MCP_ASKED_AGAIN_NOTE),
+    )
+    .await;
+    assert!(
+        asked_again.starts_with(MCP_ASKED_AGAIN_NOTE),
+        "{asked_again}"
     );
 }
 
@@ -4489,11 +4511,15 @@ async fn issue_1057_no_session_only_note_without_always_allow() {
             maybe_request_mcp_tool_approval(
                 &session,
                 &StepContext::for_test(Arc::clone(&turn_context)),
+                &CancellationToken::new(),
                 "call-1057",
                 &invocation,
+                &ToolName::namespaced(&invocation.server, &invocation.tool),
                 &HookToolName::new("mcp__project_server__post_message"),
                 &metadata,
                 &approval_config(&turn_context),
+                turn_context.config.permissions.permission_profile(),
+                test_environment_id(&turn_context),
                 McpToolApprovalPolicy::for_server(AppToolApproval::Auto)
                     .session_only_under_aggressive(/*session_only_under_aggressive*/ true),
                 /*note*/ None,
@@ -4613,8 +4639,8 @@ async fn issue_1057_always_allow_lasts_only_the_session_for_unrecorded_servers()
         Some("plugin@market"),
         /*aggressive*/ true
     ));
-||||||| 413492cd6c
-=======
+}
+
 #[tokio::test]
 async fn approval_metadata_is_released_when_the_invocation_future_is_dropped() {
     let (session, turn_context) = crate::session::tests::make_session_and_context().await;
@@ -4686,5 +4712,4 @@ async fn approval_metadata_is_released_when_the_invocation_future_is_dropped() {
             ),
         ],
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

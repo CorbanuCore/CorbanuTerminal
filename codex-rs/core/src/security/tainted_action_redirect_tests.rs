@@ -56,16 +56,19 @@ pub(super) fn workspace(files: &[(&str, &str)]) -> tempfile::TempDir {
 pub(super) fn action_in(work: &Path, argv: &[&str]) -> ApprovalAction {
     use crate::sandboxing::SandboxPermissions;
     use codex_utils_absolute_path::AbsolutePathBuf;
-    ApprovalAction::Shell {
+    ApprovalAction::ExecCommand {
         id: "call".into(),
         environment_id: "local".into(),
         command: argv.iter().map(|arg| (*arg).to_string()).collect(),
+        hook_command: String::new(),
         cwd: PathUri::from_abs_path(
             &AbsolutePathBuf::from_absolute_path_checked(work).expect("absolute"),
         ),
         sandbox_permissions: SandboxPermissions::UseDefault,
         additional_permissions: None,
         justification: None,
+        tty: false,
+        proposed_execpolicy_amendment: None,
     }
 }
 

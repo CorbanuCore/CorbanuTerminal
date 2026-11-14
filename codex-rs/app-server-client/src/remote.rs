@@ -183,22 +183,14 @@ struct RemoteServerMetadata {
     codex_home: Option<String>,
     platform_family: Option<String>,
     platform_os: Option<String>,
+    ruled_out_default_login: Option<RuledOutDefaultLoginPolicy>,
 }
 
 pub struct RemoteAppServerClient {
     command_tx: mpsc::Sender<RemoteClientCommand>,
     event_rx: mpsc::UnboundedReceiver<AppServerEvent>,
     pending_events: VecDeque<AppServerEvent>,
-<<<<<<< HEAD
-    server_version: Option<String>,
-    codex_home: Option<String>,
-    ruled_out_default_login: Option<RuledOutDefaultLoginPolicy>,
-||||||| 413492cd6c
-    server_version: Option<String>,
-    codex_home: Option<String>,
-=======
     metadata: RemoteServerMetadata,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     worker_handle: tokio::task::JoinHandle<()>,
 }
 
@@ -276,7 +268,7 @@ impl RemoteAppServerClient {
     /// leaves a ruled-out default login in place and refuses to use it, when
     /// it does (see `InitializeResponse::ruled_out_default_login`).
     pub fn ruled_out_default_login(&self) -> Option<&RuledOutDefaultLoginPolicy> {
-        self.ruled_out_default_login.as_ref()
+        self.metadata.ruled_out_default_login.as_ref()
     }
 
     async fn connect_with_stream<S>(
@@ -288,22 +280,9 @@ impl RemoteAppServerClient {
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
-<<<<<<< HEAD
-        let mut stream = stream;
-        let RemoteInitialize {
-            pending_events,
-            server_version,
-            codex_home,
-            ruled_out_default_login,
-        } = initialize_remote_connection(
-||||||| 413492cd6c
-        let mut stream = stream;
-        let (pending_events, server_version, codex_home) = initialize_remote_connection(
-=======
         let mut stream =
             RemoteWebSocket::from_handshake(stream, REMOTE_APP_SERVER_MAX_WEBSOCKET_MESSAGE_SIZE)?;
         let (pending_events, metadata) = initialize_remote_connection(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             &mut stream,
             &endpoint,
             initialize_params,
@@ -579,16 +558,7 @@ impl RemoteAppServerClient {
             command_tx,
             event_rx,
             pending_events: pending_events.into(),
-<<<<<<< HEAD
-            server_version,
-            codex_home,
-            ruled_out_default_login,
-||||||| 413492cd6c
-            server_version,
-            codex_home,
-=======
             metadata,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             worker_handle,
         })
     }
@@ -730,85 +700,6 @@ impl RemoteAppServerRequestHandle {
         await_remote_response(response_rx, "server-request rejection").await?
     }
 
-<<<<<<< HEAD
-    pub async fn next_event(&mut self) -> Option<AppServerEvent> {
-        if let Some(event) = self.pending_events.pop_front() {
-            return Some(event);
-        }
-        self.event_rx.recv().await
-    }
-
-    pub async fn shutdown(self) -> IoResult<()> {
-        let Self {
-            command_tx,
-            event_rx,
-            pending_events: _pending_events,
-            server_version: _server_version,
-            codex_home: _codex_home,
-            ruled_out_default_login: _ruled_out_default_login,
-            worker_handle,
-        } = self;
-        let mut worker_handle = worker_handle;
-        drop(event_rx);
-        let (response_tx, response_rx) = oneshot::channel();
-        if command_tx
-            .send(RemoteClientCommand::Shutdown { response_tx })
-            .await
-            .is_ok()
-            && let Ok(Ok(close_result)) = timeout(SHUTDOWN_TIMEOUT, response_rx).await
-        {
-            close_result?;
-        }
-
-        if let Err(_elapsed) = timeout(SHUTDOWN_TIMEOUT, &mut worker_handle).await {
-            worker_handle.abort();
-            let _ = worker_handle.await;
-        }
-        Ok(())
-    }
-}
-
-impl RemoteAppServerRequestHandle {
-||||||| 413492cd6c
-    pub async fn next_event(&mut self) -> Option<AppServerEvent> {
-        if let Some(event) = self.pending_events.pop_front() {
-            return Some(event);
-        }
-        self.event_rx.recv().await
-    }
-
-    pub async fn shutdown(self) -> IoResult<()> {
-        let Self {
-            command_tx,
-            event_rx,
-            pending_events: _pending_events,
-            server_version: _server_version,
-            codex_home: _codex_home,
-            worker_handle,
-        } = self;
-        let mut worker_handle = worker_handle;
-        drop(event_rx);
-        let (response_tx, response_rx) = oneshot::channel();
-        if command_tx
-            .send(RemoteClientCommand::Shutdown { response_tx })
-            .await
-            .is_ok()
-            && let Ok(Ok(close_result)) = timeout(SHUTDOWN_TIMEOUT, response_rx).await
-        {
-            close_result?;
-        }
-
-        if let Err(_elapsed) = timeout(SHUTDOWN_TIMEOUT, &mut worker_handle).await {
-            worker_handle.abort();
-            let _ = worker_handle.await;
-        }
-        Ok(())
-    }
-}
-
-impl RemoteAppServerRequestHandle {
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub async fn request(&self, request: ClientRequest) -> IoResult<RequestResult> {
         self.request_json_rpc(jsonrpc_request_from_client_request(request))
             .await
@@ -973,28 +864,13 @@ async fn initialize_remote_connection<S>(
     endpoint: &str,
     params: InitializeParams,
     initialize_timeout: Duration,
-<<<<<<< HEAD
-) -> IoResult<RemoteInitialize>
-||||||| 413492cd6c
-) -> IoResult<(Vec<AppServerEvent>, Option<String>, Option<String>)>
-=======
 ) -> IoResult<(Vec<AppServerEvent>, RemoteServerMetadata)>
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     let initialize_request_id = RequestId::String("initialize".to_string());
     let mut pending_events = Vec::new();
-<<<<<<< HEAD
-    let mut server_version = None;
-    let mut codex_home = None;
-    let mut ruled_out_default_login = None;
-||||||| 413492cd6c
-    let mut server_version = None;
-    let mut codex_home = None;
-=======
     let mut metadata = RemoteServerMetadata::default();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     write_jsonrpc_message(
         stream,
         JSONRPCMessage::Request(jsonrpc_request_from_client_request(
@@ -1032,19 +908,15 @@ where
                                 .and_then(serde_json::Value::as_str)
                                 .filter(|codex_home| !codex_home.is_empty())
                                 .map(str::to_string);
-<<<<<<< HEAD
-                            ruled_out_default_login = response
+                            metadata.ruled_out_default_login = response
                                 .result
                                 .get("ruledOutDefaultLogin")
                                 .cloned()
                                 .and_then(|policy| serde_json::from_value(policy).ok());
-||||||| 413492cd6c
-=======
                             metadata.platform_family = response.result.get("platformFamily")
                                 .and_then(serde_json::Value::as_str).map(str::to_string);
                             metadata.platform_os = response.result.get("platformOs")
                                 .and_then(serde_json::Value::as_str).map(str::to_string);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                             break Ok(());
                         }
                         JSONRPCMessage::Error(error) if error.id == initialize_request_id => {
@@ -1137,25 +1009,7 @@ where
     )
     .await?;
 
-<<<<<<< HEAD
-    Ok(RemoteInitialize {
-        pending_events,
-        server_version,
-        codex_home,
-        ruled_out_default_login,
-    })
-}
-
-struct RemoteInitialize {
-    pending_events: Vec<AppServerEvent>,
-    server_version: Option<String>,
-    codex_home: Option<String>,
-    ruled_out_default_login: Option<RuledOutDefaultLoginPolicy>,
-||||||| 413492cd6c
-    Ok((pending_events, server_version, codex_home))
-=======
     Ok((pending_events, metadata))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn app_server_event_from_notification(notification: JSONRPCNotification) -> Option<AppServerEvent> {
@@ -1254,16 +1108,7 @@ mod tests {
             command_tx,
             event_rx,
             pending_events: VecDeque::new(),
-<<<<<<< HEAD
-            server_version: None,
-            codex_home: None,
-            ruled_out_default_login: None,
-||||||| 413492cd6c
-            server_version: None,
-            codex_home: None,
-=======
             metadata: RemoteServerMetadata::default(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             worker_handle,
         };
 

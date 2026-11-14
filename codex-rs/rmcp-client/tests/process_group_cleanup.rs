@@ -20,6 +20,7 @@ use rmcp::model::Implementation;
 use rmcp::model::InitializeRequestParams;
 use rmcp::model::ProtocolVersion;
 use serde_json::json;
+use tracing_test::traced_test;
 
 fn stdio_server_bin() -> Result<std::path::PathBuf> {
     codex_utils_cargo_bin::cargo_bin("test_stdio_server").map_err(Into::into)
@@ -79,6 +80,95 @@ async fn wait_for_process_exit(pid: u32) -> Result<()> {
     }
 
     anyhow::bail!("process {pid} still running after timeout");
+}
+
+async fn wait_for_file_containing(path: &Path, needle: &str) -> Result<()> {
+    for _ in 0..50 {
+        match fs::read_to_string(path) {
+            Ok(content) if content.contains(needle) => return Ok(()),
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).with_context(|| format!("failed to read {}", path.display()));
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    anyhow::bail!("timed out waiting for {needle:?} in {}", path.display());
+}
+
+/// Far past anything these tests wait for; a step that reaches it hung.
+const HANG_WAIT: Duration = Duration::from_secs(300);
+
+/// Bounds each step that must not hang.
+const TEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// An opted-in 2026-07-28 client on a local `test_mcp_2026_stdio_server` in `mode`. The wrapper
+/// logs its PID (the server's process group) to `server.pids` and the requests the server
+/// receives to `requests.log`, both in `dir`.
+async fn opted_in_stdio_client(dir: &Path, mode: &str) -> Result<RmcpClient> {
+    let server = codex_utils_cargo_bin::cargo_bin("test_mcp_2026_stdio_server")?;
+    let client = RmcpClient::new_stdio_client_with_protocol_mode(
+        OsString::from("/bin/sh"),
+        vec![
+            OsString::from("-c"),
+            OsString::from(
+                "echo $$ >> \"$PID_LOG\"; tee -a \"$REQUEST_LOG\" | \"$SERVER\" \"$MODE\"",
+            ),
+        ],
+        Some(HashMap::from([
+            (
+                OsString::from("CODEX_MCP_PROTOCOL_VERSION"),
+                OsString::from("2026-07-28"),
+            ),
+            (
+                OsString::from("PID_LOG"),
+                dir.join("server.pids").into_os_string(),
+            ),
+            (
+                OsString::from("REQUEST_LOG"),
+                dir.join("requests.log").into_os_string(),
+            ),
+            (OsString::from("SERVER"), server.into_os_string()),
+            (OsString::from("MODE"), OsString::from(mode)),
+        ])),
+        &[],
+        /*cwd*/ None,
+        Arc::new(LocalStdioServerLauncher::new(std::env::current_dir()?)),
+        McpProtocolMode::V20260728,
+    )
+    .await?;
+    Ok(client)
+}
+
+fn server_pids(dir: &Path) -> Result<Vec<u32>> {
+    fs::read_to_string(dir.join("server.pids"))?
+        .lines()
+        .map(|line| line.parse::<u32>().map_err(Into::into))
+        .collect()
+}
+
+async fn initialize_declining_elicitations(
+    client: &RmcpClient,
+    timeout: Duration,
+) -> Result<rmcp::model::ServerPeerInfo> {
+    client
+        .initialize(
+            init_params(),
+            Some(timeout),
+            Box::new(|_, _| {
+                async {
+                    Ok(ElicitationResponse {
+                        action: ElicitationAction::Decline,
+                        content: None,
+                        meta: None,
+                    })
+                }
+                .boxed()
+            }),
+        )
+        .await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -256,4 +346,85 @@ async fn opted_in_legacy_fallback_leaves_one_stdio_server_process() -> Result<()
 
     client.shutdown().await;
     wait_for_process_exit(pids[1]).await
+}
+
+// #2101 review: a `shutdown()` while a local server hasn't answered `server/discover` stops that
+// server, ends startup without waiting out the discover timeout, and starts no fallback server.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn opted_in_shutdown_during_the_discover_wait_stops_the_stdio_server() -> Result<()> {
+    let temp_dir = tempfile::tempdir()?;
+    // The server never answers discover; startup could only end on its own after `HANG_WAIT`.
+    let client = Arc::new(
+        opted_in_stdio_client(temp_dir.path(), "legacy-silent")
+            .await?
+            .with_discover_timeout(Some(HANG_WAIT)),
+    );
+    let initializing = tokio::spawn({
+        let client = Arc::clone(&client);
+        async move { initialize_declining_elicitations(&client, HANG_WAIT).await }
+    });
+    wait_for_file_containing(&temp_dir.path().join("requests.log"), "server/discover").await?;
+    let server_pid = server_pids(temp_dir.path())?[0];
+    assert!(
+        process_exists(server_pid),
+        "expected MCP server process {server_pid} to be running during the discover wait"
+    );
+
+    tokio::time::timeout(TEST_TIMEOUT, client.shutdown())
+        .await
+        .context("shutdown during the discover wait hung")?;
+    let result = tokio::time::timeout(TEST_TIMEOUT, initializing)
+        .await
+        .context("initialize kept waiting for discover after shutdown")??;
+
+    assert!(
+        result.is_err(),
+        "initialize must fail once the client is shut down"
+    );
+    wait_for_process_exit(server_pid).await?;
+    assert_eq!(
+        server_pids(temp_dir.path())?,
+        vec![server_pid],
+        "shutdown must not start a fallback server"
+    );
+    Ok(())
+}
+
+// #2101 review: a local 2026-07-28 server is stopped by its discovery cleanup, not by the
+// transport. After a successful modern start, `shutdown()` must still stop it, without a warning.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "traced_test installs an in-memory subscriber to check that shutdown logs no warning"
+)]
+#[traced_test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn opted_in_shutdown_after_a_modern_start_stops_the_stdio_server() -> Result<()> {
+    let temp_dir = tempfile::tempdir()?;
+    let client = opted_in_stdio_client(temp_dir.path(), "modern").await?;
+    let info = tokio::time::timeout(
+        TEST_TIMEOUT,
+        initialize_declining_elicitations(&client, TEST_TIMEOUT),
+    )
+    .await
+    .context("the modern start hung")??;
+    assert_eq!(
+        info.server_info.as_ref().map(|info| info.name.as_str()),
+        Some("strict-stdio-test")
+    );
+    let server_pid = server_pids(temp_dir.path())?[0];
+    assert!(
+        process_exists(server_pid),
+        "expected MCP server process {server_pid} to be running before shutdown"
+    );
+
+    tokio::time::timeout(TEST_TIMEOUT, client.shutdown())
+        .await
+        .context("shutdown after a modern start hung")?;
+
+    wait_for_process_exit(server_pid).await?;
+    assert!(!logs_contain(
+        "failed to terminate MCP stdio server process"
+    ));
+    assert_eq!(server_pids(temp_dir.path())?, vec![server_pid]);
+    Ok(())
 }

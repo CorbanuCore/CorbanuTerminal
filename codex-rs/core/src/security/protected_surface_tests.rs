@@ -628,3 +628,177 @@ fn pf_23_s01_typed_window_joins_split_input_until_a_human_approves() {
         "x"
     );
 }
+
+const GOAL_TOOLS: [&str; 3] = ["get_goal", "create_goal", "update_goal"];
+
+/// Upstream names top-level tools with the `functions` namespace: the goal
+/// tools there are the same tools as the plain names, and nothing else is.
+#[test]
+fn goal_tools_under_the_functions_namespace_match_the_plain_names() {
+    for tool in GOAL_TOOLS {
+        let plain = ToolName::plain(tool);
+        let functions = ToolName::namespaced("functions", tool);
+        assert_eq!(
+            coverage(ToolOrigin::Extension, &plain),
+            Coverage::NoProtectedEffect,
+            "{tool}"
+        );
+        for origin in [
+            ToolOrigin::Extension,
+            ToolOrigin::Builtin,
+            ToolOrigin::Mcp,
+            ToolOrigin::Dynamic,
+        ] {
+            assert_eq!(
+                coverage(origin, &functions),
+                coverage(origin, &plain),
+                "{origin:?} {tool}"
+            );
+        }
+        // An MCP, client or built-in tool of that name is not the goal tool.
+        assert_eq!(coverage(ToolOrigin::Mcp, &plain), Coverage::OwnCheck);
+        assert_eq!(
+            coverage(ToolOrigin::Dynamic, &plain),
+            Coverage::Unclassified
+        );
+        assert_eq!(
+            coverage(ToolOrigin::Builtin, &plain),
+            Coverage::Unclassified
+        );
+        assert_eq!(coverage(ToolOrigin::Mcp, &functions), Coverage::OwnCheck);
+        assert_eq!(
+            coverage(ToolOrigin::Dynamic, &functions),
+            Coverage::Unclassified
+        );
+        // Nor is an extension tool of that name in any other namespace.
+        for namespace in ["", "goal", "goals", "Functions", "functions ", "mcp__x__"] {
+            assert_eq!(
+                coverage(
+                    ToolOrigin::Extension,
+                    &ToolName::namespaced(namespace, tool)
+                ),
+                Coverage::Unclassified,
+                "{namespace:?} {tool}"
+            );
+        }
+    }
+    // `functions` adds only the goal tools.
+    for (namespace, tool) in [
+        ("functions", "run"),
+        ("functions", "imagegen"),
+        ("functions", "list"),
+        ("functions", "read"),
+        ("functions", "search"),
+        ("functions", "add_ad_hoc_note"),
+        ("functions", "GET_GOAL"),
+        ("functions", "get_goals"),
+    ] {
+        assert_eq!(
+            coverage(
+                ToolOrigin::Extension,
+                &ToolName::namespaced(namespace, tool)
+            ),
+            Coverage::Unclassified,
+            "{namespace} {tool}"
+        );
+    }
+}
+
+/// After untrusted content, the goal tools go ahead under either name, and
+/// a same-named tool from anywhere else still asks.
+#[tokio::test]
+async fn goal_tools_after_untrusted_content_under_either_name() {
+    use crate::tools::context::ToolInvocation;
+    use crate::tools::context::ToolPayload;
+    use crate::tools::router::ToolCallSource;
+    use crate::turn_diff_tracker::TurnDiffTracker;
+    use codex_protocol::models::FunctionCallOutputPayload;
+    use codex_protocol::models::ResponseItem;
+    use codex_protocol::protocol::AskForApproval;
+    use codex_security_policy::SecurityLevel;
+
+    for level in [SecurityLevel::Moderate, SecurityLevel::Aggressive] {
+        let (session, mut turn) = crate::session::tests::make_session_and_context().await;
+        turn.approval_policy
+            .set(AskForApproval::Never)
+            .expect("approval policy");
+        let client = (*session.services.model_client())
+            .clone()
+            .with_ingress_level(level)
+            .with_source_envelopes(/*enabled*/ true);
+        client.note_recorded_for_taint(&[ResponseItem::FunctionCallOutput {
+            id: None,
+            call_id: "call-read".into(),
+            output: FunctionCallOutputPayload::from_text("README".into()),
+            internal_chat_message_metadata_passthrough: None,
+        }]);
+        session.services.replace_model_client(client);
+        assert!(
+            session
+                .services
+                .model_client()
+                .post_taint_state()
+                .expect("checks apply")
+                .taint_generation
+                > 0,
+            "tainted"
+        );
+        let session = Arc::new(session);
+        let turn = Arc::new(turn);
+        let dispatch = |tool_name: ToolName, origin: ToolOrigin| {
+            let invocation = ToolInvocation {
+                session: Arc::clone(&session),
+                step_context: StepContext::for_test(Arc::clone(&turn)),
+                turn: Arc::clone(&turn),
+                cancellation_token: tokio_util::sync::CancellationToken::new(),
+                tracker: Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new())),
+                call_id: "call-goal".to_string(),
+                tool_name,
+                source: ToolCallSource::Direct,
+                payload: ToolPayload::Function {
+                    arguments: "{}".to_string(),
+                },
+            };
+            async move { check_dispatch(&invocation, origin).await }
+        };
+        let unclassified = format!(
+            "Not run: Security level {level:?}: this is a tool the security level has not \
+             classified after untrusted content entered the session"
+        );
+        for tool in GOAL_TOOLS {
+            for name in [
+                ToolName::plain(tool),
+                ToolName::namespaced("functions", tool),
+            ] {
+                assert_eq!(
+                    dispatch(name.clone(), ToolOrigin::Extension).await,
+                    Ok(()),
+                    "{level:?} {name}"
+                );
+                // MCP calls are judged by their own check, not here.
+                assert_eq!(
+                    dispatch(name.clone(), ToolOrigin::Mcp).await,
+                    Ok(()),
+                    "{level:?} {name}"
+                );
+                let refusal = dispatch(name.clone(), ToolOrigin::Dynamic)
+                    .await
+                    .expect_err("asks");
+                assert!(
+                    refusal.starts_with(&unclassified),
+                    "{level:?} {name}: {refusal}"
+                );
+            }
+            for namespace in ["goal", "mcp__x__", ""] {
+                let name = ToolName::namespaced(namespace, tool);
+                let refusal = dispatch(name.clone(), ToolOrigin::Extension)
+                    .await
+                    .expect_err("asks");
+                assert!(
+                    refusal.starts_with(&unclassified),
+                    "{level:?} {name}: {refusal}"
+                );
+            }
+        }
+    }
+}

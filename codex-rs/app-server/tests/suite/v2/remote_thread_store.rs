@@ -76,7 +76,6 @@ use uuid::Uuid;
 
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
-<<<<<<< HEAD
 fn run_current_thread_test_with_stack<F>(name: &str, future: F) -> Result<()>
 where
     F: Future<Output = Result<()>> + Send + 'static,
@@ -97,21 +96,14 @@ where
 }
 
 #[test]
-fn thread_section_list_without_sqlite_returns_method_not_found() -> Result<()> {
+fn thread_section_operations_without_sqlite_return_method_not_found() -> Result<()> {
     run_current_thread_test_with_stack(
-        "thread-section-list-without-sqlite",
-        thread_section_list_without_sqlite_returns_method_not_found_impl(),
+        "thread-section-operations-without-sqlite",
+        thread_section_operations_without_sqlite_return_method_not_found_impl(),
     )
 }
 
-async fn thread_section_list_without_sqlite_returns_method_not_found_impl() -> Result<()> {
-||||||| 413492cd6c
-#[tokio::test]
-async fn thread_section_list_without_sqlite_returns_method_not_found() -> Result<()> {
-=======
-#[tokio::test]
-async fn thread_section_operations_without_sqlite_return_method_not_found() -> Result<()> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+async fn thread_section_operations_without_sqlite_return_method_not_found_impl() -> Result<()> {
     let codex_home = TempDir::new()?;
     let store_id = Uuid::new_v4().to_string();
     create_config_toml_with_thread_store(codex_home.path(), "http://127.0.0.1:1", &store_id)?;
@@ -623,23 +615,15 @@ async fn thread_delete_with_non_local_thread_store_does_not_create_local_persist
     Ok(())
 }
 
-<<<<<<< HEAD
 #[test]
-fn cold_thread_resume_reuses_non_local_history_probe() -> Result<()> {
+fn cold_thread_resume_rechecks_non_local_history_after_config_load() -> Result<()> {
     run_current_thread_test_with_stack(
-        "cold-thread-resume-non-local-history",
-        cold_thread_resume_reuses_non_local_history_probe_impl(),
+        "cold-thread-resume-rechecks-non-local-history",
+        cold_thread_resume_rechecks_non_local_history_after_config_load_impl(),
     )
 }
 
-async fn cold_thread_resume_reuses_non_local_history_probe_impl() -> Result<()> {
-||||||| 413492cd6c
-#[tokio::test]
-async fn cold_thread_resume_reuses_non_local_history_probe() -> Result<()> {
-=======
-#[tokio::test]
-async fn cold_thread_resume_rechecks_non_local_history_after_config_load() -> Result<()> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+async fn cold_thread_resume_rechecks_non_local_history_after_config_load_impl() -> Result<()> {
     let server = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     let store_id = Uuid::new_v4().to_string();

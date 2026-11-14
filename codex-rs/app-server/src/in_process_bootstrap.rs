@@ -150,13 +150,19 @@ pub(super) async fn configure(
     )
     .await
     .map_err(IoError::other)?;
-    let auth_manager = if enable_codex_api_key_env {
-        AuthManager::shared_from_auth_config(auth_config, /*enable_codex_api_key_env*/ true)
-            .await
-            .map_err(IoError::other)?
-    } else {
-        policy_auth_manager.clone()
-    };
+    // The serving manager keeps the session settings `shared_from_config`
+    // applies to the caller's config (#571, PF-84-S06 #570), as before the
+    // embedded policy bootstrap.
+    let auth_manager = AuthManager::shared_from_config(
+        &EmbeddedSessionAuthConfig {
+            auth: &auth_config,
+            configured_forced_login_method: policy_config.configured_forced_login_method,
+            runs_on_named_sign_in_account: config.runs_on_named_sign_in_account(),
+        },
+        enable_codex_api_key_env,
+    )
+    .await
+    .map_err(IoError::other)?;
     let config = Arc::make_mut(config);
     config.chatgpt_base_url = policy_config.chatgpt_base_url;
     config.chatgpt_base_url_is_explicit = policy_config.chatgpt_base_url_is_explicit;
@@ -165,11 +171,70 @@ pub(super) async fn configure(
     config.application_auth_route_config = policy_config.application_auth_route_config;
     config.forced_login_method = policy_config.forced_login_method;
     config.forced_chatgpt_workspace_id = policy_config.forced_chatgpt_workspace_id;
-    config_manager.update_managed_config_loader(policy_auth_manager, config);
+    // Without the environment API key, one manager serves both, as upstream's
+    // shared policy manager did, so a refreshed sign-in is never left stale.
+    let managed_config_auth_manager = if enable_codex_api_key_env {
+        policy_auth_manager
+    } else {
+        Arc::clone(&auth_manager)
+    };
+    config_manager.update_managed_config_loader(managed_config_auth_manager, config);
     codex_login::default_client::set_default_client_residency_requirement(
         config.enforce_residency.value(),
     );
     Ok(auth_manager)
+}
+
+/// The policy-resolved auth settings, with the session settings of the
+/// caller's config that `AuthManager::shared_from_config` reads.
+struct EmbeddedSessionAuthConfig<'a> {
+    auth: &'a codex_login::AuthConfig,
+    configured_forced_login_method: Option<codex_protocol::config_types::ForcedLoginMethod>,
+    runs_on_named_sign_in_account: bool,
+}
+
+impl codex_login::AuthManagerConfig for EmbeddedSessionAuthConfig<'_> {
+    fn codex_home(&self) -> std::path::PathBuf {
+        self.auth.codex_home.clone()
+    }
+
+    fn cli_auth_credentials_store_mode(&self) -> codex_login::AuthCredentialsStoreMode {
+        self.auth.auth_credentials_store_mode
+    }
+
+    fn auth_keyring_backend_kind(&self) -> codex_login::AuthKeyringBackendKind {
+        self.auth.keyring_backend_kind
+    }
+
+    fn forced_login_method(&self) -> Option<codex_protocol::config_types::ForcedLoginMethod> {
+        self.auth.forced_login_method
+    }
+
+    fn forced_chatgpt_workspace_id(&self) -> Option<Vec<String>> {
+        self.auth.forced_chatgpt_workspace_id.clone()
+    }
+
+    fn managed_auth_policy(&self) -> codex_config::ManagedAuthPolicy {
+        self.auth.managed_auth_policy.clone()
+    }
+
+    fn chatgpt_base_url(&self) -> String {
+        self.auth.chatgpt_base_url.clone().unwrap_or_default()
+    }
+
+    fn auth_route_config(&self) -> codex_login::AuthRouteConfig {
+        self.auth.auth_route_config.clone()
+    }
+
+    fn configured_forced_login_method(
+        &self,
+    ) -> Option<codex_protocol::config_types::ForcedLoginMethod> {
+        self.configured_forced_login_method
+    }
+
+    fn runs_on_named_sign_in_account(&self) -> bool {
+        self.runs_on_named_sign_in_account
+    }
 }
 
 #[cfg(test)]

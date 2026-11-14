@@ -213,13 +213,8 @@ fn provider_tokens_for_current_turn(info: &TokenUsageInfo) -> u64 {
 }
 
 fn generated_tokens_for_usage(usage: &TokenUsage) -> u64 {
-    u64::try_from(
-        usage
-            .output_tokens
-            .max(0)
-            .saturating_add(usage.reasoning_output_tokens.max(0)),
-    )
-    .unwrap_or_default()
+    // Reasoning is a breakdown of output, not an additional generated bucket.
+    u64::try_from(usage.output_tokens.max(0)).unwrap_or_default()
 }
 
 fn estimate_tokens_from_chars(chars: usize) -> u64 {
@@ -252,7 +247,7 @@ mod tests {
         TokenUsage {
             output_tokens,
             reasoning_output_tokens,
-            total_tokens: output_tokens.saturating_add(reasoning_output_tokens),
+            total_tokens: output_tokens,
             ..TokenUsage::default()
         }
     }
@@ -301,9 +296,9 @@ mod tests {
         )));
         assert!(estimator.complete_turn(Some(1_000), start + Duration::from_secs(1)));
 
-        assert_eq!(
+        insta::assert_snapshot!(
             estimator.label(start + Duration::from_secs(1)),
-            "TPS: 25.0 tok/s"
+            @"TPS: 20.0 tok/s"
         );
     }
 
@@ -320,7 +315,25 @@ mod tests {
 
         assert_eq!(
             estimator.label(start + Duration::from_secs(2)),
-            "TPS: 6.0 tok/s"
+            "TPS: 4.0 tok/s"
+        );
+    }
+
+    #[test]
+    fn reasoning_breakdown_does_not_change_generated_count() {
+        for output in [0, 100, i64::MAX] {
+            for reasoning in [0, 30, output] {
+                assert_eq!(
+                    generated_tokens_for_usage(&usage(output, reasoning)),
+                    output as u64,
+                );
+            }
+        }
+        assert_eq!(
+            generated_tokens_for_usage(&usage(
+                /*output_tokens*/ -1, /*reasoning_output_tokens*/ 30,
+            )),
+            0,
         );
     }
 

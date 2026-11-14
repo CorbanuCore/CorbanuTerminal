@@ -40,7 +40,6 @@ pub enum CargoBinError {
 /// In `cargo test`, `CARGO_BIN_EXE_*` env vars are absolute.
 /// In `bazel test`, `CARGO_BIN_EXE_*` env vars are rlocationpaths, intended to be consumed by `rlocation`.
 /// This helper allows callers to transparently support both.
-#[allow(deprecated)]
 pub fn cargo_bin(name: &str) -> Result<PathBuf, CargoBinError> {
     let env_keys = cargo_bin_env_keys(name);
     for key in &env_keys {
@@ -48,30 +47,34 @@ pub fn cargo_bin(name: &str) -> Result<PathBuf, CargoBinError> {
             return resolve_bin_from_env(key, value);
         }
     }
-    match assert_cmd::Command::cargo_bin(name) {
-        Ok(cmd) => {
-            let mut path = PathBuf::from(cmd.get_program());
-            if !path.is_absolute() {
-                path = std::env::current_dir()
-                    .map_err(|source| CargoBinError::CurrentDir { source })?
-                    .join(path);
-            }
-            if path.exists() {
-                Ok(path)
-            } else {
-                Err(CargoBinError::ResolvedPathDoesNotExist {
-                    key: "assert_cmd::Command::cargo_bin".to_owned(),
-                    path,
-                })
-            }
-        }
-        Err(err) => Err(CargoBinError::NotFound {
+    let current_exe =
+        std::env::current_exe().map_err(|source| CargoBinError::CurrentExe { source })?;
+    legacy_cargo_bin(name, &current_exe)
+}
+
+// Preserve the fallible legacy lookup: assert_cmd 2.2 now panics for absent
+// optional helpers. Explicit Cargo/Bazel paths above remain authoritative.
+fn legacy_cargo_bin(name: &str, current_exe: &Path) -> Result<PathBuf, CargoBinError> {
+    let mut directory = current_exe.to_path_buf();
+    directory.pop();
+    if directory.ends_with("deps") {
+        directory.pop();
+    }
+    let path = directory.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+    if path.is_file() {
+        Ok(path)
+    } else {
+        Err(CargoBinError::NotFound {
             name: name.to_owned(),
-            env_keys,
-            fallback: format!("assert_cmd fallback failed: {err}"),
-        }),
+            env_keys: cargo_bin_env_keys(name),
+            fallback: format!("no binary file at {}", path.display()),
+        })
     }
 }
+
+#[cfg(test)]
+#[path = "lookup_tests.rs"]
+mod lookup_tests;
 
 fn cargo_bin_env_keys(name: &str) -> Vec<String> {
     let mut keys = Vec::with_capacity(2);

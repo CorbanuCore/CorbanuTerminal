@@ -1282,7 +1282,7 @@ async fn thread_settings_confirmation_noop_concurrent_and_legacy() -> Result<()>
     let server = responses::start_mock_server().await;
     let codex_home = TempDir::new()?;
     create_config_toml(codex_home.path(), &server.uri())?;
-    write_models_cache(codex_home.path())?;
+    write_models_cache(codex_home.path()).await?;
     let mut mcp = TestAppServer::builder()
         .with_local_auto_env()
         .with_codex_home(codex_home.path())

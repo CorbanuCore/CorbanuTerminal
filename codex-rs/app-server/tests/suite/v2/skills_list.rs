@@ -1397,14 +1397,10 @@ async fn skills_changed_notification_is_emitted_after_skill_change() -> Result<(
             session_start_source: None,
             reopened_by_prompt_edit: false,
             thread_source: None,
-<<<<<<< HEAD
             spawn_agent_parent_thread_id: None,
             spawn_agent_role: None,
-||||||| 413492cd6c
-=======
             project_id: None,
             daybreak_enabled: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             dynamic_tools: None,
             environments: None,
             selected_capability_roots: None,

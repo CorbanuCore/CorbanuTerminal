@@ -6,6 +6,7 @@ use crate::agents_md::LoadedAgentsMd;
 use crate::config::TokenBudgetConfig;
 use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::realtime_conversation::RealtimeConversationSnapshot;
+use crate::session::session::Session;
 use crate::session::step_settings::ResolvedStepSettings;
 use crate::session::turn_context::TurnContext;
 use crate::session::turn_context::TurnEnvironment;
@@ -13,10 +14,12 @@ use crate::tools::router::ToolRouter;
 use codex_extension_api::ExtensionData;
 use codex_file_system::EnvironmentAccess;
 use codex_file_system::FileSystemEnvironmentAccessor;
+use codex_file_system::FileSystemSandboxContext;
 use codex_mcp::McpBinding;
 use codex_otel::SessionTelemetry;
 use codex_plugin::ExecutorPluginHookSource;
 use codex_protocol::items::ModelInvocationContext;
+use codex_protocol::models::AdditionalPermissionProfile;
 use codex_protocol::protocol::TurnContextItem;
 use tokio_util::sync::CancellationToken;
 
@@ -62,29 +65,55 @@ impl StepContext {
                 .enabled(codex_features::Feature::IncrementalTools)
     }
 
-    /// Pairs the step's environments with access using current session and originating-turn grants.
-    pub(crate) fn environments(&self) -> Vec<(&TurnEnvironment, impl EnvironmentAccess + '_)> {
-        self.environments
-            .turn_environments()
-            .map(|environment| (environment, self.fs_accessor(environment)))
-            .collect()
+    /// Pairs the step's environments with access, each through [`Self::file_access_context`].
+    pub(crate) async fn environments(
+        &self,
+        session: &Session,
+    ) -> Vec<(&TurnEnvironment, impl EnvironmentAccess + '_)> {
+        let mut environments = Vec::new();
+        for environment in self.environments.turn_environments() {
+            let context = self.file_access_context(session, environment).await;
+            environments.push((
+                environment,
+                FileSystemEnvironmentAccessor::new(
+                    environment.environment.filesystem_ref(),
+                    context,
+                ),
+            ));
+        }
+        environments
     }
 
-    /// File access in `environment` with the turn's grants, through Corbanu's file-tool
-    /// sandbox context (PF-27-S02 launch contract, D491 refusal where the host has no
-    /// platform sandbox). The grants are fenced by the policy marker (D51, D520 (a)); #245's
-    /// read-time strip of protected paths is not applied here (S3a, recorded in the ledger).
-    pub(crate) fn fs_accessor<'a>(
+    /// File access in `environment` with the current session and originating-turn grants
+    /// ([`Self::usable_grants`]), through Corbanu's file-tool sandbox context (PF-27-S02 launch
+    /// contract, D491 refusal where the host has no platform sandbox) and PF-23-S01's read
+    /// denials once they apply, as main's extension file access had.
+    pub(crate) async fn file_access_context(
         &self,
-        environment: &'a TurnEnvironment,
-    ) -> impl EnvironmentAccess + 'a + use<'a> {
+        session: &Session,
+        environment: &TurnEnvironment,
+    ) -> FileSystemSandboxContext {
         let grants = self
-            .turn
-            .granted_permissions(&environment.selection.environment_id);
-        FileSystemEnvironmentAccessor::new(
-            environment.environment.filesystem_ref(),
+            .usable_grants(session, &environment.selection.environment_id)
+            .await;
+        crate::security::protected_surface::protect_file_tool_context(
+            session,
+            &self.turn,
             self.turn.file_system_sandbox_context(grants, environment),
         )
+    }
+
+    /// The session's and the originating turn's grants for `environment_id`, fenced by the
+    /// policy marker (D51, D520 (a)), as file access may use them: #245, read through the
+    /// session, which strips protected paths while the protected-path rules apply.
+    pub(crate) async fn usable_grants(
+        &self,
+        session: &Session,
+        environment_id: &str,
+    ) -> Option<AdditionalPermissionProfile> {
+        session
+            .usable_grant(self.turn.granted_permissions(environment_id))
+            .await
     }
 
     /// Persist the context captured for this request, even after a live update.
@@ -104,3 +133,7 @@ impl StepContext {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "step_context_tests.rs"]
+mod tests;

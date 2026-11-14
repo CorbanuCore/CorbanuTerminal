@@ -232,28 +232,6 @@ fn chatgpt_auth_dot_json(fixture: ChatGptAuthFixture) -> Result<AuthDotJson> {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
-<<<<<<< HEAD
-    })
-||||||| 413492cd6c
-    };
-
-    save_auth(
-        codex_home,
-        &auth,
-        cli_auth_credentials_store_mode,
-        AuthKeyringBackendKind::default(),
-    )
-    .context("write auth.json")
-=======
         bedrock_access_keys: None,
-    };
-
-    save_auth(
-        codex_home,
-        &auth,
-        cli_auth_credentials_store_mode,
-        AuthKeyringBackendKind::default(),
-    )
-    .context("write auth.json")
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    })
 }

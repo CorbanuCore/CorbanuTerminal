@@ -141,11 +141,19 @@ const NO_PROTECTED_EFFECT: &[&str] = &[
     "list_available_plugins_to_install",
     "test_sync_tool",
 ];
-/// First-party extension tools, by namespace and name.
+/// The namespace upstream gives top-level function tools (`ToolName`'s
+/// default namespace); it names the same tool as no namespace.
+const FUNCTIONS_NAMESPACE: &str = "functions";
+/// First-party extension tools, by namespace and name. The goal tools are
+/// top-level tools, so they are listed both without a namespace and under
+/// `functions`; any other namespace stays unclassified.
 const EXTENSION_NO_PROTECTED_EFFECT: &[(Option<&str>, &str)] = &[
     (None, "get_goal"),
     (None, "create_goal"),
     (None, "update_goal"),
+    (Some(FUNCTIONS_NAMESPACE), "get_goal"),
+    (Some(FUNCTIONS_NAMESPACE), "create_goal"),
+    (Some(FUNCTIONS_NAMESPACE), "update_goal"),
     (Some("web"), "run"),
     (Some("image_gen"), "imagegen"),
     (Some("memories"), "list"),
