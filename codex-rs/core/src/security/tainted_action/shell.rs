@@ -1527,6 +1527,9 @@ impl Lexer {
                         self.just_closed_group = None;
                     }
                     self.operator(&chars, index);
+                    // An escaped separator also invents the next command,
+                    // even when its first character is no longer escaped.
+                    self.current.assignment_quoted |= quoted[index];
                 }
                 ch if ch.is_whitespace() || matches!(ch, '<' | '>' | ',') => self.flush(),
                 ch => self.word.push(literal_char(ch)),
@@ -1542,11 +1545,23 @@ impl Lexer {
 fn assignment_quotes(chars: &[char]) -> Vec<bool> {
     let mut quote = None;
     let mut escaped = false;
+    let mut uncertain = false;
     chars
         .iter()
-        .map(|&ch| {
+        .enumerate()
+        .map(|(index, &ch)| {
             work::step();
-            let protected = quote.is_some() || escaped || matches!(ch, '\'' | '"' | '\\');
+            // Comments, heredocs, ANSI-C strings and nested expansions can
+            // contain quotes with different pairing rules. Do not try to
+            // prove later assignments with this deliberately small scanner.
+            // This only adds a finding; the old reading remains intact.
+            uncertain |= matches!(ch, '#' | '`' | '[')
+                || (ch == '<' && chars.get(index + 1) == Some(&'<'))
+                || (ch == '(' && chars.get(index + 1) == Some(&'('))
+                || (ch == '$'
+                    && matches!(chars.get(index + 1), Some('\'' | '"' | '(' | '{' | '[')));
+            let protected =
+                uncertain || quote.is_some() || escaped || matches!(ch, '\'' | '"' | '\\');
             if escaped {
                 escaped = false;
             } else if ch == '\\' && quote != Some('\'') {

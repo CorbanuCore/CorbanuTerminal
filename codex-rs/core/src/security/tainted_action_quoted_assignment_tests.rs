@@ -45,6 +45,32 @@ fn issue_1973_quoted_assignments_cannot_hide_remotes() {
     ] {
         assert_eq!(
             verdicts(line),
+            // git pull also changes persistent repository state. Once the
+            // action asks, the existing D191 held finding is retained.
+            vec![
+                Some(if line.contains("git pull") {
+                    ProtectedActionKind::Persistence
+                } else {
+                    ProtectedActionKind::UnseenCode
+                });
+                4
+            ],
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn issue_1973_review_ambiguous_quote_contexts_ask() {
+    for line in [
+        r#"echo x\;r=o; git fetch e"$r""#,
+        "echo a #'\necho 'x;r=o'; git fetch e\"$r\"",
+        "cat <<E\ndon't\nE\necho 'x;r=o'; git fetch e\"$r\"",
+        r#"echo $'\'' 'x;r=o'; git fetch e"$r""#,
+        "echo a #x;r=o\ngit fetch e\"$r\"",
+    ] {
+        assert_eq!(
+            verdicts(line),
             vec![Some(ProtectedActionKind::UnseenCode); 4],
             "{line}"
         );
