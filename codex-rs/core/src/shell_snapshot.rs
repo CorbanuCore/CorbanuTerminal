@@ -661,9 +661,10 @@ async fn capture_snapshot(
     let mut capture = CapturedSnapshot::parse(shell_type, raw_snapshot.as_bytes())
         .ok_or_else(|| anyhow!("invalid shell snapshot capture"))?;
     // #310: no secret-named export, nor a provider credential name, is written
-    // to the snapshot file, whatever the policy admits. Only the file changes:
-    // the captured environment, and so the broker's credential and alias
-    // handling for commands, is untouched.
+    // to the snapshot file, whatever the policy admits, so a variable that only
+    // shell startup files define no longer reaches commands through the
+    // snapshot (as on main). The captured environment, and so the broker's
+    // credential and alias handling, is untouched.
     let secret_exports = secret_export_patterns(removed_env_vars);
     capture.retain_exports(|key| !secret_exports.iter().any(|pattern| pattern.matches(key)));
     let Some(credential_broker) = credential_broker else {
