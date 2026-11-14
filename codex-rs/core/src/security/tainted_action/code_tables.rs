@@ -241,14 +241,32 @@ pub(super) fn style_eval_option(options: &[String], cut: bool) -> Option<usize> 
         if style_may_evaluate(option) || (cut && index + 1 == options.len()) {
             return Some(index);
         }
-        if !option.contains(GLOB)
-            && !option.contains(['$', '`'])
-            && !option.contains(shell::UNSEEN_OUTPUT)
-        {
+        if !style_may_disappear(option) {
             break;
         }
     }
     None
+}
+
+fn style_may_disappear(option: &str) -> bool {
+    option.contains(GLOB) || option.contains(['$', '`']) || option.contains(shell::UNSEEN_OUTPUT)
+}
+
+/// Whether a cut can hide a style option after any zstyle-named word.
+/// Fold suffix reachability once: restarting the option scan at each word
+/// would be quadratic for repeated expanding zstyle names before a fixed word.
+pub(super) fn style_eval_cut(words: &[quoted::Word]) -> bool {
+    let mut reachable = true; // The empty suffix can hide the entire option.
+    for (index, word) in words.iter().enumerate().rev() {
+        work::step();
+        if shell::basename(&word.text).eq_ignore_ascii_case("zstyle") && reachable {
+            return true;
+        }
+        reachable = style_may_evaluate(&word.text)
+            || index + 1 == words.len()
+            || (style_may_disappear(&word.text) && reachable);
+    }
+    false
 }
 
 /// D410: whether `text`, quotes and backslashes aside, names `zmodload`

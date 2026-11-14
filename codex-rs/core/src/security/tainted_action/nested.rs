@@ -2010,12 +2010,7 @@ fn fish_codes(texts: &[String], at: usize, cut: &mut bool) -> Vec<String> {
 fn cut_matters(words: &[Word]) -> bool {
     // #2001: '(' can cut off a style option. A fixed earlier context
     // still prevents a group in an ordinary value from becoming '-e'.
-    let texts: Vec<String> = words.iter().map(|word| word.text.clone()).collect();
-    if texts.iter().enumerate().any(|(at, text)| {
-        work::step();
-        basename(text).eq_ignore_ascii_case("zstyle")
-            && code_tables::style_eval_option(&texts[at + 1..], /*cut*/ true).is_some()
-    }) {
+    if code_tables::style_eval_cut(words) {
         return true;
     }
     let judged = |text: &str| {

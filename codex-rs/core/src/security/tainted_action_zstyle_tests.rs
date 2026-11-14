@@ -152,6 +152,12 @@ fn issue_2001_deferred_style_scan_is_linear() {
                 .collect::<String>();
             let _ = verdicts(&line);
         });
+        for expanding_name in ["x*/zstyle ", "x$y/zstyle "] {
+            work::assert_linear("repeated cut style names", |scale| {
+                let line = format!(": {}a b {{", expanding_name.repeat(1000 * scale));
+                let _ = verdicts(&line);
+            });
+        }
         work::assert_linear("disappearing style operands", |scale| {
             let line = format!(
                 "zstyle {}-e :x y 'eval $q'",
