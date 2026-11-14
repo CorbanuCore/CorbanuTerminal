@@ -1567,8 +1567,10 @@ fn assignment_quotes(chars: &[char]) -> Vec<bool> {
     let mut ansi = false;
     let mut escaped = false;
     let mut comment = false;
+    let mut word_start = true;
     let mut uncertain = false;
     let mut nested = Vec::new();
+    let mut code_depth = 0usize;
     chars
         .iter()
         .enumerate()
@@ -1578,16 +1580,10 @@ fn assignment_quotes(chars: &[char]) -> Vec<bool> {
             let next = chars.get(index + 1).copied();
             if comment {
                 comment = ch != '\n';
+                word_start = !comment;
                 return uncertain || comment;
             }
-            if quote.is_none()
-                && !escaped
-                && nested.is_empty()
-                && ch == '#'
-                && previous.is_none_or(|before| {
-                    before.is_whitespace() || matches!(before, ';' | '&' | '|' | '(' | ')')
-                })
-            {
+            if quote.is_none() && !escaped && nested.is_empty() && ch == '#' && word_start {
                 comment = true;
                 return true;
             }
@@ -1595,12 +1591,19 @@ fn assignment_quotes(chars: &[char]) -> Vec<bool> {
             // grammar. Preserve uncertainty after them, but do not make an
             // ordinary comment, arithmetic counter or mktemp opaque.
             uncertain |= (quote.is_none() && ch == '<' && next == Some('<'))
-                || (!nested.is_empty() && matches!(ch, '\'' | '"'));
+                || (!nested.is_empty() && matches!(ch, '\'' | '"'))
+                // Shell comments and case patterns can contain a closing
+                // parenthesis without ending a substitution. An outer quote
+                // cannot be paired reliably after that apparent close.
+                || (ch == ')' && quote.is_some() && nested.last() == Some(&'('))
+                || (ch == '#' && code_depth != 0)
+                || (ch == '#' && quote.is_none() && previous == Some(')'));
             let continuation = (ch == '\\' && next == Some('\n')) || (escaped && ch == '\n');
             let protected = uncertain
                 || quote.is_some()
                 || (!continuation && (escaped || matches!(ch, '\'' | '"' | '\\')))
                 || (ch == '$' && matches!(next, Some('\'' | '"')));
+            let plain = !escaped && quote.is_none() && nested.is_empty();
             if escaped {
                 escaped = false;
             } else if ch == '\\' && (quote != Some('\'') || ansi) {
@@ -1615,19 +1618,26 @@ fn assignment_quotes(chars: &[char]) -> Vec<bool> {
                 if ch == '`' {
                     if nested.last() == Some(&'`') {
                         nested.pop();
+                        code_depth -= 1;
                     } else {
                         nested.push(ch);
+                        code_depth += 1;
                     }
                 } else if matches!(ch, '(' | '{' | '[')
                     && (previous == Some('$') || !nested.is_empty())
                 {
                     nested.push(ch);
+                    code_depth += usize::from(ch == '(');
                 } else if matches!(
                     (nested.last(), ch),
                     (Some('('), ')') | (Some('{'), '}') | (Some('['), ']')
                 ) {
                     nested.pop();
+                    code_depth -= usize::from(ch == ')');
                 }
+            }
+            if !continuation {
+                word_start = plain && matches!(ch, ' ' | '\t' | '\n' | ';' | '&' | '|' | '(');
             }
             protected
         })

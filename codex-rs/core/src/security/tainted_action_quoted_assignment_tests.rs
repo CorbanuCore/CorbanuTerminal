@@ -72,6 +72,12 @@ fn issue_1973_review_ambiguous_quote_contexts_ask() {
         r#"r\=o; git fetch e"$r""#,
         r#"r'='o; git fetch e"$r""#,
         r#"a=1 'r=o'; git fetch e"$r""#,
+        "echo \\ #'\n;r=o'; git fetch e\"$r\"",
+        "echo \\\n#'\necho 'x;r=o'; git fetch e\"$r\"",
+        "echo \u{a0}#'\n;r=o'; git fetch e\"$r\"",
+        "echo $(true)#'\n;r=o'; git fetch e\"$r\"",
+        r#"echo "$(case x in a) echo "x;r=o";; esac)"; git fetch e"$r""#,
+        "echo \"$(echo #)\necho \"x;r=o\")\"; git fetch e\"$r\"",
     ] {
         assert_eq!(
             verdicts(line),
