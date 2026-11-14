@@ -1,14 +1,10 @@
 use super::*;
-<<<<<<< HEAD
 use codex_app_server_protocol::ThreadTokenUsage;
 use codex_app_server_protocol::ThreadTokenUsageUpdatedNotification;
 use codex_app_server_protocol::TokenUsageBreakdown;
-||||||| 413492cd6c
-=======
 use codex_app_server_protocol::AuthRecoveryNotification;
 use codex_app_server_protocol::ThreadItem;
 use codex_app_server_protocol::ThreadItemPayload as AppServerThreadItemPayload;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_otel::set_parent_from_w3c_trace_context;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::models::ActivePermissionProfile;
