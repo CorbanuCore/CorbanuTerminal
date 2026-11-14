@@ -1,0 +1,22 @@
+#!/bin/bash
+# hidden_b2.sh <arm> : add the merged #2103 test file (+ its snapshot) as module
+# app::tests::provider_picker_refresh_ref on the arm's solution, run it, then restore.
+B=/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114
+arm=$1; wt=$B/wt/b2-$arm; out=$B/trackB/out/b2-hidden-$arm.txt
+mkdir -p $B/trackB/out
+d=codex-rs/tui/src/app
+snap=$d/tests/snapshots/codex_tui__app__tests__provider_picker_refresh_ref__model_picker_openai_restored_while_open.snap
+cd $wt || exit 2
+[ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "dirty"; exit 2; }
+cp $B/trackB/hidden/b2/provider_picker_refresh.rs $d/tests/provider_picker_refresh_ref.rs
+cp $B/trackB/hidden/b2/model_picker_openai_restored_while_open.snap $snap
+printf '\n#[path = "tests/provider_picker_refresh_ref.rs"]\nmod provider_picker_refresh_ref;\n' >> $d/tests.rs
+unset CORBANU_HOME CODEX_HOME
+export CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/bench1114-b2-$arm INSTA_UPDATE=no
+{ echo "## hidden: merged #2103 provider_picker_refresh.rs + snapshot added unchanged as module provider_picker_refresh_ref, on [$arm] HEAD $(git rev-parse --short HEAD)"
+  (cd codex-rs && cargo test -j8 -p codex-tui --lib provider_picker_refresh_ref 2>&1 | grep -E "^test |test result|error(\[|:)|panicked|Snapshot|^-old|^\+new|│[-+]" | head -60); } > $out
+git checkout -q -- $d/tests.rs
+rm $d/tests/provider_picker_refresh_ref.rs $snap
+ls $d/tests/snapshots/*provider_picker_refresh_ref* 2>/dev/null && echo "WARN leftover snapshot files"
+git status --porcelain
+cat $out

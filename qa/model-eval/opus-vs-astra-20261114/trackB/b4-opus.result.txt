@@ -1,0 +1,35 @@
+The new reading now treats braces after reserved words as group delimiters, as bash and zsh do. The new tests failed before the fix and pass after it, the 905 `security::` tests pass, and fmt is applied. `cargo clippy -p codex-core --all-targets -D warnings` is not clean, but none of the 8 errors are in files I touched.
+
+**What changed (`codex-rs/core/src/security/tainted_action/shell.rs`)**
+- `{` now opens a group in the new reading when the words before it are all unquoted reserved words that can start a command: `!`, `time`, `if`, `then`, `elif`, `else`, `while`, `until`, `do`. This covers `then {`, `do {`, `else {`, `! {`, `time {`, `! time {` and `if {`.
+- `}` now closes a group when the only word before it is an unquoted `fi`, `done` or `esac`.
+- A word doesn't count as reserved if it was quoted, escaped, built from a substitution, part of a redirection, or had a brace removed. So `'then' {`, `\time {`, `>then {`, `$(echo then) {` and `echo then {` still read the brace as literal and still get the second judgment. Upper-case `Then` doesn't count either.
+- The group-brace check only changes in the new reading. Main's two readings (Redirections and Legacy), which set the floor, are unchanged.
+- Result: the issue's spellings now read exactly as main's Redirections reading does, so the classifier no longer runs a needless second judgment on them. Brace arguments still get it, so the result is never quieter than before.
+
+**Tests**
+- `tainted_action/shell_brace_group_tests.rs` (new) covers the shell-independent lexer:
+  - `issue_2018_braces_after_reserved_words_delimit_groups`: 22 spellings. It checks they aren't flagged as read differently, that the words match main's Redirections reading, and that no `{`/`}` is left as a word.
+  - `issue_2018_brace_arguments_stay_literal`: 11 control lines, which pass both before and after.
+- In `tainted_action_brace_reading_tests.rs`, each test runs in both bash and zsh:
+  - `issue_2018_group_braces_need_no_second_judgment`: group lines skip the second judgment and control lines still get it.
+  - `issue_2018_group_verdicts_never_quieter_than_main`: on 11 group lines with the existing redirected-`cd` payload (3 `cd` spellings each), the new reading alone returns `Persistence`. The full verdict is never quieter than main's Redirections or Legacy verdict.
+
+**Evidence** (`CARGO_TARGET_DIR` as required, `-j8`, `unset CORBANU_HOME CODEX_HOME`, `RUST_MIN_STACK=8388608`)
+- **Before the fix**, with tests committed in `e27f5d407b`: `cargo test -j8 -p codex-core --lib issue_2018` gave 1 passed, 3 failed. The control test passed. The other three failed on every group spelling, in both bash and zsh. In the verdict test, only the "new reading" check failed (the new reading returned `None`), never the "quieter than main" check.
+- **After the fix**: the same command gave 4 passed, 0 failed.
+- **Wider suite**: `cargo test -j8 -p codex-core --lib security::` gave 905 passed, 0 failed, 7 ignored. The ignored ones are manual timing probes, the microbenchmark and the corpus measurements that need `CORBANU_CLASSIFIER_CORPUS`. I did not rerun the 193,500-line corpus check because there's no corpus here.
+
+**Clippy / fmt**
+- `just fmt` was applied, which reformatted the new test file.
+- Clippy fails with 8 `nonminimal_bool` errors in `grammar.rs`, `unknown_folder.rs`, `windows_shell.rs` and `tools/sandboxing.rs`. I didn't touch those files, and I left them alone to keep the change scoped.
+- Rerunning with only that one lint allowed (`-A clippy::nonminimal_bool`) finishes clean, so my changes add no warnings.
+
+**Commits (local only)**
+- `e27f5d407b`: tests.
+- `3c7187492c`: fix, plus fmt's reformatting of the test file.
+
+**Unsure / not done**
+- **No release-note fragment.** Verdicts are unchanged because main's floor still applies; the gain is fewer redundant judgments, so I treated it as not user-visible. One fragment would be needed if you count it as visible.
+- **`if`, `while` and `until` are included** even though the issue doesn't name them. They are real group positions (`if { true; }; then`).
+- **Not covered:** `time -p {`, `coproc {` and zsh's rule that a `}` can close a group anywhere on the line. These stay literal and keep the second judgment.

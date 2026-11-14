@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""Build a blinded grading packet: grade_pack.py <task>  (b1..b4).
+Uses blind-key.md for the X/Y assignment; scrubs model names, token counts and arm paths."""
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+B = Path(__file__).resolve().parent
+R = "/Volumes/CorbanuDrive/Corbanu/CorbanuTerminal"
+t = sys.argv[1]
+key = {}
+for line in (B / "blind-key.md").read_text().splitlines():
+    m = re.match(r"\| (\w+) \| (opus|astra) \| (opus|astra) \|", line)
+    if m:
+        key[m.group(1).lower()] = {"X": m.group(2), "Y": m.group(3)}
+base = dict(l.split("\t") for l in (B / "trackB" / "bases.tsv").read_text().splitlines())[t.rstrip("r")]
+G = B / "grade" / t
+G.mkdir(parents=True, exist_ok=True)
+
+SCRUB = [
+    (re.compile(r"bench1114-%s-(opus|astra)" % t), "bench1114-%s-ARM" % t),
+    (re.compile(r"/wt/%s-(opus|astra)" % t), "/wt/%s-ARM" % t),
+    (re.compile(r"\b(claude[- ]?opus[\w.-]*|opus[- ]?5[\w.-]*|gpt-6[\w-]*|gpt-?\d[\w.-]*)\b", re.I), "[model]"),
+    (re.compile(r"\b(Opus|Astra|Claude|Anthropic's model|ChatGPT|Codex agent)\b"), "[model]"),
+    (re.compile(r"(tokens? used|token usage)[^\n]*", re.I), "[token count removed]"),
+    (re.compile(r"Co-authored-by:[^\n]*", re.I), ""),
+]
+
+
+def scrub(s, names=True):
+    for i, (p, r) in enumerate(SCRUB):
+        if not names and i in (2, 3):
+            continue
+        s = p.sub(r, s)
+    return s
+
+
+NAMES = t.rstrip("r") != "b2"  # B2's task content is about model names; scrub paths/tokens only
+
+
+task = (B / "trackB" / f"brief-{t.rstrip('r')}-opus.md").read_text()
+(G / "task.md").write_text(scrub(task, t.rstrip("r") != "b2"))
+for side in ("X", "Y"):
+    arm = key[t][side]
+    d = G / side
+    d.mkdir(exist_ok=True)
+    o = B / "runs" / "trackB" / f"{t}-{arm}"
+    commits = (Path(f"{o}.commits").read_text() if Path(f"{o}.commits").exists() else "")
+    diff = Path(f"{o}.diff").read_text() if Path(f"{o}.diff").exists() else ""
+    status = Path(f"{o}.status").read_text() if Path(f"{o}.status").exists() else ""
+    (d / "diff.patch").write_text(scrub(f"# commits (oldest last)\n{commits}\n# uncommitted files\n{status}\n", NAMES) + scrub(diff, False))
+    res = Path(f"{o}.md").read_text() if Path(f"{o}.md").exists() else "(no result file was produced)"
+    (d / "result.md").write_text(scrub(res, NAMES))
+hc = B / "trackB" / "out" / f"{t}-hidden-check.md"
+if hc.exists():
+    txt = hc.read_text()
+    for side in ("X", "Y"):
+        txt = txt.replace(f"[{key[t][side]}]", f"[{side}]")
+    (G / "hidden-check.md").write_text(scrub(txt, NAMES))
+repo = G / "repo"
+if not repo.exists():
+    br = f"bench1114/grade-{t}"
+    subprocess.run(["git", "-C", R, "branch", "-q", br, base], check=True)
+    subprocess.run(["git", "clone", "-q", "--shared", "--no-tags", "--single-branch", "-b", br, R, str(repo)], check=True)
+    subprocess.run(["git", "-C", R, "branch", "-q", "-D", br], check=True)
+    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "--detach", base], check=True)
+    subprocess.run(["git", "-C", str(repo), "branch", "-q", "-D", br], check=True)
+    subprocess.run(["git", "-C", str(repo), "remote", "remove", "origin"], check=True)
+brief = (B / "grade" / "rubric-brief.tmpl.md").read_text()
+(G / "brief.md").write_text(brief)
+left = [w for w in ("opus", "astra", "claude", "gpt-6") if any(w in p.read_text().lower() for p in G.glob("[XY]/*"))]
+print(t, key[t], "possible leaks:", left)

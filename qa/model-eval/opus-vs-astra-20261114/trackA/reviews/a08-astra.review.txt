@@ -1,0 +1,7 @@
+1. **Medium — [codex-rs/windows-sandbox-rs/src/acl_delete_child_walk_tests.rs:216](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a08/codex-rs/windows-sandbox-rs/src/acl_delete_child_walk_tests.rs:216): inherited integrity labels cause false setup failures.** `full_sddl()` includes the label SACL, so `!sddl.contains("ID;")` checks more than DACL inheritance. If a previous legacy session leaves `%TEMP%` with an inheritable Low label, the new directory’s descriptor includes an ACE such as `S:(ML;OICIID;NW;;;LW)`. This assertion panics despite a correct DACL, before `isolated_base()` reaches `protect_label()` to remove that inherited label.
+
+   **Suggested fix:** inspect inheritance flags only within the DACL, or request DACL-only SDDL for this assertion.
+
+Review was local and read-only; no builds or tests ran.
+
+VERDICT: REQUEST_CHANGES

@@ -1,0 +1,36 @@
+Fixed and committed locally. Working tree is clean.
+
+- `model_popups.rs`: refreshes only the active session picker, preserving its tab and selection.
+- `provider_management_status.rs`: triggers that refresh after async availability updates.
+- `provider_picker_refresh.rs`: adds regression coverage for recovery, stale results, session preservation, reasoning dialogs, and dismissal, plus two snapshots.
+- Added the #2102 release-note fragment and [validation record](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/b2-astra/qa/reliability/2102-open-model-picker-refresh.md).
+
+Regression command:
+
+```sh
+just test -pcodex-tui --lib -j8 --locked --offline \
+  -E 'test(provider_manager_recovery_refreshes_open_model_picker_and_preserves_tab)'
+```
+
+**Before:** failed, exit 100—OpenAI remained absent.  
+**After:** passed with `--retries 0`; reviewed snapshots were subsequently verified without update mode.
+
+Final focused run on Rust **1.99.1**: **25 passed**:
+
+```sh
+just test -pcodex-tui --lib -j8 --locked --offline --retries 0 \
+  -E 'test(model_picker) | test(chatwidget::model_popups::tests::) | test(reasoning_popup) | test(model_reasoning_selection_popup)'
+```
+
+Also passed:
+
+```sh
+cargo clippy -p codex-tui --all-targets -j8 --locked --offline -- -D warnings
+cargo fmt -p codex-tui -- --check
+```
+
+Formatting was applied. Builds used the required external target; tests used isolated profiles after unsetting the home aliases.
+
+Local commits: `fa64485466`, `40efd3a488` (tests), `a0a8daca79` (fix and evidence).
+
+Not performed: live-provider/PTY or independent code-blind acceptance. Build notices about dependency future compatibility and the large macOS unwind table are recorded; neither prevented validation.

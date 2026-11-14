@@ -1,0 +1,5 @@
+1. **Medium — [shell.rs:837](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a03/codex-rs/core/src/security/tainted_action/shell.rs:837): New loop breaks the existing instrumentation test.** The `finished.fed_by` loop omits `work::step()`. The existing `work::tests::every_classifier_loop_steps_the_counter` scans this source and will report `shell.rs:837`, failing the core unit suite. It also leaves cache-registration work uncounted in linearity checks. **Fix:** add `work::step();` as the loop’s first statement.
+
+No other concrete defects found. Review was local and static; no builds or tests were run.
+
+VERDICT: REQUEST_CHANGES

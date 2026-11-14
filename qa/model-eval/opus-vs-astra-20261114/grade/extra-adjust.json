@@ -1,0 +1,47 @@
+{
+ "A06-astra": {
+  "real": 1,
+  "uncertain": -1,
+  "false": 0
+ },
+ "A04-opus": {
+  "real": 1,
+  "uncertain": -1,
+  "false": 0
+ },
+ "A01-astra": {
+  "real": 3,
+  "uncertain": -3,
+  "false": 0
+ },
+ "A10-astra": {
+  "real": 1,
+  "uncertain": -1,
+  "false": 0
+ },
+ "A05-opus": {
+  "real": 1,
+  "uncertain": -1,
+  "false": 0
+ },
+ "A01-opus": {
+  "real": 2,
+  "uncertain": -2,
+  "false": 0
+ },
+ "A09-opus": {
+  "real": 1,
+  "uncertain": -1,
+  "false": 0
+ },
+ "A05-astra": {
+  "real": 1,
+  "uncertain": -1,
+  "false": 0
+ },
+ "A06-opus": {
+  "real": 2,
+  "uncertain": -2,
+  "false": 0
+ }
+}

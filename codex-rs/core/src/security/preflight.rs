@@ -426,31 +426,39 @@ pub fn sources_from_config(config: &Config) -> InventorySources {
         .into_iter()
         .filter(|layer| !layer.is_disabled())
         .map(|layer| {
-            let (label, path) = match &layer.name {
-                ConfigLayerSource::User { file, profile } => (
-                    match profile {
-                        Some(profile) => format!("user config (profile {profile})"),
-                        None => "user config".to_string(),
-                    },
-                    Some(file.to_path_buf()),
+            let (label, path) = match (&layer.name, layer.project_role_file()) {
+                // Keep the existing in-memory layer disposition: setting a path here
+                // would change secret findings from Migrate to Isolate.
+                (_, Some(file)) => (
+                    format!("project role file ({})", file.as_path().display()),
+                    None,
                 ),
-                ConfigLayerSource::Project { dot_codex_folder } => (
-                    "project config".to_string(),
-                    Some(dot_codex_folder.join("config.toml").to_path_buf()),
-                ),
-                ConfigLayerSource::System { file }
-                | ConfigLayerSource::LegacyManagedConfigTomlFromFile { file } => {
-                    ("managed config".to_string(), Some(file.to_path_buf()))
-                }
-                ConfigLayerSource::SessionFlags => ("launch flags".to_string(), None),
-                ConfigLayerSource::PackagedDefaults { file } => {
-                    ("packaged defaults".to_string(), Some(file.to_path_buf()))
-                }
-                ConfigLayerSource::Mdm { .. }
-                | ConfigLayerSource::EnterpriseManaged { .. }
-                | ConfigLayerSource::LegacyManagedConfigTomlFromMdm => {
-                    ("managed config".to_string(), None)
-                }
+                (source, None) => match source {
+                    ConfigLayerSource::User { file, profile } => (
+                        match profile {
+                            Some(profile) => format!("user config (profile {profile})"),
+                            None => "user config".to_string(),
+                        },
+                        Some(file.to_path_buf()),
+                    ),
+                    ConfigLayerSource::Project { dot_codex_folder } => (
+                        "project config".to_string(),
+                        Some(dot_codex_folder.join("config.toml").to_path_buf()),
+                    ),
+                    ConfigLayerSource::System { file }
+                    | ConfigLayerSource::LegacyManagedConfigTomlFromFile { file } => {
+                        ("managed config".to_string(), Some(file.to_path_buf()))
+                    }
+                    ConfigLayerSource::SessionFlags => ("launch flags".to_string(), None),
+                    ConfigLayerSource::PackagedDefaults { file } => {
+                        ("packaged defaults".to_string(), Some(file.to_path_buf()))
+                    }
+                    ConfigLayerSource::Mdm { .. }
+                    | ConfigLayerSource::EnterpriseManaged { .. }
+                    | ConfigLayerSource::LegacyManagedConfigTomlFromMdm => {
+                        ("managed config".to_string(), None)
+                    }
+                },
             };
             ConfigLayerInput {
                 label,

@@ -50,6 +50,27 @@ fn valid_crew_round_trips_without_losing_runtime_or_identity() {
 }
 
 #[test]
+fn issue_2150_empty_provider_allowlist_denies_every_runtime() {
+    let mut crew = valid_crew();
+    crew.policy.provider_allowlist.clear();
+    assert!(
+        crew.validate().is_err(),
+        "an empty effective provider policy must not authorize an exact runtime"
+    );
+
+    crew.members[0].runtime_request = RuntimeRequest::Selector {
+        allowed_provider_ids: vec!["provider-a".to_string()],
+        preferred_model_ids: Vec::new(),
+        reasoning_effort: None,
+        service_tier: None,
+    };
+    assert!(
+        crew.validate().is_err(),
+        "a selector must not bypass an empty effective provider policy"
+    );
+}
+
+#[test]
 fn validation_rejects_ambiguous_identity_topology_and_policy() {
     let mut duplicate = valid_crew();
     duplicate.members[1].logical_member_id = "manager".to_string();

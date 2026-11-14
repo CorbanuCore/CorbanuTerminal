@@ -1,0 +1,14 @@
+Both solutions partially fix the bug, but neither fully satisfies the required tab preservation.
+
+- **Correctness:** Both refresh the active picker and protect dismissed menus and reasoning dialogs. Both fail the hidden Claude-only recovery case: the picker switches to OpenAI. The shared cause is that the single-provider layout stores no tab ID, leaving nothing to preserve when recovery introduces multiple tabs.
+- **Security/rules:** Neither diff weakens provider eligibility or authorization checks. X acknowledges running tests without required credential isolation and finishing with only `--no-deps` Clippy clean under the wrong toolchain. Y records isolated testing and the full pinned-toolchain gate. Independent checks confirm strict Clippy passes for both. Both disclose missing interactive qualification.
+- **Tests:** Both have independently verified fail-before/pass-after regressions and snapshots, but both start with multiple providers and miss the decisive single-provider transition. Y additionally checks session identity, absence of emitted operations, stale results, and navigation into restored OpenAI rows. X separates its dismissal/reasoning guard into another test.
+- **Scope and clarity:** Both make focused, readable changes using existing selection-view APIs. Their release fragments satisfy the heading rule. Y’s additional validation record is relevant. Y also carries forward the selected row index; X resets row selection during replacement.
+- **Honesty:** Both accurately report their regression results and disclose validation limitations. However, both overstate successful tab preservation, which the hidden results directly contradict. This is an unsupported completeness claim, not evidence of fabricated test runs.
+
+I prefer **Y**. Both share the same substantive correctness defect, but Y provides broader behavioral assertions, preserves the selected row index, and completes the required strict validation with the pinned toolchain and isolated test workflow. X’s candid disclosures are useful, but its unsafe test invocation and incomplete original Clippy gate make it the weaker submission. Neither is ready to accept without fixing and testing recovery from a single available provider.
+
+SCORES
+X correctness=3 security_rules=3 test_quality=3 scope=5 clarity=4 honesty=4
+Y correctness=3 security_rules=4 test_quality=3 scope=5 clarity=4 honesty=4
+PREFERENCE: Y

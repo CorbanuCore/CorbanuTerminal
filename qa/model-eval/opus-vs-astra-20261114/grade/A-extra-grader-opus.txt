@@ -1,0 +1,55 @@
+**F1: REAL; fair severity: medium**
+`issue_1139` is added to `suite/mod.rs` with no `cfg` gate, and the file has no `#![cfg(...)]`. Neighbouring sandbox tests are gated, for example `issue_584` (macOS/Linux) and `issue_840` (macOS). The Hook case runs `printf … > .git/hooks/pre-commit` through `shell_command`, which uses PowerShell on Windows, so the expected Moderate warning will not appear and the assertions fail on Windows CI.
+
+**F2: REAL; fair severity: medium**
+A provider set by managed requirements now sets `requested_provider_was_explicit`. The fallback still needs `provider_came_from_override`, which is only true for a runtime override. For the stated case, `corrected_catalog_provider("gpt-5.5", "anthropic")` returns `Some(openai)`, so `allow_provider_model_fallback` is false and startup returns the "explicit model/provider pair … is incompatible" error. That contradicts the code's own comment that mixed-provenance pairs should fall back with a warning.
+
+**F3: REAL; fair severity: low**
+The change adds only direct classifier tests (`tainted_action_chroot_tests.rs`) and nothing under `core/tests/suite`. `core/AGENTS.md` says agent-logic changes MUST add an integration test. The dispatch path itself did not change, so this is a policy and coverage gap rather than a functional defect.
+
+**F4: REAL; fair severity: medium**
+Per git's documentation, `GIT_ALLOW_PROTOCOL=file` behaves as `protocol.file.allow=always` and overrides other settings. That removes git's default `user` restriction, which is what blocks file-transport clones for submodules. Before this change the variable was misspelled (`GIT_ALLOW_PROTOCOLS`) and had no effect, so the default protection applied. It is a weakened defence-in-depth rather than a sandbox escape, since sandbox read limits still apply.
+
+**F5: REAL; fair severity: low**
+The lexer does not skip here-document bodies; it lexes them as script text. A body line starting with `for`, `if` and so on opens a keyword group that never closes, and `keyword_depth > 0` now sets `in_keyword` on every later command. Later assignments are therefore treated as unseen, which causes extra prompts but fails safe.
+
+**F6: REAL; fair severity: medium**
+`chroot_commands` and `chroot_runs_unjudged` run only from word 0 and from `eval`'s index + 1. `programs()` stops at `--`, `eval`, `trap`, `coproc` and `noglob`, none of which are wrappers. As a result, `eval -- chroot / ./x`, `eval eval chroot …`, `trap 'chroot / ./x' EXIT`, `coproc chroot …` and `noglob chroot …` all stay quiet. `carried_command` and `after_modifiers` already handle these forms; the new chroot code does not use them.
+
+**F7: REAL; fair severity: nit**
+When `root` is `stage_windows_sandbox_helpers`, a root with no callers raises the error "takes the guard but nothing calls it", which is wrong for that case. It only affects the wording of the error.
+
+**F8: REAL; fair severity: medium**
+`self.command(run, …)` lexes the substituted words again, and `literal_char` turns the `\u{1}` characters in `UNSEEN_OUTPUT` into U+FFFD, so the marker is lost. `outbound::unseen()` therefore no longer sees `--data-binary "$(cat …)"` as unseen data. The outer check covers only the first word and inline interpreter code, and `chroot` is not in `EXEC_WRAPPERS`, so the outer pass does not judge `curl` either.
+
+**F9: REAL; fair severity: medium**
+After `}`, `just_closed_group` is set, but `open_substitution` and `close_substitution` clear it when they see `>$(printf log)`. The later `&` then marks nothing, so `r=origin` counts as reaching the parent shell and `git fetch e"$r"` stays quiet. This is another spelling of the very bypass the change is meant to close.
+
+**F10: REAL; fair severity: nit**
+`path.ancestors()` walks from the path towards the root and the loop overwrites `git_folder` each time, so it keeps the `.git` nearest the root. If the writable folder itself sits inside a directory named `.git`, the check looks at the wrong parent. This only affects the explanation text, and the layout is very unusual.
+
+**F11: REAL; fair severity: low**
+`git_write_explanation` always suggests switching to Permissive. With approvals set to `Never`, Permissive never runs anything outside the sandbox, so the `.git` write still fails — the integration test itself uses `Never`. The text does say "an approved command", which hedges a little, and this is an explanation only.
+
+**F12: REAL; fair severity: low**
+With `--skip-chdir`, the extra check judges `run` (starting at `cp`) against `folders.cwd`. `elsewhere_at` and `moved` are computed only on the inner words, so `env -C` is lost. The outer pass sees `chroot` as the command and not as a writer, so `.zshrc` in `/home/fixture` is missed. This is an exotic case that needs root, and `chroot` was quiet before this change anyway.
+
+**F13: REAL; fair severity: low**
+In the inner check, `Folders` starts fresh and `self.unknown_folder` is not raised. So `unknown_place` and `unknown_folder_file` ignore both an earlier `cd "$X"` and a `sudo -D` or `env -C` before `chroot`. Relative persistence writes under `--skip-chdir` stay quiet. This overlaps with F12.
+
+```
+FINDINGS
+F1: REAL; fair severity: medium
+F2: REAL; fair severity: medium
+F3: REAL; fair severity: low
+F4: REAL; fair severity: medium
+F5: REAL; fair severity: low
+F6: REAL; fair severity: medium
+F7: REAL; fair severity: nit
+F8: REAL; fair severity: medium
+F9: REAL; fair severity: medium
+F10: REAL; fair severity: nit
+F11: REAL; fair severity: low
+F12: REAL; fair severity: low
+F13: REAL; fair severity: low
+```

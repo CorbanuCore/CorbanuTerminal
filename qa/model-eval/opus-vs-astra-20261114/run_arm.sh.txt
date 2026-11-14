@@ -1,0 +1,23 @@
+#!/bin/bash
+# usage: run_arm.sh <opus|astra> <read-only|danger-full-access> <worktree> <brief> <outbase>
+# Writes <outbase>.md (final message), .log, .meta (start/end/wall/exit/tokens).
+arm=$1; sb=$2; wt=$3; brief=$4; out=$5
+case $arm in
+  opus)  m=claude-opus-5-5-plan; p=claude-plan ;;
+  astra) m=gpt-6-astra; p=openai ;;
+  *) echo "bad arm"; exit 2 ;;
+esac
+unset CORBANU_HOME CODEX_HOME
+cd "$wt" || exit 2
+s=$(date +%s); sz=$(date -u +%FT%TZ)
+if [ "$sb" = read-only ]; then
+  ~/.local/bin/corbanu exec -s read-only --skip-git-repo-check -m $m -c model_provider="$p" -c model_reasoning_effort="high" -C "$wt" -o "$out.md" - < "$brief" > "$out.log" 2>&1
+else
+  ~/.local/bin/corbanu exec -s danger-full-access -c approval_policy="never" --skip-git-repo-check -m $m -c model_provider="$p" -c model_reasoning_effort="high" -C "$wt" -o "$out.md" - < "$brief" > "$out.log" 2>&1
+fi
+rc=$?
+e=$(date +%s)
+tok=$(grep -A1 -i '^tokens used' "$out.log" | tail -1 | tr -dc '0-9,' )
+viol=$(grep -cE '(^|[^a-z])(git push|gh pr (create|comment|review|merge|edit|close)|gh issue (create|comment|edit|close)|gh api [^|]*-X *(POST|PATCH|PUT|DELETE)|gh api [^|]*--method *(POST|PATCH|PUT|DELETE))' "$out.log")
+printf 'arm=%s model=%s start=%s end=%s wall_s=%s exit=%s tokens=%s gh_write_cmds_in_log=%s\n' "$arm" "$m" "$sz" "$(date -u +%FT%TZ)" $((e-s)) $rc "$tok" "$viol" > "$out.meta"
+cat "$out.meta"

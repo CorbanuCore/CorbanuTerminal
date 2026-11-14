@@ -1,0 +1,320 @@
+diff --git a/codex-rs/tui/src/app/provider_management_status.rs b/codex-rs/tui/src/app/provider_management_status.rs
+index c0cfd50c85..23f0c6fe90 100644
+--- a/codex-rs/tui/src/app/provider_management_status.rs
++++ b/codex-rs/tui/src/app/provider_management_status.rs
+@@ -196,6 +196,8 @@ impl App {
+         // The asynchronous discovery may have settled after the picker cached
+         // its eligibility snapshot. Publish the same status result to both UIs.
+         self.model_catalog.update_provider_statuses(&statuses);
++        // #2102: an open session model picker shows the settled policy too.
++        self.chat_widget.refresh_open_session_model_picker();
+         let selected_index = self.chat_widget.provider_manager_selected_index();
+         let selected_provider =
+             selected_index.and_then(|index| self.provider_manager_row_provider(index));
+diff --git a/codex-rs/tui/src/app/tests/provider_picker_refresh.rs b/codex-rs/tui/src/app/tests/provider_picker_refresh.rs
+index fdb67317b6..35b2aa91e3 100644
+--- a/codex-rs/tui/src/app/tests/provider_picker_refresh.rs
++++ b/codex-rs/tui/src/app/tests/provider_picker_refresh.rs
+@@ -1,4 +1,7 @@
+ use super::*;
++use crate::chatwidget::tests::helpers::render_bottom_popup_with_height;
++use crossterm::event::KeyCode;
++use crossterm::event::KeyEvent;
+ use pretty_assertions::assert_eq;
+ 
+ #[tokio::test]
+@@ -65,3 +68,148 @@ async fn provider_manager_late_refresh_updates_picker_without_reopening_dismisse
+     assert_eq!(app.chat_widget.provider_manager_selected_index(), None);
+     Ok(())
+ }
++
++/// A status host on which Z.AI and DeepSeek are usable and OpenAI is not
++/// signed in yet, installed as the session's model policy.
++fn install_policy_without_openai(app: &mut App) -> crate::provider_status_host::ProviderStatusHost {
++    app.config.cli_auth_credentials_store_mode = codex_login::AuthCredentialsStoreMode::File;
++    for env_key in [
++        codex_model_provider_info::ZAI_API_KEY_ENV_VAR,
++        codex_model_provider_info::DEEPSEEK_API_KEY_ENV_VAR,
++    ] {
++        codex_login::login_with_provider_api_key(
++            &app.config.codex_home,
++            env_key,
++            "synthetic-picker-refresh-key",
++            app.config.cli_auth_credentials_store_mode,
++            app.config.auth_keyring_backend_kind(),
++        )
++        .expect("store synthetic provider key");
++    }
++    let host = crate::provider_status_host::ProviderStatusHost::from_config(
++        &app.config,
++        crate::provider_status_host::ProviderAccountMetadata::default(),
++    );
++    app.model_catalog.set_provider_policy(
++        crate::chatwidget::provider_model_policy::ProviderModelPolicy::new(
++            host.clone(),
++            codex_provider_auth::ProviderRuntimeAuthorizations::default(),
++        ),
++    );
++    host
++}
++
++/// Opens `/providers` (as discovery's first result does) and dismisses it,
++/// so the user can move on to the model picker.
++fn open_and_dismiss_provider_manager(
++    app: &mut App,
++    host: &crate::provider_status_host::ProviderStatusHost,
++    app_server: &AppServerSession,
++) {
++    app.provider_management_generation = 1;
++    app.provider_manager_statuses_resolved(
++        /*generation*/ 1,
++        host.clone(),
++        host.resolve().entries().to_vec(),
++        /*accounts*/ None,
++        app_server,
++    );
++    assert!(app.chat_widget.provider_manager_selected_index().is_some());
++    app.chat_widget
++        .handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
++    assert!(app.chat_widget.no_modal_or_popup_active());
++}
++
++fn restore_openai(host: &crate::provider_status_host::ProviderStatusHost) {
++    host.update_account_metadata(crate::provider_status_host::ProviderAccountMetadata {
++        openai: codex_login::OpenAiAuthMetadata::Account,
++        ..Default::default()
++    });
++}
++
++/// #2102: provider discovery that settles while the session model picker is
++/// open refreshes the open picker in place, keeping the user's tab.
++#[tokio::test]
++async fn late_provider_recovery_refreshes_open_model_picker_and_keeps_tab() -> Result<()> {
++    let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
++    let app_server = start_config_write_test_app_server(&app).await?;
++    let host = install_policy_without_openai(&mut app);
++    open_and_dismiss_provider_manager(&mut app, &host, &app_server);
++    app.chat_widget
++        .open_all_models_popup(app.model_catalog.try_list_models().unwrap());
++    // The user moves from the current provider's tab to DeepSeek.
++    app.chat_widget
++        .handle_key_event(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
++    let before =
++        render_bottom_popup_with_height(&app.chat_widget, /*width*/ 120, /*height*/ 24);
++    assert!(before.contains("[DeepSeek]"), "{before}");
++    assert!(!before.contains("OpenAI"), "{before}");
++
++    restore_openai(&host);
++    app.provider_manager_statuses_resolved(
++        /*generation*/ 1,
++        host.clone(),
++        host.resolve().entries().to_vec(),
++        /*accounts*/ None,
++        &app_server,
++    );
++
++    let after =
++        render_bottom_popup_with_height(&app.chat_widget, /*width*/ 120, /*height*/ 24);
++    assert!(after.contains("OpenAI"), "{after}");
++    assert!(after.contains("[DeepSeek]"), "{after}");
++    assert_eq!(app.chat_widget.provider_manager_selected_index(), None);
++    insta::assert_snapshot!("open_model_picker_after_openai_recovery", after);
++    Ok(())
++}
++
++/// #2102: a late result neither reopens a dismissed picker nor replaces the
++/// reasoning dialog stacked above it.
++#[tokio::test]
++async fn late_provider_recovery_leaves_dismissed_picker_and_reasoning_dialog() -> Result<()> {
++    let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
++    let app_server = start_config_write_test_app_server(&app).await?;
++    let host = install_policy_without_openai(&mut app);
++    open_and_dismiss_provider_manager(&mut app, &host, &app_server);
++    restore_openai(&host);
++    let recovered = host.resolve().entries().to_vec();
++
++    app.chat_widget
++        .open_all_models_popup(app.model_catalog.try_list_models().unwrap());
++    app.chat_widget
++        .handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
++    assert!(app.chat_widget.no_modal_or_popup_active());
++    app.provider_manager_statuses_resolved(
++        /*generation*/ 1,
++        host.clone(),
++        recovered.clone(),
++        /*accounts*/ None,
++        &app_server,
++    );
++    assert!(app.chat_widget.no_modal_or_popup_active());
++
++    let glm = app
++        .model_catalog
++        .try_list_models()
++        .unwrap()
++        .into_iter()
++        .find(|preset| preset.model == "glm-5.3")
++        .expect("bundled GLM preset");
++    app.chat_widget
++        .open_all_models_popup(app.model_catalog.try_list_models().unwrap());
++    app.chat_widget.open_reasoning_popup(glm);
++    let reasoning =
++        render_bottom_popup_with_height(&app.chat_widget, /*width*/ 120, /*height*/ 24);
++    app.provider_manager_statuses_resolved(
++        /*generation*/ 1,
++        host,
++        recovered,
++        /*accounts*/ None,
++        &app_server,
++    );
++    assert_eq!(
++        render_bottom_popup_with_height(&app.chat_widget, /*width*/ 120, /*height*/ 24),
++        reasoning
++    );
++    Ok(())
++}
+diff --git a/codex-rs/tui/src/app/tests/snapshots/codex_tui__app__tests__provider_picker_refresh__open_model_picker_after_openai_recovery.snap b/codex-rs/tui/src/app/tests/snapshots/codex_tui__app__tests__provider_picker_refresh__open_model_picker_after_openai_recovery.snap
+new file mode 100644
+index 0000000000..4f62c004a6
+--- /dev/null
++++ b/codex-rs/tui/src/app/tests/snapshots/codex_tui__app__tests__provider_picker_refresh__open_model_picker_after_openai_recovery.snap
+@@ -0,0 +1,21 @@
++---
++source: tui/src/app/tests/provider_picker_refresh.rs
++expression: after
++---
++  Select Model and Effort
++  DeepSeek API key
++
++  OpenAI  Z.AI  [DeepSeek]
++
++› 1. DeepSeek V4 Pro (Direct)         Model: deepseek-v4-pro. DeepSeek API: V4 Pro - $0.66/M input, $0.022/M cached
++                                      input, $1.98/M output off-peak; double at peak (01:00-04:00 and 06:00-10:00 UTC,
++                                      Monday-Friday, except Chinese public holidays).
++  2. DeepSeek V4.1 Flash (Direct)     Model: deepseek-flash. DeepSeek Responses API: V4.1 Flash - $0.15/M input,
++                                      $0.003/M cached input, $0.60/M output off-peak; double at peak (01:00-04:00 and
++                                      06:00-10:00 UTC, Monday-Friday, except Chinese public holidays).
++  3. DeepSeek V4 Flash 0731 (Direct)  Model: deepseek-v4-flash. DeepSeek Responses API: legacy name, now served by
++                                      V4.1 Flash and billed at its price - $0.15/M input, $0.003/M cached input,
++                                      $0.60/M output off-peak; double at peak (01:00-04:00 and 06:00-10:00 UTC,
++                                      Monday-Friday, except Chinese public holidays).
++
++  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back
+diff --git a/codex-rs/tui/src/chatwidget/model_popups.rs b/codex-rs/tui/src/chatwidget/model_popups.rs
+index b18a778d6b..0e5352fc46 100644
+--- a/codex-rs/tui/src/chatwidget/model_popups.rs
++++ b/codex-rs/tui/src/chatwidget/model_popups.rs
+@@ -174,6 +174,9 @@ const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 8] = [
+     },
+ ];
+ 
++/// The session's tabbed "Select Model and Effort" picker.
++const SESSION_MODEL_PICKER_VIEW_ID: &str = "session-model-picker";
++
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub(crate) enum ModelSelectionPurpose {
+     Session,
+@@ -533,6 +536,55 @@ impl ChatWidget {
+         presets: Vec<ModelPreset>,
+         purpose: ModelSelectionPurpose,
+     ) {
++        let Some(params) = self.all_models_popup_params(presets, purpose) else {
++            self.add_info_message(
++                "No additional models are available right now.".to_string(),
++                /*hint*/ None,
++            );
++            return;
++        };
++        self.bottom_pane.show_selection_view(params);
++    }
++
++    /// #2102: provider discovery settles asynchronously. When it changes the
++    /// provider policy while the session model picker is the active view,
++    /// rebuild its rows in place on the user's tab. A dismissed picker or a
++    /// dialog stacked above it (such as reasoning effort) is left alone.
++    pub(crate) fn refresh_open_session_model_picker(&mut self) {
++        if self.bottom_pane.active_view_id() != Some(SESSION_MODEL_PICKER_VIEW_ID) {
++            return;
++        }
++        let presets = self
++            .model_catalog
++            .try_list_models()
++            .unwrap_or_default()
++            .into_iter()
++            .filter(|preset| {
++                self.model_catalog.preset_is_selectable(preset)
++                    || self.another_route_is_selectable(preset)
++            })
++            .collect();
++        let Some(mut params) =
++            self.all_models_popup_params(presets, ModelSelectionPurpose::Session)
++        else {
++            return;
++        };
++        let active_tab = self
++            .bottom_pane
++            .active_tab_id_for_active_view(SESSION_MODEL_PICKER_VIEW_ID)
++            .map(str::to_owned);
++        if let Some(tab) = active_tab.filter(|tab| params.tabs.iter().any(|t| &t.id == tab)) {
++            params.initial_tab_id = Some(tab);
++        }
++        self.bottom_pane
++            .replace_selection_view_if_active(SESSION_MODEL_PICKER_VIEW_ID, params);
++    }
++
++    fn all_models_popup_params(
++        &self,
++        presets: Vec<ModelPreset>,
++        purpose: ModelSelectionPurpose,
++    ) -> Option<SelectionViewParams> {
+         let mut presets: Vec<ModelPreset> = presets
+             .into_iter()
+             .filter(Self::show_in_pfterminal_model_picker)
+@@ -579,11 +631,7 @@ impl ChatWidget {
+         });
+ 
+         if presets.is_empty() {
+-            self.add_info_message(
+-                "No additional models are available right now.".to_string(),
+-                /*hint*/ None,
+-            );
+-            return;
++            return None;
+         }
+ 
+         // #653: a default model's other connections stay next to it.
+@@ -673,14 +721,17 @@ impl ChatWidget {
+         } else {
+             Box::new(())
+         };
+-        self.bottom_pane.show_selection_view(SelectionViewParams {
++        let view_id =
++            (purpose == ModelSelectionPurpose::Session).then_some(SESSION_MODEL_PICKER_VIEW_ID);
++        Some(SelectionViewParams {
++            view_id,
+             footer_hint,
+             items,
+             tabs,
+             initial_tab_id,
+             header,
+             ..Default::default()
+-        });
++        })
+     }
+ 
+     fn model_picker_item(
+diff --git a/qa/release/unreleased/notes/2102-open-model-picker-provider-recovery.md b/qa/release/unreleased/notes/2102-open-model-picker-provider-recovery.md
+new file mode 100644
+index 0000000000..cc8a29cc17
+--- /dev/null
++++ b/qa/release/unreleased/notes/2102-open-model-picker-provider-recovery.md
+@@ -0,0 +1,10 @@
++## Custom providers on OpenAI's regional API hosts
++
++### `/model` after `/providers`
++
++- **A provider restored in `/providers` appears in an already-open model
++  picker** (#2102). Provider discovery finishes in the background; when it
++  settled after the Models menu was open, the menu kept its earlier rows, so
++  OpenAI could stay missing until it was reopened. The open picker now
++  refreshes in place on the tab you were on. A late result does not reopen a
++  dismissed menu or replace an open reasoning-effort dialog.

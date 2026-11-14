@@ -1,0 +1,6 @@
+---
+source: core/src/agent/role_project_rules_tests.rs
+assertion_line: 401
+expression: warning
+---
+No provider is allowed for spawned agents: project config or agent role restrictions leave `agents.provider_allowlist` empty. Project lists can only narrow the providers allowed by higher-trust settings or other project lists.

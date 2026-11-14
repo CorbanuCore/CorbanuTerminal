@@ -1,0 +1,5 @@
+No blocking defects found in the reviewed diff. The lockfiles consistently reference `assert_cmd` 2.2.2, permitted by the workspace’s dependency constraint. Its usage is confined to tests and test helpers.
+
+Review limitation: 2.2.2’s source was not cached locally, so its implementation changes could not be inspected. No builds, tests, or network access were performed.
+
+VERDICT: APPROVE

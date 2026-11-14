@@ -1,0 +1,45 @@
+LOCAL ONLY: do not git push, do not use gh to create/edit/comment/review/merge anything, do not contact contributors.
+
+You are a software engineer on CorbanuTerminal (a security-focused fork of the OpenAI Codex CLI; Rust workspace under codex-rs/).
+
+TASK: implement the improvement in this issue in codex-core's post-taint shell classifier. Keep the classifier never quieter than before (the existing classifier test suites must still pass). Add tests for each spelling listed, in bash and zsh readings where the code distinguishes them, that fail before and pass after.
+
+----- issue -----
+#2018: Classifier: brace groups after then/do/else/!/time (and } after fi/done/esac) are read as literal in #2005's new reading
+
+Follow-up from #2005 by @ryssroad (thank you!), found by the independent round-2 security review. Not a security regression: every case below is still judged with main's reading as well, so the result is never quieter than before #2005.
+
+**What:** #2005's new reading treats `{` / `}` as group delimiters only in command-word position, detected as `current.words.is_empty()` (`codex-rs/core/src/security/tainted_action/shell.rs`, the `{`/`}` arms of the lexer). That check does not recognise real brace groups that open right after a reserved word or close right after a compound-command terminator:
+
+- `if true; then { echo g; }; fi` — `{` after `then`
+- `for x in a; do { echo d; }; done` — after `do`
+- `if false; then :; else { echo e; }; fi` — after `else`
+- `! { echo n; }` — after `!`
+- `time { echo t; }` — after `time`
+- `{ if true; then echo in; fi }` — `}` right after `fi` (also `done`, `esac`) with no `;`
+
+All of these run as groups in bash. The new reading keeps those braces literal, so it can glue the group's first command onto the keyword (e.g. `then {`). It always sets `read_newly`, so main's reading still decides.
+
+**Suggested fix:** also treat the brace as a group delimiter when the current command's words so far are only reserved words (`then`, `do`, `else`, `elif`, `!`, `time`, …), and accept `}` after `fi`/`done`/`esac`. Add tests for each spelling above, in bash and zsh, plus a never-quieter check against the current main.
+
+Contributions welcome — @ryssroad, it's yours if you'd like it.
+
+
+Latest maintainer update: Update: #2005 merged as 27b317cad7 with the round-4 fix. Its classifier now always keeps main's full verdict (Redirections plus Legacy readings) as the floor, and that is verified with 0 quieter lines over 193,500 lines and the targeted `then {`/`do {`/`! {`/`time {` probes. So this issue is back to a precision improvement for the new reading (fewer needless second judgments), not a safety gap.
+
+Working rules (binding):
+- Work only in this checkout (a local branch is already checked out). Commit your work locally on that branch with clear messages. There is no remote. Do not read other checkouts, worker notes or logs outside this directory; read-only dependency sources under ~/.cargo/registry/src are fine. Do not use GitHub or the network for this task.
+- NEVER use `git stash` (any form). Never `rm -f`; never pkill/killall (kill only a PID you started). Never force anything.
+- BUILD DIR: use exactly `export CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/bench1114-b4-opus` and `-j8` for every cargo command (other jobs share this machine). Never put build output on the internal disk.
+- TEST HOME: run `unset CORBANU_HOME CODEX_HOME` before any cargo test. For codex-core tests also `export RUST_MIN_STACK=8388608`.
+- MEMORY: never run a test that can grow without bound; prove blow-ups with bounded inputs and counters. Stop any process above 16 GB RSS.
+- NO TRACING: never run commands under `set -x`/`bash -x`, `env`, `printenv`, `declare -p`. KEYCHAIN: never run `security` against the login keychain, never run third-party agent binaries.
+- RELEASE NOTES: a user-visible change adds its own fragment `qa/release/unreleased/notes/<issue>-<slug>.md` starting with a `## Section` heading copied exactly from an existing fragment (see qa/release/unreleased/README.md if present). Never create qa/release/unreleased/RELEASE_NOTES.md.
+- Keep the change scoped to the task; no unrelated refactors.
+
+Gate (all required before you finish):
+1. A regression test that FAILS before your fix and PASSES after it (show both runs; e.g. commit the test first, run it, then the fix).
+2. Focused tests for the touched area pass.
+3. `cargo clippy -p <crate> --all-targets -- -D warnings` clean for each crate you changed; `cargo fmt` (or `just fmt` if available) applied.
+
+Your FINAL MESSAGE is your result file. Include: what you changed and why (files), the fail-before/pass-after evidence (test names, commands, outcomes), clippy/fmt status, the local commit SHA(s), and anything you did not finish or are unsure about. Claims must match what you actually ran.

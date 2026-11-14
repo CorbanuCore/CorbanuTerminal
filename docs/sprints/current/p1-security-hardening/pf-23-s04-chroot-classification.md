@@ -14,16 +14,14 @@ branch: "maint/contrib-1837-1111"
 base_commit: "2cfd034860f792d0c3605b40437a3e21e29b361e"
 depends_on: "PF-23-S01"
 created: 2026-11-11
-updated: 2026-11-11
+updated: 2026-11-14
 ---
 
 # PF-23-S04 — Chroot protected-action classification
 
 ## Serialized handoff — 2026-11-12
-Return this reservation to draft while the same coordinator implements PF-23-S05.
-#1837 merged at493f370ccf328840c4e052ceeffcda4e8dd132e9:59green/skipped checks,
-classifier407passed, test blob479784bytes. Eleven frozen cases/demo await Opus.
-Evidence and review usage remain; source integration is not completion.
+Returned to draft for PF-23-S05. #1837 merged at 493f370ccf328840c4e052ceeffcda4e8dd132e9 (59 checks green or
+skipped, classifier 407 passed, test blob 479784 bytes); source integration is not completion.
 
 ## Execution mandate
 
@@ -66,13 +64,15 @@ finder/exec launcher coverage, authentication recovery and other contributor fea
 - [x] Frozen independent [code-blind design](../../../../qa/security-levels/sprints/PF-23-S04/codeblind-design.md) before functional execution; all eleven cases remain unexecuted.
 - [x] Initial integrated classifier: 404/404 passed; independent review nevertheless found inherited script-input loss. New regression reproduced it; repair and final qualification remain in progress.
 - [x] Closed inherited script-input finding with red/green tests and independent repair review; pre-reconciliation classifier406/406 passed. Recorded corpus:5397 cases/10794 verdicts,62 new asks,0 quieter outcomes,0 kind changes or panics. Combined current-main replay remains required below.
+- [x] Frozen cases run code-blind on `1dea8b3b03` on 2026-11-14 ([record](../../../../qa/security-levels/sprints/PF-23-S04/functional-20261114.md), [reel](../../../../qa/demos/index/pf23-s04-reel.md)):
+  case 5 failed (#2165); effect legs of 1, 6-8 not exercised; Linux/Windows blocked; #2167 predates the sprint.
 
 ## Remaining
 
 - [ ] Format and run final-tree focused chroot and full classifier tests.
 - [ ] Verify no verdict becomes quieter on the recorded comparison corpus.
 - [ ] Independent exact-head security review and all CI complete green.
-- [ ] Execute applicable isolated, code-blind TUI acceptance and record demo reel.
+- [ ] Independent review of the functional record (#2171); owner decisions on case 5 (#2165) and case 11's Linux/Windows legs.
 - [ ] Record integrated commit, user-visible limits and actual evidence; archive only when all gates pass.
 
 ## Verification

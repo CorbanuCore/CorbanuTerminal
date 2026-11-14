@@ -375,8 +375,17 @@ pub(crate) async fn attach_turn(
         turn_context.config.accounting,
         AccountingMode::Provider { .. }
     ) {
-        let auth = turn_context.provider.auth().await;
-        let api = turn_context.provider.api_provider().await?;
+        // Read the turn's authentication through the provider the session's
+        // requests use when it serves this route: a separate provider has its
+        // own credential cache, so a command-backed credential would be
+        // fetched (the command run) once more for accounting alone.
+        let provider = if client_session.provider().info() == turn_context.provider.info() {
+            client_session.provider()
+        } else {
+            &turn_context.provider
+        };
+        let auth = provider.auth().await;
+        let api = provider.api_provider().await?;
         (
             auth.as_ref().map(codex_login::CodexAuth::auth_mode),
             api.base_url,

@@ -1,0 +1,9 @@
+1. **High — File allowlist disables Git’s submodule protection.** [env.rs:197](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a10/codex-rs/windows-sandbox-rs/src/env.rs:197)  
+   `GIT_ALLOW_PROTOCOL=file` unconditionally permits file transport, overriding Git’s default `protocol.file.allow=user` restriction. A hostile `.gitmodules` pointing to a readable private local repository can now cause `git submodule update --init` to copy its objects into the workspace. Previously, Git rejected this automatic file clone; even a subsequent checkout failure can leave copied objects behind. Filesystem restrictions still apply. **Fix:** deny non-file transports while preserving Git’s user-only file policy, and test explicit clone success alongside automatic submodule rejection.
+
+2. **Medium — Regression test fails with translated Git diagnostics.** [env_tests.rs:152](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a10/codex-rs/windows-sandbox-rs/src/env_tests.rs:152)  
+   The subprocess inherits locale settings, but the assertion requires English stderr. With a translated Git locale, HTTPS is correctly rejected and this test nevertheless fails. **Fix:** set `LC_ALL=C` and `LANGUAGE=C` on the Git child before asserting its diagnostic.
+
+Static review only; no builds, tests, network access, or repository changes.
+
+VERDICT: REQUEST_CHANGES
