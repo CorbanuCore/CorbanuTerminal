@@ -4221,6 +4221,7 @@ impl Session {
                         crate::security::protected_surface::protect_file_tool_context(
                             self,
                             &turn_context,
+                            environment,
                             turn_context.file_system_sandbox_context(
                                 /*additional_permissions*/ None,
                                 environment,

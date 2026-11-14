@@ -436,6 +436,7 @@ impl ApplyPatchHandler {
         let sandbox = crate::security::protected_surface::protect_file_tool_context(
             &session,
             &turn,
+            turn_environment,
             turn.file_system_sandbox_context(
                 /*additional_permissions*/ None,
                 turn_environment,
@@ -651,6 +652,7 @@ pub(crate) async fn intercept_apply_patch(
     let sandbox = crate::security::protected_surface::protect_file_tool_context(
         &session,
         &turn,
+        &turn_environment,
         turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment),
     );
     match codex_apply_patch::maybe_parse_apply_patch_verified(command, cwd, fs, Some(&sandbox))

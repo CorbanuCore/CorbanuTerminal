@@ -178,6 +178,13 @@ impl ToolRuntime<Req, ()> for Probe {
         &[]
     }
 
+    fn turn_environment<'a>(
+        &self,
+        _req: &'a Req,
+    ) -> Option<&'a crate::session::turn_context::TurnEnvironment> {
+        None
+    }
+
     async fn run(
         &mut self,
         _req: &Req,

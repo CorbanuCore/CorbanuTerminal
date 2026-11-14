@@ -804,7 +804,7 @@ impl Environment {
     pub async fn info(&self) -> Result<EnvironmentInfo, ExecServerError> {
         match &self.remote_client {
             Some(client) => client.environment_info().await,
-            None => Ok(EnvironmentInfo::local()),
+            None => Ok(local_environment_info()),
         }
     }
 
@@ -927,6 +927,17 @@ impl Environment {
             None => Arc::clone(&self.filesystem),
         }
     }
+}
+
+/// This machine's environment information, with its own platform sandbox
+/// (#2050), as an executor reports it to clients.
+pub fn local_environment_info() -> EnvironmentInfo {
+    let mut info = EnvironmentInfo::local();
+    info.host_sandbox = Some(crate::protocol::HostSandboxInfo {
+        os: crate::protocol::HostOs::current(),
+        windows_sandbox_set_up: codex_sandboxing::windows_elevated_sandbox_set_up(),
+    });
+    info
 }
 
 #[cfg(test)]

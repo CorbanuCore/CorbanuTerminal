@@ -56,13 +56,46 @@ impl RemoteFileSystem {
         }
     }
 
+    /// The connected client for an operation under `sandbox`. #2050 (D510):
+    /// a context carrying `unsandboxed_refusal` (a protected security level)
+    /// is refused here, with that text, unless the executor reports a
+    /// platform sandbox for it; an executor that cannot report one, or does
+    /// not answer, is refused too (fail closed). Executors that confine it
+    /// re-check on their side.
+    async fn client_for(
+        &self,
+        sandbox: Option<&FileSystemSandboxContext>,
+    ) -> FileSystemResult<crate::client::ExecServerClient> {
+        let client = self.client.get().await.map_err(map_remote_error)?;
+        let Some((refusal, context)) = sandbox.and_then(|context| {
+            context
+                .unsandboxed_refusal
+                .as_ref()
+                .map(|refusal| (refusal, context))
+        }) else {
+            return Ok(client);
+        };
+        let confined = client.environment_info().await.is_ok_and(|info| {
+            info.host_sandbox_verdict(context.windows_sandbox_level)
+                == crate::HostSandboxVerdict::Confined
+        });
+        if confined {
+            Ok(client)
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                refusal.clone(),
+            ))
+        }
+    }
+
     async fn canonicalize(
         &self,
         path: &PathUri,
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<PathUri> {
         trace!("remote fs canonicalize");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let response = client
             .fs_canonicalize(FsCanonicalizeParams {
                 path: path.clone(),
@@ -79,7 +112,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<Vec<u8>> {
         trace!("remote fs read_file");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let response = client
             .fs_read_file(FsReadFileParams {
                 path: path.clone(),
@@ -107,7 +140,7 @@ impl RemoteFileSystem {
             ));
         }
         trace!("remote fs read_file_stream");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         file_stream::open(client, path.clone(), remote_sandbox_context(sandbox)).await
     }
 
@@ -118,7 +151,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<()> {
         trace!("remote fs write_file");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let result = client
             .fs_write_file(FsWriteFileParams {
                 path: path.clone(),
@@ -138,7 +171,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<()> {
         trace!("remote fs create_directory");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let result = client
             .fs_create_directory(FsCreateDirectoryParams {
                 path: path.clone(),
@@ -196,7 +229,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<FileMetadata> {
         trace!("remote fs get_metadata");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let response = client
             .fs_get_metadata(FsGetMetadataParams {
                 path: path.clone(),
@@ -220,7 +253,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<Vec<ReadDirectoryEntry>> {
         trace!("remote fs read_directory");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let response = client
             .fs_read_directory(FsReadDirectoryParams {
                 path: path.clone(),
@@ -246,7 +279,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<WalkOutcome> {
         trace!("remote fs walk");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let response = match client
             .fs_walk(FsWalkParams {
                 path: path.clone(),
@@ -277,7 +310,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<()> {
         trace!("remote fs remove");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let result = client
             .fs_remove(FsRemoveParams {
                 path: path.clone(),
@@ -299,7 +332,7 @@ impl RemoteFileSystem {
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<()> {
         trace!("remote fs copy");
-        let client = self.client.get().await.map_err(map_remote_error)?;
+        let client = self.client_for(sandbox).await?;
         let result = client
             .fs_copy(FsCopyParams {
                 source_path: source_path.clone(),
@@ -437,6 +470,10 @@ fn map_remote_error(error: ExecServerError) -> io::Error {
 #[cfg(all(test, any(unix, windows)))]
 #[path = "remote_file_system_path_uri_tests.rs"]
 mod path_uri_tests;
+
+#[cfg(test)]
+#[path = "remote_file_system_host_sandbox_tests.rs"]
+mod host_sandbox_tests;
 
 #[cfg(test)]
 mod tests {

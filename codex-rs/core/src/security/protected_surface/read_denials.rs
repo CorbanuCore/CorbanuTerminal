@@ -1558,12 +1558,15 @@ fn real_location_within(path: &AbsolutePathBuf, hops: usize) -> Option<AbsoluteP
 pub(crate) fn protect_file_tool_context(
     session: &crate::session::session::Session,
     turn: &crate::session::turn_context::TurnContext,
+    environment: &crate::session::turn_context::TurnEnvironment,
     mut context: codex_file_system::FileSystemSandboxContext,
 ) -> codex_file_system::FileSystemSandboxContext {
-    // #1976 (D491): under the live level, not only the configured one.
-    if let Some(refusal) = crate::security::windows_unsandboxed::session_file_refusal(
-        session,
+    // #1976 (D491): under the live level, not only the configured one;
+    // #2050: for a remote environment, judged where its executor runs.
+    if let Some(refusal) = crate::security::windows_unsandboxed::environment_file_refusal(
+        session.services.model_client().live_level(),
         context.windows_sandbox_level,
+        environment,
     ) {
         context.unsandboxed_refusal = Some(refusal);
     }
