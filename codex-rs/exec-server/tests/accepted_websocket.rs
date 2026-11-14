@@ -203,7 +203,9 @@ async fn accepted_websocket_interoperates_and_recovers_with_real_direct_executor
         .default_environment()
         .context("direct executor environment should be installed")?;
 
-    let expected_info = EnvironmentInfo::local();
+    let mut expected_info = EnvironmentInfo::local();
+    // #2050 (D510): the executor reports its own host's platform sandbox.
+    expected_info.host_sandbox = codex_exec_server::local_environment_info().host_sandbox;
     assert_eq!(
         timeout(TEST_TIMEOUT, environment.force_info()).await??,
         expected_info
