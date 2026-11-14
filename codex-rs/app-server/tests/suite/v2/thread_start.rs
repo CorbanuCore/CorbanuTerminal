@@ -319,19 +319,12 @@ async fn thread_start_provider_model_fallback_uses_bedrock_static_catalog() -> R
             unsupported_with_fallback.model,
             supported_with_fallback.model,
         ],
-<<<<<<< HEAD
-        vec!["openai.gpt-5.6-sol", "openai.gpt-5.4"]
-||||||| 413492cd6c
-        vec!["openai.gpt-5.6-sol", "openai.gpt-5.4", "gpt-5.4-mini"]
-=======
-        vec!["openai.gpt-6.1-sol", "openai.gpt-5.5", "gpt-5.4-mini"]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        vec!["openai.gpt-6.1-sol", "openai.gpt-5.5"]
     );
     Ok(())
 }
 
 #[tokio::test]
-<<<<<<< HEAD
 async fn thread_start_provider_model_fallback_remains_opt_in() -> Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
@@ -366,8 +359,10 @@ async fn thread_start_provider_model_fallback_remains_opt_in() -> Result<()> {
     );
     assert!(error.error.message.contains("gpt-5.4-mini"));
     assert!(error.error.message.contains("amazon-bedrock"));
-||||||| 413492cd6c
-=======
+    Ok(())
+}
+
+#[tokio::test]
 async fn thread_start_bedrock_runtime_prefers_global_cross_region_models() -> Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
@@ -406,7 +401,6 @@ async fn thread_start_bedrock_runtime_prefers_global_cross_region_models() -> Re
     .await?;
     assert_eq!(response.model, "global.openai.gpt-6.1-sol");
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     Ok(())
 }
 

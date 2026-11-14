@@ -242,17 +242,9 @@ async fn process_spawn_reports_buffered_output_cap_reached() -> Result<()> {
     } else {
         vec![
             "sh".to_string(),
-<<<<<<< HEAD
             "-c".to_string(),
-            "printf abcde; printf 12345 >&2".to_string(),
-||||||| 413492cd6c
-            "-lc".to_string(),
-            "printf abcde; printf 12345 >&2".to_string(),
-=======
-            "-lc".to_string(),
             "printf abcde; dd if=/dev/zero bs=65536 count=32 2>/dev/null && printf 12345 >&2"
                 .to_string(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         ]
     };
     let spawn_request_id = mcp

@@ -1,32 +1,14 @@
 use codex_core::test_support::all_model_presets;
-<<<<<<< HEAD
 use codex_models_manager::bundled_models_response;
-use codex_models_manager::client_version_to_whole;
-||||||| 413492cd6c
-use codex_models_manager::client_version_to_whole;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::ModelBilling;
 use codex_protocol::openai_models::ModelInfo;
-<<<<<<< HEAD
-use codex_protocol::openai_models::ModelOrchestrationMetadata;
-||||||| 413492cd6c
-=======
 use codex_protocol::openai_models::ModelMessages;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::TruncationPolicyConfig;
-<<<<<<< HEAD
-use serde_json::json;
-||||||| 413492cd6c
-use codex_protocol::openai_models::default_input_modalities;
-use serde_json::json;
-=======
-use codex_protocol::openai_models::default_input_modalities;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::path::Path;
 
 /// Convert a ModelPreset to ModelInfo for cache storage.
@@ -86,16 +68,8 @@ fn preset_to_info(preset: &ModelPreset, priority: i32) -> ModelInfo {
         comp_hash: None,
         effective_context_window_percent: 95,
         experimental_supported_tools: Vec::new(),
-<<<<<<< HEAD
         // Cache fixtures must round-trip the catalog's real modalities, not protocol defaults.
         input_modalities: preset.input_modalities.clone(),
-        used_fallback_model_metadata: false,
-||||||| 413492cd6c
-        input_modalities: default_input_modalities(),
-        used_fallback_model_metadata: false,
-=======
-        input_modalities: default_input_modalities(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         supports_search_tool: false,
         supports_experimental_context: false,
         use_responses_lite: false,
@@ -138,7 +112,7 @@ pub async fn write_models_cache(codex_home: &Path) -> std::io::Result<()> {
 
 /// Writes provider-scoped aliases of the bundled catalog for a custom test provider.
 /// The aliases avoid pretending that a custom endpoint owns reserved built-in model slugs.
-pub fn write_models_cache_for_provider(
+pub async fn write_models_cache_for_provider(
     codex_home: &Path,
     provider_id: &str,
 ) -> std::io::Result<()> {
@@ -168,7 +142,7 @@ pub fn write_models_cache_for_provider(
             None => None,
         };
     }
-    write_models_cache_with_models(codex_home, models)
+    write_models_cache_with_models(codex_home, models).await
 }
 
 /// Write a models_cache.json file with specific models.

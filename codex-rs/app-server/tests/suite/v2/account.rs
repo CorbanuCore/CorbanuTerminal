@@ -2565,7 +2565,7 @@ async fn login_account_openai_provider_device_code_works_when_api_login_is_force
             ..Default::default()
         },
     )?;
-    write_models_cache(codex_home.path())?;
+    write_models_cache(codex_home.path()).await?;
 
     mock_device_code_usercode(&mock_server, /*interval_seconds*/ 0).await;
     mock_device_code_token_success(&mock_server).await;
@@ -3298,14 +3298,8 @@ async fn get_account_with_api_key() -> Result<()> {
         timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(request_id)).await??;
 
     let expected = GetAccountResponse {
-<<<<<<< HEAD
-        account: Some(Account::ApiKey { env_var: None }),
-||||||| 413492cd6c
-        account: Some(Account::ApiKey {}),
-=======
         workspace_routing: None,
-        account: Some(Account::ApiKey {}),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        account: Some(Account::ApiKey { env_var: None }),
         requires_openai_auth: true,
     };
     assert_eq!(received, expected);
