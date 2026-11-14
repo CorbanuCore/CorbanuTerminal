@@ -65,10 +65,23 @@ class EvidenceIOTest(unittest.TestCase):
                 opened.assert_not_called()
 
     def test_conversion_and_component_errors_are_sanitized(self):
-        with patch("bazel_evidence_io.url2pathname", side_effect=OSError("private URI")):
-            self.rejected("invalid_reference", local_log, "file:///1:/private/test.log", self.logs, 100)
-        with patch("bazel_evidence_io.is_link", side_effect=PermissionError("private component")):
-            self.rejected("missing_local_file", local_log, self.log.as_uri(), self.logs, 100)
+        with patch(
+            "bazel_evidence_io.url2pathname", side_effect=OSError("private URI")
+        ):
+            self.rejected(
+                "invalid_reference",
+                local_log,
+                "file:///1:/private/test.log",
+                self.logs,
+                100,
+            )
+        with patch(
+            "bazel_evidence_io.is_link",
+            side_effect=PermissionError("private component"),
+        ):
+            self.rejected(
+                "missing_local_file", local_log, self.log.as_uri(), self.logs, 100
+            )
 
     def test_sibling_prefix_and_missing_roots(self):
         outside = self.root / "testlogs-other"
@@ -76,8 +89,16 @@ class EvidenceIOTest(unittest.TestCase):
         path = outside / "test.log"
         path.write_bytes(b"outside")
         self.rejected("path_escape", local_log, path.as_uri(), self.logs, 100)
-        self.rejected("invalid_reference", local_log, self.logs.as_uri(), self.logs, 100)
-        self.rejected("unavailable_local_root", local_log, self.log.as_uri(), self.root / "absent", 100)
+        self.rejected(
+            "invalid_reference", local_log, self.logs.as_uri(), self.logs, 100
+        )
+        self.rejected(
+            "unavailable_local_root",
+            local_log,
+            self.log.as_uri(),
+            self.root / "absent",
+            100,
+        )
 
     def test_no_follow_for_file_and_parent_links(self):
         link = self.logs / "link.log"
@@ -89,7 +110,13 @@ class EvidenceIOTest(unittest.TestCase):
         self.rejected("symlink_rejected", local_log, link.as_uri(), self.logs, 100)
         parent = self.logs / "parent"
         parent.symlink_to(self.root, target_is_directory=True)
-        self.rejected("symlink_rejected", local_log, (parent / "testlogs" / "test.log").as_uri(), self.logs, 100)
+        self.rejected(
+            "symlink_rejected",
+            local_log,
+            (parent / "testlogs" / "test.log").as_uri(),
+            self.logs,
+            100,
+        )
 
     def test_bazel_root_alias_is_explicitly_owned(self):
         alias = self.root / "bazel-testlogs"

@@ -28,11 +28,15 @@ class BEPTest(unittest.TestCase):
 
     def result(self, crate="core", **extra):
         return {
-            "id": {"testResult": {
-                "label": f"//codex-rs/{crate}:unit-tests",
-                "configuration": {"id": "windows-fastbuild"},
-                "run": 1, "shard": 0, "attempt": 1,
-            }},
+            "id": {
+                "testResult": {
+                    "label": f"//codex-rs/{crate}:unit-tests",
+                    "configuration": {"id": "windows-fastbuild"},
+                    "run": 1,
+                    "shard": 0,
+                    "attempt": 1,
+                }
+            },
             "testResult": {
                 "status": "FAILED",
                 "testActionOutput": [{"name": "test.log", "uri": self.log.as_uri()}],
@@ -49,9 +53,13 @@ class BEPTest(unittest.TestCase):
         ]
 
     def collect(self, events=None):
-        self.path.write_text("".join(json.dumps(e) + "\n" for e in (
-            events if events is not None else self.events()
-        )), encoding="utf-8")
+        self.path.write_text(
+            "".join(
+                json.dumps(e) + "\n"
+                for e in (events if events is not None else self.events())
+            ),
+            encoding="utf-8",
+        )
         return bep.collect(self.path, self.root, self.invocation, self.sha, "failure")
 
     def test_outcomes_are_not_passes_or_fresh_execution(self):
@@ -60,11 +68,14 @@ class BEPTest(unittest.TestCase):
         self.assertEqual(report["workflowOutcome"], "failure")
         self.assertEqual(report["attempts"][0]["targetStatus"], "FAILED")
         self.assertEqual(report["attempts"][0]["provenance"], "unknown")
-        self.assertEqual(report["attempts"][0]["methods"], [
-            {"name": "good", "status": "ok"},
-            {"name": "bad", "status": "FAILED"},
-            {"name": "skip", "status": "ignored"},
-        ])
+        self.assertEqual(
+            report["attempts"][0]["methods"],
+            [
+                {"name": "good", "status": "ok"},
+                {"name": "bad", "status": "FAILED"},
+                {"name": "skip", "status": "ignored"},
+            ],
+        )
         for private in ("private", str(self.root)):
             self.assertNotIn(private, json.dumps(report))
         self.assertEqual(len(report["bepSha256"]), 64)
@@ -84,7 +95,11 @@ class BEPTest(unittest.TestCase):
     def test_invocation_and_checkout_mismatch_stop_log_reads(self):
         for index, payload, expected in [
             (0, {"started": {"uuid": "different"}}, "invocation_mismatch"),
-            (1, {"buildMetadata": {"metadata": {"CORBANU_CHECKOUT_SHA": "b" * 40}}}, "checkout_mismatch"),
+            (
+                1,
+                {"buildMetadata": {"metadata": {"CORBANU_CHECKOUT_SHA": "b" * 40}}},
+                "checkout_mismatch",
+            ),
             (1, {"buildMetadata": {}}, "checkout_mismatch"),
         ]:
             events = self.events()
@@ -107,7 +122,9 @@ class BEPTest(unittest.TestCase):
         self.assertEqual(report["captureStatus"], "incomplete")
         self.assertEqual(len(report["attempts"]), 1)
         # Child identity key order does not affect closure.
-        events[2]["children"] = [{"testResult": {"attempt": 2, "label": "//codex-rs/core:unit-tests"}}]
+        events[2]["children"] = [
+            {"testResult": {"attempt": 2, "label": "//codex-rs/core:unit-tests"}}
+        ]
         self.assertNotIn("missing_announced_events", self.collect(events)["issues"])
 
     def test_duplicate_binding_and_truncated_stream(self):
@@ -120,15 +137,23 @@ class BEPTest(unittest.TestCase):
     def test_duplicates_and_invalid_attempt_status(self):
         report = self.collect(self.events([self.result(), self.result()]))
         self.assertIn("duplicate_attempt_identity", report["issues"])
-        self.assertIn("invalid_target_status", self.collect(self.events([self.result(status="invented")]))["issues"])
+        self.assertIn(
+            "invalid_target_status",
+            self.collect(self.events([self.result(status="invented")]))["issues"],
+        )
         bad = self.result()
         bad["id"]["testResult"]["run"] = True
-        self.assertIn("invalid_attempt_identity", self.collect(self.events([bad]))["issues"])
+        self.assertIn(
+            "invalid_attempt_identity", self.collect(self.events([bad]))["issues"]
+        )
 
     def test_cached_and_missing_outputs_are_honest(self):
         report = self.collect(self.events([self.result(cachedLocally=True)]))
         self.assertEqual(report["attempts"][0]["provenance"], "cached")
-        for outputs in ([], [{"name": "test.log", "uri": "https://example.invalid/test.log"}]):
+        for outputs in (
+            [],
+            [{"name": "test.log", "uri": "https://example.invalid/test.log"}],
+        ):
             report = self.collect(self.events([self.result(testActionOutput=outputs)]))
             self.assertEqual(report["captureStatus"], "incomplete")
             self.assertEqual(report["attempts"][0]["methods"], [])

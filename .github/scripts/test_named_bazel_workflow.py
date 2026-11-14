@@ -10,7 +10,9 @@ import unittest
 
 
 class NamedWorkflowTest(unittest.TestCase):
-    def run_wrapper(self, codes, enabled=True, corrupt=False, blocked=False, optimized=False):
+    def run_wrapper(
+        self, codes, enabled=True, corrupt=False, blocked=False, optimized=False
+    ):
         script = Path(__file__).with_name("run-bazel-ci.sh").resolve()
         with TemporaryDirectory() as directory:
             root = Path(directory).resolve()
@@ -23,7 +25,11 @@ class NamedWorkflowTest(unittest.TestCase):
             if blocked:
                 (evidence / "events-1.json").mkdir()
             fake = root / "bazel"
-            fake.write_text("#!" + sys.executable + "\n" + """
+            fake.write_text(
+                "#!"
+                + sys.executable
+                + "\n"
+                + """
 import json, os, sys
 from pathlib import Path
 root = Path(os.environ["FIXTURE_ROOT"])
@@ -61,12 +67,18 @@ if code == 37:
     crash.write_text("original crash evidence")
     print(f"Server terminated abruptly (log file: '{crash}')")
 sys.exit(code)
-""", encoding="utf-8")
+""",
+                encoding="utf-8",
+            )
             fake.chmod(0o755)
             env = {
-                "PATH": os.pathsep.join((str(Path(sys.executable).parent), "/usr/bin", "/bin")),
-                "HOME": str(root), "CODEX_BAZEL_BIN": str(fake),
-                "FIXTURE_ROOT": str(root), "FIXTURE_CODES": json.dumps(codes),
+                "PATH": os.pathsep.join(
+                    (str(Path(sys.executable).parent), "/usr/bin", "/bin")
+                ),
+                "HOME": str(root),
+                "CODEX_BAZEL_BIN": str(fake),
+                "FIXTURE_ROOT": str(root),
+                "FIXTURE_CODES": json.dumps(codes),
                 "CORBANU_TEST_NO_NATIVE_KEYRING": "1",
             }
             if corrupt:
@@ -78,10 +90,21 @@ sys.exit(code)
             if optimized:
                 args += ["-c", "opt"]
             args += ["--", "//codex-rs/core/..."]
-            result = subprocess.run(args, cwd=script.parents[2], env=env,
-                                    capture_output=True, text=True, timeout=20)
-            reports = [json.loads(path.read_text()) for path in sorted(evidence.glob("report-*.json"))]
-            calls = int((root / "calls").read_text()) if (root / "calls").exists() else 0
+            result = subprocess.run(
+                args,
+                cwd=script.parents[2],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            reports = [
+                json.loads(path.read_text())
+                for path in sorted(evidence.glob("report-*.json"))
+            ]
+            calls = (
+                int((root / "calls").read_text()) if (root / "calls").exists() else 0
+            )
             return result, reports, calls
 
     def test_success_and_failure_keep_original_exit_codes(self):
@@ -92,7 +115,9 @@ sys.exit(code)
                 self.assertEqual(calls, 1)
                 self.assertEqual(len(reports), 1)
                 self.assertEqual(reports[0]["captureStatus"], "complete")
-                self.assertEqual(reports[0]["workflowOutcome"], "success" if code == 0 else "failure")
+                self.assertEqual(
+                    reports[0]["workflowOutcome"], "success" if code == 0 else "failure"
+                )
 
     def test_crash_retry_captures_each_invocation_before_logs_change(self):
         result, reports, calls = self.run_wrapper([37, 0])
@@ -103,8 +128,13 @@ sys.exit(code)
         self.assertNotEqual(reports[0]["invocationId"], reports[1]["invocationId"])
         self.assertEqual(reports[0]["captureStatus"], "incomplete")
         self.assertEqual(reports[1]["captureStatus"], "complete")
-        self.assertEqual(reports[0]["attempts"][0]["methods"], [{"name": "attempt1", "status": "FAILED"}])
-        self.assertEqual(reports[1]["attempts"][0]["methods"], [{"name": "attempt2", "status": "ok"}])
+        self.assertEqual(
+            reports[0]["attempts"][0]["methods"],
+            [{"name": "attempt1", "status": "FAILED"}],
+        )
+        self.assertEqual(
+            reports[1]["attempts"][0]["methods"], [{"name": "attempt2", "status": "ok"}]
+        )
 
     def test_second_crash_still_fails_and_preserves_both_reports(self):
         result, reports, calls = self.run_wrapper([37, 37])
@@ -118,7 +148,9 @@ sys.exit(code)
         self.assertEqual(result.returncode, 3)
         self.assertEqual(calls, 1)
         self.assertEqual(reports[0]["issues"], ["malformed_bep"])
-        self.assertNotIn("private malformed BEP", result.stdout + result.stderr + json.dumps(reports))
+        self.assertNotIn(
+            "private malformed BEP", result.stdout + result.stderr + json.dumps(reports)
+        )
 
     def test_unavailable_destination_does_not_prevent_tests(self):
         result, reports, calls = self.run_wrapper([3], blocked=True)
@@ -135,8 +167,12 @@ sys.exit(code)
         self.assertEqual((result.returncode, reports, calls), (0, [], 1))
 
     def test_workflow_uploads_reports_not_raw_bep_or_log_roots(self):
-        workflow = (Path(__file__).parents[1] / "workflows/rust-ci-windows-native-tests.yml").read_text()
-        capture = workflow.split("- name: Upload named test evidence", 1)[1].split("- name: Upload Bazel execution logs", 1)[0]
+        workflow = (
+            Path(__file__).parents[1] / "workflows/rust-ci-windows-native-tests.yml"
+        ).read_text()
+        capture = workflow.split("- name: Upload named test evidence", 1)[1].split(
+            "- name: Upload Bazel execution logs", 1
+        )[0]
         self.assertIn("/report-*.json", capture)
         self.assertNotIn("events-", capture)
         self.assertNotIn("testlogs-root-", capture)
