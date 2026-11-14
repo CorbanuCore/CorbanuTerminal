@@ -1086,7 +1086,8 @@ impl Lexer {
         );
         let outer_word = std::mem::take(&mut self.word);
         let outer_assignment_equals = std::mem::take(&mut self.assignment_equals);
-        let outer_assignment_protected = std::mem::take(&mut self.assignment_protected);
+        let outer_assignment_protected = std::mem::take(&mut self.assignment_protected)
+            || (!output && !process && !outer_assignment_equals);
         let outer_looked_up = std::mem::take(&mut self.looked_up);
         let outer_hidden = std::mem::take(&mut self.hidden);
         let outer_operated = std::mem::take(&mut self.operated);
@@ -1213,7 +1214,14 @@ impl Lexer {
             } else {
                 UNSEEN_OUTPUT
             };
-            self.word.push_str(spliced.as_deref().unwrap_or(unseen));
+            let value = spliced.as_deref().unwrap_or(unseen);
+            // Output, like ANSI-C decoding, bypasses the character loop.
+            // It cannot introduce a literal assignment name or equals sign.
+            if !self.assignment_equals && value.contains('=') {
+                self.current.assignment_quoted = true;
+                self.assignment_equals = true;
+            }
+            self.word.push_str(value);
         }
     }
 
