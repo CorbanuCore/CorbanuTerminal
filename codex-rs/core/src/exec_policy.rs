@@ -500,8 +500,11 @@ impl ExecPolicyManager {
             prefix_rule,
             allow_prefix_rules,
         } = req;
-        let exec_policy =
-            self.current_for_environment_at(environment_policy, allow_prefix_rules, live_aggressive);
+        let exec_policy = self.current_for_environment_at(
+            environment_policy,
+            allow_prefix_rules,
+            live_aggressive,
+        );
         // Avoid reusable approvals when this model does not honor prefix rules.
         let auto_amendment_allowed = allow_prefix_rules == AllowPrefixRules::Honor;
         let exec_policy_fallback = |cmd: &[String]| {
