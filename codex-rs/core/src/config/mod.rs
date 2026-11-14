@@ -6645,7 +6645,8 @@ fn narrow_project_provider_allowlist(
     stack: &ConfigLayerStack,
     merged: Option<Vec<String>>,
 ) -> Option<Vec<String>> {
-    let layers = stack.layers_high_to_low();
+    // Upstream's stack yields its layers as an iterator.
+    let layers: Vec<&ConfigLayerEntry> = stack.layers_high_to_low().collect();
     if layers.is_empty() {
         return merged;
     }
