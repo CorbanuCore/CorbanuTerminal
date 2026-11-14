@@ -282,14 +282,7 @@ async fn assert_standalone_web_search_round_trips_output(
     let codex_home = TempDir::new()?;
     let config = MockResponsesConfig::new(&server.uri())
         .with_root_config(&format!("chatgpt_base_url = \"{}\"", server.uri()))
-<<<<<<< HEAD
         .enable_feature(Feature::StandaloneWebSearch);
-||||||| 413492cd6c
-        .enable_feature(Feature::StandaloneWebSearch)
-        .with_provider_config("supports_websockets = false");
-=======
-        .enable_feature(Feature::StandaloneWebSearch)
-        .with_provider_config("supports_websockets = false");
     let config = if literature_search {
         let mut paper_model = model_info_from_slug(model);
         paper_model.experimental_supported_tools = vec!["literature_search_query".to_string()];
@@ -307,7 +300,6 @@ async fn assert_standalone_web_search_round_trips_output(
     } else {
         config
     };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let config = match provider {
         WebSearchProvider::ChatGpt => config
             .with_builtin_model_provider("openai")

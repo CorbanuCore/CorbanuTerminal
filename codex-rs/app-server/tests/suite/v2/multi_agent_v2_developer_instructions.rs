@@ -193,18 +193,12 @@ async fn spawned_subagents_apply_configured_developer_instruction_precedence(
             );
     }
     let codex_home = TempDir::new()?;
-<<<<<<< HEAD
-    let mut config = MockResponsesConfig::new(&server.uri()).with_model(TEST_MODEL);
-||||||| 413492cd6c
-    let mut config = MockResponsesConfig::new(&server.uri()).with_model("gpt-5.4");
-=======
     let configured_model = if case == "full history configured role" {
-        "gpt-5.5"
+        "mock_provider/gpt-5.5"
     } else {
-        "gpt-5.4"
+        TEST_MODEL
     };
     let mut config = MockResponsesConfig::new(&server.uri()).with_model(configured_model);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     if role_has_instructions {
         config =
             config.with_root_config(&format!("developer_instructions = {ROLE_INSTRUCTIONS:?}"));
@@ -212,13 +206,7 @@ async fn spawned_subagents_apply_configured_developer_instruction_precedence(
     config
         .with_extra_config(&feature_config)
         .write(codex_home.path())?;
-<<<<<<< HEAD
-    write_models_cache_for_provider(codex_home.path(), "mock_provider")?;
-||||||| 413492cd6c
-    write_models_cache(codex_home.path())?;
-=======
-    write_models_cache(codex_home.path()).await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    write_models_cache_for_provider(codex_home.path(), "mock_provider").await?;
     let mut app_server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .build_initialized()
@@ -266,7 +254,10 @@ async fn spawned_subagents_apply_configured_developer_instruction_precedence(
     }
     let child_texts = child_request.message_input_texts("developer");
     if case == "full history configured role" {
-        assert_eq!(child_request.body_json()["model"], json!("gpt-5.5"));
+        assert_eq!(
+            child_request.body_json()["model"],
+            json!("mock_provider/gpt-5.5")
+        );
         assert!(
             child_request.body_contains_text(PARENT_PROMPT),
             "the child should inherit the parent's conversation history"
@@ -415,13 +406,7 @@ async fn compacted_full_history_fork_applies_child_developer_instructions(
         ))
         .with_extra_config(&feature_config)
         .write(codex_home.path())?;
-<<<<<<< HEAD
-    write_models_cache_for_provider(codex_home.path(), "mock_provider")?;
-||||||| 413492cd6c
-    write_models_cache(codex_home.path())?;
-=======
-    write_models_cache(codex_home.path()).await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    write_models_cache_for_provider(codex_home.path(), "mock_provider").await?;
 
     let mut app_server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -674,27 +659,13 @@ async fn cold_resume_preserves_effective_developer_instructions_for_worker(
         ));
     }
     MockResponsesConfig::new(&server.uri())
-<<<<<<< HEAD
-        .with_model(TEST_MODEL)
-        .with_root_config(&format!("developer_instructions = {PARENT_INSTRUCTIONS:?}"))
-||||||| 413492cd6c
-        .with_model("gpt-5.4")
-        .with_root_config(&format!("developer_instructions = {PARENT_INSTRUCTIONS:?}"))
-=======
-        .with_model("gpt-5.5")
+        .with_model("mock_provider/gpt-5.5")
         .with_root_config(&format!(
             "developer_instructions = {PARENT_INSTRUCTIONS:?}\nmodel_reasoning_effort = \"high\""
         ))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .with_extra_config(&feature_config)
         .write(codex_home.path())?;
-<<<<<<< HEAD
-    write_models_cache_for_provider(codex_home.path(), "mock_provider")?;
-||||||| 413492cd6c
-    write_models_cache(codex_home.path())?;
-=======
-    write_models_cache(codex_home.path()).await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    write_models_cache_for_provider(codex_home.path(), "mock_provider").await?;
 
     let (thread_id, child_resume_params, baseline) = {
         let mut app_server = TestAppServer::builder()
@@ -703,14 +674,8 @@ async fn cold_resume_preserves_effective_developer_instructions_for_worker(
             .await?;
         let ThreadStartResponse { thread, .. } = app_server
             .start_thread(ThreadStartParams {
-<<<<<<< HEAD
-                model: Some(TEST_MODEL.to_string()),
-||||||| 413492cd6c
-                model: Some("gpt-5.4".to_string()),
-=======
-                model: Some("gpt-5.5".to_string()),
+                model: Some("mock_provider/gpt-5.5".to_string()),
                 history_mode: Some(history_mode),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 ..Default::default()
             })
             .await?;
@@ -1053,21 +1018,8 @@ features.shell_tool = false
                 .requests()
                 .into_iter()
                 .find(|request| {
-<<<<<<< HEAD
-                    request_contains_visible_collaboration_assignment(request, FOLLOWUP_TASK)
-||||||| 413492cd6c
-                    request
-                        .inputs_of_type("agent_message")
-                        .iter()
-                        .any(|message| {
-                            message.get("recipient").and_then(serde_json::Value::as_str)
-                                == Some("/root/worker")
-                        })
-                        && request.body_contains_text(FOLLOWUP_TASK)
-=======
                     request.header("thread-id").as_deref() == Some(child_thread_id.as_str())
                         && request.body_contains_text(FOLLOWUP_TASK)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 })
             {
                 break request;

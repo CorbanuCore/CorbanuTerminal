@@ -16,12 +16,8 @@ use app_test_support::format_with_current_shell_display;
 use app_test_support::write_chatgpt_auth;
 use app_test_support::write_mock_responses_config_toml_with_chatgpt_base_url;
 use app_test_support::write_models_cache;
-<<<<<<< HEAD
 use app_test_support::write_models_cache_for_provider;
-||||||| 413492cd6c
-=======
 use app_test_support::write_models_cache_with_models;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_app_server::INPUT_TOO_LARGE_ERROR_CODE;
 use codex_app_server::INVALID_PARAMS_ERROR_CODE;
 use codex_app_server_protocol::AdditionalContextEntry;
@@ -1186,12 +1182,9 @@ async fn turn_start_emits_thread_scoped_warning_notification_for_trimmed_skills(
     let warning: WarningNotification =
         timeout(DEFAULT_READ_TIMEOUT, mcp.read_notification("warning")).await??;
     assert_eq!(warning.thread_id.as_deref(), Some(thread.id.as_str()));
-<<<<<<< HEAD
     let omitted_count = warning
         .message
-        .strip_prefix(
-            "Exceeded skills context budget of 2%. All skill descriptions were removed and ",
-        )
+        .strip_prefix("Exceeded skills context budget. All skill descriptions were removed and ")
         .and_then(|remainder| {
             remainder.strip_suffix(
                 " additional skills were not included in the model-visible skills list.",
@@ -1202,15 +1195,6 @@ async fn turn_start_emits_thread_scoped_warning_notification_for_trimmed_skills(
     assert!(
         omitted_count >= 2,
         "both test skills should be omitted from the constrained context"
-||||||| 413492cd6c
-    assert_eq!(
-        warning.message,
-        "Exceeded skills context budget of 2%. All skill descriptions were removed and 7 additional skills were not included in the model-visible skills list."
-=======
-    assert_eq!(
-        warning.message,
-        "Exceeded skills context budget. All skill descriptions were removed and 6 additional skills were not included in the model-visible skills list."
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     );
 
     timeout(
@@ -4259,7 +4243,7 @@ async fn turn_start_does_not_stream_apply_patch_change_updates_without_feature_v
         .with_model(PATCH_MODEL)
         .with_sandbox_mode("danger-full-access")
         .write(&codex_home)?;
-    write_models_cache_for_provider(&codex_home, "mock_provider")?;
+    write_models_cache_for_provider(&codex_home, "mock_provider").await?;
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(&codex_home)
@@ -4385,39 +4369,7 @@ async fn turn_start_streams_apply_patch_change_updates_v2() -> Result<()> {
         .disable_feature(Feature::RemoteModels)
         .disable_feature(Feature::ShellSnapshot)
         .write(&codex_home)?;
-<<<<<<< HEAD
-    write_models_cache_for_provider(&codex_home, "mock_provider")?;
-||||||| 413492cd6c
-    write_models_cache(&codex_home)?;
-    let cache_path = codex_home.join("models_cache.json");
-    let mut cache: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&cache_path)?)?;
-    let models = cache["models"]
-        .as_array_mut()
-        .expect("models_cache.json models should be an array");
-    let model = models
-        .first_mut()
-        .expect("models_cache.json should contain at least one model");
-    model["slug"] = serde_json::Value::from("mock-model");
-    model["display_name"] = serde_json::Value::from("mock-model");
-    model["apply_patch_tool_type"] = serde_json::Value::from("freeform");
-    std::fs::write(&cache_path, serde_json::to_string_pretty(&cache)?)?;
-=======
-    write_models_cache(&codex_home).await?;
-    let cache_path = codex_home.join("models_cache.json");
-    let mut cache: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&cache_path)?)?;
-    let models = cache["models"]
-        .as_array_mut()
-        .expect("models_cache.json models should be an array");
-    let model = models
-        .first_mut()
-        .expect("models_cache.json should contain at least one model");
-    model["slug"] = serde_json::Value::from("mock-model");
-    model["display_name"] = serde_json::Value::from("mock-model");
-    model["apply_patch_tool_type"] = serde_json::Value::from("freeform");
-    std::fs::write(&cache_path, serde_json::to_string_pretty(&cache)?)?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    write_models_cache_for_provider(&codex_home, "mock_provider").await?;
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(&codex_home)
@@ -4483,15 +4435,9 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
     const CHILD_PROMPT: &str = "child: do work";
     const PARENT_PROMPT: &str = "spawn a child and continue";
     const SPAWN_CALL_ID: &str = "spawn-call-1";
-<<<<<<< HEAD
     const PARENT_MODEL: &str = "mock_provider/gpt-5.4";
-    const REQUESTED_MODEL: &str = "mock_provider/gpt-5.2";
-||||||| 413492cd6c
-    const REQUESTED_MODEL: &str = "gpt-5.2";
-=======
     const CHILD_PLAN_CALL_ID: &str = "child-plan-call";
-    const REQUESTED_MODEL: &str = "gpt-5.5";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    const REQUESTED_MODEL: &str = "mock_provider/gpt-5.5";
     const REQUESTED_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::Low;
 
     let server = responses::start_mock_server().await;
@@ -4560,12 +4506,8 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
             server.uri()
         ))
         .write(codex_home.path())?;
-<<<<<<< HEAD
-    write_models_cache_for_provider(codex_home.path(), "mock_provider")?;
-||||||| 413492cd6c
-=======
+    write_models_cache_for_provider(codex_home.path(), "mock_provider").await?;
     mount_analytics_capture(&server, codex_home.path()).await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -5149,14 +5091,8 @@ async fn turn_start_emits_spawn_agent_item_with_effective_role_model_metadata_v2
     const CHILD_PROMPT: &str = "child: do work";
     const PARENT_PROMPT: &str = "spawn a child and continue";
     const SPAWN_CALL_ID: &str = "spawn-call-1";
-<<<<<<< HEAD
     const PARENT_MODEL: &str = "mock_provider/gpt-5.4";
-    const REQUESTED_MODEL: &str = "mock_provider/gpt-5.2";
-||||||| 413492cd6c
-    const REQUESTED_MODEL: &str = "gpt-5.2";
-=======
-    const REQUESTED_MODEL: &str = "gpt-5.5";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    const REQUESTED_MODEL: &str = "mock_provider/gpt-5.5";
     const REQUESTED_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::Low;
     const ROLE_MODEL: &str = "mock_provider/gpt-5.4";
     const ROLE_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::High;
@@ -5210,7 +5146,7 @@ async fn turn_start_emits_spawn_agent_item_with_effective_role_model_metadata_v2
     MockResponsesConfig::new(&server.uri())
         .enable_feature(Feature::Collab)
         .write(codex_home.path())?;
-    write_models_cache_for_provider(codex_home.path(), "mock_provider")?;
+    write_models_cache_for_provider(codex_home.path(), "mock_provider").await?;
     std::fs::write(
         codex_home.path().join("custom-role.toml"),
         format!("model = \"{ROLE_MODEL}\"\nmodel_reasoning_effort = \"{ROLE_REASONING_EFFORT}\"\n",),

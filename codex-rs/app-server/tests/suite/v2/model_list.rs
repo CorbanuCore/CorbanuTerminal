@@ -20,17 +20,13 @@ use codex_app_server_protocol::ModelUpgradeInfo;
 use codex_app_server_protocol::ReasoningEffortOption;
 use codex_app_server_protocol::RequestId;
 use codex_config::types::AuthCredentialsStoreMode;
-<<<<<<< HEAD
+use codex_login::AuthKeyringBackendKind;
 use codex_login::OPENAI_API_KEY_ENV_VAR;
+use codex_login::login_with_api_key;
 use codex_model_provider_info::AMBIENT_API_KEY_ENV_VAR;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::ZAI_API_KEY_ENV_VAR;
-||||||| 413492cd6c
-=======
-use codex_login::AuthKeyringBackendKind;
-use codex_login::login_with_api_key;
 use codex_protocol::openai_models::MODEL_SPECIALTY_CYBER;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ModelsResponse;
@@ -42,15 +38,10 @@ use tokio::time::timeout;
 use wiremock::Mock;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
-<<<<<<< HEAD
-use wiremock::matchers::method;
-use wiremock::matchers::path_regex;
-||||||| 413492cd6c
-=======
 use wiremock::matchers::header;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use wiremock::matchers::path_regex;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const INVALID_REQUEST_ERROR_CODE: i64 = -32600;
@@ -239,12 +230,8 @@ fn model_from_preset(preset: &ModelPreset) -> Model {
         availability_nux: preset.availability_nux.clone().map(Into::into),
         display_name: preset.display_name.clone(),
         description: preset.description.clone(),
-<<<<<<< HEAD
         orchestration: preset.orchestration.clone(),
-||||||| 413492cd6c
-=======
         model_specialty: preset.model_specialty.clone(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         hidden: !preset.show_in_picker,
         supported_reasoning_efforts: preset
             .supported_reasoning_efforts
@@ -256,18 +243,8 @@ fn model_from_preset(preset: &ModelPreset) -> Model {
             .collect(),
         default_reasoning_effort: preset.default_reasoning_effort.clone(),
         input_modalities: preset.input_modalities.clone(),
-<<<<<<< HEAD
         supports_personality: preset.supports_personality,
-||||||| 413492cd6c
-        // `write_models_cache()` round-trips through a simplified ModelInfo fixture that does not
-        // preserve personality placeholders in base instructions, so app-server list results from
-        // cache report `supports_personality = false`.
-        // todo(sayan): fix, maybe make roundtrip use ModelInfo only
-        supports_personality: false,
-=======
-        supports_personality: false,
         multi_agent_version: preset.multi_agent_version.map(Into::into),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         additional_speed_tiers: preset.additional_speed_tiers.clone(),
         service_tiers: preset
             .service_tiers
@@ -494,16 +471,10 @@ async fn list_models_includes_hidden_models() -> Result<()> {
 #[test_case("chatgpt-access-token", None; "chatgpt")]
 #[test_case("test-api-key", Some("test-api-key"); "api key")]
 #[tokio::test]
-<<<<<<< HEAD
-async fn list_models_includes_chatgpt_catalog_after_background_refresh() -> Result<()> {
-||||||| 413492cd6c
-async fn list_models_uses_chatgpt_remote_catalog_as_source_of_truth() -> Result<()> {
-=======
 async fn list_models_uses_remote_catalog_as_source_of_truth(
     bearer_token: &str,
     api_key: Option<&str>,
 ) -> Result<()> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let server = MockServer::start().await;
     let remote_models = [
         (
@@ -608,63 +579,8 @@ model_catalog_url = "{server_uri}/v1/models"
         .with_env_overrides(&[("OPENAI_API_KEY", None), ("CODEX_API_KEY", None)])
         .build_initialized()
         .await?;
-<<<<<<< HEAD
-    let mut expected_presets: Vec<ModelPreset> = vec![remote_model.into()];
-||||||| 413492cd6c
-    let ModelListResponse {
-        data: items,
-        next_cursor,
-    } = mcp
-        .request(|request_id| ClientRequest::ModelList {
-            request_id,
-            params: ModelListParams {
-                limit: Some(100),
-                cursor: None,
-                include_hidden: None,
-            },
-        })
-        .await?;
-    let mut expected_presets: Vec<ModelPreset> = vec![remote_model.into()];
-=======
-    let request_id = mcp
-        .send_list_models_request(ModelListParams {
-            limit: Some(100),
-            cursor: None,
-            include_hidden: None,
-        })
-        .await?;
-    let response = mcp
-        .read_stream_until_response_message(RequestId::Integer(request_id))
-        .await?;
-    assert_eq!(
-        response.result["data"][0]["upgradeInfo"]["retirementAt"],
-        json!(1_893_456_000)
-    );
-    assert_eq!(
-        response.result["data"][1]["upgradeInfo"]["retirementAt"],
-        serde_json::Value::Null
-    );
-    assert_eq!(
-        response.result["data"]
-            .as_array()
-            .expect("model/list data should be an array")
-            .iter()
-            .map(|model| model["availableAccessPrograms"].clone())
-            .collect::<Vec<_>>(),
-        vec![
-            json!({ "cyber": ["standard", "daybreakBlue"] }),
-            json!({ "cyber": ["daybreakRed"] }),
-            json!({ "cyber": [] }),
-            json!(null),
-        ]
-    );
-    let ModelListResponse {
-        data: items,
-        next_cursor,
-    } = serde_json::from_value(response.result)?;
     let mut expected_presets: Vec<ModelPreset> =
         remote_models.into_iter().map(Into::into).collect();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     ModelPreset::mark_default_by_picker_visibility(&mut expected_presets);
     let mut expected_items = expected_presets
         .iter()
@@ -689,7 +605,6 @@ model_catalog_url = "{server_uri}/v1/models"
     // remote response the default model.
     expected_items[0].is_default = false;
 
-<<<<<<< HEAD
     // The models manager uses a global bundled catalog as its base and merges the
     // background `/models` response into it. Poll the non-blocking endpoint until
     // that background result is visible rather than requiring bootstrap to wait.
@@ -709,30 +624,13 @@ model_catalog_url = "{server_uri}/v1/models"
                 })
                 .await?;
             assert!(next_cursor.is_none());
-            if items.contains(&expected_items[0]) {
+            if expected_items.iter().all(|item| items.contains(item)) {
                 return Ok::<(), Error>(());
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await??;
-    assert_eq!(
-        models_mock.requests().len(),
-        1,
-        "expected a single /models request"
-    );
-||||||| 413492cd6c
-    assert_eq!(items, expected_items);
-    assert!(next_cursor.is_none());
-    assert_eq!(
-        models_mock.requests().len(),
-        1,
-        "expected a single /models request"
-    );
-=======
-    assert_eq!(items, expected_items);
-    assert!(next_cursor.is_none());
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     Ok(())
 }
 

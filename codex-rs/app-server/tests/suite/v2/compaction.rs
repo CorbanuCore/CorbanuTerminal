@@ -311,9 +311,10 @@ async fn compaction_error_window_reaches_analytics(
     let mut config = compaction_config(&server.uri(), /*auto_compact_limit*/ 1_000_000)
         .with_root_config(&format!("chatgpt_base_url = \"{}\"", server.uri()));
     if let CompactionRoute::Remote = route {
+        // The built-in OpenAI provider, pointed at the mock server (main).
         config = config
-            .with_provider_name("OpenAI")
-            .with_provider_config("requires_openai_auth = true");
+            .with_builtin_model_provider("openai")
+            .with_root_config(&format!("openai_base_url = \"{}/v1\"", server.uri()));
     }
     config.write(codex_home.path())?;
     mount_analytics_capture(&server, codex_home.path()).await?;
@@ -402,165 +403,17 @@ async fn auto_compaction_emits_started_and_completed_items(route: CompactionRout
     let codex_home = TempDir::new()?;
     let mut config = compaction_config(&server.uri(), /*auto_compact_limit*/ 200_000);
     if let CompactionRoute::Remote = route {
+        // The built-in OpenAI provider, pointed at the mock server (main).
         config = config
-            .with_provider_name("OpenAI")
-            .with_provider_config("requires_openai_auth = true");
+            .with_builtin_model_provider("openai")
+            .with_root_config(&format!("openai_base_url = \"{}/v1\"", server.uri()));
         write_chatgpt_auth(
             codex_home.path(),
             ChatGptAuthFixture::new("access-chatgpt").plan_type("pro"),
             AuthCredentialsStoreMode::File,
         )?;
     }
-<<<<<<< HEAD
-
-    let started = wait_for_context_compaction_started(&mut mcp).await?;
-    let completed = wait_for_context_compaction_completed(&mut mcp).await?;
-
-    let ThreadItem::ContextCompaction { id: started_id } = started.item else {
-        unreachable!("started item should be context compaction");
-    };
-    let ThreadItem::ContextCompaction { id: completed_id } = completed.item else {
-        unreachable!("completed item should be context compaction");
-    };
-
-    assert_eq!(started.thread_id, thread_id);
-    assert_eq!(completed.thread_id, thread_id);
-    assert_eq!(started_id, completed_id);
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn auto_compaction_remote_emits_started_and_completed_items() -> Result<()> {
-    skip_if_no_network!(Ok(()));
-    const REMOTE_AUTO_COMPACT_LIMIT: i64 = 200_000;
-
-    let server = responses::start_mock_server().await;
-    let sse1 = responses::sse(vec![
-        responses::ev_assistant_message("m1", "FIRST_REPLY"),
-        responses::ev_completed_with_tokens("r1", /*total_tokens*/ 70_000),
-    ]);
-    let sse2 = responses::sse(vec![
-        responses::ev_assistant_message("m2", "SECOND_REPLY"),
-        responses::ev_completed_with_tokens("r2", /*total_tokens*/ 330_000),
-    ]);
-    let sse3 = responses::sse(vec![
-        responses::ev_assistant_message("m3", "FINAL_REPLY"),
-        responses::ev_completed_with_tokens("r3", /*total_tokens*/ 120),
-    ]);
-    let responses_log = responses::mount_sse_sequence(&server, vec![sse1, sse2, sse3]).await;
-
-    let compacted_history = vec![
-        ResponseItem::Message {
-            id: None,
-            role: "assistant".to_string(),
-            content: vec![ContentItem::OutputText {
-                text: "REMOTE_COMPACT_SUMMARY".to_string(),
-            }],
-            phase: None,
-            internal_chat_message_metadata_passthrough: None,
-        },
-        ResponseItem::Compaction {
-            id: None,
-            encrypted_content: "ENCRYPTED_COMPACTION_SUMMARY".to_string(),
-            internal_chat_message_metadata_passthrough: None,
-        },
-    ];
-    let compact_mock = responses::mount_compact_json_once(
-        &server,
-        serde_json::json!({ "output": compacted_history }),
-    )
-    .await;
-
-    let codex_home = TempDir::new()?;
-    MockResponsesConfig::new(&server.uri())
-        .with_builtin_model_provider("openai")
-        .with_root_config(&format!("openai_base_url = \"{}/v1\"", server.uri()))
-        .with_root_config(&format!(
-            "compact_prompt = \"{COMPACT_PROMPT}\"\nmodel_auto_compact_token_limit = {REMOTE_AUTO_COMPACT_LIMIT}"
-        ))
-        .disable_feature(Feature::RemoteCompactionV2)
-        .write(codex_home.path())?;
-    write_chatgpt_auth(
-        codex_home.path(),
-        ChatGptAuthFixture::new("access-chatgpt").plan_type("pro"),
-        AuthCredentialsStoreMode::File,
-    )?;
-||||||| 413492cd6c
-
-    let started = wait_for_context_compaction_started(&mut mcp).await?;
-    let completed = wait_for_context_compaction_completed(&mut mcp).await?;
-
-    let ThreadItem::ContextCompaction { id: started_id } = started.item else {
-        unreachable!("started item should be context compaction");
-    };
-    let ThreadItem::ContextCompaction { id: completed_id } = completed.item else {
-        unreachable!("completed item should be context compaction");
-    };
-
-    assert_eq!(started.thread_id, thread_id);
-    assert_eq!(completed.thread_id, thread_id);
-    assert_eq!(started_id, completed_id);
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn auto_compaction_remote_emits_started_and_completed_items() -> Result<()> {
-    skip_if_no_network!(Ok(()));
-    const REMOTE_AUTO_COMPACT_LIMIT: i64 = 200_000;
-
-    let server = responses::start_mock_server().await;
-    let sse1 = responses::sse(vec![
-        responses::ev_assistant_message("m1", "FIRST_REPLY"),
-        responses::ev_completed_with_tokens("r1", /*total_tokens*/ 70_000),
-    ]);
-    let sse2 = responses::sse(vec![
-        responses::ev_assistant_message("m2", "SECOND_REPLY"),
-        responses::ev_completed_with_tokens("r2", /*total_tokens*/ 330_000),
-    ]);
-    let sse3 = responses::sse(vec![
-        responses::ev_assistant_message("m3", "FINAL_REPLY"),
-        responses::ev_completed_with_tokens("r3", /*total_tokens*/ 120),
-    ]);
-    let responses_log = responses::mount_sse_sequence(&server, vec![sse1, sse2, sse3]).await;
-
-    let compacted_history = vec![
-        ResponseItem::Message {
-            id: None,
-            role: "assistant".to_string(),
-            content: vec![ContentItem::OutputText {
-                text: "REMOTE_COMPACT_SUMMARY".to_string(),
-            }],
-            phase: None,
-            internal_chat_message_metadata_passthrough: None,
-        },
-        ResponseItem::Compaction {
-            id: None,
-            encrypted_content: "ENCRYPTED_COMPACTION_SUMMARY".to_string(),
-            internal_chat_message_metadata_passthrough: None,
-        },
-    ];
-    let compact_mock = responses::mount_compact_json_once(
-        &server,
-        serde_json::json!({ "output": compacted_history }),
-    )
-    .await;
-
-    let codex_home = TempDir::new()?;
-    compaction_config(&server.uri(), REMOTE_AUTO_COMPACT_LIMIT)
-        .disable_feature(Feature::RemoteCompactionV2)
-        .with_provider_name("OpenAI")
-        .with_provider_config("requires_openai_auth = true")
-        .write(codex_home.path())?;
-    write_chatgpt_auth(
-        codex_home.path(),
-        ChatGptAuthFixture::new("access-chatgpt").plan_type("pro"),
-        AuthCredentialsStoreMode::File,
-    )?;
-=======
     config.write(codex_home.path())?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())

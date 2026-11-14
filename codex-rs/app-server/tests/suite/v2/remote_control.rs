@@ -1330,18 +1330,9 @@ impl PairingRemoteControlBackend {
                 )
                 .await?;
 
-<<<<<<< HEAD
                 // Websocket connection attempts (GET) may arrive between the
                 // HTTP requests; hold them open so the server does not
                 // reconnect, and answer only the pairing requests.
-||||||| 413492cd6c
-                let request_after_enroll = read_http_request(&listener).await?;
-                let pair_http_request = if request_after_enroll.request_line.starts_with("GET ") {
-                    read_http_request(&listener).await?
-                } else {
-                    request_after_enroll
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 let mut websocket_connections = Vec::new();
                 let pair_http_request = loop {
                     let request = read_http_request(&listener).await?;
