@@ -100,10 +100,7 @@ impl PreparedExecCommand {
                 command_platform,
                 // #443/#626 (D52): checked against the policy of the
                 // session's live level (Aggressive suspends approvals).
-                session
-                    .services
-                    .model_client()
-                    .live_level_is_aggressive(),
+                session.services.model_client().live_level_is_aggressive(),
             )
             .await
     }
