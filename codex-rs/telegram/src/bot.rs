@@ -192,7 +192,7 @@ async fn handle_message(
     let update_id = u64::from(update.id.0);
     let dedup = Arc::clone(&dedup);
     let result = handle_message_inner(
-        bot,
+        bot.clone(),
         update,
         message,
         bridge,
@@ -207,12 +207,13 @@ async fn handle_message(
             Ok(())
         }
         Ok(UserInputReceipt::Queued(completion_rx)) => {
-            monitor_queued_update(dedup, conversation, update_id, completion_rx);
+            monitor_queued_update(bot, dedup, conversation, update_id, completion_rx);
             Ok(())
         }
         Err(err) => {
-            dedup.release_update(update_id).await;
-            Err(err)
+            let result = Err(err);
+            finish_update(&bot, &dedup, conversation, update_id, &result).await;
+            result
         }
     }
 }
@@ -460,8 +461,8 @@ async fn handle_callback(
         return Ok(());
     }
     let update_id = u64::from(update.id.0);
-    let result = handle_callback_inner(bot, query, bridge, allowlist).await;
-    finish_update(&dedup, conversation, update_id, &result).await;
+    let result = handle_callback_inner(bot.clone(), query, bridge, allowlist).await;
+    finish_update(&bot, &dedup, conversation, update_id, &result).await;
     result
 }
 
@@ -524,6 +525,7 @@ async fn handle_callback_inner(
 }
 
 async fn finish_update(
+    bot: &Bot,
     dedup: &UpdateDeduplicator,
     conversation: ConversationKey,
     update_id: u64,
@@ -532,7 +534,22 @@ async fn finish_update(
     if result.is_ok() {
         complete_update(dedup, conversation, update_id).await;
     } else {
-        dedup.release_update(update_id).await;
+        // Commit the terminal failure before sending the notice: failure to
+        // deliver a notice must never replay an already attempted mutation.
+        let notice = match dedup.fail_update(update_id).await {
+            Ok(()) => format!(
+                "Processing your Telegram update {update_id} failed. Some actions may already have completed. Check /status before retrying. To retry, resend your message or command; for a button action, resend the command that opened it."
+            ),
+            Err(err) => {
+                warn!(update_id, "failed to commit Telegram inbox failure: {err}");
+                format!(
+                    "Processing your Telegram update {update_id} failed, and its outcome could not be saved. It remains pending for restart recovery. Check host storage and /status before resending your message or command; some actions may already have completed."
+                )
+            }
+        };
+        if let Err(err) = send_notice(bot, conversation, notice).await {
+            warn!(update_id, "failed to send Telegram failure notice: {err}");
+        }
     }
 }
 
@@ -557,27 +574,35 @@ async fn complete_update(
 }
 
 fn monitor_queued_update(
+    bot: Bot,
     dedup: Arc<UpdateDeduplicator>,
     conversation: ConversationKey,
     update_id: u64,
     completion_rx: tokio::sync::oneshot::Receiver<Result<(), String>>,
-) {
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         match completion_rx.await {
             Ok(Ok(())) => complete_update(&dedup, conversation, update_id).await,
             Ok(Err(err)) => {
-                dedup.release_update(update_id).await;
                 warn!(
                     update_id,
                     "queued Telegram update failed before acceptance: {err}"
                 );
+                finish_update(
+                    &bot,
+                    &dedup,
+                    conversation,
+                    update_id,
+                    &Err(anyhow::anyhow!(err)),
+                )
+                .await;
             }
             Err(_) => {
                 dedup.release_update(update_id).await;
                 warn!(update_id, "queued Telegram update completion was dropped");
             }
         }
-    });
+    })
 }
 
 async fn begin_or_explain(
@@ -644,6 +669,10 @@ fn callback_answer_text(text: &str) -> String {
     truncated.push_str("...");
     truncated
 }
+
+#[cfg(test)]
+#[path = "bot_failure_tests.rs"]
+mod failure_tests;
 
 #[cfg(test)]
 mod tests {
