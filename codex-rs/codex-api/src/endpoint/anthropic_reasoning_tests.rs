@@ -147,7 +147,7 @@ fn cumulative_input_and_accounting_observer_are_unchanged() {
             cache_write_input_tokens: 5,
             output_tokens: 40,
             reasoning_output_tokens: 9,
-            total_tokens: 61
+            total_tokens: 61,
             codex_rollout_budget_units: None,
         }
     );
