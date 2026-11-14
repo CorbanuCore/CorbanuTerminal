@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Duration;
 
+use crate::oauth::DefaultKeyringStore;
 use anyhow::Context;
 use anyhow::Result;
 use codex_config::types::AuthKeyringBackendKind;
@@ -9,7 +10,6 @@ use codex_config::types::OAuthCredentialsStoreMode;
 use codex_exec_server::RouteAwareHttpClient;
 use codex_http_client::HttpClientFactory;
 use codex_http_client::OutboundProxyPolicy;
-use codex_keyring_store::DefaultKeyringStore;
 use http::HeaderMap;
 use keyring::Error as KeyringError;
 use oauth2::AccessToken;

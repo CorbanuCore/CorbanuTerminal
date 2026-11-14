@@ -3,10 +3,10 @@
 
 use std::future::Future;
 
+use super::DefaultKeyringStore;
 use anyhow::Result;
 use anyhow::anyhow;
 use anyhow::bail;
-use codex_keyring_store::DefaultKeyringStore;
 use codex_keyring_store::KeyringStore;
 use tracing::instrument::WithSubscriber;
 
