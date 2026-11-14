@@ -128,7 +128,6 @@ const CHILD_AGENT: &[&str] = &[
 const NO_PROTECTED_EFFECT: &[&str] = &[
     "update_plan",
     "request_user_input",
-    "view_image",
     "sleep",
     "curr_time",
     "get_context_remaining",
@@ -183,7 +182,7 @@ pub(crate) fn coverage(origin: ToolOrigin, name: &ToolName) -> Coverage {
         }
         ToolOrigin::Builtin => match plain {
             _ if APPROVAL_SEAM.contains(&plain) => Coverage::ApprovalSeam,
-            "write_stdin" => Coverage::OwnCheck,
+            "write_stdin" | "view_image" => Coverage::OwnCheck,
             "exec" | "wait" => Coverage::NestedCallsOnly,
             "request_permissions" | "request_plugin_install" => Coverage::PolicyRequest,
             _ if AGENT_LAUNCH.contains(&plain) => Coverage::AgentLaunch,
@@ -301,7 +300,7 @@ pub(crate) fn classify_mcp(call: &McpCall<'_>, codex_home: &Path) -> Option<Prot
         if key.is_some_and(|key| COMMAND_KEYS.contains(&key.to_lowercase().as_str())) {
             let command = vec!["sh".to_string(), "-c".to_string(), text.to_string()];
             found = strongest(found, classify(&exec(command), codex_home));
-        } else if text.contains('/') || text.starts_with(['~', '.', '$']) {
+        } else if text.contains(['/', '\\']) || text.starts_with(['~', '.', '$']) {
             paths.push(text.to_string());
         }
     }

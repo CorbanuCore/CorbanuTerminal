@@ -4,6 +4,9 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 
+#[path = "issue_2167_dotenv_tests.rs"]
+mod issue_2167_dotenv;
+
 #[path = "git_config_round6_tests.rs"]
 mod issue_1161_round6;
 

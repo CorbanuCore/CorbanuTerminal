@@ -146,6 +146,48 @@ impl ViewImageHandler {
                 turn_environment.cwd(),
             ))
         })?;
+        // #2167: file reads share the shell/MCP credential classifier.
+        // Approval admits this call only; Aggressive's read denials stay on.
+        let read_path = path_uri.inferred_native_path_string();
+        let read_cwd = turn_environment.cwd().clone();
+        let codex_home = turn.config.codex_home.clone();
+        let admission = crate::security::protected_surface::admit(
+            &session,
+            turn.approval_policy.value(),
+            crate::security::protected_surface::Route::FileRead,
+            &call_id,
+            move || {
+                let arguments = serde_json::json!({ "path": read_path });
+                crate::security::protected_surface::classify_mcp(
+                    &crate::security::protected_surface::McpCall {
+                        server: "builtin",
+                        tool: "read_file",
+                        title: None,
+                        acts_outside: false,
+                        arguments: Some(&arguments),
+                        cwd: &read_cwd,
+                    },
+                    &codex_home,
+                )
+            },
+        )
+        .await;
+        match admission {
+            crate::security::protected_surface::Admission::Clear => {}
+            crate::security::protected_surface::Admission::Refused(refusal) => {
+                return Err(FunctionCallError::RespondToModel(refusal));
+            }
+            crate::security::protected_surface::Admission::AskHuman(check) => {
+                let question = format!("Allow reading `{path}`? {}", check.reason());
+                let approved = crate::security::protected_surface::ask_human(
+                    &session, &turn, &call_id, question,
+                )
+                .await;
+                check
+                    .resolve(&session, approved)
+                    .map_err(FunctionCallError::RespondToModel)?;
+            }
+        }
         let model_visible_path = path_uri.inferred_native_path_string();
         let own_sandbox = turn
             .file_system_sandbox_context(/*additional_permissions*/ None, turn_environment);

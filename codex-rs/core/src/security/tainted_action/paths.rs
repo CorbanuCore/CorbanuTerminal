@@ -603,6 +603,11 @@ impl Homes {
                 })
             })
             || CREDENTIAL_FILES.iter().any(|file| glob_matches(name, file))
+            // #841/#2167: project dotenv files need fresh approval after
+            // untrusted content, independently of Moderate's sandbox list.
+            || codex_protocol::permissions::is_credential_file_name(std::ffi::OsStr::new(name))
+            || glob_matches(name, ".env")
+            || glob_matches(name, ".envrc")
             || (glob_matches(name, "hosts.yml")
                 && segments.iter().any(|segment| glob_any(segment, "gh")))
             || name.starts_with("id_rsa")

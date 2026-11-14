@@ -34,6 +34,7 @@ const CANCEL: &str = "Cancel";
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Route {
     McpTool,
+    FileRead,
     WriteStdin,
     UnclassifiedTool,
     AgentLaunch,
@@ -44,6 +45,7 @@ impl Route {
     fn as_str(self) -> &'static str {
         match self {
             Self::McpTool => "mcp_tool",
+            Self::FileRead => "file_read",
             Self::WriteStdin => "write_stdin",
             Self::UnclassifiedTool => "unclassified_tool",
             Self::AgentLaunch => "agent_launch",
