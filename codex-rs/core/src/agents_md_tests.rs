@@ -5,6 +5,7 @@ use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::environment_selection::TurnEnvironmentState;
 use crate::session::turn_context::TurnEnvironment;
 use codex_config::ConfigLayerEntry;
+use codex_config::ConfigLayerSource;
 use codex_config::ConfigLayerStack;
 use codex_config::ConfigRequirements;
 use codex_config::ConfigRequirementsToml;

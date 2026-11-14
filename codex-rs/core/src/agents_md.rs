@@ -18,7 +18,6 @@
 use crate::config::Config;
 use crate::context::UserInstructions as ContextUserInstructions;
 use crate::environment_selection::TurnEnvironmentSnapshot;
-use codex_config::ConfigLayerSource;
 use codex_config::ConfigLayerStackOrdering;
 use codex_config::default_project_root_markers;
 use codex_config::merge_toml_values;
@@ -175,7 +174,9 @@ async fn agents_md_paths(
         ConfigLayerStackOrdering::LowestPrecedenceFirst,
         /*include_disabled*/ false,
     ) {
-        if matches!(layer.name, ConfigLayerSource::Project { .. }) {
+        // A project, and an agent role file it declares (D525), can't move
+        // the project root.
+        if layer.is_project_scoped() {
             continue;
         }
         merge_toml_values(&mut merged, &layer.config);
