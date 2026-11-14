@@ -248,33 +248,21 @@ impl ConfigManager {
         &self,
         fallback_cwd: Option<PathBuf>,
     ) -> std::io::Result<Config> {
-<<<<<<< HEAD
         // Bootstrap configuration must retain an explicitly selected provider
         // even when its configured model needs the per-thread catalog fallback.
         // A thread/start request that does not opt into fallback still reloads
         // with the default (fail-closed) override below.
-||||||| 413492cd6c
-=======
         let Some(fallback_cwd) = fallback_cwd else {
             return self.load_non_project_config().await;
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.load_with_cli_overrides(
             &self.current_cli_overrides(),
             /*request_overrides*/ None,
-<<<<<<< HEAD
             ConfigOverrides {
                 allow_provider_model_fallback: true,
                 ..Default::default()
             },
-            fallback_cwd,
-||||||| 413492cd6c
-            ConfigOverrides::default(),
-            fallback_cwd,
-=======
-            ConfigOverrides::default(),
             Some(fallback_cwd),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         )
         .await
     }
@@ -292,6 +280,17 @@ impl ConfigManager {
             .fallback_cwd(Some(self.codex_home.clone()))
             .cloud_config_bundle(policy_load.cloud_config.clone())
             .thread_config_loader(Arc::clone(&self.thread_config_loader))
+            // As in `load_latest_config`: bootstrap configuration retains an
+            // explicitly selected provider even when its model needs the
+            // per-thread catalog fallback, and builds with this process's
+            // helper executables.
+            .harness_overrides(ConfigOverrides {
+                allow_provider_model_fallback: true,
+                codex_self_exe: self.arg0_paths.codex_self_exe.clone(),
+                codex_linux_sandbox_exe: self.arg0_paths.codex_linux_sandbox_exe.clone(),
+                main_execve_wrapper_exe: self.arg0_paths.main_execve_wrapper_exe.clone(),
+                ..Default::default()
+            })
             .without_project_context()
             .build()
             .await?;
@@ -440,6 +439,8 @@ impl ConfigManager {
         cwd: Option<PathBuf>,
     ) -> std::io::Result<CloudStartupConfig> {
         let bootstrap = self.load_startup_config(cwd.clone()).await?.config;
+        // PF-84-S06 (#595): before any auth manager is built.
+        crate::leave_ruled_out_default_login_in_place(&bootstrap);
         let auth =
             AuthManager::shared_from_config(&bootstrap, /*enable_codex_api_key_env*/ false)
                 .await
@@ -687,20 +688,6 @@ impl ConfigManager {
         typesafe_overrides: ConfigOverrides,
         fallback_cwd: Option<PathBuf>,
     ) -> std::io::Result<Config> {
-<<<<<<< HEAD
-        if typesafe_overrides.codex_self_exe.is_none() {
-            typesafe_overrides.codex_self_exe = self.arg0_paths.codex_self_exe.clone();
-        }
-        if typesafe_overrides.codex_linux_sandbox_exe.is_none() {
-            typesafe_overrides.codex_linux_sandbox_exe =
-                self.arg0_paths.codex_linux_sandbox_exe.clone();
-        }
-        if typesafe_overrides.main_execve_wrapper_exe.is_none() {
-            typesafe_overrides.main_execve_wrapper_exe =
-                self.arg0_paths.main_execve_wrapper_exe.clone();
-        }
-||||||| 413492cd6c
-=======
         self.load_with_validation(
             cli_overrides,
             request_overrides,
@@ -725,7 +712,17 @@ impl ConfigManager {
     ) -> std::io::Result<Config> {
         let mcp_ema_cancellation = self.capture_mcp_ema_cancellation();
         let policy_load = self.refresh_application_network_policy().await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        if typesafe_overrides.codex_self_exe.is_none() {
+            typesafe_overrides.codex_self_exe = self.arg0_paths.codex_self_exe.clone();
+        }
+        if typesafe_overrides.codex_linux_sandbox_exe.is_none() {
+            typesafe_overrides.codex_linux_sandbox_exe =
+                self.arg0_paths.codex_linux_sandbox_exe.clone();
+        }
+        if typesafe_overrides.main_execve_wrapper_exe.is_none() {
+            typesafe_overrides.main_execve_wrapper_exe =
+                self.arg0_paths.main_execve_wrapper_exe.clone();
+        }
         let mut request_overrides = request_overrides.unwrap_or_default();
         if let Some(value) = request_overrides.remove("bypass_hook_trust") {
             typesafe_overrides.bypass_hook_trust = Some(value.as_bool().ok_or_else(|| {
@@ -858,18 +855,16 @@ impl ConfigManager {
 }
 
 #[cfg(test)]
-<<<<<<< HEAD
 #[path = "config_manager_tests.rs"]
 mod tests;
-||||||| 413492cd6c
-=======
+
+#[cfg(test)]
 #[path = "application_network_tests.rs"]
 mod application_network_tests;
 
 #[cfg(test)]
 #[path = "config_manager_provider_tests.rs"]
 mod provider_tests;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 pub(crate) fn protected_feature_keys(config_layer_stack: &ConfigLayerStack) -> BTreeSet<String> {
     let mut protected_features = config_layer_stack

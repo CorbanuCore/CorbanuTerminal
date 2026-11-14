@@ -123,23 +123,15 @@ impl TracingHarness {
     async fn new() -> Result<Self> {
         let server = create_mock_responses_server_repeating_assistant("Done").await;
         let codex_home = TempDir::new()?;
-<<<<<<< HEAD
         let cwd = TempDir::new()?;
         let config =
             Arc::new(build_test_config(codex_home.path(), cwd.path(), &server.uri()).await?);
-        let (processor, outgoing_rx) = build_test_processor(config).await;
-||||||| 413492cd6c
-        let config = Arc::new(build_test_config(codex_home.path(), &server.uri()).await?);
-        let (processor, outgoing_rx) = build_test_processor(config).await;
-=======
-        let config = Arc::new(build_test_config(codex_home.path(), &server.uri()).await?);
         let auth_manager = AuthManager::shared_from_config(
             config.as_ref(),
             /*enable_codex_api_key_env*/ false,
         )
         .await?;
         let (processor, outgoing_rx) = build_test_processor(config, auth_manager).await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let tracing = init_test_tracing();
         tracing.exporter.reset();
         tracing::callsite::rebuild_interest_cache();
@@ -693,7 +685,6 @@ fn turn_start_jsonrpc_span_parents_core_turn_spans() -> Result<()> {
 
             harness.reset_tracing();
 
-<<<<<<< HEAD
             let RemoteTrace {
                 trace_id: remote_trace_id,
                 parent_span_id: remote_parent_span_id,
@@ -704,6 +695,7 @@ fn turn_start_jsonrpc_span_parents_core_turn_spans() -> Result<()> {
                     ClientRequest::TurnStart {
                         request_id: RequestId::Integer(3),
                         params: TurnStartParams {
+                            disabled_plugin_ids: None,
                             environments: None,
                             thread_id,
                             client_user_message_id: None,
@@ -711,7 +703,12 @@ fn turn_start_jsonrpc_span_parents_core_turn_spans() -> Result<()> {
                                 text: "hello".to_string(),
                                 text_elements: Vec::new(),
                             }],
+                            turn_trigger: None,
+                            parent_turn_id: None,
+                            root_turn_id: None,
+                            tool_output: None,
                             responsesapi_client_metadata: None,
+                            responsesapi_client_metadata_patch: None,
                             additional_context: None,
                             cwd: None,
                             runtime_workspace_roots: None,
@@ -721,12 +718,14 @@ fn turn_start_jsonrpc_span_parents_core_turn_spans() -> Result<()> {
                             approvals_reviewer: None,
                             model: None,
                             service_tier: None,
+                            service_tier_for_turn: None,
                             effort: None,
                             summary: None,
                             personality: None,
                             output_schema: None,
                             collaboration_mode: None,
                             multi_agent_mode: None,
+                            cyber_access_program: None,
                         },
                     },
                     Some(remote_trace),
@@ -738,143 +737,18 @@ fn turn_start_jsonrpc_span_parents_core_turn_spans() -> Result<()> {
                         && span_attr(span, "rpc.method") == Some("turn/start")
                         && span.span_context.trace_id() == remote_trace_id
                 }) && spans.iter().any(|span| {
-                    span_attr(span, "codex.op") == Some("user_input")
+                    span_attr(span, "codex.op") == Some("turn_input")
                         && span.span_context.trace_id() == remote_trace_id
                 })
             })
             .await;
-||||||| 413492cd6c
-    let RemoteTrace {
-        trace_id: remote_trace_id,
-        parent_span_id: remote_parent_span_id,
-        context: remote_trace,
-    } = RemoteTrace::new("00000000000000000000000000000077", "0000000000000088");
-    let turn_start_response: TurnStartResponse = harness
-        .request(
-            ClientRequest::TurnStart {
-                request_id: RequestId::Integer(3),
-                params: TurnStartParams {
-                    environments: None,
-                    thread_id,
-                    client_user_message_id: None,
-                    input: vec![UserInput::Text {
-                        text: "hello".to_string(),
-                        text_elements: Vec::new(),
-                    }],
-                    responsesapi_client_metadata: None,
-                    additional_context: None,
-                    cwd: None,
-                    runtime_workspace_roots: None,
-                    approval_policy: None,
-                    sandbox_policy: None,
-                    permissions: None,
-                    approvals_reviewer: None,
-                    model: None,
-                    service_tier: None,
-                    effort: None,
-                    summary: None,
-                    personality: None,
-                    output_schema: None,
-                    collaboration_mode: None,
-                    multi_agent_mode: None,
-                },
-            },
-            Some(remote_trace),
-        )
-        .await;
-    let spans = wait_for_exported_spans(harness.tracing, |spans| {
-        spans.iter().any(|span| {
-            span.span_kind == SpanKind::Server
-                && span_attr(span, "rpc.method") == Some("turn/start")
-                && span.span_context.trace_id() == remote_trace_id
-        }) && spans.iter().any(|span| {
-            span_attr(span, "codex.op") == Some("user_input")
-                && span.span_context.trace_id() == remote_trace_id
-        })
-    })
-    .await;
-=======
-    let RemoteTrace {
-        trace_id: remote_trace_id,
-        parent_span_id: remote_parent_span_id,
-        context: remote_trace,
-    } = RemoteTrace::new("00000000000000000000000000000077", "0000000000000088");
-    let turn_start_response: TurnStartResponse = harness
-        .request(
-            ClientRequest::TurnStart {
-                request_id: RequestId::Integer(3),
-                params: TurnStartParams {
-                    disabled_plugin_ids: None,
-                    environments: None,
-                    thread_id,
-                    client_user_message_id: None,
-                    input: vec![UserInput::Text {
-                        text: "hello".to_string(),
-                        text_elements: Vec::new(),
-                    }],
-                    turn_trigger: None,
-                    parent_turn_id: None,
-                    root_turn_id: None,
-                    tool_output: None,
-                    responsesapi_client_metadata: None,
-                    responsesapi_client_metadata_patch: None,
-                    additional_context: None,
-                    cwd: None,
-                    runtime_workspace_roots: None,
-                    approval_policy: None,
-                    sandbox_policy: None,
-                    permissions: None,
-                    approvals_reviewer: None,
-                    model: None,
-                    service_tier: None,
-                    service_tier_for_turn: None,
-                    effort: None,
-                    summary: None,
-                    personality: None,
-                    output_schema: None,
-                    collaboration_mode: None,
-                    multi_agent_mode: None,
-                    cyber_access_program: None,
-                },
-            },
-            Some(remote_trace),
-        )
-        .await;
-    let spans = wait_for_exported_spans(harness.tracing, |spans| {
-        spans.iter().any(|span| {
-            span.span_kind == SpanKind::Server
-                && span_attr(span, "rpc.method") == Some("turn/start")
-                && span.span_context.trace_id() == remote_trace_id
-        }) && spans.iter().any(|span| {
-            span_attr(span, "codex.op") == Some("turn_input")
-                && span.span_context.trace_id() == remote_trace_id
-        })
-    })
-    .await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
-<<<<<<< HEAD
             let server_request_span =
                 find_rpc_span_with_trace(&spans, SpanKind::Server, "turn/start", remote_trace_id);
             let core_turn_span =
-                find_span_with_trace(&spans, remote_trace_id, "codex.op=user_input", |span| {
-                    span_attr(span, "codex.op") == Some("user_input")
+                find_span_with_trace(&spans, remote_trace_id, "codex.op=turn_input", |span| {
+                    span_attr(span, "codex.op") == Some("turn_input")
                 });
-||||||| 413492cd6c
-    let server_request_span =
-        find_rpc_span_with_trace(&spans, SpanKind::Server, "turn/start", remote_trace_id);
-    let core_turn_span =
-        find_span_with_trace(&spans, remote_trace_id, "codex.op=user_input", |span| {
-            span_attr(span, "codex.op") == Some("user_input")
-        });
-=======
-    let server_request_span =
-        find_rpc_span_with_trace(&spans, SpanKind::Server, "turn/start", remote_trace_id);
-    let core_turn_span =
-        find_span_with_trace(&spans, remote_trace_id, "codex.op=turn_input", |span| {
-            span_attr(span, "codex.op") == Some("turn_input")
-        });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
             assert_eq!(server_request_span.parent_span_id, remote_parent_span_id);
             assert!(server_request_span.parent_span_is_remote);

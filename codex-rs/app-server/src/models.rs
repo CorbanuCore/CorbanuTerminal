@@ -5,33 +5,8 @@ use codex_app_server_protocol::ReasoningEffortOption;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffortPreset;
 
-<<<<<<< HEAD
-pub async fn supported_models(
-    thread_manager: Arc<ThreadManager>,
-    include_hidden: bool,
-    http_client_factory: HttpClientFactory,
-) -> Vec<Model> {
-    thread_manager
-        // `model/list` is part of TUI bootstrap, so it must not wait for a
-        // provider request on a cold cache. The manager always starts with the
-        // bundled catalog and can overlay a fresh disk cache here. The app
-        // server's models refresh worker updates it from the network in the
-        // background.
-        .list_models(RefreshStrategy::Offline, http_client_factory)
-        .await
-||||||| 413492cd6c
-pub async fn supported_models(
-    thread_manager: Arc<ThreadManager>,
-    include_hidden: bool,
-    http_client_factory: HttpClientFactory,
-) -> Vec<Model> {
-    thread_manager
-        .list_models(RefreshStrategy::OnlineIfUncached, http_client_factory)
-        .await
-=======
 pub fn supported_models(models: Vec<ModelPreset>, include_hidden: bool) -> Vec<Model> {
     models
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .into_iter()
         .filter(|preset| include_hidden || preset.show_in_picker)
         .map(model_from_preset)
@@ -56,12 +31,8 @@ fn model_from_preset(preset: ModelPreset) -> Model {
         availability_nux: preset.availability_nux.map(Into::into),
         display_name: preset.display_name.to_string(),
         description: preset.description.to_string(),
-<<<<<<< HEAD
         orchestration: preset.orchestration,
-||||||| 413492cd6c
-=======
         model_specialty: preset.model_specialty,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         hidden: !preset.show_in_picker,
         supported_reasoning_efforts: reasoning_efforts_from_preset(
             preset.supported_reasoning_efforts,
