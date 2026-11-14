@@ -2674,7 +2674,6 @@ async fn exec_policy_warnings_ignore_untrusted_project_rules_without_config_toml
     Ok(())
 }
 
-<<<<<<< HEAD
 fn words(command: &str) -> Vec<String> {
     shlex::split(command).expect("test command splits")
 }
@@ -2799,6 +2798,8 @@ prefix_rule(pattern = ["rm"], decision = "forbidden")"#,
                 windows_sandbox_level: WindowsSandboxLevel::Disabled,
                 sandbox_permissions: SandboxPermissions::UseDefault,
                 prefix_rule: None,
+                environment_policy: None,
+                allow_prefix_rules: AllowPrefixRules::Honor,
             })
             .await
     }
@@ -2913,6 +2914,8 @@ async fn issue_441_nested_launch_rules_refuse_launches_but_not_text() -> anyhow:
                     windows_sandbox_level: WindowsSandboxLevel::Disabled,
                     sandbox_permissions: SandboxPermissions::UseDefault,
                     prefix_rule: None,
+                    environment_policy: None,
+                    allow_prefix_rules: AllowPrefixRules::Honor,
                 })
                 .await
         }
@@ -2984,6 +2987,8 @@ async fn issue_443_live_aggressive_adds_the_vault_rule() {
                         windows_sandbox_level: WindowsSandboxLevel::Disabled,
                         sandbox_permissions: SandboxPermissions::UseDefault,
                         prefix_rule: None,
+                        environment_policy: None,
+                        allow_prefix_rules: AllowPrefixRules::Honor,
                     },
                     live_aggressive,
                 )
@@ -3063,8 +3068,8 @@ prefix_rule(pattern=["python3", "src/notes.py", "list"], decision="allow")
         },
     )
     .await;
-||||||| 413492cd6c
-=======
+}
+
 #[tokio::test]
 async fn windows_powershell_policy_classifies_only_independent_literal_commands() {
     for (script, expected) in [
@@ -3128,6 +3133,7 @@ async fn windows_powershell_policy_classifies_only_independent_literal_commands(
                         },
                         &shell,
                         DangerousCommandPlatform::Windows,
+                        /*live_aggressive*/ false,
                     )
                     .await;
                 let actual = match requirement {
@@ -3143,5 +3149,4 @@ async fn windows_powershell_policy_classifies_only_independent_literal_commands(
             }
         }
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
