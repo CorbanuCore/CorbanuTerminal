@@ -111,7 +111,7 @@ async fn completed_failures_do_not_fill_pending_inbox() {
     let restarted = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
     assert!(restarted.pending_updates().await.is_empty());
     assert_eq!(
-        restarted.begin_update(&update(500)).await,
+        restarted.begin_update(&update(/*id*/ 500)).await,
         BeginUpdate::Accepted
     );
     restarted.complete_update(/*update_id*/ 500).await.unwrap();
@@ -125,7 +125,7 @@ async fn completed_failure_does_not_repeat_mutation_after_redelivery_or_restart(
     let mutations = AtomicUsize::new(0);
     let inbox = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
     for _ in 0..2 {
-        if inbox.begin_update(&update(42)).await == BeginUpdate::Accepted {
+        if inbox.begin_update(&update(/*id*/ 42)).await == BeginUpdate::Accepted {
             let (bot, mutation) = notice_bot(/*fail_notice*/ false).await;
             send_notice(
                 &bot,
@@ -141,7 +141,7 @@ async fn completed_failure_does_not_repeat_mutation_after_redelivery_or_restart(
         }
     }
     let restarted = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
-    if restarted.begin_update(&update(42)).await == BeginUpdate::Accepted {
+    if restarted.begin_update(&update(/*id*/ 42)).await == BeginUpdate::Accepted {
         mutations.fetch_add(1, Ordering::SeqCst);
     }
     assert_eq!(mutations.load(Ordering::SeqCst), 1);
@@ -161,7 +161,10 @@ async fn completed_failure_does_not_repeat_mutation_after_redelivery_or_restart(
 async fn failed_notice_is_not_retried_and_keeps_terminal_failure() {
     let home = test_home();
     let inbox = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
-    assert_eq!(inbox.begin_update(&update(42)).await, BeginUpdate::Accepted);
+    assert_eq!(
+        inbox.begin_update(&update(/*id*/ 42)).await,
+        BeginUpdate::Accepted
+    );
     let (bot, notice) = notice_bot(/*fail_notice*/ true).await;
     let conversation = ConversationKey::new(
         ChatId(99),
@@ -184,7 +187,7 @@ async fn failed_notice_is_not_retried_and_keeps_terminal_failure() {
     let restarted = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
     assert!(restarted.pending_updates().await.is_empty());
     assert_eq!(
-        restarted.begin_update(&update(42)).await,
+        restarted.begin_update(&update(/*id*/ 42)).await,
         BeginUpdate::Duplicate
     );
     std::fs::remove_dir_all(home).unwrap();
@@ -197,7 +200,10 @@ async fn queued_receipt_is_retained_until_known_resolution() {
     let conversation = ConversationKey::from(ChatId(99));
     let (bot, notice) = notice_bot(/*fail_notice*/ false).await;
     let (tx, rx) = tokio::sync::oneshot::channel();
-    assert_eq!(inbox.begin_update(&update(42)).await, BeginUpdate::Accepted);
+    assert_eq!(
+        inbox.begin_update(&update(/*id*/ 42)).await,
+        BeginUpdate::Accepted
+    );
     let monitor = monitor_queued_update(
         bot,
         Arc::clone(&inbox),
@@ -205,21 +211,24 @@ async fn queued_receipt_is_retained_until_known_resolution() {
         /*update_id*/ 42,
         rx,
     );
-    assert_eq!(inbox.pending_updates().await, vec![update(42)]);
+    assert_eq!(inbox.pending_updates().await, vec![update(/*id*/ 42)]);
     let restarted = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
-    assert_eq!(restarted.pending_updates().await, vec![update(42)]);
+    assert_eq!(restarted.pending_updates().await, vec![update(/*id*/ 42)]);
     tx.send(Err("known failure".to_string())).unwrap();
     monitor.await.unwrap();
     notice.await.unwrap();
     let restarted = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
     assert!(restarted.pending_updates().await.is_empty());
     assert_eq!(
-        restarted.begin_update(&update(42)).await,
+        restarted.begin_update(&update(/*id*/ 42)).await,
         BeginUpdate::Duplicate
     );
 
     let (tx, rx) = tokio::sync::oneshot::channel();
-    assert_eq!(inbox.begin_update(&update(43)).await, BeginUpdate::Accepted);
+    assert_eq!(
+        inbox.begin_update(&update(/*id*/ 43)).await,
+        BeginUpdate::Accepted
+    );
     let monitor = monitor_queued_update(
         Bot::new("123:test"),
         Arc::clone(&inbox),
@@ -230,9 +239,9 @@ async fn queued_receipt_is_retained_until_known_resolution() {
     drop(tx);
     monitor.await.unwrap();
     let restarted = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
-    assert_eq!(restarted.pending_updates().await, vec![update(43)]);
+    assert_eq!(restarted.pending_updates().await, vec![update(/*id*/ 43)]);
     assert_eq!(
-        restarted.begin_update(&update(43)).await,
+        restarted.begin_update(&update(/*id*/ 43)).await,
         BeginUpdate::Accepted
     );
 
@@ -249,7 +258,7 @@ async fn queued_receipt_is_retained_until_known_resolution() {
     let restarted = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
     assert!(restarted.pending_updates().await.is_empty());
     assert_eq!(
-        restarted.begin_update(&update(43)).await,
+        restarted.begin_update(&update(/*id*/ 43)).await,
         BeginUpdate::Duplicate
     );
     std::fs::remove_dir_all(home).unwrap();
@@ -263,7 +272,7 @@ async fn crash_mid_handler_retains_raw_update_for_restart() {
     let handler_inbox = Arc::clone(&inbox);
     let handler = tokio::spawn(async move {
         assert_eq!(
-            handler_inbox.begin_update(&update(42)).await,
+            handler_inbox.begin_update(&update(/*id*/ 42)).await,
             BeginUpdate::Accepted
         );
         started_tx.send(()).unwrap();
@@ -278,16 +287,16 @@ async fn crash_mid_handler_retains_raw_update_for_restart() {
     assert!(handler.await.unwrap_err().is_cancelled());
     drop(inbox);
     let restarted = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
-    assert_eq!(restarted.pending_updates().await, vec![update(42)]);
+    assert_eq!(restarted.pending_updates().await, vec![update(/*id*/ 42)]);
     assert_eq!(
-        restarted.begin_update(&update(42)).await,
+        restarted.begin_update(&update(/*id*/ 42)).await,
         BeginUpdate::Accepted
     );
     restarted.complete_update(/*update_id*/ 42).await.unwrap();
     let recovered = UpdateDeduplicator::load(&home, /*bot_id*/ 123).await;
     assert!(recovered.pending_updates().await.is_empty());
     assert_eq!(
-        recovered.begin_update(&update(42)).await,
+        recovered.begin_update(&update(/*id*/ 42)).await,
         BeginUpdate::Duplicate
     );
     std::fs::remove_dir_all(home).unwrap();
