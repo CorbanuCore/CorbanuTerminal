@@ -95,6 +95,23 @@ fn reject_apply_patch_if_fallback_active(
     ))
 }
 
+/// A strict `apply_patch` grammar failure: counted toward the
+/// structured-edit fallback, measured, and answered with the guidance once
+/// the fallback is active.
+fn patch_grammar_failure(
+    turn: &TurnContext,
+    parse_error: impl std::fmt::Display,
+) -> FunctionCallError {
+    record_apply_patch_grammar_failure(turn, "strict_apply_patch");
+    emit_model_edit_compat_metric(turn, "strict_apply_patch", "failure", "parse_error");
+    let mut message = format!("apply_patch verification failed: {parse_error}");
+    if turn.structured_edit_fallback_enabled() {
+        message.push_str("\n\n");
+        message.push_str(STRUCTURED_EDIT_FALLBACK_GUIDANCE);
+    }
+    FunctionCallError::RespondToModel(message)
+}
+
 /// PF-27-S02, D491 (#1976), PF-23-S01: the file-tool sandbox context for a
 /// patch: the turn's (launch-contract narrowing, Windows unsandboxed refusal)
 /// with the post-taint protected-path denials, as on main.
@@ -401,9 +418,12 @@ impl CoreToolRuntime for ApplyPatchHandler {
                 "expected apply_patch input".to_string(),
             ));
         };
-        let args = codex_apply_patch::parse_patch(&input).map_err(|err| {
-            FunctionCallError::RespondToModel(format!("apply_patch verification failed: {err}"))
-        })?;
+        // The patch is parsed here first (before `handle_call`), so main's
+        // structured-edit fallback is checked and counted here too.
+        let turn = invocation.step_context.turn.as_ref();
+        reject_apply_patch_if_fallback_active(turn, "strict_apply_patch")?;
+        let args = codex_apply_patch::parse_patch(&input)
+            .map_err(|parse_error| patch_grammar_failure(turn, parse_error))?;
         let environment_id =
             require_environment_id(args.environment_id.as_deref(), self.multi_environment)?;
         let environment = resolve_tool_environment(
@@ -586,16 +606,7 @@ pub(crate) async fn prepare_patch_request(
             turn.record_strict_apply_patch_parse_success();
             args
         }
-        Err(parse_error) => {
-            record_apply_patch_grammar_failure(turn, "strict_apply_patch");
-            emit_model_edit_compat_metric(turn, "strict_apply_patch", "failure", "parse_error");
-            let mut message = format!("apply_patch verification failed: {parse_error}");
-            if turn.structured_edit_fallback_enabled() {
-                message.push_str("\n\n");
-                message.push_str(STRUCTURED_EDIT_FALLBACK_GUIDANCE);
-            }
-            return Err(FunctionCallError::RespondToModel(message));
-        }
+        Err(parse_error) => return Err(patch_grammar_failure(turn, parse_error)),
     };
     let fs = turn_environment.environment.get_filesystem();
     let sandbox = protected_patch_context(session, turn, turn_environment);
