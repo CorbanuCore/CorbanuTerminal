@@ -205,6 +205,7 @@ def codex_rust_crate(
         unit_test_timeout = None,
         extra_binaries = [],
         extra_binaries_non_windows = [],
+        unit_test_extra_binaries = [],
         run_tests_with_wine_exec = False):
     """Defines a Rust crate with library, binaries, and tests wired for Bazel + Cargo parity.
 
@@ -268,6 +269,12 @@ def codex_rust_crate(
         extra_binaries_non_windows: Like `extra_binaries`, but omitted from
             Windows test data and environment variables. Tests using these
             binaries must be excluded when targeting Windows.
+        unit_test_extra_binaries: Binary labels the library's unit-test
+            targets get as runfiles and `CARGO_BIN_EXE_*` variables (absolute
+            paths at run time), as `extra_binaries` gives integration tests.
+            Example: core's unit tests that run a command in the Linux sandbox
+            need `//codex-rs/bwrap:bwrap`, which the sandbox helper finds
+            through `CARGO_BIN_EXE_bwrap` under Bazel.
         run_tests_with_wine_exec: Boolean, defaults to False. Whether to emit a
             Wine-exec variant for each integration test. Variants inherit the
             native test's timeout, tags, and shard count.
@@ -368,6 +375,10 @@ def codex_rust_crate(
         unit_test_kwargs = {}
         if unit_test_alone and unit_test_shard_count:
             fail("unit_test_alone cannot be combined with sharding " + unit_test_name)
+        unit_test_runfile_env = {
+            binary_label: "CARGO_BIN_EXE_" + Label(binary_label).name
+            for binary_label in unit_test_extra_binaries
+        }
         alone_skips = [arg for test in unit_test_alone for arg in ["--skip", test]]
         if unit_test_args or alone_skips:
             unit_test_kwargs["args"] = unit_test_args + alone_skips
@@ -380,6 +391,7 @@ def codex_rust_crate(
         workspace_root_test(
             name = unit_test_name,
             env = test_env,
+            runfile_env = unit_test_runfile_env,
             test_bin = ":" + unit_test_binary,
             workspace_root_marker = "//codex-rs/utils/cargo-bin:repo_root.marker",
             tags = test_tags + unit_test_tags,
@@ -390,6 +402,7 @@ def codex_rust_crate(
             workspace_root_test(
                 name = unit_test_name + "-alone",
                 env = test_env,
+                runfile_env = unit_test_runfile_env,
                 test_bin = ":" + unit_test_binary,
                 workspace_root_marker = "//codex-rs/utils/cargo-bin:repo_root.marker",
                 args = ["--exact", "--test-threads=1"] + unit_test_alone,

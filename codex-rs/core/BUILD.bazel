@@ -57,5 +57,8 @@ codex_rust_crate(
         "core-unit-tests": 8,
     },
     test_tags = ["no-sandbox"],
+    # Unit tests that run a command in the Linux sandbox (D447's
+    # git_ext_guard tests) need bubblewrap: the Bazel runner has none on PATH.
+    unit_test_extra_binaries = ["//codex-rs/bwrap:bwrap"],
     unit_test_timeout = "long",
 )
