@@ -1,12 +1,8 @@
-<<<<<<< HEAD
 #![allow(
     clippy::disallowed_methods,
     reason = "#[traced_test] installs tracing-test's in-memory global subscriber"
 )]
-||||||| 413492cd6c
-=======
 use codex_core::TurnInputRequest;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_core::config::Constrained;
 use codex_features::Feature;
 use codex_otel::SessionTelemetry;

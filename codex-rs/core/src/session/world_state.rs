@@ -23,6 +23,7 @@ use crate::context::world_state::RealtimeState;
 use crate::context::world_state::ToolsState;
 use crate::context::world_state::TopLevelToolsState;
 use crate::context::world_state::WorldState;
+use crate::exec_policy::AllowPrefixRules;
 use crate::tools::handlers::multi_agents_spec::MULTI_AGENT_V1_NAMESPACE;
 use codex_connectors::AppToolPolicyEvaluator;
 use codex_extension_api::WorldStateContributionInput;
@@ -225,29 +226,22 @@ impl Session {
                 .and_then(|instructions| instructions.end.as_deref()),
         ));
         world_state.add_section(AgentsMdState::new(step_context.loaded_agents_md.as_deref()));
-        let exec_policy = self
-            .services
-            .exec_policy
-            .current_for_prefix_rules(turn_context.allow_prefix_rules());
+        // #626: under Aggressive the model is not told of approvals suspended
+        // there. A cyber model's policy drops every allow-prefix rule, which
+        // covers the remembered approvals Aggressive suspends.
+        let allow_prefix_rules = turn_context.allow_prefix_rules();
+        let exec_policy = if allow_prefix_rules == AllowPrefixRules::Honor {
+            self.services
+                .exec_policy
+                .current_for(self.services.model_client().live_level_is_aggressive())
+        } else {
+            self.services
+                .exec_policy
+                .current_for_prefix_rules(allow_prefix_rules)
+        };
         let approval_context =
             ApprovalPromptContext::new(settings.approvals_reviewer(), model_messages);
         if turn_context.config.include_permissions_instructions {
-<<<<<<< HEAD
-            let permission_profile = turn_context.permission_profile();
-            let model_messages = turn_context.model_info.model_messages.as_ref();
-            // #626: under Aggressive the model is not told of approvals
-            // suspended there.
-            let exec_policy = self
-                .services
-                .exec_policy
-                .current_for(self.services.model_client().live_level_is_aggressive());
-            let permissions = PermissionsState::new(
-||||||| 413492cd6c
-            let permission_profile = turn_context.permission_profile();
-            let model_messages = turn_context.model_info.model_messages.as_ref();
-            let exec_policy = self.services.exec_policy.current();
-            world_state.add_section(PermissionsState::new(
-=======
             let environment = step_context.environments.primary();
             let sandbox = environment
                 .filter(|environment| environment.environment.is_remote())
@@ -263,8 +257,7 @@ impl Session {
             let cwd = environment
                 .and_then(|environment| environment.cwd().to_abs_path().ok())
                 .unwrap_or_else(|| turn_context.cwd.clone());
-            world_state.add_section(PermissionsState::new(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            let permissions = PermissionsState::new(
                 &permission_profile,
                 settings.approval_policy(),
                 approval_context,
@@ -279,7 +272,6 @@ impl Session {
                     .config
                     .features
                     .enabled(Feature::RequestPermissionsTool),
-<<<<<<< HEAD
             );
             world_state.add_section(
                 if turn_context.config.permissions.launch_enforces_aggressive() {
@@ -298,16 +290,11 @@ impl Session {
                     permissions
                 },
             );
-||||||| 413492cd6c
-            ));
-=======
-            ));
         } else {
             world_state.add_section(CompactPermissionsState::new(
                 exec_policy.as_ref(),
                 approval_context.approved_command_prefix_saved_heading(),
             ));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         if turn_context.config.include_collaboration_mode_instructions {
             world_state.add_section(CollaborationModeState::from_collaboration_mode(
@@ -445,8 +432,10 @@ impl Session {
                 .multi_agent_v2
                 .expose_spawn_agent_model_overrides
                 .then(|| {
+                    // S2b contract: plain on wires without namespaces.
                     ToolName::new(
-                        turn_context.config.multi_agent_v2.tool_namespace.clone(),
+                        crate::tools::spec_plan::multi_agent_v2_tool_namespace(turn_context)
+                            .map(str::to_string),
                         "spawn_agent",
                     )
                 }),

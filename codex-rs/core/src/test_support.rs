@@ -146,7 +146,7 @@ pub fn set_thread_manager_test_mode(enabled: bool) {
 /// #888: skill discovery in this process skips the user-home skills root
 /// (`$HOME/.agents/skills`), so a developer's own skills never reach a test.
 pub fn ignore_user_home_skills(ignore: bool) {
-    codex_core_skills::loader::ignore_user_home_skills_for_tests(ignore);
+    codex_skills_extension::ignore_user_home_skills_for_tests(ignore);
 }
 
 /// #902: the security level's path lookups in this process (which explain

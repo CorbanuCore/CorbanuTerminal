@@ -250,6 +250,14 @@ pub(super) async fn handle(
         .values()
         .try_for_each(AdditionalContextEntry::validate)
         .map_err(|message| CodexErr::InvalidRequest(message.to_owned()))?;
+    // Corbanu: a person's input resets this agent's native auto-processing chain, also when it
+    // steers a running turn.
+    if let SubmittedTurnInput::UserInput { content, .. } = &request.request.input
+        && !content.is_empty()
+        && let Some(control) = session.services.agent_control.local()
+    {
+        control.note_native_operator_input(session.thread_id);
+    }
     let result = match mode {
         TurnInputMode::StartOrSteer => start_or_steer(session, request, submission_id).await,
         TurnInputMode::StartIfIdle => {

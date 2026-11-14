@@ -1418,6 +1418,14 @@ struct StartServerTaskParams {
     catalog_item_limit: usize,
 }
 
+/// The discovery phase cannot outlive startup; an omitted budget uses startup's budget.
+pub(crate) fn effective_discover_timeout(config: &McpServerConfig) -> Duration {
+    let startup = config
+        .startup_timeout_sec
+        .unwrap_or(DEFAULT_STARTUP_TIMEOUT);
+    config.discover_timeout_sec.unwrap_or(startup).min(startup)
+}
+
 #[allow(clippy::too_many_arguments)]
 #[instrument(level = "trace", skip_all, fields(server_name = %server_name))]
 pub(crate) async fn make_rmcp_client(
@@ -1480,6 +1488,9 @@ pub(crate) async fn make_rmcp_client(
         resolved_environment.map_err(|err| StartupOutcomeError::from(anyhow!(err)))?;
     let is_local_environment = config.is_local_environment();
     let oauth_credential_name = config.oauth_credential_name(server_name);
+    // The discover wait is capped at the startup timeout; a legacy fallback after it gets
+    // the startup timeout again.
+    let discover_timeout = effective_discover_timeout(&config);
     let McpServerConfig { transport, .. } = config;
 
     match transport {
@@ -1526,6 +1537,7 @@ pub(crate) async fn make_rmcp_client(
                 protocol_mode,
             )
             .await
+            .map(|client| client.with_discover_timeout(Some(discover_timeout)))
             .map_err(|err| StartupOutcomeError::from(anyhow!(err)))
         }
         McpServerTransportConfig::StreamableHttp {

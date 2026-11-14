@@ -83,6 +83,8 @@ pub(crate) struct ConnectionKey {
     pub(crate) account: ConnectorRuntimeContextKey,
     pub(crate) auth_state: Option<(Arc<AuthManager>, AuthChangeState)>,
     pub(crate) startup_timeout: Duration,
+    // Compared only while startup is pending, not for ready connection reuse.
+    pub(crate) discover_timeout: Duration,
     pub(crate) catalog_item_limit: usize,
 }
 
@@ -358,14 +360,15 @@ impl McpConnectionPool {
                     .filter(|entry| {
                         entry.key == key
                             && !entry.sharing_declined.is_cancelled()
-                            && entry.client.peek().is_none_or(|result| {
-                                result.as_ref().is_ok_and(|client| {
+                            && match entry.client.peek() {
+                                None => entry.key.discover_timeout == key.discover_timeout,
+                                Some(result) => result.as_ref().is_ok_and(|client| {
                                     matches!(
                                         client.connection_sharing,
                                         ConnectionSharing::Negotiated
                                     )
-                                })
-                            })
+                                }),
+                            }
                     })
                     .find_map(|entry| entry.owners.upgrade().map(|owner| (entry, owner)));
                 let (entry, owner, role) = if let Some((entry, owner)) = existing {

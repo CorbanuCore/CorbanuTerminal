@@ -573,6 +573,32 @@
       ],
       "type": "object"
     },
+    "BillingBasis": {
+      "description": "How work on a route is paid for.",
+      "oneOf": [
+        {
+          "description": "Covered by a membership or plan; never counted as money spent.",
+          "enum": [
+            "subscription"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Charged per request from a balance or card.",
+          "enum": [
+            "pay_per_use"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Runs on the user's own machine; no charge.",
+          "enum": [
+            "local"
+          ],
+          "type": "string"
+        }
+      ]
+    },
     "BodySecretReplacement": {
       "additionalProperties": false,
       "properties": {
@@ -652,32 +678,6 @@
         }
       },
       "type": "object"
-    },
-    "BillingBasis": {
-      "description": "How work on a route is paid for.",
-      "oneOf": [
-        {
-          "description": "Covered by a membership or plan; never counted as money spent.",
-          "enum": [
-            "subscription"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "Charged per request from a balance or card.",
-          "enum": [
-            "pay_per_use"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "Runs on the user's own machine; no charge.",
-          "enum": [
-            "local"
-          ],
-          "type": "string"
-        }
-      ]
     },
     "BundledSkillsConfig": {
       "additionalProperties": false,
@@ -924,18 +924,16 @@
             "auth_elicitation": {
               "type": "boolean"
             },
-<<<<<<< HEAD
-            "broker_model_auth": {
-||||||| 413492cd6c
-=======
             "background_paginated_rollout_migration": {
               "type": "boolean"
             },
             "bedrock_setup_wizard": {
               "type": "boolean"
             },
+            "broker_model_auth": {
+              "type": "boolean"
+            },
             "browser_annotation_api": {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
               "type": "boolean"
             },
             "browser_use": {
@@ -1013,10 +1011,9 @@
             "connectors": {
               "type": "boolean"
             },
-<<<<<<< HEAD
             "contained_external_agents": {
-||||||| 413492cd6c
-=======
+              "type": "boolean"
+            },
             "content_item_kinds": {
               "type": "boolean"
             },
@@ -1027,7 +1024,6 @@
               "type": "boolean"
             },
             "critical_path_timing": {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
               "type": "boolean"
             },
             "current_time_reminder": {
@@ -1168,10 +1164,6 @@
             "in_app_updates": {
               "type": "boolean"
             },
-<<<<<<< HEAD
-            "isolated_credential_broker": {
-||||||| 413492cd6c
-=======
             "in_app_voice": {
               "type": "boolean"
             },
@@ -1185,7 +1177,9 @@
               "type": "boolean"
             },
             "interrupt_on_cancel": {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+              "type": "boolean"
+            },
+            "isolated_credential_broker": {
               "type": "boolean"
             },
             "item_ids": {
@@ -1239,15 +1233,13 @@
             "multi_agent_v2": {
               "$ref": "#/definitions/FeatureToml_for_MultiAgentV2ConfigToml"
             },
-<<<<<<< HEAD
-            "named_accounts": {
-||||||| 413492cd6c
-=======
             "multi_agent_v2_dynamic_tools": {
               "type": "boolean"
             },
             "multi_env_copy_file": {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+              "type": "boolean"
+            },
+            "named_accounts": {
               "type": "boolean"
             },
             "network_proxy": {
@@ -1295,12 +1287,10 @@
             "prevent_idle_sleep": {
               "type": "boolean"
             },
-<<<<<<< HEAD
             "protected_mode_preflight": {
-||||||| 413492cd6c
-=======
+              "type": "boolean"
+            },
             "psp": {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
               "type": "boolean"
             },
             "realtime_conversation": {
@@ -1366,7 +1356,6 @@
             "secret_auth_storage": {
               "type": "boolean"
             },
-<<<<<<< HEAD
             "secret_output_gate": {
               "type": "boolean"
             },
@@ -1374,13 +1363,12 @@
               "type": "boolean"
             },
             "security_levels": {
-||||||| 413492cd6c
-=======
+              "type": "boolean"
+            },
             "send_async_message": {
               "type": "boolean"
             },
             "send_message_to_user_async": {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
               "type": "boolean"
             },
             "shell_snapshot": {
@@ -1410,20 +1398,14 @@
             "skill_search": {
               "type": "boolean"
             },
-<<<<<<< HEAD
-            "sleep_tool": {
-              "type": "boolean"
-            },
-            "source_envelopes": {
-              "type": "boolean"
-||||||| 413492cd6c
-=======
             "skip_host_skill_discovery": {
               "type": "boolean"
             },
             "sleep_tool": {
               "$ref": "#/definitions/FeatureToml_for_SleepToolConfigToml"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            },
+            "source_envelopes": {
+              "type": "boolean"
             },
             "sqlite": {
               "type": "boolean"
@@ -1512,15 +1494,13 @@
             "unified_exec_zsh_fork": {
               "type": "boolean"
             },
-<<<<<<< HEAD
-            "url_destination_policy": {
-||||||| 413492cd6c
-=======
             "unified_image_budget": {
               "type": "boolean"
             },
             "untrusted_as_tool_output": {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+              "type": "boolean"
+            },
+            "url_destination_policy": {
               "type": "boolean"
             },
             "use_agent_identity": {
@@ -3182,7 +3162,6 @@
           "description": "Base URL for the provider's OpenAI-compatible API.",
           "type": "string"
         },
-<<<<<<< HEAD
         "billing": {
           "allOf": [
             {
@@ -3191,10 +3170,6 @@
           ],
           "description": "How this provider's work is paid for: `subscription`, `pay_per_use` or `local`. Overrides the built-in declaration for unusual setups; when unset, the built-in table decides from the route and credential used, and an unknown route is shown as not declared."
         },
-        "chat_completions_provider": {
-          "description": "Optional `provider` object to include in Chat Completions request bodies. This is used by OpenRouter-compatible routes for provider routing preferences such as `order`, `sort`, `allow_fallbacks`, and `require_parameters`."
-||||||| 413492cd6c
-=======
         "capabilities": {
           "allOf": [
             {
@@ -3203,10 +3178,12 @@
           ],
           "description": "Optional API capability overrides for a custom Responses-compatible provider. Unspecified capabilities retain their existing provider defaults."
         },
+        "chat_completions_provider": {
+          "description": "Optional `provider` object to include in Chat Completions request bodies. This is used by OpenRouter-compatible routes for provider routing preferences such as `order`, `sort`, `allow_fallbacks`, and `require_parameters`."
+        },
         "credential_file": {
           "description": "Absolute path to a Google ADC credential file. For GCP, overrides GOOGLE_APPLICATION_CREDENTIALS in the auth command's environment only.",
           "type": "string"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         },
         "env_http_headers": {
           "additionalProperties": {
@@ -4310,7 +4287,6 @@
       },
       "type": "object"
     },
-<<<<<<< HEAD
     "ProviderRuntimePolicy": {
       "additionalProperties": false,
       "description": "Typed request and provider-tool budgets for a provider route.",
@@ -4336,8 +4312,7 @@
         "retry_request_body_max_bytes"
       ],
       "type": "object"
-||||||| 413492cd6c
-=======
+    },
     "ProxySecretSource": {
       "description": "A credential source in the trusted proxy process, never in the executor environment.",
       "oneOf": [
@@ -4366,7 +4341,6 @@
           "type": "object"
         }
       ]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     },
     "RawMcpServerConfig": {
       "additionalProperties": false,
@@ -7830,18 +7804,16 @@
         "auth_elicitation": {
           "type": "boolean"
         },
-<<<<<<< HEAD
-        "broker_model_auth": {
-||||||| 413492cd6c
-=======
         "background_paginated_rollout_migration": {
           "type": "boolean"
         },
         "bedrock_setup_wizard": {
           "type": "boolean"
         },
+        "broker_model_auth": {
+          "type": "boolean"
+        },
         "browser_annotation_api": {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
           "type": "boolean"
         },
         "browser_use": {
@@ -7919,10 +7891,9 @@
         "connectors": {
           "type": "boolean"
         },
-<<<<<<< HEAD
         "contained_external_agents": {
-||||||| 413492cd6c
-=======
+          "type": "boolean"
+        },
         "content_item_kinds": {
           "type": "boolean"
         },
@@ -7933,7 +7904,6 @@
           "type": "boolean"
         },
         "critical_path_timing": {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
           "type": "boolean"
         },
         "current_time_reminder": {
@@ -8074,10 +8044,6 @@
         "in_app_updates": {
           "type": "boolean"
         },
-<<<<<<< HEAD
-        "isolated_credential_broker": {
-||||||| 413492cd6c
-=======
         "in_app_voice": {
           "type": "boolean"
         },
@@ -8091,7 +8057,9 @@
           "type": "boolean"
         },
         "interrupt_on_cancel": {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+          "type": "boolean"
+        },
+        "isolated_credential_broker": {
           "type": "boolean"
         },
         "item_ids": {
@@ -8145,15 +8113,13 @@
         "multi_agent_v2": {
           "$ref": "#/definitions/FeatureToml_for_MultiAgentV2ConfigToml"
         },
-<<<<<<< HEAD
-        "named_accounts": {
-||||||| 413492cd6c
-=======
         "multi_agent_v2_dynamic_tools": {
           "type": "boolean"
         },
         "multi_env_copy_file": {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+          "type": "boolean"
+        },
+        "named_accounts": {
           "type": "boolean"
         },
         "network_proxy": {
@@ -8201,12 +8167,10 @@
         "prevent_idle_sleep": {
           "type": "boolean"
         },
-<<<<<<< HEAD
         "protected_mode_preflight": {
-||||||| 413492cd6c
-=======
+          "type": "boolean"
+        },
         "psp": {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
           "type": "boolean"
         },
         "realtime_conversation": {
@@ -8272,7 +8236,6 @@
         "secret_auth_storage": {
           "type": "boolean"
         },
-<<<<<<< HEAD
         "secret_output_gate": {
           "type": "boolean"
         },
@@ -8280,13 +8243,12 @@
           "type": "boolean"
         },
         "security_levels": {
-||||||| 413492cd6c
-=======
+          "type": "boolean"
+        },
         "send_async_message": {
           "type": "boolean"
         },
         "send_message_to_user_async": {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
           "type": "boolean"
         },
         "shell_snapshot": {
@@ -8316,20 +8278,14 @@
         "skill_search": {
           "type": "boolean"
         },
-<<<<<<< HEAD
-        "sleep_tool": {
-          "type": "boolean"
-        },
-        "source_envelopes": {
-          "type": "boolean"
-||||||| 413492cd6c
-=======
         "skip_host_skill_discovery": {
           "type": "boolean"
         },
         "sleep_tool": {
           "$ref": "#/definitions/FeatureToml_for_SleepToolConfigToml"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        },
+        "source_envelopes": {
+          "type": "boolean"
         },
         "sqlite": {
           "type": "boolean"
@@ -8418,15 +8374,13 @@
         "unified_exec_zsh_fork": {
           "type": "boolean"
         },
-<<<<<<< HEAD
-        "url_destination_policy": {
-||||||| 413492cd6c
-=======
         "unified_image_budget": {
           "type": "boolean"
         },
         "untrusted_as_tool_output": {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+          "type": "boolean"
+        },
+        "url_destination_policy": {
           "type": "boolean"
         },
         "use_agent_identity": {
@@ -8936,20 +8890,17 @@
       "description": "Suppress warnings about unstable (under development) features.",
       "type": "boolean"
     },
-<<<<<<< HEAD
     "telegram": {
       "additionalProperties": true,
       "default": null,
       "description": "Telegram connector settings. The connector parses this table itself; core only accepts it so strict config validation does not reject it.",
       "type": "object"
-||||||| 413492cd6c
-=======
+    },
     "thread_unload_delay_secs": {
       "description": "Seconds a thread must have no subscribers and no activity before app-server unloads it. Defaults to 60 (1 minute); zero unloads immediately. Resolved when each thread is loaded; request config overrides apply per thread.",
       "format": "uint64",
       "minimum": 0.0,
       "type": "integer"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     },
     "tool_output_token_limit": {
       "description": "Token budget applied when storing tool/function outputs in the context manager.",
