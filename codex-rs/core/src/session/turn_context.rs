@@ -1201,7 +1201,8 @@ impl TurnContext {
 
     /// The sandbox context of a file tool in `environment`: the environment's, with
     /// `additional_permissions`, narrowed by Corbanu's launch contract (PF-27-S02) and refused
-    /// where the host has no platform sandbox (#1976, D491).
+    /// where the host has no platform sandbox (#1976, D491) or, for a remote environment, where
+    /// its executor may have none (#2050, D510).
     pub(crate) fn file_system_sandbox_context(
         &self,
         additional_permissions: Option<AdditionalPermissionProfile>,
@@ -1229,11 +1230,13 @@ impl TurnContext {
         } else {
             self.windows_sandbox_level
         };
-        context.unsandboxed_refusal = crate::security::windows_unsandboxed::applies(
+        // #2050 (D510): for a remote environment, where its executor has none (the remote file
+        // system refuses unless the executor reports a platform sandbox for this level).
+        context.unsandboxed_refusal = crate::security::windows_unsandboxed::environment_file_refusal(
             self.config.security_level,
             windows_sandbox_level,
-        )
-        .then(|| crate::security::windows_unsandboxed::file_refusal(self.config.security_level));
+            environment,
+        );
         context
     }
 
@@ -1999,3 +2002,44 @@ mod tests;
 #[cfg(test)]
 #[path = "turn_context_tests.rs"]
 mod turn_context_tests;
+
+#[cfg(test)]
+impl TurnEnvironment {
+    /// Main's five-argument test constructor (its #2050/D510 tests) on upstream's environment
+    /// selection: a ready, read-only environment without a Windows sandbox.
+    pub(crate) fn for_tests(
+        environment_id: String,
+        environment: Arc<Environment>,
+        cwd: PathUri,
+        workspace_roots: Vec<PathUri>,
+        shell: Option<shell::Shell>,
+    ) -> Self {
+        Self::new(
+            TurnEnvironmentSelection {
+                selected_capability_roots: Default::default(),
+                environment_id,
+                cwd,
+                workspace_roots: workspace_roots.clone(),
+                config: EnvironmentConfigState::Ready(EnvironmentConfig {
+                    environment_hooks: Default::default(),
+                    allow_login_shell: true,
+                    workspace_roots,
+                    windows_sandbox_level: WindowsSandboxLevel::Disabled,
+                    windows_sandbox_type: codex_sandboxing::SandboxType::None,
+                    use_legacy_landlock: false,
+                    permission_profile: crate::config::PermissionProfileSnapshot::legacy(
+                        codex_protocol::models::PermissionProfile::read_only(),
+                    ),
+                    shell_environment_policy: Default::default(),
+                    exec_policy: None,
+                    mcp_policy: None,
+                    network_policy: None,
+                    selected_capability_roots: Vec::new(),
+                }),
+            },
+            EnvironmentConfigOrigin::Thread,
+            environment,
+            shell,
+        )
+    }
+}

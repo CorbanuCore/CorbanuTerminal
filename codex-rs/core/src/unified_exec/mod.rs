@@ -195,6 +195,9 @@ struct ProcessEntry {
     /// #2000: the Windows sandbox of the turn that started the process; a
     /// sandbox set up later in the session does not confine it.
     windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel,
+    /// #2050: the remote environment (id and executor) the process runs in,
+    /// for judging typing into it where it runs; `None` on this host.
+    remote_environment: Option<(String, Arc<codex_exec_server::Environment>)>,
 }
 
 type SharedPluginMetricsSidecar = Arc<std::sync::Mutex<Option<PluginMetricsSidecar>>>;
