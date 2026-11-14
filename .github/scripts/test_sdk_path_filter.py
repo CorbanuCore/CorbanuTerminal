@@ -40,7 +40,12 @@ def run_for(changed: list[str]) -> str:
 
         def git(*args: str) -> str:
             return subprocess.run(
-                ["git", *args], cwd=repo, env=env, check=True, capture_output=True, text=True
+                ["git", *args],
+                cwd=repo,
+                env=env,
+                check=True,
+                capture_output=True,
+                text=True,
             ).stdout.strip()
 
         git("init", "-q")
@@ -57,7 +62,12 @@ def run_for(changed: list[str]) -> str:
         subprocess.run(
             ["bash", "-c", detect_script()],
             cwd=repo,
-            env={**env, "BASE_SHA": base, "HEAD_SHA": head, "GITHUB_OUTPUT": str(output)},
+            env={
+                **env,
+                "BASE_SHA": base,
+                "HEAD_SHA": head,
+                "GITHUB_OUTPUT": str(output),
+            },
             check=True,
             capture_output=True,
         )
@@ -81,7 +91,11 @@ CASES = [
     ("root pnpm-workspace.yaml", ["pnpm-workspace.yaml"], True),
     ("root .npmrc", [".npmrc"], True),
     ("root package.json with unrelated", ["package.json", "README.md"], True),
-    ("root pnpm-workspace.yaml with unrelated", ["pnpm-workspace.yaml", "docs/x.md"], True),
+    (
+        "root pnpm-workspace.yaml with unrelated",
+        ["pnpm-workspace.yaml", "docs/x.md"],
+        True,
+    ),
     ("root .npmrc with unrelated", [".npmrc", "codex-rs/core/src/lib.rs"], True),
     # A nested SDK package.json still runs through sdk/typescript/*.
     ("SDK package.json", ["sdk/typescript/package.json"], True),
@@ -106,7 +120,9 @@ class SdkPathFilterTest(unittest.TestCase):
     def test_case_matrix(self) -> None:
         for label, changed, runs in CASES:
             with self.subTest(label):
-                self.assertEqual(run_for(changed), f"run={'true' if runs else 'false'}", changed)
+                self.assertEqual(
+                    run_for(changed), f"run={'true' if runs else 'false'}", changed
+                )
 
 
 if __name__ == "__main__":

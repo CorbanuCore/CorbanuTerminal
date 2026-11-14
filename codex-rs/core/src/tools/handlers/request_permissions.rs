@@ -129,20 +129,7 @@ impl RequestPermissionsHandler {
         let turn_environment = selected_executor(&environments, &step_context.environments)?;
         let request = PreparedPermissionRequest::parse(&arguments, turn_environment)?;
         let response = session
-<<<<<<< HEAD
-            .request_permissions_explained(
-                &turn,
-||||||| 413492cd6c
-            .request_permissions_for_environment(
-                &turn,
-=======
-            .request_permissions_for_environment(
-                &step_context,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-                call_id,
-                request,
-                cancellation_token,
-            )
+            .request_permissions_explained(&step_context, call_id, request, cancellation_token)
             .await
             // #584: refused before anyone was asked; the model is told why.
             .map_err(FunctionCallError::RespondToModel)?

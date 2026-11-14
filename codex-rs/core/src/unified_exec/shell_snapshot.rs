@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use super::UnifiedExecContext;
 use super::process_manager::apply_unified_exec_env;
-use super::process_manager::exec_env_policy_from_shell_policy;
+use super::process_manager::exec_env_policy_for_config;
 use crate::config::NetworkProxySpec;
 use crate::exec_env::CODEX_THREAD_ID_ENV_VAR;
 use crate::exec_env::inject_apply_patch_env;
@@ -55,11 +55,15 @@ impl Session {
                 .network
                 .as_ref()
                 .is_some_and(NetworkProxySpec::enabled)
+            // D544 (a): a snapshot starts a login shell outside the PF-27-S02
+            // launch contract; while the contract is armed none is taken.
+            || crate::security::launch_contract::active().is_some()
         {
             return None;
         }
 
         let environments = step_context.environments.clone();
+        let turn_windows_sandbox_level = step_context.turn.windows_sandbox_level;
         let session = Arc::clone(self);
         Some(AbortOnDropHandle::new(tokio::spawn(async move {
             for environment in environments.turn_environments() {
@@ -78,6 +82,20 @@ impl Session {
                     shell.shell_type,
                     ShellType::Bash | ShellType::Zsh | ShellType::Sh
                 ) {
+                    continue;
+                }
+                // #1976 (D491), D522 (a): no login shell starts where agent
+                // commands are refused for want of a Windows sandbox.
+                let unsandboxed_level = crate::tools::orchestrator::unsandboxed_check_level(
+                    environment.config(),
+                    turn_windows_sandbox_level,
+                );
+                if crate::security::windows_unsandboxed::session_command_refusal(
+                    &session,
+                    unsandboxed_level,
+                )
+                .is_some()
+                {
                     continue;
                 }
                 let sandbox = SandboxManager::new()
@@ -102,6 +120,8 @@ impl Session {
                             session.windows_sandbox_proxy_settings_mode,
                         ),
                         use_legacy_landlock: environment.config().use_legacy_landlock,
+                        // Checked above: a refused environment takes no snapshot.
+                        unsandboxed_refusal: None,
                     });
                 let mut env = apply_unified_exec_env(HashMap::new());
                 env.insert(
@@ -129,8 +149,9 @@ impl Session {
                     // speculative work through tool approvals or exec-policy bypass.
                     argv: shell.derive_exec_args("", /*use_login_shell*/ true),
                     cwd: environment.cwd().clone(),
-                    env_policy: Some(exec_env_policy_from_shell_policy(
+                    env_policy: Some(exec_env_policy_for_config(
                         environment.shell_environment_policy(),
+                        &config,
                     )),
                     shell_snapshot: Some(ShellSnapshotRequest {
                         scope_id: format!(
@@ -170,7 +191,12 @@ pub(super) fn shell_snapshot_request(
     request: &PreparedExecCommand,
     context: &UnifiedExecContext,
 ) -> Option<ShellSnapshotRequest> {
-    if !context.session.features().enabled(Feature::ShellSnapshotV2)
+    // D544 (a): the snapshot starts a login shell outside the PF-27-S02
+    // launch contract (and moves a local command onto the executor path);
+    // while the contract is armed none is taken. A snapshot is only a
+    // speed-up, so skipping it fails closed.
+    if crate::security::launch_contract::active().is_some()
+        || !context.session.features().enabled(Feature::ShellSnapshotV2)
         || !request.turn_environment.shell_snapshot_v2_supported
         || request.turn_environment.selection.cwd != request.cwd
         || !request.resolved.shell.is_posix_login()

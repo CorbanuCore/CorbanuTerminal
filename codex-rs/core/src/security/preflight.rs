@@ -443,6 +443,9 @@ pub fn sources_from_config(config: &Config) -> InventorySources {
                     ("managed config".to_string(), Some(file.to_path_buf()))
                 }
                 ConfigLayerSource::SessionFlags => ("launch flags".to_string(), None),
+                ConfigLayerSource::PackagedDefaults { file } => {
+                    ("packaged defaults".to_string(), Some(file.to_path_buf()))
+                }
                 ConfigLayerSource::Mdm { .. }
                 | ConfigLayerSource::EnterpriseManaged { .. }
                 | ConfigLayerSource::LegacyManagedConfigTomlFromMdm => {

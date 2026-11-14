@@ -137,6 +137,8 @@ pub(crate) fn native_structured_edit_protocol_enabled_for(
     slug.contains("glm") || slug.contains("zai-org")
 }
 
+/// The step-less form, kept for tests; handlers use the `_for` form.
+#[cfg(test)]
 pub(crate) fn reject_source_write_heredoc_when_structured_edit_enabled(
     turn_context: &TurnContext,
     command: &str,

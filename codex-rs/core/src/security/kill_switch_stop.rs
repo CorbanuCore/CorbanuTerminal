@@ -126,13 +126,16 @@ async fn stop(session: &Arc<Session>) {
 /// A tool call is not run while the kill switch is on (anywhere in the
 /// session's policy tree).
 pub(crate) fn refuse_tool_call(session: &Session) -> Result<(), FunctionCallError> {
-    if session
-        .services
-        .agent_control
-        .effective_security_policy()
-        .kill_switch_event()
-        .is_some()
-    {
+    // A controller other than the local backend cannot report the policy
+    // tree, so its calls are refused (fail closed).
+    let stopped = match session.services.agent_control.local_or_unsupported() {
+        Ok(local) => local
+            .effective_security_policy()
+            .kill_switch_event()
+            .is_some(),
+        Err(_) => true,
+    };
+    if stopped {
         Err(FunctionCallError::RespondToModel(
             KILL_SWITCH_TOOL_REFUSAL.to_string(),
         ))

@@ -41,21 +41,6 @@ pub(crate) const TRAILING_OUTPUT_GRACE: Duration = Duration::from_millis(100);
 /// process arbitrarily large delta payloads.
 const UNIFIED_EXEC_OUTPUT_DELTA_MAX_BYTES: usize = 8192;
 
-<<<<<<< HEAD
-/// Spawn a background task that continuously reads from the PTY and emits
-/// ExecCommandOutputDelta events on UTF‑8 boundaries. The process records its
-/// own transcript ([`UnifiedExecProcess::transcript`]): this subscriber starts
-/// after the process and can lag, so it may miss output.
-||||||| 413492cd6c
-/// Spawn a background task that continuously reads from the PTY, appends to the
-/// shared transcript, and emits ExecCommandOutputDelta events on UTF‑8
-/// boundaries.
-pub(crate) fn start_streaming_output(
-    process: &UnifiedExecProcess,
-    context: &UnifiedExecContext,
-    transcript: Arc<Mutex<HeadTailBuffer>>,
-) {
-=======
 struct Emitter {
     remaining_deltas: usize,
     session: Arc<Session>,
@@ -69,7 +54,6 @@ struct Buffer<const MAX_BYTES: usize = UNIFIED_EXEC_OUTPUT_DELTA_MAX_BYTES> {
 }
 
 /// Spawn a background task that emits ExecCommandOutputDelta events on UTF‑8 boundaries.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub(crate) fn start_streaming_output(process: &UnifiedExecProcess, context: &UnifiedExecContext) {
     let mut receiver = process.output_receiver();
     let output_drained = process.output_drained_notify();
@@ -139,28 +123,7 @@ pub(crate) fn start_streaming_output(process: &UnifiedExecProcess, context: &Uni
                         }
                     };
 
-<<<<<<< HEAD
-                    process_chunk(
-                        &mut pending,
-                        &call_id,
-                        &session_ref,
-                        &turn_ref,
-                        &mut emitted_deltas,
-                        chunk,
-                    ).await;
-||||||| 413492cd6c
-                    process_chunk(
-                        &mut pending,
-                        &transcript,
-                        &call_id,
-                        &session_ref,
-                        &turn_ref,
-                        &mut emitted_deltas,
-                        chunk,
-                    ).await;
-=======
                     output.push(chunk).await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }
             }
         }
@@ -180,30 +143,7 @@ pub(crate) fn start_streaming_output(process: &UnifiedExecProcess, context: &Uni
                     ) => break,
                 };
 
-<<<<<<< HEAD
-                process_chunk(
-                    &mut pending,
-                    &call_id,
-                    &session_ref,
-                    &turn_ref,
-                    &mut emitted_deltas,
-                    chunk,
-                )
-                .await;
-||||||| 413492cd6c
-                process_chunk(
-                    &mut pending,
-                    &transcript,
-                    &call_id,
-                    &session_ref,
-                    &turn_ref,
-                    &mut emitted_deltas,
-                    chunk,
-                )
-                .await;
-=======
                 output.push(chunk).await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
         }
 
@@ -302,51 +242,6 @@ pub(crate) fn spawn_exit_watcher(
     });
 }
 
-<<<<<<< HEAD
-async fn process_chunk(
-    pending: &mut VecDeque<u8>,
-    call_id: &str,
-    session_ref: &Arc<Session>,
-    turn_ref: &Arc<TurnContext>,
-    emitted_deltas: &mut usize,
-    chunk: Vec<u8>,
-) {
-    pending.extend(chunk);
-    while let Some(prefix) = split_valid_utf8_prefix(pending) {
-        if *emitted_deltas >= MAX_EXEC_OUTPUT_DELTAS_PER_CALL {
-            continue;
-        }
-
-        let event = ExecCommandOutputDeltaEvent {
-            call_id: call_id.to_string(),
-            stream: ExecOutputStream::Stdout,
-            chunk: prefix,
-||||||| 413492cd6c
-async fn process_chunk(
-    pending: &mut VecDeque<u8>,
-    transcript: &Arc<Mutex<HeadTailBuffer>>,
-    call_id: &str,
-    session_ref: &Arc<Session>,
-    turn_ref: &Arc<TurnContext>,
-    emitted_deltas: &mut usize,
-    chunk: Vec<u8>,
-) {
-    pending.extend(chunk);
-    while let Some(prefix) = split_valid_utf8_prefix(pending) {
-        {
-            let mut guard = transcript.lock().await;
-            guard.push_chunk(prefix.to_vec());
-        }
-
-        if *emitted_deltas >= MAX_EXEC_OUTPUT_DELTAS_PER_CALL {
-            continue;
-        }
-
-        let event = ExecCommandOutputDeltaEvent {
-            call_id: call_id.to_string(),
-            stream: ExecOutputStream::Stdout,
-            chunk: prefix,
-=======
 impl<const MAX_BYTES: usize> Buffer<MAX_BYTES> {
     async fn push(&mut self, mut bytes: Vec<u8>) {
         const {
@@ -354,7 +249,6 @@ impl<const MAX_BYTES: usize> Buffer<MAX_BYTES> {
                 MAX_BYTES >= char::MAX.len_utf8(),
                 "a frame must fit one UTF-8 scalar"
             )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
         let Self { pending, emitter } = self;
 

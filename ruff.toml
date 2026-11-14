@@ -1,1 +1,14 @@
-extend-exclude = ["sdk/python", "codex-rs/vendor"]
+# Corbanu's qa/ evidence and benchmarks/ trees are hash-pinned (manifests, provenance
+# records, CI contracts), not editable sources. Preserve historical hashes; never
+# regenerate them to satisfy formatting.
+# Keep this boundary aligned with is_frozen_artifact in scripts/format.py.
+extend-exclude = [
+    "sdk/python",
+    "codex-rs/vendor",
+    "qa/**",
+    "benchmarks/**",
+    # Carries a long scripts/upstream_sync/ci_mode.py line ending in "# sync-ci-mode".
+    # Ruff would split it, and ci_mode.py revert only drops lines that end with the
+    # tag, leaving broken Python. Drop this entry after the S4 ci_mode revert.
+    ".github/scripts/check_ci_results.py",
+]

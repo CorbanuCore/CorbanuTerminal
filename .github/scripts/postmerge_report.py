@@ -101,7 +101,11 @@ def parse_marker(text: str) -> Record | None:
         return None
     if not isinstance(raw, dict):
         return None
-    run_id, created_at, failed = raw.get("run_id"), raw.get("created_at"), raw.get("failed_jobs")
+    run_id, created_at, failed = (
+        raw.get("run_id"),
+        raw.get("created_at"),
+        raw.get("failed_jobs"),
+    )
     if type(run_id) is not int or run_id <= 0:
         return None
     # created_at goes into the runs query string.
@@ -211,7 +215,10 @@ class Reporter:
         ran the job and it passed. runs is newest first; checks at most
         RUNS_CHECKED newer runs and stops at the first pass."""
         newer = [run.id for run in runs if run.key() > record.key()][:RUNS_CHECKED]
-        return any(self.jobs(run_id).get(job) == "success" for run_id in [*newer, record.run_id])
+        return any(
+            self.jobs(run_id).get(job) == "success"
+            for run_id in [*newer, record.run_id]
+        )
 
     def dedupe(self, issues: list[int]) -> int | None:
         if not issues:
@@ -222,12 +229,16 @@ class Reporter:
                 markers = "\n".join(record.marker() for record in carried)
                 body = f"Failures recorded on #{number}, closed as a duplicate:\n\n{markers}"
                 self.gh(["issue", "comment", str(keep), "--body", body])
-            self.gh(["issue", "close", str(number), "--comment", f"Duplicate of #{keep}."])
+            self.gh(
+                ["issue", "close", str(number), "--comment", f"Duplicate of #{keep}."]
+            )
         return keep
 
     def report(self, run_id: int, sha: str, result: str, run_url: str) -> str:
         try:
-            self.gh(["label", "create", LABEL, "--color", "B60205", "--description", TITLE])
+            self.gh(
+                ["label", "create", LABEL, "--color", "B60205", "--description", TITLE]
+            )
         except subprocess.CalledProcessError:
             pass  # The label already exists.
         me = self.run(run_id)
@@ -242,7 +253,9 @@ class Reporter:
             mine = Record(run_id, me.created_at, tuple(failed))
             runs = self.runs_since(me.created_at)
             if all(self.fixed(mine, job, runs) for job in failed):
-                return f"stale: every failed job of {sha[:10]} passed in a later main run"
+                return (
+                    f"stale: every failed job of {sha[:10]} passed in a later main run"
+                )
             jobs = "\n".join(f"- {job}" for job in failed)
             body = (
                 f"postmerge-ci failed on {sha[:10]}: {run_url}\n\nFailed jobs:\n{jobs}\n\n"
@@ -265,7 +278,9 @@ class Reporter:
         records = self.records(issue)
         if not records:
             # An issue opened before these markers existed: keep the old rule.
-            head = self.gh(["api", f"repos/{self.repo}/commits/main", "--jq", ".sha"]).strip()
+            head = self.gh(
+                ["api", f"repos/{self.repo}/commits/main", "--jq", ".sha"]
+            ).strip()
             if head != sha:
                 return "green on an older commit; left open"
         else:
@@ -280,7 +295,9 @@ class Reporter:
             if any(run.key() > me.key() and run.status != "completed" for run in runs):
                 return "a newer main run is still in progress; it decides"
             unfixed = sorted(
-                job for job, record in newest.items() if not self.fixed(record, job, runs)
+                job
+                for job, record in newest.items()
+                if not self.fixed(record, job, runs)
             )
             if unfixed:
                 return "left open; not passed again yet: " + ", ".join(unfixed)
@@ -288,7 +305,9 @@ class Reporter:
         self.gh(["issue", "close", str(issue), "--comment", comment])
         # A red report may have commented after we read the markers.
         if any(record not in records for record in self.records(issue)):
-            reopen = "Reopened: a failure was reported while this issue was being closed."
+            reopen = (
+                "Reopened: a failure was reported while this issue was being closed."
+            )
             self.gh(["issue", "reopen", str(issue), "--comment", reopen])
             return f"closed and reopened #{issue}"
         return f"closed #{issue}"

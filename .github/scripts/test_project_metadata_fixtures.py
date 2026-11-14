@@ -18,7 +18,9 @@ G27 = (
 
 class ProjectMetadataFixturesTest(unittest.TestCase):
     def test_the_repository_tracks_no_nested_project_metadata(self):
-        self.assertEqual(fixtures.nested_project_metadata(fixtures.tracked_paths(REPO)), [])
+        self.assertEqual(
+            fixtures.nested_project_metadata(fixtures.tracked_paths(REPO)), []
+        )
 
     def test_nested_entries_of_any_case_are_found_and_top_level_ones_are_not(self):
         paths = [

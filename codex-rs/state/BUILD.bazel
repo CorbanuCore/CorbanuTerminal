@@ -14,6 +14,10 @@ codex_rust_crate(
     crate_name = "codex_state",
     # Several integration tests share this helper through `#[path]`.
     integration_compile_data_extra = ["src/runtime/accounting_late_import_test_support.rs"],
+    test_shard_counts = {
+        # Windows runs database-heavy Rust tests serially within each shard.
+        "state-unit-tests": 4,
+    },
     # Several unit tests bound how long a request waits on the state DB, and
     # use more than the one core Bazel reserves per test by default: libtest
     # runs one test per core unless RUST_TEST_THREADS says otherwise, and
@@ -24,8 +28,4 @@ codex_rust_crate(
     # The accounting suites take ~210s on a 4-core Windows runner on their
     # own, so the default 300s budget times out when Bazel runs tests in parallel.
     unit_test_timeout = "long",
-    test_shard_counts = {
-        # Windows runs database-heavy Rust tests serially within each shard.
-        "state-unit-tests": 4,
-    },
 )
