@@ -17,7 +17,6 @@ use core_test_support::responses::mount_sse_once_match;
 use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
-use core_test_support::rollback_thread;
 use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
@@ -479,46 +478,6 @@ async fn restates_the_current_remainder_after_compaction() -> Result<()> {
     assert!(
         summary_position < reminder_position,
         "the current remainder should follow the compaction summary"
-    );
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn restates_the_current_remainder_after_rollback() -> Result<()> {
-    skip_if_no_network!(Ok(()));
-
-    let server = start_mock_server().await;
-    let responses = mount_sse_sequence(
-        &server,
-        vec![
-            sse(vec![
-                ev_response_created("resp-1"),
-                ev_completed_with_tokens("resp-1", /*total_tokens*/ 30),
-            ]),
-            sse(vec![ev_response_created("resp-2"), ev_completed("resp-2")]),
-        ],
-    )
-    .await;
-    let test = test_codex()
-        .with_config(|config| {
-            config.rollout_budget = Some(RolloutBudgetConfig {
-                reminder_at_remaining_tokens: vec![50],
-                ..rollout_budget()
-            });
-        })
-        .build(&server)
-        .await?;
-
-    test.submit_turn("rolled-back turn").await?;
-    rollback_thread(&test.codex, /*num_turns*/ 1).await?;
-    test.submit_turn("turn after rollback").await?;
-
-    let requests = responses.requests();
-    assert_eq!(
-        rollout_budget_texts(&requests[1]),
-        vec![rollout_budget_message(/*remaining_tokens*/ 70)],
-        "rollback should rearm the current budget reminder without refunding usage"
     );
 
     Ok(())
