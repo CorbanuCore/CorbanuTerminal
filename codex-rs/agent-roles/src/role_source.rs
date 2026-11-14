@@ -1,6 +1,7 @@
 //! Corbanu: where an agent role was declared, and which of a role file's keys
 //! are applied when an agent is spawned with it.
 
+use codex_config::ConfigLayerEntry;
 use codex_config::ConfigLayerSource;
 use codex_config::loader::sanitize_project_role_config;
 use std::path::Path;
@@ -24,6 +25,15 @@ pub enum AgentRoleSource {
 }
 
 impl AgentRoleSource {
+    /// A project-declared agent role's layer (launch flags in name only)
+    /// declares project roles (D525, #2052).
+    pub fn from_layer_entry(layer: &ConfigLayerEntry) -> Self {
+        if layer.project_role_file().is_some() {
+            return Self::Project;
+        }
+        Self::from_layer(&layer.name)
+    }
+
     pub fn from_layer(source: &ConfigLayerSource) -> Self {
         match source {
             ConfigLayerSource::Project { .. } => Self::Project,

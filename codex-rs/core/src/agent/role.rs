@@ -49,6 +49,7 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::SandboxPolicy;
 use serde::Serialize;
+use codex_utils_absolute_path::AbsolutePathBuf;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -248,7 +249,16 @@ async fn apply_role_to_config_inner(
     {
         return Ok(());
     }
-    let mut next_config = role_overrides::build_next_config(config, role_layer_toml, &overrides)?;
+    // D525 (#2052): a project-declared role's layer follows project-config rules.
+    let project_role_file = (!is_built_in && role.source == AgentRoleSource::Project)
+        .then(|| AbsolutePathBuf::from_absolute_path(config_file))
+        .transpose()?;
+    let mut next_config = role_overrides::build_next_config(
+        config,
+        role_layer_toml,
+        &overrides,
+        project_role_file,
+    )?;
     // Corbanu: a built-in crew role that pins no reasoning effort takes the configured effort,
     // not the caller's runtime one, so an Orc spawned from an xhigh Troll doesn't silently
     // inherit xhigh. A user role keeps the caller's runtime effort.
@@ -478,9 +488,11 @@ mod role_overrides {
         config: &Config,
         role_layer_toml: TomlValue,
         overrides: &AgentRoleOverrides,
+        project_role_file: Option<AbsolutePathBuf>,
     ) -> anyhow::Result<Config> {
         let mut next_config = config.clone();
-        next_config.config_layer_stack = build_config_layer_stack(config, &role_layer_toml)?;
+        next_config.config_layer_stack =
+            build_config_layer_stack(config, &role_layer_toml, project_role_file)?;
         if let Some(model) = &overrides.model {
             next_config.model = Some(model.clone());
         }
@@ -688,14 +700,21 @@ mod role_overrides {
     fn build_config_layer_stack(
         config: &Config,
         role_layer_toml: &TomlValue,
+        project_role_file: Option<AbsolutePathBuf>,
     ) -> anyhow::Result<ConfigLayerStack> {
         let mut layers: Vec<_> = config
             .config_layer_stack
             .all_layers_low_to_high()
             .cloned()
             .collect();
+        // Launch flags by precedence. A project-declared role's layer is marked
+        // with its file so project-config rules apply to it (D525, #2052).
         let role_layer =
             ConfigLayerEntry::new(ConfigLayerSource::SessionFlags, role_layer_toml.clone());
+        let role_layer = match project_role_file {
+            Some(role_file) => role_layer.with_project_role_file(role_file),
+            None => role_layer,
+        };
         let insertion_index = layers.partition_point(|layer| layer.name <= role_layer.name);
         layers.insert(insertion_index, role_layer);
         Ok(ConfigLayerStack::new(
@@ -959,3 +978,7 @@ mod tests;
 #[cfg(test)]
 #[path = "role_project_tests.rs"]
 mod project_tests;
+
+#[cfg(test)]
+#[path = "role_project_rules_tests.rs"]
+mod project_rules_tests;

@@ -52,6 +52,17 @@ in the project's `.codex/agents/` folder instead. If a project only re-describes
 a role you declared or adds nicknames, without its own `config_file`, your file
 applies as before.
 
+The other project-config rules apply to those role files too (D525, #2052):
+their hooks are project hooks that need your review (keyed by the role file,
+and a `[hooks.state]` table in the role is ignored); an MCP server they define
+or change counts as a project's server; and they can't change a security
+level's feature defaults, skill settings or `project_root_markers`. Like
+project config, their `[security]` table can only raise the security level.
+
+`[agents] provider_allowlist` is your spend policy: a project's config or a
+project role can narrow the list your own, managed or `-c` config sets, but
+can't add providers to it.
+
 ## Built-In Providers
 
 These providers are compiled into Corbanu Terminal:
