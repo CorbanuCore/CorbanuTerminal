@@ -84,6 +84,11 @@ fn issue_1973_review_ambiguous_quote_contexts_ask() {
         r#"r$(echo =)o; git fetch e"$r""#,
         r#"r`echo =`o; git fetch e"$r""#,
         r#"r$'\x3d'o; git fetch e"$r""#,
+        "echo \"$(ca\\\nse x in a) echo \"x;r=o\";; esac)\"; git fetch e\"$r\"",
+        "cat <\\\n<E\ndon't\nE\necho 'x;r=o'; git fetch e\"$r\"",
+        "echo \"$\\\n(echo \"x;r=o\")\"; git fetch e\"$r\"",
+        r#">(:)r=o; git fetch e"$r""#,
+        r#"r>(:)=o; git fetch e"$r""#,
         "echo \\ #'\n;r=o'; git fetch e\"$r\"",
         "echo \\\n#'\necho 'x;r=o'; git fetch e\"$r\"",
         "echo \u{a0}#'\n;r=o'; git fetch e\"$r\"",
@@ -114,6 +119,7 @@ fn issue_1973_real_assignments_and_literal_remotes_stay_quiet() {
         r#"t="$(mktemp -d)"; out="$t/a"; echo "$out""#,
         r#"r=$'origin'; git fetch "$r""#,
         r#"r="$(echo origin)"; git fetch "$r""#,
+        "echo ok \\\n  still-ok; r=origin; git fetch \"$r\"",
     ] {
         assert_eq!(verdicts(line), vec![None; 4], "{line}");
     }

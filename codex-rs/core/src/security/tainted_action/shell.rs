@@ -1086,8 +1086,8 @@ impl Lexer {
         );
         let outer_word = std::mem::take(&mut self.word);
         let outer_assignment_equals = std::mem::take(&mut self.assignment_equals);
-        let outer_assignment_protected = std::mem::take(&mut self.assignment_protected)
-            || (!output && !process && !outer_assignment_equals);
+        let outer_assignment_protected =
+            std::mem::take(&mut self.assignment_protected) || !outer_assignment_equals;
         let outer_looked_up = std::mem::take(&mut self.looked_up);
         let outer_hidden = std::mem::take(&mut self.hidden);
         let outer_operated = std::mem::take(&mut self.operated);
@@ -1606,7 +1606,17 @@ fn assignment_quotes(chars: &[char]) -> Vec<bool> {
             // Heredoc bodies and quotes inside expansions need a fuller
             // grammar. Preserve uncertainty after them, but do not make an
             // ordinary comment, arithmetic counter or mktemp opaque.
-            uncertain |= (quote.is_none() && ch == '<' && next == Some('<'))
+            // The lexer joins backslash-newline. Inside a token this can
+            // hide case, << or $( from this side scan; a continuation after
+            // ordinary command whitespace does not change token spelling.
+            let joined_token = ch == '\\'
+                && next == Some('\n')
+                && previous.is_some_and(|before| !before.is_whitespace())
+                && chars
+                    .get(index + 2)
+                    .is_some_and(|after| !after.is_whitespace());
+            uncertain |= joined_token
+                || (quote.is_none() && ch == '<' && next == Some('<'))
                 || (!nested.is_empty() && matches!(ch, '\'' | '"'))
                 // A case pattern can close with ')' without ending the
                 // substitution. Do not trust quote pairing after case syntax.
