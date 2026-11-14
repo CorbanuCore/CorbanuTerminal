@@ -5,11 +5,13 @@
 //! Windows sandbox and the security level in force, including what changed
 //! since the thread started.
 
+use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_security_policy::SecurityLevel;
 
 use super::session::Session;
 use crate::config::Config;
 use crate::security::SecurityPolicyError;
+use crate::windows_sandbox::WindowsSandboxLevelExt;
 use crate::windows_sandbox::raise_windows_sandbox;
 
 impl Session {
@@ -36,6 +38,23 @@ impl Session {
                 SecurityPolicyError::RuntimeNotInitialized | SecurityPolicyError::UnknownAgent(_),
             ) => {}
             Err(_) => config.security_level = SecurityLevel::Aggressive,
+        }
+        // Config was loaded before the parent's live security level changed.
+        // Replace only this derived notice, preserving unrelated warnings.
+        let old_notices = [SecurityLevel::Moderate, SecurityLevel::Aggressive]
+            .map(crate::security::windows_unsandboxed::startup_notice);
+        config
+            .startup_warnings
+            .retain(|warning| !old_notices.contains(warning));
+        if crate::security::windows_unsandboxed::applies(
+            config.security_level,
+            WindowsSandboxLevel::from_config(&config),
+        ) {
+            config
+                .startup_warnings
+                .push(crate::security::windows_unsandboxed::startup_notice(
+                    config.security_level,
+                ));
         }
         config
     }

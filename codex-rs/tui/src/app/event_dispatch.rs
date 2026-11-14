@@ -4522,6 +4522,10 @@ impl App {
                             );
                             let windows_sandbox_level =
                                 crate::windows_sandbox::level_from_config(&self.config);
+                            self.chat_widget.add_info_message(
+                                "Windows sandbox set up. Confirming its use by this session…".to_string(),
+                                /*hint*/ None,
+                            );
                             if let Some((sample_paths, extra_count, failed_scan)) =
                                 self.chat_widget.world_writable_warning_details()
                             {
@@ -4572,14 +4576,6 @@ impl App {
                                 if self.apply_permission_profile_selection(app_server, selection).await {
                                     self.chat_widget.submit_initial_user_message_if_pending();
                                 }
-                                self.chat_widget.add_plain_history_lines(vec![
-                                    Line::from(vec!["• ".dim(), "Sandbox ready".into()]),
-                                    Line::from(vec![
-                                        "  ".into(),
-                                        "Codex can now safely edit files and execute commands in your computer"
-                                            .dark_gray(),
-                                    ]),
-                                ]);
                             } else {
                                 self.app_event_tx.send(AppEvent::CodexOp(
                                     AppCommand::override_turn_context(
@@ -4604,14 +4600,6 @@ impl App {
                                     approvals_reviewer: Some(self.config.approvals_reviewer),
                                     display_label: preset.active_permission_profile.id.clone(),
                                 }));
-                                self.chat_widget.add_plain_history_lines(vec![
-                                    Line::from(vec!["• ".dim(), "Sandbox ready".into()]),
-                                    Line::from(vec![
-                                        "  ".into(),
-                                        "Codex can now safely edit files and execute commands in your computer"
-                                            .dark_gray(),
-                                    ]),
-                                ]);
                             }
                             if let Some(message) = codex_sandboxing::legacy_windows_sandbox_warning(
                                 windows_sandbox_level,

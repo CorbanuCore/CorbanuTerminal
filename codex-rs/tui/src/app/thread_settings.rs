@@ -1,5 +1,9 @@
 //! Thread settings sync between TUI-local state and app-server thread state.
 
+#[cfg(test)]
+#[path = "thread_settings_tests.rs"]
+mod tests;
+
 use super::App;
 use crate::app_command::AppCommand;
 use crate::app_server_session::AppServerSession;
@@ -160,12 +164,30 @@ impl App {
             ..ThreadSettingsUpdateParams::default()
         };
         let outcome = self.send_thread_settings_update(app_server, params).await;
-        if windows_sandbox_level.is_some() && outcome == SettingsUpdateOutcome::Failed {
-            self.chat_widget.add_error_message(
-                "The Windows sandbox is set up, but this session could not switch to it and \
-                 keeps running commands as before. Start a new session with /new to use it."
-                    .to_string(),
-            );
+        if windows_sandbox_level.is_some() {
+            use ratatui::style::Stylize;
+            use ratatui::text::Line;
+
+            if outcome == SettingsUpdateOutcome::Confirmed {
+                self.chat_widget.add_plain_history_lines(vec![
+                    Line::from(vec!["• ".dim(), "Sandbox ready".into()]),
+                    Line::from(vec![
+                        "  ".into(),
+                        "This session uses the configured Windows sandbox from the next message."
+                            .dark_gray(),
+                    ]),
+                    Line::from(vec![
+                        "  ".into(),
+                        "Work already running keeps its earlier sandbox.".dark_gray(),
+                    ]),
+                ]);
+            } else {
+                self.chat_widget.add_error_message(
+                    "The Windows sandbox is set up, but its use by this session could not be \
+                     confirmed. Start a new session with /new to use the saved sandbox settings."
+                        .to_string(),
+                );
+            }
         }
     }
 
@@ -204,7 +226,7 @@ impl App {
         let mut result = app_server.thread_settings_update(params.clone()).await;
         match &result {
             Ok(true) => return SettingsUpdateOutcome::Confirmed,
-            Err(err) if params.confirm => {
+            Err(err) if params.confirm && !params.refresh_windows_sandbox => {
                 // PF-84: confirmation needs a live listener; the update itself
                 // must still apply, as it did before it was confirmed.
                 tracing::warn!(
