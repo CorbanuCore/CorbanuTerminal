@@ -54,8 +54,8 @@ updated: 2026-11-11
 ## Remaining
 
 Current mechanical assignment is limited to #2101; later slice items below stay queued.
-- [ ] Preserve contributor process-lifecycle tests, ledger attribution and independent final review.
 
+- [ ] Preserve contributor process-lifecycle tests, ledger attribution and independent final review.
 - [ ] Slice PRs per the ledger; security-owner review on security paths.
 - [ ] D319 fixtures (plan §6 S1) generated from `main` and committed before any `age`/`zip` change; then the security owner's decision.
 - [ ] Migration renumbering with an upgrade test from the latest released state DB.
