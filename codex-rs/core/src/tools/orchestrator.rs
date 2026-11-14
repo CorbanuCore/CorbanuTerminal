@@ -326,6 +326,27 @@ impl ToolOrchestrator {
             warn(tool_ctx, &refusal).await;
             return Err(ToolError::Rejected(refusal));
         }
+        // #2050 (D510): the same where the command runs on a remote machine
+        // without a sandbox (or one that cannot say), whatever this host is.
+        // Sync: upstream's runtimes always name their environment; the level
+        // is the one judged above (the environment's, MXC as none, D522 (a)).
+        if let Some(refusal) = crate::security::windows_unsandboxed::session_remote_command_refusal(
+            &tool_ctx.session,
+            environment,
+            unsandboxed_level,
+        )
+        .await
+        {
+            crate::security::inspection::record_refusal(
+                tool_ctx.session.thread_id(),
+                crate::security::windows_unsandboxed::INSPECTED,
+                crate::security::windows_unsandboxed::inspected_outcome(
+                    tool_ctx.session.services.model_client().live_level(),
+                ),
+            );
+            warn(tool_ctx, &refusal).await;
+            return Err(ToolError::Rejected(refusal));
+        }
         let otel = turn_ctx.session_telemetry.clone();
         let otel_tn = flat_tool_name(&tool_ctx.tool_name).into_owned();
         let otel_ci = &tool_ctx.call_id;

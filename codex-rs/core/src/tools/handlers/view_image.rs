@@ -153,6 +153,7 @@ impl ViewImageHandler {
         let sandbox = crate::security::protected_surface::protect_file_tool_context(
             &session,
             &turn,
+            turn_environment,
             own_sandbox.clone(),
         );
         let fs = turn_environment.environment.get_filesystem();

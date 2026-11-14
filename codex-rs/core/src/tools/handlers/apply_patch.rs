@@ -123,6 +123,7 @@ fn protected_patch_context(
     crate::security::protected_surface::protect_file_tool_context(
         session,
         turn,
+        turn_environment,
         turn.file_system_sandbox_context(/*additional_permissions*/ None, turn_environment),
     )
 }

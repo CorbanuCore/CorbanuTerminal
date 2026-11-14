@@ -143,6 +143,10 @@ pub struct EnvironmentInfo {
     /// Optional executor features that clients must gate before sending newer request fields.
     #[serde(default)]
     pub capabilities: EnvironmentCapabilities,
+    /// #2050: the executor host's own platform sandbox. `None` from executors
+    /// that predate it (see [`EnvironmentInfo::host_sandbox_verdict`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_sandbox: Option<crate::HostSandboxInfo>,
 }
 
 fn unknown_executor_version() -> String {
@@ -343,6 +347,8 @@ impl EnvironmentInfo {
                 linux_approved_root_write_preserves_restrictions: cfg!(target_os = "linux"),
                 http_address_policy: true,
             },
+            // Filled in by the executor, which knows its Windows sandbox state.
+            host_sandbox: None,
         }
     }
 }
@@ -1565,6 +1571,7 @@ mod tests {
                 temporary_directories: None,
                 temp_dir: None,
                 capabilities: EnvironmentCapabilities::default(),
+                host_sandbox: None,
             }
         );
     }

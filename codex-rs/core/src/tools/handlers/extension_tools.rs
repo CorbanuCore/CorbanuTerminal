@@ -148,6 +148,7 @@ async fn extension_file_contexts(
         let context = crate::security::protected_surface::protect_file_tool_context(
             &invocation.session,
             &invocation.turn,
+            environment,
             invocation
                 .turn
                 .file_system_sandbox_context(granted, environment),

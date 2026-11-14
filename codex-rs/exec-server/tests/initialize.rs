@@ -78,6 +78,16 @@ async fn exec_server_accepts_initialize(version: Option<&str>) -> anyhow::Result
         .context("the test binary has a compiled target")?;
     expected_environment.provider_id = build_id(TEST_BUILD_COMMIT, target);
     assert!(expected_environment.provider_id.is_some());
+    // #2050 (D510): the executor reports its own host's platform sandbox.
+    let reported_host_sandbox = initialize_response
+        .environment_info
+        .as_ref()
+        .and_then(|info| info.host_sandbox);
+    assert_eq!(
+        reported_host_sandbox.map(|host| host.os),
+        Some(codex_exec_server::HostOs::current())
+    );
+    expected_environment.host_sandbox = reported_host_sandbox;
     assert_eq!(
         initialize_response.environment_info,
         Some(expected_environment.clone())

@@ -217,6 +217,11 @@ async fn exec_server_runs_ordinary_requests_serially_by_default() -> anyhow::Res
     };
     assert_eq!(id, queued_environment_info_id);
     let mut expected_environment_info = EnvironmentInfo::local();
+    // #2050 (D510): the executor reports its own host's platform sandbox.
+    expected_environment_info.host_sandbox = initialization
+        .environment_info
+        .as_ref()
+        .and_then(|info| info.host_sandbox);
     expected_environment_info.provider_id = initialization
         .environment_info
         .and_then(|info| info.provider_id);

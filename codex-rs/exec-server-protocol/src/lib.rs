@@ -1,6 +1,7 @@
 mod address_policy;
 mod capabilities;
 mod environment_config;
+mod host_sandbox;
 mod network_policy;
 mod process_id;
 mod protocol;
@@ -13,6 +14,7 @@ mod glob_scan_transport_tests;
 pub use address_policy::*;
 pub use capabilities::*;
 pub use environment_config::*;
+pub use host_sandbox::*;
 pub use network_policy::*;
 pub use process_id::ProcessId;
 pub use protocol::*;

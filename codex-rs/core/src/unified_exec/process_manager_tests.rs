@@ -665,6 +665,7 @@ async fn pruning_does_not_evict_live_process_while_exited_process_is_finalizing(
                     now
                 },
                 windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
+                remote_environment: None,
             },
         );
     }

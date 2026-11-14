@@ -424,6 +424,7 @@ async fn handle_structured_edit(
     let sandbox = crate::security::protected_surface::protect_file_tool_context(
         &session,
         &turn,
+        &turn_environment,
         turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment),
     );
     let path_uri = turn_environment
@@ -556,6 +557,7 @@ async fn handle_structured_write(
     let sandbox = crate::security::protected_surface::protect_file_tool_context(
         &session,
         &turn,
+        &turn_environment,
         turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment),
     );
     let path_uri = turn_environment

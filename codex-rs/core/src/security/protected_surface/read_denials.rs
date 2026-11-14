@@ -1568,9 +1568,11 @@ fn real_location_within(path: &AbsolutePathBuf, hops: usize) -> Option<AbsoluteP
 pub(crate) fn protect_file_tool_context(
     session: &crate::session::session::Session,
     turn: &crate::session::turn_context::TurnContext,
+    environment: &crate::session::turn_context::TurnEnvironment,
     mut context: codex_file_system::FileSystemSandboxContext,
 ) -> codex_file_system::FileSystemSandboxContext {
-    // #1976 (D491): under the live level, not only the configured one.
+    // #1976 (D491): under the live level, not only the configured one;
+    // #2050: for a remote environment, judged where its executor runs.
     // (sync D543 (a): upstream's context names the selected backend, not a
     // level; no Windows sandbox, or MXC (D522 (a)), counts as none.)
     let windows_sandbox_level = match context.windows_sandbox_selection {
@@ -1581,9 +1583,11 @@ pub(crate) fn protect_file_tool_context(
         codex_file_system::WindowsSandboxSelection::RestrictedToken
         | codex_file_system::WindowsSandboxSelection::Elevated => turn.windows_sandbox_level,
     };
-    if let Some(refusal) =
-        crate::security::windows_unsandboxed::session_file_refusal(session, windows_sandbox_level)
-    {
+    if let Some(refusal) = crate::security::windows_unsandboxed::environment_file_refusal(
+        session.services.model_client().live_level(),
+        windows_sandbox_level,
+        environment,
+    ) {
         context.unsandboxed_refusal = Some(refusal);
     }
     let Some(state) = session
