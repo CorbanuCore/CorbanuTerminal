@@ -17,12 +17,17 @@ impl ExecPolicyManager {
         mut request: ExecApprovalRequest<'_>,
         configured_shell: &Shell,
         command_platform: DangerousCommandPlatform,
+        live_aggressive: bool,
     ) -> ExecApprovalRequirement {
         let command = request.command;
         let executable = shell_approval_command(command, configured_shell);
         if executable.len() == command.len() {
             return self
-                .create_exec_approval_requirement_for_command_platform(request, command_platform)
+                .create_exec_approval_requirement_for_command_platform(
+                    request,
+                    command_platform,
+                    live_aggressive,
+                )
                 .await;
         }
 
@@ -54,6 +59,7 @@ impl ExecPolicyManager {
             request,
             policy_commands,
             command_platform,
+            live_aggressive,
         )
         .await
     }

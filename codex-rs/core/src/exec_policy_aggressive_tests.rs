@@ -18,6 +18,7 @@ use tempfile::TempDir;
 use toml::Value as TomlValue;
 
 use super::*;
+use crate::exec_policy::AllowPrefixRules;
 use crate::exec_policy::ApprovedUnder;
 use crate::exec_policy::ExecApprovalRequest;
 use crate::exec_policy::ExecPolicyManager;
@@ -87,6 +88,8 @@ async fn requirement(
                 windows_sandbox_level: WindowsSandboxLevel::Disabled,
                 sandbox_permissions: SandboxPermissions::UseDefault,
                 prefix_rule: None,
+                environment_policy: None,
+                allow_prefix_rules: AllowPrefixRules::Honor,
             },
             live_aggressive,
         )
@@ -327,6 +330,8 @@ async fn issue_626_note_names_only_suspended_rules() {
                 windows_sandbox_level: WindowsSandboxLevel::Disabled,
                 sandbox_permissions: SandboxPermissions::UseDefault,
                 prefix_rule: None,
+                environment_policy: None,
+                allow_prefix_rules: AllowPrefixRules::Honor,
             },
             /*live_aggressive*/ true,
         )
@@ -371,6 +376,8 @@ async fn issue_626_rejection_names_the_suspended_rule() {
                 },
                 sandbox_permissions: SandboxPermissions::UseDefault,
                 prefix_rule: None,
+                environment_policy: None,
+                allow_prefix_rules: AllowPrefixRules::Honor,
             },
             /*live_aggressive*/ true,
         )
