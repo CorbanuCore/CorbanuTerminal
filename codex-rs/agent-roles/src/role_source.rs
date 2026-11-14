@@ -211,3 +211,31 @@ pub fn push_role_file_warnings(
         startup_warnings.push(unapplied_role_keys_warning(role_file, &unapplied_keys));
     }
 }
+
+#[cfg(test)]
+mod project_role_layer_tests {
+    use super::AgentRoleSource;
+    use codex_config::ConfigLayerEntry;
+    use codex_config::ConfigLayerSource;
+    use codex_utils_absolute_path::AbsolutePathBuf;
+
+    /// D525 (#2052): roles declared in a project-declared role's layer count
+    /// as project roles; the same launch-flags layer without a role file is
+    /// the person's.
+    #[test]
+    fn a_project_role_layer_declares_project_roles() {
+        let layer = ConfigLayerEntry::new(
+            ConfigLayerSource::SessionFlags,
+            toml::Value::Table(Default::default()),
+        );
+        assert_eq!(AgentRoleSource::from_layer_entry(&layer), AgentRoleSource::User);
+        let role_file = AbsolutePathBuf::from_absolute_path(
+            std::env::temp_dir().join("project/.codex/agents/reviewer.toml"),
+        )
+        .expect("absolute role file");
+        assert_eq!(
+            AgentRoleSource::from_layer_entry(&layer.with_project_role_file(role_file)),
+            AgentRoleSource::Project
+        );
+    }
+}
