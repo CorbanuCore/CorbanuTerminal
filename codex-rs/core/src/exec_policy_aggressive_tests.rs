@@ -558,3 +558,42 @@ async fn issue_1001_network_allow_rule_saved_under_aggressive_applies_there() {
     .expect("load");
     assert_eq!(check(&later), expected, "after a restart");
 }
+
+/// #1001 on upstream's executable-identity path: when the model picks a shell
+/// that is not the configured one, the approval judges the executable, but
+/// the Aggressive strict match still sees the whole command line, so a
+/// wrapped vault command stays forbidden.
+#[tokio::test]
+async fn strict_vault_rule_sees_the_whole_command_of_an_unconfigured_shell() {
+    let manager = ExecPolicyManager::new(Arc::new(PolicyParser::new().build()));
+    let command = vec![
+        "/opt/homebrew/bin/bash".to_string(),
+        "-lc".to_string(),
+        "env co''rbanu vault get X".to_string(),
+    ];
+    let configured = crate::shell::Shell {
+        shell_type: crate::shell::ShellType::Zsh,
+        shell_path: std::path::PathBuf::from("/bin/zsh"),
+    };
+    let requirement = manager
+        .create_exec_approval_requirement_for_shell(
+            ExecApprovalRequest {
+                command: &command,
+                approval_policy: AskForApproval::UnlessTrusted,
+                permission_profile: PermissionProfile::read_only(),
+                windows_sandbox_level: WindowsSandboxLevel::Disabled,
+                sandbox_permissions: SandboxPermissions::UseDefault,
+                prefix_rule: None,
+                environment_policy: None,
+                allow_prefix_rules: AllowPrefixRules::Honor,
+            },
+            &configured,
+            codex_shell_command::is_dangerous_command::DangerousCommandPlatform::Posix,
+            /*live_aggressive*/ true,
+        )
+        .await;
+    assert!(
+        matches!(requirement, ExecApprovalRequirement::Forbidden { .. }),
+        "{requirement:?}"
+    );
+}

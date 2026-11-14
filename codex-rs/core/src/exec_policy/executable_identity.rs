@@ -55,11 +55,13 @@ impl ExecPolicyManager {
         // commands can add restrictions, but cannot grant the executable trust.
         policy_commands.commands.insert(0, executable.to_vec());
         request.command = executable;
+        // Corbanu strict rules (#1001) still match the whole command line.
         self.create_exec_approval_requirement_for_parsed_commands(
             request,
             policy_commands,
             command_platform,
             live_aggressive,
+            command,
         )
         .await
     }
