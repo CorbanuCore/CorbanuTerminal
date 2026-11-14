@@ -105,31 +105,6 @@ async fn base_instructions_use_input_items(responses_lite: bool) -> Result<()> {
     )
     .await;
 
-<<<<<<< HEAD
-    let mut builder = test_codex()
-        .with_model_info_override("gpt-5.4", |model_info| {
-            model_info.use_responses_lite = true;
-            model_info.tool_mode = Some(ToolMode::CodeMode);
-        })
-        .with_config(|config| {
-            config.base_instructions = Some("test instructions".to_string());
-            // This request-shape test does not execute code-mode calls. Keep the
-            // requested Code Mode surface even when the standalone host binary is
-            // not part of the focused codex-core test build.
-            config.code_mode.disable_in_process_fallback = true;
-        });
-    let test = builder.build(&server).await?;
-||||||| 413492cd6c
-    let mut builder = test_codex()
-        .with_model_info_override("gpt-5.4", |model_info| {
-            model_info.use_responses_lite = true;
-            model_info.tool_mode = Some(ToolMode::CodeMode);
-        })
-        .with_config(|config| {
-            config.base_instructions = Some("test instructions".to_string());
-        });
-    let test = builder.build(&server).await?;
-=======
     let builder = || {
         test_codex()
             .with_model_info_override("gpt-5.4", move |model_info| {
@@ -138,11 +113,13 @@ async fn base_instructions_use_input_items(responses_lite: bool) -> Result<()> {
             })
             .with_config(|config| {
                 config.base_instructions = Some("test instructions".to_string());
+                // This request-shape test does not execute code-mode calls. Keep the
+                // requested Code Mode surface even when the standalone host binary is
+                // not part of the focused codex-core test build.
                 config.code_mode.disable_in_process_fallback = true;
             })
     };
     let test = builder().build(&server).await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     test.submit_turn("hello").await?;
 
