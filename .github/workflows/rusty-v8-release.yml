@@ -295,6 +295,16 @@ jobs:
           path: upstream-rusty-v8
           submodules: recursive
 
+      - name: Download upstream Windows build tools
+        shell: bash
+        working-directory: upstream-rusty-v8
+        run: |
+          set -euo pipefail
+          # Upstream skips this submodule and downloads the pinned archive in CI.
+          mkdir -p tools/win
+          curl -fL https://chromium.googlesource.com/chromium/src/tools/win/+archive/faefd1b6fa9eeb033ad6fe60368ccb9bf908cbd0.tar.gz |
+            tar -xz -C tools/win
+
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -327,9 +337,14 @@ jobs:
           path: |
             upstream-rusty-v8/target/sccache
             upstream-rusty-v8/target/${{ matrix.target }}/release/gn_out
-          key: rusty-v8-source-${{ matrix.target }}-sandbox-${{ hashFiles('upstream-rusty-v8/Cargo.lock', 'upstream-rusty-v8/build.rs', 'upstream-rusty-v8/git_submodule_status.txt') }}
+          key: rusty-v8-source-${{ matrix.target }}-sandbox-${{ hashFiles('upstream-rusty-v8/Cargo.lock', 'upstream-rusty-v8/build.rs', 'upstream-rusty-v8/git_submodule_status.txt', 'patches/v8_array_sort_elements_kind.patch') }}
           restore-keys: |
             rusty-v8-source-${{ matrix.target }}-sandbox-
+
+      - name: Apply V8 Array.sort backport
+        shell: bash
+        working-directory: upstream-rusty-v8/v8
+        run: git apply -p3 "${GITHUB_WORKSPACE}/patches/v8_array_sort_elements_kind.patch"
 
       - name: Install and start sccache
         shell: pwsh
