@@ -299,7 +299,12 @@ impl CatalogRequestProcessor {
             .list_models_from_snapshot(
                 config,
                 models_manager,
-                codex_models_manager::manager::RefreshStrategy::OnlineIfUncached,
+                // `model/list` is part of TUI bootstrap, so it must not wait for a
+                // provider request on a cold cache. The manager always starts with the
+                // bundled catalog and can overlay a fresh disk cache here. The app
+                // server's models refresh worker updates it from the network in the
+                // background.
+                codex_models_manager::manager::RefreshStrategy::Offline,
             )
             .await
             .map_err(|err| config_load_error(&err))?;
@@ -384,20 +389,6 @@ impl CatalogRequestProcessor {
             }
             None => self.load_latest_config(/*fallback_cwd*/ None).await?,
         };
-<<<<<<< HEAD
-        let auth = self.auth_manager.session_auth().await;
-        let workspace_codex_plugins_enabled = self
-            .workspace_codex_plugins_enabled(&config, auth.as_ref())
-            .await;
-
-||||||| 413492cd6c
-        let auth = self.auth_manager.auth().await;
-        let workspace_codex_plugins_enabled = self
-            .workspace_codex_plugins_enabled(&config, auth.as_ref())
-            .await;
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let data = FEATURES
             .iter()
             .map(|spec| {
@@ -549,20 +540,6 @@ impl CatalogRequestProcessor {
             cwds
         };
 
-<<<<<<< HEAD
-        let config = self.load_latest_config(/*fallback_cwd*/ None).await?;
-        let auth = self.auth_manager.session_auth().await;
-        let workspace_codex_plugins_enabled = self
-            .workspace_codex_plugins_enabled(&config, auth.as_ref())
-            .await;
-||||||| 413492cd6c
-        let config = self.load_latest_config(/*fallback_cwd*/ None).await?;
-        let auth = self.auth_manager.auth().await;
-        let workspace_codex_plugins_enabled = self
-            .workspace_codex_plugins_enabled(&config, auth.as_ref())
-            .await;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let skills_service = self.thread_manager.skills_service();
         let plugins_manager = self.thread_manager.plugins_manager();
         if force_reload {
@@ -685,12 +662,6 @@ impl CatalogRequestProcessor {
             cwds
         };
 
-<<<<<<< HEAD
-        let auth = self.auth_manager.session_auth().await;
-||||||| 413492cd6c
-        let auth = self.auth_manager.auth().await;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let plugins_manager = self.thread_manager.plugins_manager();
         let mut data = Vec::new();
         for cwd in cwds {

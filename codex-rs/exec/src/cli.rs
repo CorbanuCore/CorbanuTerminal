@@ -24,11 +24,6 @@ pub struct Cli {
     #[clap(flatten)]
     pub shared: ExecSharedCliOptions,
 
-<<<<<<< HEAD
-    /// Allow running Corbanu Terminal outside a Git repository.
-||||||| 413492cd6c
-    /// Allow running Codex outside a Git repository.
-=======
     /// Source classification for newly created or forked threads.
     #[arg(long = "thread-source", value_name = "SOURCE", global = true)]
     pub thread_source: Option<ThreadSource>,
@@ -38,8 +33,7 @@ pub struct Cli {
     #[arg(long, value_enum, value_name = "PROGRAM", global = true)]
     pub cyber_access_program: Option<CyberAccessProgramCliArg>,
 
-    /// Allow running Codex outside a Git repository.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    /// Allow running Corbanu Terminal outside a Git repository.
     #[arg(long = "skip-git-repo-check", global = true, default_value_t = false)]
     pub skip_git_repo_check: bool,
 

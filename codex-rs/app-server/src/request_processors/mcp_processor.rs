@@ -140,15 +140,8 @@ impl McpRequestProcessor {
             scopes,
             timeout_secs,
         } = params;
-<<<<<<< HEAD
-
+        // #658: the account the session runs on.
         let auth = self.auth_manager.session_auth().await;
-||||||| 413492cd6c
-
-        let auth = self.auth_manager.auth().await;
-=======
-        let auth = self.auth_manager.auth().await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let (mcp_config, runtime_context) = match thread_id.as_deref() {
             Some(thread_id) => {
                 let (_, thread) = self.load_thread(thread_id).await?;
@@ -392,40 +385,12 @@ impl McpRequestProcessor {
             Some(thread_id) => Some(self.load_thread(thread_id).await?.1),
             None => None,
         };
-<<<<<<< HEAD
-        let mcp_manager = self.thread_manager.mcp_manager();
-        let auth = self.auth_manager.session_auth().await;
-        let (mcp_config, runtime_context) = match thread {
-            Some(thread) => thread.runtime_mcp_config_and_context(&config).await,
-            None => {
-                let mcp_config = mcp_manager.runtime_config(&config).await;
-                let runtime_context = McpRuntimeContext::new(
-                    self.thread_manager.environment_manager(),
-                    config.cwd.to_path_buf(),
-                );
-                (mcp_config, runtime_context)
-            }
-||||||| 413492cd6c
-        let mcp_manager = self.thread_manager.mcp_manager();
-        let auth = self.auth_manager.auth().await;
-        let (mcp_config, runtime_context) = match thread {
-            Some(thread) => thread.runtime_mcp_config_and_context(&config).await,
-            None => {
-                let mcp_config = mcp_manager.runtime_config(&config).await;
-                let runtime_context = McpRuntimeContext::new(
-                    self.thread_manager.environment_manager(),
-                    config.cwd.to_path_buf(),
-                );
-                (mcp_config, runtime_context)
-            }
-=======
         let processor = self.clone();
         let task = async move {
             let result = processor
                 .list_mcp_server_status_response(params, thread)
                 .await;
             outgoing.send_result(request, result).await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
         tokio::spawn(AuthStorageOriginator::current().scope(task));
         Ok(())
@@ -465,7 +430,8 @@ impl McpRequestProcessor {
                 None => self.load_global_config().await?,
             };
             let mcp_manager = self.thread_manager.mcp_manager();
-            let auth = self.auth_manager.auth().await;
+            // #658: the account the session runs on.
+            let auth = self.auth_manager.session_auth().await;
             let (mcp_config, runtime_context) = match thread.as_ref() {
                 Some(thread) => thread.runtime_mcp_config_and_context(&config).await,
                 None => (

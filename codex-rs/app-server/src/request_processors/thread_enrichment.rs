@@ -26,118 +26,12 @@ pub(super) async fn enrich_loaded_threads<T>(
         )
         .await;
 
-<<<<<<< HEAD
-    futures::future::join_all(threads.iter_mut().map(as_thread).map(|thread| {
-        let statuses = &statuses;
-        async move {
-            let watched_status = statuses.get(&thread.id);
-            if let Some(status) = watched_status {
-                thread.status = status.clone();
-            }
-
-            if !matches!(
-                &thread.source,
-                SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
-            ) || matches!(watched_status, Some(ThreadStatus::NotLoaded))
-            {
-                return;
-            }
-
-            let Ok(thread_id) = ThreadId::from_string(&thread.id) else {
-                return;
-            };
-            let Ok(loaded_thread) = thread_manager.get_thread(thread_id).await else {
-                return;
-            };
-            match loaded_thread.agent_status().await {
-                AgentStatus::Running => {
-                    if watched_status.is_none() {
-                        thread.status = resolve_thread_status(
-                            ThreadStatus::Idle,
-                            /*has_in_progress_turn*/ true,
-                        );
-                    }
-                }
-                AgentStatus::PendingInit | AgentStatus::Interrupted | AgentStatus::Completed(_) => {
-                    if watched_status.is_none() {
-                        thread.status = ThreadStatus::Idle;
-                    }
-                }
-                AgentStatus::Errored(_) => {
-                    thread.status = ThreadStatus::SystemError;
-                }
-                AgentStatus::Shutdown | AgentStatus::NotFound | AgentStatus::Unloaded => {
-                    thread.status = ThreadStatus::NotLoaded;
-                    return;
-                }
-            }
-            let config_snapshot = loaded_thread.config_snapshot().await;
-            thread.can_accept_direct_input = Some(can_accept_direct_input(
-                loaded_thread.multi_agent_version(),
-                &config_snapshot.session_source,
-            ));
-        }
-    }))
-||||||| 413492cd6c
-    futures::future::join_all(threads.iter_mut().map(as_thread).map(|thread| {
-        let statuses = &statuses;
-        async move {
-            let watched_status = statuses.get(&thread.id);
-            if let Some(status) = watched_status {
-                thread.status = status.clone();
-            }
-
-            if !matches!(
-                &thread.source,
-                SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
-            ) || matches!(watched_status, Some(ThreadStatus::NotLoaded))
-            {
-                return;
-            }
-
-            let Ok(thread_id) = ThreadId::from_string(&thread.id) else {
-                return;
-            };
-            let Ok(loaded_thread) = thread_manager.get_thread(thread_id).await else {
-                return;
-            };
-            match loaded_thread.agent_status().await {
-                AgentStatus::Running => {
-                    if watched_status.is_none() {
-                        thread.status = resolve_thread_status(
-                            ThreadStatus::Idle,
-                            /*has_in_progress_turn*/ true,
-                        );
-                    }
-                }
-                AgentStatus::PendingInit | AgentStatus::Interrupted | AgentStatus::Completed(_) => {
-                    if watched_status.is_none() {
-                        thread.status = ThreadStatus::Idle;
-                    }
-                }
-                AgentStatus::Errored(_) => {
-                    thread.status = ThreadStatus::SystemError;
-                }
-                AgentStatus::Shutdown | AgentStatus::NotFound => {
-                    thread.status = ThreadStatus::NotLoaded;
-                    return;
-                }
-            }
-            let config_snapshot = loaded_thread.config_snapshot().await;
-            thread.can_accept_direct_input = Some(can_accept_direct_input(
-                loaded_thread.multi_agent_version(),
-                &config_snapshot.session_source,
-            ));
-        }
-    }))
-=======
     futures::future::join_all(
         threads
             .iter_mut()
             .map(as_thread)
             .map(|thread| enrich_loaded_thread(thread_manager, &statuses, thread)),
     )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     .await;
 }
 
@@ -184,7 +78,7 @@ async fn enrich_loaded_thread(
         AgentStatus::Errored(_) => {
             thread.status = ThreadStatus::SystemError;
         }
-        AgentStatus::Shutdown | AgentStatus::NotFound => {
+        AgentStatus::Shutdown | AgentStatus::NotFound | AgentStatus::Unloaded => {
             thread.status = ThreadStatus::NotLoaded;
             return;
         }

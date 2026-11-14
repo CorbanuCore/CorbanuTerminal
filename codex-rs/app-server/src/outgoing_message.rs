@@ -264,7 +264,6 @@ impl ThreadScopedOutgoingMessageSender {
     {
         self.outgoing.send_response(request_id, response).await;
     }
-<<<<<<< HEAD
 
     /// #722 (D279): core no longer waits for this command approval (its
     /// request timed out or was cancelled and the action was refused), so
@@ -290,25 +289,6 @@ impl ThreadScopedOutgoingMessageSender {
             })
             .await;
     }
-
-    pub(crate) async fn send_error(
-        &self,
-        request_id: ConnectionRequestId,
-        error: impl Into<JSONRPCErrorError>,
-    ) {
-        self.outgoing.send_error(request_id, error).await;
-    }
-||||||| 413492cd6c
-
-    pub(crate) async fn send_error(
-        &self,
-        request_id: ConnectionRequestId,
-        error: impl Into<JSONRPCErrorError>,
-    ) {
-        self.outgoing.send_error(request_id, error).await;
-    }
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl OutgoingMessageSender {

@@ -40,16 +40,12 @@ pub(crate) struct EventProcessorWithHumanOutput {
     final_message_rendered: bool,
     emit_final_message_on_shutdown: bool,
     last_total_token_usage: Option<ThreadTokenUsage>,
-<<<<<<< HEAD
     /// Config warnings already printed; the session repeats them once (#419).
     shown_config_warnings: Vec<String>,
     /// PF-84 (#480): what to print when the provider rejects the named
     /// account this session runs on; `None` on the default account.
     rejected_account_message: Option<String>,
-||||||| 413492cd6c
-=======
     last_turn_diff: String,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl EventProcessorWithHumanOutput {
@@ -75,21 +71,16 @@ impl EventProcessorWithHumanOutput {
             final_message_rendered: false,
             emit_final_message_on_shutdown: false,
             last_total_token_usage: None,
-<<<<<<< HEAD
             shown_config_warnings: Vec::new(),
             rejected_account_message: config
                 .model_providers
                 .get(&config.model_provider_id)
                 .and_then(|provider| provider.account.as_ref())
                 .and_then(|account| rejected_account_message(config, &account.to_string())),
-||||||| 413492cd6c
-=======
             last_turn_diff: String::new(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
-<<<<<<< HEAD
     /// The error lines for a failed turn: the error, then (#480) the named
     /// account it was rejected on and how to replace its credential.
     fn failed_turn_lines(&self, error: &codex_app_server_protocol::TurnError) -> Vec<String> {
@@ -102,12 +93,7 @@ impl EventProcessorWithHumanOutput {
             .collect()
     }
 
-    fn render_item_started(&self, item: &ThreadItem) {
-||||||| 413492cd6c
-    fn render_item_started(&self, item: &ThreadItem) {
-=======
     fn render_item_started(&self, item: &ThreadItemPayload) {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         match item {
             ThreadItemPayload::CommandExecution { command, cwd, .. } => {
                 eprintln!(

@@ -27,9 +27,5 @@ mod sandbox;
 #[cfg(target_os = "macos")]
 mod seatbelt;
 mod server_error_exit;
-<<<<<<< HEAD
 mod trace_log_credentials;
-||||||| 413492cd6c
-=======
 mod worktree;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
