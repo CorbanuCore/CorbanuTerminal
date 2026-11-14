@@ -3,12 +3,8 @@ use crate::outgoing_message::ClientRequestResult;
 use crate::outgoing_message::ThreadScopedOutgoingMessageSender;
 use crate::request_processors::thread_settings_from_config_snapshot;
 use crate::server_request_error::is_turn_transition_server_request_error;
-<<<<<<< HEAD
 use crate::server_request_error::is_withdrawn_server_request_error;
-||||||| 413492cd6c
-=======
 use crate::thread_state::PendingNetworkApproval;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::thread_state::ThreadState;
 use crate::thread_state::TurnSummary;
 use crate::thread_state::resolve_server_request_on_thread_listener;
@@ -163,7 +159,6 @@ pub(crate) async fn apply_bespoke_event_handling(
         id: event_turn_id,
         msg,
     } = event;
-<<<<<<< HEAD
     if matches!(msg, EventMsg::ThreadSettingsApplied(_) | EventMsg::Error(_)) {
         let mut state = thread_state.lock().await;
         if state.listener_matches(&conversation) {
@@ -176,10 +171,7 @@ pub(crate) async fn apply_bespoke_event_handling(
             state.finish_settings_confirmation(&event_turn_id, result);
         }
     }
-||||||| 413492cd6c
-=======
     let approval_starts_command = msg.command_approval_start().is_some();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     match msg {
         EventMsg::TurnStarted(payload) => {
             // While not technically necessary as it was already done on TurnComplete, be extra cautios and abort any pending server requests.
@@ -857,7 +849,6 @@ pub(crate) async fn apply_bespoke_event_handling(
                 .await;
             });
         }
-<<<<<<< HEAD
         EventMsg::ExecApprovalRequestWithdrawn(withdrawn) => {
             outgoing
                 .withdraw_command_execution_approval(
@@ -865,8 +856,7 @@ pub(crate) async fn apply_bespoke_event_handling(
                     &withdrawn.effective_approval_id(),
                 )
                 .await;
-||||||| 413492cd6c
-=======
+        }
         EventMsg::NetworkApprovalResolved { approval_id } => {
             let pending = thread_state
                 .lock()
@@ -877,7 +867,6 @@ pub(crate) async fn apply_bespoke_event_handling(
                 outgoing.resolve_server_request(pending.request_id).await;
                 drop(pending.permission_guard);
             }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         EventMsg::RequestUserInput(request) => {
             let user_input_guard = thread_watch_manager
@@ -1225,6 +1214,9 @@ pub(crate) async fn apply_bespoke_event_handling(
         EventMsg::PrivateSessionEvent(private) => match private.event {
             PrivateSessionEventPayload::RecordedItem(mut recorded) => {
                 recorded.item.clear_executed_tool_calls();
+                // Fragment and producer provenance are local harness metadata,
+                // not part of the client-facing item.
+                recorded.item.clear_local_provenance();
                 let mut notification = ServerNotification::RawResponseItemCompleted(
                     RawResponseItemCompletedNotification {
                         thread_id: private.thread_id.to_string(),
@@ -1264,6 +1256,9 @@ pub(crate) async fn apply_bespoke_event_handling(
         EventMsg::RawResponseItem(mut raw_response_item_event) => {
             // Keep warehouse metadata out of app-server notifications.
             raw_response_item_event.item.clear_executed_tool_calls();
+            // Fragment and producer provenance are local harness metadata, not
+            // part of the client-facing item.
+            raw_response_item_event.item.clear_local_provenance();
             let mut notification = ServerNotification::RawResponseItemCompleted(
                 RawResponseItemCompletedNotification {
                     thread_id: conversation_id.to_string(),
@@ -1598,45 +1593,6 @@ async fn complete_command_execution_item(
         .await;
 }
 
-<<<<<<< HEAD
-async fn maybe_emit_raw_response_item_completed(
-    conversation_id: ThreadId,
-    turn_id: &str,
-    mut item: codex_protocol::models::ResponseItem,
-    outgoing: &ThreadScopedOutgoingMessageSender,
-) {
-    // Fragment and producer provenance are local harness metadata, not part of the
-    // client-facing item.
-    item.clear_local_provenance();
-    let notification = RawResponseItemCompletedNotification {
-        thread_id: conversation_id.to_string(),
-        turn_id: turn_id.to_string(),
-        item,
-    };
-    outgoing
-        .send_server_notification(ServerNotification::RawResponseItemCompleted(notification))
-        .await;
-}
-
-||||||| 413492cd6c
-async fn maybe_emit_raw_response_item_completed(
-    conversation_id: ThreadId,
-    turn_id: &str,
-    item: codex_protocol::models::ResponseItem,
-    outgoing: &ThreadScopedOutgoingMessageSender,
-) {
-    let notification = RawResponseItemCompletedNotification {
-        thread_id: conversation_id.to_string(),
-        turn_id: turn_id.to_string(),
-        item,
-    };
-    outgoing
-        .send_server_notification(ServerNotification::RawResponseItemCompleted(notification))
-        .await;
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 async fn find_and_remove_turn_summary(
     _conversation_id: ThreadId,
     thread_state: &Arc<Mutex<ThreadState>>,

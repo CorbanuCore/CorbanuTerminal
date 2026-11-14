@@ -1,24 +1,13 @@
-use super::thread_input::ensure_direct_input_allowed;
+use super::thread_input::ensure_direct_input_allowed_from_client;
 use super::*;
-<<<<<<< HEAD
-use codex_agent_extension::AgentInvocation;
-use codex_agent_extension::AgentRun;
-use codex_agent_extension::AgentRunner;
-use codex_core::accounting_extensions::SentModelRequest;
-use codex_model_provider_info::WireApi;
-use codex_model_provider_info::built_in_model_providers;
-use codex_protocol::crew::AgentClass;
-||||||| 413492cd6c
-use codex_agent_extension::AgentInvocation;
-use codex_agent_extension::AgentRun;
-use codex_agent_extension::AgentRunner;
-=======
 use codex_app_server_protocol::ImageReference as V2ImageReference;
 use codex_app_server_protocol::ThreadGuardianAssessment;
 use codex_app_server_protocol::ThreadGuardianReviewParams;
 use codex_app_server_protocol::ThreadGuardianReviewResponse;
 use codex_app_server_protocol::ThreadItem;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_core::accounting_extensions::SentModelRequest;
+use codex_model_provider_info::WireApi;
+use codex_model_provider_info::built_in_model_providers;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputBody;
@@ -33,10 +22,6 @@ use codex_protocol::turn_input::ResponseItemAnnotations;
 
 use crate::image_url::REMOTE_IMAGE_URL_ERROR;
 use crate::image_url::is_remote_image_url;
-
-<<<<<<< HEAD
-const DIRECT_INPUT_TO_MULTI_AGENT_V2_SUBAGENT_ERROR: &str =
-    "direct app-server input is not allowed for multi-agent v2 sub-agents";
 
 /// The route a reported send may be recorded against, canonically.
 ///
@@ -74,55 +59,9 @@ fn recognised_reported_route(
         .then(|| (route, dialect_path.to_string(), provider.wire_api))
 }
 
-/// Mirrors the direct-input policy in both request validation and thread capability responses.
-pub(super) fn can_accept_direct_input(
-    multi_agent_version: Option<MultiAgentVersion>,
-    session_source: &SessionSource,
-) -> bool {
-    multi_agent_version != Some(MultiAgentVersion::V2)
-        || !matches!(
-            session_source,
-            SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
-        )
-        || human_addressable_crew_member(session_source)
-}
-
-fn human_addressable_crew_member(session_source: &SessionSource) -> bool {
-    matches!(
-        session_source,
-        SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-            agent_class: Some(AgentClass::CrewMember {
-                human_addressable: true,
-                ..
-            }),
-            ..
-        })
-    )
-}
-
-fn validate_user_input_image_urls(input: &[V2UserInput]) -> Result<(), JSONRPCErrorError> {
-||||||| 413492cd6c
-const DIRECT_INPUT_TO_MULTI_AGENT_V2_SUBAGENT_ERROR: &str =
-    "direct app-server input is not allowed for multi-agent v2 sub-agents";
-
-/// Mirrors the direct-input policy in both request validation and thread capability responses.
-pub(super) fn can_accept_direct_input(
-    multi_agent_version: Option<MultiAgentVersion>,
-    session_source: &SessionSource,
-) -> bool {
-    multi_agent_version != Some(MultiAgentVersion::V2)
-        || !matches!(
-            session_source,
-            SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
-        )
-}
-
-fn validate_user_input_image_urls(input: &[V2UserInput]) -> Result<(), JSONRPCErrorError> {
-=======
 pub(super) fn validate_user_input_image_urls(
     input: &[V2UserInput],
 ) -> Result<(), JSONRPCErrorError> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     if input.iter().any(|item| {
         matches!(
             item,
@@ -213,7 +152,6 @@ fn map_additional_context(
         .collect()
 }
 
-<<<<<<< HEAD
 fn turn_start_submission_error(err: &CodexErr) -> JSONRPCErrorError {
     let mut error = internal_error(format!("failed to start turn: {err}"));
     if let CodexErrorDetails::AgentLimitReached { max_threads } = err.details() {
@@ -225,26 +163,11 @@ fn turn_start_submission_error(err: &CodexErr) -> JSONRPCErrorError {
     error
 }
 
-fn direct_input_to_v2_thread_spawn_is_blocked(
-    multi_agent_version: Option<MultiAgentVersion>,
-    session_source: &SessionSource,
-    app_server_client_name: Option<&str>,
-) -> bool {
-    multi_agent_version == Some(MultiAgentVersion::V2)
-        && matches!(
-            session_source,
-            SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
-        )
-        && !human_addressable_crew_member(session_source)
-        && app_server_client_name != Some("codex-tui")
-||||||| 413492cd6c
-=======
 #[derive(Default)]
 struct ThreadEnvironmentOverride {
     environment_requests: Option<TurnEnvironmentRequests>,
     // Only default-environment updates replace the task's separately persisted root selection.
     runtime_workspace_roots: Option<Vec<AbsolutePathBuf>>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 struct ThreadSettingsBuildParams {
@@ -319,8 +242,12 @@ impl TurnRequestProcessor {
         cancellation: &CancellationToken,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         let (thread_id, thread) = self.load_thread(&params.thread_id).await?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref())
-            .await?;
+        self.ensure_direct_input_allowed(
+            request_id,
+            thread.as_ref(),
+            /*app_server_client_name*/ None,
+        )
+        .await?;
         self.config_manager
             .check_thread_model_provider_for_input(thread.config().await.as_ref())
             .await
@@ -395,8 +322,12 @@ impl TurnRequestProcessor {
         params: TurnSettingsUpdateParams,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         let (_, thread) = self.load_thread(&params.thread_id).await?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref())
-            .await?;
+        self.ensure_direct_input_allowed(
+            request_id,
+            thread.as_ref(),
+            /*app_server_client_name*/ None,
+        )
+        .await?;
         let (reply, outcome) = oneshot::channel();
         self.submit_core_op(
             request_id,
@@ -524,8 +455,12 @@ impl TurnRequestProcessor {
         params: ReviewStartParams,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         let (_, thread) = self.load_thread(&params.thread_id).await?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref())
-            .await?;
+        self.ensure_direct_input_allowed(
+            request_id,
+            thread.as_ref(),
+            /*app_server_client_name*/ None,
+        )
+        .await?;
         self.config_manager
             .check_thread_model_provider_for_input(thread.config().await.as_ref())
             .await
@@ -581,38 +516,11 @@ impl TurnRequestProcessor {
         thread: &CodexThread,
         app_server_client_name: Option<&str>,
     ) -> Result<(), JSONRPCErrorError> {
-<<<<<<< HEAD
-        let config_snapshot = thread.config_snapshot().await;
-        if direct_input_to_v2_thread_spawn_is_blocked(
-            thread.multi_agent_version(),
-            &config_snapshot.session_source,
-            app_server_client_name,
-        ) {
-            let error = invalid_request(DIRECT_INPUT_TO_MULTI_AGENT_V2_SUBAGENT_ERROR);
-            self.track_error_response(request_id, &error, /*error_type*/ None);
-            return Err(error);
-        }
-
-        Ok(())
-||||||| 413492cd6c
-        let config_snapshot = thread.config_snapshot().await;
-        if !can_accept_direct_input(
-            thread.multi_agent_version(),
-            &config_snapshot.session_source,
-        ) {
-            let error = invalid_request(DIRECT_INPUT_TO_MULTI_AGENT_V2_SUBAGENT_ERROR);
-            self.track_error_response(request_id, &error, /*error_type*/ None);
-            return Err(error);
-        }
-
-        Ok(())
-=======
-        ensure_direct_input_allowed(thread)
+        ensure_direct_input_allowed_from_client(thread, app_server_client_name)
             .await
             .inspect_err(|error| {
                 self.track_error_response(request_id, error, /*error_type*/ None);
             })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn normalize_collaboration_mode(
@@ -722,21 +630,12 @@ impl TurnRequestProcessor {
                 .inspect_err(|error| {
                     self.track_error_response(&request_id, error, /*error_type*/ None);
                 })?;
-<<<<<<< HEAD
         self.ensure_direct_input_allowed(
             &request_id,
             thread.as_ref(),
             app_server_client_name.as_deref(),
         )
         .await?;
-        if let Err(error) = Self::validate_v2_input_limit(&params.input) {
-||||||| 413492cd6c
-        self.ensure_direct_input_allowed(&request_id, thread.as_ref())
-            .await?;
-        if let Err(error) = Self::validate_v2_input_limit(&params.input) {
-=======
-        self.ensure_direct_input_allowed(&request_id, thread.as_ref())
-            .await?;
         self.config_manager
             .check_thread_model_provider_for_input(thread.config().await.as_ref())
             .await
@@ -773,7 +672,6 @@ impl TurnRequestProcessor {
                 });
         if actual_chars > MAX_USER_INPUT_TEXT_CHARS {
             let error = Self::input_too_large_error(actual_chars);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             self.track_error_response(
                 &request_id,
                 &error,
@@ -888,16 +786,10 @@ impl TurnRequestProcessor {
             )
             .await
             .map_err(|err| {
-<<<<<<< HEAD
-                let error = turn_start_submission_error(&err);
-||||||| 413492cd6c
-                let error = internal_error(format!("failed to start turn: {err}"));
-=======
                 let error = match err.details() {
                     CodexErrorDetails::InvalidRequest(message) => invalid_request(message.clone()),
-                    _ => internal_error(format!("failed to submit turn input: {err}")),
+                    _ => turn_start_submission_error(&err),
                 };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 self.track_error_response(&request_id, &error, /*error_type*/ None);
                 error
             })?;
@@ -923,50 +815,25 @@ impl TurnRequestProcessor {
 
         if turn_has_input && started {
             let config_snapshot = thread.config_snapshot().await;
-<<<<<<< HEAD
-            let parent_permission_profile =
-                parent_permission_profile_override.unwrap_or(config_snapshot.permission_profile);
-            let thread_config = thread.config().await;
-            // #658: the usage check runs on the thread's own account.
-            let auth_manager =
-                match codex_model_provider::named_sign_in_account(&thread_config.model_provider) {
+            if config_snapshot.is_primary_environment_configured() {
+                let thread_config = thread.config().await;
+                // #658: the usage check runs on the thread's own account.
+                let auth_manager = match codex_model_provider::named_sign_in_account(
+                    &thread_config.model_provider,
+                ) {
                     Some(account) => self.auth_manager.for_named_account(account),
                     None => self.auth_manager.default_account_manager(),
                 };
-            codex_memories_write::start_memories_startup_task(
-                Arc::clone(&self.thread_manager),
-                auth_manager,
-                thread_id,
-                Arc::clone(&thread),
-                thread_config,
-                parent_permission_profile,
-                &config_snapshot.session_source,
-            );
-||||||| 413492cd6c
-            let parent_permission_profile =
-                parent_permission_profile_override.unwrap_or(config_snapshot.permission_profile);
-            codex_memories_write::start_memories_startup_task(
-                Arc::clone(&self.thread_manager),
-                Arc::clone(&self.auth_manager),
-                thread_id,
-                Arc::clone(&thread),
-                thread.config().await,
-                parent_permission_profile,
-                &config_snapshot.session_source,
-            );
-=======
-            if config_snapshot.is_primary_environment_configured() {
                 codex_memories_write::start_memories_startup_task(
                     Arc::clone(&self.thread_manager),
-                    Arc::clone(&self.auth_manager),
+                    auth_manager,
                     thread_id,
                     Arc::clone(&thread),
-                    thread.config().await,
+                    thread_config,
                     config_snapshot.permission_profile,
                     &config_snapshot.session_source,
                 );
             }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
 
         self.outgoing
@@ -1079,21 +946,10 @@ impl TurnRequestProcessor {
 
         let collaboration_mode =
             collaboration_mode.map(|mode| self.normalize_collaboration_mode(mode));
-<<<<<<< HEAD
-        let has_environment_override = environments.is_some();
-        // Legacy requests only acknowledge queueing. Dependent partial updates
-        // should opt into confirmation or combine their fields in one request.
-||||||| 413492cd6c
-        let has_environment_override = environments.is_some();
-        // `thread/settings/update` only acknowledges that the update was queued.
-        // Clients that send dependent partial updates should wait for
-        // `thread/settings/updated` or combine the fields in one request.
-=======
         let has_environment_override = environment_requests.is_some();
         // `thread/settings/update` only acknowledges that the update was queued.
         // Clients that send dependent partial updates should wait for
         // `thread/settings/updated` or combine the fields in one request.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let snapshot = if permissions.is_some() {
             Some(thread.config_snapshot().await)
         } else {
@@ -1126,46 +982,26 @@ impl TurnRequestProcessor {
                         "{method} permission selection missing thread snapshot"
                     )));
                 };
-<<<<<<< HEAD
-                let overrides = ConfigOverrides {
-                    // Reload permissions for this thread's runtime, not an unrelated
-                    // saved default. CLI/model switches can legitimately differ from
-                    // config.toml; validating a mixed pair blocks an otherwise valid turn.
-                    model: Some(model.clone().unwrap_or_else(|| snapshot.model.clone())),
-                    model_provider: Some(
-                        model_provider
-                            .clone()
-                            .unwrap_or_else(|| snapshot.model_provider_id.clone()),
-                    ),
-                    cwd: environments
-                        .as_ref()
-                        .map(|environments| environments.legacy_fallback_cwd.to_path_buf()),
-                    default_permissions: Some(permissions),
-                    codex_self_exe: self.arg0_paths.codex_self_exe.clone(),
-                    codex_linux_sandbox_exe: self.arg0_paths.codex_linux_sandbox_exe.clone(),
-                    main_execve_wrapper_exe: self.arg0_paths.main_execve_wrapper_exe.clone(),
-                    ..Default::default()
-                };
-||||||| 413492cd6c
-                let overrides = ConfigOverrides {
-                    cwd: environments
-                        .as_ref()
-                        .map(|environments| environments.legacy_fallback_cwd.to_path_buf()),
-                    default_permissions: Some(permissions),
-                    codex_linux_sandbox_exe: self.arg0_paths.codex_linux_sandbox_exe.clone(),
-                    main_execve_wrapper_exe: self.arg0_paths.main_execve_wrapper_exe.clone(),
-                    ..Default::default()
-                };
-=======
                 let thread_config = thread.config().await;
                 let cwd = environment_requests.as_ref().map_or_else(
                     || snapshot.cwd().clone(),
                     |environment_requests| environment_requests.legacy_fallback_cwd.clone(),
                 );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 let config = self
                     .config_manager
-                    .load_permission_config_for_thread(&thread_config, cwd, permissions)
+                    // Reload permissions for this thread's runtime, not an unrelated
+                    // saved default.
+                    .load_permission_config_for_thread_runtime(
+                        &thread_config,
+                        cwd,
+                        permissions,
+                        Some(model.clone().unwrap_or_else(|| snapshot.model.clone())),
+                        Some(
+                            model_provider
+                                .clone()
+                                .unwrap_or_else(|| snapshot.model_provider_id.clone()),
+                        ),
+                    )
                     .await
                     .map_err(|error| config_load_error(&error))?;
                 // Startup config is allowed to fall back when requirements
@@ -1241,18 +1077,14 @@ impl TurnRequestProcessor {
         &self,
         request_id: &ConnectionRequestId,
         params: ThreadSettingsUpdateParams,
-<<<<<<< HEAD
     ) -> Result<Option<ThreadSettingsUpdateResponse>, JSONRPCErrorError> {
         let (thread_id, thread) = self.load_thread(&params.thread_id).await?;
-||||||| 413492cd6c
-    ) -> Result<ThreadSettingsUpdateResponse, JSONRPCErrorError> {
-        let (_, thread) = self.load_thread(&params.thread_id).await?;
-=======
-    ) -> Result<ThreadSettingsUpdateResponse, JSONRPCErrorError> {
-        let (_, thread) = self.load_thread(&params.thread_id).await?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref())
-            .await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        self.ensure_direct_input_allowed(
+            request_id,
+            thread.as_ref(),
+            /*app_server_client_name*/ None,
+        )
+        .await?;
         let cwd = resolve_request_cwd(params.cwd)?;
         let environment_override = self
             .build_environment_override(
@@ -1349,8 +1181,12 @@ impl TurnRequestProcessor {
         params: ThreadInjectItemsParams,
     ) -> Result<ThreadInjectItemsResponse, JSONRPCErrorError> {
         let (_, thread) = self.load_thread(&params.thread_id).await?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref())
-            .await?;
+        self.ensure_direct_input_allowed(
+            request_id,
+            thread.as_ref(),
+            /*app_server_client_name*/ None,
+        )
+        .await?;
 
         let items = params
             .items
@@ -1553,8 +1389,7 @@ impl TurnRequestProcessor {
                             Some(AnalyticsJsonRpcError::TurnSteer(turn_steer_error)),
                         )
                     }
-<<<<<<< HEAD
-                    SteerInputError::AuthorizationChanged(_) => {
+                    NotSubmittedReason::AuthorizationChanged => {
                         tracing::info!(
                             boundary = "authorizationChanged",
                             input_disposition = "returned",
@@ -1570,12 +1405,7 @@ impl TurnRequestProcessor {
                             None,
                         )
                     }
-                    SteerInputError::EmptyInput => (
-||||||| 413492cd6c
-                    SteerInputError::EmptyInput => (
-=======
                     NotSubmittedReason::EmptyInput => (
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                         "input must not be empty".to_string(),
                         None,
                         Some(AnalyticsJsonRpcError::Input(InputError::Empty)),
@@ -1610,8 +1440,12 @@ impl TurnRequestProcessor {
         thread_id: &str,
     ) -> Result<Option<(ThreadId, Arc<CodexThread>)>, JSONRPCErrorError> {
         let (thread_id, thread) = self.load_thread(thread_id).await?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref())
-            .await?;
+        self.ensure_direct_input_allowed(
+            request_id,
+            thread.as_ref(),
+            /*app_server_client_name*/ None,
+        )
+        .await?;
 
         match self
             .ensure_conversation_listener(
@@ -1958,7 +1792,10 @@ fn xcode_26_4_mcp_elicitations_auto_deny(
 
 #[cfg(test)]
 mod tests {
+    use super::super::thread_input::can_accept_direct_input;
+    use super::super::thread_input::direct_input_to_v2_thread_spawn_is_blocked;
     use super::*;
+    use codex_protocol::crew::AgentClass;
 
     #[test]
     fn execution_capacity_turn_start_error_is_structured() {

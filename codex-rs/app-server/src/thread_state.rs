@@ -124,13 +124,9 @@ impl TurnSummary {
 
 #[derive(Default)]
 pub(crate) struct ThreadState {
-<<<<<<< HEAD
     pub(crate) pending_settings:
         HashMap<String, crate::settings_confirmation::PendingSettingsConfirmation>,
-||||||| 413492cd6c
-=======
     goal_resume_lock: Arc<Mutex<()>>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub(crate) pending_interrupts: PendingInterruptQueue,
     pub(crate) network_approvals: HashMap<String, PendingNetworkApproval>,
     pub(crate) turn_summary: TurnSummary,
@@ -430,7 +426,6 @@ impl ListenerStateCandidate {
 }
 
 impl ThreadStateManager {
-<<<<<<< HEAD
     #[expect(
         clippy::await_holding_invalid_type,
         reason = "connection liveness and pending settings change together under the manager lock"
@@ -469,8 +464,8 @@ impl ThreadStateManager {
         );
         drop(guard);
         Some((state, receiver))
-||||||| 413492cd6c
-=======
+    }
+
     /// Coordinates goal edits with cold/path-based resume for just this thread.
     pub(crate) async fn lock_goal_resume(
         &self,
@@ -491,7 +486,6 @@ impl ThreadStateManager {
                 return guard;
             }
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) fn new() -> Self {

@@ -47,24 +47,6 @@ impl AppsRequestProcessor {
         let mut snapshot_age = None;
         let mut snapshot_tool_count = 0;
         let result = async {
-<<<<<<< HEAD
-            let config = self
-                .load_apps_installed_config(params.thread_id.as_deref())
-                .await?;
-            // #658: the account the session runs on.
-            let session_auth_manager = self.auth_manager.for_session();
-            let auth = match &session_auth_manager {
-                Some(auth_manager) => auth_manager.auth().await,
-                None => None,
-            };
-            let apps_enabled = config
-||||||| 413492cd6c
-            let config = self
-                .load_apps_installed_config(params.thread_id.as_deref())
-                .await?;
-            let auth = self.auth_manager.auth().await;
-            let apps_enabled = config
-=======
             let (config, thread) = match params.thread_id.as_deref() {
                 Some(thread_id) => {
                     let (_, thread) = self.load_thread(thread_id).await?;
@@ -76,9 +58,13 @@ impl AppsRequestProcessor {
                     None,
                 ),
             };
-            let auth = self.auth_manager.auth().await;
+            // #658: the account the session runs on.
+            let session_auth_manager = self.auth_manager.for_session();
+            let auth = match &session_auth_manager {
+                Some(auth_manager) => auth_manager.auth().await,
+                None => None,
+            };
             let runtime_enabled = config
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 .features
                 .apps_enabled_for_auth(auth.as_ref().is_some_and(CodexAuth::uses_codex_backend));
 

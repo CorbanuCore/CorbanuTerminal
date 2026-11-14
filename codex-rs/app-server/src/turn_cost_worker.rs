@@ -170,7 +170,8 @@ impl TurnCostWorkerHandle {
             return;
         }
         if let TurnCostBackend::OpenAi(auth_manager) = &self.backend {
-            let Some(auth) = auth_manager.auth_cached() else {
+            // #658: the account the session runs on, never another one.
+            let Some(auth) = auth_manager.session_auth_cached() else {
                 return;
             };
             if !auth.is_api_key_auth() && !auth.is_chatgpt_auth() {
@@ -400,8 +401,10 @@ impl WorkerRuntime {
     ) -> Result<Option<Vec<ApiKeyTurnCost>>, RequestError> {
         match &self.backend {
             TurnCostBackend::OpenAi(auth_manager) => {
+                // #658: the account the session runs on, never another one.
                 let Some((auth, captured_factory)) =
-                    auth_manager.auth_with_http_client_factory().await
+                    crate::request_processors::session_auth_with_http_client_factory(auth_manager)
+                        .await
                 else {
                     return Ok(None);
                 };

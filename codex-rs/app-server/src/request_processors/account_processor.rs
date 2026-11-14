@@ -36,17 +36,9 @@ const ACCOUNT_TOKEN_USAGE_FETCH_TIMEOUT: Duration = Duration::from_secs(/*secs*/
 const THREAD_USAGE_FETCH_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 60);
 const ACCOUNT_WORKSPACE_MESSAGES_FETCH_TIMEOUT: Duration =
     Duration::from_millis(/*millis*/ 1000);
-<<<<<<< HEAD
 const OPENROUTER_PROVIDER_ID: &str = "openrouter";
 const OPENROUTER_API_KEY_ENV_VAR: &str = "OPENROUTER_API_KEY";
-// Login overrides are intentionally available only in debug builds.
-#[cfg(debug_assertions)]
-||||||| 413492cd6c
-// Login overrides are intentionally available only in debug builds.
-#[cfg(debug_assertions)]
-=======
 // Packaged clients use this together with the OAuth client ID override for staging login.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 const LOGIN_ISSUER_OVERRIDE_ENV_VAR: &str = "CODEX_APP_SERVER_LOGIN_ISSUER";
 // The development success-page redirect remains debug-only.
 #[cfg(debug_assertions)]
@@ -711,17 +703,23 @@ impl AccountRequestProcessor {
             return Err(self.external_auth_active_error());
         }
 
-<<<<<<< HEAD
-        if !allow_forced_api_for_provider_login
-            && matches!(config.forced_login_method, Some(ForcedLoginMethod::Api))
-||||||| 413492cd6c
-        if matches!(config.forced_login_method, Some(ForcedLoginMethod::Api)) {
-=======
-        if !self
-            .auth_manager
-            .is_login_method_allowed(ForcedLoginMethod::Chatgpt)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-        {
+        let chatgpt_login_allowed = if allow_forced_api_for_provider_login {
+            // An OpenAI provider (named account) login is not refused by an
+            // API-key-only login method, only by managed policy (as on main).
+            config
+                .config_layer_stack
+                .requirements()
+                .managed_auth_policy()
+                .allows_login_method(
+                    ForcedLoginMethod::Chatgpt,
+                    /*forced_login_method*/ None,
+                    self.auth_manager.forced_chatgpt_workspace_id().as_deref(),
+                )
+        } else {
+            self.auth_manager
+                .is_login_method_allowed(ForcedLoginMethod::Chatgpt)
+        };
+        if !chatgpt_login_allowed {
             return Err(invalid_request(
                 "ChatGPT login is disabled. Use API key login instead.",
             ));
@@ -1097,57 +1095,6 @@ impl AccountRequestProcessor {
             .await;
 
         if success {
-<<<<<<< HEAD
-            let auth_manager = thread_manager.auth_manager();
-            auth_manager.reload().await;
-            config_manager.replace_cloud_config_bundle_loader(
-                auth_manager.clone(),
-                config.chatgpt_base_url.clone(),
-                config.http_client_factory(),
-            );
-            config_manager
-                .sync_default_client_residency_requirement()
-                .await;
-
-            let auth = auth_manager.auth_cached();
-            Self::maybe_refresh_plugin_caches_for_current_config(
-                &config_manager,
-                &thread_manager,
-                auth.clone(),
-            )
-            .await;
-            let payload_v2 = account_updated_notification(auth.as_ref());
-            outgoing
-                .send_server_notification(ServerNotification::AccountUpdated(payload_v2))
-||||||| 413492cd6c
-            let auth_manager = thread_manager.auth_manager();
-            auth_manager.reload().await;
-            config_manager.replace_cloud_config_bundle_loader(
-                auth_manager.clone(),
-                config.chatgpt_base_url.clone(),
-                config.http_client_factory(),
-            );
-            config_manager
-                .sync_default_client_residency_requirement()
-                .await;
-
-            let auth = auth_manager.auth_cached();
-            Self::maybe_refresh_plugin_caches_for_current_config(
-                &config_manager,
-                &thread_manager,
-                auth.clone(),
-            )
-            .await;
-            let payload_v2 = AccountUpdatedNotification {
-                auth_mode: auth
-                    .as_ref()
-                    .map(CodexAuth::api_auth_mode)
-                    .map(auth_mode_to_api),
-                plan_type: auth.as_ref().and_then(CodexAuth::account_plan_type),
-            };
-            outgoing
-                .send_server_notification(ServerNotification::AccountUpdated(payload_v2))
-=======
             let notification = self.current_account_updated_notification();
             self.outgoing
                 .send_account_notification(
@@ -1156,7 +1103,6 @@ impl AccountRequestProcessor {
                     owner_generation,
                     AccountNotification::Updated(notification),
                 )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 .await;
         }
     }
@@ -1359,83 +1305,16 @@ impl AccountRequestProcessor {
         Ok(response)
     }
 
-<<<<<<< HEAD
-    async fn get_account_response(
-        &self,
-        params: GetAccountParams,
-    ) -> Result<GetAccountResponse, JSONRPCErrorError> {
-        let do_refresh = params.refresh_token;
-
-        self.refresh_token_if_requested(do_refresh).await;
-
-        let config = self.load_latest_config().await;
-        let uses_openai_key = config.model_provider.uses_first_party_openai_auth();
-        let provider =
-            create_model_provider(config.model_provider, Some(self.auth_manager.clone()));
-        let account_state = match provider.account_state() {
-            Ok(account_state) => account_state,
-            Err(err) => return Err(invalid_request(err.to_string())),
-        };
-        let account = account_state
-            .account
-            .map(Account::from)
-            .map(|account| match account {
-                // Name the variable when the OpenAI key comes from the environment.
-                Account::ApiKey { .. } if uses_openai_key => Account::ApiKey {
-                    env_var: api_key_env_var(self.auth_manager.auth_cached().as_ref()),
-                },
-                account => account,
-            });
-
-        Ok(GetAccountResponse {
-            account,
-            requires_openai_auth: account_state.requires_openai_auth,
-        })
-    }
-
-||||||| 413492cd6c
-    async fn get_account_response(
-        &self,
-        params: GetAccountParams,
-    ) -> Result<GetAccountResponse, JSONRPCErrorError> {
-        let do_refresh = params.refresh_token;
-
-        self.refresh_token_if_requested(do_refresh).await;
-
-        let config = self.load_latest_config().await;
-        let provider =
-            create_model_provider(config.model_provider, Some(self.auth_manager.clone()));
-        let account_state = match provider.account_state() {
-            Ok(account_state) => account_state,
-            Err(err) => return Err(invalid_request(err.to_string())),
-        };
-        let account = account_state.account.map(Account::from);
-
-        Ok(GetAccountResponse {
-            account,
-            requires_openai_auth: account_state.requires_openai_auth,
-        })
-    }
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     async fn get_account_rate_limits_response(
         &self,
         params: GetAccountRateLimitsParams,
     ) -> Result<GetAccountRateLimitsResponse, JSONRPCErrorError> {
-<<<<<<< HEAD
         // #658: the account the session runs on, never another one.
-        let Some(auth) = self.auth_manager.session_auth().await else {
-            return Err(self.session_auth_missing(
-||||||| 413492cd6c
-        let Some(auth) = self.auth_manager.auth().await else {
-            return Err(invalid_request(
-=======
         let Some((auth, http_client_factory)) =
-            self.auth_manager.auth_with_http_client_factory().await
+            crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager)
+                .await
         else {
-            return Err(invalid_request(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            return Err(self.session_auth_missing(
                 "codex account authentication required to read rate limits",
             ));
         };
@@ -1508,7 +1387,8 @@ impl AccountRequestProcessor {
         // Match desktop's account readiness check before exposing account-bound CTA content.
         // Normal rate limits remain available when older backends omit identity or banner data.
         // Login can change while the backend read is in flight.
-        let active_auth = self.auth_manager.auth().await;
+        // #658: the session's account, which the rate limits above were read for.
+        let active_auth = self.auth_manager.session_auth().await;
         let matches_active_account = active_auth.is_some_and(|auth| {
             !auth.is_fedramp_account()
                 && response.account_id.is_some()
@@ -1541,14 +1421,6 @@ impl AccountRequestProcessor {
         &self,
         params: Option<GetAccountTokenUsageParams>,
     ) -> Result<GetAccountTokenUsageResponse, JSONRPCErrorError> {
-<<<<<<< HEAD
-        // #658: the account the session runs on, never another one.
-        let Some(auth) = self.auth_manager.session_auth().await else {
-            return Err(self.session_auth_missing(
-||||||| 413492cd6c
-        let Some(auth) = self.auth_manager.auth().await else {
-            return Err(invalid_request(
-=======
         let thread_id = params
             .and_then(|params| params.thread_id)
             .map(|thread_id| {
@@ -1557,11 +1429,12 @@ impl AccountRequestProcessor {
             })
             .transpose()?;
 
+        // #658: the account the session runs on, never another one.
         let Some((auth, http_client_factory)) =
-            self.auth_manager.auth_with_http_client_factory().await
+            crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager)
+                .await
         else {
-            return Err(invalid_request(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            return Err(self.session_auth_missing(
                 "codex account authentication required to read token usage",
             ));
         };
@@ -1646,19 +1519,12 @@ impl AccountRequestProcessor {
     async fn get_workspace_messages_response(
         &self,
     ) -> Result<GetWorkspaceMessagesResponse, JSONRPCErrorError> {
-<<<<<<< HEAD
         // #658: the account the session runs on, never another one.
-        let Some(auth) = self.auth_manager.session_auth().await else {
-            return Err(self.session_auth_missing(
-||||||| 413492cd6c
-        let Some(auth) = self.auth_manager.auth().await else {
-            return Err(invalid_request(
-=======
         let Some((auth, http_client_factory)) =
-            self.auth_manager.auth_with_http_client_factory().await
+            crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager)
+                .await
         else {
-            return Err(invalid_request(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            return Err(self.session_auth_missing(
                 "codex account authentication required to read workspace messages",
             ));
         };
@@ -1749,19 +1615,12 @@ impl AccountRequestProcessor {
         &self,
         params: SendAddCreditsNudgeEmailParams,
     ) -> Result<AddCreditsNudgeEmailStatus, JSONRPCErrorError> {
-<<<<<<< HEAD
         // #658: the account the session runs on, never another one.
-        let Some(auth) = self.auth_manager.session_auth().await else {
-            return Err(self.session_auth_missing(
-||||||| 413492cd6c
-        let Some(auth) = self.auth_manager.auth().await else {
-            return Err(invalid_request(
-=======
         let Some((auth, http_client_factory)) =
-            self.auth_manager.auth_with_http_client_factory().await
+            crate::request_processors::session_auth_with_http_client_factory(&self.auth_manager)
+                .await
         else {
-            return Err(invalid_request(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            return Err(self.session_auth_missing(
                 "codex account authentication required to notify workspace owner",
             ));
         };
@@ -1842,7 +1701,6 @@ fn workspace_messages_feature_disabled(err: &BackendRequestError) -> bool {
     err.status().is_some_and(|status| status.as_u16() == 404)
 }
 
-<<<<<<< HEAD
 fn account_updated_notification(auth: Option<&CodexAuth>) -> AccountUpdatedNotification {
     AccountUpdatedNotification {
         auth_mode: auth.map(CodexAuth::api_auth_mode).map(auth_mode_to_api),
@@ -1855,8 +1713,8 @@ fn account_updated_notification(auth: Option<&CodexAuth>) -> AccountUpdatedNotif
 fn api_key_env_var(auth: Option<&CodexAuth>) -> Option<String> {
     auth.and_then(CodexAuth::api_key_env_var)
         .map(str::to_string)
-||||||| 413492cd6c
-=======
+}
+
 /// Remove account credentials using the current account's policy, even during startup recovery.
 pub(crate) async fn logout_configured_account(
     config_manager: &ConfigManager,
@@ -1927,7 +1785,6 @@ pub(crate) async fn clear_account_configuration(
         clear_user_model_provider_if_bedrock(config_manager, config).await?;
     }
     Ok(())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[cfg(test)]
