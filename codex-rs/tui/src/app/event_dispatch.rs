@@ -4618,6 +4618,7 @@ impl App {
                         &self.config.model_provider_id,
                     );
                     self.model_catalog.refresh_provider_policy();
+                    self.chat_widget.refresh_open_model_picker();
                 }
             }
             AppEvent::ProviderManagerReplacementPersisted {

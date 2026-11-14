@@ -863,6 +863,21 @@ fn write_mount_view(process: &Path, namespace: &str, root: &Path, point: &str) {
 }
 
 #[test]
+fn cached_root_identity_follows_the_process_root_link() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let root = temp.path().join("root");
+    std::fs::create_dir(&root).expect("root");
+    let process = temp.path().join("101");
+    write_mount_view(&process, "mnt:[1]", &root, "/root-mount");
+    let expected = std::fs::metadata(&root).expect("root identity");
+
+    assert_eq!(
+        cached_root_identity(&process.join("root")),
+        Some((expected.dev(), expected.ino())),
+    );
+}
+
+#[test]
 fn different_roots_in_one_mount_namespace_are_all_scanned() {
     let temp = tempfile::TempDir::new().expect("tempdir");
     let root_a = temp.path().join("root-a");
@@ -1187,6 +1202,7 @@ fn a_child_of_a_pending_placeholder_folder_is_recorded_as_used() {
             real: pending.clone(),
         }],
     );
+    assert_eq!(setup.records().len(), 1);
     let pending_name = setup.records().pop().expect("pending record name");
     let pending_record = setup.journal.read(&pending_name).expect("pending record");
     setup.journal.register(

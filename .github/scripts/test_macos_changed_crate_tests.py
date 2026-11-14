@@ -50,6 +50,14 @@ class SelectionTest(unittest.TestCase):
                     ["codex-network-proxy"],
                 )
 
+    def test_vendor_only_dns_changes_select_network_proxy(self) -> None:
+        for suffix in ("src/hickory.rs", "src/chain.rs", "Cargo.toml"):
+            with self.subTest(suffix=suffix):
+                self.assertEqual(
+                    macos.changed_packages([f"third_party/rama-dns/{suffix}"], PACKAGES),
+                    ["codex-network-proxy"],
+                )
+
     def test_a_job_file_selects_every_package(self) -> None:
         paths = [
             path + "action.yml" if path.endswith("/") else path

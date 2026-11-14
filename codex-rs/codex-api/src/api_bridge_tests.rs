@@ -47,6 +47,60 @@ fn map_api_error_classifies_entitlement_401_separately_from_bad_credential() {
 }
 
 #[test]
+fn entitlement_recovery_gate_preserves_authentication_failures() {
+    for (body, expected) in [
+        (
+            r#"{"error":{"message":"context tokens exceed this plan"}}"#,
+            true,
+        ),
+        (
+            r#"{"error":{"type":"authentication_error","message":"context tokens exceed this plan"}}"#,
+            false,
+        ),
+        (
+            r#"{"error":{"code":"invalid_token","message":"context tokens exceed this plan"}}"#,
+            false,
+        ),
+        (
+            r#"{"error":{"message":"OAuth token exceeded maximum allowed lifetime"}}"#,
+            false,
+        ),
+        (
+            r#"{"error":{"message":"OAuth tokens exceed the maximum allowed lifetime"}}"#,
+            false,
+        ),
+        (
+            r#"{"error":{"message":"access token expired; plan context unavailable"}}"#,
+            false,
+        ),
+        (r#"{"error":{"message":"Incorrect API key"}}"#, false),
+        ("unauthorized", false),
+    ] {
+        let transport = TransportError::Http {
+            status: http::StatusCode::UNAUTHORIZED,
+            url: None,
+            headers: None,
+            body: Some(body.to_owned()),
+        };
+        assert_eq!(is_plan_entitlement_error(&transport), expected);
+        assert_eq!(
+            matches!(
+                map_api_error(ApiError::Transport(transport)).details(),
+                CodexErrorDetails::PlanEntitlementExceeded(_)
+            ),
+            expected
+        );
+    }
+    assert!(!is_plan_entitlement_error(&TransportError::Timeout));
+    assert!(!is_plan_entitlement_error(&TransportError::Http {
+        status: http::StatusCode::FORBIDDEN,
+        url: None,
+        headers: None,
+        body: Some("context tokens exceed this plan".to_owned()),
+    }));
+}
+
+#[test]
 fn map_api_error_maps_server_overloaded() {
     let err = map_api_error(ApiError::ServerOverloaded { retry_after: None });
     assert!(matches!(err.details(), CodexErrorDetails::ServerOverloaded));

@@ -79,6 +79,12 @@ doesn't change (through a dependency) shows up on `main`.
   with it), until those are fixed. It has no compile cache: about 22 minutes to
   build, then about 5 (core) or 13 (app-server) minutes of tests (60-minute
   timeout).
+- Windows gnullvm cross shards
+  (`Bazel test on windows-latest for x86_64-pc-windows-gnullvm shard N/4`,
+  `bazel.yml` `test-windows-shard`), meant to run the `*-windows-cross`
+  targets: their `bazel test shard` step runs only with authenticated
+  BuildBuddy execution. Without it every shard skips that step and still
+  reports success, with a notice and job summary saying so.
 - Argument comment lint on changed crates
   (`rust-ci / Argument comment lint - changed crates`, #636): runs the
   `/*param*/` lint, test code included, on every `codex-rs` crate whose `.rs`

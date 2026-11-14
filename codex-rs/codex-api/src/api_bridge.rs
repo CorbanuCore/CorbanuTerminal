@@ -312,11 +312,52 @@ const MISALIGNMENT_POLICY_VIOLATION_FALLBACK_MESSAGE: &str =
 const CLOUDFLARE_BLOCKED_MESSAGE: &str =
     "Access blocked by Cloudflare. This usually happens when connecting from a restricted region";
 
+/// Whether this HTTP failure represents plan limits rather than rejected credentials.
+/// Callers use the same classification as error presentation before refreshing auth.
+pub fn is_plan_entitlement_error(error: &TransportError) -> bool {
+    matches!(
+        error,
+        TransportError::Http { status, body: Some(body), .. }
+            if *status == http::StatusCode::UNAUTHORIZED
+                && indicates_plan_entitlement_rejection(body)
+    )
+}
+
 /// Heuristic for providers that signal "request exceeds plan entitlement" with a 401.
 /// Matches on semantic phrases (context/token limit combined with plan/quota language),
 /// never on one provider's exact sentence.
 fn indicates_plan_entitlement_rejection(body: &str) -> bool {
-    let lower = body.to_ascii_lowercase();
+    let parsed = serde_json::from_str::<Value>(body).ok();
+    let error = parsed.as_ref().and_then(|value| value.get("error"));
+    if error.is_some_and(|error| {
+        ["type", "code"].iter().any(|field| {
+            matches!(
+                error.get(*field).and_then(Value::as_str),
+                Some(
+                    "authentication_error" | "invalid_api_key" | "invalid_token" | "token_expired"
+                )
+            )
+        })
+    }) {
+        return false;
+    }
+    let message = error
+        .and_then(|error| error.get("message"))
+        .and_then(Value::as_str)
+        .unwrap_or(body);
+    let lower = message.to_ascii_lowercase();
+    if [
+        "oauth",
+        "access token",
+        "refresh token",
+        "api key",
+        "token lifetime",
+    ]
+    .iter()
+    .any(|credential| lower.contains(credential))
+    {
+        return false;
+    }
     let mentions_context_or_tokens =
         lower.contains("context") || lower.contains("token limit") || lower.contains("tokens");
     let mentions_entitlement = lower.contains("plan")
