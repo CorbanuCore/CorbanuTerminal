@@ -26,22 +26,19 @@ impl AppsRequestProcessor {
             .into_iter()
             .filter(|app_id| seen_app_ids.insert(app_id.clone()))
             .collect::<Vec<_>>();
-<<<<<<< HEAD
-        let config = self.load_latest_config(/*fallback_cwd*/ None).await?;
-        let auth = self.auth_manager.session_auth().await;
-||||||| 413492cd6c
-        let config = self.load_latest_config(/*fallback_cwd*/ None).await?;
-        let auth = self.auth_manager.auth().await;
-=======
         let mut config = self.load_apps_config(thread_id.as_deref()).await?;
-        let auth = match self.auth_manager.auth_with_http_client_factory().await {
+        // #658: the account the session runs on.
+        let auth = match crate::request_processors::session_auth_with_http_client_factory(
+            &self.auth_manager,
+        )
+        .await
+        {
             Some((auth, factory)) => {
                 config.application_network_policy = factory.network_policy().clone();
                 Some(auth)
             }
             None => None,
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if !config
             .features
             .apps_enabled_for_auth(auth.as_ref().is_some_and(CodexAuth::uses_codex_backend))

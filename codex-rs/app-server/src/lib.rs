@@ -587,60 +587,9 @@ pub async fn run_main_with_transport_options(
         arg0_paths.clone(),
         Arc::new(NoopThreadConfigLoader),
     );
-<<<<<<< HEAD
-    match config_manager
-        .load_latest_config(/*fallback_cwd*/ None)
-        .await
-    {
-        Ok(config) => {
-            leave_ruled_out_default_login_in_place(&config);
-            let discovered_thread_config_loader = configured_thread_config_loader(&config);
-            config_manager
-                .replace_thread_config_loader(Arc::clone(&discovered_thread_config_loader));
-            let auth_manager =
-                AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false).await;
-            config_manager.replace_cloud_config_bundle_loader(
-                auth_manager,
-                config.chatgpt_base_url.clone(),
-                config.http_client_factory(),
-            );
-        }
-        Err(err) => {
-            warn!(error = %err, "Failed to preload config for cloud config bundle");
-            // TODO: Decide whether bootstrap config preload failures should block startup.
-            // If this fails, we cannot install cloud/thread config loaders, so non-strict
-            // startup may continue without managed cloud config.
-        }
-    };
-||||||| 413492cd6c
-    match config_manager
-        .load_latest_config(/*fallback_cwd*/ None)
-        .await
-    {
-        Ok(config) => {
-            let discovered_thread_config_loader = configured_thread_config_loader(&config);
-            config_manager
-                .replace_thread_config_loader(Arc::clone(&discovered_thread_config_loader));
-            let auth_manager =
-                AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false).await;
-            config_manager.replace_cloud_config_bundle_loader(
-                auth_manager,
-                config.chatgpt_base_url.clone(),
-                config.http_client_factory(),
-            );
-        }
-        Err(err) => {
-            warn!(error = %err, "Failed to preload config for cloud config bundle");
-            // TODO: Decide whether bootstrap config preload failures should block startup.
-            // If this fails, we cannot install cloud/thread config loaders, so non-strict
-            // startup may continue without managed cloud config.
-        }
-    };
-=======
     let startup = config_manager
         .load_managed_startup_config(startup_cwd.clone())
         .await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut config_warnings = Vec::new();
     let mut plugin_startup_config = PluginStartupConfig::Current;
     let config = match startup.config {
@@ -664,10 +613,7 @@ pub async fn run_main_with_transport_options(
             })?
         }
     };
-<<<<<<< HEAD
     leave_ruled_out_default_login_in_place(&config);
-||||||| 413492cd6c
-=======
     config.validate_windows_mxc_requirement()?;
     config.auth_config().validate()?;
     let auth_manager =
@@ -683,7 +629,6 @@ pub async fn run_main_with_transport_options(
     let local_runtime_paths = local_runtime_paths.with_allowed_symlinked_codex_home(
         codex_config::allowed_symlinked_codex_home(&config.config_layer_stack, &config.codex_home),
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let code_mode_session_provider: Option<Arc<dyn CodeModeSessionProvider>> =
         match &runtime_options.code_mode_host_transport {
             CodeModeHostTransport::Local => None,
@@ -777,25 +722,15 @@ pub async fn run_main_with_transport_options(
             range: None,
         });
     }
-<<<<<<< HEAD
+    let effective_permission_profile = config.permissions.effective_permission_profile();
     let platform_sandbox_warnings = [
-        codex_core::config::system_bwrap_warning(config.permissions.permission_profile()),
+        codex_core::config::system_bwrap_warning(&effective_permission_profile, &config.cwd),
         codex_core::config::legacy_windows_sandbox_warning(
             WindowsSandboxLevel::from_config(&config),
-            config.permissions.permission_profile(),
+            &effective_permission_profile,
         ),
     ];
     for warning in platform_sandbox_warnings.into_iter().flatten() {
-||||||| 413492cd6c
-    if let Some(warning) =
-        codex_core::config::system_bwrap_warning(config.permissions.permission_profile())
-    {
-=======
-    if let Some(warning) = codex_core::config::system_bwrap_warning(
-        &config.permissions.effective_permission_profile(),
-        &config.cwd,
-    ) {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         config_warnings.push(ConfigWarningNotification {
             summary: warning,
             details: None,
@@ -821,29 +756,17 @@ pub async fn run_main_with_transport_options(
     let stderr_fmt: StderrLogLayer = match log_format_from_env() {
         LogFormat::Json => tracing_subscriber::fmt::layer()
             .json()
-<<<<<<< HEAD
-            .with_writer(codex_log_guard::RedactingMakeWriter::new(std::io::stderr))
-            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::FULL)
-||||||| 413492cd6c
-            .with_writer(std::io::stderr)
-            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::FULL)
-=======
-            .with_writer(codex_app_server_daemon::stderr_writer)
+            .with_writer(codex_log_guard::RedactingMakeWriter::new(
+                codex_app_server_daemon::stderr_writer,
+            ))
             .with_span_events(stderr_span_events())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             .with_filter(EnvFilter::from_default_env())
             .boxed(),
         LogFormat::Default => tracing_subscriber::fmt::layer()
-<<<<<<< HEAD
-            .with_writer(codex_log_guard::RedactingMakeWriter::new(std::io::stderr))
-            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::FULL)
-||||||| 413492cd6c
-            .with_writer(std::io::stderr)
-            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::FULL)
-=======
-            .with_writer(codex_app_server_daemon::stderr_writer)
+            .with_writer(codex_log_guard::RedactingMakeWriter::new(
+                codex_app_server_daemon::stderr_writer,
+            ))
             .with_span_events(stderr_span_events())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             .with_filter(EnvFilter::from_default_env())
             .boxed(),
     };
@@ -861,44 +784,20 @@ pub async fn run_main_with_transport_options(
     let log_db_layer = log_db
         .clone()
         .map(|layer| layer.with_filter(log_db::default_filter()));
-<<<<<<< HEAD
-    let otel_logger_layer = otel.as_ref().and_then(|o| o.logger_layer());
-    let otel_tracing_layer = otel.as_ref().and_then(|o| o.tracing_layer());
+    let (otel_layers, otel_logger_reload_handle) = otel_reloader::layers(otel.as_ref());
     let _ = codex_log_guard::guard(
         tracing_subscriber::registry()
             .with(stderr_fmt)
             .with(feedback_layer)
             .with(feedback_metadata_layer)
             .with(log_db_layer)
-            .with(otel_logger_layer)
-            .with(otel_tracing_layer),
+            .with(otel_layers),
     )
     .try_init();
-||||||| 413492cd6c
-    let otel_logger_layer = otel.as_ref().and_then(|o| o.logger_layer());
-    let otel_tracing_layer = otel.as_ref().and_then(|o| o.tracing_layer());
-    let _ = tracing_subscriber::registry()
-        .with(stderr_fmt)
-        .with(feedback_layer)
-        .with(feedback_metadata_layer)
-        .with(log_db_layer)
-        .with(otel_logger_layer)
-        .with(otel_tracing_layer)
-        .try_init();
-=======
-    let (otel_layers, otel_logger_reload_handle) = otel_reloader::layers(otel.as_ref());
-    let _ = tracing_subscriber::registry()
-        .with(stderr_fmt)
-        .with(feedback_layer)
-        .with(feedback_metadata_layer)
-        .with(log_db_layer)
-        .with(otel_layers)
-        .try_init();
     #[cfg(unix)]
     if let Some(Err(err)) = nofile_limit_result {
         warn!(%err, "failed to raise managed app-server file descriptor limit");
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     for warning in &config_warnings {
         match &warning.details {
             Some(details) => error!("{} {}", warning.summary, details),
@@ -1006,17 +905,8 @@ pub async fn run_main_with_transport_options(
     }
     drop(unix_socket_startup_lock);
 
-<<<<<<< HEAD
-    let auth_manager =
-        AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false).await;
     follow_configured_session_account(&auth_manager, &config, /*embedded*/ false);
 
-||||||| 413492cd6c
-    let auth_manager =
-        AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false).await;
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let remote_control_enabled = remote_control_policy == RemoteControlPolicy::Allowed
         && remote_control_explicitly_requested
         && state_db.is_some();
@@ -1516,16 +1406,12 @@ pub async fn run_main_with_transport_options(
                 }
             };
 
-<<<<<<< HEAD
             processor.cancel_plugin_sync();
-||||||| 413492cd6c
-=======
             if let Some(task) = recovery_task {
                 task.abort();
             }
             drop(snapshot);
             drop(thread_listener_tasks);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             if !shutdown_state.forced() {
                 futures::future::join_all(connections.iter().map(
                     |(&connection_id, connection_state)| {

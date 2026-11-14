@@ -26,13 +26,9 @@ use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::UserInput as V2UserInput;
 use codex_config::types::AuthCredentialsStoreMode;
 use codex_features::Feature;
-<<<<<<< HEAD
 use codex_login::AuthKeyringBackendKind;
 use codex_login::login_with_api_key;
-||||||| 413492cd6c
-=======
 use codex_utils_absolute_path::AbsolutePathBuf;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use core_test_support::responses;
 use core_test_support::skip_if_remote;
 use pretty_assertions::assert_eq;
@@ -557,26 +553,8 @@ async fn standalone_image_generation_uses_the_images_api_with_an_openai_api_key(
 async fn automatic_image_background_preserves_unknown_transparency() -> Result<()> {
     let call_id = "automatic-image-run-1";
     let server = responses::start_mock_server().await;
-<<<<<<< HEAD
-    Mock::given(method("POST"))
-        .and(path("/api/codex/images/generations"))
-        .respond_with(ResponseTemplate::new(500).set_body_string("image backend failed"))
-        .expect(1..)
-        .mount(&server)
-        .await;
-    let response_mock = responses::mount_sse_sequence(
-||||||| 413492cd6c
-    Mock::given(method("POST"))
-        .and(path("/api/codex/images/generations"))
-        .respond_with(ResponseTemplate::new(500).set_body_string("image backend failed"))
-        .expect(1)
-        .mount(&server)
-        .await;
-    let response_mock = responses::mount_sse_sequence(
-=======
     mount_image_response_with_background(&server, "auto").await;
     responses::mount_sse_sequence(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         &server,
         vec![
             responses::sse(vec![
@@ -1114,17 +1092,11 @@ async fn standalone_image_generation_is_exposed_in_code_mode_only() -> Result<()
 #[test_case(Some(false), "opaque"; "opaque")]
 #[test_case(None, "opaque"; "omitted_defaults_to_opaque")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-<<<<<<< HEAD
-async fn standalone_image_generation_is_callable_from_code_mode_only() -> Result<()> {
-    require_code_mode_host();
-||||||| 413492cd6c
-async fn standalone_image_generation_is_callable_from_code_mode_only() -> Result<()> {
-=======
 async fn standalone_image_generation_is_callable_from_code_mode_only(
     requested_transparent_background: Option<bool>,
     expected_background: &str,
 ) -> Result<()> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    require_code_mode_host();
     let call_id = "code-mode-image-run-1";
     let server = responses::start_mock_server().await;
     mount_image_response_with_background(&server, "opaque").await;
@@ -1223,7 +1195,6 @@ generatedImage(result);
     Ok(())
 }
 
-<<<<<<< HEAD
 /// Code mode runs cells in the `codex-code-mode-host` process, found next to
 /// the app server. `cargo test -p codex-app-server` builds only this package's
 /// binaries; `just test`, CI and Bazel also build the host. Without it the
@@ -1235,15 +1206,14 @@ fn require_code_mode_host() {
         "build `codex-code-mode-host` first (`cargo build -p codex-code-mode-host`, or run \
          through `just test`): without it code mode cannot run the cell"
     );
-||||||| 413492cd6c
-=======
+}
+
 fn imagegen_arguments(prompt: &str, transparent_background: Option<bool>) -> serde_json::Value {
     let mut arguments = json!({"prompt": prompt});
     if let Some(transparent_background) = transparent_background {
         arguments["transparent_background"] = json!(transparent_background);
     }
     arguments
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 async fn start_image_generation_turn(

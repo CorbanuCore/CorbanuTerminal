@@ -49,6 +49,8 @@ pub(super) struct CachedWorkspaceRouting {
 
 pub(super) struct AccountRead {
     account_state: ProviderAccountState,
+    /// Whether the read config's provider authenticates with an OpenAI key.
+    uses_openai_key: bool,
     pub(super) workspace_routing: Option<WorkspaceRouting>,
     workspace_name: Option<String>,
 }
@@ -268,8 +270,15 @@ impl AccountRequestProcessor {
                 AccountReadError::Routing(error) => internal_error(error.to_string()),
             })?;
         let mut account = read.account_state.account.map(Account::from);
-        if let Some(Account::Chatgpt { workspace_name, .. }) = &mut account {
-            *workspace_name = read.workspace_name;
+        match &mut account {
+            Some(Account::Chatgpt { workspace_name, .. }) => {
+                *workspace_name = read.workspace_name;
+            }
+            // Name the variable when the OpenAI key comes from the environment.
+            Some(Account::ApiKey { env_var }) if read.uses_openai_key => {
+                *env_var = api_key_env_var(self.auth_manager.auth_cached().as_ref());
+            }
+            _ => {}
         }
         Ok(Some(
             GetAccountResponse {
@@ -537,6 +546,7 @@ impl AccountRequestProcessor {
                 .unwrap_or_default();
             Ok(AccountRead {
                 account_state,
+                uses_openai_key: config.model_provider.uses_first_party_openai_auth(),
                 workspace_routing,
                 workspace_name,
             })

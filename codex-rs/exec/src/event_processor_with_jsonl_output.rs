@@ -10,15 +10,7 @@ use codex_app_server_protocol::McpToolCallStatus;
 use codex_app_server_protocol::PatchApplyStatus;
 use codex_app_server_protocol::PatchChangeKind;
 use codex_app_server_protocol::ServerNotification;
-<<<<<<< HEAD
-use codex_app_server_protocol::ThreadItem;
-||||||| 413492cd6c
-use codex_app_server_protocol::ThreadItem;
-use codex_app_server_protocol::ThreadTokenUsage;
-=======
 use codex_app_server_protocol::ThreadItemPayload;
-use codex_app_server_protocol::ThreadTokenUsage;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_app_server_protocol::TurnStatus;
 use codex_app_server_protocol::WebSearchAction as ApiWebSearchAction;
 use codex_core::config::Config;
