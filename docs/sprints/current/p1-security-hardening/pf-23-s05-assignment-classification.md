@@ -63,7 +63,8 @@ silently declaring complete shell analysis. Track any out-of-scope limitations.
 
 - [x] 19 frozen cases run code-blind in Tart guests on `1dea8b3b03` (2026-11-14):
   [functional record](../../../../qa/security-levels/sprints/PF-23-S05/functional-20261114.md); 18 pass after
-  evidence review and local-model replays, case 11 inconclusive; findings outside S05: #2166, #2167.
+  evidence review and local-model replays, case 11 inconclusive; findings outside S05: #2166, #2167;
+  [reel](../../../../qa/demos/index/pf23-s05-reel.md).
 
 ## Remaining
 
