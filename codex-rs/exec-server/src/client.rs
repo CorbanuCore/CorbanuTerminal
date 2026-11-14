@@ -532,7 +532,14 @@ impl LazyRemoteExecServerClient {
     }
 
     pub(crate) async fn get(&self) -> Result<ExecServerClient, ExecServerError> {
+        // Checked again once the client is ready: arming can happen while it starts.
         self.refuse_unprotected_stdio_executor()?;
+        let client = self.get_unchecked().await?;
+        self.refuse_unprotected_stdio_executor()?;
+        Ok(client)
+    }
+
+    async fn get_unchecked(&self) -> Result<ExecServerClient, ExecServerError> {
         if matches!(self.recovery_policy, RecoveryPolicy::FailFast) {
             let client = match self.cached_client() {
                 Some(client) => client,
