@@ -61,8 +61,45 @@ fn lower_priority() {
 }
 
 /// The crash was macOS-only; elsewhere a few droppers keep the cycles
-/// covered without nearing Linux's inotify instance limit.
+/// covered (on Linux below the inotify instance limit: `MAX_OPEN_INOTIFY`).
 const DROPPERS: usize = if cfg!(target_os = "macos") { 16 } else { 2 };
+
+/// Linux allows each user a few inotify instances (`max_user_instances`,
+/// often 128), and a dropped watcher's instance is closed only when notify's
+/// event-loop thread handles the shutdown, which it does after draining the
+/// inotify queue. In full `cargo test` runs every queued event is logged at
+/// TRACE (a test's `set_default` installs the `log` bridge, a `#[traced_test]`
+/// the unfiltered process-wide subscriber), so with the writers busy the
+/// queues did not drain and the droppers piled up ~120 open instances until
+/// `inotify_init` failed with EMFILE (#1553). They wait above this many open
+/// instances, leaving the rest of the limit to other tests.
+#[cfg(target_os = "linux")]
+const MAX_OPEN_INOTIFY: usize = 32;
+
+/// The inotify instances this process has open.
+#[cfg(target_os = "linux")]
+fn open_inotify_instances() -> usize {
+    let Ok(fds) = std::fs::read_dir("/proc/self/fd") else {
+        return 0;
+    };
+    fds.filter_map(Result::ok)
+        .filter(|fd| {
+            std::fs::read_link(fd.path())
+                .is_ok_and(|target| target.as_os_str() == "anon_inode:inotify")
+        })
+        .count()
+}
+
+/// Waits (until `done`) while dropped watchers' inotify instances are still
+/// closing on Linux; elsewhere there is no such limit to wait for.
+fn wait_for_closing_watchers(done: &AtomicBool) {
+    #[cfg(target_os = "linux")]
+    while open_inotify_instances() >= MAX_OPEN_INOTIFY && !done.load(Ordering::Relaxed) {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = done;
+}
 
 /// How long past the stress window the droppers get to finish a first cycle;
 /// starting an FSEvents watcher can take seconds on a loaded runner (#1553).
@@ -95,7 +132,11 @@ fn notifications_survive_start_stop_drop_cycles_on_a_busy_home() {
         let (home, done, cycles) = (home.clone(), Arc::clone(&done), Arc::clone(&cycles));
         threads.push(std::thread::spawn(move || {
             lower_priority();
-            while !done.load(Ordering::Relaxed) {
+            loop {
+                wait_for_closing_watchers(&done);
+                if done.load(Ordering::Relaxed) {
+                    break;
+                }
                 let (tx, _rx) = mpsc::channel();
                 let watcher = notifications(&home, tx).expect("watch the home");
                 std::thread::sleep(Duration::from_millis(2));
