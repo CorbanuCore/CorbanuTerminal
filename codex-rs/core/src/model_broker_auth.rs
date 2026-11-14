@@ -685,7 +685,9 @@ struct BrokeredAuth {
 
 impl AuthProvider for BrokeredAuth {
     /// Header-only paths (websockets, uploads, telemetry) get no credential.
-    fn add_auth_headers(&self, _headers: &mut HeaderMap) {}
+    fn add_auth_headers(&self, _headers: &mut HeaderMap) -> Result<(), AuthError> {
+        Ok(())
+    }
 
     fn apply_auth(&self, request: Request) -> AuthProviderFuture<'_> {
         Box::pin(async move {

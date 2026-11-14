@@ -634,7 +634,7 @@ pub(crate) async fn attach_scopes(
     let anthropic = if collects_wire(codex_model_provider_info::WireApi::Anthropic) {
         let opened = async {
             session
-                .try_ensure_rollout_materialized()
+                .try_ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
                 .await
                 .map_err(|error| CodexErr::Fatal(failure("materialize rollout", error).into()))?;
             let owner = owner.as_ref().ok_or_else(|| {
@@ -712,7 +712,7 @@ pub(crate) fn canonical_query(
     }
     let mut items: Vec<String> = parameters
         .iter()
-        .map(|(key, value)| format!("{key}={value}"))
+        .map(|(key, value)| format!("{key}={}", value.as_str()))
         .collect();
     items.sort();
     Some(items.join("&"))
@@ -774,13 +774,14 @@ pub(crate) fn turn_mode(
     // requiring the maps to be absent entirely would silence pricing on exactly
     // the metered API-key routes that can be priced. This keeps the predicate the
     // legacy eligibility used.
-    let credential_header = |headers: &Option<std::collections::HashMap<String, String>>| {
+    // Only the header names matter; the values (redacted for static headers) are not read.
+    fn credential_header<V>(headers: &Option<std::collections::HashMap<String, V>>) -> bool {
         headers.as_ref().is_some_and(|headers| {
             headers.keys().any(|name| {
                 name.eq_ignore_ascii_case("authorization") || name.eq_ignore_ascii_case("api-key")
             })
         })
-    };
+    }
     // Any built-in provider, at its own default route, in its own dialect. The
     // catalogue states exact rates per provider row, so restricting money to two
     // of those providers left every other provider recording tokens with no
