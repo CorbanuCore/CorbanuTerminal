@@ -68,13 +68,9 @@ use tokio_util::sync::CancellationToken;
 
 mod clients_tests;
 mod pairing_tests;
-<<<<<<< HEAD
 mod rpc_serialization_tests;
-||||||| 413492cd6c
-=======
 #[path = "tests/retry_tests.rs"]
 mod retry_tests;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 const TEST_INSTALLATION_ID: &str = "11111111-1111-4111-8111-111111111111";
 const TEST_REMOTE_CONTROL_URL: &str = "http://127.0.0.1:1/backend-api/wham/remote/control";
@@ -480,14 +476,8 @@ pub(super) fn remote_control_handle_with_current_enrollment(
         current_enrollment,
         pairing_persistence_key: watch::channel(None).0,
         pairing_persistence_key_required: false,
-<<<<<<< HEAD
-        auth_manager,
-        desired_state_stored_hook: None,
-||||||| 413492cd6c
-        auth_manager,
-=======
         auth_manager: auth::RemoteControlAuth::capture(auth_manager).0,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        desired_state_stored_hook: None,
     }
 }
 

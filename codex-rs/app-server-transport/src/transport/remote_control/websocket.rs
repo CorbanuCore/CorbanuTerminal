@@ -274,8 +274,7 @@ pub(super) struct RemoteControlWebsocket {
     used_rx: watch::Receiver<usize>,
     desired_state_tx: Arc<watch::Sender<RemoteControlDesiredState>>,
     desired_state_rx: watch::Receiver<RemoteControlDesiredState>,
-<<<<<<< HEAD
-    desired_state_persistence_lock: Arc<Semaphore>,
+    persistence: RemoteControlPersistence,
     /// Called just before and just after a disabled cycle publishes
     /// `Disabled` (tests only: they race an enable there, #857).
     #[cfg(test)]
@@ -288,11 +287,6 @@ pub(super) struct RemoteControlWebsocket {
 enum DisabledPublish {
     Before,
     After,
-||||||| 413492cd6c
-    desired_state_persistence_lock: Arc<Semaphore>,
-=======
-    persistence: RemoteControlPersistence,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub(super) struct RemoteControlWebsocketConfig {
@@ -514,8 +508,7 @@ impl RemoteControlWebsocket {
             used_rx,
             desired_state_tx,
             desired_state_rx,
-<<<<<<< HEAD
-            desired_state_persistence_lock: channels.desired_state_persistence_lock,
+            persistence: channels.persistence,
             #[cfg(test)]
             disabled_publish_hook: None,
         }
@@ -536,11 +529,6 @@ impl RemoteControlWebsocket {
         #[cfg(test)]
         if let Some(hook) = &self.disabled_publish_hook {
             hook(DisabledPublish::After);
-||||||| 413492cd6c
-            desired_state_persistence_lock: channels.desired_state_persistence_lock,
-=======
-            persistence: channels.persistence,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
@@ -2768,13 +2756,13 @@ mod tests {
                 server_name: "test-server".to_string(),
             },
             /*state_db*/ None,
-            remote_control_auth_manager(),
+            RemoteControlAuth::capture(remote_control_auth_manager()).0,
             RemoteControlChannels {
                 transport_event_tx,
                 status_publisher,
                 current_enrollment: test_current_enrollment(/*enrollment*/ None),
                 pairing_persistence_key: watch::channel(None).0,
-                desired_state_persistence_lock: Arc::new(Semaphore::new(1)),
+                persistence: RemoteControlPersistence::default(),
             },
             shutdown_token.clone(),
             Arc::new(desired_state_tx),
@@ -3736,16 +3724,8 @@ mod tests {
         )
     }
 
-<<<<<<< HEAD
     pub(super) async fn connected_websocket_pair() -> (
-        WebSocketStream<MaybeTlsStream<TcpStream>>,
-||||||| 413492cd6c
-    async fn connected_websocket_pair() -> (
-        WebSocketStream<MaybeTlsStream<TcpStream>>,
-=======
-    async fn connected_websocket_pair() -> (
         codex_websocket_client::WebSocketConnection,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         WebSocketStream<TcpStream>,
     ) {
         let listener = TcpListener::bind("127.0.0.1:0")
