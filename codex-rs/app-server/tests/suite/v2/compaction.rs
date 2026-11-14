@@ -312,9 +312,15 @@ async fn compaction_error_window_reaches_analytics(
         .with_root_config(&format!("chatgpt_base_url = \"{}\"", server.uri()));
     if let CompactionRoute::Remote = route {
         // The built-in OpenAI provider, pointed at the mock server (main).
-        config = config
-            .with_builtin_model_provider("openai")
-            .with_root_config(&format!("openai_base_url = \"{}/v1\"", server.uri()));
+        config = compaction_config_without_provider_table(
+            &server.uri(),
+            /*auto_compact_limit*/ 1_000_000,
+        )
+        .with_root_config(&format!("chatgpt_base_url = \"{}\"", server.uri()))
+        .with_builtin_model_provider("openai")
+        .with_root_config(&format!("openai_base_url = \"{}/v1\"", server.uri()))
+        .disable_feature(Feature::ResponsesWebsockets)
+        .disable_feature(Feature::ResponsesWebsocketsV2);
     }
     config.write(codex_home.path())?;
     mount_analytics_capture(&server, codex_home.path()).await?;
@@ -404,9 +410,14 @@ async fn auto_compaction_emits_started_and_completed_items(route: CompactionRout
     let mut config = compaction_config(&server.uri(), /*auto_compact_limit*/ 200_000);
     if let CompactionRoute::Remote = route {
         // The built-in OpenAI provider, pointed at the mock server (main).
-        config = config
-            .with_builtin_model_provider("openai")
-            .with_root_config(&format!("openai_base_url = \"{}/v1\"", server.uri()));
+        config = compaction_config_without_provider_table(
+            &server.uri(),
+            /*auto_compact_limit*/ 200_000,
+        )
+        .with_builtin_model_provider("openai")
+        .with_root_config(&format!("openai_base_url = \"{}/v1\"", server.uri()))
+        .disable_feature(Feature::ResponsesWebsockets)
+        .disable_feature(Feature::ResponsesWebsocketsV2);
         write_chatgpt_auth(
             codex_home.path(),
             ChatGptAuthFixture::new("access-chatgpt").plan_type("pro"),
@@ -747,9 +758,16 @@ async fn wait_for_context_compaction_completed(
 }
 
 fn compaction_config(server_uri: &str, auto_compact_limit: i64) -> MockResponsesConfig {
-    MockResponsesConfig::new(server_uri)
-        .with_root_config(&format!(
-            "compact_prompt = \"{COMPACT_PROMPT}\"\nmodel_auto_compact_token_limit = {auto_compact_limit}"
-        ))
+    compaction_config_without_provider_table(server_uri, auto_compact_limit)
         .with_provider_config("supports_websockets = false")
+}
+
+/// For the built-in OpenAI provider, which accepts no custom provider table.
+fn compaction_config_without_provider_table(
+    server_uri: &str,
+    auto_compact_limit: i64,
+) -> MockResponsesConfig {
+    MockResponsesConfig::new(server_uri).with_root_config(&format!(
+        "compact_prompt = \"{COMPACT_PROMPT}\"\nmodel_auto_compact_token_limit = {auto_compact_limit}"
+    ))
 }

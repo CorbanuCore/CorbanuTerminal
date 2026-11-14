@@ -545,16 +545,11 @@ async fn list_models_uses_remote_catalog_as_source_of_truth(
             r#"
 model = "mock-model"
 model_provider = "{OPENAI_PROVIDER_ID}"
+openai_base_url = "{server_uri}/v1"
 approval_policy = "never"
 sandbox_mode = "read-only"
-model_provider = "catalog-test"
 [features]
 api_key_model_discovery = true
-[model_providers.catalog-test]
-name = "OpenAI"
-base_url = "{server_uri}/v1"
-requires_openai_auth = true
-model_catalog_url = "{server_uri}/v1/models"
 "#
         ),
     )?;
