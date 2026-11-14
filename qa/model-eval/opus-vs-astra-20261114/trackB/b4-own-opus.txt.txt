@@ -1,0 +1,42 @@
+## own tests (brace) at HEAD 3c7187492c [opus]
+test security::tainted_action::tests::d258_plain_lines_for_the_brace_check ... ok
+test security::protected_links::names::tests::issue_623_nested_braces_and_sequences_are_named_whole ... ok
+test security::tainted_action::quoted::tests::d258_brace_and_quote_metadata_follows_words_and_commands ... ok
+test security::protected_links::names::tests::issue_623_globs_braces_and_shell_syntax_name_agent_settings ... ok
+test security::tainted_action::braces::tests::expands_as_bash_does ... ok
+test security::tainted_action::shell::brace_group_tests::issue_2018_braces_after_reserved_words_delimit_groups ... ok
+test security::tainted_action::shell::brace_group_tests::issue_2018_brace_arguments_stay_literal ... ok
+test security::tainted_action::tainted_action_git_option_value_tests::issue_1975_brace_option_value_before_dashes_asks ... ok
+test security::tainted_action::tainted_action_git_option_value_tests::issue_1975_literal_brace_values_stay_quiet ... ok
+test security::tainted_action::tests::d258_unrelated_or_literal_quotes_do_not_promote_brace_words ... ok
+test security::tainted_action::tainted_action_git_option_value_tests::issue_1975_other_brace_spellings_ask ... ok
+test security::tainted_action::tainted_action_brace_reading_tests::issue_2018_group_braces_need_no_second_judgment ... ok
+test security::tainted_action::tainted_action_brace_reading_tests::issue_1975_named_brace_groups_keep_full_main_verdict ... ok
+test security::tainted_action::tainted_action_brace_reading_tests::issue_1975_brace_groups_keep_full_main_verdict ... ok
+test security::tainted_action::tests::issue1636_brace_made_git_options_ask_without_quotes ... ok
+test security::tainted_action::tainted_action_brace_reading_tests::issue_1975_measuring_harness_keeps_full_main_verdict ... ok
+test security::tainted_action::tainted_action_brace_reading_tests::issue_2018_group_verdicts_never_quieter_than_main ... ok
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 3875 filtered out; finished in 9.17s
+## own tests at test-only commit e27f5d407b (expect FAIL)
+test security::tainted_action::tests::d258_plain_lines_for_the_brace_check ... ok
+test security::protected_links::names::tests::issue_623_nested_braces_and_sequences_are_named_whole ... ok
+test security::tainted_action::quoted::tests::d258_brace_and_quote_metadata_follows_words_and_commands ... ok
+test security::protected_links::names::tests::issue_623_globs_braces_and_shell_syntax_name_agent_settings ... ok
+test security::tainted_action::braces::tests::expands_as_bash_does ... ok
+test security::tainted_action::shell::brace_group_tests::issue_2018_brace_arguments_stay_literal ... ok
+test security::tainted_action::shell::brace_group_tests::issue_2018_braces_after_reserved_words_delimit_groups ... FAILED
+test security::tainted_action::tainted_action_git_option_value_tests::issue_1975_brace_option_value_before_dashes_asks ... ok
+test security::tainted_action::tainted_action_git_option_value_tests::issue_1975_literal_brace_values_stay_quiet ... ok
+test security::tainted_action::tests::d258_unrelated_or_literal_quotes_do_not_promote_brace_words ... ok
+test security::tainted_action::tainted_action_git_option_value_tests::issue_1975_other_brace_spellings_ask ... ok
+test security::tainted_action::tainted_action_brace_reading_tests::issue_2018_group_braces_need_no_second_judgment ... FAILED
+test security::tainted_action::tainted_action_brace_reading_tests::issue_1975_brace_groups_keep_full_main_verdict ... ok
+test security::tainted_action::tainted_action_brace_reading_tests::issue_1975_named_brace_groups_keep_full_main_verdict ... ok
+test security::tainted_action::tests::issue1636_brace_made_git_options_ask_without_quotes ... ok
+test security::tainted_action::tainted_action_brace_reading_tests::issue_2018_group_verdicts_never_quieter_than_main ... FAILED
+test security::tainted_action::tainted_action_brace_reading_tests::issue_1975_measuring_harness_keeps_full_main_verdict ... ok
+thread 'security::tainted_action::shell::brace_group_tests::issue_2018_braces_after_reserved_words_delimit_groups' (67371625) panicked at core/src/security/tainted_action/shell_brace_group_tests.rs:71:9:
+thread 'security::tainted_action::tainted_action_brace_reading_tests::issue_2018_group_braces_need_no_second_judgment' (67371629) panicked at core/src/security/tainted_action_brace_reading_tests.rs:150:5:
+thread 'security::tainted_action::tainted_action_brace_reading_tests::issue_2018_group_verdicts_never_quieter_than_main' (67371630) panicked at core/src/security/tainted_action_brace_reading_tests.rs:188:5:
+test result: FAILED. 14 passed; 3 failed; 0 ignored; 0 measured; 3875 filtered out; finished in 12.73s
+error: test failed, to rerun pass `-p codex-core --lib`

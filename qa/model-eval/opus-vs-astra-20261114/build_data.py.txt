@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""Assemble data.json for make_html.py from scores (hand-entered below) and run metadata."""
+import json
+import re
+from pathlib import Path
+
+B = Path(__file__).resolve().parent
+M = ["opus", "astra"]
+
+# ---- Track A scores (from trackA/scoring-notes.md) ----
+# detect: full/partial/missed (known-defect cases) or clean/fp (controls)
+# extras: real / uncertain / false counts of findings beyond the known defect(s)
+A = [
+    ("A01", "#1837 chroot stdin (security)", True,
+     {"opus": ("missed", "REQ", 1, 2, 0, None), "astra": ("full", "REQ", 0, 3, 0, True)}),
+    ("A02", "#1962 assert_cmd bump (test infra)", True,
+     {"opus": ("missed", "APP", 0, 0, 0, None), "astra": ("missed", "APP", 0, 0, 0, None)}),
+    ("A03", "#1055 work counter (test/perf)", True,
+     {"opus": ("missed", "APP", 3, 0, 0, None), "astra": ("full", "REQ", 0, 0, 0, True)}),
+    ("A04", "#2043 sync: network settings (security)", True,
+     {"opus": ("full", "REQ", 0, 1, 0, True), "astra": ("full", "REQ", 1, 0, 0, True)}),
+    ("A05", "#2133 assignment provenance (security)", True,
+     {"opus": ("partial", "REQ", 3, 1, 0, True), "astra": ("full", "REQ", 3, 1, 0, True)}),
+    ("A06", "#1171 .git message (logic)", True,
+     {"opus": ("partial", "REQ", 3, 2, 0, True), "astra": ("missed", "REQ", 2, 1, 0, None)}),
+    ("A07", "#1175 pane settings leak (agent control)", True,
+     {"opus": ("full", "REQ", 2, 0, 0, True), "astra": ("full", "REQ", 1, 0, 0, True)}),
+    ("A08", "#1889 Windows test DACL (test quality)", True,
+     {"opus": ("full", "REQ", 0, 0, 0, True), "astra": ("full", "REQ", 0, 0, 0, True)}),
+    ("A09", "#1878 nextest group (control)", False,
+     {"opus": ("clean", "APP", 2, 1, 0, None), "astra": ("clean", "APP", 0, 0, 0, None)}),
+    ("A10", "#1944 GIT_ALLOW_PROTOCOL (control)", False,
+     {"opus": ("clean", "APP", 2, 0, 0, None), "astra": ("newreal", "REQ", 1, 1, 0, None)}),
+]
+# Optional overrides from blinded extra-finding grading (trackA/extra-grading.json)
+ov = B / "trackA" / "extra-adjust.json"
+adjust = json.loads(ov.read_text()) if ov.exists() else {}
+
+
+def meta(path):
+    t = Path(path).read_text()
+    wall = int(re.search(r"wall_s=(\d+)", t).group(1))
+    tok = re.search(r"tokens=([\d,]*)", t).group(1).replace(",", "")
+    return wall, int(tok) if tok else None
+
+
+cases, tot = [], {m: dict(full=0, partial=0, missed=0, verdict_ok=0, n=0, real_extras=0,
+                          uncertain_extras=0, false_alarms=0, sev_ok=0, wall=0, tokens=0) for m in M}
+for cid, label, defect, runs in A:
+    c = {"id": cid, "label": label, "runs": {}}
+    for m in M:
+        det, verdict, real, unc, false, sev = runs[m]
+        adj = adjust.get(f"{cid}-{m}", {})
+        real += adj.get("real", 0); unc += adj.get("uncertain", 0); false += adj.get("false", 0)
+        ok = (verdict == "REQ") if defect else (verdict == "APP")
+        mp = B / "runs" / "trackA" / f"{cid.lower()}-{m}.meta"
+        wall, tok = meta(mp) if mp.exists() else (0, 0)
+        c["runs"][m] = {"detect": det, "verdict": verdict, "verdict_ok": ok, "wall": wall, "tokens": tok}
+        t = tot[m]
+        if defect:
+            t[det] += 1
+            t["sev_ok"] += 1 if sev else 0
+        t["verdict_ok"] += bool(ok); t["n"] += 1
+        t["real_extras"] += real; t["uncertain_extras"] += unc
+        t["false_alarms"] += false
+        t["wall"] += wall; t["tokens"] += tok or 0
+    cases.append(c)
+for m in M:
+    t = tot[m]
+    t["detect_txt"] = f'{t["full"]} full, {t["partial"]} partial, {t["missed"]} missed (of 8)'
+    t["score_txt"] = f'{t["full"] + 0.5 * t["partial"]:.1f} / 8'
+    t["verdict_txt"] = f'{t["verdict_ok"]} / {t["n"]}' + (" (A10 counted wrong per the frozen key; both graders judged its reason real)" if m == "astra" else "")
+    t["wall_txt"] = f'{t["wall"] / 60:.0f} min total ({t["wall"] / 600:.1f} min per review)'
+    t["tok_txt"] = f'{t["tokens"] / 1000:.0f}k total ({t["tokens"] / 10000:.0f}k per review)'
+    t["sev_txt"] = f'{t["sev_ok"]} of {t["full"] + t["partial"]} found defects'
+
+data = json.loads((B / "prose.json").read_text())
+data["trackA"].update({
+    "cases": cases,
+    "totals": tot,
+    "metric_rows": [("Known defects found (full = 1, partial = ½)", "score_txt"), ("Breakdown", "detect_txt"),
+                    ("Correct verdict vs frozen key (10 PRs)", "verdict_txt"), ("Severity calibrated", "sev_txt"),
+                    ("Real extra findings", "real_extras"), ("Uncertain extra findings", "uncertain_extras"),
+                    ("Extra findings judged false", "false_alarms"),
+                    ("Wall time", "wall_txt"), ("Tokens", "tok_txt")],
+})
+
+# ---- Track B ----
+hid = json.loads((B / "trackB" / "hidden.json").read_text()) if (B / "trackB" / "hidden.json").exists() else []
+rub = json.loads((B / "grade" / "rubric.json").read_text()) if (B / "grade" / "rubric.json").exists() else {}
+data["trackB"]["hidden"] = hid
+charts = []
+DIMS = ["correctness", "security_rules", "test_quality", "scope", "clarity", "honesty"]
+if rub:
+    # mean over tasks, per dimension, per (model, grader)
+    groups = []
+    for d in DIMS:
+        vals = {}
+        for m in M:
+            for g in M:
+                xs = [r[g][m][d] for t, r in rub.items() if t != "b1r" and g in r and m in r[g]]
+                vals[f"{m}-by-{g}"] = round(sum(xs) / len(xs), 2) if xs else None
+        groups.append((d.replace("_", " "), vals))
+    charts.append({"title": "Figure 3. Track B blinded rubric (1–5, mean over B1–B4): each model's work as scored by each grader",
+                   "groups": groups,
+                   "series": [("opus-by-opus", "Opus work, Opus grader", "#c2410c"),
+                              ("opus-by-astra", "Opus work, Astra grader", "#fdba74"),
+                              ("astra-by-opus", "Astra work, Opus grader", "#1d4ed8"),
+                              ("astra-by-astra", "Astra work, Astra grader", "#93c5fd")]})
+data["trackB"]["rubric_charts"] = charts
+
+# ---- Cost ----
+wall, toks = [], []
+for c in cases:
+    wall.append((c["id"], {m: round(c["runs"][m]["wall"] / 60, 1) for m in M}))
+    toks.append((c["id"], {m: round((c["runs"][m]["tokens"] or 0) / 1000) for m in M}))
+for t in ["b1", "b2", "b3", "b4", "b1r"]:
+    w, k = {}, {}
+    for m in M:
+        mp = B / "runs" / "trackB" / f"{t}-{m}.meta"
+        if mp.exists():
+            a, b = meta(mp)
+            w[m], k[m] = round(a / 60, 1), round((b or 0) / 1000)
+    if w:
+        wall.append((t.upper(), w)); toks.append((t.upper(), k))
+data["cost"]["wall"] = wall
+data["cost"]["tokens"] = toks
+(B / "data.json").write_text(json.dumps(data, indent=1))
+print("ok", {m: (tot[m]["score_txt"], tot[m]["verdict_txt"], tot[m]["false_alarms"]) for m in M})

@@ -1,0 +1,68 @@
+F1: REAL; fair severity: medium
+
+The test module has no Windows gate, and its skip macros do not exclude Windows. It uses the default PowerShell shell without supplying `printf`, so a missing-command failure can replace the sandbox denial required by its assertions.
+
+F2: REAL; fair severity: medium
+
+A required provider makes the provider explicit but does not set `provider_came_from_override`. With the fallback flag at its default `false`, inherited `gpt-5.5` plus required `anthropic` reaches the incompatible-pair error.
+
+F3: REAL; fair severity: medium
+
+The added tests exercise classification directly; none establishes taint and checks approval or refusal through dispatch. The checkout’s core `AGENTS.md` explicitly requires integration tests for agent-logic changes.
+
+F4: REAL; fair severity: high
+
+The environment unconditionally sets `GIT_ALLOW_PROTOCOL=file`, which permits file transport even for automatic submodule operations. That removes Git’s user-only restriction and permits copying a readable local repository’s objects into the workspace; filesystem restrictions remain the limiting boundary.
+
+F5: REAL; fair severity: low
+
+The lexer marks the heredoc delimiter but continues lexing the body as commands. `for now` increments `keyword_depth` without a matching close, so the later assignment receives `in_keyword` and stores an unseen value, producing an unnecessary prompt.
+
+F6: REAL; fair severity: high
+
+The chroot checks run only from position zero and immediately after the first `eval`. Carried-command and modifier handling occurs later without repeating those checks, so forms such as `eval -- chroot / ./x` bypass the new child classification.
+
+F7: REAL; fair severity: nit
+
+The error still says “takes the guard” when traversal starts from `stage_windows_sandbox_helpers`. The docstring already mentions calling `root`, so that part of the finding overstates the stale wording.
+
+F8: REAL; fair severity: high
+
+The recursive `self.command` call re-lexes placeholders, and `literal_char` replaces their control characters, destroying their unseen identity. The explicit checks miss both curl’s data operand and an unknown executable after `env`, allowing the stated classification gaps.
+
+F9: REAL; fair severity: high
+
+Both substitution entry and exit clear `just_closed_group`, so the subsequent `&` cannot mark the brace group’s assignment as backgrounded. Literal `printf log` introduces no unseen-output marker, leaving the classifier to trust `r=origin` although the parent shell retains its previous value.
+
+F10: REAL; fair severity: low
+
+`Path::ancestors()` visits the nearest ancestor first, but each match overwrites `git_folder`. Consequently, an outer `.git` can cause the writable-parent check to fail and suppress the explanation for a protected inner `.git`.
+
+F11: REAL; fair severity: low
+
+The explanation recommends Permissive without considering the approval policy. With approvals disabled, switching levels preserves the workspace sandbox’s `.git` restriction and cannot authorize the escape needed to perform the write.
+
+F12: REAL; fair severity: high
+
+The child classification receives `folders.cwd` after the outer `env -C` wrapper has been removed. The original pass sees the directory option but identifies `chroot` as the command, so it does not treat the child `cp` operands as persistence writes.
+
+F13: REAL; fair severity: high
+
+Recursive classification initializes fresh folder state without propagating the outer uncertainty through `unknown_folder`. Although `unseen_folder` survives for executable-path checks, persistence checks use different state, so relative writes can escape classification; the wrapper-directory case overlaps F12.
+
+```text
+FINDINGS
+F1: REAL; fair severity: medium
+F2: REAL; fair severity: medium
+F3: REAL; fair severity: medium
+F4: REAL; fair severity: high
+F5: REAL; fair severity: low
+F6: REAL; fair severity: high
+F7: REAL; fair severity: nit
+F8: REAL; fair severity: high
+F9: REAL; fair severity: high
+F10: REAL; fair severity: low
+F11: REAL; fair severity: low
+F12: REAL; fair severity: high
+F13: REAL; fair severity: high
+```

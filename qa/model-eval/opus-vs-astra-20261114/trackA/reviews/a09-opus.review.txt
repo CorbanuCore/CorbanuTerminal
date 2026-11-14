@@ -1,0 +1,25 @@
+I found no blocking defects. I reviewed the code without running the tests or the script, as instructed.
+
+**Checked and correct:**
+- **New Windows override in `nextest.toml`:** it is first in `profile.default.overrides` and limited to `cfg(windows)`. Its four exact names match `test(...)` (which matches substrings) in both places these tests live: the integration tests at `suite::windows_sandbox::…` and the unit tests at `security::launch_contract::windows_tests::…` and `…windows_workspace_write_tests::…`. Putting it first means no other group can claim these tests ahead of it, including the `core_apply_patch_cli_integration` override and the Windows-only `windows_process_heavy` override that has no package filter. `profile.local` only adds an override for `codex-app-server`.
+- **The four listed tests are the complete current set.** The only places outside `windows-sandbox-rs` that stage `codex-windows-sandbox-setup` are `core/tests/suite/windows_sandbox.rs` and `core/src/security/launch_contract_windows_tests.rs`. The other codex-core tests that use `WindowsSandboxLevel::Elevated` only build the launch environment or check refusal logic: `exec_tests.rs`, `tools/sandboxing_tests.rs`, `pf_27_s06_d2_tool_launch_carries_contract_denies_to_windows_sandbox` and the `pf_27_s07_*` tests. None of them runs the elevated setup.
+- **Faster `code_only` scan:** the old loop checked every character; the new one jumps to the next character that could start a comment or literal (`/ " ' r b c`). It still visits every position where a branch could match, so the output is the same.
+- **`block_end` rewrite:** it returns the same index as before, including `len(code)` when braces don't balance.
+- **`FILTER_RE` as a format string:** the regex has no other `{}`, so the package name is inserted correctly.
+- **`is_ours(…, platform=None)`:** this behaves the same as the old `"platform" not in override` check for the existing codex-windows-sandbox check.
+- **Name-based scan of codex-core:** the `use super::windows_tests::stage_windows_sandbox_helpers;` line is blanked and isn't renamed with `as`, so it is accepted. The two separate helpers with the same name are treated as one root, which is correct here.
+
+**Findings:**
+
+1. **Low — `.github/scripts/test_windows_sandbox_nextest_groups.py:338-349`: the test is brittle.** `test_core_scan_finds_the_elevated_tests` uses `assertEqual` against an exact list of four names.
+   - **Scenario:** someone adds a fifth codex-core test that calls `stage_windows_sandbox_helpers()` and correctly adds it to `nextest.toml`. This test still fails until the hard-coded list is also edited.
+   - **Why it matters:** the real coverage check is `test_every_core_elevated_test_is_in_the_group_on_windows`. This test is only a guard that the scan isn't finding nothing.
+   - **Fix:** use `assertIn` for the four known names, the way the matching windows-sandbox test does.
+
+2. **Low — line 33 (`CORE_ELEVATED_MARK`): a gap in what the check can see.** It only finds codex-core tests that call a function named exactly `stage_windows_sandbox_helpers`.
+   - **Scenario:** a new test runs the elevated setup through a helper with a different name, such as `stage_helpers()`. Or it skips staging because helpers are already sitting in the shared `codex-resources` folder next to the test binary, which persists across tests in the same binary. Either way, the test escapes the group without the check noticing.
+   - **Fix:** document the convention near the helpers. Or also scan for `WindowsSandboxLevel::Elevated` combined with `process_exec_tool_call` or `run(` and send matches to manual review.
+
+3. **Nit — line 207: misleading error text.** The `ScanError` message says "takes the guard but nothing calls it", which is wrong when the scan starts from `stage_windows_sandbox_helpers`. The `guard_users` docstring wording is also stale. Consider saying "reaches `{root}`" instead.
+
+VERDICT: APPROVE

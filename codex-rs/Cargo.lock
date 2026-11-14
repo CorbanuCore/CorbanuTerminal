@@ -4421,6 +4421,7 @@ dependencies = [
  "codex-windows-sandbox",
  "globset",
  "libc",
+ "memchr",
  "opentelemetry",
  "pretty_assertions",
  "rama-core",

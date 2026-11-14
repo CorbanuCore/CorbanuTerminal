@@ -1,0 +1,34 @@
+Fixed locally; working tree is clean.
+
+- [input_queue.rs](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/b1r-astra/codex-rs/core/src/session/input_queue.rs) now verifies the polling task’s turn ID and holds ownership through input draining and mailbox tracking.
+- [turn.rs](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/b1r-astra/codex-rs/core/src/session/turn.rs) supplies that ID.
+- [stale_poll_mail_tests.rs](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/b1r-astra/codex-rs/core/src/session/stale_poll_mail_tests.rs) adds the bounded regression. Added the #2046 release fragment and [verification record](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/b1r-astra/qa/reliability/2046-guardian-stop-message-gap.md).
+
+**Fail-before evidence:** this command failed with exit 100 because the stopped task consumed both replacement inputs:
+
+```sh
+just test -pcodex-core --lib -j8 --locked --offline --no-tests=fail --retries 0 -E 'test(guardian_stopped_turn_cannot_take_replacement_turn_input)'
+```
+
+**Pass-after evidence:** the regression and all focused tests passed—**28 passed, 0 failed**:
+
+```sh
+just test -pcodex-core --lib -j8 --locked --offline --no-tests=fail --retries 0 -E 'test(session::input_queue::tests::) | test(session::stale_poll_mail_tests::) | test(session::tests::steer_input_) | test(mailbox_delivery) | test(abort_does_not_advance)'
+```
+
+Final validation used the pinned Rust **1.99.1** toolchain:
+
+```sh
+cargo clippy -p codex-core --all-targets -j8 --locked --offline -- -D warnings
+cargo fmt -p codex-core -- --config imports_granularity=Item
+cargo fmt -p codex-core -- --check
+```
+
+Clippy passed; formatting was applied and checked. Builds used the specified target directory and eight jobs. Tests unset both home aliases and used `RUST_MIN_STACK=8388608`.
+
+Local commits:
+
+- `6366d8d52a50775bc5e6341915dfe5fde09d6da5` — regression test.
+- `fb81142de804f5add31387f2b4c51cb4440f19c3` — fix, release note, evidence.
+
+No requested gate remains unfinished. Nonfatal linker/dependency advisories and the ignored nightly-only formatting option are recorded. Full-workspace and TUI qualification were not run. No network, push, GitHub operations, or contributor contact.

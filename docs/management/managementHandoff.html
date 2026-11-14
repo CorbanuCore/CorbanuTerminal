@@ -15,10 +15,201 @@ th{background:#f5f5f7}.warn{background:#fff4e5;border-left:4px solid #f0a020;pad
 </head>
 <body>
 <h1>Corbanu Terminal — management handoff</h1>
-<p><small>Update 2026-11-10 ~03:30Z (earlier: 11-09 14:30Z; 11-08 23:30Z, 15:30Z and 05:15Z; 11-07 21:30Z, 15:00Z and 02:15Z; 10-29 07:20Z; 10-28 21:30Z, 16:15Z and 03:15Z; resume update, 2026-10-26; closeout update, 2026-10-22). Owner: <b>Travis</b>. Repository: <code>CorbanuCore/CorbanuTerminal</code>. This update supersedes earlier operational snapshots below.</small></p>
-<div class="note"><b>Contributor integration update — 2026-11-11 10:26Z.</b> See the <a href="contributorIntegration20261111-1026.md">dated integration update</a> and <a href="https://github.com/CorbanuCore/CorbanuTerminal/issues/2106">tracker #2106</a>. Twenty-seven PRs have been explicitly merged in this round, plus #1957 incorporated through #1959 ancestry. Named Windows evidence tooling, the substitution cache and compatible reasoning/TPS changes are integrated. Audit/V8 and provider/native Windows gates remain; the sync tree still has unresolved conflicts. Independent functional qualification and demo reels are not complete. No binary was installed or released. The older contributor snapshot below is historical, not current status. Unrelated owner decisions and release gates are unchanged.</div>
+<p><small>Current update: <a href="#update-20261114">2026-11-14 15:16Z (handoff-doc24)</a>. Owner: <b>Travis</b>. Repository: <code>CorbanuCore/CorbanuTerminal</code>.</small></p>
+<div class="note" id="update-20261114"><b>Update 2026-11-14 15:16Z (handoff-doc24).</b>
+<p><b>Work resumed; source integration is ahead of qualification.</b> This is the current operational snapshot. Older update boxes and the dated state/decision lists below are historical where superseded here. Sources: <code>$W/todo.md</code> from 11-10 03:28Z through 11-14 15:12Z, worker results modified since November 10, the six live workers' briefs, the contributor checkpoints, the <a href="astraVsOpus.html">model comparison</a>, and GitHub PR/issue state checked November 14 around 15:12–15:16Z. Main is <code>d8482953b5</code> (#2141). Every merge listed below is a source merge, not a release or functional-acceptance claim.</p>
+<h3>Outage, recovery and owner decisions</h3>
+<p><b>The claude-plan outage lasted from 11-10 13:24Z to the successful 11-14 10:48Z probe.</b> Opus workers/review execution hit HTTP 429 and a local cooldown. During the outage the coordinator directly implemented the owner-requested provider/model-picker repair and contributor integrations, using the specifically authorized Astra High reviews. This was a scoped exception, not permission for workers to substitute models. The coordinator assessed 19 human and eight Dependabot PRs, retained original author history, thanked contributors by name and recorded Task Node provenance. It repaired OpenSSL/rustix/Hickory audit blockers, reconciled dependencies, landed the accepted contributor queue and staged sync CI repairs. Independent functional acceptance and demos remained unfinished; no install or release was claimed by those November 11–12 checkpoints.</p>
+<p><b>Decisions with dates:</b> on <b>11-10 05:25Z</b> Travis accepted D497–D519 as recommended, then D496 at <b>05:35Z</b>. D518's Defender exclusion for <code>C:\CorbanuQA</code> on the test PC was applied. On <b>11-11</b> he accepted the contributor assessment and requested incorporation and named thanks; that did not approve unrelated sync decisions. On <b>11-12 00:27Z</b>, the <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/88#issuecomment-6810673461">88-B decision record</a> accepted fail-closed handling and explicit sign-in for ambiguous damaged/deleted external Claude credentials; automatic restoration waits for all-writer coordination or identity-safe isolation. Stage B remains unimplemented and PF-84-S07 remains draft.</p>
+<p>On <b>11-14 11:30Z</b>, Travis said <b>“Regarding decisions, all as recommended”</b>: <b>D520–D546 are accepted</b>, not pending. The recorded selections are D520(a), D521(a), D522(a), D523(a), D524(a), <b>D525(a)</b>, D526(a), D527(a), D528(a), D529(a), D530(a), D531(a), D532(a), <b>D533 yes</b>, D534(a), D535(a), D536 yes, D537(b), D538(a), D539(c), D540 accept upstream, D541(a), D542(a), D543(a), D544(a), D545(a), D546(a). In plain language: keep fenced session grants and serial/unknown-model limits; fail closed on unsupported agent backends and MXC; preserve role restrictions, input ownership and accounting; hold input across mid-turn permission changes; refuse localhost shares; allow recorded, independently security-reviewed sync-only edits inside <code>core/src/security</code>; skip unsafe snapshot shortcuts; retain the stricter approval/escalation rules. Earlier provisional implementations are now owner-accepted. <b>D525/D533 shipped in #2071 on 11-14 13:04Z</b>; project roles now obey all project-config rules and provider allowlists can only narrow. #2052 is closed; small follow-ups are in <a href="https://github.com/CorbanuCore/CorbanuTerminal/issues/2150">#2150</a>.</p>
+<p>Travis requested the model experiment at <b>11-14 11:15Z</b> and granted the coordinator discretion to <b>“use Astra whenever you feel is warranted until I weigh in”</b>. The coordinator enacted the interim policy at <b>14:55Z</b>. The Windows desktop checklist still belongs to Travis when he has 30 minutes; it was not waived by “all as recommended.”</p>
+<h3>Opus versus Astra and the rules now in force</h3>
+<p><a href="astraVsOpus.html">Report #2144</a>: Track A found <b>4.0/8 known bugs for Opus, 6.0/8 for Astra</b>; both matched the frozen verdict key on 8/10 cases. Most of the detection gap follows case selection: on Astra-discovered bugs the split was 0.5 versus 3.0; on Opus-discovered bugs, 3.5 versus 3.0. Opus raised 23 additional real findings, Astra 14. Track B hidden checks passed on <b>2/4 tasks for Opus, 3/4 for Astra</b>. Both graders preferred Astra on B1/B4, Opus on B3, and split on B2. Opus's B4 change made two classifier lines quieter, contrary to the task rule; both models missed the B2 picker-tab detail. Astra used more implementation tokens and its grader leaned toward its own work by 2–3 points. The samples are small; docs were not directly tested.</p>
+<ul>
+<li><b>ASTRA INTERIM POLICY:</b> a brief names the executor. Astra High may execute ordinary fixes, CI/flake work, docs, first-pass reviews and triage, including security-code and sync-conflict implementation. <b>Every final merge-gating review remains independent, read-only Opus 5.5 High on the exact head.</b> D318/corbanu-security approval remains Opus-only. Workers never switch their own model, trim tests to pass or add unrequested evidence documents.</li>
+<li><b>Launchers:</b> <code>$HOME/.corbanu-workers/launch-astra.sh</code> runs <code>gpt-6-astra</code> on provider <code>openai</code> at High; <code>launch.sh</code> remains the Opus launcher. <b>TOOLCHAIN:</b> both put pinned Rust <b>1.99.1</b> first on PATH. Clippy evidence from the 1.95.0 default is invalid and must be rerun; it caused a false gate failure in experiment B1.</li>
+<li><b>PLAN CAPACITY:</b> one reviewer process per worker, lean briefs, focused delta reviews. On a 429/local cooldown, save state to the result file and stop. Launch reviewers in the foreground or a private tmux session that the worker waits on.</li>
+<li><b>SAME-TEST and SYNC MERGE rules:</b> re-integrate main and rerun affected CI if main changed the same tests since the last run. Even expected-red sync checks must finish before merge. #2100/#2142 merged with marker-blocked jobs still pending; the coordinator recorded the slip and clarified the rule. The sync CI worker has specific documented exceptions for pre-existing macOS failures (#2051/#2143) and formatting; these are not a general waiver.</li>
+</ul>
+<h3>What merged since the November 10 handoff</h3>
+<p>The following GitHub snapshot covers <b>111 PRs</b> merged from <b>11-10 03:28Z through 11-14 15:16Z</b>, grouped by destination and area, one line per PR. Main merge #2b (#2023/#2025) immediately preceded this window and carried D487's OAuth policy; main merge #2c is listed below. #1957's merged state is through the paired #1959 ancestry, not a separate independent integration campaign.</p>
+<details><summary>Open the complete merged-PR list</summary>
+<h4>Main — security, Windows and command classification</h4>
+<ul>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1055">#1055</a> (11-11): Cached shell-substitution membership reduces repeated classifier work (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1246">#1246</a> (11-11): Linux process-root identity uses cached statx data while retaining later safety checks (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1348">#1348</a> (11-11): Protected-read explanations preserve colon-space paths without widening the general parser (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1831">#1831</a> (11-10): Commands launched through find's exec option receive the sudo checks (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1837">#1837</a> (11-11): Classifies chroot's actual command, including inherited input; asks when it cannot judge safely (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1944">#1944</a> (11-10): No-network Windows commands allow only Git's local-file transport (D475; D550 below revisits submodules).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2005">#2005</a> (11-10): Brace arguments no longer split Git commands incorrectly after untrusted content (ryssroad).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2009">#2009</a> (11-10): Setting up the default Windows sandbox now raises the running session's protection (D514).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2024">#2024</a> (11-10): Folder/repository confirmation now covers only the files shown in the prompt (D486).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2031">#2031</a> (11-10): Added MCP OAuth address-policy files to security CODEOWNERS.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2034">#2034</a> (11-10): Detached reviews inherit their conversation's current security settings (D519).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2040">#2040</a> (11-10): Added three more address-policy enforcement files to security CODEOWNERS.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2048">#2048</a> (11-10): Added outbound proxy and exec-server handler paths to security CODEOWNERS.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2054">#2054</a> (11-10): Project-declared agent roles receive the project-config denylist (D512).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2066">#2066</a> (11-10): Network-home Git config is read in the background with a two-second limit (D517).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2071">#2071</a> (11-14): Project roles follow all project-config rules; project provider lists may narrow but never widen policy (D525/D533).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2087">#2087</a> (11-14): Refuses remote Windows work at Moderate/Aggressive when the remote machine has no Windows sandbox (D510).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2099">#2099</a> (11-14): Recognizes functions-namespaced goal tools as the same built-in goal tools.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2133">#2133</a> (11-12): Conditional and subshell assignments no longer establish trusted Git-remote values (araupooo).</li>
+</ul>
+<h4>Main — providers, sessions and MCP</h4>
+<ul>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/135">#135</a> (11-11): Keeps Grok 4.7 available by explicit choice, outside automatic allocation (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/983">#983</a> (11-11): Concurrent tool builds emit one omitted-tool warning (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2028">#2028</a> (11-10): Bounds the remote MCP fallback restart time (bradsbots).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2030">#2030</a> (11-10): Rejects a zero MCP discovery timeout at config load (bradsbots).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2033">#2033</a> (11-10): Preserves mailbox messages during turn shutdown (0xzoz).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2083">#2083</a> (11-10): A stopping turn cannot consume the newer turn's input or mail.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2103">#2103</a> (11-11): Refreshes the model picker after a provider is restored.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2113">#2113</a> (11-11): Preserves reasoning usage without inflating tokens-per-second figures; salvage from goodalexander's #28/#2107.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2115">#2115</a> (11-11): Claude Stage A retries rejected streams before output and avoids entitlement-driven auth churn; goodalexander's #88 attribution retained.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2132">#2132</a> (11-12): Re-arms remote termination when the fallback timeout cancels it.</li>
+</ul>
+<h4>Main — tests, CI and dependencies</h4>
+<ul>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1370">#1370</a> (11-11): Explains the Bash prerequisite for path-regression tests (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1383">#1383</a> (11-11): Tests cancellation-grace task scope (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1384">#1384</a> (11-11): Checks the Linux sandbox pending-record count (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1385">#1385</a> (11-11): Keeps instruction-test temporary directories alive (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1392">#1392</a> (11-11): Tests persisted legacy cooldown controls (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1393">#1393</a> (11-11): Normalizes proven-data shell fixtures on Windows (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1394">#1394</a> (11-11): Introduces the named Windows test-evidence parser (citadelculture, stage 1).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1864">#1864</a> (11-10): Windows cross-test shards explicitly report tests that did not run (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1955">#1955</a> (11-11): Updates the release action to 3.0.3; synthetic qualification, no publication.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1956">#1956</a> (11-11): Updates actions/cache/save to 6.1.0.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1957">#1957</a> (11-11): Updates CodeQL init to 4.39.1, incorporated through the paired #1959 ancestry.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1959">#1959</a> (11-11): Updates CodeQL analyze to 4.39.1; five-language qualification recorded.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1960">#1960</a> (11-11): Updates socket2 to 0.6.5.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1961">#1961</a> (11-11): Updates axum to 0.8.9; combined dependency and socket evidence retained.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1962">#1962</a> (11-11): Updates assert_cmd to 2.2.2, with the optional-helper panic repaired.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1986">#1986</a> (11-10): Adds coverage for disguised zsh/stat loads (envcoding).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2026">#2026</a> (11-10): Adds D484 release notes and removes six claimed fixed Windows known failures; #2039 corrects the vault cases.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2036">#2036</a> (11-10): Repairs the #2007/#2017 Windows provenance-test clash.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2038">#2038</a> (11-10): Keeps Windows-path tests on Windows and includes path dependencies in changed-crate testing.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2039">#2039</a> (11-10): Runs vault provenance tests with the elevated Windows sandbox; 965/965 passed.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2057">#2057</a> (11-10): Retries remote-test package installation during mirror sync failures.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2058">#2058</a> (11-10): Includes path-dependency crates in changed-crate argument-comment lint.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2070">#2070</a> (11-10): Adds non-blocking macOS changed-crate tests for five crates; #2069 remains a recorded memory-scan timeout.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2073">#2073</a> (11-11): Polls pending input through the production path; local-maxi contribution with citadelculture credit; #2076 closed as superseded.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2095">#2095</a> (11-14): Waits for closing inotify instances in the kill-switch test; closes #1553.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2105">#2105</a> (11-11): Updates OpenSSL to 0.10.80 to clear the new audit failures.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2110">#2110</a> (11-11): Bounds inputs to named test-evidence tooling (stage 2).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2111">#2111</a> (11-11): Associates named Bazel outcomes with the invocation and checkout (stage 3).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2112">#2112</a> (11-11): Collects Windows outcomes across Bazel crash retries (stage 4).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2114">#2114</a> (11-14): Keeps macOS Unix-socket fixtures below SUN_LEN (citadelculture); closes #2108.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2118">#2118</a> (11-11): Updates rustix to 1.1.6 for its advisory.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2128">#2128</a> (11-12): Uses patched Hickory 0.26.3 through a vendored adapter without changing Rama's network interfaces.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2141">#2141</a> (11-14): Supplies bwrap to Bazel core tests and reuses session auth for accounting; closes #2140; fresh nightly still pending.</li>
+</ul>
+<h4>Main — documentation and qualification records</h4>
+<ul>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/1380">#1380</a> (11-11): Clarifies Windows installer junction-prefix comparison (citadelculture).</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2029">#2029</a> (11-10): Publishes handoff-doc23 and archives older handoff boxes.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2109">#2109</a> (11-11): Preserves the November 11 06:28 contributor checkpoint.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2116">#2116</a> (11-11): Allocates selected-account recovery and freezes its independent test design.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2125">#2125</a> (11-11): Preserves the November 11 10:26 contributor checkpoint.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2135">#2135</a> (11-12): Records the assignment-classifier plan and frozen test design.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2136">#2136</a> (11-12): Records assignment integration evidence, with acceptance still outstanding.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2144">#2144</a> (11-14): Publishes the Opus-versus-Astra comparison and its limitations.</li>
+</ul>
+<h4>Sync branch — infrastructure, main catch-up and MCP baseline</h4>
+<ul>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2032">#2032</a> (11-10): Adds MCP OAuth address-policy paths to the sync security list and CODEOWNERS.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2045">#2045</a> (11-10): Repairs MCP and exec-server compilation and adapts rmcp-client tests to rmcp 3.9.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2053">#2053</a> (11-10): Repairs Windows/Linux network-proxy test compilation.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2060">#2060</a> (11-10): Adapts backend-client to the refused-address error without retrying through a system proxy.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2077">#2077</a> (11-10): Main merge #2c carries main through ede11f0d21 and records 151 paths.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2079">#2079</a> (11-10): Carries the discovery-timeout setting and aligns security-path ownership with main.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2119">#2119</a> (11-14): Repairs dependency audit, V8 targets and CI inventory; folds in #2131's Hickory work and quinn advisory repair.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2120">#2120</a> (11-14): Retains MCP 401 no-replay assertions with typed errors.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2123">#2123</a> (11-14): Injects synthetic keyrings for MCP tests while retaining production isolation.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2124">#2124</a> (11-14): Limits lint expectations to synthetic tracing fixtures.</li>
+</ul>
+<h4>Sync branch — S2a session, client and turn</h4>
+<ul>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2042">#2042</a> (11-10): Resolves core context, state and small session modules.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2043">#2043</a> (11-10): Resolves core configuration.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2055">#2055</a> (11-10): Ports compaction and retry/accounting protections to upstream's newer path; background compaction stays off.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2064">#2064</a> (11-10): Fences session grants, ports approvals/file-tool checks and protects mailbox admission.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2074">#2074</a> (11-10): Ports sessions, startup warm-up and steering authority.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2080">#2080</a> (11-10): Ports turn/task handling, serial-model rules and deferred input after a permission change.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2089">#2089</a> (11-10): Ports the core client with a security review.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2100">#2100</a> (11-14): Ports session handlers, injection, thread manager and delegation.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2142">#2142</a> (11-14): Ports guardian and MCP uploads and repairs Corbanu-specific compile errors.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2145">#2145</a> (11-14): Ports MCP approvals to the central flow with D50/D52, #945 and post-taint rules.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2146">#2146</a> (11-14): Ports realtime conversations, admission and accounting to upstream's loop.</li>
+</ul>
+<h4>Sync branch — S2b non-shell tools and S2c agents</h4>
+<ul>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2059">#2059</a> (11-10): Resolves agent-role loading and retains base-instruction validation.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2061">#2061</a> (11-10): Resolves agent status, registry and capacity helpers.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2063">#2063</a> (11-10): Connects upstream's interface to Corbanu's shared agent backend; others fail closed.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2065">#2065</a> (11-10): Ports agent control and durable mailboxes.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2067">#2067</a> (11-10): Ports agent spawning.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2072">#2072</a> (11-10): Ports typed role overrides while preserving parent restrictions and D512.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2075">#2075</a> (11-10): Ports child-config and multi-agent helpers.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2078">#2078</a> (11-10): Ports spawn handlers, specifications and the V2 thread-spawn contract.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2081">#2081</a> (11-10): Ports agent lifecycle, messaging, interrupt, wait and listing tools.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2086">#2086</a> (11-10): Ports agent specification tests.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2092">#2092</a> (11-10): Ports registry/router, grant reads, extension, image, MCP and dynamic tools.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2093">#2093</a> (11-10): Ports parallel tools, planning, code mode and small handlers.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2094">#2094</a> (11-10): Resolves registry/router/planning test conflicts.</li>
+</ul>
+<h4>Sync branch — S3a security resolution</h4>
+<ul>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2084">#2084</a> (11-10): Restores D446 network-folder and D398 real-path checks in command execution.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2085">#2085</a> (11-10): Follows upstream shell-handler/zsh-fork removals and relocates Windows sandbox tests.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2090">#2090</a> (11-10): Ports Corbanu approval rules to upstream's approval and sandbox flow.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2091">#2091</a> (11-10): Ports execution/apply-patch runtimes; carries D447 to every exec_command launch.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2096">#2096</a> (11-10): Restores Windows agent-command restrictions, treats MXC as no sandbox and refuses localhost shares.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2097">#2097</a> (11-10): Ports the orchestrator with D491/D522 refusals.</li>
+<li><a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2098">#2098</a> (11-10): Adds compatibility aliases outside the security folder (D539(c)); D543 later permits reviewed edits inside it.</li>
+</ul>
+</details>
+<h3>Upstream sync: progress and the remaining gates</h3>
+<p>Target: <code>sync/upstream-rust-v0.167.0</code>, tracked by <a href="https://github.com/CorbanuCore/CorbanuTerminal/issues/1532">#1532</a> and <a href="https://github.com/CorbanuCore/CorbanuTerminal/issues/1628">#1628</a>. The fetched ledger at <code>4946b66343f90eb9677bb4d75c2a7d3469efd095</code> has <b>1,460/2,545 rows resolved (57.4%)</b>, 1,085 open, counting the main ledger plus <code>-main-merges.tsv</code>, <code>-s1c.tsv</code> and <code>-s3b.tsv</code>. The denominator has grown with new follow-ups; this is recorded row progress, not a percentage of code proven correct. The earlier handoff reported 1,055/2,276 (46%).</p>
+<ul>
+<li><b>S0/S1:</b> original below-core integration is complete, with later catch-up/CI rows still open (S0 4; S1c 12 at this ledger head). #2119 clears the audit blocker; #2131 was folded into it and closed. #2120/#2123/#2124 are merged. Contributor bradsbots' #2101 still needs its final current-head gates. Formatter draft #2121 must restore/freeze the 190 hash-pinned <code>qa/**</code>/<code>benchmarks/**</code> files under the coordinator's Q3 grant; draft #2122 waits for S4's CLI.</li>
+<li><b>S2a:</b> core session/client/turn and guardian/MCP work is landing; #2100/#2142/#2145/#2146 are merged, #2147–#2149 remain open in this snapshot. Schema/test batches and follow-ups remain. The broad ledger has 68 open S2a rows, including later main-merge and follow-up obligations.</li>
+<li><b>S2b:</b> the original 19 non-shell-tool rows are resolved (#2092–#2094); two later rows remain in the combined ledger. <b>S2c:</b> agent tool handlers are resolved, but five original test files and other follow-ups wait for core compilation (18 open rows across ledgers).</li>
+<li><b>S3a:</b> #2151–#2154 were independently approved in the prior worker's report but are still open here; current heads have moved during base integration and must be checked again. #2157 is the new network-approval/D52 suspended-host fix. A <b>scratch combined-stack library build</b> reduced <code>codex-core</code> errors from about <b>107 to 43</b>; inside <code>core/src/security</code>, about 75 fell to one, waiting on <code>network_approval.rs</code>. These are not passing tests and are not all merged-branch results. Core tests still do not compile. D446 is in code (#2084), D447 in code (#2091); Windows/runtime proof remains due at tier exit. D491 typing/file-tool and #2009 integration still depend on the remaining stack. The ledger has 39 S3a open rows before that stack lands.</li>
+<li><b>Next main → sync merge must carry #2099, #2087 and #2071.</b> Preserve both sides of the expected <code>protected_surface.rs</code>/<code>read_denials.rs</code> conflicts; carry project-role scoping through config, hooks, skills, agent roles and MCP. Do not assume those main protections are already present on sync.</li>
+<li><b>S3b/S4/S5:</b> the security parity/review work, TUI/app-server/exec/CLI resolutions and full qualification are still ahead. The combined ledger has 572 open S3b rows. No SG2/SG3 sign-off or final upstream merge is claimed.</li>
+</ul>
+<h3>Contributor checkpoints, infrastructure and active workers</h3>
+<p><b>Preserved from stale docs PRs:</b> #2126's <a href="contributorIntegration20261111-1320.md">13:20</a> and <a href="contributorIntegration20261111-1412.md">14:12 November 11 checkpoints</a> are retained as explicitly historical evidence, including contributor attribution, the DNS regression fixes, original failed attempts and the formatter/evidence incident. #2134's unique 88-B decision is folded into the plan and PF-84-S07 sprint; its “await Opus recharge” status is superseded by November 14 recovery. #88 Stage B, PF-23-S04/S05 functional acceptance and demos, and the #1958 WinGet publisher hold are not complete. #28 and #2076 were closed as superseded, not merged; #2113 delivered the narrow #2107 salvage. The cooldown-era Astra review used for #2114 is recorded honestly and does not replace the new Opus final-review rule.</p>
+<p><b>Infrastructure:</b> the November 11 Ubuntu package-server DNS failures occurred before product tests and remain tracked in <a href="https://github.com/CorbanuCore/CorbanuTerminal/issues/2130">#2130</a>; they are separate from the repaired product Hickory adapter. On <b>11-14 around 13:52–14:10Z</b>, the Mac system resolver hung only on <code>api.github.com</code>, while direct DNS queries and other GitHub hosts worked. Toggling Tailscale <code>accept-dns</code> off/on fixed it without sudo and restored MagicDNS/Windows-host resolution. Worker gh failures in that window were infrastructure failures. merge-1114 cleaned about <b>85 GB</b> of dead-worker glitch directories; bench-1114 reports about <b>290 GB</b> of build output/clones removed. land-2071 left the earlier <code>sec2052-target</code> (16 GB) for its owner/coordinator; no cleanup is claimed for that directory.</p>
+<p><b>CI:</b> main postmerge recovered on November 10 after #2038. At November 14 resume, postmerge on <code>1dea8b3b03</code> was green, but November 12–13 nightlies failed. #2141 fixes the missing Bazel bwrap and repeated provider-auth call; the newly dispatched nightly <code>43607356281</code> is still awaiting a result. Earlier green evidence is not transferred to newer heads.</p>
+<p><b>Six live tmux workers at this check:</b></p>
+<ul>
+<li><code>nightly-1114</code> (Opus): #2141 merged; awaiting the freshly dispatched nightly result.</li>
+<li><code>sync-ci1114</code> (Opus): finish #2101 and #2121, preserve frozen evidence; keep #2122 draft.</li>
+<li><code>sync-s2a7</code> (Opus): land the remaining S2a stack, schema and test batches.</li>
+<li><code>sync-s3a8</code> (Opus): land #2151–#2154, resolve network approvals/D52 and remaining S3a contracts/tests.</li>
+<li><code>func-pf23</code> (Opus): rebuild/install the signed candidate, execute frozen PF-23-S04/S05 cases under enforced isolation and produce demos; no finished result yet.</li>
+<li><code>handoff-doc24</code> (Astra High executor, independent Opus final review): this handoff and supersession of #2126/#2134.</li>
+</ul>
+<p><code>astra-2155</code> has finished: draft <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2156">#2156</a> at <code>50ff9f61ab6da0e83137d6bf937bdfe8ab84561f</code> implements D550(a). Windows extracted Git-environment tests went 0/2 → 2/2; macOS focused tests passed 55/55. Opus approved code only in round 1. <b>No security approval or merge</b>: the real sandbox → shell → Git path must prove the empty variable survives before sign-off, and Travis must choose D550.</p>
+<h3 id="pending-20261114">PENDING DECISIONS — coordinator's current list</h3>
+<p>These are the six current owner items from the latest coordinator entries; accepted D520–D546 and 88-B are not pending. Product follow-ups without an owner choice remain work items above.</p>
+<ol>
+<li><b>Astra policy.</b> (a) Confirm Astra High for implementation/first-pass review where warranted, with independent Opus final merge review and Opus-only D318 security sign-off; (b) limit Astra to first-pass review; (c) wait for more evidence. <b>Recommendation: (a).</b> Coordinator discretion already authorizes the interim policy until Travis weighs in. The benchmark also suggests Astra as an additional classifier-review lens; it does not replace Opus sign-off.</li>
+<li><b>D547 — kill switch with a non-local agent backend.</b> (a) Keep refusing every tool call; (b) add a policy query for remote backends. <b>Recommendation: (a)</b>, as built provisionally; the local backend is the only production backend today.</li>
+<li><b>D548 — denied path with no local form.</b> (a) Keep the strict refusal; (b) resolve through the executor. <b>Recommendation: (a)</b>, as built provisionally. An unresolvable denied path must not be bypassed through a writable link target.</li>
+<li><b>D549 — malformed apply_patch before PreToolUse.</b> (a) Accept upstream's order, refusing malformed patches (also structured-edit-fallback refusals) before hooks; (b) restore main's hook order. <b>Recommendation: (a)</b>, as built provisionally.</li>
+<li><b>D550 — local-file Git submodules in no-network mode.</b> (a) Refuse all Git transports, also losing direct local clone/fetch/push and reversing D475's local-clone preservation; (b) keep D475 and document the local-file submodule gap, within the sandbox's read policy. <b>Coordinator recommendation: (b). Worker recommendation: (a), after actual launch-path verification.</b> <code>GIT_ALLOW_PROTOCOL=file</code> is consulted before per-protocol config, so the proposed config pair and <code>GIT_PROTOCOL_FROM_USER=0</code> do not repair it. #2156 waits for the decision; code approval is not security sign-off.</li>
+<li><b>Windows desktop checklist.</b> (a) Travis schedules 30 minutes and completes the existing D396/D416/D448 checklist plus step 4b/#1803 probe; (b) defer and keep #1800/#1798/#1851 drafts gated. <b>Recommendation: (a) when available; otherwise (b), with no inferred sign-off.</b> Automated desktop evidence and D461/D462 acceptance do not replace his checklist.</li>
+</ol>
+</div>
+
+<p><small>Historical update 2026-11-10 ~03:30Z (earlier: 11-09 14:30Z; 11-08 23:30Z, 15:30Z and 05:15Z; 11-07 21:30Z, 15:00Z and 02:15Z; 10-29 07:20Z; 10-28 21:30Z, 16:15Z and 03:15Z; resume update, 2026-10-26; closeout update, 2026-10-22). Owner: <b>Travis</b>. Repository: <code>CorbanuCore/CorbanuTerminal</code>. This historical update is superseded by handoff-doc24 above.</small></p>
+<div class="note"><b>Historical contributor checkpoint — 2026-11-11 10:26Z.</b> See the <a href="contributorIntegration20261111-1026.md">dated integration update</a> and <a href="https://github.com/CorbanuCore/CorbanuTerminal/issues/2106">tracker #2106</a>. Twenty-seven PRs have been explicitly merged in this round, plus #1957 incorporated through #1959 ancestry. Named Windows evidence tooling, the substitution cache and compatible reasoning/TPS changes are integrated. Audit/V8 and provider/native Windows gates remain; the sync tree still has unresolved conflicts. Independent functional qualification and demo reels are not complete. No binary was installed or released. The older contributor snapshot below is historical, not current status. Unrelated owner decisions and release gates are unchanged.</div>
 <div class="note"><b>Historical contributor checkpoint — 2026-11-11 06:28Z.</b> Travis approved the comparative contributor assessment and requested revisions, incorporation and named thanks. See <a href="contributorIntegration20261111.md">the scoped integration handoff</a> and <a href="https://github.com/CorbanuCore/CorbanuTerminal/issues/2106">tracker #2106</a>. Prepared branches have independent reviews and focused evidence, but <b>no contributor PR has merged in this round</b>; #2105 still awaits two Linux V8 jobs. #28 was closed as superseded with detailed @goodalexander credit and narrow salvage tracked in #2107. No binary was installed or released. Opus execution is provider-blocked; the coordinator implemented directly with owner-requested Astra High reviews. The persistent goal reports blocked, not active. This note supersedes only the contributor integration/build snapshot, not unrelated pending decisions or release gates.</div>
-<div class="note"><b>Update 2026-11-10 ~03:30Z (handoff-doc23).</b> Sources: <code>$W/todo.md</code> from its 11-09 14:30Z line through its 11-10 03:28Z line, the worker results in <code>$HOME/.corbanu-workers/*.result.md</code> written since then
+<div class="note"><b>Historical update 2026-11-10 ~03:30Z (handoff-doc23).</b> Sources: <code>$W/todo.md</code> from its 11-09 14:30Z line through its 11-10 03:28Z line, the worker results in <code>$HOME/.corbanu-workers/*.result.md</code> written since then
 (contrib-o, win-dec2, rev-1963, ci-1856, rev-1971, win-1909b, contrib-p, win-1967, sync-s1d, sync-s1b, ci-1972, sync-s1b2, contrib-q, ci-1982, dec-1109c, win-1976, dec-1109e, sec-1947, contrib-r, sec-1912b, merge-train1, sync-main2, win-prov and win-2000),
 the running workers' briefs, logs and tmux sessions, <code>INSTALL.json</code>, the sync ledgers on <code>sync/upstream-rust-v0.167.0</code>, and <code>git log</code>/GitHub re-checked at about 02:55–03:30Z. Main is at <code>ddfa14163b</code> (#2008, 02:55Z); the sync branch at <code>fb24bf9e00</code> (#2023, 03:12Z).
 <ul>
@@ -145,6 +336,16 @@ recommendation for each. Travis answers by number (“1. yes 2. …”).</li>
 </ul>
 
 <h2>3. Worker mechanics</h2>
+<h3>Current additions — November 14, 2026</h3>
+<p>The current <code>$W/wave2-common.md</code> controls; these additions supersede older launcher/model instructions below.</p>
+<ul>
+<li><b>ASTRA INTERIM POLICY (11-14 14:55Z):</b> under Travis's discretion grant, a brief may name Astra High as executor for ordinary fixes, CI, docs, triage, first-pass review, security-code implementation or sync-conflict resolution. Every final merge review remains an independent read-only Opus 5.5 High review on the exact head; D318/corbanu-security approval requires Opus APPROVE. Workers never switch their own model. Astra workers must not trim tests to pass or include extra evidence documents unless asked.</li>
+<li><b>Launchers:</b> <code>$L/launch-astra.sh &lt;name&gt; $W/&lt;name&gt;.brief.md</code> selects <code>-m gpt-6-astra -c model_provider="openai" -c model_reasoning_effort="high"</code>; <code>$L/launch.sh</code> keeps Opus 5.5 High. The brief states the executor and independent final reviewer.</li>
+<li><b>TOOLCHAIN (11-14):</b> both launchers put pinned Rust 1.99.1 first on PATH. Clippy output from default 1.95.0 is not valid gate evidence; rerun with 1.99.1.</li>
+<li><b>PLAN CAPACITY (11-14):</b> at most one reviewer process per worker. Keep briefs lean and prefer focused delta reviews. Run the reviewer in the foreground or a private tmux session you wait on (REVIEWER LAUNCH). On HTTP 429/local cooldown, write state to the result and stop; do not substitute models.</li>
+<li><b>SAME-TEST RULE (11-10):</b> if main changed the same test files since your last CI, merge main and rerun affected platform checks, including non-blocking workflows. Do not remove failures from a known-failures list while they still fail.</li>
+<li><b>SYNC MERGE NOTE (11-14):</b> every check must finish before merging, even expected-red marker-blocked checks. Any permitted baseline failures need the specific coordinator grant and recorded log evidence; main still requires all checks green.</li>
+</ul>
 <h3>Folder layout</h3>
 <p><b>Since 2026-10-15 ~21:10Z</b> (Travis's resilience decision 8, after the #616 outages) workers run from the internal disk.
 <code>L=$HOME/.corbanu-workers</code> holds:</p>
@@ -1478,6 +1679,7 @@ scheduled nightly had not run at 12:45Z. Open: #636, #349, #1201 (reopened to ke
 <p><b>11-09/10 (since #1965):</b> the cargo-deny outage and its combined fix #1993, and the coverage PRs #1970, #1984 and #2017, are in section 8.0q; main's red postmerge since #2011 (#2027) and the failed 11-09 nightly are in section 10. Open: #1448, #1610, #1967–#1969, #1989, #2027.</p>
 
 <h2>9. Travis's decisions (binding)</h2>
+<p><b>November 14 status:</b> Newer decisions: D496–D519 were accepted on November 10, 88-B on November 12, and D520–D546 on November 14. Astra executor discretion is in force. The dated decisions below remain binding except where explicitly superseded. See the <a href="#update-20261114">current update</a> and <a href="#pending-20261114">PENDING DECISIONS</a>.</p>
 <p>All are also recorded as comments on the named issues/PRs (and in <code>todo.md</code>). Dates are 2026 (Phoenix/UTC as logged).</p>
 <table>
 <tr><th>Date</th><th>Decision</th><th>Where</th></tr>
@@ -2167,6 +2369,7 @@ Was (win-1648, 16:29Z): D367: how to close #1721: (a) remove the sandbox account
 </table>
 
 <h2>10. Current state</h2>
+<p><b>November 14 status:</b> The state tables below are the historical November 10 snapshot. Use handoff-doc24 for current workers, merged PRs and outstanding gates. See the <a href="#update-20261114">current update</a> and <a href="#pending-20261114">PENDING DECISIONS</a>.</p>
 <p>As of about 03:30Z on 2026-11-10. Running workers (<code>tmux -S $HOME/.corbanu-workers/tmux.sock ls</code>; launch times UTC):</p>
 <table><tr><th>Worker (launched)</th><th>Scope</th><th>State</th></tr>
 <tr><td>merge-train2 (about 22:10Z, 11-09)</td><td>Part A: sync #1987 → #1988 → #1994 → #1998. Part B (after merge-train1): main #1984, #1943, #1944, #1986.</td><td>Part A done (00:20Z). Part B: #1984 and #1943 merged (02:50Z, 02:52Z); #1944 (D475) and envcoding's #1986 remain, each with a main merge, a fresh corbanu-security approval (body naming the SHA) and, for #1986, warm thanks and the Task Node note for task_0897f54e05eb43825911b03fcfe96430. Then it checks main's postmerge.</td></tr>
@@ -2205,6 +2408,7 @@ Was (win-1648, 16:29Z): D367: how to close #1721: (a) remove the sandbox account
 <p><b>Evidence:</b> worker reports and reviewer outputs are in <code>$HOME/.corbanu-workers/</code> and <code>.codex-work/&lt;worker&gt;/</code>; requests, grants and the desktop checklist (<code>win-desk.request.md</code>) in <code>$W</code>; the decision log in <code>$W/todo.md</code>; the sync plan in <code>docs/management/upstreamSyncPlan.md</code> and on #1532/#1628.</p>
 
 <h2>11. Decisions and remaining external actions</h2>
+<p><b>November 14 status:</b> The decision queue below is historical. D496–D546 are accepted; the current six-item queue is Astra policy, D547–D550 and Travis's Windows desktop checklist. Other unfinished qualification and release gates remain as stated. See the <a href="#update-20261114">current update</a> and <a href="#pending-20261114">PENDING DECISIONS</a>.</p>
 <p><b>Pending numbered decisions (20):</b> D496–D515, each in section 9. Recommended (as in <code>todo.md</code>):</p>
 <ul>
 <li><b>D496</b> (sync, misalignment stops): keep upstream's dedicated error with Corbanu wording, never retried. Recommended: <b>yes</b>.</li>

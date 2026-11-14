@@ -1,0 +1,15 @@
+No blocking defects found.
+
+**Checked and correct**
+- **The fix itself.** `GIT_ALLOW_PROTOCOL` is the variable git actually reads. When it is set, git ignores `protocol.*.allow` config, so a repository's `.git/config` or the global config can't re-allow a transport. Setting it to `file` still allows local paths, `file://` URLs and bundles, which git checks as `file`. It refuses `https`, `ssh`, `git://`, `ext` and remote helpers before connecting.
+- **Caller values are overwritten.** `set_env_var` (env.rs:197) replaces the value in every spelling, because Windows ignores case in variable names. A caller can no longer widen the list, and the old `or_insert` behavior is gone, as the release note says.
+- **No conflict with the core git guard.** `git_ext_guard` changes `GIT_ALLOW_PROTOCOL` before the sandbox does, and the sandbox then sets `file`. Snapshot wrapping is skipped on Windows (`maybe_wrap_shell_lc_with_snapshot` returns early under `cfg!(windows)`), so the core overrides can't restore a wider list inside the command.
+- **Refactor.** Moving the variables into `apply_no_network_env_vars` leaves `apply_no_network_to_env` behaving the same. The only caller is `spawn_prep.rs:153`.
+- **Workflow probe.** `env_tests.rs` now has 8 `#[test]` functions, so `8 passed` is the right expectation.
+- **Real git in tests.** Calling git is not new: `acl_delete_child_tests.rs` already runs real git in tests that aren't ignored.
+
+**Non-blocking test issues**
+1. **Low, env_tests.rs:149: the error-message check depends on the language git runs in.** The test looks for the English text `transport 'https' not allowed`. Git for Windows translates its messages based on the system language, so on a non-English machine git still refuses, but the assertion fails. Fix: add `.env("LANGUAGE", "C").env("LC_ALL", "C")` to the test command, or only check that the output contains `https`.
+2. **Nit, env_tests.rs:139–146: the test uses the developer's system and global git config.** It doesn't reach the network or a credential helper. Even so, a global `init.templateDir` hook or `core.fsmonitor` would run during `git init` and `git clone`. Setting `GIT_CONFIG_NOSYSTEM=1` and `GIT_CONFIG_GLOBAL` to an empty file in the temporary folder keeps the test isolated, in line with the repository's rules for isolating automated tests.
+
+VERDICT: APPROVE

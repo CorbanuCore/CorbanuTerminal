@@ -1,0 +1,1 @@
+arm=opus model=claude-opus-5-5-plan start=2026-11-14T11:26:38Z end=2026-11-14T11:29:30Z wall_s=172 exit=0 tokens=88,533 gh_write_cmds_in_log=1

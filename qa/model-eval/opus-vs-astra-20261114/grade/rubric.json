@@ -1,0 +1,192 @@
+{
+ "b1": {
+  "opus": {
+   "astra": {
+    "correctness": 5,
+    "security_rules": 5,
+    "test_quality": 5,
+    "scope": 3,
+    "clarity": 4,
+    "honesty": 5
+   },
+   "opus": {
+    "correctness": 4,
+    "security_rules": 4,
+    "test_quality": 4,
+    "scope": 5,
+    "clarity": 4,
+    "honesty": 3
+   }
+  },
+  "astra": {
+   "astra": {
+    "correctness": 5,
+    "security_rules": 5,
+    "test_quality": 5,
+    "scope": 5,
+    "clarity": 5,
+    "honesty": 5
+   },
+   "opus": {
+    "correctness": 4,
+    "security_rules": 4,
+    "test_quality": 4,
+    "scope": 5,
+    "clarity": 4,
+    "honesty": 3
+   }
+  }
+ },
+ "b2": {
+  "opus": {
+   "opus": {
+    "correctness": 3,
+    "security_rules": 3,
+    "test_quality": 4,
+    "scope": 4,
+    "clarity": 4,
+    "honesty": 4
+   },
+   "astra": {
+    "correctness": 3,
+    "security_rules": 4,
+    "test_quality": 4,
+    "scope": 3,
+    "clarity": 3,
+    "honesty": 4
+   }
+  },
+  "astra": {
+   "opus": {
+    "correctness": 3,
+    "security_rules": 3,
+    "test_quality": 3,
+    "scope": 5,
+    "clarity": 4,
+    "honesty": 4
+   },
+   "astra": {
+    "correctness": 3,
+    "security_rules": 4,
+    "test_quality": 3,
+    "scope": 5,
+    "clarity": 4,
+    "honesty": 4
+   }
+  }
+ },
+ "b3": {
+  "opus": {
+   "opus": {
+    "correctness": 5,
+    "security_rules": 5,
+    "test_quality": 5,
+    "scope": 5,
+    "clarity": 5,
+    "honesty": 5
+   },
+   "astra": {
+    "correctness": 5,
+    "security_rules": 3,
+    "test_quality": 1,
+    "scope": 4,
+    "clarity": 4,
+    "honesty": 5
+   }
+  },
+  "astra": {
+   "opus": {
+    "correctness": 5,
+    "security_rules": 5,
+    "test_quality": 5,
+    "scope": 5,
+    "clarity": 5,
+    "honesty": 5
+   },
+   "astra": {
+    "correctness": 5,
+    "security_rules": 4,
+    "test_quality": 1,
+    "scope": 5,
+    "clarity": 5,
+    "honesty": 5
+   }
+  }
+ },
+ "b4": {
+  "opus": {
+   "opus": {
+    "correctness": 4,
+    "security_rules": 3,
+    "test_quality": 4,
+    "scope": 5,
+    "clarity": 4,
+    "honesty": 4
+   },
+   "astra": {
+    "correctness": 4,
+    "security_rules": 5,
+    "test_quality": 4,
+    "scope": 3,
+    "clarity": 3,
+    "honesty": 5
+   }
+  },
+  "astra": {
+   "opus": {
+    "correctness": 3,
+    "security_rules": 2,
+    "test_quality": 3,
+    "scope": 5,
+    "clarity": 4,
+    "honesty": 3
+   },
+   "astra": {
+    "correctness": 4,
+    "security_rules": 5,
+    "test_quality": 4,
+    "scope": 5,
+    "clarity": 4,
+    "honesty": 5
+   }
+  }
+ },
+ "b1r": {
+  "opus": {
+   "astra": {
+    "correctness": 5,
+    "security_rules": 4,
+    "test_quality": 5,
+    "scope": 3,
+    "clarity": 4,
+    "honesty": 4
+   },
+   "opus": {
+    "correctness": 4,
+    "security_rules": 5,
+    "test_quality": 4,
+    "scope": 5,
+    "clarity": 4,
+    "honesty": 5
+   }
+  },
+  "astra": {
+   "astra": {
+    "correctness": 5,
+    "security_rules": 3,
+    "test_quality": 5,
+    "scope": 5,
+    "clarity": 5,
+    "honesty": 3
+   },
+   "opus": {
+    "correctness": 4,
+    "security_rules": 4,
+    "test_quality": 4,
+    "scope": 5,
+    "clarity": 5,
+    "honesty": 5
+   }
+  }
+ }
+}

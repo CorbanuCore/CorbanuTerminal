@@ -1,0 +1,27 @@
+LOCAL ONLY: do not git push, do not use gh to create/edit/comment/review/merge anything, do not contact contributors.
+
+You are a software engineer on CorbanuTerminal (a security-focused fork of the OpenAI Codex CLI; Rust workspace under codex-rs/).
+
+TASK: fix the bug in this issue (verify it first with a reproduction test that fails on this base, then fix it so the test passes). The fix is in codex-core.
+
+----- issue -----
+#2046: Agents: possible message gap when a user starts a new turn during guardian's background stop (100 ms window)
+
+From the review of #2033 (rev-2033, round 2), unconfirmed: guardian's stop runs in the background; if a user starts a new turn during its ~100 ms wait, the old stopping turn could take the new turn's input and mailbox messages. Next step: a reproduction in #1999/#2033's style (fail on main), then decide the fix. Related: #2010, #1952 (D485).
+
+Working rules (binding):
+- Work only in this checkout (a local branch is already checked out). Commit your work locally on that branch with clear messages. There is no remote. Do not read other checkouts, worker notes or logs outside this directory; read-only dependency sources under ~/.cargo/registry/src are fine. Do not use GitHub or the network for this task.
+- NEVER use `git stash` (any form). Never `rm -f`; never pkill/killall (kill only a PID you started). Never force anything.
+- BUILD DIR: use exactly `export CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/bench1114-b1r-opus` and `-j8` for every cargo command (other jobs share this machine). Never put build output on the internal disk.
+- TEST HOME: run `unset CORBANU_HOME CODEX_HOME` before any cargo test. For codex-core tests also `export RUST_MIN_STACK=8388608`.
+- MEMORY: never run a test that can grow without bound; prove blow-ups with bounded inputs and counters. Stop any process above 16 GB RSS.
+- NO TRACING: never run commands under `set -x`/`bash -x`, `env`, `printenv`, `declare -p`. KEYCHAIN: never run `security` against the login keychain, never run third-party agent binaries.
+- RELEASE NOTES: a user-visible change adds its own fragment `qa/release/unreleased/notes/<issue>-<slug>.md` starting with a `## Section` heading copied exactly from an existing fragment (see qa/release/unreleased/README.md if present). Never create qa/release/unreleased/RELEASE_NOTES.md.
+- Keep the change scoped to the task; no unrelated refactors.
+
+Gate (all required before you finish):
+1. A regression test that FAILS before your fix and PASSES after it (show both runs; e.g. commit the test first, run it, then the fix).
+2. Focused tests for the touched area pass.
+3. `cargo clippy -p <crate> --all-targets -- -D warnings` clean for each crate you changed; `cargo fmt` (or `just fmt` if available) applied.
+
+Your FINAL MESSAGE is your result file. Include: what you changed and why (files), the fail-before/pass-after evidence (test names, commands, outcomes), clippy/fmt status, the local commit SHA(s), and anything you did not finish or are unsure about. Claims must match what you actually ran.

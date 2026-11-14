@@ -1,0 +1,466 @@
+diff --git a/codex-rs/tui/src/app/provider_management_status.rs b/codex-rs/tui/src/app/provider_management_status.rs
+index c0cfd50c85..3c1e58d91f 100644
+--- a/codex-rs/tui/src/app/provider_management_status.rs
++++ b/codex-rs/tui/src/app/provider_management_status.rs
+@@ -196,6 +196,7 @@ impl App {
+         // The asynchronous discovery may have settled after the picker cached
+         // its eligibility snapshot. Publish the same status result to both UIs.
+         self.model_catalog.update_provider_statuses(&statuses);
++        self.chat_widget.refresh_open_model_picker();
+         let selected_index = self.chat_widget.provider_manager_selected_index();
+         let selected_provider =
+             selected_index.and_then(|index| self.provider_manager_row_provider(index));
+diff --git a/codex-rs/tui/src/app/tests/provider_picker_refresh.rs b/codex-rs/tui/src/app/tests/provider_picker_refresh.rs
+index fdb67317b6..acd425288c 100644
+--- a/codex-rs/tui/src/app/tests/provider_picker_refresh.rs
++++ b/codex-rs/tui/src/app/tests/provider_picker_refresh.rs
+@@ -1,6 +1,155 @@
+ use super::*;
+ use pretty_assertions::assert_eq;
+ 
++#[tokio::test]
++async fn provider_manager_recovery_refreshes_open_model_picker_and_preserves_tab() -> Result<()> {
++    let (mut app, _rx, mut op_rx) = make_test_app_with_channels().await;
++    let app_server = start_config_write_test_app_server(&app).await?;
++    std::fs::write(
++        app.config.codex_home.join("provider_auth.json"),
++        r#"{"api_keys":{"AMBIENT_API_KEY":"synthetic-picker-key"}}"#,
++    )?;
++    let host = crate::provider_status_host::ProviderStatusHost::from_config(
++        &app.config,
++        crate::provider_status_host::ProviderAccountMetadata {
++            claude: codex_provider_auth::ClaudeCredentialMetadata::Configured {
++                source: codex_provider_auth::ClaudeCredentialSource::Managed,
++            },
++            ..Default::default()
++        },
++    );
++    app.model_catalog.set_provider_policy(
++        crate::chatwidget::provider_model_policy::ProviderModelPolicy::new(
++            host.clone(),
++            codex_provider_auth::ProviderRuntimeAuthorizations::default(),
++        ),
++    );
++    app.provider_management_generation = 1;
++    // Model the manager after dismissal without starting real account discovery.
++    app.provider_management_host = Some(
++        crate::provider_management_host::ProviderManagementHost::new_with_statuses(
++            &app.config,
++            app_server.request_handle(),
++            app.app_event_tx.clone(),
++            host.clone(),
++            host.resolve().entries().to_vec(),
++        ),
++    );
++    let session = (
++        app.active_thread_id,
++        app.config.model_provider_id.clone(),
++        app.chat_widget.current_model().to_string(),
++    );
++    app.chat_widget
++        .open_all_models_popup(app.model_catalog.try_list_models()?);
++    app.chat_widget
++        .handle_key_event(crossterm::event::KeyEvent::new(
++            crossterm::event::KeyCode::Right,
++            KeyModifiers::NONE,
++        ));
++    app.chat_widget
++        .handle_key_event(crossterm::event::KeyEvent::new(
++            crossterm::event::KeyCode::Left,
++            KeyModifiers::NONE,
++        ));
++    let before = render_bottom_popup(&app.chat_widget, /*width*/ 140);
++    assert!(before.contains("[Ambient]"), "{before}");
++    assert!(!before.contains("OpenAI"), "{before}");
++
++    host.update_account_metadata(crate::provider_status_host::ProviderAccountMetadata {
++        openai: codex_login::OpenAiAuthMetadata::Account,
++        claude: codex_provider_auth::ClaudeCredentialMetadata::Configured {
++            source: codex_provider_auth::ClaudeCredentialSource::Managed,
++        },
++        ..Default::default()
++    });
++    let recovered = host.resolve().entries().to_vec();
++    // A stale result must leave both the policy and displayed rows alone.
++    app.provider_manager_statuses_resolved(
++        /*generation*/ 2,
++        host.clone(),
++        recovered.clone(),
++        /*accounts*/ None,
++        &app_server,
++    );
++    assert_eq!(render_bottom_popup(&app.chat_widget, /*width*/ 140), before);
++    app.provider_manager_statuses_resolved(
++        /*generation*/ 1,
++        host.clone(),
++        recovered.clone(),
++        /*accounts*/ None,
++        &app_server,
++    );
++    let refreshed = render_bottom_popup(&app.chat_widget, /*width*/ 140);
++    assert!(refreshed.contains("OpenAI"), "{refreshed}");
++    assert!(refreshed.contains("[Ambient]"), "{refreshed}");
++    insta::assert_snapshot!("model_picker_recovery_preserves_tab", refreshed);
++
++    app.chat_widget
++        .handle_key_event(crossterm::event::KeyEvent::new(
++            crossterm::event::KeyCode::Left,
++            KeyModifiers::NONE,
++        ));
++    let openai = render_bottom_popup(&app.chat_widget, /*width*/ 140);
++    assert!(openai.contains("[OpenAI]"), "{openai}");
++    assert!(openai.contains("gpt-6-astra"), "{openai}");
++    insta::assert_snapshot!("model_picker_recovered_openai", openai);
++    assert_eq!(
++        (
++            app.active_thread_id,
++            app.config.model_provider_id.clone(),
++            app.chat_widget.current_model().to_string()
++        ),
++        session,
++    );
++    assert!(op_rx.try_recv().is_err());
++
++    // A late result must not replace a reasoning dialog above the picker.
++    let preset = app
++        .model_catalog
++        .try_list_models()?
++        .into_iter()
++        .find(|preset| preset.model == "gpt-6-astra")
++        .unwrap();
++    app.chat_widget.open_reasoning_popup(preset);
++    let reasoning = render_bottom_popup(&app.chat_widget, /*width*/ 140);
++    assert!(reasoning.contains("reasoning"), "{reasoning}");
++    app.provider_manager_statuses_resolved(
++        /*generation*/ 1,
++        host.clone(),
++        recovered.clone(),
++        /*accounts*/ None,
++        &app_server,
++    );
++    assert_eq!(
++        render_bottom_popup(&app.chat_widget, /*width*/ 140),
++        reasoning
++    );
++    // Cancel reasoning, then cancel the picker. Neither may reopen.
++    for _ in 0..2 {
++        app.chat_widget
++            .handle_key_event(crossterm::event::KeyEvent::new(
++                crossterm::event::KeyCode::Esc,
++                KeyModifiers::NONE,
++            ));
++    }
++    let dismissed = render_bottom_popup(&app.chat_widget, /*width*/ 140);
++    assert!(!dismissed.contains("Select Model"), "{dismissed}");
++    app.provider_manager_statuses_resolved(
++        /*generation*/ 1,
++        host,
++        recovered,
++        /*accounts*/ None,
++        &app_server,
++    );
++    assert_eq!(
++        render_bottom_popup(&app.chat_widget, /*width*/ 140),
++        dismissed
++    );
++    app_server.shutdown().await?;
++    Ok(())
++}
++
+ #[tokio::test]
+ async fn provider_manager_late_refresh_updates_picker_without_reopening_dismissed_menu()
+ -> Result<()> {
+diff --git a/codex-rs/tui/src/app/tests/snapshots/codex_tui__app__tests__provider_picker_refresh__model_picker_recovered_openai.snap b/codex-rs/tui/src/app/tests/snapshots/codex_tui__app__tests__provider_picker_refresh__model_picker_recovered_openai.snap
+new file mode 100644
+index 0000000000..586c1d18dd
+--- /dev/null
++++ b/codex-rs/tui/src/app/tests/snapshots/codex_tui__app__tests__provider_picker_refresh__model_picker_recovered_openai.snap
+@@ -0,0 +1,20 @@
++---
++source: tui/src/app/tests/provider_picker_refresh.rs
++expression: openai
++---
++  Select Model and Effort
++  OpenAI Codex plan
++
++  [OpenAI]  Ambient  Claude Plan
++
++› 1. GPT-6 Astra    Model: gpt-6-astra. Advanced reasoning and coding. Requires eligible OpenAI account access.
++  2. GPT-6.1 Sol    Model: gpt-6.1-sol. Newer GPT-6 Sol: near-Astra reasoning and coding at Sol pricing. Requires eligible OpenAI account
++                    access; ChatGPT sign-in may reject it.
++  3. GPT-6 Sol      Model: gpt-6-sol. Cost-efficient high-end GPT-6 reasoning and coding, below Astra and above Luna. Requires eligible
++                    OpenAI account access; ChatGPT sign-in may reject it.
++  4. GPT-5.6-Sol    Model: gpt-5.6-sol. Latest frontier agentic coding model.
++  5. GPT-6 Luna     Model: gpt-6-luna. Efficient GPT-6 model for focused coding and high-volume tasks.
++  6. GPT-5.6-Terra  Model: gpt-5.6-terra. Balanced agentic coding model for everyday work.
++  7. GPT-5.6-Luna   Model: gpt-5.6-luna. Fast and affordable agentic coding model.
++
++  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back
+diff --git a/codex-rs/tui/src/app/tests/snapshots/codex_tui__app__tests__provider_picker_refresh__model_picker_recovery_preserves_tab.snap b/codex-rs/tui/src/app/tests/snapshots/codex_tui__app__tests__provider_picker_refresh__model_picker_recovery_preserves_tab.snap
+new file mode 100644
+index 0000000000..d461d5d518
+--- /dev/null
++++ b/codex-rs/tui/src/app/tests/snapshots/codex_tui__app__tests__provider_picker_refresh__model_picker_recovery_preserves_tab.snap
+@@ -0,0 +1,12 @@
++---
++source: tui/src/app/tests/provider_picker_refresh.rs
++expression: refreshed
++---
++  Select Model and Effort
++  Ambient coding plan
++
++  OpenAI  [Ambient]  Claude Plan
++
++› 1. Ambient GLM 5.2  Model: z-ai/glm-5.2. Ambient: GLM 5.2 - $0.76/M input, $0.14/M cached input, $2.42/M output.
++
++  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back
+diff --git a/codex-rs/tui/src/chatwidget/model_popups.rs b/codex-rs/tui/src/chatwidget/model_popups.rs
+index b18a778d6b..df8a94991a 100644
+--- a/codex-rs/tui/src/chatwidget/model_popups.rs
++++ b/codex-rs/tui/src/chatwidget/model_popups.rs
+@@ -290,6 +290,7 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 14] = [
+     },
+ ];
+ 
++const SESSION_MODEL_PICKER_VIEW_ID: &str = "session_model_picker";
+ const ULTRA_REASONING_CONCURRENCY_WARNING_THRESHOLD: usize = 8;
+ 
+ impl ChatWidget {
+@@ -533,6 +534,47 @@ impl ChatWidget {
+         presets: Vec<ModelPreset>,
+         purpose: ModelSelectionPurpose,
+     ) {
++        let Some(params) = self.all_models_popup_params(presets, purpose) else {
++            self.add_info_message(
++                "No additional models are available right now.".to_string(),
++                /*hint*/ None,
++            );
++            return;
++        };
++        self.bottom_pane.show_selection_view(params);
++    }
++
++    /// Publish recovered providers without reopening a dismissed picker or
++    /// replacing a child dialog. Preserve the user's tab rather than returning
++    /// to the session's current provider.
++    pub(crate) fn refresh_open_model_picker(&mut self) {
++        if self.bottom_pane.active_view_id() != Some(SESSION_MODEL_PICKER_VIEW_ID) {
++            return;
++        }
++        let Ok(presets) = self.model_catalog.try_list_models();
++        let Some(mut params) =
++            self.all_models_popup_params(presets, ModelSelectionPurpose::Session)
++        else {
++            return;
++        };
++        if let Some(tab_id) = self
++            .bottom_pane
++            .active_tab_id_for_active_view(SESSION_MODEL_PICKER_VIEW_ID)
++        {
++            params.initial_tab_id = Some(tab_id.to_string());
++        }
++        params.initial_selected_idx = self
++            .bottom_pane
++            .selected_index_for_active_view(SESSION_MODEL_PICKER_VIEW_ID);
++        self.bottom_pane
++            .replace_selection_view_if_active(SESSION_MODEL_PICKER_VIEW_ID, params);
++    }
++
++    fn all_models_popup_params(
++        &self,
++        presets: Vec<ModelPreset>,
++        purpose: ModelSelectionPurpose,
++    ) -> Option<SelectionViewParams> {
+         let mut presets: Vec<ModelPreset> = presets
+             .into_iter()
+             .filter(Self::show_in_pfterminal_model_picker)
+@@ -579,11 +621,7 @@ impl ChatWidget {
+         });
+ 
+         if presets.is_empty() {
+-            self.add_info_message(
+-                "No additional models are available right now.".to_string(),
+-                /*hint*/ None,
+-            );
+-            return;
++            return None;
+         }
+ 
+         // #653: a default model's other connections stay next to it.
+@@ -673,14 +711,16 @@ impl ChatWidget {
+         } else {
+             Box::new(())
+         };
+-        self.bottom_pane.show_selection_view(SelectionViewParams {
++        Some(SelectionViewParams {
++            view_id: matches!(purpose, ModelSelectionPurpose::Session)
++                .then_some(SESSION_MODEL_PICKER_VIEW_ID),
+             footer_hint,
+             items,
+             tabs,
+             initial_tab_id,
+             header,
+             ..Default::default()
+-        });
++        })
+     }
+ 
+     fn model_picker_item(
+diff --git a/qa/release/unreleased/notes/2102-open-model-picker-refresh.md b/qa/release/unreleased/notes/2102-open-model-picker-refresh.md
+new file mode 100644
+index 0000000000..3b86abd4cf
+--- /dev/null
++++ b/qa/release/unreleased/notes/2102-open-model-picker-refresh.md
+@@ -0,0 +1,6 @@
++## Slash commands typed while the session starts
++
++- **Restoring OpenAI refreshes an already-open model picker** (#2102).
++  Provider discovery now updates the session model picker as soon as recovery
++  finishes, preserving your provider tab and session. Late results leave
++  dismissed menus closed and reasoning dialogs in place.
+diff --git a/qa/reliability/2102-open-model-picker-refresh.md b/qa/reliability/2102-open-model-picker-refresh.md
+new file mode 100644
+index 0000000000..3216b3d91a
+--- /dev/null
++++ b/qa/reliability/2102-open-model-picker-refresh.md
+@@ -0,0 +1,140 @@
++# #2102: refresh an open session model picker after provider recovery
++
++Classification: bounded reliability fix. Product authority:
++`docs/corbanu-product-spec.md`, **Shipping MVP — LIVE**, **Multi-provider inference**:
++“OpenAI, Anthropic/Claude Plan, Kimi, Z.AI, DeepSeek, OpenRouter” and custom providers.
++This restores provider recovery within the existing session; it adds no provider,
++authorization, credential-storage, or persistence behavior. No plan or sprint is
++required for this bounded fix.
++
++The async provider-status result previously updated the shared model policy but
++left the open model picker showing its earlier rows. The repair rebuilds
++only an active session model picker, retaining its active provider tab. Stale
++results, dismissed menus, other-purpose pickers, and reasoning dialogs must not
++be reopened or replaced.
++
++Validation is local and offline, using synthetic metadata and the isolated debug
++test lane. The regression is committed before the production change. Commands,
++results, and remaining qualification are recorded below.
++
++Base: `2cfd034860f792d0c3605b40437a3e21e29b361e`; local branch: `work-b2`.
++Test-only commits: `fa64485466`, `40efd3a488`.
++
++Build/test environment:
++
++```sh
++export CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/bench1114-b2-astra
++export CARGO_BUILD_JOBS=8
++export CARGO_NET_OFFLINE=true
++unset CORBANU_HOME CODEX_HOME
++```
++
++Before the fix:
++
++```sh
++just test -pcodex-tui --lib -j8 --locked --offline \
++  -E 'test(provider_manager_recovery_refreshes_open_model_picker_and_preserves_tab)'
++```
++
++Result: exit 100; 0 passed, 1 failed (both attempts under the default retry
++policy failed). The assertion that the refreshed picker contains OpenAI failed;
++its rendered provider bar remained `[Ambient]  Claude Plan`. This was an
++assertion failure after successful compilation, not a build or fixture failure.
++The test is bounded and performs no live account discovery.
++
++The compact `-pcodex-tui --lib` invocation keeps this unit-test run on the
++isolation wrapper's direct nextest path, without building unrelated helper
++executables. `CARGO_BUILD_JOBS=8` limits compilation; nextest's `-j8` limits
++test concurrency.
++
++Formatting: `cargo fmt --all -- --config imports_granularity=Item` completed
++successfully. Stable rustfmt warned that `imports_granularity` is nightly-only;
++existing item imports were retained. Formatting has no jobs option.
++
++After the fix, the same regression passed (1 passed, 0 failed; exit 0) using
++`--retries 0` and `INSTA_UPDATE=always` to create the two new snapshots.
++Both snapshots were reviewed: the provider bar becomes
++`OpenAI  [Ambient]  Claude Plan`; navigating left displays `[OpenAI]` and
++the GPT-6 Astra row. The test also passes its stale-generation, unchanged
++session/provider/model, no-operation, reasoning-dialog, and dismissal checks.
++
++The initial Clippy launch with the tool's explicit `codex-rs` working directory
++failed before compilation (exit 101): that shell did not inherit the prepared
++Cargo home and its offline index lacked locked `notify 8.2.1`. The retry starts
++in the checkout root and uses `cd codex-rs`, retaining the same offline Cargo
++cache as `just test`. No dependency or lockfile change was made.
++
++The inherited shell uses Rust 1.95. Its strict Clippy run reached compilation
++but failed with 10 `clippy::nonminimal_bool` errors in unchanged `codex-core`
++sources. An additional
++`cargo clippy -p codex-tui --all-targets --no-deps -j8 --locked --offline -- -D warnings`
++passed (exit 0) under that toolchain.
++
++A retry using `rustup run 1.99.1 cargo clippy` still inherited the 1.95
++`cargo-clippy` child from PATH and failed with the same 10 core diagnostics.
++Selecting the top-level executable alone was insufficient. The final toolchain
++configuration prepends the installed pinned toolchain's bin directory:
++
++```sh
++task_rustc=$(rustup which --toolchain 1.99.1 rustc)
++export PATH="${task_rustc%/*}:$PATH"
++```
++
++Direct version checks then reported `rustc 1.99.1` and `clippy 0.1.99`.
++`cargo fmt -p codex-tui -- --config imports_granularity=Item` completed with
++the same stable-rustfmt warning and no further diff.
++
++One focused-test invocation was rejected before compiling because it supplied
++both `-j8` and its alias `--test-threads 8`; the duplicate option was removed.
++The corrected invocation (still inheriting the 1.95 child tools) passed all
++25 focused tests with `INSTA_UPDATE` unset:
++
++```sh
++rustup run 1.99.1 just test -pcodex-tui --lib -j8 --locked --offline --retries 0 \
++  -E 'test(model_picker) | test(chatwidget::model_popups::tests::) | test(reasoning_popup) | test(model_reasoning_selection_popup)'
++```
++
++This includes the new recovery regression and the existing provider grouping,
++model-route selection, reasoning selection, cancellation, and snapshot tests.
++
++Final strict Clippy, with the pinned bin directory first in PATH:
++
++```sh
++cd codex-rs
++cargo clippy -p codex-tui --all-targets -j8 --locked --offline -- -D warnings
++```
++
++Result: exit 0 on Rust/Clippy 1.99.1/0.1.99, without `--no-deps` or lint
++suppressions. The older core diagnostics do not occur on the pinned toolchain.
++Cargo emitted a dependency future-compatibility notice for existing
++`proc-macro-error2 2.0.1`; no dependency changes were made.
++The final pinned `cargo fmt -p codex-tui -- --check` also passed (exit 0).
++Release-note `check` (65 fragments) and `preview` passed; `git diff --check`
++passed.
++
++Final focused tests, with the pinned bin directory first in PATH and
++`INSTA_UPDATE` unset:
++
++```sh
++unset CORBANU_HOME CODEX_HOME INSTA_UPDATE
++just test -pcodex-tui --lib -j8 --locked --offline --retries 0 \
++  -E 'test(model_picker) | test(chatwidget::model_popups::tests::) | test(reasoning_popup) | test(model_reasoning_selection_popup)'
++```
++
++Result: exit 0; **25 passed, 0 failed**, 4754 skipped, on Rust 1.99.1.
++Nextest run ID: `93c60b0f-35b2-4cbb-8afd-cc444e42df21`.
++The recovery regression passed in 0.521s. No snapshots changed during this run.
++All final source checks follow formatting.
++
++The macOS test-binary linker warned that `__eh_frame` exceeds 16 MB for compact
++unwind offsets and that exception-handling performance might be affected. The
++binary linked and all selected tests passed. The same dependency
++future-compatibility notice described above was also emitted. These notices
++were not suppressed or addressed by unrelated changes.
++
++Interactive qualification remains outstanding: no independently isolated,
++code-blind packaged execution, true-PTY provider recovery, live-repository run,
++or named-human acceptance is claimed. The user's single-checkout/no-network
++scope excludes live provider recovery and external repository qualification.
++This is an implementation/test result, not an unqualified human-test or release
++handoff.

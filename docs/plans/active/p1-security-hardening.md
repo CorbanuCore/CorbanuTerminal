@@ -90,18 +90,31 @@ in chat”; **Required trust boundaries**, “Credentials are referenced by labe
 resolved only inside a trusted execution boundary.”
 
 Contract: retry signed-thinking history rejection once before substantive output;
-do not refresh credentials for genuine plan-entitlement failures; preserve the
-selected file-backed login if a refresh damages it, including timeout. Preserve
-selected source, named-account identity, unknown fields and native Keychain
-ownership. Never silently fall back, resurrect deliberately revoked credentials,
-overwrite a concurrent valid login, disclose credentials or replay delivered output.
+do not refresh credentials for genuine plan-entitlement failures. Preserve selected
+source, named-account identity, unknown fields and native Keychain ownership.
+Never silently fall back, resurrect deliberately revoked credentials, overwrite a
+concurrent valid login, disclose credentials or replay delivered output.
 No installer, billing, vault schema or default-account migration changes.
 
-Allocation: coordinator owns the otherwise free **windows-host** lane for this
-cross-platform credential-recovery increment. PF-23-S04's pending broker-lane
-allocation in #1837 remains separate; neither its code nor qualification is
-superseded. Upstream S1 auth adapters are serialized at their receiving boundary;
-this work lands on main first, then is explicitly reconciled during the next sync.
+**88-B decision, recorded November 12:** Travis accepted fail-closed handling and
+explicit sign-in when damaged or deleted external Claude credentials cannot
+safely be identified ([decision record](https://github.com/CorbanuCore/CorbanuTerminal/pull/88#issuecomment-6810673461)).
+This qualifies the original automatic-preservation requirement, including timeout:
+guaranteed automatic restoration is deferred until all-writer coordination or
+identity-safe isolation exists. Do not infer permission to guess identity or to
+restore ambiguous state. Stage B must still implement and qualify safe failure,
+selected-source recovery and the protections above; it is not complete.
+
+Allocation: PF-84-S07 remains **draft** after the shared-owner/shared-plan handoff
+with PF-23-S04. Its recorded windows-host coordinates are a reservation, not
+permission to resume implementation. The coordinator must serialize the shared
+plan/index boundary, reconcile actual ownership and rerun both checkers before
+reactivation. Neither sprint's evidence or outstanding qualification is superseded.
+Upstream S1 auth adapters are serialized at their receiving boundary; this work
+lands on main first, then is explicitly reconciled during the next sync.
+Opus execution recovered on November 14 after the provider cooldown. Independent
+functional execution and demos remain required; restored runtime access is not
+acceptance. Stage B is still draft and has not been implemented or qualified.
 
 | Upstream-touch field | PF-84-S07 record |
 | --- | --- |

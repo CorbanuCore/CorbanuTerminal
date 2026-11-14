@@ -1,0 +1,15 @@
+#!/bin/bash
+# hidden_b4.sh <arm> : full classifier lib suite (security::) + pinned clippy on the arm's solution.
+B=/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114
+TC=/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/rustup/toolchains/1.99.1-aarch64-apple-darwin/bin
+arm=$1; wt=$B/wt/b4-$arm; out=$B/trackB/out/b4-hidden-$arm.txt
+cd $wt/codex-rs || exit 2
+unset CORBANU_HOME CODEX_HOME
+export CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/bench1114-b4-$arm RUST_MIN_STACK=8388608 PATH=$TC:$PATH
+{
+echo "## [$arm] HEAD $(git rev-parse --short HEAD)"
+echo "codex-core lib security:: test suite (classifier never-quieter guard; all must pass):"
+cargo test -j8 -p codex-core --lib security:: 2>&1 | grep -E "test result|FAILED|panicked|error(\[|:)" | head -20
+cargo clippy -j8 -p codex-core --all-targets -- -D warnings > /tmp/b4k-$arm.txt 2>&1; echo "cargo clippy -p codex-core --all-targets -- -D warnings (1.99.1): exit=$?"; grep -E "^error" /tmp/b4k-$arm.txt | head -5
+} > $out 2>&1
+cat $out

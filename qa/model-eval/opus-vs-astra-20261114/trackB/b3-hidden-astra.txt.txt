@@ -1,0 +1,9 @@
+## [astra] HEAD ea2ae1d6c1 — conflict markers left in agent-roles: 0 files
+cargo check -p codex-agent-roles --all-targets: exit=0
+cargo clippy -p codex-agent-roles --all-targets -- -D warnings: exit=0
+hidden behaviour test (main's base_instructions validation kept: accepted alone, blank rejected, developer_instructions still accepted):
+test hidden_b3_developer_instructions_still_accepted ... ok
+test hidden_b3_base_instructions_alone_is_accepted ... ok
+test hidden_b3_blank_base_instructions_is_rejected ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+diff vs merged resolution (#2059 ce78a87e52), agent-roles/src only:

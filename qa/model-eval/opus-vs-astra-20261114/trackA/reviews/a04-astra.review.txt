@@ -1,0 +1,19 @@
+Found four blocking defects. Review was local and read-only; no builds or tests were run.
+
+1. **High — Permission-profile switches discard network protections.**  
+   [mod.rs:6263](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a04/codex-rs/core/src/config/mod.rs:6263)  
+   The resolution removes `apply_security_network_features` and `apply_secretless_launch_network_config` from profile rebuilding. With these features enabled, switching between named network-enabled profiles loses URL/DNS/redirect enforcement, credential-response scrubbing, isolated brokerage, and secretless broker configuration. Neither replacement helper restores them. **Fix:** apply both hooks to the prepared proxy configuration before building its spec, matching startup.
+
+2. **High — Retained credential helpers use an incompatible proxy API.**  
+   [network_proxy_spec.rs:397](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a04/codex-rs/core/src/config/network_proxy_spec.rs:397)  
+   The resolved `build_state_with_audit_metadata` requires three arguments, but retained production callers in `network_proxy_credential.rs:235` and `:324` supply only metadata. This leaves `codex-core` with argument-count errors, independently of test compilation. **Fix:** update both callers to supply the appropriate executor platform and local-binding policy, and update their test callers.
+
+3. **High — Bedrock assertion cannot compile.**  
+   [config_tests.rs:1616](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a04/codex-rs/core/src/config/config_tests.rs:1616)  
+   Conflict resolution leaves `err.to_string().contains()` without its required pattern argument, blocking the core unit-test target. **Fix:** restore the merged expected diagnostic, including the supported `aws.credential_export`, `aws.auth_refresh`, and `billing` fields.
+
+4. **High — Two exhaustive TUI literals omit required fields.**  
+   [config_tests.rs:1677](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a04/codex-rs/core/src/config/config_tests.rs:1677), also line 5033  
+   Both literals lose seven fields: `screen_reader_detection_done`, `effects`, `rendering`, `show_tooltips`, `show_server_version_notice`, `auto_recap`, and `disable_paste_burst`. Rust rejects these incomplete initializers, blocking unit-test compilation. **Fix:** restore all fields with the current deserialization defaults, including `show_tooltips: false`.
+
+VERDICT: REQUEST_CHANGES
