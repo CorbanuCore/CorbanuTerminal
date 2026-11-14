@@ -118,13 +118,13 @@ async fn issue_2062_detached_review_keeps_the_parent_level_until_next_start() {
         )
         .expect("request");
         let confirmed = controller
-            .confirm_security_request(request, 1_000)
+            .confirm_security_request(request, /*now_unix_seconds*/ 1_000)
             .expect("confirm");
         let prepared = controller
             .prepare_transition(confirmed, crate::security::transition::ProbeOutcome::Passed)
             .expect("prepare");
         let committed = controller
-            .commit_transition(prepared, &store, 1_000)
+            .commit_transition(prepared, &store, /*now_unix_seconds*/ 1_000)
             .expect("commit");
         assert_eq!(committed.level, SecurityLevel::Aggressive);
         assert_eq!(committed.next_start_level, level);

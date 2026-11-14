@@ -168,7 +168,15 @@ impl App {
             use ratatui::style::Stylize;
             use ratatui::text::Line;
 
-            if outcome == SettingsUpdateOutcome::Confirmed {
+            if outcome == SettingsUpdateOutcome::Confirmed
+                && *windows_sandbox_level
+                    == Some(codex_protocol::config_types::WindowsSandboxLevel::Disabled)
+            {
+                self.chat_widget.add_info_message(
+                    "Windows sandbox settings confirmed for this session.".to_string(),
+                    /*hint*/ None,
+                );
+            } else if outcome == SettingsUpdateOutcome::Confirmed {
                 self.chat_widget.add_plain_history_lines(vec![
                     Line::from(vec!["• ".dim(), "Sandbox ready".into()]),
                     Line::from(vec![
@@ -183,8 +191,8 @@ impl App {
                 ]);
             } else {
                 self.chat_widget.add_error_message(
-                    "The Windows sandbox is set up, but its use by this session could not be \
-                     confirmed. Start a new session with /new to use the saved sandbox settings."
+                    "The Windows sandbox settings were saved, but their use by this session could \
+                     not be confirmed. Start a new session with /new to use the saved settings."
                         .to_string(),
                 );
             }
@@ -242,7 +250,7 @@ impl App {
             Err(err) => {
                 tracing::warn!("failed to update app-server thread settings from TUI: {err}");
                 self.chat_widget
-                    .add_error_message(format!("Failed to update thread settings: {err}"));
+                    .add_error_message(format!("Failed to update thread settings: {err:#}"));
                 SettingsUpdateOutcome::Failed
             }
         }

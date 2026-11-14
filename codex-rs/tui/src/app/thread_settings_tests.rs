@@ -154,32 +154,53 @@ async fn issue_2062_sandbox_confirmation_failure_from_embedded_server_is_preserv
 }
 
 #[tokio::test]
-async fn issue_2062_sandbox_success_waits_for_confirmation() -> color_eyre::Result<()> {
+async fn issue_2062_disabled_sandbox_confirmation_does_not_claim_readiness()
+-> color_eyre::Result<()> {
     let (mut app, mut rx, _ops) = Box::pin(make_test_app_with_channels()).await;
     let mut server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
     let started = server.start_thread(&app.config).await?;
     let thread_id = started.session.thread_id;
-    // No setup is required: refresh on an already-disabled session is an
-    // unchanged update, still requiring an explicit Core acknowledgement.
-    let op = sandbox_refresh_op();
+    // A confirmed refresh can leave sandboxing disabled: it must not claim
+    // that a sandbox is ready merely because the request was acknowledged.
+    let op = sandbox_refresh_op(codex_protocol::config_types::WindowsSandboxLevel::Disabled);
     while rx.try_recv().is_ok() {}
     app.sync_override_turn_context_settings(&mut server, thread_id, &op)
         .await;
     server.shutdown().await?;
+    let text = history_text(&mut rx);
+    assert!(!text.contains("Sandbox ready"), "{text}");
+    assert!(text.contains("settings confirmed"), "{text}");
+    insta::assert_snapshot!("issue_2062_sandbox_disabled", text);
+    Ok(())
+}
+
+#[tokio::test]
+async fn issue_2062_sandbox_success_waits_for_confirmation() -> color_eyre::Result<()> {
+    let (mut app, mut rx, _ops) = Box::pin(make_test_app_with_channels()).await;
+    let (mut server, task) = reply_server(json!({"result": {"outcome": "applied"}})).await?;
+    while rx.try_recv().is_ok() {}
+    app.sync_override_turn_context_settings(
+        &mut server,
+        ThreadId::new(),
+        &sandbox_refresh_op(codex_protocol::config_types::WindowsSandboxLevel::Elevated),
+    )
+    .await;
+    server.shutdown().await?;
+    assert_eq!(task.await?.len(), 1);
     let text = history_text(&mut rx);
     assert!(text.contains("Sandbox ready"), "{text}");
     insta::assert_snapshot!("issue_2062_sandbox_confirmed", text);
     Ok(())
 }
 
-fn sandbox_refresh_op() -> AppCommand {
+fn sandbox_refresh_op(level: codex_protocol::config_types::WindowsSandboxLevel) -> AppCommand {
     AppCommand::OverrideTurnContext {
         cwd: None,
         approval_policy: None,
         approvals_reviewer: None,
         permission_profile: None,
         active_permission_profile: None,
-        windows_sandbox_level: Some(codex_protocol::config_types::WindowsSandboxLevel::Disabled),
+        windows_sandbox_level: Some(level),
         model: None,
         effort: None,
         summary: None,
@@ -221,7 +242,7 @@ async fn issue_2062_unconfirmed_sandbox_has_a_persistent_recovery_message() -> c
         app.sync_override_turn_context_settings(
             &mut server,
             ThreadId::new(),
-            &sandbox_refresh_op(),
+            &sandbox_refresh_op(codex_protocol::config_types::WindowsSandboxLevel::Elevated),
         )
         .await;
         server.shutdown().await?;
@@ -230,6 +251,9 @@ async fn issue_2062_unconfirmed_sandbox_has_a_persistent_recovery_message() -> c
         assert!(!text.contains("Sandbox ready"), "{text}");
         assert!(text.contains("could not be confirmed"), "{text}");
         assert!(text.contains("/new"), "{text}");
+        if snapshot == "issue_2062_sandbox_rejected" {
+            assert!(text.contains("sandbox update rejected"), "{text}");
+        }
         insta::assert_snapshot!(snapshot, text);
     }
     Ok(())

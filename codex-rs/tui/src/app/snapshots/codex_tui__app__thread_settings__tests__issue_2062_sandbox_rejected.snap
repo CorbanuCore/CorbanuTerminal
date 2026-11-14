@@ -2,5 +2,5 @@
 source: tui/src/app/thread_settings_tests.rs
 expression: text
 ---
-■ Failed to update thread settings: thread/settings/update failed in TUI
-■ The Windows sandbox is set up, but its use by this session could not be confirmed. Start a new session with /new to use the saved sandbox settings.
+■ Failed to update thread settings: thread/settings/update failed in TUI: thread/settings/update failed: sandbox update rejected (code -32600)
+■ The Windows sandbox settings were saved, but their use by this session could not be confirmed. Start a new session with /new to use the saved settings.
