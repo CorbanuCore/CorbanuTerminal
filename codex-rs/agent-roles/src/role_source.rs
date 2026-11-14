@@ -228,7 +228,10 @@ mod project_role_layer_tests {
             ConfigLayerSource::SessionFlags,
             toml::Value::Table(Default::default()),
         );
-        assert_eq!(AgentRoleSource::from_layer_entry(&layer), AgentRoleSource::User);
+        assert_eq!(
+            AgentRoleSource::from_layer_entry(&layer),
+            AgentRoleSource::User
+        );
         let role_file = AbsolutePathBuf::from_absolute_path(
             std::env::temp_dir().join("project/.codex/agents/reviewer.toml"),
         )

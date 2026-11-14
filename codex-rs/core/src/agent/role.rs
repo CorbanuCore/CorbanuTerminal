@@ -48,8 +48,8 @@ use codex_protocol::models::BaseInstructionsProvenance;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::SandboxPolicy;
-use serde::Serialize;
 use codex_utils_absolute_path::AbsolutePathBuf;
+use serde::Serialize;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -253,12 +253,8 @@ async fn apply_role_to_config_inner(
     let project_role_file = (!is_built_in && role.source == AgentRoleSource::Project)
         .then(|| AbsolutePathBuf::from_absolute_path(config_file))
         .transpose()?;
-    let mut next_config = role_overrides::build_next_config(
-        config,
-        role_layer_toml,
-        &overrides,
-        project_role_file,
-    )?;
+    let mut next_config =
+        role_overrides::build_next_config(config, role_layer_toml, &overrides, project_role_file)?;
     // Corbanu: a built-in crew role that pins no reasoning effort takes the configured effort,
     // not the caller's runtime one, so an Orc spawned from an xhigh Troll doesn't silently
     // inherit xhigh. A user role keeps the caller's runtime effort.

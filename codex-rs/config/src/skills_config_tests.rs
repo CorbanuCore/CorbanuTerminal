@@ -254,7 +254,10 @@ fn later_path_rule_reenables_one_skill_disabled_by_name() {
 fn project_role_layer_does_not_change_skill_settings() {
     let codex_home = TempDir::new().expect("temp dir");
     let skill_path = codex_home.path().join("skills/demo/SKILL.md");
-    let role_file = codex_home.path().join("project/.codex/agents/reviewer.toml").abs();
+    let role_file = codex_home
+        .path()
+        .join("project/.codex/agents/reviewer.toml")
+        .abs();
     let rules = |project_role_file: Option<AbsolutePathBuf>| {
         let layer = ConfigLayerEntry::new(
             ConfigLayerSource::SessionFlags,
