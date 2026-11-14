@@ -478,6 +478,7 @@ mod tests {
         };
         let mut sandbox = FileSystemSandboxContext::from_permission_profile(
             codex_protocol::models::PermissionProfile::Disabled,
+            codex_utils_path_uri::PathUri::parse("file:///work").expect("cwd"),
         );
         sandbox.unsandboxed_refusal = Some("refused".to_string());
         let refused = Some(&"refused".to_string());

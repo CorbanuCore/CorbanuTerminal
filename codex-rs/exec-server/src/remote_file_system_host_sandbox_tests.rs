@@ -73,14 +73,16 @@ async fn read(
 ) -> (io::Result<()>, Vec<String>) {
     let (url, methods) = fake_executor(info).await;
     let environment = Environment::create_for_tests(Some(url)).expect("environment");
-    let mut context =
-        FileSystemSandboxContext::from_permission_profile(PermissionProfile::Disabled);
+    let mut context = FileSystemSandboxContext::from_permission_profile(
+        PermissionProfile::Disabled,
+        PathUri::parse("file:///C:/work").expect("cwd uri"),
+    );
     context.windows_sandbox_selection = level.into();
     context.unsandboxed_refusal = refusal.then(|| REFUSAL.to_string());
     let path = PathUri::parse("file:///C:/work/secret.txt").expect("uri");
     let result = environment
         .get_filesystem()
-        .read_file(&path, Some(&context))
+        .read_file(&path, ReadFileOptions::default(), Some(&context))
         .await
         .map(|_| ());
     (result, file_requests(&methods))
@@ -170,11 +172,14 @@ async fn issue_2050_older_executors_fail_closed_unless_clearly_posix() {
 async fn issue_2050_permissive_is_unchanged() {
     let (url, methods) = fake_executor(windows(/*set_up*/ false)).await;
     let environment = Environment::create_for_tests(Some(url)).expect("environment");
-    let context = FileSystemSandboxContext::from_permission_profile(PermissionProfile::Disabled);
+    let context = FileSystemSandboxContext::from_permission_profile(
+        PermissionProfile::Disabled,
+        PathUri::parse("file:///C:/work").expect("cwd uri"),
+    );
     let path = PathUri::parse("file:///C:/work/secret.txt").expect("uri");
     environment
         .get_filesystem()
-        .read_file(&path, Some(&context))
+        .read_file(&path, ReadFileOptions::default(), Some(&context))
         .await
         .expect("served");
     let methods = methods.lock().expect("methods").clone();
