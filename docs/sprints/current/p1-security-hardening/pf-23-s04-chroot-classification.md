@@ -64,9 +64,8 @@ finder/exec launcher coverage, authentication recovery and other contributor fea
 - [x] Frozen independent [code-blind design](../../../../qa/security-levels/sprints/PF-23-S04/codeblind-design.md) before functional execution; all eleven cases remain unexecuted.
 - [x] Initial integrated classifier: 404/404 passed; independent review nevertheless found inherited script-input loss. New regression reproduced it; repair and final qualification remain in progress.
 - [x] Closed inherited script-input finding with red/green tests and independent repair review; pre-reconciliation classifier406/406 passed. Recorded corpus:5397 cases/10794 verdicts,62 new asks,0 quieter outcomes,0 kind changes or panics. Combined current-main replay remains required below.
-- [x] Frozen cases run code-blind on `1dea8b3b03` ([record](../../../../qa/security-levels/sprints/PF-23-S04/functional-20261114.md),
-  2026-11-14): case 5 failed (#2165); 6-8 effect legs not exercised; Linux/Windows blocked; #2167 predates it;
-  [reel](../../../../qa/demos/index/pf23-s04-reel.md).
+- [x] Frozen cases run code-blind on `1dea8b3b03` on 2026-11-14 ([record](../../../../qa/security-levels/sprints/PF-23-S04/functional-20261114.md), [reel](../../../../qa/demos/index/pf23-s04-reel.md)):
+  case 5 failed (#2165); 6-8 effect legs not exercised; Linux/Windows blocked; #2167 predates the sprint.
 
 ## Remaining
 
