@@ -167,7 +167,7 @@ pub(crate) fn opened_protected_path(
             cwds.iter()
                 .flat_map(move |cwd| alone.get_readable_roots_with_cwd(cwd))
         })
-        .find(|root| matcher.is_read_denied(root.as_path()))
+        .find(|root| matcher.is_local_path_read_denied(root.as_path()))
         .map(|root| root.display().to_string())
 }
 
@@ -233,7 +233,9 @@ fn reopened(
         let mut merged = protected.clone();
         merged.entries.extend(spellings.iter().map(|root| {
             FileSystemSandboxEntry::new(
-                FileSystemPath::Path { path: root.clone() },
+                FileSystemPath::Path {
+                    path: root.clone().into(),
+                },
                 FileSystemAccessMode::Write,
             )
         }));

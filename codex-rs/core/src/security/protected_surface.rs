@@ -287,6 +287,8 @@ pub(crate) fn classify_mcp(call: &McpCall<'_>, codex_home: &Path) -> Option<Prot
         additional_permissions: None,
         justification: None,
         tty: false,
+        hook_command: String::new(),
+        proposed_execpolicy_amendment: None,
     };
     let mut paths = vec!["mcp-arguments".to_string()];
     for (key, text) in strings {
@@ -322,6 +324,8 @@ pub(crate) fn classify_typed_input(
         additional_permissions: None,
         justification: None,
         tty: true,
+        hook_command: String::new(),
+        proposed_execpolicy_amendment: None,
     };
     let sh = |text: &str| vec!["sh".to_string(), "-c".to_string(), text.to_string()];
     let process = classify(&exec(sh(process_command)), codex_home);
