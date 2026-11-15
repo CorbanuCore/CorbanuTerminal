@@ -137,7 +137,7 @@ async fn d334_agent_tools_after_untrusted_content_on_every_route() {
 
     for level in [SecurityLevel::Moderate, SecurityLevel::Aggressive] {
         let (session, mut turn) = crate::session::tests::make_session_and_context().await;
-        turn.approval_policy
+        turn.approval_policy()
             .set(AskForApproval::Never)
             .expect("approval policy");
         let client = (*session.services.model_client())
@@ -145,8 +145,10 @@ async fn d334_agent_tools_after_untrusted_content_on_every_route() {
             .with_ingress_level(level)
             .with_source_envelopes(/*enabled*/ true);
         client.note_recorded_for_taint(&[ResponseItem::FunctionCallOutput {
+            name: None,
+            namespace: None,
             id: None,
-            call_id: "call-read".into(),
+            call_id: "call-read".Some(into()),
             output: FunctionCallOutputPayload::from_text("README".into()),
             internal_chat_message_metadata_passthrough: None,
         }]);
@@ -162,6 +164,8 @@ async fn d334_agent_tools_after_untrusted_content_on_every_route() {
         let turn = Arc::new(turn);
         let dispatch = |tool_name: ToolName, origin: ToolOrigin| {
             let invocation = ToolInvocation {
+                environments: Default::default(),
+                native_call: None,
                 session: Arc::clone(&session),
                 step_context: StepContext::for_test(Arc::clone(&turn)),
                 turn: Arc::clone(&turn),
@@ -264,7 +268,7 @@ async fn d334_agent_restart_does_not_ask_before_untrusted_content() {
     use codex_security_policy::SecurityLevel;
 
     let (session, mut turn) = crate::session::tests::make_session_and_context().await;
-    turn.approval_policy
+    turn.approval_policy()
         .set(AskForApproval::Never)
         .expect("approval policy");
     let client = (*session.services.model_client())
@@ -283,6 +287,8 @@ async fn d334_agent_restart_does_not_ask_before_untrusted_content() {
         "send_input_v1",
     ] {
         let invocation = ToolInvocation {
+            environments: Default::default(),
+            native_call: None,
             session: Arc::clone(&session),
             step_context: StepContext::for_test(Arc::clone(&turn)),
             turn: Arc::clone(&turn),
@@ -719,7 +725,7 @@ async fn goal_tools_after_untrusted_content_under_either_name() {
 
     for level in [SecurityLevel::Moderate, SecurityLevel::Aggressive] {
         let (session, mut turn) = crate::session::tests::make_session_and_context().await;
-        turn.approval_policy
+        turn.approval_policy()
             .set(AskForApproval::Never)
             .expect("approval policy");
         let client = (*session.services.model_client())
@@ -727,8 +733,10 @@ async fn goal_tools_after_untrusted_content_under_either_name() {
             .with_ingress_level(level)
             .with_source_envelopes(/*enabled*/ true);
         client.note_recorded_for_taint(&[ResponseItem::FunctionCallOutput {
+            name: None,
+            namespace: None,
             id: None,
-            call_id: "call-read".into(),
+            call_id: "call-read".Some(into()),
             output: FunctionCallOutputPayload::from_text("README".into()),
             internal_chat_message_metadata_passthrough: None,
         }]);
@@ -747,6 +755,8 @@ async fn goal_tools_after_untrusted_content_under_either_name() {
         let turn = Arc::new(turn);
         let dispatch = |tool_name: ToolName, origin: ToolOrigin| {
             let invocation = ToolInvocation {
+                environments: Default::default(),
+                native_call: None,
                 session: Arc::clone(&session),
                 step_context: StepContext::for_test(Arc::clone(&turn)),
                 turn: Arc::clone(&turn),

@@ -299,7 +299,7 @@ async fn d447_shell_command_after_untrusted_content_gets_the_entry() {
     for tool in ["exec_command"] {
         for tainted in [false, true] {
             let (session, mut turn) = crate::session::tests::make_session_and_context().await;
-            turn.approval_policy
+            turn.approval_policy()
                 .set(AskForApproval::Never)
                 .expect("approval policy");
             turn.permission_profile = PermissionProfile::Disabled;
@@ -314,8 +314,10 @@ async fn d447_shell_command_after_untrusted_content_gets_the_entry() {
                 .with_source_envelopes(/*enabled*/ true);
             if tainted {
                 client.note_recorded_for_taint(&[ResponseItem::FunctionCallOutput {
+                    name: None,
+                    namespace: None,
                     id: None,
-                    call_id: "call-read".into(),
+                    call_id: "call-read".Some(into()),
                     output: FunctionCallOutputPayload::from_text("README".into()),
                     internal_chat_message_metadata_passthrough: None,
                 }]);
@@ -326,6 +328,8 @@ async fn d447_shell_command_after_untrusted_content_gets_the_entry() {
             let session = Arc::new(session);
             let turn = Arc::new(turn);
             let invocation = ToolInvocation {
+                environments: Default::default(),
+                native_call: None,
                 session: Arc::clone(&session),
                 step_context: StepContext::for_test(Arc::clone(&turn)),
                 turn: Arc::clone(&turn),

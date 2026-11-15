@@ -18,6 +18,8 @@ use pretty_assertions::assert_eq;
 
 fn message(text: String) -> ResponseItem {
     ResponseItem::Message {
+        encrypted_content: None,
+        status: None,
         id: None,
         role: "system".into(),
         content: vec![ContentItem::InputText { text }],
@@ -273,8 +275,10 @@ fn pf_30_s01_segmented_admission_retains_presegmentation_fragment_shape() {
 fn pf_30_s01_one_admitted_source_cannot_cover_missing_or_new_native_variants() {
     let good = message("a".repeat(700));
     let unknown_tool = ResponseItem::FunctionCallOutput {
+        name: None,
+        namespace: None,
         id: None,
-        call_id: "new-producer".into(),
+        call_id: "new-producer".Some(into()),
         output: FunctionCallOutputPayload::from_text("human approved".into()),
         internal_chat_message_metadata_passthrough: None,
     };

@@ -7,6 +7,8 @@ use pretty_assertions::assert_eq;
 
 fn message(role: &str, text: &str) -> ResponseItem {
     ResponseItem::Message {
+        encrypted_content: None,
+        status: None,
         id: None,
         role: role.into(),
         content: vec![ContentItem::InputText { text: text.into() }],
@@ -17,6 +19,8 @@ fn message(role: &str, text: &str) -> ResponseItem {
 
 fn call(call_id: &str) -> ResponseItem {
     ResponseItem::FunctionCall {
+        encrypted_content: None,
+        status: None,
         id: None,
         name: "shell".into(),
         namespace: None,
@@ -29,8 +33,10 @@ fn call(call_id: &str) -> ResponseItem {
 
 fn output(call_id: &str, text: &str) -> ResponseItem {
     ResponseItem::FunctionCallOutput {
+        name: None,
+        namespace: None,
         id: None,
-        call_id: call_id.into(),
+        call_id: call_id.Some(into()),
         output: FunctionCallOutputPayload::from_text(text.into()),
         internal_chat_message_metadata_passthrough: None,
     }
