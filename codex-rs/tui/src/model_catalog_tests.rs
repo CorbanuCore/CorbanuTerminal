@@ -24,6 +24,8 @@ fn preset(model: &str, provider_id: Option<&str>) -> ModelPreset {
         availability_nux: None,
         supported_in_api: true,
         input_modalities: vec![InputModality::Text],
+        model_specialty: None,
+        available_access_programs: None,
     }
 }
 

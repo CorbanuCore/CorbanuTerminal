@@ -57,6 +57,8 @@ pub(crate) fn include_runtime_model(
             availability_nux: None,
             supported_in_api: true,
             input_modalities: vec![InputModality::Text],
+            model_specialty: None,
+            available_access_programs: None,
         });
     preset.id = format!("{runtime_provider_id}:{model}");
     preset.provider_id = Some(runtime_provider_id.to_string());
