@@ -92,20 +92,49 @@ fn windows_sandbox_server_policy_controls_setup_choices() {
 }
 
 #[test]
+fn issue_2255_mxc_stays_gated_with_supported_sandbox_instructions() {
+    for setup_complete in [false, true] {
+        let steps = setup_steps(
+            WindowsSandboxLevel::Disabled,
+            setup_complete,
+            Some(WindowsSandboxModeToml::Mxc),
+        )
+        .expect("MXC must keep Moderate and Aggressive gated even after elevated setup");
+        insta::assert_snapshot!("security_levels_mxc_not_supported", steps);
+        assert!(!steps.ends_with('.'), "{steps}");
+    }
+}
+
+#[test]
 fn issue_691_783_protected_levels_need_the_elevated_sandbox_set_up() {
     assert_eq!(
-        setup_steps(WindowsSandboxLevel::Elevated, /*setup_complete*/ true),
+        setup_steps(
+            WindowsSandboxLevel::Elevated,
+            /*setup_complete*/ true,
+            /*selected_mode*/ None,
+        ),
         None
     );
-    let not_set_up = setup_steps(WindowsSandboxLevel::Disabled, /*setup_complete*/ true).unwrap();
+    let not_set_up = setup_steps(
+        WindowsSandboxLevel::Disabled,
+        /*setup_complete*/ true,
+        /*selected_mode*/ None,
+    )
+    .unwrap();
     assert!(not_set_up.contains("/permissions"), "{not_set_up}");
     let non_admin = setup_steps(
         WindowsSandboxLevel::RestrictedToken,
         /*setup_complete*/ true,
+        /*selected_mode*/ None,
     )
     .unwrap();
     assert!(non_admin.contains("/setup-default-sandbox"), "{non_admin}");
-    let unfinished = setup_steps(WindowsSandboxLevel::Elevated, /*setup_complete*/ false).unwrap();
+    let unfinished = setup_steps(
+        WindowsSandboxLevel::Elevated,
+        /*setup_complete*/ false,
+        /*selected_mode*/ None,
+    )
+    .unwrap();
     assert!(
         unfinished.contains("setup has not finished"),
         "{unfinished}"
