@@ -88,7 +88,7 @@ async fn confirm_permission(
 }
 
 fn write_probe(path: &std::path::Path, call_id: &str) -> Result<String> {
-    app_test_support::create_shell_command_sse_response(
+    app_test_support::create_command_execution_sse_response(
         vec![
             "python3".into(),
             "-c".into(),
@@ -133,7 +133,7 @@ async fn finish_probe(mcp: &mut TestAppServer, call_id: &str) -> Result<usize> {
 
 // Append instead of overwriting so an automatic replay cannot look like one write.
 fn counted_permission_probe(path: &std::path::Path, call_id: &str) -> Result<String> {
-    app_test_support::create_shell_command_sse_response(
+    app_test_support::create_command_execution_sse_response(
         vec![
             "python3".into(),
             "-c".into(),
@@ -266,7 +266,7 @@ async fn pending_selection_case(decision: &str, expected_old_effects: usize) -> 
 }
 
 fn permission_barrier(fixture: &std::path::Path) -> Result<String> {
-    app_test_support::create_shell_command_sse_response(
+    app_test_support::create_command_execution_sse_response(
         vec![
             "python3".into(),
             "-c".into(),
@@ -672,7 +672,7 @@ async fn thread_settings_confirmation_f04_restricts_work_steered_after_applied()
     let marker = fixture.path().join("outside-workspace");
     let barrier_timeout = DEFAULT_TIMEOUT * 6;
     let barrier_deadline = barrier_timeout - DEFAULT_TIMEOUT;
-    let barrier = app_test_support::create_shell_command_sse_response(
+    let barrier = app_test_support::create_command_execution_sse_response(
         vec![
             "python3".into(),
             "-c".into(),
@@ -767,6 +767,7 @@ async fn thread_settings_confirmation_f04_restricts_work_steered_after_applied()
             }],
             client_user_message_id: None,
             responsesapi_client_metadata: None,
+            responsesapi_client_metadata_patch: None,
             additional_context: None,
         })
         .await?;
@@ -958,6 +959,7 @@ async fn thread_settings_authorization_boundary_returns_input_and_discriminator(
             ],
             client_user_message_id: None,
             responsesapi_client_metadata: None,
+            responsesapi_client_metadata_patch: None,
             additional_context: None,
         })
         .await?;
@@ -1107,7 +1109,7 @@ async fn preserve_running_authority_after_confirmation(
     let release = fixture.path().join("release");
     let completed = fixture.path().join("completed");
     let probe = fixture.path().join("probe");
-    let barrier = app_test_support::create_shell_command_sse_response(
+    let barrier = app_test_support::create_command_execution_sse_response(
         vec![
             "python3".into(),
             "-c".into(),
@@ -1257,6 +1259,7 @@ async fn thread_settings_confirmation_leaves_mcp_status_responses_unaffected() -
                     limit: None,
                     detail: Some(McpServerStatusDetail::ToolsAndAuthOnly),
                     thread_id: Some(thread.id.clone()),
+                    server_name: None,
                 })
                 .await?;
             let response: ListMcpServerStatusResponse =
@@ -1973,6 +1976,19 @@ async fn start_thread(mcp: &mut TestAppServer) -> Result<ThreadStartResponse> {
         .send_thread_start_request_with_auto_env(ThreadStartParams {
             model: Some("mock-model".to_string()),
             ..Default::default()
+        })
+        .await?;
+    timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await?
+}
+
+async fn read_thread_with_turns(
+    mcp: &mut TestAppServer,
+    thread_id: &str,
+) -> Result<ThreadReadResponse> {
+    let request_id = mcp
+        .send_thread_read_request(ThreadReadParams {
+            thread_id: thread_id.to_string(),
+            include_turns: true,
         })
         .await?;
     timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await?

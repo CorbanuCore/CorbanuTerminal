@@ -60,6 +60,7 @@ libc = { workspace = true }
 signal-hook = { workspace = true }
 
 [dev-dependencies]
+anyhow = { workspace = true }
 chrono = { workspace = true }
 codex-config = { workspace = true }
 pretty_assertions = { workspace = true }

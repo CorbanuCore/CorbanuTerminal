@@ -152,6 +152,7 @@ client_id = "enterprise-client""#
         AccountUpdatedNotification {
             auth_mode: None,
             plan_type: None,
+            api_key_env_var: None,
         }
     );
     assert!(!codex_home.path().join("auth.json").exists());

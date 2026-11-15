@@ -56,6 +56,8 @@ use std::ops::ControlFlow;
 pub(super) const THREAD_LIST_DEFAULT_LIMIT: usize = 25;
 pub(super) const THREAD_LIST_MAX_LIMIT: usize = 100;
 const THREAD_LIST_MAX_EXCLUDED_IDS: usize = 100;
+/// The in-process TUI's client name; its new threads are materialized eagerly.
+const CODEX_TUI_CLIENT_NAME: &str = "codex-tui";
 const PAGINATED_FULL_HISTORY_DEPRECATION_SUMMARY: &str = "Full-history hydration is deprecated for paginated threads; use `excludeTurns: true`, then page with `thread/turns/list` and `thread/items/list`.";
 const PAGINATED_THREAD_READ_DEPRECATION_SUMMARY: &str = "Full-history hydration is deprecated for paginated threads; omit `includeTurns` or set it to `false`, then page with `thread/turns/list` and `thread/items/list`.";
 
@@ -801,7 +803,7 @@ impl ThreadRequestProcessor {
         params: ThreadSpawnAgentParams,
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
-        supports_openai_form_elicitation: bool,
+        client_mcp_extensions: ClientMcpExtensions,
         request_context: RequestContext,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         let ThreadSpawnAgentParams {
@@ -829,7 +831,7 @@ impl ThreadRequestProcessor {
             thread,
             app_server_client_name,
             app_server_client_version,
-            supports_openai_form_elicitation,
+            client_mcp_extensions,
             request_context,
             ThreadStartResponseKind::ThreadSpawnAgent {
                 agent_nickname,
@@ -5151,7 +5153,7 @@ impl ThreadRequestProcessor {
 
         let reasoning_effort = persisted_metadata
             .as_ref()
-            .map(|metadata| metadata.reasoning_effort);
+            .map(|metadata| metadata.reasoning_effort.clone());
         (persisted_metadata, reasoning_effort)
     }
 

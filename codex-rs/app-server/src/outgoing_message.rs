@@ -1800,6 +1800,7 @@ mod tests {
         let approval = |item_id: &str, approval_id: Option<&str>| {
             ServerRequestPayload::CommandExecutionRequestApproval(
                 CommandExecutionRequestApprovalParams {
+                    kind: Default::default(),
                     thread_id: thread_id.to_string(),
                     turn_id: "turn-1".to_string(),
                     item_id: item_id.to_string(),

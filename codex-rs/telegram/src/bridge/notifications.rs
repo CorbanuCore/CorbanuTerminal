@@ -3,6 +3,7 @@ use std::time::Instant;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::ServerNotification;
 use codex_app_server_protocol::ThreadItem;
+use codex_app_server_protocol::ThreadItemPayload;
 use codex_app_server_protocol::ThreadReadParams;
 use codex_app_server_protocol::ThreadReadResponse;
 use codex_app_server_protocol::TurnStatus;
@@ -201,6 +202,22 @@ impl BridgeRuntime {
             | ServerNotification::ThreadRealtimeSdp(_)
             | ServerNotification::ThreadRealtimeError(_)
             | ServerNotification::ThreadRealtimeClosed(_)
+            | ServerNotification::AuthRecoveryCompleted(_)
+            | ServerNotification::AuthRecoveryStarted(_)
+            | ServerNotification::GatewayOAuthChanged(_)
+            | ServerNotification::McpServerEventStream(_)
+            | ServerNotification::ProjectChanged(_)
+            | ServerNotification::StrictReviewRequired(_)
+            | ServerNotification::ThreadAttachmentUpdated(_)
+            | ServerNotification::ThreadPredictionUpdated(_)
+            | ServerNotification::ThreadProjectUpdated(_)
+            | ServerNotification::ThreadQueueChanged(_)
+            | ServerNotification::ThreadReadStateChanged(_)
+            | ServerNotification::ThreadRealtimeItemCompleted(_)
+            | ServerNotification::ThreadRealtimeItemStarted(_)
+            | ServerNotification::ThreadRealtimeItemTranscriptDelta(_)
+            | ServerNotification::ThreadReverted(_)
+            | ServerNotification::ThreadSectionChanged(_)
             | ServerNotification::WindowsWorldWritableWarning(_)
             | ServerNotification::WindowsSandboxSetupCompleted(_)
             | ServerNotification::AccountLoginCompleted(_) => Ok(()),
@@ -214,8 +231,8 @@ impl BridgeRuntime {
         item: ThreadItem,
     ) -> anyhow::Result<()> {
         let item_id = item.id().to_string();
-        match item {
-            ThreadItem::AgentMessage { id, text, .. } => {
+        match item.payload {
+            ThreadItemPayload::AgentMessage { id, text, .. } => {
                 let stream = self.sessions.take_stream_for_item(thread_id, &id).await;
                 if let Some((chat_id, Some(message_id))) = stream {
                     if self
@@ -236,7 +253,7 @@ impl BridgeRuntime {
                     self.send_text(chat_id, &text).await?;
                 }
             }
-            ThreadItem::CommandExecution {
+            ThreadItemPayload::CommandExecution {
                 command, status, ..
             } => {
                 if let Some(chat_id) = self.sessions.conversation_for_thread(thread_id).await {
@@ -244,13 +261,13 @@ impl BridgeRuntime {
                         .await?;
                 }
             }
-            ThreadItem::FileChange { status, .. } => {
+            ThreadItemPayload::FileChange { status, .. } => {
                 if let Some(chat_id) = self.sessions.conversation_for_thread(thread_id).await {
                     self.send_text(chat_id, &format!("File change {status:?}."))
                         .await?;
                 }
             }
-            ThreadItem::McpToolCall {
+            ThreadItemPayload::McpToolCall {
                 server,
                 tool,
                 status,
@@ -261,20 +278,21 @@ impl BridgeRuntime {
                         .await?;
                 }
             }
-            ThreadItem::UserMessage { .. }
-            | ThreadItem::HookPrompt { .. }
-            | ThreadItem::Plan { .. }
-            | ThreadItem::Reasoning { .. }
-            | ThreadItem::DynamicToolCall { .. }
-            | ThreadItem::CollabAgentToolCall { .. }
-            | ThreadItem::SubAgentActivity { .. }
-            | ThreadItem::WebSearch { .. }
-            | ThreadItem::ImageView { .. }
-            | ThreadItem::ImageGeneration { .. }
-            | ThreadItem::EnteredReviewMode { .. }
-            | ThreadItem::ExitedReviewMode { .. }
-            | ThreadItem::ContextCompaction { .. }
-            | ThreadItem::Sleep { .. } => {}
+            ThreadItemPayload::UserMessage { .. }
+            | ThreadItemPayload::HookPrompt { .. }
+            | ThreadItemPayload::FunctionCallOutput { .. }
+            | ThreadItemPayload::Plan { .. }
+            | ThreadItemPayload::Reasoning { .. }
+            | ThreadItemPayload::DynamicToolCall { .. }
+            | ThreadItemPayload::CollabAgentToolCall { .. }
+            | ThreadItemPayload::SubAgentActivity { .. }
+            | ThreadItemPayload::WebSearch { .. }
+            | ThreadItemPayload::ImageView { .. }
+            | ThreadItemPayload::ImageGeneration { .. }
+            | ThreadItemPayload::EnteredReviewMode { .. }
+            | ThreadItemPayload::ExitedReviewMode { .. }
+            | ThreadItemPayload::ContextCompaction { .. }
+            | ThreadItemPayload::Sleep { .. } => {}
         };
         self.sessions.mark_item_delivered(thread_id, &item_id).await;
         Ok(())

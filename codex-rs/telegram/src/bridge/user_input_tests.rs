@@ -7,6 +7,7 @@ use codex_app_server_client::TypedRequestError;
 use codex_app_server_protocol::JSONRPCErrorError;
 use codex_app_server_protocol::THREAD_UNMATERIALIZED_ERROR_CODE;
 use codex_app_server_protocol::ThreadItem;
+use codex_app_server_protocol::ThreadItemPayload;
 
 #[test]
 fn image_only_message_yields_only_image_items() {
@@ -58,17 +59,19 @@ fn queue_limits_are_hard_for_items_and_bytes() {
 
 #[test]
 fn replay_reconciliation_finds_only_the_matching_client_message() {
-    let first_turn = vec![ThreadItem::UserMessage {
+    let first_turn = vec![ThreadItem::untimed(ThreadItemPayload::UserMessage {
         id: "item-1".into(),
         client_id: Some("telegram:1:41".into()),
         content: Vec::new(),
-    }];
-    let second_turn = vec![ThreadItem::AgentMessage {
+    })];
+    let second_turn = vec![ThreadItem::untimed(ThreadItemPayload::AgentMessage {
         id: "item-2".into(),
         text: "done".into(),
         phase: None,
         memory_citation: None,
-    }];
+        delivery: None,
+        questions: None,
+    })];
     let turns = [first_turn.as_slice(), second_turn.as_slice()];
 
     assert!(turn_items_contain_client_message(turns, "telegram:1:41"));

@@ -22,7 +22,13 @@ async fn feedback_includes_flush_and_query_failures_in_the_same_submission() -> 
         Scenario::Corruption,
     ] {
         let home = tempfile::tempdir()?;
-        let config = core_test_support::load_default_config_for_test(&home).await;
+        let cwd = tempfile::tempdir()?;
+        let config = core_test_support::load_default_config_for_test_in(
+            &home,
+            Default::default(),
+            cwd.path(),
+        )
+        .await;
         let sqlite = &config.sqlite;
         let runtime = StateRuntime::init(sqlite.clone(), "test-provider".to_string()).await?;
         let pool = sqlite.open_read_write_pool(&sqlite.logs_db_path()).await?;

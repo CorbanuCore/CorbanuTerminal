@@ -1353,7 +1353,7 @@ impl MessageProcessor {
                         params,
                         app_server_client_name.clone(),
                         client_version.clone(),
-                        supports_openai_form_elicitation,
+                        client_mcp_extensions.clone(),
                         request_context,
                     )
                     .await

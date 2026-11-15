@@ -19,6 +19,7 @@ async fn queued_notifications_follow_auth_owner_changes(owner_generation: u64) {
         let updated = AccountUpdatedNotification {
             auth_mode: None,
             plan_type: None,
+            api_key_env_var: None,
         };
         tx.send(OutgoingEnvelope::Broadcast {
             message: timestamped_server_notification(ServerNotification::AccountUpdated(

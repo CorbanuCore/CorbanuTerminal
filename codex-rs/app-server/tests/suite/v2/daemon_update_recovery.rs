@@ -235,6 +235,7 @@ async fn managed_shutdown_skips_nonpersistent_threads_and_tolerates_save_failure
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             },
         )
     } else {
