@@ -139,9 +139,12 @@ pub(crate) fn refuse_without_platform_sandbox(
     }) else {
         return Ok(());
     };
+    // D522 (a): MXC counts as no sandbox here, as for the client's refusal and
+    // the remote verdict (`remote_file_system::host_sandbox_level`).
     let windows_sandbox_enabled = !matches!(
         context.windows_sandbox_selection,
         codex_file_system::WindowsSandboxSelection::Disabled
+            | codex_file_system::WindowsSandboxSelection::Mxc
     );
     // Recheck setup on the executor too: another server may answer behind
     // the same URL after the client checked environment/info (#2088).

@@ -493,6 +493,13 @@ impl Session {
         // Keep a context for discovery and subsequent skill resource reads.
         let level = self.services.model_client().live_level();
         let protected_level = level != codex_security_policy::SecurityLevel::Permissive;
+        // The session's Windows sandbox level, as commands and file tools judge it.
+        let session_windows_level = self
+            .state
+            .lock()
+            .await
+            .session_configuration
+            .windows_sandbox_level;
         if !restricted_file_system
             && !protected_level
             && !config
@@ -514,7 +521,7 @@ impl Session {
                             level,
                             crate::tools::orchestrator::unsandboxed_check_level(
                                 environment.config(),
-                                environment.config().windows_sandbox_level,
+                                session_windows_level,
                             ),
                             environment,
                         );
@@ -578,6 +585,13 @@ impl Session {
         cache.ensure_capacity(remote_environment_count);
         let mut snapshots = Vec::new();
         let mut skipped_incompatible_executor = false;
+        // The session's Windows sandbox level, as commands and file tools judge it.
+        let session_windows_level = self
+            .state
+            .lock()
+            .await
+            .session_configuration
+            .windows_sandbox_level;
         for selected in environments.turn_environments() {
             if !selected.environment.is_remote() {
                 continue;
@@ -602,7 +616,7 @@ impl Session {
             let mut sandbox = selected.sandbox_context(/*additional_permissions*/ None);
             let check_level = crate::tools::orchestrator::unsandboxed_check_level(
                 selected.config(),
-                selected.config().windows_sandbox_level,
+                session_windows_level,
             );
             sandbox.unsandboxed_refusal =
                 crate::security::windows_unsandboxed::environment_file_refusal(

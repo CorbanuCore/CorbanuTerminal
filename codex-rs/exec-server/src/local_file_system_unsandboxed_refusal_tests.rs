@@ -46,6 +46,19 @@ async fn issue_1976_a_refusal_applies_only_without_a_platform_sandbox() -> io::R
         assert!(opened.is_ok());
     }
 
+    // D522 (a): MXC counts as no sandbox here.
+    context.windows_sandbox_selection = WindowsSandboxSelection::Mxc;
+    let read = fs
+        .read_file(&uri, ReadFileOptions::default(), Some(&context))
+        .await;
+    if cfg!(windows) {
+        let error = read.expect_err("refused under MXC");
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(error.to_string(), "refused for #1976");
+    } else {
+        assert_eq!(read?, b"plain".to_vec());
+    }
+
     // The non-admin sandbox needs no setup.
     context.windows_sandbox_selection = WindowsSandboxSelection::RestrictedToken;
     assert_eq!(
