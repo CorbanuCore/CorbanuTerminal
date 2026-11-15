@@ -180,13 +180,19 @@ pub(crate) fn protected_level_setup_steps(config: &Config) -> Option<&'static st
     setup_steps(
         level_from_config(config),
         sandbox_setup_is_complete(config.codex_home.as_path()),
+        config.permissions.windows_sandbox_mode,
     )
 }
 
 /// `protected_level_setup_steps` for a Windows sandbox `level` whose elevated
-/// setup is (or is not) `setup_complete`.
+/// setup is (or is not) `setup_complete`. The selected mode distinguishes MXC
+/// from an unconfigured sandbox without changing which levels pass the gate.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-fn setup_steps(level: WindowsSandboxLevel, setup_complete: bool) -> Option<&'static str> {
+fn setup_steps(
+    level: WindowsSandboxLevel,
+    setup_complete: bool,
+    selected_mode: Option<WindowsSandboxModeToml>,
+) -> Option<&'static str> {
     match level {
         WindowsSandboxLevel::Elevated if setup_complete => None,
         WindowsSandboxLevel::Elevated => Some(
@@ -198,6 +204,12 @@ fn setup_steps(level: WindowsSandboxLevel, setup_complete: bool) -> Option<&'sta
             "This session uses the non-admin Windows sandbox, which cannot keep agent commands \
              from reading the vault and sign-in files. Run /setup-default-sandbox (it needs \
              Administrator permission)",
+        ),
+        WindowsSandboxLevel::Disabled if selected_mode == Some(WindowsSandboxModeToml::Mxc) => Some(
+            "This session uses the MXC Windows sandbox, which Corbanu's security levels do not \
+             support yet. To use Moderate or Aggressive, set sandbox = \"elevated\" in the \
+             [windows] section of config.toml, restart Corbanu Terminal and run an agent command \
+             to finish the default sandbox setup (it needs Administrator permission)",
         ),
         WindowsSandboxLevel::Disabled => Some(
             "The Windows sandbox is not set up. Open /permissions, choose Default and pick \
