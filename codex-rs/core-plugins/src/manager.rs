@@ -593,6 +593,11 @@ pub struct PluginsManager {
     plugin_install_source: PluginInstallSource,
     curated_repo_sync: Mutex<Option<CuratedRepoSync>>,
     curated_repo_sync_shut_down: AtomicBool,
+    /// Unit tests only: the `git` the curated repo sync runs, with offline
+    /// fallbacks. Production always resolves `git` from trusted install
+    /// directories.
+    #[cfg(test)]
+    curated_repo_sync_test_git: Mutex<Option<PathBuf>>,
 }
 
 /// The curated repo sync this manager started, so shutdown can cancel it.
@@ -771,6 +776,8 @@ impl PluginsManager {
             plugin_install_source: PluginInstallSource::Manual,
             curated_repo_sync: Mutex::new(None),
             curated_repo_sync_shut_down: AtomicBool::new(false),
+            #[cfg(test)]
+            curated_repo_sync_test_git: Mutex::new(None),
         }
     }
 
@@ -3462,14 +3469,36 @@ impl PluginsManager {
         let codex_home = self.codex_home.clone();
         let cancel = Arc::new(AtomicBool::new(false));
         let thread_cancel = Arc::clone(&cancel);
+        #[cfg(test)]
+        let test_git = self
+            .curated_repo_sync_test_git
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
         let spawned = std::thread::Builder::new()
             .name("plugins-curated-repo-sync".to_string())
             .spawn(move || {
-                match sync_openai_plugins_repo(
+                #[cfg(test)]
+                let result = match test_git {
+                    Some(git) => crate::startup_sync::sync_openai_plugins_repo_offline_for_test(
+                        codex_home.as_path(),
+                        &git,
+                        &http_client_factory,
+                        &thread_cancel,
+                    ),
+                    None => sync_openai_plugins_repo(
+                        codex_home.as_path(),
+                        http_client_factory,
+                        &thread_cancel,
+                    ),
+                };
+                #[cfg(not(test))]
+                let result = sync_openai_plugins_repo(
                     codex_home.as_path(),
                     http_client_factory,
                     &thread_cancel,
-                ) {
+                );
+                match result {
                     Ok(_) if thread_cancel.load(Ordering::SeqCst) => {
                         CURATED_REPO_SYNC_STARTED.store(false, Ordering::SeqCst);
                     }
@@ -3526,6 +3555,11 @@ impl PluginsManager {
         if let Some(sync) = slot.as_ref() {
             sync.cancel.store(true, Ordering::SeqCst);
         }
+    }
+
+    /// #477: whether [`Self::cancel_curated_repo_sync`] has run.
+    pub fn curated_repo_sync_cancelled(&self) -> bool {
+        self.curated_repo_sync_shut_down.load(Ordering::SeqCst)
     }
 
     /// #477: cancels the curated repo sync and waits up to `timeout` for it

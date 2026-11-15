@@ -62,7 +62,56 @@ const HTTP_HEADER_ENV_DENYLIST: &[&str] = &[
     "AZURE_CLIENT_SECRET",
     "AZURE_FEDERATED_TOKEN_FILE",
     "GOOGLE_APPLICATION_CREDENTIALS",
+    // Provider credentials Corbanu reads that no built-in provider names as its
+    // `env_key`; the rest come from the built-in provider table (#2316).
+    "AZURE_OPENAI_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "AWS_BEARER_TOKEN_BEDROCK",
 ];
+
+/// Corbanu's own variable namespaces. A credential-looking name in one of them
+/// (vault, Task Node, plan, gateway or helper tokens) never reaches an MCP
+/// server through an executor-side header.
+const CORBANU_ENV_PREFIXES: &[&str] = &["CORBANU_", "PFTERMINAL_", "PFT_", "TASKNODE_", "CODEX_"];
+
+/// True when no `http/request` header may read `name` from the executor's
+/// environment, whatever the security level.
+fn is_denied_header_env_var(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    HTTP_HEADER_ENV_DENYLIST
+        .iter()
+        .copied()
+        .chain(
+            codex_model_provider_info::built_in_provider_api_key_env_vars()
+                .iter()
+                .map(String::as_str),
+        )
+        .any(|denied| denied.eq_ignore_ascii_case(name))
+        || (CORBANU_ENV_PREFIXES
+            .iter()
+            .any(|prefix| upper.starts_with(prefix))
+            && (codex_protocol::secretless_launch::is_secret_looking_name(name)
+                || upper.contains("TASKNODE")))
+}
+
+/// PF-27-S02: while protected launch is armed, a header may read only an
+/// executor variable that an agent launch could inherit. Names must be ASCII
+/// and literal so that no case folding or pattern can reach another variable.
+/// The orchestrator checks this before forwarding a request, so the boundary
+/// holds even when the executor has not armed itself.
+pub(crate) fn armed_header_env_var_error(header: &HttpHeader, armed: bool) -> Option<String> {
+    let env_var = header.value_env_var.as_deref()?;
+    let allowed = env_var.is_ascii()
+        && !env_var.contains(['*', '?'])
+        && codex_protocol::secretless_launch::is_launch_env_name_allowed(env_var);
+    (armed && !allowed).then(|| {
+        format!(
+            "http/request header {} cannot use executor environment variable {env_var} while protected launch is armed; set the credential in the MCP server's own http_headers configuration",
+            header.name
+        )
+    })
+}
 
 /// HTTP capability implementation backed by the shared route-aware transport.
 #[derive(Clone)]
@@ -378,17 +427,18 @@ impl RouteAwareHttpRequestRunner {
     }
 
     fn build_headers(headers: Vec<HttpHeader>) -> Result<HeaderMap, JSONRPCErrorError> {
+        let armed = codex_protocol::secretless_launch::is_armed();
         let mut header_map = HeaderMap::new();
         for header in headers {
+            if let Some(message) = armed_header_env_var_error(&header, armed) {
+                return Err(invalid_params(message));
+            }
             let name = HeaderName::from_bytes(header.name.as_bytes()).map_err(|error| {
                 invalid_params(format!("http/request header name is invalid: {error}"))
             })?;
             let value = match header.value_env_var {
                 Some(env_var) => {
-                    if HTTP_HEADER_ENV_DENYLIST
-                        .iter()
-                        .any(|denied| denied.eq_ignore_ascii_case(&env_var))
-                    {
+                    if is_denied_header_env_var(&env_var) {
                         return Err(invalid_params(format!(
                             "http/request header {} cannot use executor environment variable {env_var}",
                             header.name
@@ -450,3 +500,7 @@ fn log_send_error(method: &Method, error: RouteAwareRequestError) {
         "http/request send failed"
     );
 }
+
+#[cfg(test)]
+#[path = "route_aware_http_client_tests.rs"]
+mod tests;
