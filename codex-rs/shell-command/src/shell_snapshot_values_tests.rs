@@ -93,6 +93,8 @@ fn snapshot_capture_records_raw_values_of_every_shell_variable() -> Result<()> {
                     .any(|name| name.starts_with("__codex_snapshot_")),
                 "{shell}"
             );
+            // The capture script's own text is skipped: bash 3.2 can tear it.
+            assert!(!values.contains_key("BASH_EXECUTION_STRING"), "{shell}");
             if shell_type == ShellType::Zsh {
                 // Specials are read too, as on main (PSVAR is zsh's prompt array).
                 assert_eq!(values.get("PSVAR"), Some(&"special-Canary-2314"));
@@ -160,9 +162,13 @@ fn malformed_value_section_rejects_capture() {
         // Unterminated section.
         "# Snapshot file\n\0\0#values\0GH_TOKEN\0value\0",
         // A record name that is not an identifier.
-        "# Snapshot file\n\0\0#values\0BAD-NAME\0value\0\0\0",
+        "# Snapshot file\n\0\0#values\0BAD-NAME\0value\0#end\0\0",
         // A name without its value.
         "# Snapshot file\n\0\0#values\0GH_TOKEN",
+        // A torn value (its NUL lost): an empty value must not end the section.
+        "# Snapshot file\n\0\0#values\0SCRIPT\0torn textNEXT\0\0LATER\0\0#end\0\0",
+        // The old empty-record terminator is not accepted.
+        "# Snapshot file\n\0\0#values\0GH_TOKEN\0value\0\0\0",
     ] {
         assert!(
             CapturedSnapshot::parse(ShellType::Bash, captured.as_bytes()).is_none(),
@@ -171,7 +177,7 @@ fn malformed_value_section_rejects_capture() {
     }
     let captured = CapturedSnapshot::parse(
         ShellType::Bash,
-        b"# Snapshot file\n\0\0#values\0GH_TOKEN\0a\nb\0EMPTY\0\0\0SAFE\0declare -x SAFE=\"1\"\n\0\0",
+        b"# Snapshot file\n\0\0#values\0GH_TOKEN\0a\nb\0EMPTY\0\0#end\0SAFE\0declare -x SAFE=\"1\"\n\0\0",
     )
     .unwrap();
     let values = captured.values.unwrap();

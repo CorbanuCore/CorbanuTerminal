@@ -8,9 +8,12 @@ use std::borrow::Cow;
 /// Record that opens the value section. It is not a shell identifier, so it
 /// cannot be mistaken for the first export record of a capture without values.
 pub(super) const VALUES_MARKER: &[u8] = b"#values";
+const VALUES_END: &[u8] = b"#end";
 
-/// `#values NUL (name NUL value NUL)* NUL`. The subshell keeps the loop
-/// variables out of later sections; a failed subshell fails the whole capture.
+/// `#values NUL (name NUL value NUL)* #end NUL`. A non-identifier end record,
+/// not an empty one, so a lost or merged byte cannot end the section early at
+/// an empty value. The subshell keeps the loop variables out of later sections;
+/// a failed subshell fails the whole capture.
 pub(super) fn script(shell_type: ShellType) -> String {
     let body = match shell_type {
         ShellType::Bash => {
@@ -19,10 +22,12 @@ pub(super) fn script(shell_type: ShellType) -> String {
   while IFS= read -r __codex_snapshot_value_name; do
     case "$__codex_snapshot_value_name" in
       ""|[0-9]*|*[!A-Za-z0-9_]*|__codex_snapshot_*) continue ;;
+      # This capture script's own text. Bash 3.2 (macOS) can print it torn.
+      BASH_EXECUTION_STRING|BASH_COMMAND) continue ;;
     esac
     RECORD "${!__codex_snapshot_value_name}"
   done < <(compgen -v)
-  printf '\0'
+  printf '%s\0' 'VALUES_END'
 ) || exit 1
 "#
         }
@@ -40,7 +45,7 @@ pub(super) fn script(shell_type: ShellType) -> String {
     [[ "${(P)__codex_snapshot_value_name}" == *$'\0'* ]] && exit 1
     RECORD "${(P)__codex_snapshot_value_name}"
   done
-  printf '\0'
+  printf '%s\0' 'VALUES_END'
 ) || exit 1
 "#
         }
@@ -50,12 +55,14 @@ pub(super) fn script(shell_type: ShellType) -> String {
   set | __codex_snapshot_command sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' | while IFS= read -r __codex_snapshot_value_name; do
     case "$__codex_snapshot_value_name" in
       ""|[0-9]*|*[!A-Za-z0-9_]*|__codex_snapshot_*) continue ;;
+      # This capture script's own text (bash-backed sh). Bash 3.2 can print it torn.
+      BASH_EXECUTION_STRING|BASH_COMMAND) continue ;;
     esac
     # Only the validated identifier enters eval.
     eval '__codex_snapshot_value=${'"$__codex_snapshot_value_name"'-}'
     RECORD "$__codex_snapshot_value"
   done
-  printf '\0'
+  printf '%s\0' 'VALUES_END'
 ) || exit 1
 "#
         }
@@ -64,10 +71,11 @@ pub(super) fn script(shell_type: ShellType) -> String {
     format!(
         "printf '%s\\0' '{}'\n{}",
         String::from_utf8_lossy(VALUES_MARKER),
-        body.replace(
-            "RECORD",
-            "printf '%s\\0%s\\0' \"$__codex_snapshot_value_name\""
-        )
+        body.replace("VALUES_END", &String::from_utf8_lossy(VALUES_END))
+            .replace(
+                "RECORD",
+                "printf '%s\\0%s\\0' \"$__codex_snapshot_value_name\""
+            )
     )
 }
 
@@ -76,7 +84,7 @@ pub(super) fn parse<'a>(remaining: &mut &'a [u8]) -> Option<Vec<(&'a str, Cow<'a
     let mut values = Vec::new();
     loop {
         let name = super::capture::take_record(remaining)?;
-        if name.is_empty() {
+        if name == VALUES_END {
             return Some(values);
         }
         let name = std::str::from_utf8(name).ok()?;
