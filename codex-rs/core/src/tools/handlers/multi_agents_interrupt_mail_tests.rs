@@ -57,8 +57,8 @@ async fn spawn_unload_and_reload(interrupt: bool) -> Outcome {
         .start_thread(StartThreadOptions::new(config.clone()))
         .await
         .expect("root thread should start");
-    session.services.local_agent_runtime = manager.agent_control().runtime.clone();
-    session.services.agent_control = Arc::new(manager.agent_control());
+    // One control: each `manager.agent_control()` call builds a separate registry.
+    set_agent_control(&mut session, manager.agent_control());
     session.thread_id = root.thread_id;
     set_turn_config(&mut turn, config);
     let session = Arc::new(session);
@@ -170,7 +170,9 @@ async fn reload_does_not_redeliver_an_interrupted_first_message() {
         outcome.first_phase_before_reload
     );
     assert_eq!(outcome.redelivered, 0);
-    assert_eq!(outcome.status_after_reload, AgentStatus::PendingInit);
+    // Upstream's reload restores the interrupted agent's last status (main showed
+    // PendingInit); either way the reload starts no turn.
+    assert_eq!(outcome.status_after_reload, AgentStatus::Interrupted);
 }
 
 #[tokio::test]

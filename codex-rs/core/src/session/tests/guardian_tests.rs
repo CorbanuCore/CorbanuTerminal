@@ -783,8 +783,16 @@ async fn strict_auto_review_turn_grant_forces_guardian_for_exec_command_policy_s
 
 #[test_case(AskForApproval::Never; "policy_precheck")]
 #[test_case(AskForApproval::OnRequest; "reviewer_routing")]
-#[tokio::test]
-async fn network_approval_uses_published_task_authority_within_same_turn(
+fn network_approval_uses_published_task_authority_within_same_turn(
+    admitted_policy: AskForApproval,
+) {
+    // #2294: needs more than the harness's 8 MiB stack in a debug build.
+    crate::session::tests::block_on_production_stack(move || {
+        network_approval_uses_published_task_authority_within_same_turn_body(admitted_policy)
+    });
+}
+
+async fn network_approval_uses_published_task_authority_within_same_turn_body(
     admitted_policy: AskForApproval,
 ) {
     let (session, turn, events) = make_session_and_context_with_auth_and_config_and_rx(

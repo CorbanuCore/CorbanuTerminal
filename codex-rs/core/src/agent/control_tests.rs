@@ -1556,8 +1556,19 @@ async fn spawn_failure_context_survives_manager_and_fork_errors() {
 async fn spawn_failure_context_preserves_shutdown_during_child_startup() {
     let harness = AgentControlHarness::new().await;
     let state = harness.control.runtime.upgrade().expect("live manager");
-    let parent_id = ThreadId::new();
-    let spawn = harness.control.spawn_agent(
+    // Corbanu (PF-23-S03): the child inherits its live parent's security policy, so the
+    // parent must be a running thread (an unknown parent refuses the spawn). Spawn through
+    // the parent's own control, which holds its binding, so the lookups this test blocks
+    // are upstream's own.
+    let (parent_id, parent_thread) = harness.start_thread().await;
+    let control = parent_thread
+        .session
+        .services
+        .agent_control
+        .local()
+        .expect("local agent control")
+        .clone();
+    let spawn = control.spawn_agent(
         harness.config.clone(),
         text_input("hello"),
         Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
@@ -1580,7 +1591,7 @@ async fn spawn_failure_context_preserves_shutdown_during_child_startup() {
                 .poll(&mut Context::from_waker(Waker::noop()))
                 .is_pending()
         );
-        harness.control.runtime.request_shutdown()
+        control.runtime.request_shutdown()
     };
     let error = spawn
         .await
@@ -1623,8 +1634,19 @@ async fn spawn_failure_context_preserves_shutdown_during_child_startup() {
 async fn cancelled_spawn_after_input_admission_discards_child() {
     let harness = AgentControlHarness::new().await;
     let state = harness.control.runtime.upgrade().expect("live manager");
-    let parent_id = ThreadId::new();
-    let mut spawn = harness.control.spawn(SpawnRequest {
+    // Corbanu (PF-23-S03): the child inherits its live parent's security policy, so the
+    // parent must be a running thread (an unknown parent refuses the spawn). Spawn through
+    // the parent's own control, which holds its binding, so the lookups this test blocks
+    // are upstream's own.
+    let (parent_id, parent_thread) = harness.start_thread().await;
+    let control = parent_thread
+        .session
+        .services
+        .agent_control
+        .local()
+        .expect("local agent control")
+        .clone();
+    let mut spawn = control.spawn(SpawnRequest {
         caller: parent_id,
         config: harness.config.clone(),
         input: AgentInput::UserInput(text_input("child task")),
@@ -1669,13 +1691,12 @@ async fn cancelled_spawn_after_input_admission_discards_child() {
         drop(spawn);
     }
     assert!(
-        harness.control.get_agent_metadata(child_id).is_none(),
+        control.get_agent_metadata(child_id).is_none(),
         "cancelled spawn must not leave an accepted child registered"
     );
     child.wait_until_terminated().await;
     assert_thread_not_loaded(&harness.manager, child_id).await;
-    harness
-        .control
+    control
         .runtime
         .request_shutdown()
         .wait()

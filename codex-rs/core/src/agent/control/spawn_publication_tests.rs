@@ -201,7 +201,9 @@ async fn cancelled_spawn_edge_publication_cleanup(
     committed_children: usize,
 ) {
     let (harness, graph) = publication_harness(failure, ThreadId::new).await;
-    let parent = ThreadId::new();
+    // Corbanu (PF-23-S03): a child inherits its live parent's security policy, so the
+    // parent must be a running thread (an unknown parent refuses the spawn).
+    let (parent, _parent_thread) = harness.start_thread().await;
     let mut spawn = Box::pin(spawn_publication_child(&harness, parent));
     tokio::select! {
         biased;
@@ -237,13 +239,19 @@ async fn cancelled_spawn_edge_publication_cleanup(
 async fn failed_spawn_edge_publication_cleanup() {
     let (harness, graph) =
         publication_harness(SpawnEdgeFailure::ErrorAfterCommit, ThreadId::new).await;
-    let parent = ThreadId::new();
+    // Corbanu (PF-23-S03): a child inherits its live parent's security policy, so the
+    // parent must be a running thread (an unknown parent refuses the spawn).
+    let (parent, _parent_thread) = harness.start_thread().await;
     let error = spawn_publication_child(&harness, parent)
         .await
         .expect_err("lost commit acknowledgement rejects spawn");
-    assert_eq!(
-        error.to_string(),
-        "Fatal error: failed to persist spawned agent relationship"
+    // Corbanu (main): the spawn reports which edge it could not persist and why.
+    let message = error.to_string();
+    assert!(
+        message.starts_with(&format!(
+            "Fatal error: failed to persist native agent edge {parent} -> "
+        )) && message.ends_with("injected response loss after successful commit"),
+        "{message}"
     );
     assert_publication_closed(&harness, &graph, parent).await;
 }
@@ -254,7 +262,9 @@ async fn failed_spawn_edge_publication_cleanup() {
 async fn failed_spawn_without_publication_does_not_close_graph(skipped: SkippedPublication) {
     let (mut harness, graph) =
         publication_harness(SpawnEdgeFailure::ErrorAfterCommit, ThreadId::new).await;
-    let parent = ThreadId::new();
+    // Corbanu (PF-23-S03): a child inherits its live parent's security policy, so the
+    // parent must be a running thread (an unknown parent refuses the spawn).
+    let (parent, _parent_thread) = harness.start_thread().await;
     let source = match skipped {
         SkippedPublication::Ephemeral => {
             harness.config.ephemeral = true;

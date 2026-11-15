@@ -1704,9 +1704,14 @@ async fn danger_full_access_tool_attempts_do_not_enforce_managed_network() -> an
 async fn issue_1001_aggressive_proxy_leaves_out_allow_rules_saved_outside_it() -> anyhow::Result<()>
 {
     let permission_profile = PermissionProfile::workspace_write();
+    // Upstream exposes no managed proxy for a disabled network spec ("Disabled specs ...
+    // must not be exposed"); enable it as the next test does.
     let network_spec = crate::config::NetworkProxySpec::from_config_and_constraints(
         NetworkProxyConfig::default(),
-        /*requirements*/ None,
+        Some(NetworkConstraints {
+            enabled: Some(true),
+            ..Default::default()
+        }),
         &permission_profile,
     )?;
     let session = make_session_with_config(move |config| {
@@ -10400,6 +10405,30 @@ pub(crate) async fn make_session_and_context_with_dynamic_tools_and_rx(
 
 // Like make_session_and_context, but returns Arc<Session> and the event receiver
 // so tests can assert on emitted events.
+/// #2294: runs a test body on a thread with the stack production gives Core's runtime
+/// (`THREAD_STACK_SIZE_BYTES`, 16 MiB) instead of the test harness's 8 MiB. The approval and
+/// automatic-review paths these tests drive need more than 8 MiB in a debug build; production
+/// polls them on 16 MiB worker and review threads.
+pub(crate) fn block_on_production_stack<T, F>(test: T)
+where
+    T: FnOnce() -> F + Send + 'static,
+    F: std::future::Future<Output = ()>,
+{
+    std::thread::Builder::new()
+        .name("production-stack-test".to_string())
+        .stack_size(codex_async_utils::THREAD_STACK_SIZE_BYTES)
+        .spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("test runtime")
+                .block_on(Box::pin(test()));
+        })
+        .expect("test thread")
+        .join()
+        .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+}
+
 pub(crate) async fn make_session_and_context_with_rx() -> (
     Arc<Session>,
     Arc<TurnContext>,

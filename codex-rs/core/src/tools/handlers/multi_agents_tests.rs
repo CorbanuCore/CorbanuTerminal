@@ -775,11 +775,18 @@ async fn spawn_agent_limit_failure_emits_bounded_metric() {
     .expect("create in-memory metrics client");
     let (mut session, mut turn) = make_session_and_context().await;
     turn.session_telemetry = turn.session_telemetry.clone().with_metrics(metrics.clone());
+    let manager = thread_manager();
+    // Corbanu (PF-23-S03): a child inherits its live parent's security policy, so a spawn
+    // from a parent that isn't running is refused before the thread limit is checked.
+    let root = manager
+        .start_thread(StartThreadOptions::new((*turn.config).clone()))
+        .await
+        .expect("root thread should start");
+    session.thread_id = root.thread_id;
     let mut config = (*turn.config).clone();
     config.agent_max_threads = Some(0);
     config.apps_mcp_product_sku = Some("codex".to_string());
     turn.config = Arc::new(config);
-    let manager = thread_manager();
     set_agent_control(&mut session, manager.agent_control());
 
     let Err(err) = SpawnAgentHandler::default()
@@ -8801,9 +8808,10 @@ async fn settle_agent_waits_for_the_spawn_turn_after_an_error() {
     );
 }
 
-/// #2000: a child agent whose role sets permissions (so its config is rebuilt
-/// from the session's starting layers, without the Windows sandbox set up
-/// since) still gets the session's raised Windows sandbox.
+/// #2000: a child agent whose role changes its config still gets the session's
+/// raised Windows sandbox. On main the role rebuilt the config from the session's
+/// starting layers, which dropped it; upstream's role application keeps it, and
+/// the spawn override restores it to a config that lost it anyway.
 #[tokio::test]
 async fn issue_2000_a_role_rebuilt_child_keeps_the_raised_windows_sandbox() {
     use crate::windows_sandbox::WindowsSandboxLevelExt;
@@ -8813,10 +8821,16 @@ async fn issue_2000_a_role_rebuilt_child_keeps_the_raised_windows_sandbox() {
         .await
         .expect("codex home should be created");
     let role_config_path = turn.config.codex_home.as_path().join("sandbox-role.toml");
-    tokio::fs::write(&role_config_path, "sandbox_mode = \"workspace-write\"\n")
-        .await
-        .expect("role config should be written");
     let mut config = (*turn.config).clone();
+    // A model as well, so the role takes upstream's copy-and-apply path, not its
+    // no-override early return.
+    let model = config.model.clone().expect("test config sets a model");
+    tokio::fs::write(
+        &role_config_path,
+        format!("model = \"{model}\"\nsandbox_mode = \"workspace-write\"\n"),
+    )
+    .await
+    .expect("role config should be written");
     config.agent_roles.insert(
         "sandbox-role".to_string(),
         AgentRoleConfig {
@@ -8835,7 +8849,14 @@ async fn issue_2000_a_role_rebuilt_child_keeps_the_raised_windows_sandbox() {
     crate::agent::role::apply_role_to_config(&mut config, Some("sandbox-role"))
         .await
         .expect("role should apply");
-    // The role rebuilt the config from the starting layers.
+    // Upstream's role application keeps the session's raised level (main rebuilt the
+    // config from the starting layers here, dropping it).
+    assert_eq!(
+        WindowsSandboxLevel::from_config(&config),
+        WindowsSandboxLevel::Elevated
+    );
+    // A config that lost the level, as main's rebuilt one did, gets it back from the turn.
+    config.set_windows_elevated_sandbox_enabled(/*value*/ false);
     assert_eq!(WindowsSandboxLevel::from_config(&config), starting);
     apply_spawn_agent_runtime_overrides(&mut config, &turn).expect("runtime overrides");
     assert_eq!(
