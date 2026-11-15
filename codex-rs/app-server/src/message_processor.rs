@@ -1811,7 +1811,7 @@ impl MessageProcessor {
             ClientRequest::ThreadTimelineList { params, .. } => {
                 self.thread_processor.thread_timeline_list(params).await
             }
-            ClientRequest::ThreadRealtimeListVoices { params: _, .. } => {
+            ClientRequest::ThreadRealtimeListVoices { .. } => {
                 self.turn_processor.thread_realtime_list_voices().await
             }
             ClientRequest::ReviewStart { params, .. } => {
