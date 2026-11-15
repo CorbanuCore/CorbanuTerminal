@@ -71,7 +71,7 @@ jobs:
           python3 scripts/check_price_calendars.py --warn-only
 
       - name: Configure rusty_v8 artifact overrides and verify checksums
-        uses: CorbanuCore/CorbanuTerminal/.github/actions/setup-rusty-v8@11d9de6c9269db69b4cd6f861449d1eca80a9a03
+        uses: openai/codex/.github/actions/setup-rusty-v8@086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a # rust-v0.167.0
         with:
           target: x86_64-unknown-linux-gnu
 
