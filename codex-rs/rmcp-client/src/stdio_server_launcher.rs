@@ -60,6 +60,7 @@ use crate::executor_process_transport::ExecutorProcessTransport;
 use crate::local_stdio_transport::LocalStdioTransport;
 use crate::program_resolver;
 use crate::protocol_mode::McpProtocolMode;
+use crate::utils::McpInheritedEnv;
 use crate::utils::create_env_for_mcp_server;
 use crate::utils::create_env_overlay_for_remote_mcp_server;
 use crate::utils::remote_mcp_env_var_names;
@@ -574,7 +575,8 @@ impl ExecutorStdioServerLauncher {
             .try_into()
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
         let program_name = program.to_string_lossy().into_owned();
-        let envs = create_env_overlay_for_remote_mcp_server(env, &env_vars);
+        let inheritance = McpInheritedEnv::current();
+        let envs = create_env_overlay_for_remote_mcp_server(env, &env_vars, inheritance);
         let remote_env_vars = remote_mcp_env_var_names(&env_vars);
         // The executor protocol carries argv/env as UTF-8 strings. Local stdio can
         // accept arbitrary OsString values because it calls the OS directly; remote
@@ -591,7 +593,7 @@ impl ExecutorStdioServerLauncher {
                 process_id,
                 argv,
                 cwd,
-                env_policy: Some(Self::remote_env_policy(&remote_env_vars)),
+                env_policy: Some(Self::remote_env_policy(&remote_env_vars, inheritance)),
                 env,
                 tty: false,
                 pipe_stdin: true,
@@ -647,18 +649,45 @@ impl ExecutorStdioServerLauncher {
             .map_err(|_| anyhow!("{label} must be valid Unicode for remote MCP stdio"))
     }
 
-    fn remote_env_policy(remote_env_vars: &[String]) -> ExecEnvPolicy {
-        let include_only = if remote_env_vars.is_empty() {
+    fn remote_env_policy(
+        remote_env_vars: &[String],
+        inheritance: McpInheritedEnv,
+    ) -> ExecEnvPolicy {
+        let armed = inheritance == McpInheritedEnv::Secretless;
+        let include_only = if remote_env_vars.is_empty() && !armed {
             Vec::new()
         } else {
             // `source = "remote"` means the value is read from the executor's
             // environment, not copied from Codex. Start from `All` only so the
             // named remote variable is available to the filter below; the
             // effective child env is still limited by `include_only`.
-            crate::utils::DEFAULT_ENV_VARS
-                .iter()
-                .map(|name| (*name).to_string())
+            // Core inheritance is evaluated on the executor's OS. Keep its
+            // allowed defaults even when the orchestrator runs another OS.
+            let defaults = match inheritance {
+                McpInheritedEnv::Configured => crate::utils::DEFAULT_ENV_VARS.to_vec(),
+                McpInheritedEnv::Secretless => crate::utils::UNIX_DEFAULT_ENV_VARS
+                    .iter()
+                    .chain(codex_protocol::shell_environment::UNIX_CORE_ENV_VARS)
+                    .chain(codex_protocol::shell_environment::WINDOWS_CORE_ENV_VARS)
+                    .copied()
+                    .collect(),
+            };
+            defaults
+                .into_iter()
+                .map(str::to_string)
                 .chain(remote_env_vars.iter().cloned())
+                // The executor need not have armed PF-27-S02 itself. Apply the
+                // same inherited-name boundary as local MCP before sending it
+                // the policy; literal server `env` remains a separate overlay.
+                // include_only is a Unicode case-insensitive glob list. Keep
+                // names ASCII and literal: CORBANU_* or a Kelvin-sign K could
+                // otherwise match credential names that the allowlist rejects.
+                .filter(|name| {
+                    !armed
+                        || (name.is_ascii()
+                            && !name.contains(['*', '?'])
+                            && codex_protocol::secretless_launch::is_launch_env_name_allowed(name))
+                })
                 .collect()
         };
         ExecEnvPolicy {
@@ -676,6 +705,10 @@ impl ExecutorStdioServerLauncher {
 }
 
 #[cfg(test)]
+#[path = "stdio_secretless_tests.rs"]
+mod secretless_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use codex_protocol::config_types::EnvironmentVariablePattern;
@@ -684,7 +717,8 @@ mod tests {
 
     #[test]
     fn remote_env_policy_uses_core_env_without_remote_source_vars() {
-        let policy = ExecutorStdioServerLauncher::remote_env_policy(&[]);
+        let policy =
+            ExecutorStdioServerLauncher::remote_env_policy(&[], McpInheritedEnv::Configured);
 
         assert_eq!(policy.inherit, ShellEnvironmentPolicyInherit::Core);
         assert!(policy.include_only.is_empty());
@@ -692,7 +726,10 @@ mod tests {
 
     #[test]
     fn remote_env_policy_includes_remote_source_vars_without_full_env() {
-        let policy = ExecutorStdioServerLauncher::remote_env_policy(&["REMOTE_TOKEN".to_string()]);
+        let policy = ExecutorStdioServerLauncher::remote_env_policy(
+            &["REMOTE_TOKEN".to_string()],
+            McpInheritedEnv::Configured,
+        );
 
         assert_eq!(policy.inherit, ShellEnvironmentPolicyInherit::All);
         assert!(
@@ -709,8 +746,10 @@ mod tests {
 
     #[test]
     fn remote_env_policy_effectively_filters_unrequested_vars() {
-        let exec_policy =
-            ExecutorStdioServerLauncher::remote_env_policy(&["REMOTE_TOKEN".to_string()]);
+        let exec_policy = ExecutorStdioServerLauncher::remote_env_policy(
+            &["REMOTE_TOKEN".to_string()],
+            McpInheritedEnv::Configured,
+        );
         let policy = ShellEnvironmentPolicy {
             inherit: exec_policy.inherit,
             ignore_default_excludes: exec_policy.ignore_default_excludes,
