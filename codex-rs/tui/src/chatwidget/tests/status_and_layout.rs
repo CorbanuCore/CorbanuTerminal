@@ -2500,6 +2500,51 @@ async fn issue_787_dropped_esc_neither_interrupts_nor_pauses_the_goal() {
     assert_goal_paused_event(&mut rx, thread_id);
 }
 
+/// #787: the same for an async question on show: an Esc that reaches it
+/// before it was drawn, or in the second after, neither interrupts the turn
+/// nor pauses the goal; later Esc does both.
+#[tokio::test]
+async fn issue_787_dropped_esc_at_an_async_question_neither_interrupts_nor_pauses_the_goal() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.bottom_pane
+        .set_request_input_guard(crate::bottom_pane::REQUEST_INPUT_GUARD);
+    // Esc reaches the question instead of collapsing it.
+    chat.local_settings.tui.question_esc_back = false;
+    let thread_id = start_active_goal_turn(&mut chat);
+    chat.add_async_questions(
+        "message",
+        &[codex_protocol::items::AsyncUserInputQuestion {
+            title: "Deploy?".into(),
+            options: Some(vec!["Yes".into(), "No".into()]),
+        }],
+    );
+    chat.bottom_pane
+        .questions
+        .as_mut()
+        .unwrap()
+        .set_expanded(/*expanded*/ true);
+    let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+
+    chat.handle_key_event(esc);
+    chat.pre_draw_tick();
+    chat.handle_key_event(esc);
+    let events: Vec<AppEvent> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+    assert!(
+        !events.iter().any(|event| matches!(
+            event,
+            AppEvent::CodexOp(Op::Interrupt) | AppEvent::SetThreadGoalStatus { .. }
+        )),
+        "a dropped Esc interrupted or paused: {events:?}"
+    );
+
+    std::thread::sleep(
+        crate::bottom_pane::REQUEST_INPUT_GUARD + std::time::Duration::from_millis(100),
+    );
+    chat.handle_key_event(esc);
+    assert_matches!(rx.try_recv(), Ok(AppEvent::CodexOp(Op::Interrupt)));
+    assert_goal_paused_event(&mut rx, thread_id);
+}
+
 fn start_active_goal_turn(chat: &mut ChatWidget) -> ThreadId {
     let thread_id = ThreadId::new();
     chat.set_feature_enabled(Feature::Goals, /*enabled*/ true);
