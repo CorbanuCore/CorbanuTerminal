@@ -335,8 +335,9 @@ enum UpdateTrigger<'a> {
     RestoreProduction(&'a str),
 }
 
-/// D564: with self-update off, a scheduled check stops the loop as if
-/// auto-update were disabled, and a requested update fails with the reason.
+/// D564: with self-update off, a scheduled check does nothing and the
+/// updater stays up (it keeps the daemon counted as bootstrapped and answers
+/// requests), and a requested update fails with the reason.
 fn self_update_gate(
     enabled: bool,
     trigger: UpdateTrigger<'_>,
@@ -345,7 +346,7 @@ fn self_update_gate(
         return Ok(None);
     }
     if trigger == UpdateTrigger::Scheduled {
-        return Ok(Some(UpdateLoopControl::Stop));
+        return Ok(Some(UpdateLoopControl::Continue));
     }
     anyhow::bail!(
         "the app-server daemon does not update itself in Corbanu Terminal yet; update Corbanu Terminal with its own installer"

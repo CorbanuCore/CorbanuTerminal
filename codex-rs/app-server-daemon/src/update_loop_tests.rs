@@ -1383,13 +1383,14 @@ printf '%s' '{release}' > '{marker}'
     }
 }
 
-/// D564: with self-update off, a scheduled check stops the loop and a
-/// requested update or restore is refused before anything is downloaded.
+/// D564: with self-update off, a scheduled check is skipped (the updater
+/// stays up) and a requested update or restore is refused before anything is
+/// downloaded.
 #[test]
-fn d564_self_update_gate_stops_scheduled_and_refuses_requested_updates() {
+fn d564_self_update_gate_skips_scheduled_and_refuses_requested_updates() {
     assert!(matches!(
         super::self_update_gate(/*enabled*/ false, super::UpdateTrigger::Scheduled),
-        Ok(Some(super::UpdateLoopControl::Stop))
+        Ok(Some(super::UpdateLoopControl::Continue))
     ));
     for trigger in [
         super::UpdateTrigger::Manual,
