@@ -34,8 +34,18 @@ impl ExecCell {
             );
             lines.extend(cmd_display);
 
+            if call.is_declined() {
+                lines.push(Line::from("✗ Did not run (approval declined)".red()).into());
+                lines.extend(self.group.details.lines_after(i + 1, width, mode));
+                continue;
+            }
+            // #873: neutral, since a network-policy refusal can come after the command ran;
+            // the reason below says what happened.
+            if call.is_refused() {
+                lines.push(Line::from("✗ Refused".red()).into());
+            }
             if let Some(output) = call.output.as_ref() {
-                if !call.is_unified_exec_interaction() {
+                if !call.is_unified_exec_interaction() || call.is_refused() {
                     let wrap_width = width.max(/*other*/ 1) as usize;
                     let wrap_opts = RtOptions::new(wrap_width);
                     for unwrapped in output
@@ -48,14 +58,19 @@ impl ExecCell {
                         ));
                     }
                 }
-                if call.duration.is_some() || output.exit_code != 0 {
-                    let mut result: Line = if output.exit_code == 0 {
+                if call.is_unknown() {
+                    lines.push(
+                        Line::from("✗ Execution unconfirmed (no exit status received)".red())
+                            .into(),
+                    );
+                }
+                if let Some(exit_code) = output.exit_code()
+                    && (call.duration.is_some() || exit_code != 0)
+                {
+                    let mut result: Line = if exit_code == 0 {
                         Line::from("✓".green().bold())
                     } else {
-                        Line::from(vec![
-                            "✗".red().bold(),
-                            format!(" ({})", output.exit_code).into(),
-                        ])
+                        Line::from(vec!["✗".red().bold(), format!(" ({exit_code})").into()])
                     };
                     if let Some(duration) = call.duration {
                         let duration = format_duration(duration);

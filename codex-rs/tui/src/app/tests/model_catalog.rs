@@ -216,19 +216,14 @@ async fn model_migration_prompt_skips_hidden_gpt_targets() {
     let seen = BTreeMap::new();
     let presets = model_presets_with_test_upgrades();
     assert!(should_show_model_migration_prompt(
-<<<<<<< HEAD
+        "openai",
         "gpt-5.2",
         "gpt-6-sol",
         &seen,
         &presets
-||||||| 413492cd6c
-        "gpt-5.2", "gpt-5.5", &seen, &presets
-=======
-        "openai", "gpt-5.2", "gpt-5.5", &seen, &presets
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     ));
     assert!(should_show_model_migration_prompt(
-<<<<<<< HEAD
+        "openai",
         "gpt-5.4",
         "gpt-6-sol",
         &seen,
@@ -236,16 +231,7 @@ async fn model_migration_prompt_skips_hidden_gpt_targets() {
     ));
     // GPT-5.5 is hidden from the picker, so it is never offered as a target.
     assert!(!should_show_model_migration_prompt(
-        "gpt-5.4", "gpt-5.5", &seen, &presets
-||||||| 413492cd6c
-        "gpt-5.4", "gpt-5.5", &seen, &presets
-=======
-        "openai",
-        "gpt-5.4",
-        "gpt-6-sol",
-        &seen,
-        &presets
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        "openai", "gpt-5.4", "gpt-5.5", &seen, &presets
     ));
     assert!(!should_show_model_migration_prompt(
         "openai", "gpt-5.4", "gpt-5.4", &seen, &presets
@@ -413,41 +399,19 @@ async fn prepare_startup_tooltip_override_suppresses_model_availability_nux() {
     )
     .await;
 
-<<<<<<< HEAD
+    // Corbanu shows no startup tooltips, so the availability NUX is never shown or counted.
     assert_eq!(tooltip, None);
-    assert_eq!(config.model_availability_nux.shown_count, HashMap::new());
-||||||| 413492cd6c
-    assert_eq!(tooltip.as_deref(), Some("gpt-5.4 is available"));
-    assert_eq!(
-        config.model_availability_nux.shown_count,
-        HashMap::from([("gpt-5.4".to_string(), 1)])
-    );
-=======
-    assert_eq!(tooltip.as_deref(), Some("gpt-5.6-terra is available"));
     assert_eq!(
         local_settings.tui.model_availability_nux.shown_count,
-        HashMap::from([("gpt-5.6-terra".to_string(), 1)])
+        HashMap::new()
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let reloaded = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
         .build()
         .await
         .expect("reloaded config");
-<<<<<<< HEAD
     assert_eq!(reloaded.model_availability_nux.shown_count, HashMap::new());
-||||||| 413492cd6c
-    assert_eq!(
-        reloaded.model_availability_nux.shown_count,
-        HashMap::from([("gpt-5.4".to_string(), 1)])
-    );
-=======
-    assert_eq!(
-        reloaded.model_availability_nux.shown_count,
-        HashMap::from([("gpt-5.6-terra".to_string(), 1)])
-    );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]
@@ -554,28 +518,13 @@ async fn accepted_model_migration_persists_target_default_reasoning_effort() -> 
         let persist_selection = rx.try_recv().expect("persist model selection event");
         assert_matches!(
             persist_selection,
-            AppEvent::PersistModelSelection { model: selected_model, effort }
+            AppEvent::PersistModelSelection { model: selected_model, effort, .. }
                 if selected_model == replacement && effort == Some(target_effort)
         );
     }
     assert_snapshot!(migration_copies.join("\n"), @r"
     GPT-5.4 is no longer available
 
-<<<<<<< HEAD
-    let persist_selection = rx.try_recv().expect("persist model selection event");
-    assert_matches!(
-        persist_selection,
-        AppEvent::PersistModelSelection { model, effort, .. }
-            if model == "gpt-5.4" && effort == Some(ReasoningEffortConfig::Medium)
-    );
-||||||| 413492cd6c
-    let persist_selection = rx.try_recv().expect("persist model selection event");
-    assert_matches!(
-        persist_selection,
-        AppEvent::PersistModelSelection { model, effort }
-            if model == "gpt-5.4" && effort == Some(ReasoningEffortConfig::Medium)
-    );
-=======
     Codex now uses GPT-6 Sol in place of GPT-5.4. Switch to GPT-6 Sol to continue.
 
     GPT-5.4 Mini is no longer available
@@ -603,7 +552,6 @@ async fn accepted_model_migration_persists_target_default_reasoning_effort() -> 
     Codex now uses GPT-6 Sol on Amazon Bedrock in place of GPT-5.4 on Amazon Bedrock. Switch to GPT-6 Sol on Amazon Bedrock to continue.
     ");
     Ok(())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]

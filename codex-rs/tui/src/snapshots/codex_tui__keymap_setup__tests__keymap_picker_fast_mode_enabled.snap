@@ -22,11 +22,6 @@ expression: "render_picker(params, 120)"
   Global       - Toggle Fast Mode           unbound
   Global         Toggle Raw Output          alt-r
   Global         Toggle Side Conversation   ctrl-/
-<<<<<<< HEAD
-                                                                                                               1 / 110
-||||||| 413492cd6c
-
-=======
   Global         Leader                     ctrl-x
   Chat           Interrupt Turn             esc
   Chat           Decrease Reasoning Effort  alt-,, shift-down
@@ -41,5 +36,4 @@ expression: "render_picker(params, 120)"
   Chat           Toggle Voice Mute          f9
   Composer       Submit                     enter
 ↓
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
   left/right group · enter edit shortcut · * custom · - unbound · esc close

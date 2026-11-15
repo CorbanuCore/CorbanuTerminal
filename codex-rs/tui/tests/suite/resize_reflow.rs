@@ -40,7 +40,6 @@ async fn tmux_smoke_split_preserves_fresh_session_composer_row_after_resize_refl
     write_auth(codex_home.path())?;
 
     let prompt = "Say hi.";
-<<<<<<< HEAD
     let tmux = TmuxServer::start("tmux_smoke_split_preserves")?;
     tmux.register_artifact("config.toml", codex_home.path().join("config.toml"));
     tmux.register_artifact("codex-tui.log", codex_home.path().join("log/codex-tui.log"));
@@ -53,67 +52,12 @@ async fn tmux_smoke_split_preserves_fresh_session_composer_row_after_resize_refl
                 .env("OPENAI_API_KEY", "dummy")
                 .arg("-c")
                 .arg("analytics.enabled=false")
-                .arg("-c")
-                .arg(&openai_base_url_config)
                 .arg("--no-alt-screen")
                 .arg("-C")
                 .arg(&repo_root)
                 .arg(prompt),
         )
         .current_dir(&repo_root),
-||||||| 413492cd6c
-    let start_output = checked_output(
-        Command::new("tmux")
-            .arg("new-session")
-            .arg("-d")
-            .arg("-P")
-            .arg("-F")
-            .arg("#{pane_id}")
-            .arg("-x")
-            .arg("120")
-            .arg("-y")
-            .arg("40")
-            .arg("-s")
-            .arg(&session_name)
-            .arg("--")
-            .arg("env")
-            .arg(format!("CODEX_HOME={}", codex_home.path().display()))
-            .arg("OPENAI_API_KEY=dummy")
-            .arg(codex)
-            .arg("-c")
-            .arg("analytics.enabled=false")
-            .arg("-c")
-            .arg(&openai_base_url_config)
-            .arg("--no-alt-screen")
-            .arg("-C")
-            .arg(&repo_root)
-            .arg(prompt),
-=======
-    let start_output = checked_output(
-        Command::new("tmux")
-            .arg("new-session")
-            .arg("-d")
-            .arg("-P")
-            .arg("-F")
-            .arg("#{pane_id}")
-            .arg("-x")
-            .arg("120")
-            .arg("-y")
-            .arg("40")
-            .arg("-s")
-            .arg(&session_name)
-            .arg("--")
-            .arg("env")
-            .arg(format!("CODEX_HOME={}", codex_home.path().display()))
-            .arg("OPENAI_API_KEY=dummy")
-            .arg(codex)
-            .arg("-c")
-            .arg("analytics.enabled=false")
-            .arg("--no-alt-screen")
-            .arg("-C")
-            .arg(&repo_root)
-            .arg(prompt),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     )?;
     let codex_pane = session.primary_pane();
 
@@ -206,7 +150,6 @@ async fn tmux03_width_resize_restore_keeps_visible_content_anchored() -> Result<
     write_auth(codex_home.path())?;
 
     let prompt = "Send me a large paragraph of text for testing.";
-<<<<<<< HEAD
     let tmux = TmuxServer::start("tmux03_width_resize_restore")?;
     tmux.register_artifact("config.toml", codex_home.path().join("config.toml"));
     tmux.register_artifact("codex-tui.log", codex_home.path().join("log/codex-tui.log"));
@@ -219,67 +162,12 @@ async fn tmux03_width_resize_restore_keeps_visible_content_anchored() -> Result<
                 .env("OPENAI_API_KEY", "dummy")
                 .arg("-c")
                 .arg("analytics.enabled=false")
-                .arg("-c")
-                .arg(&openai_base_url_config)
                 .arg("--no-alt-screen")
                 .arg("-C")
                 .arg(&repo_root)
                 .arg(prompt),
         )
         .current_dir(&repo_root),
-||||||| 413492cd6c
-    let start_output = checked_output(
-        Command::new("tmux")
-            .arg("new-session")
-            .arg("-d")
-            .arg("-P")
-            .arg("-F")
-            .arg("#{pane_id}")
-            .arg("-x")
-            .arg("120")
-            .arg("-y")
-            .arg("40")
-            .arg("-s")
-            .arg(&session_name)
-            .arg("--")
-            .arg("env")
-            .arg(format!("CODEX_HOME={}", codex_home.path().display()))
-            .arg("OPENAI_API_KEY=dummy")
-            .arg(codex)
-            .arg("-c")
-            .arg("analytics.enabled=false")
-            .arg("-c")
-            .arg(&openai_base_url_config)
-            .arg("--no-alt-screen")
-            .arg("-C")
-            .arg(&repo_root)
-            .arg(prompt),
-=======
-    let start_output = checked_output(
-        Command::new("tmux")
-            .arg("new-session")
-            .arg("-d")
-            .arg("-P")
-            .arg("-F")
-            .arg("#{pane_id}")
-            .arg("-x")
-            .arg("120")
-            .arg("-y")
-            .arg("40")
-            .arg("-s")
-            .arg(&session_name)
-            .arg("--")
-            .arg("env")
-            .arg(format!("CODEX_HOME={}", codex_home.path().display()))
-            .arg("OPENAI_API_KEY=dummy")
-            .arg(codex)
-            .arg("-c")
-            .arg("analytics.enabled=false")
-            .arg("--no-alt-screen")
-            .arg("-C")
-            .arg(&repo_root)
-            .arg(prompt),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     )?;
     let codex_pane = session.primary_pane();
 
