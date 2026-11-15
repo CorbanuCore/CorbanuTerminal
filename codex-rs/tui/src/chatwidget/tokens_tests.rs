@@ -2,7 +2,6 @@ use super::*;
 use crate::chatwidget::tests::helpers::render_bottom_popup;
 use crate::chatwidget::tests::helpers::render_bottom_popup_with_height;
 use crate::chatwidget::tests::make_chatwidget_manual;
-use codex_app_server_protocol::AccountTokenUsageSummary;
 use codex_state::accounting::Attempt;
 use codex_state::accounting::DayTotals;
 use codex_state::accounting::Dialect;
@@ -821,7 +820,7 @@ async fn accounting_inspect_store_range_reaching_today_reads_as_in_progress() ->
     let time = 100 * DAY;
     let home = tempfile::tempdir()?;
     let runtime = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(
+        codex_state::SqliteConfig::new_for_testing(
             codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
         ),
         "synthetic".into(),
@@ -1708,7 +1707,7 @@ async fn accounting_inspect_empty_day_after_checkpoint_renders_lag() -> anyhow::
     let created = chrono::Utc::now();
     let owner = ThreadId::new();
     let runtime = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(
+        codex_state::SqliteConfig::new_for_testing(
             codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
         ),
         "synthetic".into(),
@@ -1773,7 +1772,7 @@ async fn maintenance_inspection(mutation: &str) -> anyhow::Result<InspectionDay>
     const CHECKPOINT: i64 = 100 * 86_400_000;
     let home = tempfile::tempdir()?;
     let runtime = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(
+        codex_state::SqliteConfig::new_for_testing(
             codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
         ),
         "synthetic".into(),
@@ -2318,41 +2317,6 @@ async fn accounting_inspect_breakdown_navigation_reuses_packet() {
         rx.try_recv(),
         Ok(AppEvent::LoadAccountingInspector { .. })
     ));
-}
-
-#[test]
-fn loaded_state_freezes_chart_anchor_date_at_completion() {
-    let state = Arc::new(RwLock::new(TokenActivityState::Loading));
-    let handle = TokenActivityHandle {
-        state: Arc::clone(&state),
-    };
-    let today =
-        NaiveDate::from_ymd_opt(/*year*/ 2026, /*month*/ 5, /*day*/ 29).expect("valid date");
-
-    handle.finish_with_today(
-        Ok(GetAccountTokenUsageResponse {
-            summary: AccountTokenUsageSummary {
-                lifetime_tokens: None,
-                peak_daily_tokens: None,
-                longest_running_turn_sec: None,
-                current_streak_days: None,
-                longest_streak_days: None,
-            },
-            daily_usage_buckets: None,
-        }),
-        today,
-    );
-
-    let state = state.read().expect("token activity state poisoned");
-    match &*state {
-        TokenActivityState::Loaded {
-            today: loaded_today,
-            ..
-        } => {
-            assert_eq!(*loaded_today, today);
-        }
-        other => panic!("expected loaded state, got {other:?}"),
-    }
 }
 
 /// A blank money figure has two very different causes - an attempt that

@@ -149,6 +149,7 @@ fn spawn_daemon(
         endpoint: RemoteAppServerEndpoint::UnixSocket {
             socket_path: AbsolutePathBuf::from_absolute_path(&socket_path).expect("socket path"),
         },
+        allow_embedded_fallback: false,
     };
     (target, daemon)
 }
@@ -236,6 +237,7 @@ async fn named_session_starts_its_own_server_when_the_daemon_is_gone() {
             socket_path: AbsolutePathBuf::from_absolute_path(socket_dir.path().join("d.sock"))
                 .expect("socket path"),
         },
+        allow_embedded_fallback: false,
     };
 
     let settled = settle_default_login_at_launch(

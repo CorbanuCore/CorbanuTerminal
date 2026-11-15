@@ -304,6 +304,7 @@ async fn model_default_saves_report_server_outcomes_and_target_server_profile() 
             AppEvent::PersistModelSelection {
                 model: "gpt-5.5".into(),
                 effort: Some(ReasoningEffortConfig::High),
+                provider: None,
             },
             AppEvent::PersistPlanModeReasoningEffort(Some(ReasoningEffortConfig::High)),
             AppEvent::PersistServiceTierSelection {

@@ -20,12 +20,14 @@
 //! so callers must distinguish them from confirmed native clipboard writes.
 //! Image paste lives in `clipboard_paste`.
 
+mod plain_text;
 pub(crate) mod primary;
 mod tmux;
 pub(crate) mod worker;
 mod wsl;
 
 use base64::Engine;
+pub(crate) use plain_text::copy_plain_text_blocking;
 use std::io::Write;
 use std::sync::Arc;
 use tmux::copy as tmux_clipboard_copy;

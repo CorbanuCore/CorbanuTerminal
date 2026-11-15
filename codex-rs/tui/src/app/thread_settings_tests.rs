@@ -63,7 +63,11 @@ async fn reply_server(
     )
     .await?;
     Ok((
-        AppServerSession::new(client, crate::app_server_session::ThreadParamsMode::Remote),
+        AppServerSession::new(
+            crate::backend_id::BackendId::new(),
+            client,
+            crate::app_server_session::ThreadParamsMode::Remote,
+        ),
         task,
     ))
 }

@@ -38,7 +38,9 @@ pub(crate) fn historical_tool_fallback(item: &ThreadItemPayload) -> Option<Plain
             ..
         } if matches!(
             status,
-            CommandExecutionStatus::InProgress | CommandExecutionStatus::Declined
+            CommandExecutionStatus::InProgress
+                | CommandExecutionStatus::Declined
+                | CommandExecutionStatus::Refused
         ) || *source == CommandExecutionSource::UnifiedExecInteraction
             || replay_command_args(command).is_none() =>
         {
@@ -47,6 +49,7 @@ pub(crate) fn historical_tool_fallback(item: &ThreadItemPayload) -> Option<Plain
                 CommandExecutionStatus::Completed => "Completed",
                 CommandExecutionStatus::Failed => "Failed",
                 CommandExecutionStatus::Declined => "Declined",
+                CommandExecutionStatus::Refused => "Refused",
             };
             let mut status_line = if *source == CommandExecutionSource::UnifiedExecInteraction {
                 format!("Terminal interaction · {status_label}")
@@ -148,7 +151,9 @@ impl CommandHistory {
             return None;
         }
         let exit_code = match status {
-            CommandExecutionStatus::InProgress | CommandExecutionStatus::Declined => return None,
+            CommandExecutionStatus::InProgress
+            | CommandExecutionStatus::Declined
+            | CommandExecutionStatus::Refused => return None,
             CommandExecutionStatus::Completed => exit_code.unwrap_or_default(),
             CommandExecutionStatus::Failed => {
                 exit_code.filter(|code| *code != 0).unwrap_or(/*default*/ 1)

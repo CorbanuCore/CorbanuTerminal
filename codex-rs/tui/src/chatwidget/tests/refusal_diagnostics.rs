@@ -7,7 +7,7 @@ async fn issue822_refused_command_preserves_reason_and_never_claims_execution() 
         let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
         chat.on_task_started();
         let mut item = begin_exec(&mut chat, "refused", command);
-        let AppServerThreadItem::CommandExecution {
+        let AppServerThreadItemPayload::CommandExecution {
             status,
             aggregated_output,
             exit_code,

@@ -98,6 +98,9 @@ impl ChatWidget {
             pet_http_client.clone(),
         );
         let config_panel_tui = local_settings.tui.clone();
+        // Main resolved this asynchronously for the status card, which upstream no longer shows it
+        // on; the widget still tracks the configured provider's URL across provider switches.
+        let runtime_model_provider_base_url = config.model_provider.base_url.clone();
         let mut widget = Self {
             empty_state_animation: std::cell::RefCell::new(empty_state_animation),
             daybreak_enabled: false,
@@ -161,9 +164,6 @@ impl ChatWidget {
             refreshing_status_outputs: Vec::new(),
             next_status_refresh_request_id: 0,
             accounting_inspector: None,
-            refreshing_token_activity_output: None,
-            completed_token_activity_output: None,
-            next_token_activity_request_id: 0,
             pending_rate_limit_reset_request_id: None,
             pending_rate_limit_reset_idempotency_key: None,
             rate_limit_reset_picker_request_id: None,

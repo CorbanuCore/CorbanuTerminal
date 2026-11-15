@@ -316,7 +316,12 @@ async fn status_permissions_compact_next_turn_label_at_narrow_widths() {
         // without an unconditional paragraph or a guessed authority comparison.
         for width in [42, 46, 70, 100] {
             let lines = render_lines(&cell.display_lines(width));
-            assert!(lines.iter().all(|line| line.width() <= usize::from(width)));
+            assert!(
+                lines
+                    .iter()
+                    .all(|line| unicode_width::UnicodeWidthStr::width(line.as_str())
+                        <= usize::from(width))
+            );
             let section = lines
                 .iter()
                 .skip_while(|line| !line.contains("Permissions:"))
@@ -1614,6 +1619,8 @@ async fn status_wraps_long_paths_and_session_ids_without_losing_text() {
         /*reasoning_effort_override*/ None,
         "<none>".to_string(),
         /*refreshing_rate_limits*/ false,
+        /*account_usage*/ None,
+        /*named_sign_in*/ None,
     );
     let directory = directory.to_string_lossy();
     for width in [7, 12, 17, 18, 24, 25, 40, 80] {
@@ -2946,6 +2953,7 @@ async fn default_openai_status_is_unchanged_without_named_accounts() {
         let account_display = StatusAccountDisplay::ChatGpt {
             email: Some("user@example.com".to_string()),
             plan: Some("Plus".to_string()),
+            workspace: None,
         };
         let (composite, _) = new_status_output_with_rate_limits_handle(
             &config,
@@ -3026,6 +3034,8 @@ async fn named_sign_in_status(signed_in: bool, remote: bool, known: bool) -> Str
     let remote_connection = remote.then(|| RemoteConnectionStatus {
         address: "wss://remote.example".to_string(),
         version: "0.0.0".to_string(),
+        is_local_daemon: false,
+        is_managed_daemon: false,
     });
     let (composite, _) = new_status_output_with_rate_limits_handle(
         &config,

@@ -321,7 +321,7 @@ impl App {
     fn current_session_header_details(&self) -> history_cell::SessionHeaderDetails {
         // Same label the header is created with (new_session_info, clear_ui_header_cell).
         history_cell::SessionHeaderDetails::new(
-            self.chat_widget.model_display_name().to_string(),
+            self.chat_widget.model_display_name(),
             self.chat_widget.current_reasoning_effort(),
         )
     }
@@ -339,7 +339,7 @@ impl App {
         version: &'static str,
     ) -> history_cell::SessionHeaderHistoryCell {
         history_cell::SessionHeaderHistoryCell::new(
-            self.chat_widget.model_display_name().to_string(),
+            self.chat_widget.model_display_name(),
             self.chat_widget.current_reasoning_effort(),
             self.config.cwd.to_path_buf(),
             version,
@@ -409,7 +409,8 @@ impl App {
         if let Some(Overlay::Transcript(overlay)) = &mut self.overlay {
             overlay.replace_cells(self.transcript_cells.clone());
         }
-        self.reflow_transcript_now(tui)?;
+        let terminal_width = tui.terminal.last_known_screen_size.into();
+        self.reflow_transcript_now(tui, terminal_width)?;
         tui.frame_requester().schedule_frame();
         Ok(())
     }
@@ -472,6 +473,8 @@ impl App {
         self.deferred_history_lines.clear();
         self.has_emitted_history_lines = false;
         self.transcript_reflow.clear();
+        // Main: a transcript reset also closes the accounting inspector (late loads must not land).
+        self.chat_widget.clear_accounting_inspector();
         self.chat_widget.clear_pending_rate_limit_reset_hint();
         self.initial_history_replay_buffer = None;
         self.scrollback_has_older_history = false;

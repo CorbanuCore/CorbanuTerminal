@@ -373,6 +373,7 @@ async fn backend_banner_account_changes_invalidate_pending_recovery() -> Result<
                 codex_app_server_protocol::AccountUpdatedNotification {
                     auth_mode: None,
                     plan_type: None,
+                    api_key_env_var: None,
                 },
             ),
         )),

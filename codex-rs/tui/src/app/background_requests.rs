@@ -29,6 +29,7 @@ use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::ThreadRecordSentModelRequestParams;
 use codex_app_server_protocol::ThreadRecordSentModelRequestResponse;
 use std::future::Future;
+use std::sync::atomic::Ordering;
 
 use crate::hooks_rpc::HooksListTarget;
 use crate::hooks_rpc::fetch_hooks_list;

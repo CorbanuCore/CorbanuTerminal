@@ -1128,7 +1128,7 @@ impl ListSelectionView {
         let len = self.visible_len();
         if idx < len && !self.is_searchable {
             self.state.selected_idx = Some(idx);
-            self.state.ensure_visible(len, Self::max_visible_rows(len));
+            self.state.ensure_visible(len, self.visible_rows(len));
         }
     }
 
@@ -1188,7 +1188,7 @@ impl ListSelectionView {
             None
         }
         .or_else(|| self.footer_note.clone());
-        let mut lines = note.map(&wrap).unwrap_or_default();
+        let mut lines = note.map(wrap).unwrap_or_default();
         if self.reserve_result_rows && show_selected_description {
             let height = self
                 .items
@@ -1952,8 +1952,7 @@ impl Renderable for ListSelectionView {
         // Drawn right-aligned under the list, in the menu surface's bottom
         // padding row, so the popup's height does not change.
         let len = self.visible_len();
-        if len > Self::max_visible_rows(len) && content_area.bottom() < outer_content_area.bottom()
-        {
+        if len > self.visible_rows(len) && content_area.bottom() < outer_content_area.bottom() {
             let label = list_position_label(self.state.selected_idx, len);
             let label_width = UnicodeWidthStr::width(label.as_str()) as u16;
             let right = list_area

@@ -36,6 +36,7 @@ pub(super) async fn run_startup_for_test(
         /*initial_prompt*/ None,
         Vec::new(),
         selection,
+        /*startup_resume_model_override*/ None,
         codex_feedback::CodexFeedback::new(),
         /*is_first_run*/ false,
         /*should_prompt_windows_sandbox_nux_at_startup*/ false,
@@ -50,6 +51,8 @@ pub(super) async fn run_startup_for_test(
         crate::startup_draft::tests::quiet_startup_test_pump(),
         /*managed_worktree*/ None,
         /*daemon_cli_executable*/ None,
+        /*deferred_provider_setup*/ None,
+        /*startup_provider_resolution*/ None,
     )
     .await
 }

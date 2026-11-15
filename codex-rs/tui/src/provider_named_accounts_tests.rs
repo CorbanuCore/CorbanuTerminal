@@ -293,11 +293,14 @@ fn chatgpt_sign_in_rows_show_the_email_hint_and_plan_only() {
             access_token: "access-canary-0002".to_string(),
             refresh_token: "refresh-canary-0002".to_string(),
             account_id: Some("ws-1".to_string()),
+            login_owner_id: None,
+            oauth_provenance: None,
         }),
         last_refresh: None,
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        bedrock_access_keys: None,
     };
     codex_login::save_named_account_auth(
         home.path(),

@@ -9,11 +9,11 @@ use crate::support::tmux::TmuxServer;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::ensure;
+use codex_history::RolloutItem;
+use codex_history::RolloutLine;
 use codex_protocol::ThreadId;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
 use codex_protocol::protocol::SessionSource;
 use serde_json::Value;
 use serde_json::json;
@@ -358,15 +358,20 @@ animations = false
     let line = RolloutLine {
         timestamp: timestamp.to_rfc3339(),
         ordinal: None,
-        item: RolloutItem::ResponseItem(ResponseItem::Message {
-            id: None,
-            role: "user".into(),
-            content: vec![ContentItem::InputText {
-                text: CANARY.into(),
-            }],
-            phase: None,
-            internal_chat_message_metadata_passthrough: None,
-        }),
+        item: RolloutItem::ResponseItem(
+            ResponseItem::Message {
+                id: None,
+                role: "user".into(),
+                content: vec![ContentItem::InputText {
+                    text: CANARY.into(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+                encrypted_content: None,
+                status: None,
+            }
+            .into(),
+        ),
     };
     fs::write(&rollout, format!("{}\n", serde_json::to_string(&line)?))?;
     let mut metadata =

@@ -93,6 +93,7 @@ async fn selected_usage_is_cached_and_account_changes_discard_old_results() -> R
                 last: tokens.clone(),
                 model_context_window: None,
             },
+            account_usage: None,
         },
     ));
     app.apply_agents_overview_thread_refresh(
@@ -184,6 +185,7 @@ async fn selected_usage_is_cached_and_account_changes_discard_old_results() -> R
             AccountUpdatedNotification {
                 auth_mode: None,
                 plan_type: None,
+                api_key_env_var: None,
             },
         ))),
     ] {

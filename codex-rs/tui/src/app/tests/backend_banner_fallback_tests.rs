@@ -432,13 +432,19 @@ async fn backend_banner_fallback_handles_settings_failure_and_queued_manual_sele
 async fn backend_banner_fallback_preserves_permissions_for_first_eligible_cyber_model() -> Result<()>
 {
     let mut app = make_test_app().await;
+    let mut permission_server = start_config_write_test_app_server(&app)
+        .await
+        .expect("permission test app server");
     assert!(
-        app.apply_permission_profile_selection(PermissionProfileSelection {
-            profile_id: codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY.into(),
-            approval_policy: Some(AskForApproval::UnlessTrusted),
-            approvals_reviewer: Some(ApprovalsReviewer::User),
-            display_label: "Read Only".into(),
-        })
+        app.apply_permission_profile_selection(
+            &mut permission_server,
+            PermissionProfileSelection {
+                profile_id: codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY.into(),
+                approval_policy: Some(AskForApproval::UnlessTrusted),
+                approvals_reviewer: Some(ApprovalsReviewer::User),
+                display_label: "Read Only".into(),
+            },
+        )
         .await
     );
     let mut server = crate::start_embedded_app_server_for_picker(&app.config).await?;

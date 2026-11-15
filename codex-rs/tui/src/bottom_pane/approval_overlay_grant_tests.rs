@@ -55,6 +55,7 @@ fn request_in(thread_id: ThreadId) -> ApprovalRequest {
         ],
         network_approval_context: None,
         additional_permissions: None,
+        kind: Default::default(),
     })
 }
 
@@ -369,6 +370,7 @@ fn pf_25_s01_review_follows_the_request() {
     key(&mut view, KeyCode::Enter);
     assert!(
         view.dismiss_app_server_request(&ResolvedAppServerRequest::ExecApproval {
+            thread_id: thread().to_string(),
             id: "call-1".to_string(),
         })
     );

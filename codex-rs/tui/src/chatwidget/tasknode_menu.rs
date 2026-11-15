@@ -336,7 +336,7 @@ impl ChatWidget {
                     self.add_error_message("Task Node did not return a task brief.".to_string());
                     return;
                 }
-                match crate::clipboard_copy::copy_to_clipboard(&brief) {
+                match crate::clipboard_copy::copy_plain_text_blocking(&brief) {
                     Ok(lease) => {
                         self.clipboard_lease = lease;
                         self.add_info_message(

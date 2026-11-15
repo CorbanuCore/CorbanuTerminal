@@ -91,7 +91,7 @@ async fn permission_confirmation_native_requests_carry_effective_defaults() {
                             }
                         }
                         event = server.next_event() => {
-                            if let Some(codex_app_server_client::AppServerEvent::ServerNotification(notification)) = event {
+                            if let Some(crate::app_server_session::AppServerSessionEvent { event: codex_app_server_client::AppServerEvent::ServerNotification(notification), .. }) = event {
                             app.handle_thread_event_now(ThreadBufferedEvent::Notification(notification));
                             }
                         }
@@ -102,7 +102,7 @@ async fn permission_confirmation_native_requests_carry_effective_defaults() {
             .unwrap_or_else(|error| panic!("{profile}: {:?}: {error}", app.pending_permission_confirmation));
             let expected = if profile == "missing-profile" { ":read-only" } else { profile };
             app.refresh_in_memory_config_from_disk().await.unwrap();
-            let fresh = app.fresh_session_config();
+            let fresh = app.config.clone();
             assert_eq!(fresh.permissions.active_permission_profile().unwrap().id, expected);
             let next = server.start_thread(&fresh).await.unwrap();
             assert_eq!(next.session.active_permission_profile, fresh.permissions.active_permission_profile());
@@ -152,11 +152,11 @@ async fn permission_confirmation_f07_conflicts_are_refused_and_old_completion_ca
                     &mut server, requested.clone(), profile.into(), /*persist_reviewer*/ None,
                 );
                 let pending = app.pending_permission_confirmation.clone().unwrap();
-                let before = RuntimePermissionProfileOverride::from_config(&app.fresh_session_config());
+                let before = RuntimePermissionProfileOverride::from_config(&app.config.clone());
                 if let Some(old) = previous {
                     app.finish_permission_confirmation(old, PermissionConfirmationResult::Applied);
                     assert_eq!(app.pending_permission_confirmation, Some(pending.clone()));
-                    assert_eq!(RuntimePermissionProfileOverride::from_config(&app.fresh_session_config()), before);
+                    assert_eq!(RuntimePermissionProfileOverride::from_config(&app.config.clone()), before);
                 }
                 let conflicting = if profile == ":read-only" {
                     ":danger-full-access"
@@ -190,7 +190,7 @@ async fn permission_confirmation_f07_conflicts_are_refused_and_old_completion_ca
                                 _ => {}
                             },
                             event = server.next_event() => {
-                                if let Some(codex_app_server_client::AppServerEvent::ServerNotification(notification)) = event {
+                                if let Some(crate::app_server_session::AppServerSessionEvent { event: codex_app_server_client::AppServerEvent::ServerNotification(notification), .. }) = event {
                                     app.handle_thread_event_now(ThreadBufferedEvent::Notification(notification));
                                 }
                             }
@@ -206,7 +206,7 @@ async fn permission_confirmation_f07_conflicts_are_refused_and_old_completion_ca
                 assert!(messages.contains("A permission selection is still pending"));
                 assert!(!messages.contains("Permissions requested: refused-conflict"));
                 assert!(messages.contains(&format!("Permissions confirmed for new turns: {profile}")));
-                assert_eq!(app.fresh_session_config().permissions.active_permission_profile().unwrap().id, profile);
+                assert_eq!(app.config.clone().permissions.active_permission_profile().unwrap().id, profile);
                 let unexpected = ops.try_recv().ok();
                 assert!(unexpected.is_none(), "selection must not approve, interrupt or replay: {unexpected:?}");
                 previous = Some(pending.selection_id);
@@ -285,7 +285,7 @@ async fn permission_confirmation_f10_request_does_not_optimistically_apply_or_pe
             assert_eq!(app.runtime_permission_profile_override, None);
             assert_eq!(app.runtime_approval_policy_override, None);
             assert_eq!(
-                RuntimePermissionProfileOverride::from_config(&app.fresh_session_config()),
+                RuntimePermissionProfileOverride::from_config(&app.config.clone()),
                 before
             );
             server.shutdown().await.unwrap();
@@ -353,6 +353,7 @@ async fn permission_confirmation_hint_matches_retained_steer_and_latest_submissi
         started_at: None,
         completed_at: None,
         duration_ms: None,
+        root_turn_id: None,
     };
     app.chat_widget.handle_server_notification(
         ServerNotification::TurnStarted(TurnStartedNotification {
@@ -586,14 +587,13 @@ async fn permission_confirmation_orders_profiles_and_newer_observations() {
                     ..pending_confirmation(thread_id)
                 });
                 if reply_first {
-                    let before =
-                        RuntimePermissionProfileOverride::from_config(&app.fresh_session_config());
+                    let before = RuntimePermissionProfileOverride::from_config(&app.config.clone());
                     app.finish_permission_confirmation(
                         selection_id,
                         PermissionConfirmationResult::Applied,
                     );
                     assert_eq!(
-                        RuntimePermissionProfileOverride::from_config(&app.fresh_session_config()),
+                        RuntimePermissionProfileOverride::from_config(&app.config.clone()),
                         before
                     );
                     assert!(app.pending_permission_confirmation.is_some());
@@ -608,7 +608,7 @@ async fn permission_confirmation_orders_profiles_and_newer_observations() {
                     selection_id,
                     PermissionConfirmationResult::Applied,
                 );
-                let fresh = app.fresh_session_config();
+                let fresh = app.config.clone();
                 assert_eq!(fresh.permissions.permission_profile(), &profile);
                 assert_eq!(
                     fresh.permissions.active_permission_profile(),
@@ -619,7 +619,8 @@ async fn permission_confirmation_orders_profiles_and_newer_observations() {
                     policy
                 );
                 let mut reloaded = super::super::tests::make_test_app().await.config.clone();
-                app.apply_runtime_policy_overrides(&mut reloaded);
+                app.apply_runtime_policy_overrides(&mut reloaded, RuntimePolicyOverrideScope::All)
+                    .expect("apply runtime policy overrides");
                 assert_eq!(
                     RuntimePermissionProfileOverride::from_config(&reloaded),
                     RuntimePermissionProfileOverride::from_config(&fresh)
@@ -648,7 +649,7 @@ async fn permission_confirmation_orders_profiles_and_newer_observations() {
                     None
                 );
                 assert_eq!(
-                    app.fresh_session_config().permissions.permission_profile(),
+                    app.config.clone().permissions.permission_profile(),
                     &PermissionProfile::read_only()
                 );
                 let message = std::iter::from_fn(|| events.try_recv().ok())
@@ -730,13 +731,16 @@ async fn permission_confirmation_dispatch_preserves_policy_for_fresh_threads() {
 
         assert!(app.pending_permission_confirmation.is_none());
         assert_eq!(app.config.permissions.permission_profile(), &profile);
-        assert_eq!(app.runtime_approval_policy_override, Some(policy));
+        assert_eq!(
+            app.runtime_approval_policy_override,
+            Some(RuntimeApprovalPolicyOverride::Explicit(policy))
+        );
         assert_eq!(
             app.runtime_permission_profile_override,
             Some(RuntimePermissionProfileOverride::from_config(&app.config))
         );
         app.refresh_in_memory_config_from_disk().await.unwrap();
-        let fresh = app.fresh_session_config();
+        let fresh = app.config.clone();
         let next = server.start_thread(&fresh).await.unwrap();
         assert_eq!(
             (
@@ -777,13 +781,14 @@ async fn permission_confirmation_held_input_resumes_only_after_matching_success(
             feedback: codex_feedback::CodexFeedback::new(),
             is_first_run: false,
             status_account_display: None,
-            runtime_model_provider_base_url: None,
             initial_plan_type: None,
             model: app.config.model.clone(),
             startup_tooltip_override: None,
             status_line_invalid_items_warned: app.status_line_invalid_items_warned.clone(),
             terminal_title_invalid_items_warned: app.terminal_title_invalid_items_warned.clone(),
             session_telemetry: app.session_telemetry.clone(),
+            local_settings: crate::local_settings::LocalSettings::from(&app.config),
+            requires_openai_auth: app.chat_widget.requires_openai_auth,
         });
         let thread_id = ThreadId::new();
         app.active_thread_id = Some(thread_id);

@@ -4110,7 +4110,8 @@ mod tests {
 
     fn user_input_request() -> ToolRequestUserInputParams {
         ToolRequestUserInputParams {
-            thread_id: "thread-1".to_string(),
+            // Upstream answers on the request's thread, so it must parse as one.
+            thread_id: codex_protocol::ThreadId::new().to_string(),
             item_id: "call-1".to_string(),
             turn_id: "turn-1".to_string(),
             questions: vec![codex_app_server_protocol::ToolRequestUserInputQuestion {
@@ -4130,6 +4131,7 @@ mod tests {
                     },
                 ]),
             }],
+            is_blocking: true,
             auto_resolution_ms: None,
         }
     }
@@ -4138,7 +4140,10 @@ mod tests {
         std::iter::from_fn(|| rx.try_recv().ok()).any(|event| {
             matches!(
                 event,
-                AppEvent::CodexOp(crate::app_command::AppCommand::UserInputAnswer { .. })
+                AppEvent::SubmitThreadOp {
+                    op: crate::app_command::AppCommand::UserInputAnswer { .. },
+                    ..
+                }
             )
         })
     }

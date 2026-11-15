@@ -1147,7 +1147,9 @@ impl AppServerSession {
             .unwrap_or(account_has_chatgpt_account);
         let auth_mode = auth_status_mode
             .map(|mode| match mode {
-                AuthMode::ApiKey | AuthMode::BedrockApiKey => TelemetryAuthMode::ApiKey,
+                AuthMode::ApiKey | AuthMode::BedrockApiKey | AuthMode::BedrockAccessKeys => {
+                    TelemetryAuthMode::ApiKey
+                }
                 AuthMode::Chatgpt
                 | AuthMode::ChatgptAuthTokens
                 | AuthMode::Headers
@@ -3650,7 +3652,10 @@ mod tests {
         let state = codex_state::StateRuntime::init(sqlite.clone(), "test-provider".to_string())
             .await
             .expect("initialize runtime databases");
-        let log_db = codex_state::log_db::start(state.clone());
+        let log_db = codex_state::log_db::start(
+            state.clone(),
+            std::sync::Arc::new(codex_feedback::CodexFeedback::new()),
+        );
         let subscriber = tracing_subscriber::registry().with(log_db.clone());
         let dispatch = tracing::Dispatch::new(subscriber);
         let thread_id = ThreadId::new();
@@ -3697,6 +3702,7 @@ mod tests {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            bedrock_access_keys: None,
         };
         assert!(auth_dot_json_has_codex_backend_auth(&auth));
 
@@ -3708,6 +3714,7 @@ mod tests {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            bedrock_access_keys: None,
         };
         assert!(!auth_dot_json_has_codex_backend_auth(&auth));
     }
@@ -4000,6 +4007,7 @@ mod tests {
             service_tiers: Vec::new(),
             default_service_tier: None,
             available_access_programs: None,
+            orchestration: None,
             is_default: false,
         }
     }
@@ -4601,6 +4609,7 @@ mod tests {
             (
                 FileSystemPath::GlobPattern {
                     pattern: "**/*.secret".to_string(),
+                    scan: None,
                 },
                 FileSystemAccessMode::Deny,
             ),

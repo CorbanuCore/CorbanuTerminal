@@ -114,6 +114,11 @@ pub(crate) async fn check_directory_trust(
             remote_trust_key,
             is_done: false,
             should_exit: false,
+            // A trust-only screen has no provider sign-in or Claude pane steps.
+            provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),
+            provider_auth_executor: None,
+            provider_auth_action_rx: tokio::sync::mpsc::unbounded_channel().1,
+            claude_event_rx: tokio::sync::mpsc::unbounded_channel().1,
         };
         let result = run_onboarding_screen(
             screen,

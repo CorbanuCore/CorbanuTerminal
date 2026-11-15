@@ -1320,6 +1320,9 @@ async fn known_thread_started_preserves_session_without_reading_unmaterialized_r
             agent_path: None,
             is_running: false,
             is_closed: false,
+            last_result_message: None,
+            last_task_message: None,
+            model: None,
         })
     );
 }
@@ -1413,6 +1416,7 @@ async fn startup_slash_command_runs_after_startup_whatever_the_keystroke_timing(
                 session: test_thread_session(ThreadId::new(), test_path_buf("/tmp/project")),
                 turns: Vec::new(),
                 blocks_direct_input: false,
+                task_tools_available: false,
             }),
         )
         .await
@@ -1753,6 +1757,7 @@ async fn check_subagent_approval_routing(routing: ApprovalRouting) -> Result<()>
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             }),
             parent_thread_id.into(),
             parent_thread_id,

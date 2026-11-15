@@ -128,10 +128,10 @@ fn resolve_model_command(chat: &ChatWidget, args: &str) -> Result<ModelCommand, 
         .model
         .clone()
         .unwrap_or_else(|| chat.current_model().to_owned());
-    let Some(model) =
-        chat.model_catalog.models.iter().find(|model| {
-            model.model == model_name && (args.model.is_none() || model.show_in_picker)
-        })
+    let models = chat.model_catalog.models();
+    let Some(model) = models
+        .iter()
+        .find(|model| model.model == model_name && (args.model.is_none() || model.show_in_picker))
     else {
         return Err(format!(
             "Model '{model_name}' is unavailable. Use /model to see available models."

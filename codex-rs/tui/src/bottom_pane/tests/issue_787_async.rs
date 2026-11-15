@@ -3,7 +3,9 @@
 //! or in the second after (an arrival, the next question after an answer, a
 //! reply from another client, expanding the panel, or the panel uncovered by
 //! a closing view) is dropped like input reaching a request view; its footer
-//! says so. Ctrl+C and deliberate answers keep working.
+//! says so. As on main's request prompts (`TypingGuard::on_early_input`), the
+//! question then waits for navigation (↑/↓) before anything answers, skips or
+//! edits it. Ctrl+C and deliberate answers keep working.
 
 use super::*;
 use codex_protocol::items::AsyncUserInputQuestion;
@@ -83,8 +85,8 @@ fn unanswered(pane: &BottomPane) -> usize {
 
 /// Enter, a number key, the skip key, and Esc (which would interrupt the
 /// turn) reaching a question before it was drawn or in the second after are
-/// dropped, and each dropped key restarts the second; afterwards a deliberate
-/// Enter answers.
+/// dropped, and each dropped key restarts the second; afterwards Enter waits
+/// for navigation, then answers.
 #[test]
 fn issue_787_async_question_takes_no_key_before_it_is_drawn_or_in_the_second_after() {
     let (tx_raw, mut rx) = unbounded_channel::<AppEvent>();
@@ -126,7 +128,19 @@ fn issue_787_async_question_takes_no_key_before_it_is_drawn_or_in_the_second_aft
     let later = start + Duration::from_millis(2700) + REQUEST_INPUT_GUARD;
     draw_at(&mut pane, later);
     press_at(&mut pane, &[plain(KeyCode::Enter)], later);
-    let answer = take_answer(&mut pane).expect("a deliberate Enter answers");
+    assert_eq!(take_answer(&mut pane), None);
+    let screen = draw_at(&mut pane, later);
+    assert!(screen.contains(EARLY), "{screen}");
+    press_at(
+        &mut pane,
+        &[
+            plain(KeyCode::Down),
+            plain(KeyCode::Up),
+            plain(KeyCode::Enter),
+        ],
+        later,
+    );
+    let answer = take_answer(&mut pane).expect("Enter after navigating answers");
     assert!(answer.contains("Yes"), "{answer}");
 }
 
@@ -156,6 +170,11 @@ fn issue_787_type_ahead_never_answers_or_edits_the_next_async_question() {
     assert_eq!(unanswered(&pane), 1);
 
     let later = at + Duration::from_millis(500) + REQUEST_INPUT_GUARD;
+    pane.handle_paste_at("because".to_string(), later);
+    press_at(&mut pane, &[plain(KeyCode::Enter)], later);
+    assert_eq!(draft(&pane), "");
+    assert_eq!(take_answer(&mut pane), None);
+    press_at(&mut pane, &[plain(KeyCode::Down)], later);
     pane.handle_paste_at("because".to_string(), later);
     press_at(&mut pane, &[plain(KeyCode::Enter)], later);
     assert!(take_answer(&mut pane).unwrap().contains("because"));
@@ -190,6 +209,12 @@ fn issue_787_question_answered_elsewhere_hands_no_key_to_the_next() {
 
     let later = at + Duration::from_millis(800) + REQUEST_INPUT_GUARD;
     press_at(&mut pane, &[plain(KeyCode::Char('2'))], later);
+    assert_eq!(take_answer(&mut pane), None);
+    press_at(
+        &mut pane,
+        &[plain(KeyCode::Down), plain(KeyCode::Char('2'))],
+        later,
+    );
     assert!(take_answer(&mut pane).unwrap().contains("Four"));
 }
 
@@ -216,6 +241,9 @@ fn issue_787_uncovered_or_reexpanded_question_waits_for_a_draw() {
     draw_at(&mut pane, shown);
     let quiet = shown + REQUEST_INPUT_GUARD;
     pane.handle_paste_at("typed".to_string(), quiet);
+    assert_eq!(draft(&pane), "");
+    press_at(&mut pane, &[plain(KeyCode::Down)], quiet);
+    pane.handle_paste_at("typed".to_string(), quiet);
     assert_eq!(draft(&pane), "typed");
 
     let questions = pane.questions.as_mut().unwrap();
@@ -227,4 +255,73 @@ fn issue_787_uncovered_or_reexpanded_question_waits_for_a_draw() {
     assert_eq!(take_answer(&mut pane), None);
     assert!(matches!(pane.on_ctrl_c(), CancellationEvent::Handled));
     assert_eq!(draft(&pane), "");
+}
+
+/// #1631 follow-up (main's #787 rule for request prompts): once keys were
+/// dropped as a question appeared, nothing but navigation arms it. Enter, a
+/// number key, the skip key, typing and a paste answer or edit nothing, and
+/// the footer says to navigate first; after ↑/↓ it answers as usual. A
+/// freeform question arms on ↑/↓ alone, and then takes typing.
+#[test]
+fn issue_787_dropped_keys_make_an_async_question_wait_for_navigation() {
+    let (tx_raw, mut rx) = unbounded_channel::<AppEvent>();
+    let mut pane = guarded_pane(AppEventSender::new(tx_raw));
+    pane.push_async_questions(
+        "message",
+        &[
+            question("Deploy?", Some(&["Yes", "No"])),
+            question("Why?", /*options*/ None),
+        ],
+    );
+    pane.questions
+        .as_mut()
+        .unwrap()
+        .set_expanded(/*expanded*/ true);
+    let start = Instant::now();
+    let skip = KeyEvent::new(KeyCode::Char(']'), KeyModifiers::CONTROL);
+
+    press_at(&mut pane, &[plain(KeyCode::Enter)], start);
+    draw_at(&mut pane, start);
+    let later = start + REQUEST_INPUT_GUARD + Duration::from_millis(100);
+    let mut keys = vec![plain(KeyCode::Enter), plain(KeyCode::Char('2')), skip];
+    keys.extend(text("ok"));
+    press_at(&mut pane, &keys, later);
+    pane.handle_paste_at("pasted".to_string(), later);
+    assert_eq!(take_answer(&mut pane), None);
+    assert_eq!(unanswered(&pane), 2);
+    assert_eq!(draft(&pane), "");
+    let screen = draw_at(&mut pane, later);
+    assert!(
+        screen.contains("Choose an option with ↑/↓, then press enter."),
+        "{screen}"
+    );
+    assert!(
+        !std::iter::from_fn(|| rx.try_recv().ok())
+            .any(|event| matches!(event, AppEvent::CodexOp(_))),
+        "a held key reached the turn"
+    );
+
+    press_at(&mut pane, &[plain(KeyCode::Down)], later);
+    let screen = draw_at(&mut pane, later);
+    assert!(!screen.contains(EARLY), "{screen}");
+    press_at(&mut pane, &[plain(KeyCode::Enter)], later);
+    let answer = take_answer(&mut pane).expect("Enter after navigating answers");
+    assert!(answer.contains("No"), "{answer}");
+
+    // The freeform question shows next: typing on as it appears is dropped,
+    // then it waits for ↑/↓ before it takes text.
+    press_at(&mut pane, &text("so"), later);
+    let shown = later + Duration::from_millis(16);
+    draw_at(&mut pane, shown);
+    let quiet = shown + REQUEST_INPUT_GUARD;
+    let screen = draw_at(&mut pane, quiet);
+    assert!(screen.contains("Press ↑/↓ first, then answer."), "{screen}");
+    press_at(&mut pane, &text("because"), quiet);
+    press_at(&mut pane, &[plain(KeyCode::Enter)], quiet);
+    assert_eq!(draft(&pane), "");
+    assert_eq!(take_answer(&mut pane), None);
+    press_at(&mut pane, &[plain(KeyCode::Up)], quiet);
+    pane.handle_paste_at("because".to_string(), quiet);
+    press_at(&mut pane, &[plain(KeyCode::Enter)], quiet);
+    assert!(take_answer(&mut pane).unwrap().contains("because"));
 }
