@@ -767,6 +767,11 @@ fn content_print(path: &Path) -> String {
 
 /// The SHA-256 of what `file` holds, or `unreadable`.
 fn hash(mut file: std::fs::File) -> String {
+    #[cfg(test)]
+    {
+        let _size = file.metadata().expect("file size").len();
+        tests::before_hash();
+    }
     hash_read(&mut file)
 }
 

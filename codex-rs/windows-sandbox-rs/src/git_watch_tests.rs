@@ -3,6 +3,45 @@ use pretty_assertions::assert_eq;
 use std::cell::RefCell;
 use std::fs;
 
+thread_local! {
+    static BEFORE_HASH: RefCell<Option<Box<dyn FnOnce()>>> = const { RefCell::new(None) };
+}
+
+pub(crate) fn before_hash() {
+    BEFORE_HASH.with(|slot| {
+        if let Some(hook) = slot.borrow_mut().take() {
+            hook();
+        }
+    });
+}
+
+/// A leftover writer must not extend a fingerprint read beyond the size
+/// recorded on its open handle. The input stays bounded even before the fix.
+#[test]
+fn file_print_flags_growth_during_the_read() {
+    use std::io::Write as _;
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("config");
+    fs::write(&path, b"x").expect("write");
+    let unchanged = file_print(&path);
+    assert_eq!(file_print(&path), unchanged);
+    let append_path = path.clone();
+    BEFORE_HASH.with(|slot| {
+        *slot.borrow_mut() = Some(Box::new(move || {
+            fs::OpenOptions::new()
+                .append(true)
+                .open(append_path)
+                .expect("open writer")
+                .write_all(&[b'y'; 16_384])
+                .expect("grow");
+        }));
+    });
+    let grown = file_print(&path);
+    assert!(grown.starts_with("truncated at"), "{grown}");
+    assert_eq!(fs::metadata(&path).expect("metadata").len(), 16_385);
+    assert!(!file_print(&path).starts_with("truncated at"));
+}
+
 type Hook = Box<dyn Fn(&Path)>;
 
 thread_local! {

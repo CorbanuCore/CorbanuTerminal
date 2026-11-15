@@ -517,7 +517,7 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
             );
             #[cfg(test)]
             if let Ok(prepared) = &prepared {
-                test_hooks::after_blocking_step(&command, &[prepared.token.raw()]);
+                test_hooks::after_blocking_step(&command, &[prepared.token.raw()], None);
             }
             prepared
         })
@@ -564,6 +564,7 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
                         handles.process.0.hProcess,
                         handles.process.0.hThread,
                     ],
+                    Some(&handles.job),
                 );
             }
             match spawned {
@@ -680,20 +681,26 @@ pub(crate) mod test_hooks {
     use std::sync::Mutex;
     use std::sync::PoisonError;
 
-    pub(crate) type Hook = Arc<dyn Fn(&[String], &[HANDLE]) + Send + Sync>;
+    use codex_utils_pty::JobObject;
+
+    pub(crate) type Hook = Arc<dyn Fn(&[String], &[HANDLE], Option<&Arc<JobObject>>) + Send + Sync>;
 
     /// #1909: run on the blocking thread at the end of each legacy spawn's
     /// preparation (with its token) and start (token, process and thread
     /// handles), before the step returns them.
     pub(crate) static AFTER_BLOCKING_STEP: Mutex<Option<Hook>> = Mutex::new(None);
 
-    pub(crate) fn after_blocking_step(command: &[String], handles: &[HANDLE]) {
+    pub(crate) fn after_blocking_step(
+        command: &[String],
+        handles: &[HANDLE],
+        job: Option<&Arc<JobObject>>,
+    ) {
         let hook = AFTER_BLOCKING_STEP
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone();
         if let Some(hook) = hook {
-            hook(command, handles);
+            hook(command, handles, job);
         }
     }
 }

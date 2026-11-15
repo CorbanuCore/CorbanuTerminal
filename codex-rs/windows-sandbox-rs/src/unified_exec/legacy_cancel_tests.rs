@@ -74,7 +74,7 @@ fn duplicate(handle: HANDLE) -> HANDLE {
 /// `step` (0: preparation, 1: start) waits, then lets that step return.
 /// For each handle the step made: the handles open to its object while it
 /// waited, and once the step's result was dropped.
-fn cancelled_during(step: usize) -> Vec<(u32, u32)> {
+fn cancelled_during(step: usize) -> (Vec<(u32, u32)>, bool) {
     let _guard = legacy_process_test_guard();
     let test_root = user_owned_test_root();
     let workspace = test_root.path().join("workspace");
@@ -83,26 +83,29 @@ fn cancelled_during(step: usize) -> Vec<(u32, u32)> {
     // Made first so that it is dropped last: if this test panics, the
     // release sender (made below) goes first and the waiting step returns.
     let runtime = current_thread_runtime();
-    let (reached_tx, mut reached_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<HANDLE>>();
+    let (reached_tx, mut reached_rx) = tokio::sync::mpsc::unbounded_channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
     let release_rx = std::sync::Mutex::new(release_rx);
     let calls = std::sync::atomic::AtomicUsize::new(0);
     {
         let marker = marker.clone();
-        *test_hooks::AFTER_BLOCKING_STEP.lock().expect("hook") =
-            Some(Arc::new(move |command: &[String], handles: &[HANDLE]| {
+        *test_hooks::AFTER_BLOCKING_STEP.lock().expect("hook") = Some(Arc::new(
+            move |command: &[String], handles: &[HANDLE], job| {
                 if !command.iter().any(|arg| arg.contains(&marker))
                     || calls.fetch_add(1, Ordering::SeqCst) != step
                 {
                     return;
                 }
-                let copies = handles.iter().map(|handle| duplicate(*handle)).collect();
-                let _ = reached_tx.send(copies);
+                let copies: Vec<HANDLE> = handles.iter().map(|handle| duplicate(*handle)).collect();
+                // Keep the job observable after cancellation, so the test proves
+                // explicit termination and waiting, not kill-on-last-close.
+                let _ = reached_tx.send((copies, job.cloned()));
                 // Until the future has been dropped.
                 let _ = release_rx.lock().expect("release").recv();
-            }));
+            },
+        ));
     }
-    let copies = runtime.block_on(async {
+    let (copies, job) = runtime.block_on(async {
         let codex_home = sandbox_home("legacy-cancel");
         let profile = PermissionProfile::workspace_write();
         let roots = workspace_roots_for(&workspace);
@@ -114,7 +117,7 @@ fn cancelled_during(step: usize) -> Vec<(u32, u32)> {
                 "C:\\Windows\\System32\\cmd.exe".to_string(),
                 "/d".to_string(),
                 "/c".to_string(),
-                format!("{marker} & exit /b 0"),
+                format!("{marker} & C:\\Windows\\System32\\ping.exe -n 30 127.0.0.1 >nul"),
             ],
             &workspace,
             with_session_temp(codex_home.path(), HashMap::new()),
@@ -135,6 +138,15 @@ fn cancelled_during(step: usize) -> Vec<(u32, u32)> {
     // Waits for the blocking step to return (its result is dropped).
     drop(runtime);
     *test_hooks::AFTER_BLOCKING_STEP.lock().expect("hook") = None;
+    let ended_before_release = job.as_ref().is_none_or(|_| {
+        // SAFETY: copies[1] is the test's duplicate process handle.
+        unsafe { windows_sys::Win32::System::Threading::WaitForSingleObject(copies[1], 0) == 0 }
+    });
+    // Clean up even on the fail-before version, whose plain lease drop left
+    // the command running while this test retained the job.
+    if let Some(job) = job {
+        job.terminate().expect("terminate test command");
+    }
     // Other processes (such as csrss) may hold a started process's handles
     // until it has fully ended, which a job closing doesn't wait for.
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -156,7 +168,10 @@ fn cancelled_during(step: usize) -> Vec<(u32, u32)> {
             CloseHandle(copy);
         }
     }
-    waiting.iter().copied().zip(after).collect()
+    (
+        waiting.iter().copied().zip(after).collect(),
+        ended_before_release,
+    )
 }
 
 /// Whether, for each object, only this test's copy is still open once the
@@ -171,12 +186,16 @@ fn closed(counts: &[(u32, u32)]) -> Vec<bool> {
 
 #[test]
 fn legacy_spawn_cancelled_while_preparing_closes_its_token() {
-    let counts = cancelled_during(0);
+    let (counts, _) = cancelled_during(/*step*/ 0);
     assert_eq!(closed(&counts), vec![true], "{counts:?}");
 }
 
 #[test]
 fn legacy_spawn_cancelled_while_starting_closes_its_handles() {
-    let counts = cancelled_during(1);
+    let (counts, ended_before_release) = cancelled_during(/*step*/ 1);
     assert_eq!(closed(&counts), vec![true; 3], "{counts:?}");
+    assert!(
+        ended_before_release,
+        "lease released before the cancelled job ended"
+    );
 }
