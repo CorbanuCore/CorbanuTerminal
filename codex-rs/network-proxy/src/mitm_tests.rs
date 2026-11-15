@@ -641,3 +641,32 @@ async fn pf_33_s02_guard_refuses_open_tunnel_after_host_is_denied() {
         assert_eq!(blocked[0].host, "example.com");
     }
 }
+
+#[test]
+fn aws_sigv4_hook_counts_as_touching_authorization() {
+    // SigV4 signing rewrites `Authorization`, so the brokered and scoped
+    // collision guards must see it like a header hook.
+    let signer = crate::aws_sigv4::AwsSigV4Config {
+        placeholder_access_key_id: "MASKEDACCESSKEY".to_string(),
+        region: "us-east-1".to_string(),
+        service: "sts".to_string(),
+        access_key_id: crate::aws_sigv4::ProxySecretSource::EnvVar("AWS_KEY".to_string()),
+        secret_access_key: crate::aws_sigv4::ProxySecretSource::EnvVar("AWS_SECRET".to_string()),
+        session_token: None,
+        port: 443,
+        max_body_bytes: 1024,
+    }
+    .compile(&|name| Some(format!("synthetic-{name}-value")), &|_| {
+        panic!("unexpected file")
+    })
+    .expect("signer");
+    let mut actions = MitmHookActions {
+        body_secret_substitution: None,
+        aws_sigv4: None,
+        strip_request_headers: Vec::new(),
+        inject_request_headers: Vec::new(),
+    };
+    assert!(!hook_actions_touch_authorization(Some(&actions)));
+    actions.aws_sigv4 = Some(Arc::new(signer));
+    assert!(hook_actions_touch_authorization(Some(&actions)));
+}

@@ -217,3 +217,53 @@ fn pf_28_s02_hook_injected_values_join_the_gate() {
         Some(RegisterError::NotText)
     );
 }
+
+#[test]
+fn aws_sigv4_hook_values_join_the_gate() {
+    // Synthetic AWS values: a response reflecting the real access key ID or
+    // session token a SigV4 hook sent must be scrubbed, as for header hooks.
+    const ACCESS_KEY_ID: &str = "AKIAPF28S02SIGV4CANARY";
+    const SESSION_TOKEN: &str = "pf28s02-sigv4-session-token-0000";
+    let signer = crate::aws_sigv4::AwsSigV4Config {
+        placeholder_access_key_id: "MASKEDACCESSKEY".to_string(),
+        region: "us-east-1".to_string(),
+        service: "sts".to_string(),
+        access_key_id: crate::aws_sigv4::ProxySecretSource::EnvVar("AWS_KEY".to_string()),
+        secret_access_key: crate::aws_sigv4::ProxySecretSource::EnvVar("AWS_SECRET".to_string()),
+        session_token: Some(crate::aws_sigv4::ProxySecretSource::EnvVar(
+            "AWS_TOKEN".to_string(),
+        )),
+        port: 443,
+        max_body_bytes: 1024,
+    }
+    .compile(
+        &|name| {
+            Some(
+                match name {
+                    "AWS_KEY" => ACCESS_KEY_ID,
+                    "AWS_SECRET" => "pf28s02-sigv4-secret-key-000000",
+                    _ => SESSION_TOKEN,
+                }
+                .to_string(),
+            )
+        },
+        &|_| panic!("unexpected file"),
+    )
+    .expect("signer");
+    let actions = MitmHookActions {
+        body_secret_substitution: None,
+        aws_sigv4: Some(std::sync::Arc::new(signer)),
+        strip_request_headers: Vec::new(),
+        inject_request_headers: Vec::new(),
+    };
+
+    let gate = with_hook_values(/*gate*/ None, Some(&actions))
+        .expect("gate")
+        .expect("SigV4 values gated");
+
+    let echoed = format!("{ACCESS_KEY_ID} {SESSION_TOKEN}");
+    assert_eq!(
+        gate.scrub_header(echoed.as_bytes()),
+        Some(b"[REDACTED:hook:aws_sigv4] [REDACTED:hook:aws_sigv4]".to_vec())
+    );
+}

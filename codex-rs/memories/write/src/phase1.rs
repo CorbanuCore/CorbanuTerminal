@@ -11,15 +11,11 @@ use crate::runtime::StageOneRequestContext;
 use codex_config::types::MemoriesConfig;
 use codex_core::Prompt;
 use codex_core::config::Config;
-<<<<<<< HEAD
 use codex_core::memory_stage_one::StageOneMemoryClient;
 use codex_core::memory_stage_one::StageOneMemoryError;
 use codex_model_provider::DEFAULT_MEMORY_EXTRACTION_PREFERRED_MODEL;
-||||||| 413492cd6c
-=======
 use codex_protocol::MemoryVersion;
 use codex_protocol::ResponseItemId;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::error::CodexErr;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
@@ -55,63 +51,6 @@ struct Stats {
     total_token_usage: Option<TokenUsage>,
 }
 
-<<<<<<< HEAD
-/// Phase 1 model output payload.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct StageOneOutput {
-    /// Detailed markdown raw memory for a single rollout.
-    #[serde(rename = "raw_memory")]
-    pub(crate) raw_memory: String,
-    /// Compact summary line used for routing and indexing.
-    #[serde(rename = "rollout_summary")]
-    pub(crate) rollout_summary: String,
-    /// Optional slug used to derive rollout summary artifact filenames.
-    #[serde(default, rename = "rollout_slug")]
-    pub(crate) rollout_slug: Option<String>,
-}
-
-/// Parses the stage-one answer. Some providers (GLM) wrap the JSON in one
-/// Markdown code fence despite the output schema, so exactly one fenced block
-/// tagged `json` or untagged is also accepted. Nothing else is loosened.
-fn parse_stage_one_output(text: &str) -> serde_json::Result<StageOneOutput> {
-    match serde_json::from_str(text) {
-        Ok(output) => Ok(output),
-        Err(err) => match single_fenced_json_block(text) {
-            Some(inner) => serde_json::from_str(inner),
-            None => Err(err),
-        },
-    }
-}
-
-fn single_fenced_json_block(text: &str) -> Option<&str> {
-    let rest = text.trim().strip_prefix("```")?;
-    let (info, body) = rest.split_once('\n')?;
-    if !matches!(info.trim(), "" | "json") {
-        return None;
-    }
-    // A second block, or prose after the fence, is not JSON: serde rejects it.
-    body.trim_end().strip_suffix("```")
-}
-
-||||||| 413492cd6c
-/// Phase 1 model output payload.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct StageOneOutput {
-    /// Detailed markdown raw memory for a single rollout.
-    #[serde(rename = "raw_memory")]
-    pub(crate) raw_memory: String,
-    /// Compact summary line used for routing and indexing.
-    #[serde(rename = "rollout_summary")]
-    pub(crate) rollout_summary: String,
-    /// Optional slug used to derive rollout summary artifact filenames.
-    #[serde(default, rename = "rollout_slug")]
-    pub(crate) rollout_slug: Option<String>,
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 /// Runs memory phase 1 in strict step order:
 /// 1) claim eligible rollout jobs
 /// 2) build metrics context and refresh each job's host routing
@@ -322,7 +261,6 @@ mod job {
             }
         };
 
-<<<<<<< HEAD
         // The response may have completed before a live policy/provider change.
         // Never persist its output (including successful no-output) after denial.
         if let Err(reason) = client.check_completion().await {
@@ -339,17 +277,12 @@ mod job {
             };
         }
 
-        if stage_one_output.raw_memory.is_empty() || stage_one_output.rollout_summary.is_empty() {
-||||||| 413492cd6c
-        if stage_one_output.raw_memory.is_empty() || stage_one_output.rollout_summary.is_empty() {
-=======
         if stage_one_output
             .raw_memory
             .as_ref()
             .is_some_and(String::is_empty)
             || stage_one_output.rollout_summary.is_empty()
         {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             return JobResult {
                 outcome: result::no_output(context, claimed_thread.id, &claim.ownership_token)
                     .await,
@@ -381,8 +314,8 @@ mod job {
         rollout_cwd: &Path,
         rollout_git_branch: Option<&str>,
         stage_one_context: &StageOneRequestContext,
-<<<<<<< HEAD
     ) -> anyhow::Result<(StageOneOutput, Option<TokenUsage>, StageOneMemoryClient)> {
+        let version = config.memories.version;
         let client = context.stage_one_client(config).await?;
         // PF-23-S01: above Permissive Core builds the whole message from the
         // source session's own rollout; Permissive is unchanged.
@@ -396,13 +329,19 @@ mod job {
                         rollout_path,
                         crate::prompts::stage_one_rollout_token_limit(model_info),
                         redact_secrets,
-                        |contents| {
-                            build_stage_one_input_message(
+                        |contents| match version {
+                            MemoryVersion::V1 => build_stage_one_input_message(
                                 model_info,
                                 rollout_path,
                                 rollout_cwd,
                                 contents,
-                            )
+                            ),
+                            MemoryVersion::V2 => crate::prompts::build_stage_one_input_v2(
+                                rollout_path,
+                                rollout_cwd,
+                                rollout_git_branch,
+                                contents,
+                            ),
                         },
                     )
                     .await?,
@@ -410,101 +349,53 @@ mod job {
         } else {
             None
         };
-        let text = match &labelled {
-            Some(labelled) => labelled.message().to_string(),
-            None => {
-                let (rollout_items, _, _) =
-                    RolloutRecorder::load_rollout_items(rollout_path).await?;
-                let rollout_contents = serialize_filtered_rollout_response_items(&rollout_items)?;
-                build_stage_one_input_message(
-                    &stage_one_context.model_info,
-                    rollout_path,
-                    rollout_cwd,
-                    &rollout_contents,
-                )?
-            }
-||||||| 413492cd6c
-    ) -> anyhow::Result<(StageOneOutput, Option<TokenUsage>)> {
-        let (rollout_items, _, _) = RolloutRecorder::load_rollout_items(rollout_path).await?;
-        let rollout_contents = serialize_filtered_rollout_response_items(&rollout_items)?;
-=======
-    ) -> anyhow::Result<(StageOneOutput, Option<TokenUsage>)> {
-        let rollout_items = crate::rollout_input::read_recent_rollout_items(rollout_path).await?;
-        let rollout_contents = match config.memories.version {
-            MemoryVersion::V1 => serialize_filtered_rollout_response_items(&rollout_items)?,
-            MemoryVersion::V2 => crate::rollout_input::serialize_tiered_input(
-                &rollout_items,
-                crate::prompts::rollout_token_limit(&stage_one_context.model_info),
-            )?,
-        };
-
-        let input_text = match config.memories.version {
-            MemoryVersion::V1 => build_stage_one_input_message(
-                &stage_one_context.model_info,
-                rollout_path,
-                rollout_cwd,
-                &rollout_contents,
-            )?,
-            MemoryVersion::V2 => crate::prompts::build_stage_one_input_v2(
-                rollout_path,
-                rollout_cwd,
-                rollout_git_branch,
-                &rollout_contents,
-            )?,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-        };
 
         let mut prompt = Prompt::default();
-<<<<<<< HEAD
-        prompt.input = vec![ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText { text }],
-            phase: None,
-            internal_chat_message_metadata_passthrough: None,
-        }];
-        prompt.base_instructions = BaseInstructions {
-            text: crate::stage_one::PROMPT.to_string(),
-||||||| 413492cd6c
-        prompt.input = vec![ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: build_stage_one_input_message(
-                    &stage_one_context.model_info,
-                    rollout_path,
-                    rollout_cwd,
-                    &rollout_contents,
-                )?,
-            }],
-            phase: None,
-            internal_chat_message_metadata_passthrough: None,
-        }];
-        prompt.base_instructions = BaseInstructions {
-            text: crate::stage_one::PROMPT.to_string(),
-=======
-        prompt.input = match config.memories.version {
-            MemoryVersion::V1 => vec![ResponseItem::Message {
-                status: None,
-                encrypted_content: None,
-                id: Some(ResponseItemId::new("msg")),
-                role: "user".to_string(),
-                content: vec![ContentItem::InputText { text: input_text }],
-                phase: None,
-                internal_chat_message_metadata_passthrough: None,
-            }],
-            MemoryVersion::V2 => crate::rollout_input::extraction_messages(&input_text),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        prompt.input = match &labelled {
+            // Core accepts a labelled request only as exactly this one user
+            // message, so v2 does not split it into extraction-evidence parts.
+            Some(labelled) => vec![stage_one_user_message(labelled.message().to_string())],
+            None => {
+                let rollout_items =
+                    crate::rollout_input::read_recent_rollout_items(rollout_path).await?;
+                let rollout_contents = match version {
+                    MemoryVersion::V1 => serialize_filtered_rollout_response_items(&rollout_items)?,
+                    MemoryVersion::V2 => crate::rollout_input::serialize_tiered_input(
+                        &rollout_items,
+                        crate::prompts::stage_one_rollout_token_limit(
+                            &stage_one_context.model_info,
+                        ),
+                    )?,
+                };
+                match version {
+                    MemoryVersion::V1 => {
+                        vec![stage_one_user_message(build_stage_one_input_message(
+                            &stage_one_context.model_info,
+                            rollout_path,
+                            rollout_cwd,
+                            &rollout_contents,
+                        )?)]
+                    }
+                    MemoryVersion::V2 => crate::rollout_input::extraction_messages(
+                        &crate::prompts::build_stage_one_input_v2(
+                            rollout_path,
+                            rollout_cwd,
+                            rollout_git_branch,
+                            &rollout_contents,
+                        )?,
+                    ),
+                }
+            }
         };
         prompt.base_instructions = BaseInstructions {
-            text: match config.memories.version {
+            text: match version {
                 MemoryVersion::V1 => crate::stage_one::PROMPT,
                 MemoryVersion::V2 => include_str!("../templates/memories/stage_one_system_v2.md"),
             }
             .to_string(),
             provenance: None,
         };
-        prompt.output_schema = Some(output_schema(config.memories.version));
+        prompt.output_schema = Some(output_schema(version));
         prompt.output_schema_strict = true;
 
         let (result, token_usage, client) = context
@@ -517,21 +408,22 @@ mod job {
             )
             .await?;
 
-<<<<<<< HEAD
-        let mut output = parse_stage_one_output(&result)?;
-        output.raw_memory = redact_secrets(output.raw_memory);
-        output.rollout_summary = redact_secrets(output.rollout_summary);
-        output.rollout_slug = output.rollout_slug.map(redact_secrets);
-||||||| 413492cd6c
-        let mut output: StageOneOutput = serde_json::from_str(&result)?;
-        output.raw_memory = redact_secrets(output.raw_memory);
-        output.rollout_summary = redact_secrets(output.rollout_summary);
-        output.rollout_slug = output.rollout_slug.map(redact_secrets);
-=======
-        let output = StageOneOutput::parse(&result, config.memories.version)?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let output = StageOneOutput::parse(&result, version)?;
 
         Ok((output, token_usage, client))
+    }
+
+    /// The single user message that carries a v1 or labelled stage-one input.
+    fn stage_one_user_message(text: String) -> ResponseItem {
+        ResponseItem::Message {
+            status: None,
+            encrypted_content: None,
+            id: Some(ResponseItemId::new("msg")),
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText { text }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        }
     }
 
     mod result {
@@ -627,13 +519,9 @@ mod job {
                 | RolloutItem::TokenUsageRecord(_)
                 | RolloutItem::RealtimeItem(_)
                 | RolloutItem::WorldState(_)
-<<<<<<< HEAD
                 | RolloutItem::SourceOrigin(_)
-||||||| 413492cd6c
-=======
                 | RolloutItem::RetainedContext(_)
                 | RolloutItem::SecurityRiskScore(_)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 | RolloutItem::EventMsg(_) => None,
             })
             .map(|mut item| {
@@ -815,19 +703,23 @@ mod tests {
             format!("  \n```json\n{json}\n```\n"),
             format!("```json\r\n{json}\r\n```\r\n"),
         ] {
-            let output =
-                parse_stage_one_output(&text).unwrap_or_else(|err| panic!("{text}: {err}"));
+            let output = StageOneOutput::parse(&text, MemoryVersion::V1)
+                .unwrap_or_else(|err| panic!("{text}: {err}"));
             assert_eq!(
-                (output.raw_memory.as_str(), output.rollout_summary.as_str()),
-                ("m", "s")
+                (
+                    output.raw_memory.as_deref(),
+                    output.rollout_summary.as_str()
+                ),
+                (Some("m"), "s")
             );
             assert_eq!(output.rollout_slug.as_deref(), Some("x"));
         }
         // A Markdown code block inside a value is kept.
         let text =
             "```json\n{\"raw_memory\":\"a ```rust\\nx\\n``` b\",\"rollout_summary\":\"s\"}\n```";
-        let output = parse_stage_one_output(text).unwrap_or_else(|err| panic!("{text}: {err}"));
-        assert_eq!(output.raw_memory, "a ```rust\nx\n``` b");
+        let output = StageOneOutput::parse(text, MemoryVersion::V1)
+            .unwrap_or_else(|err| panic!("{text}: {err}"));
+        assert_eq!(output.raw_memory.as_deref(), Some("a ```rust\nx\n``` b"));
     }
 
     #[test]
@@ -845,7 +737,10 @@ mod tests {
 ```"#
                 .to_string(),
         ] {
-            assert!(parse_stage_one_output(&text).is_err(), "accepted: {text}");
+            assert!(
+                StageOneOutput::parse(&text, MemoryVersion::V1).is_err(),
+                "accepted: {text}"
+            );
         }
     }
 
@@ -994,6 +889,8 @@ mod tests {
     #[test]
     fn memory_text_leaves_out_local_provenance() {
         let mut call = ResponseItem::FunctionCall {
+            encrypted_content: None,
+            status: None,
             id: None,
             name: "shell".to_string(),
             namespace: None,
@@ -1004,10 +901,14 @@ mod tests {
         };
         call.set_producer("zai");
         let mut answer = ResponseItem::Message {
+            encrypted_content: None,
+            status: None,
             id: None,
             role: "assistant".to_string(),
             content: vec![ContentItem::OutputText {
                 text: "done".to_string(),
+                annotations: None,
+                logprobs: None,
             }],
             phase: None,
             internal_chat_message_metadata_passthrough: None,
@@ -1015,8 +916,8 @@ mod tests {
         answer.set_producer("openai:work");
 
         let serialized = job::serialize_filtered_rollout_response_items(&[
-            RolloutItem::ResponseItem(call),
-            RolloutItem::ResponseItem(answer),
+            RolloutItem::ResponseItem(call.into()),
+            RolloutItem::ResponseItem(answer.into()),
         ])
         .expect("serialize");
 
