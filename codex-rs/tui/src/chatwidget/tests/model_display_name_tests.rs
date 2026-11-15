@@ -43,7 +43,7 @@ async fn custom_model_display_name_in_pickers_preserves_selection_slug() {
     );
     chat.handle_key_event(KeyCode::Enter.into());
     let selected =
-        assert_matches!(events.try_recv(), Ok(AppEvent::OpenReasoningPopup { model }) => model);
+        assert_matches!(events.try_recv(), Ok(AppEvent::OpenReasoningPopup { model, .. }) => model);
     assert_eq!(selected, preset);
     chat.open_reasoning_popup(selected);
     assert_chatwidget_snapshot!(

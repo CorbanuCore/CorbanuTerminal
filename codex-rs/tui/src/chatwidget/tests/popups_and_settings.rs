@@ -4304,7 +4304,7 @@ async fn model_picker_refresh_preserves_highlight() {
         }
         while rx.try_recv().is_ok() {}
         chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
-        let selected = assert_matches!(rx.try_recv(), Ok(AppEvent::OpenReasoningPopup { model }) => model.model);
+        let selected = assert_matches!(rx.try_recv(), Ok(AppEvent::OpenReasoningPopup { model, .. }) => model.model);
         assert_eq!(selected, expected);
     }
 }
@@ -4358,8 +4358,7 @@ async fn model_picker_refresh_preserves_dismissal_and_reasoning_submenu() {
             chat.handle_key_event(KeyEvent::from(KeyCode::Esc));
         } else {
             chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
-            let model =
-                assert_matches!(rx.try_recv(), Ok(AppEvent::OpenReasoningPopup { model }) => model);
+            let model = assert_matches!(rx.try_recv(), Ok(AppEvent::OpenReasoningPopup { model, .. }) => model);
             chat.open_reasoning_popup(model);
         }
         let before = render_bottom_popup(&chat, /*width*/ 80);
