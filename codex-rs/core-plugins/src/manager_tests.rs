@@ -162,7 +162,6 @@ async fn plugins_manager_reads_auth_mode_from_auth_manager() {
 
 #[test]
 fn curated_repo_sync_stays_deferred_for_remote_chatgpt_catalog() {
-    CURATED_REPO_SYNC_STARTED.store(false, std::sync::atomic::Ordering::SeqCst);
     let tmp = TempDir::new().unwrap();
     let config = PluginsConfigInput::new(
         unrestricted_config_layer_stack(),
@@ -229,6 +228,14 @@ fn cancelling_the_curated_repo_sync_stops_its_git_and_helpers() {
         !CURATED_REPO_SYNC_STARTED.load(std::sync::atomic::Ordering::SeqCst)
     });
 
+    // A failed run must not leave the fake `git` writing into the home.
+    struct CancelOnDrop(Arc<PluginsManager>);
+    impl Drop for CancelOnDrop {
+        fn drop(&mut self) {
+            self.0.cancel_curated_repo_sync();
+        }
+    }
+    let _cancel_on_drop = CancelOnDrop(Arc::clone(&manager));
     manager.maybe_start_curated_repo_sync_for_config(
         &config, /*on_effective_plugins_changed*/ None,
     );
