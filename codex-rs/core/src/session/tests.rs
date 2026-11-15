@@ -10058,6 +10058,35 @@ pub(crate) async fn make_session_and_context_with_auth_config_home_and_rx<F>(
 where
     F: FnOnce(&mut Config),
 {
+    make_session_and_context_with_extensions_and_rx(
+        auth,
+        dynamic_tools,
+        codex_home,
+        cwd,
+        configure_config,
+        start_submission_loop,
+        Arc::new(codex_extension_api::ExtensionRegistryBuilder::new().build()),
+    )
+    .await
+}
+
+/// As [`make_session_and_context_with_auth_config_home_and_rx`], with these extensions.
+pub(crate) async fn make_session_and_context_with_extensions_and_rx<F>(
+    auth: CodexAuth,
+    dynamic_tools: Vec<DynamicToolSpec>,
+    codex_home: &Path,
+    cwd: &Path,
+    configure_config: F,
+    start_submission_loop: bool,
+    extensions: Arc<codex_extension_api::ExtensionRegistry<Config>>,
+) -> (
+    Arc<Session>,
+    Arc<TurnContext>,
+    async_channel::Receiver<Event>,
+)
+where
+    F: FnOnce(&mut Config),
+{
     let (tx_sub, rx_sub) = async_channel::bounded(16);
     let (tx_event, rx_event) = async_channel::unbounded();
     let mut config = build_test_config(codex_home, cwd).await;
@@ -10229,7 +10258,7 @@ where
         agents_md_manager: Arc::new(AgentsMdManager::new(SessionInstructions::default())),
         plugins_manager,
         mcp_manager,
-        extensions: Arc::new(codex_extension_api::ExtensionRegistryBuilder::new().build()),
+        extensions,
         session_extension_data: codex_extension_api::ExtensionData::new(
             agent_control.session_id().to_string(),
         ),
