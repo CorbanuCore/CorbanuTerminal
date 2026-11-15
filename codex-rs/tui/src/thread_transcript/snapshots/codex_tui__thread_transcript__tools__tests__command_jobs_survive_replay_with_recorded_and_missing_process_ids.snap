@@ -1,0 +1,68 @@
+---
+source: tui/src/thread_transcript/tools_tests.rs
+assertion_line: 313
+expression: "snapshots.join(\"\\n\\n\")"
+---
+Completed, pid=42
+$ cargo check
+saved output
+✓ • 1.25s
+
+job: pid=42 · call=command · cwd=/tmp/project · output=thread transcript
+
+Completed, pid=not reported
+$ cargo check
+saved output
+✓ • 1.25s
+
+job: pid=not reported · call=command · cwd=/tmp/project · output=thread transcript
+
+Failed, pid=42
+$ cargo check
+saved output
+✗ (1) • 1.25s
+
+job: pid=42 · call=command · cwd=/tmp/project · output=thread transcript
+
+Failed, pid=not reported
+$ cargo check
+saved output
+✗ (1) • 1.25s
+
+job: pid=not reported · call=command · cwd=/tmp/project · output=thread transcript
+
+InProgress, pid=42
+$ cargo check
+job: pid=42 · call=command · cwd=/tmp/project · output=thread transcript
+In progress at last update · 1250ms
+  saved output
+
+InProgress, pid=not reported
+$ cargo check
+job: pid=not reported · call=command · cwd=/tmp/project · output=thread transcript
+In progress at last update · 1250ms
+  saved output
+
+Declined, pid=42
+$ cargo check
+job: pid=42 · call=command · cwd=/tmp/project · output=thread transcript
+Declined · 1250ms
+  saved output
+
+Declined, pid=not reported
+$ cargo check
+job: pid=not reported · call=command · cwd=/tmp/project · output=thread transcript
+Declined · 1250ms
+  saved output
+
+Refused, pid=42
+$ cargo check
+job: pid=42 · call=command · cwd=/tmp/project · output=thread transcript
+Refused · 1250ms
+  saved output
+
+Refused, pid=not reported
+$ cargo check
+job: pid=not reported · call=command · cwd=/tmp/project · output=thread transcript
+Refused · 1250ms
+  saved output

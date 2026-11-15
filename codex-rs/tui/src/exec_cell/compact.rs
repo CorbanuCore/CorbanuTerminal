@@ -4,7 +4,6 @@ use super::model::CommandOutput;
 use super::model::ExecCell;
 use crate::exec_command::strip_bash_lc_and_escape;
 use crate::history_cell::ActivityDisclosure;
-use crate::history_cell::HistoryRenderMode;
 use crate::history_cell::activity_preview::DETAIL_PREVIEW_LINES;
 use crate::history_cell::activity_preview::clipped_line;
 use crate::motion::MotionMode;
@@ -38,11 +37,10 @@ impl ExecCell {
                 return Some(ActivityDisclosure::OutputLines(hidden));
             }
         }
-        if !self
+        if self
             .group
             .details
-            .lines_after(/*after_calls*/ 1, width, HistoryRenderMode::Rich)
-            .is_empty()
+            .has_disclosure_after(/*after_calls*/ 1, width)
         {
             return Some(ActivityDisclosure::Generic);
         }

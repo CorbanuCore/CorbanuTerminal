@@ -1,10 +1,11 @@
 ---
 source: tui/src/status/tests.rs
+assertion_line: 2024
 expression: sanitized
 ---
 /status
 
-  >_ OpenAI Codex (v0.0.0)
+  >_ Corbanu Terminal (v<V>)  
 
   Visit https://chatgpt.com/settings/usage for up-to-date
   information on rate limits and credits
@@ -14,7 +15,10 @@ expression: sanitized
 
   Model:           gpt-5.1-codex-max (reasoning medium)
   Directory:       [[workspace]]
-  Permissions:     Custom (workspace with network access, Ask for approval)
+  Permissions:     Next turn: Custom (workspace with network access, Ask for
+                   approval)
+  Security:        Requested Permissive; effective protection unverified (/
+                   security)
   Agents.md:       <none>
 
   Token usage:     750 total  (500 input + 250 output)

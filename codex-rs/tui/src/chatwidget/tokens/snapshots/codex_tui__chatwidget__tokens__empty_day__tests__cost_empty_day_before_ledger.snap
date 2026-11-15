@@ -1,9 +1,11 @@
 ---
 source: tui/src/chatwidget/tokens/empty_day_tests.rs
+assertion_line: 220
 expression: "render_bottom_popup_with_height(&chat, 100, 24)"
 ---
   Cost — this conversation
   Requested UTC day: 2026-01-01
+
 
 › This conversation on 2026-01-01 (UTC): not recorded — this home's accounting ledger was
   created on 2026-09-01 (UTC), after this day.
@@ -13,6 +15,6 @@ expression: "render_bottom_popup_with_height(&chat, 100, 24)"
   Not recorded: this home's accounting ledger was created on 2026-09-01 (UTC), after this day;
   collection coverage unknown.
   Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent
-                                                                                            1 / 25
+↓
   Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
   ↑↓ scroll · Enter open · Esc back/close

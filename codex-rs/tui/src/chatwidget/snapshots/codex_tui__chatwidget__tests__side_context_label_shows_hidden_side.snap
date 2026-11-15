@@ -1,9 +1,10 @@
 ---
 source: tui/src/chatwidget/tests/side.rs
+assertion_line: 352
 expression: terminal.backend()
 ---
 "                                                                                "
 "                                                                                "
 "› Ask Corbanu Terminal to do anything                                           "
 "                                                                                "
-"  Z.AI GLM 5.3 Flash via zai                                 ctrl + / for side  "
+"  Z.AI GLM 5.3 Flash via zai                                   ctrl+/ for side  "

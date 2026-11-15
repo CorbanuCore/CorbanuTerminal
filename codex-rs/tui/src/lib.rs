@@ -769,6 +769,37 @@ pub(crate) async fn start_app_server_for_picker(
 pub(crate) async fn start_embedded_app_server_for_picker(
     config: &Config,
 ) -> color_eyre::Result<AppServerSession> {
+    start_embedded_app_server_for_picker_with_cli(config, test_provider_session_flags(config)).await
+}
+
+/// Test configs may pick their provider in memory (chat widget fixtures choose it from the
+/// test model); an embedded server reloads config from disk for resume and input checks, so it
+/// must see the same provider or each resume is refused as a provider mismatch. Only other
+/// built-in providers: the server already defaults to OpenAI, and a custom in-memory provider
+/// is not in the server's config. A test that chose the server's model or provider in its
+/// own `config.toml` keeps that choice.
+#[cfg(test)]
+pub(crate) fn test_provider_session_flags(config: &Config) -> Vec<(String, toml::Value)> {
+    let provider = config.model_provider_id.clone();
+    let server_chooses_model = std::fs::read_to_string(config.codex_home.join("config.toml"))
+        .ok()
+        .and_then(|text| text.parse::<toml::Table>().ok())
+        .is_some_and(|table| table.contains_key("model") || table.contains_key("model_provider"));
+    (!server_chooses_model
+        && provider != codex_model_provider_info::OPENAI_PROVIDER_ID
+        && codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
+            .contains_key(&provider))
+    .then(|| ("model_provider".to_string(), toml::Value::String(provider)))
+    .into_iter()
+    .collect()
+}
+
+/// [`start_embedded_app_server_for_picker`] with session-flag overrides for the server's own loads.
+#[cfg(test)]
+pub(crate) async fn start_embedded_app_server_for_picker_with_cli(
+    config: &Config,
+    cli_kv_overrides: Vec<(String, toml::Value)>,
+) -> color_eyre::Result<AppServerSession> {
     let mut target = AppServerTarget::Embedded;
     let mut state_db = init_state_db_for_app_server_target(config, &target).await?;
     // Keep the shared test fixture's frame independent of embedded startup size.
@@ -776,7 +807,7 @@ pub(crate) async fn start_embedded_app_server_for_picker(
         &mut target,
         Arg0DispatchPaths::default(),
         config.clone(),
-        Vec::new(),
+        cli_kv_overrides,
         LoaderOverrides::without_managed_config_for_tests(),
         /*strict_config*/ false,
         CloudConfigBundleLoader::default(),

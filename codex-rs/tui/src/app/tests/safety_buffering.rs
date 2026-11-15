@@ -1401,6 +1401,9 @@ goals = true
         let rendered_retry = forked_history
             .lines()
             .skip_while(|line| !line.contains(RETRY_PROMPT))
+            // This test's own `thread/read(includeTurns)` checks draw the app server's
+            // paginated-history deprecation notice; it is not part of the retry.
+            .filter(|line| !line.contains("Full-history hydration is deprecated"))
             .collect::<Vec<_>>()
             .join("\n");
         insta::assert_snapshot!("safety_retry_committed_steer_history", rendered_retry);

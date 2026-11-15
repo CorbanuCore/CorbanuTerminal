@@ -1,16 +1,19 @@
 ---
 source: tui/src/status/tests.rs
+assertion_line: 902
 expression: rendered
 ---
 /status
 
-  >_ OpenAI Codex (v0.0.0)
+  >_ Corbanu Terminal (v<V>)  
 
   Model:           gpt-5.6-sol (reasoning none, summaries auto)
   Model provider:  server-ollama
   Directory:       [[workspace]]
-  Permissions:     Custom (workspace with network access, Ask for approval)
+  Permissions:     Next turn: Custom (workspace with network access, Ask for approval)
+  Security:        Requested Permissive; effective protection unverified (/security)
   Agents.md:       <none>
+  Account:         Amazon Bedrock AWS credentials
 
   Token usage:     0 total  (0 input + 0 output)
   Limits:          data not available yet

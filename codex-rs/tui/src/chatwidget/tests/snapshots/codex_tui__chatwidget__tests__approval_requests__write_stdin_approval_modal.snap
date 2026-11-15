@@ -1,9 +1,10 @@
 ---
 source: tui/src/chatwidget/tests/approval_requests.rs
+assertion_line: 256
 expression: "format!(\"{buf:?}\")"
 ---
 Buffer {
-    area: Rect { x: 0, y: 0, width: 80, height: 11 },
+    area: Rect { x: 0, y: 0, width: 80, height: 12 },
     content: [
         "                                                                                ",
         "                                                                                ",
@@ -13,8 +14,9 @@ Buffer {
         "                                                                                ",
         "                                                                                ",
         "› 1. Yes, proceed (y)                                                           ",
-        "  2. No, and tell Codex what to do differently (esc)                            ",
+        "  2. No, and tell Corbanu Terminal what to do differently (esc)                 ",
         "                                                                                ",
+        "  A letter in brackets only highlights its option; enter confirms it.           ",
         "  Press enter to confirm or esc to cancel                                       ",
     ],
     styles: [
@@ -23,12 +25,14 @@ Buffer {
         x: 46, y: 2, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 0, y: 7, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD | REVERSED,
         x: 0, y: 8, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
-        x: 48, y: 8, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
-        x: 51, y: 8, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        x: 59, y: 8, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
+        x: 62, y: 8, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 2, y: 10, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
-        x: 8, y: 10, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
-        x: 13, y: 10, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
-        x: 28, y: 10, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
-        x: 31, y: 10, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+        x: 0, y: 11, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        x: 2, y: 11, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+        x: 8, y: 11, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
+        x: 13, y: 11, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+        x: 28, y: 11, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
+        x: 31, y: 11, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
     ]
 }

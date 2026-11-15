@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/status_surface_previews.rs
+assertion_line: 244
 expression: status_line_popup_snapshot(&mut chat)
 ---
   Configure Status Line
@@ -16,5 +17,5 @@ expression: status_line_popup_snapshot(&mut chat)
   [x] provider             Model provider for the active thread
   [ ] model                Current model name
 ↓
-  my-project · feat/awesome-feature · thread title · profile: <name> · provider: <id>
+  tmp · feat/awesome-feature · thread title · profile: <name> · provider: <id>
   space toggle · ←/→ reorder · enter save · esc cancel
