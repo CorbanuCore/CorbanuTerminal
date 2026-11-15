@@ -114,7 +114,95 @@ fn issue_2315_service_marker_commits_through_retained_handle() {
     assert_eq!(content["offline_username"], "offline");
 }
 
+#[test]
+fn issue_2315_service_acl_refuses_cwd_junction_without_touching_target() {
+    let temp = tempfile::tempdir().unwrap();
+    let sandbox = temp.path().join(".sandbox");
+    let outside = temp.path().join("outside");
+    fs::create_dir_all(sandbox.join("cwd")).unwrap();
+    fs::create_dir(&outside).unwrap();
+    let victim = outside.join("file");
+    fs::write(&victim, b"unchanged").unwrap();
+    let before = dacl(&victim);
+    let junction = sandbox.join("cwd").join("hash");
+    let output = std::process::Command::new("cmd.exe")
+        .args(["/d", "/c", "mklink", "/J"])
+        .arg(&junction)
+        .arg(&outside)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let user = owner();
+    let sid = crate::resolve_sid(&user).unwrap();
+    let error = lock_sandbox_dir(
+        &sandbox,
+        &user,
+        &sid,
+        GRANT_ACCESS,
+        FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
+        FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE | DELETE,
+        DaclInheritance::Protected,
+        SetupMode::ProvisionOnly,
+    )
+    .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("refusing unsafe"),
+        "{error:#}"
+    );
+    assert_eq!(dacl(&victim), before);
+    assert_eq!(fs::read(victim).unwrap(), b"unchanged");
+    fs::remove_dir(junction).unwrap();
+}
+
+#[test]
+fn issue_2315_service_acl_matches_interactive_inheritance() {
+    for initially_protected in [false, true] {
+        for inheritance in [DaclInheritance::Inherited, DaclInheritance::Protected] {
+            let temp = tempfile::tempdir().unwrap();
+            let user = owner();
+            let sid = crate::resolve_sid("Users").unwrap();
+            let apply = |path: &std::path::Path, mode, inheritance| {
+                lock_sandbox_dir(
+                    path,
+                    &user,
+                    &sid,
+                    GRANT_ACCESS,
+                    FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
+                    FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE | DELETE,
+                    inheritance,
+                    mode,
+                )
+                .unwrap();
+            };
+            for (folder, mode) in [
+                ("full", SetupMode::Full),
+                ("service", SetupMode::ProvisionOnly),
+            ] {
+                let root = temp.path().join(folder);
+                fs::create_dir(&root).unwrap();
+                if initially_protected {
+                    apply(&root, SetupMode::Full, DaclInheritance::Protected);
+                }
+                fs::create_dir(root.join("nested")).unwrap();
+                fs::write(root.join("nested/file"), b"ordinary").unwrap();
+                apply(&root, mode, inheritance);
+            }
+            for relative in ["", "nested", "nested/file"] {
+                assert_eq!(
+                    acl_and_control(&temp.path().join("service").join(relative)),
+                    acl_and_control(&temp.path().join("full").join(relative)),
+                    "protection={initially_protected}, path={relative}"
+                );
+            }
+        }
+    }
+}
+
 fn dacl(path: &std::path::Path) -> Vec<u8> {
+    acl_and_control(path).0
+}
+
+fn acl_and_control(path: &std::path::Path) -> (Vec<u8>, u16) {
     use windows_sys::Win32::Security::Authorization::GetNamedSecurityInfoW;
     use windows_sys::Win32::Security::Authorization::SE_FILE_OBJECT;
     use windows_sys::Win32::Security::DACL_SECURITY_INFORMATION;
@@ -137,8 +225,23 @@ fn dacl(path: &std::path::Path) -> Vec<u8> {
     assert!(!acl.is_null());
     let bytes =
         unsafe { std::slice::from_raw_parts(acl.cast::<u8>(), (*acl).AclSize as usize) }.to_vec();
+    let mut control = 0;
+    let mut revision = 0;
     unsafe {
+        assert_ne!(
+            windows_sys::Win32::Security::GetSecurityDescriptorControl(
+                sd,
+                &mut control,
+                &mut revision
+            ),
+            0
+        );
         windows_sys::Win32::Foundation::LocalFree(sd);
     }
-    bytes
+    (
+        bytes,
+        control
+            & (windows_sys::Win32::Security::SE_DACL_PROTECTED
+                | windows_sys::Win32::Security::SE_DACL_AUTO_INHERITED),
+    )
 }

@@ -56,10 +56,20 @@ fn checked_entry(parent: HANDLE, name: &OsStr, access: u32) -> Result<OwnedHandl
     );
     wide.push(0);
     let handle = open_no_reparse(
-        parent, &mut wide, access | fs::FILE_READ_ATTRIBUTES,
+        parent,
+        &mut wide,
+        access | fs::FILE_READ_ATTRIBUTES,
         fs::FILE_SHARE_READ | fs::FILE_SHARE_WRITE | fs::FILE_SHARE_DELETE,
-        FILE_OPEN, /*create_options*/ 0,
-    ).with_context(|| format!("refusing unsafe sandbox entry {}; remove the link or restore a regular file before retrying setup", name.to_string_lossy()))?;
+        FILE_OPEN,
+        /*create_options*/ 0,
+    )
+    .with_context(|| {
+        format!(
+            "refusing unsafe sandbox entry {}; \
+             remove the link or restore a regular file before retrying setup",
+            name.to_string_lossy(),
+        )
+    })?;
     check_handle(handle.as_raw_handle())
         .with_context(|| format!("sandbox entry {}", name.to_string_lossy()))?;
     Ok(handle)
@@ -158,8 +168,8 @@ fn inherit(parent: *const c_void, current: *const c_void, directory: bool) -> Re
     ensure!(
         unsafe {
             security::CreatePrivateObjectSecurityEx(
-                parent,
-                current,
+                parent.cast_mut(),
+                current.cast_mut(),
                 &mut sd,
                 std::ptr::null(),
                 i32::from(directory),
@@ -175,7 +185,28 @@ fn inherit(parent: *const c_void, current: *const c_void, directory: bool) -> Re
     );
     Ok(Inherited(sd))
 }
-fn set(handle: HANDLE, descriptor: *const c_void) -> Result<()> {
+fn set(handle: HANDLE, descriptor: *mut c_void) -> Result<()> {
+    let mut control = 0;
+    let mut revision = 0;
+    ensure!(
+        unsafe { security::GetSecurityDescriptorControl(descriptor, &mut control, &mut revision) }
+            != 0,
+        "read computed ACL control"
+    );
+    // The file system requires AUTO_INHERIT_REQ to retain AUTO_INHERITED on a
+    // direct write, as in acl::delete_child's checked, non-recursive setter.
+    if control & security::SE_DACL_AUTO_INHERITED != 0 {
+        ensure!(
+            unsafe {
+                security::SetSecurityDescriptorControl(
+                    descriptor,
+                    security::SE_DACL_AUTO_INHERIT_REQ,
+                    security::SE_DACL_AUTO_INHERIT_REQ,
+                )
+            } != 0,
+            "retain auto-inherited ACL control"
+        );
+    }
     // Unlike SetSecurityInfo, this touches only the checked object, never children.
     let status =
         unsafe { NtSetSecurityObject(handle, security::DACL_SECURITY_INFORMATION, descriptor) };
@@ -197,6 +228,16 @@ pub(crate) fn set_directory_acl(
     protected: bool,
 ) -> Result<()> {
     let original = Descriptor::read(directory.as_raw_handle())?;
+    let mut control = 0;
+    let mut revision = 0;
+    ensure!(
+        unsafe { security::GetSecurityDescriptorControl(original.0, &mut control, &mut revision) }
+            != 0,
+        "read provisioning ACL control"
+    );
+    // DACL_SECURITY_INFORMATION preserves existing protection unless the caller
+    // explicitly requests unprotection; setup never requests that.
+    let protected = protected || control & security::SE_DACL_PROTECTED != 0;
     let mut owner = std::ptr::null_mut();
     let mut group = std::ptr::null_mut();
     let mut defaulted = 0;
@@ -249,10 +290,12 @@ pub(crate) fn set_directory_acl(
     let parent_sd = Descriptor::read(parent.as_raw_handle())?;
     let root = inherit(parent_sd.0, raw, /*directory*/ true)?;
     set(directory.as_raw_handle(), root.0)?;
-    let mut dot = [u16::from(b'.'), 0];
+    // An empty NT relative name reopens the same directory, without resolving
+    // its former pathname (a literal dot is not a valid NT relative name).
+    let mut same_directory = [0_u16];
     let listed = open_no_reparse(
         directory.as_raw_handle(),
-        &mut dot,
+        &mut same_directory,
         fs::FILE_LIST_DIRECTORY | fs::SYNCHRONIZE,
         fs::FILE_SHARE_READ | fs::FILE_SHARE_WRITE,
         FILE_OPEN,
@@ -331,4 +374,5 @@ fn propagate(
             propagate(listed.as_raw_handle(), inherited.0, budget, depth + 1)?;
         }
     }
+    Ok(())
 }
