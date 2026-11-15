@@ -17,13 +17,14 @@ impl AgentControl {
                     .await
             };
             thread.wait_until_terminated().await;
+            // Only remove a thread that the public agent lookup admitted.
+            // Internal threads are hidden by get_thread and belong to their
+            // internal lifecycle owner, even when their id is supplied here.
+            let _ = state.remove_thread(&agent_id).await;
             result
         } else {
-            state
-                .send_op(agent_id, Op::Shutdown {}, /*parent_turn_id*/ None)
-                .await
+            Err(CodexErr::ThreadNotFound(agent_id))
         };
-        let _ = state.remove_thread(&agent_id).await;
         self.forget_v2_residency(agent_id);
         self.state.release_spawned_thread(agent_id);
         result

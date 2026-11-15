@@ -52,12 +52,18 @@ impl Handler {
             .own_agent_names(session.thread_id)
             .await
             .unwrap_or_default();
-        own_agents.push(
-            turn.session_source
-                .get_agent_path()
-                .unwrap_or_else(AgentPath::root)
-                .to_string(),
-        );
+        let caller_path = turn
+            .session_source
+            .get_agent_path()
+            .unwrap_or_else(AgentPath::root);
+        if session
+            .services
+            .agent_control
+            .get_agent_metadata_for_path(&caller_path)
+            .is_some_and(|metadata| metadata.agent_id == Some(session.thread_id))
+        {
+            own_agents.push(caller_path.to_string());
+        }
         agents.retain(|agent| own_agents.contains(&agent.agent_name));
 
         Ok(boxed_tool_output(ListAgentsResult { agents }))

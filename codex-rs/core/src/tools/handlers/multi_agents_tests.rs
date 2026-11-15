@@ -95,6 +95,9 @@ use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
+#[path = "multi_agents_ownership_tests.rs"]
+mod ownership;
+
 fn model_facing_error_message(error: &FunctionCallError) -> Option<&str> {
     match error {
         FunctionCallError::RespondToModel(message)
@@ -2600,6 +2603,12 @@ async fn multi_agent_v2_list_agents_lists_only_the_callers_agents() {
         .expect("other root should start");
     session.services.agent_control = manager.agent_control();
     session.thread_id = root.thread_id;
+    // Register on the handler's control before the foreign spawn. Each call to
+    // manager.agent_control() creates a separate registry.
+    session
+        .services
+        .agent_control
+        .register_session_root(root.thread_id, /*current_parent_thread_id*/ None);
     let mut config = (*turn.config).clone();
     config
         .features

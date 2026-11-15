@@ -169,7 +169,7 @@ impl Handler {
         let own_agents = session
             .services
             .agent_control
-            .spawn_descendant_agent_names(session.thread_id)
+            .own_agent_names(session.thread_id)
             .await
             .unwrap_or_default();
         agents.retain(|agent| own_agents.contains(&agent.agent_name));

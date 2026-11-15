@@ -749,23 +749,37 @@ impl AgentControl {
             .contains(&agent_id))
     }
 
-    /// #1701: the names `list_agents` gives the loaded agents `caller`
-    /// spawned, directly or through its own agents.
-    pub(crate) async fn spawn_descendant_agent_names(
+    /// Apply the V1 ownership check before a registered agent can be cold-loaded
+    /// or closed. Unknown ids retain the handlers' not-found behavior.
+    pub(crate) async fn is_foreign_agent(
         &self,
         caller: ThreadId,
-    ) -> CodexResult<Vec<String>> {
-        Ok(self
-            .live_thread_spawn_descendants(caller)
-            .await?
-            .into_iter()
-            .map(|thread_id| {
-                self.get_agent_metadata(thread_id)
-                    .and_then(|metadata| metadata.agent_path)
-                    .map(|path| path.to_string())
-                    .unwrap_or_else(|| thread_id.to_string())
-            })
-            .collect())
+        agent_id: ThreadId,
+    ) -> CodexResult<bool> {
+        let state = self.upgrade()?;
+        if state.get_thread(agent_id).await.is_ok() {
+            // Re-check the live ancestry after loading; persisted metadata must
+            // not override a loaded thread's actual parent.
+            return Ok(!self
+                .live_thread_spawn_descendants(caller)
+                .await?
+                .contains(&agent_id));
+        }
+        if self.get_agent_metadata(agent_id).is_none() {
+            // Do not let a target that appears after this check bypass ownership.
+            return Err(CodexErr::ThreadNotFound(agent_id));
+        }
+        let Some(store) = state.agent_graph_store() else {
+            return Ok(true);
+        };
+        let descendants = store
+            .list_thread_spawn_descendants(
+                caller,
+                Some(codex_agent_graph_store::ThreadSpawnEdgeStatus::Open),
+            )
+            .await
+            .map_err(|err| CodexErr::Fatal(format!("failed to check agent ownership: {err}")))?;
+        Ok(!descendants.contains(&agent_id))
     }
 
     /// #1756: the names `list_agents` gives the agents `caller` spawned,
