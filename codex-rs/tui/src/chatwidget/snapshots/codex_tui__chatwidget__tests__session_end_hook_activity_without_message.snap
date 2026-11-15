@@ -1,24 +1,25 @@
 ---
 source: tui/src/chatwidget/tests/status_and_layout.rs
+assertion_line: 5826
 expression: "format!(\"before reveal:\\n{hidden}\\nrunning:\\n{running}\\ncompleted:\\n{}\",\nhook_status_frame(&chat, 80),)"
 ---
 before reveal:
 "                                                                                "
 "                                                                                "
-"› Ask Codex to do anything                                                      "
+"› Ask Corbanu Terminal to do anything                                           "
 "                                                                                "
-"  GPT-5.6-Sol default · /tmp/project                                            "
+"  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…"
 running:
 "                                                                                "
 "• Running hook                                                                  "
 "                                                                                "
 "                                                                                "
-"› Ask Codex to do anything                                                      "
+"› Ask Corbanu Terminal to do anything                                           "
 "                                                                                "
-"  GPT-5.6-Sol default · /tmp/project                                            "
+"  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…"
 completed:
 "                                                                                "
 "                                                                                "
-"› Ask Codex to do anything                                                      "
+"› Ask Corbanu Terminal to do anything                                           "
 "                                                                                "
-"  GPT-5.6-Sol default · /tmp/project                                            "
+"  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…"

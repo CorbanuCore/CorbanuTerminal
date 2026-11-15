@@ -1,5 +1,6 @@
 ---
 source: tui/src/app/owned_transcript_tests.rs
+assertion_line: 687
 expression: normalize_snapshot_paths(screen)
 ---
 ····································
@@ -16,7 +17,7 @@ expression: normalize_snapshot_paths(screen)
 ·····                          ·····
 ·····› preserved draft         ·····
 ·····                          ·····
-·····  gpt-test default · /tmp…·····
+·····  gpt-test via test-provi…·····
 ·····                          ·····
 ····································
 ····································
