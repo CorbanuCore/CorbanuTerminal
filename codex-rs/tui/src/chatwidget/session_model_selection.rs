@@ -24,6 +24,12 @@ pub(crate) enum AstraModelPickerAction {
     ApplyAdvancedReasoning {
         effort: ReasoningEffortConfig,
     },
+    /// Main's provider-aware pick in its provider-tabbed picker (S4b): the
+    /// model on its route's provider. The effort and the saved default follow
+    /// as separate events, as on main.
+    UpdateModelSelection {
+        provider: Option<String>,
+    },
     SelectSessionModel {
         effort: Option<ReasoningEffortConfig>,
         service_tier: Option<String>,
@@ -48,6 +54,9 @@ impl AstraModelPickerAction {
             Self::ApplyModelSelection { effort } => AppEvent::ApplyModelSelection { model, effort },
             Self::ApplyAdvancedReasoning { effort } => {
                 AppEvent::ApplyAdvancedReasoning { model, effort }
+            }
+            Self::UpdateModelSelection { provider } => {
+                AppEvent::UpdateModelSelection { model, provider }
             }
             Self::SelectSessionModel {
                 effort,

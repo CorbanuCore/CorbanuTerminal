@@ -10,6 +10,9 @@ transcript:
 $ cat refused.txt
 ✗ Refused
 Synthetic policy refused escalation before approval
+
+job: pid=not reported · call=refused · cwd=/tmp/project · output=thread
+transcript
 narrow:
 ✗ cat refused.txt
   └ Refused: Synthetic policy
