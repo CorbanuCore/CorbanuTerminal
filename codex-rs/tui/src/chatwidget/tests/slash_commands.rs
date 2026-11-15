@@ -2635,7 +2635,7 @@ async fn assert_daybreak_catalog_and_account_gates(provider_id: &str) {
         .push(codex_protocol::turn_input::CyberAccessProgram::DaybreakBlue);
     chat.model_catalog = std::sync::Arc::new(ModelCatalog::new(vec![model]));
     chat.has_chatgpt_account = false;
-    chat.status_account_display = Some(StatusAccountDisplay::ApiKey);
+    chat.status_account_display = Some(StatusAccountDisplay::ApiKey { env_var: None });
     chat.set_feature_enabled(Feature::ApiKeyCyberAccessPrograms, /*enabled*/ true);
     chat.set_daybreak_enabled(/*enabled*/ false);
     chat.bottom_pane
