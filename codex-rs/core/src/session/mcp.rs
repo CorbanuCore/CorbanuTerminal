@@ -248,7 +248,7 @@ impl Session {
             if self
                 .services
                 .plugins_manager
-                .follow_session_auth(self.services.auth_manager())
+                .follow_session_auth(&self.services.auth_manager())
                 || !self
                     .services
                     .mcp_runtime
@@ -345,6 +345,10 @@ impl Session {
             refresh: &self.mcp_refresh,
             published: false,
         };
+        // #2337: as main's `set_auth_mode` here.
+        self.services
+            .plugins_manager
+            .follow_session_auth(&self.services.auth_manager());
         let auth = self.services.auth_manager().auth().await;
         let environments = self.services.turn_environments.snapshot().await;
         let environment_selections = environments.all_selections();
@@ -939,6 +943,10 @@ impl Session {
             refresh: &self.mcp_refresh,
             published: false,
         };
+        // #2337: as main's `set_auth_mode` here.
+        self.services
+            .plugins_manager
+            .follow_session_auth(&self.services.auth_manager());
         let auth = self.services.auth_manager().auth().await;
         let ready_selected_capability_roots = self
             .services

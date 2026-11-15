@@ -357,6 +357,8 @@ fn build(
             None => provider.models_manager_without_cache(model_catalog.clone()),
         },
     };
+    // A list that cannot be partitioned by originator keeps its default
+    // catalog, as upstream's `for_originator` returning `None` does.
     let manager = match originator {
         Some(originator) => manager
             .for_originator(originator.as_str())

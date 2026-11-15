@@ -587,8 +587,10 @@ pub struct PluginsManager {
     restriction_product: Option<Product>,
     auth_manager: Arc<AuthManager>,
     /// The sign-in a session uses now, pushed by the session (PF-84, #2337);
-    /// once set, the auth mode follows it instead of `auth_manager`.
-    session_auth_manager: RwLock<Option<Arc<AuthManager>>>,
+    /// while that session's auth manager lives, the auth mode follows it
+    /// instead of `auth_manager`. Weak, so an ended session's sign-in is not
+    /// kept.
+    session_auth_manager: RwLock<Option<std::sync::Weak<AuthManager>>>,
     analytics_events_client: RwLock<Option<AnalyticsEventsClient>>,
     plugin_install_source: PluginInstallSource,
     curated_repo_sync: Mutex<Option<CuratedRepoSync>>,
@@ -789,26 +791,30 @@ impl PluginsManager {
     /// Follows the auth mode of the sign-in a session uses now (PF-84): a
     /// session that switched accounts hands its auth manager here before it
     /// refreshes its MCP state, as main's `set_auth_mode` does (#2337). The
-    /// mode then tracks that sign-in, logouts included. Returns whether the
-    /// mode changed.
-    pub fn follow_session_auth(&self, session_auth: Arc<AuthManager>) -> bool {
+    /// mode then tracks that sign-in, logouts included, until another session
+    /// hands over its own or the session's sign-in is dropped (then
+    /// `auth_manager` applies again). Only the mode follows: plugin requests
+    /// keep their credentials, as on main. Returns whether handing over this
+    /// sign-in changed the mode; a change within the sign-in already followed
+    /// is not reported here (the session's MCP auth check catches it).
+    pub fn follow_session_auth(&self, session_auth: &Arc<AuthManager>) -> bool {
         let mut stored = match self.session_auth_manager.write() {
             Ok(guard) => guard,
             Err(err) => err.into_inner(),
         };
-        let previous = stored
-            .as_deref()
-            .unwrap_or(&self.auth_manager)
-            .get_api_auth_mode();
+        let previous = match stored.as_ref().and_then(std::sync::Weak::upgrade) {
+            Some(previous) => previous.get_api_auth_mode(),
+            None => self.auth_manager.get_api_auth_mode(),
+        };
         let changed = previous != session_auth.get_api_auth_mode();
-        *stored = Some(session_auth);
+        *stored = Some(Arc::downgrade(session_auth));
         changed
     }
 
     pub fn auth_mode(&self) -> Option<AuthMode> {
         let session_auth = match self.session_auth_manager.read() {
-            Ok(guard) => guard.clone(),
-            Err(err) => err.into_inner().clone(),
+            Ok(guard) => guard.as_ref().and_then(std::sync::Weak::upgrade),
+            Err(err) => err.into_inner().as_ref().and_then(std::sync::Weak::upgrade),
         };
         session_auth
             .as_deref()

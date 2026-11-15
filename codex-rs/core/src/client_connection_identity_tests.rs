@@ -464,7 +464,6 @@ fn issue_1343_brokered_identities_never_match() {
     );
 }
 
-/// #1504: the other half of the broker check. In a brokered process
 /// #2259: when the resolved auth headers are the sign-in but cannot be
 /// computed, the identity fails closed: it never matches another failed
 /// sign-in, the unauthenticated identity, or the headers written before the
