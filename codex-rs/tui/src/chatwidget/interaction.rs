@@ -123,8 +123,14 @@ impl ChatWidget {
             let should_pause_active_goal = self
                 .bottom_pane
                 .active_view_will_interrupt_turn_on_key_event(key_event);
+            let previous_view = self.bottom_pane.active_view_id();
             self.bottom_pane
                 .handle_key_event_with_activation_key(key_event, activation_key);
+            if self.bottom_pane.active_view_id() != previous_view {
+                // A provider refresh may have arrived while a reasoning dialog
+                // covered the model picker. Reconcile it when the child closes.
+                self.refresh_open_model_picker();
+            }
             if should_pause_active_goal {
                 self.pause_active_goal_for_interrupt();
             }
@@ -190,6 +196,7 @@ impl ChatWidget {
                 ..
             } if modifiers.contains(KeyModifiers::CONTROL) && c.eq_ignore_ascii_case(&'c') => {
                 self.on_ctrl_c();
+                self.refresh_open_model_picker();
                 return KeyEventAction::None;
             }
             KeyEvent {
@@ -379,7 +386,6 @@ impl ChatWidget {
         self.request_redraw();
     }
 
-<<<<<<< HEAD
     /// A contained Claude pane's tool request (#218).
     pub(crate) fn show_claude_approval(
         &mut self,
@@ -399,11 +405,12 @@ impl ChatWidget {
     }
 
     pub(crate) fn show_custom_prompt_view(&mut self, view: CustomPromptView) {
-        self.bottom_pane.show_view(Box::new(view));
+        // Upstream's text-prompt entry: the composer's editor keymap and Vim preference apply.
+        self.bottom_pane.show_text_prompt(view);
         self.refresh_plan_mode_nudge();
         self.request_redraw();
-||||||| 413492cd6c
-=======
+    }
+
     pub(crate) fn show_bottom_pane_view(&mut self, view: Box<dyn BottomPaneView>) {
         self.bottom_pane.show_view(view);
         self.request_redraw();
@@ -415,7 +422,6 @@ impl ChatWidget {
         view: Box<dyn BottomPaneView>,
     ) {
         self.bottom_pane.replace_view_if_present(view_id, view);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) fn selected_index_for_present_view(&self, view_id: &'static str) -> Option<usize> {
