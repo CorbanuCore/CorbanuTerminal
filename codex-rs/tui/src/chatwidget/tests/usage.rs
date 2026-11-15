@@ -259,6 +259,7 @@ async fn usage_command_disables_reset_after_cached_zero_snapshot() {
         })
     );
     // The disabled reset is skipped; the appended inspector is now next.
+    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
     chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_recorded_requests_or_wrapped(rx.try_recv());
 }

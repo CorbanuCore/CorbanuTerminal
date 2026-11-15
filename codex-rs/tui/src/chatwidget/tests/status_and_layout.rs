@@ -2380,6 +2380,7 @@ async fn ctrl_c_interrupts_agent_turn_even_if_bottom_pane_running_state_is_stale
     }
 }
 
+#[tokio::test]
 async fn program_status_stays_working_when_input_acknowledges_an_active_goal() {
     use crate::terminal_program_status::ProgramStatus;
 
@@ -3283,6 +3284,7 @@ async fn status_line_tps_updates_when_usage_arrives_after_completion() {
     assert!(status_line.ends_with("TPS: 15.0 tok/s"));
 }
 
+#[tokio::test]
 async fn status_line_hostname_renders_current_machine_hostname() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.thread_id = Some(ThreadId::new());

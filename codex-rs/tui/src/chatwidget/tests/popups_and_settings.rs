@@ -4519,7 +4519,7 @@ async fn model_picker_same_slug_marks_only_exact_provider_current() {
     let mut second = base;
     second.provider_id = Some("custom-b".to_string());
     chat.config.model_provider_id = "custom-b".to_string();
-    chat.open_all_models_popup(vec![first, second]);
+    chat.open_all_models_popup_for_purpose(vec![first, second], ModelSelectionPurpose::Session);
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 120, /*height*/ 20);
     assert_eq!(popup.matches("(current)").count(), 1, "{popup}");
     insta::assert_snapshot!("model_picker_exact_provider_current", popup);
@@ -4603,7 +4603,7 @@ async fn model_picker_claude_recovery_refresh_restores_full_subscription_catalog
             .provider_is_selectable("anthropic", ANTHROPIC_DEFAULT_MODEL)
     );
     chat.handle_key_event(KeyEvent::from(KeyCode::Esc));
-    chat.open_all_models_popup(chat.model_catalog.try_list_models().unwrap());
+    chat.open_all_models_popup();
     chat.handle_key_event(KeyEvent::from(KeyCode::Right));
     let api_popup = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 30);
     assert!(api_popup.contains("[Anthropic]"), "{api_popup}");
@@ -5449,7 +5449,11 @@ async fn max_reasoning_selection_persists_model_selection() {
     let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
     assert!(events.iter().any(|event| matches!(
         event,
-        AppEvent::ApplyModelSelection {
+        AppEvent::UpdateReasoningEffort(Some(ReasoningEffortConfig::Max))
+    )));
+    assert!(events.iter().any(|event| matches!(
+        event,
+        AppEvent::PersistModelSelection {
             model,
             provider: _,
             effort: Some(ReasoningEffortConfig::Max),
@@ -5799,7 +5803,7 @@ async fn single_reasoning_option_skips_selection() {
     assert!(
         events
             .iter()
-            .any(|ev| matches!(ev, AppEvent::ApplyModelSelection { effort: Some(effort), .. } if *effort == ReasoningEffortConfig::High)),
+            .any(|ev| matches!(ev, AppEvent::UpdateReasoningEffort(Some(effort)) if *effort == ReasoningEffortConfig::High)),
         "expected reasoning effort to be applied automatically; events: {events:?}"
     );
 }
@@ -5958,6 +5962,7 @@ async fn model_picker_runtime_refresh_keeps_claude_out_of_openai_tab() {
     panic!("OpenAI tab unavailable");
 }
 
+#[tokio::test]
 async fn account_change_dismisses_the_previous_app_directory_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.thread_id = Some(ThreadId::new());
