@@ -58,7 +58,23 @@ async fn client(
     server: &wiremock::MockServer,
     overrides: bool,
 ) -> Result<TestAppServer> {
-    client_with_effort_updates(home, server, overrides, EffortUpdates::Supported, "").await
+    client_with_effort_updates(
+        home,
+        server,
+        overrides,
+        EffortUpdates::Supported,
+        SampleProvider::OpenAi,
+        "",
+    )
+    .await
+}
+
+/// The selected provider. Corbanu refuses a custom provider named "OpenAI",
+/// so OpenAI is the built-in provider at the mock server, and the other is
+/// the plain mock provider.
+enum SampleProvider {
+    OpenAi,
+    NotOpenAi,
 }
 
 enum EffortUpdates {
@@ -71,6 +87,7 @@ async fn client_with_effort_updates(
     server: &wiremock::MockServer,
     overrides: bool,
     effort_updates: EffortUpdates,
+    provider: SampleProvider,
     extra_config: &str,
 ) -> Result<TestAppServer> {
     let config = ConfigBuilder::default()
@@ -91,7 +108,11 @@ async fn client_with_effort_updates(
         &catalog,
         serde_json::to_string(&json!({"models": [model]}))?,
     )?;
-    let mut config = MockResponsesConfig::new(&server.uri()).with_model("gpt-5.4").with_builtin_openai_provider()
+    let mut config = MockResponsesConfig::new(&server.uri()).with_model("gpt-5.4");
+    if matches!(provider, SampleProvider::OpenAi) {
+        config = config.with_builtin_openai_provider();
+    }
+    config = config
         .with_root_config(&format!("model_catalog_json = {}\nmodel_reasoning_effort = \"high\"\nmodel_post_turn_compact_threshold_percent = 0", serde_json::to_string(&catalog)?));
     config = if overrides {
         config.enable_feature(Feature::ReasoningEffortOverride)
@@ -558,6 +579,7 @@ async fn sample_skips_inherited_stop_hooks() -> Result<()> {
         &server,
         /*overrides*/ true,
         EffortUpdates::Supported,
+        SampleProvider::OpenAi,
         &extra_config,
     )
     .await?;
@@ -725,6 +747,7 @@ async fn sample_blocks_mcp_execution_without_changing_parent_tools(
         &server,
         /*overrides*/ true,
         EffortUpdates::Supported,
+        SampleProvider::OpenAi,
         &extra_config,
     )
     .await?;
@@ -1037,21 +1060,24 @@ async fn unsupported_effort_updates_keep_inherited_effort(
     } else {
         EffortUpdates::Unsupported
     };
-    let mut client =
-        client_with_effort_updates(&home, &server, /*overrides*/ true, effort_updates, "").await?;
-    let overrides = if unsupported_provider {
-        json!({"model_providers.mock_provider.name":"Another provider"})
+    // Upstream renamed the selected custom provider away from "OpenAI" at
+    // thread start; Corbanu refuses that name for a custom provider, so this
+    // case selects the plain mock provider, which is not OpenAI.
+    let provider = if unsupported_provider {
+        SampleProvider::NotOpenAi
     } else {
-        json!({})
+        SampleProvider::OpenAi
     };
-    let (parent_id, turn_id) = ready_parent(
-        &mut client,
-        ThreadStartParams {
-            config: Some(serde_json::from_value(overrides)?),
-            ..Default::default()
-        },
+    let mut client = client_with_effort_updates(
+        &home,
+        &server,
+        /*overrides*/ true,
+        effort_updates,
+        provider,
+        "",
     )
     .await?;
+    let (parent_id, turn_id) = ready_parent(&mut client, ThreadStartParams::default()).await?;
     let response = sample(
         &mut client,
         ThreadSampleParams {

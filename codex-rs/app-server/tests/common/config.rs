@@ -51,7 +51,8 @@ impl MockResponsesConfig {
     /// need OpenAI's behaviour use the built-in OpenAI provider pointed at
     /// the mock server instead (`openai_base_url`, as the remote compaction
     /// tests do). A custom base URL turns its websockets off, and it requires
-    /// OpenAI auth, as these tests' custom providers did.
+    /// OpenAI auth, as these tests' custom providers did. Unlike the mock
+    /// provider table it keeps the default request and stream retries.
     pub fn with_builtin_openai_provider(mut self) -> Self {
         self.provider_id = "openai".to_string();
         self.use_builtin_provider = true;
@@ -63,6 +64,7 @@ impl MockResponsesConfig {
     pub fn with_builtin_model_provider(mut self, provider_id: &str) -> Self {
         self.provider_id = provider_id.to_string();
         self.use_builtin_provider = true;
+        self.builtin_openai_at_base_url = false;
         self
     }
 
