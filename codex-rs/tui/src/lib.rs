@@ -212,7 +212,6 @@ pub(crate) mod onboarding;
 mod orchestrate;
 mod oss_selection;
 mod pager_overlay;
-mod permission_compat;
 mod provider_account_auth_host;
 mod provider_account_feedback;
 mod provider_auth_effect_executor;
@@ -1565,7 +1564,6 @@ async fn run_ratatui_app(
     let backend_id = crate::backend_id::BackendId::new();
     let uses_remote_workspace = app_server_target.uses_remote_workspace();
     let workload_identity_selected = is_workload_identity_selected();
-    color_eyre::install()?;
 
     tooltips::announcement::prewarm(initial_config.http_client_factory());
 
@@ -1574,11 +1572,9 @@ async fn run_ratatui_app(
     // onboarding).
     let daemon_not_reused = default_login_launch::daemon_not_reused_warning(&initial_config);
 
-    // Panic reports go through tracing; `tui::init`'s hook restores the terminal only for a
-    // panic on the thread that owns it, so panics contained in tasks leave the TUI running.
-    install_panic_hook();
+    // `run_main_inner` installed the panic hooks before `tui::init`; diagnostics need the final
+    // config's log directory.
     tui::configure_panic_diagnostics(initial_config.log_dir.clone());
-    security::restart::clear_restart_banner();
     let (mut tui, mut terminal_restore_guard, mut startup_draft) = startup_draft.into_parts();
 
     #[cfg(not(debug_assertions))]

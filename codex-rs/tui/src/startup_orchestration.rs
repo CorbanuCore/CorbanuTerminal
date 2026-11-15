@@ -349,6 +349,14 @@ pub(super) async fn run_main_inner(
         )
         .await?;
     }
+    // Panic hooks chain as on main (#638): color-eyre's report, then tracing with the vault-callback
+    // check (`install_panic_hook`), then `tui::init`'s hook on top, which records diagnostics and
+    // restores the terminal only for a panic on the thread that owns it. color-eyre replaces any
+    // earlier hook, so it must be installed first.
+    color_eyre::install().map_err(|err| std::io::Error::other(format!("{err:?}")))?;
+    install_panic_hook();
+    // PF-24-S02: erase the "restarting" banner before the startup draft draws.
+    security::restart::clear_restart_banner();
     // Keep normal terminal signals available until local configuration is ready. Once raw
     // mode begins, StartupDraft immediately takes ownership of input.
     let initialized_terminal = tokio::task::spawn_blocking(tui::init)
@@ -615,7 +623,7 @@ pub(super) async fn run_main_inner(
         .run_until(security_launch.finish(&mut config))
         .await?
     {
-        exit_with_security_error(&message);
+        exit_with_security_error_after_worktree(managed_worktree.as_ref(), &message);
     }
     // PF-84 (#426): a missing named account (`--account` or
     // `[provider_accounts]`) is refused before onboarding, with exec's
@@ -630,7 +638,7 @@ pub(super) async fn run_main_inner(
         && let Some(message) =
             crate::resume_launch::launch_account_error(&config, deferred_account_check)
     {
-        exit_with_security_error(&message);
+        exit_with_security_error_after_worktree(managed_worktree.as_ref(), &message);
     }
     if let Some(aggressive) = origin_registry_update
         && let Err(err) = security::nested::register_origin(&codex_home, aggressive)
@@ -639,6 +647,50 @@ pub(super) async fn run_main_inner(
         config.startup_warnings.push(format!(
             "Could not record this Corbanu home for nested-launch checks ({err}); an agent command that changes CODEX_HOME may not be recognised as nested."
         ));
+    }
+    // PF-84-S06: a launch on a named account (or a resume/fork) leaves the default
+    // login in place and never reuses a local daemon; every other launch enforces
+    // the login restrictions on it here. Settled before daemon auto-start so such a launch
+    // never starts a daemon only to discard it.
+    if !workload_identity_selected {
+        let launches_resume_or_fork = is_resume_launch(&cli)
+            || cli.fork_picker
+            || cli.fork_last
+            || cli.fork_session_id.is_some();
+        let settled = startup_draft
+            .run_until(default_login_launch::settle_default_login_at_launch(
+                &config,
+                launches_resume_or_fork,
+                app_server_target,
+            ))
+            .await?;
+        let default_login_launch::DefaultLoginAtLaunch {
+            app_server_target: settled_target,
+            left_in_place,
+            daemon_not_reused,
+        } = match settled {
+            Ok(settled) => settled,
+            Err(err) => {
+                restore_terminal_before_fatal_exit();
+                #[allow(clippy::print_stderr)]
+                {
+                    eprintln!("{err}");
+                }
+                if let Some(worktree) = managed_worktree.as_ref() {
+                    worktree.report_startup_failure();
+                }
+                std::process::exit(1);
+            }
+        };
+        app_server_target = settled_target;
+        if left_in_place {
+            codex_login::leave_default_login_unenforced();
+            // #658: such a launch neither reuses nor starts the shared daemon.
+            if daemon_exclusion.is_none() {
+                daemon_exclusion = Some("a named sign-in account or a resumed/forked session");
+            }
+        }
+        config.startup_warnings.extend(daemon_not_reused);
     }
     let auto_start_daemon = cfg!(any(unix, windows))
         && (cli.agents_overview || config.features.enabled(Feature::DaemonAutoStart))
@@ -728,54 +780,11 @@ pub(super) async fn run_main_inner(
         app_server_target = AppServerTarget::Embedded;
         daemon_exclusion = Some("daemon feature settings");
     }
-    // PF-84-S06: a launch on a named account (or a resume/fork) leaves the default
-    // login in place and never reuses a local daemon; every other launch enforces
-    // the login restrictions on it here.
-    if !workload_identity_selected {
-        let launches_resume_or_fork = is_resume_launch(&cli)
-            || cli.fork_picker
-            || cli.fork_last
-            || cli.fork_session_id.is_some();
-        let settled = startup_draft
-            .run_until(default_login_launch::settle_default_login_at_launch(
-                &config,
-                launches_resume_or_fork,
-                app_server_target,
-            ))
-            .await?;
-        let default_login_launch::DefaultLoginAtLaunch {
-            app_server_target: settled_target,
-            left_in_place,
-            daemon_not_reused,
-        } = match settled {
-            Ok(settled) => settled,
-            Err(err) => {
-                restore_terminal_before_fatal_exit();
-                #[allow(clippy::print_stderr)]
-                {
-                    eprintln!("{err}");
-                }
-                if let Some(worktree) = managed_worktree.as_ref() {
-                    worktree.report_startup_failure();
-                }
-                std::process::exit(1);
-            }
-        };
-        app_server_target = settled_target;
-        if !matches!(app_server_target, AppServerTarget::LocalDaemon { .. }) {
-            // The launch no longer uses a daemon it may have started above.
-            managed_daemon = false;
-        }
-        if left_in_place {
-            codex_login::leave_default_login_unenforced();
-        }
-        config.startup_warnings.extend(daemon_not_reused);
-    }
     // Defense in depth: the final target must still satisfy the security level.
     if !matches!(app_server_target, AppServerTarget::Embedded)
         && let Some(message) = &non_embedded_refusal
     {
-        exit_with_security_error(message);
+        exit_with_security_error_after_worktree(managed_worktree.as_ref(), message);
     }
     if app_server_target.uses_embedded_network_policy() {
         embedded_network_policy.activate(&mut config);
@@ -946,6 +955,8 @@ pub(super) async fn run_main_inner(
                 Some(daemon_startup::WSL_DRVFS_EXCLUSION) => "wsl_drvfs",
                 Some("this Windows launcher") => "windows_detach_restricted",
                 Some("daemon feature settings") => "daemon_compatibility",
+                Some("the Corbanu security level") => "security_level",
+                Some("a named sign-in account or a resumed/forked session") => "named_account",
                 None if selection_reason == "auto_start_disabled" => {
                     "auto_start_disabled_no_daemon"
                 }
@@ -1182,4 +1193,16 @@ pub(super) async fn run_main_inner(
     }
 
     app_result
+}
+
+/// A security refusal after `--worktree` created its worktree reports the failed startup first,
+/// as the other fatal exits there do.
+fn exit_with_security_error_after_worktree(
+    worktree: Option<&ManagedTuiWorktree>,
+    message: &str,
+) -> ! {
+    if let Some(worktree) = worktree {
+        worktree.report_startup_failure();
+    }
+    exit_with_security_error(message)
 }
