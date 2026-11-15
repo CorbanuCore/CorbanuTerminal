@@ -510,7 +510,7 @@ impl CredentialBroker {
     pub(crate) fn configure(&self, config: &NetworkProxyConfig) {
         if self.hardened.armed() && !config.credential_providers.is_empty() {
             tracing::warn!(
-                "network.credential_providers are not brokered while Corbanu credential hardening is active"
+                "network.credential_providers are not brokered while Corbanu credential hardening is active; their environment variables are withheld from commands"
             );
         }
         let mut state = self.write_state();
@@ -772,6 +772,7 @@ impl CredentialBroker {
         environment_id: Option<&str>,
     ) {
         if self.hardened.armed() {
+            self.strip_unbrokered_configured_sources(env);
             self.hardened.virtualize_child_env(env);
             return;
         }
@@ -784,10 +785,45 @@ impl CredentialBroker {
         environment_id: Option<&str>,
     ) {
         if self.hardened.armed() {
+            self.strip_unbrokered_configured_sources(env);
             self.hardened.virtualize_snapshot_env(env);
             return;
         }
         self.virtualize_env(env, environment_id, CredentialEnvironment::Snapshot);
+    }
+
+    /// Corbanu's engine does not broker `network.credential_providers`
+    /// (see `configure`), so their sources would reach the child unmasked.
+    /// Fail closed: drop each provider's environment variables and any
+    /// variable carrying one of their values. Keys a built-in provider owns
+    /// are left to the hardened engine.
+    fn strip_unbrokered_configured_sources(&self, env: &mut HashMap<String, String>) {
+        /// Shorter values are too common to match other variables on.
+        const MIN_COPIED_VALUE_BYTES: usize = 8;
+        // Variables of built-in providers stay with the hardened engine.
+        let is_builtin =
+            |name: &str| providers::credential_env_keys().any(|key| env_key_matches(name, key));
+        let keys = self
+            .read_state()
+            .configured_provider_configs
+            .values()
+            .flat_map(|provider| provider.env.iter().cloned())
+            .filter(|key| !is_builtin(key))
+            .collect::<Vec<_>>();
+        if keys.is_empty() {
+            return;
+        }
+        let is_source = |name: &str| keys.iter().any(|key| env_key_matches(name, key));
+        let values = env
+            .iter()
+            .filter(|(name, value)| is_source(name) && value.len() >= MIN_COPIED_VALUE_BYTES)
+            .map(|(_, value)| value.clone())
+            .collect::<Vec<_>>();
+        env.retain(|name, value| {
+            is_builtin(name)
+                || (!is_source(name)
+                    && !values.iter().any(|secret| value.contains(secret.as_str())))
+        });
     }
 
     fn virtualize_env(

@@ -2464,3 +2464,45 @@ fn main_engine_never_injects_raw_values_over_plain_http() {
         Some(format!("Bearer {dummy}").as_str())
     );
 }
+
+#[test]
+fn main_engine_withholds_unbrokered_configured_provider_sources() {
+    // Corbanu's engine does not broker `network.credential_providers`, so a
+    // configured provider's real value must not reach the command.
+    const ALIAS_VALUE: &str = "alias_aaaaaaaaaaaaaaaaaaaaaaaa";
+    let broker = CredentialBroker::new(/*enabled*/ true).with_main_engine();
+    broker.configure(&NetworkProxyConfig {
+        credential_broker: true,
+        credential_providers: BTreeMap::from([(
+            "alias_test".to_string(),
+            CredentialProviderConfig {
+                // GH_TOKEN belongs to a built-in provider and stays brokered.
+                env: vec!["ALIAS_TEST_TOKEN".to_string(), "GH_TOKEN".to_string()],
+                patterns: vec!["alias_[a-z]{24}".to_string()],
+                url_prefixes: vec!["https://alias.example/v1".to_string()],
+                ..CredentialProviderConfig::default()
+            },
+        )]),
+        ..NetworkProxyConfig::default()
+    });
+    let base = env_map([
+        ("ALIAS_TEST_TOKEN", ALIAS_VALUE),
+        ("COPIED", ALIAS_VALUE),
+        ("GH_TOKEN", PF28_S02_TOKEN),
+        ("PATH", "/usr/bin"),
+    ]);
+    let mut child = base.clone();
+    broker.virtualize_child_env(&mut child);
+    let mut snapshot = base;
+    broker.virtualize_snapshot_env(&mut snapshot, /*environment_id*/ None);
+
+    for env in [&child, &snapshot] {
+        assert!(!env.contains_key("ALIAS_TEST_TOKEN"), "{env:?}");
+        assert!(!env.contains_key("COPIED"), "{env:?}");
+        assert!(env.values().all(|value| !value.contains(ALIAS_VALUE)));
+        assert_eq!(env.get("PATH").map(String::as_str), Some("/usr/bin"));
+    }
+    // The built-in source is still virtualized (masked), not dropped.
+    let masked = child.get("GH_TOKEN").expect("GH_TOKEN stays brokered");
+    assert_ne!(masked, PF28_S02_TOKEN);
+}
