@@ -799,6 +799,8 @@ async fn enqueue_primary_thread_session_replays_buffered_approval_after_attach()
             .await?;
     }
     assert!(!app.chat_widget.has_active_view());
+    // Answering the approvals leaves the pending permission confirmation in place.
+    assert!(app.pending_permission_confirmation.is_some());
 
     app_server.shutdown().await?;
     proxy.await??;
@@ -2495,6 +2497,38 @@ async fn archived_untracked_threads_do_not_appear_in_agent_picker() -> Result<()
 
 #[path = "tests/corbanu_app_tests.rs"]
 mod corbanu_app_tests;
+// Shared with dispatch_integration, issue_613 and issue_660 through `use super::*`.
+use corbanu_app_tests::drain_claude_pane_task_events;
+use corbanu_app_tests::drain_spawn_agent_task_for;
+use corbanu_app_tests::issue_507_switch;
+use corbanu_app_tests::make_child_report_auto_claude_pane_app;
+use corbanu_app_tests::write_test_whip;
+
+// File snapshots are named after this module, so these two accounting tests stay here.
+#[test]
+fn accounting_clock_before_day_message_states_the_lag() {
+    let rendered = [30_000, 3 * 3_600_000 - 5_000, 6 * 86_400_000]
+        .map(super::event_dispatch::clock_before_day_message)
+        .join("\n")
+        // The command name depends on the build's features.
+        .replace(crate::chatwidget::cost_command(), "<cost command>");
+    insta::assert_snapshot!("accounting_clock_before_day_messages", rendered);
+}
+
+#[test]
+fn accounting_clock_behind_message_states_the_lag() {
+    let rendered = [
+        30_000,
+        89_000,
+        58 * 60_000,
+        3 * 3_600_000 - 5_000,
+        47 * 3_600_000,
+        6 * 86_400_000,
+    ]
+    .map(super::event_dispatch::clock_behind_ledger_message)
+    .join("\n");
+    insta::assert_snapshot!("accounting_clock_behind_ledger_messages", rendered);
+}
 
 #[tokio::test]
 async fn orchestrate_fast_path_is_worker_then_manager_with_eight_hour_draft_defaults() {
@@ -12067,6 +12101,7 @@ async fn thread_account_usage_reaches_status_and_resets_with_the_session() {
     app.reset_thread_event_state();
     assert_eq!(totals(&app), vec![("default".to_string(), 0)]);
 }
+
 #[path = "tests/active_reconnect_tests.rs"]
 mod active_reconnect;
 

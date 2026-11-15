@@ -270,4 +270,17 @@ fn session_start_refusal_keeps_a_report_for_transport_errors() {
     );
 
     assert!(session_start_refusal_exit("resume", thread_id, &err).is_none());
+    let target_session = SessionTarget {
+        backend_id: crate::backend_id::BackendId::new(),
+        path: None,
+        thread_id,
+        cwd: None,
+        history_mode: None,
+    };
+    assert_eq!(
+        session_start_error("resume", &target_session, err).to_string(),
+        format!(
+            "Failed to resume session from thread {thread_id}: thread/resume failed during TUI bootstrap: thread/resume transport error: broken pipe"
+        )
+    );
 }

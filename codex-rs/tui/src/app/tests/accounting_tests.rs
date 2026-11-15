@@ -243,7 +243,7 @@ async fn accounting_inspect_app_clock_behind_ledger_names_the_clock() -> anyhow:
     };
     assert_eq!(
         message,
-        &super::event_dispatch::clock_behind_ledger_message(3 * 3_600_000)
+        &crate::app::event_dispatch::clock_behind_ledger_message(3 * 3_600_000)
     );
     app.handle_accounting_inspector_event(loaded);
     let rendered = render_bottom_popup(&app.chat_widget, /*width*/ 80);
@@ -290,31 +290,6 @@ async fn accounting_inspect_app_day_after_clock_names_the_clock() -> anyhow::Res
     Ok(())
 }
 
-#[test]
-fn accounting_clock_before_day_message_states_the_lag() {
-    let rendered = [30_000, 3 * 3_600_000 - 5_000, 6 * 86_400_000]
-        .map(super::event_dispatch::clock_before_day_message)
-        .join("\n")
-        // The command name depends on the build's features.
-        .replace(crate::chatwidget::cost_command(), "<cost command>");
-    insta::assert_snapshot!("accounting_clock_before_day_messages", rendered);
-}
-
-#[test]
-fn accounting_clock_behind_message_states_the_lag() {
-    let rendered = [
-        30_000,
-        89_000,
-        58 * 60_000,
-        3 * 3_600_000 - 5_000,
-        47 * 3_600_000,
-        6 * 86_400_000,
-    ]
-    .map(super::event_dispatch::clock_behind_ledger_message)
-    .join("\n");
-    insta::assert_snapshot!("accounting_clock_behind_ledger_messages", rendered);
-}
-
 #[tokio::test]
 async fn accounting_inspect_app_error_retry_and_timeout() -> anyhow::Result<()> {
     let path = tempdir()?;
@@ -335,7 +310,7 @@ async fn accounting_inspect_app_error_retry_and_timeout() -> anyhow::Result<()> 
     app.handle_accounting_inspector_event(event);
     tokio::time::pause();
     let timeout =
-        super::event_dispatch::accounting_inspector_read_result(std::future::pending()).await;
+        crate::app::event_dispatch::accounting_inspector_read_result(std::future::pending()).await;
     tokio::time::resume();
     assert!(timeout.unwrap_err().contains("timed out"));
     app.handle_accounting_inspector_event(AppEvent::RefreshAccountingInspector { generation });

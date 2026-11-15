@@ -1719,7 +1719,7 @@ fn drain_spawn_agent_tasks_for(
 }
 
 /// Drains app events looking for a `SubmitSpawnAgentTask` for `thread_id`. Returns its task text.
-fn drain_spawn_agent_task_for(
+pub(super) fn drain_spawn_agent_task_for(
     rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
     thread_id: ThreadId,
 ) -> Option<String> {
@@ -1759,9 +1759,7 @@ fn issue_1208_layout(edges: &[(&str, &str)]) -> crate::claude_panes::PaneLayoutS
 }
 
 const ISSUE_1208_MAIN: &str = "thread:00000000-0000-0000-0000-000000001208";
-
 const ISSUE_1208_CHILD: &str = "thread:00000000-0000-0000-0000-000000001209";
-
 const ISSUE_1208_GRANDCHILD: &str = "thread:00000000-0000-0000-0000-000000001210";
 
 #[test]
@@ -3634,7 +3632,7 @@ async fn claude_orc_completion_is_reported_to_parent_troll_context() {
     assert!(context.contains("result=Implemented the mock website and npm run build passed."));
 }
 
-async fn make_child_report_auto_claude_pane_app() -> (
+pub(super) async fn make_child_report_auto_claude_pane_app() -> (
     App,
     tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
     String,
@@ -3670,7 +3668,7 @@ async fn make_child_report_auto_claude_pane_app() -> (
     (app, app_event_rx, troll_pane_id, orc_pane_id)
 }
 
-fn drain_claude_pane_task_events(
+pub(super) fn drain_claude_pane_task_events(
     app_event_rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
 ) -> Vec<(String, String)> {
     let mut submitted_tasks = Vec::new();
@@ -3682,7 +3680,7 @@ fn drain_claude_pane_task_events(
     submitted_tasks
 }
 
-fn write_test_whip(app: &App, name: &str, body: &str) {
+pub(super) fn write_test_whip(app: &App, name: &str, body: &str) {
     let dir = app.config.codex_home.join("whips");
     std::fs::create_dir_all(&dir).expect("create whips dir");
     std::fs::write(dir.join(format!("{name}.md")), body).expect("write whip");
@@ -5448,7 +5446,10 @@ async fn issue_554_kill_switch_stop_does_not_say_interrupted_by_user() {
 }
 
 /// #507: the person confirms `choice` in `/security`.
-fn issue_507_switch(app: &App, choice: crate::legacy_core::security_revocation::HumanRevocation) {
+pub(super) fn issue_507_switch(
+    app: &App,
+    choice: crate::legacy_core::security_revocation::HumanRevocation,
+) {
     use crate::legacy_core::security_level_change::LevelBasis;
     use crate::legacy_core::security_level_change::SecurityLevel;
     use crate::legacy_core::security_revocation::commit_human_revocation;
