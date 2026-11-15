@@ -975,6 +975,7 @@ mod tests {
         );
         assert_eq!(terminal.backend().scroll_on_clear_saves(), &[] as &[String]);
     }
+
     #[path = "cursor_tests.rs"]
     mod cursor;
 
