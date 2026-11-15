@@ -137,15 +137,15 @@ async fn issue863_custom_native_send_followup_reject_builtin_before_mailbox_muta
         .spawn_agent_with_metadata(
             config,
             Vec::new(),
-            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
                 parent_thread_id: root.thread_id,
                 depth: 1,
                 agent_path: Some(builtin_path.clone()),
                 agent_nickname: Some("Synthetic".to_string()),
                 agent_role: Some("orc".to_string()),
                 agent_class: None,
-            })),
-            crate::agent::control::SpawnAgentOptions::default(),
+            }),
+            crate::agent::types::SpawnAgentOptions::default(),
         )
         .await
         .expect("register built-in child without inference");
@@ -393,15 +393,15 @@ async fn issue1127_custom_native_send_followup_to_another_account_are_refused() 
         .spawn_agent_with_metadata(
             child_config,
             Vec::new(),
-            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
                 parent_thread_id: root.thread_id,
                 depth: 1,
                 agent_path: Some(work_path.clone()),
                 agent_nickname: Some("Synthetic".to_string()),
                 agent_role: Some("orc".to_string()),
                 agent_class: None,
-            })),
-            crate::agent::control::SpawnAgentOptions::default(),
+            }),
+            crate::agent::types::SpawnAgentOptions::default(),
         )
         .await
         .expect("register a child on account `work` without inference");
@@ -511,9 +511,14 @@ async fn issue1016_custom_native_spawn_default_model_keeps_source_and_ciphertext
     );
     assert_eq!(threads_after, expected_threads);
     let operations_after = manager.captured_ops();
-    let new_operations = operations_after
-        .strip_prefix(operations_before.as_slice())
-        .expect("spawn must preserve all prior captured operations");
+    // Upstream's `Op` has no `PartialEq`; compare the kept prefix by its debug form.
+    assert!(
+        operations_after.len() >= operations_before.len()
+            && format!("{:?}", &operations_after[..operations_before.len()])
+                == format!("{operations_before:?}"),
+        "spawn must preserve all prior captured operations"
+    );
+    let new_operations = &operations_after[operations_before.len()..];
     let [(actual_child, Op::InterAgentCommunication { communication, .. })] = new_operations else {
         panic!("spawn must add exactly one captured communication operation");
     };

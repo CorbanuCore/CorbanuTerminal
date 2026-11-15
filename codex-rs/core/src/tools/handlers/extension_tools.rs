@@ -801,7 +801,12 @@ mod tests {
         use codex_security_policy::SecurityLevel;
         use codex_security_policy::SecuritySettings;
         crate::security::TrustedSecurityController::initialize(
-            &session.services.agent_control.effective_security_policy(),
+            &session
+                .services
+                .agent_control
+                .local()
+                .expect("local agent control")
+                .effective_security_policy(),
             crate::security::PersistedHumanSecurityState::new(
                 SecuritySettings::new(SecurityLevel::Permissive),
                 PolicyPrincipal::new(PrincipalKind::Human, "human:issue-1057").unwrap(),
@@ -827,13 +832,16 @@ mod tests {
         controller.apply_confirmed_change(change).unwrap();
     }
 
+    /// The file contexts an extension call is built with. Upstream passes each
+    /// environment's filesystem to the extension, so main's check of the built
+    /// call's contexts reads the contexts the call is built from.
     fn file_contexts(
-        call: &codex_tools::ToolCall,
+        contexts: Vec<(
+            &crate::session::turn_context::TurnEnvironment,
+            codex_file_system::FileSystemSandboxContext,
+        )>,
     ) -> Vec<codex_file_system::FileSystemSandboxContext> {
-        call.environments
-            .iter()
-            .map(|environment| environment.file_system_sandbox_context.clone())
-            .collect()
+        contexts.into_iter().map(|(_, context)| context).collect()
     }
 
     /// #1057 (D71): a session with a read grant outside the workspace, an
@@ -864,28 +872,26 @@ mod tests {
                 arguments: "{}".to_string(),
             },
         };
-        let ungranted = file_contexts(&super::to_extension_call(&invocation).await);
-        session
-            .record_granted_request_permissions_for_turn(
-                &codex_protocol::request_permissions::RequestPermissionsResponse {
-                    permissions: codex_protocol::request_permissions::RequestPermissionProfile {
-                        file_system: Some(
-                            codex_protocol::models::FileSystemPermissions::from_read_write_roots(
-                                Some(vec![outside.path().abs()]),
-                                /*write*/ None,
-                            ),
+        let ungranted = file_contexts(super::extension_file_contexts(&invocation).await);
+        session.record_granted_request_permissions_for_turn(
+            &codex_protocol::request_permissions::RequestPermissionsResponse {
+                permissions: codex_protocol::request_permissions::RequestPermissionProfile {
+                    file_system: Some(
+                        codex_protocol::models::FileSystemPermissions::from_read_write_roots(
+                            Some(vec![outside.path().abs()]),
+                            /*write*/ None,
                         ),
-                        ..Default::default()
-                    },
-                    scope: codex_protocol::request_permissions::PermissionGrantScope::Session,
-                    strict_auto_review: false,
+                    ),
+                    ..Default::default()
                 },
-                codex_exec_server::LOCAL_ENVIRONMENT_ID,
-                /*originating_turn_state*/ None,
-                session.services.authority_marker(),
-            )
-            .await;
-        let granted = file_contexts(&super::to_extension_call(&invocation).await);
+                scope: codex_protocol::request_permissions::PermissionGrantScope::Session,
+                strict_auto_review: false,
+            },
+            codex_exec_server::LOCAL_ENVIRONMENT_ID,
+            &invocation.turn,
+            session.services.authority_marker(),
+        );
+        let granted = file_contexts(super::extension_file_contexts(&invocation).await);
         assert!(!granted.is_empty(), "the test turn has an environment");
         assert_ne!(granted, ungranted, "the grant widens the file context");
         (controller, invocation, granted, outside)
@@ -897,11 +903,12 @@ mod tests {
     async fn issue_1057_extension_call_carries_grants_without_a_transition() {
         let (_controller, invocation, granted, _outside) = granted_invocation().await;
         let mut builds = 0;
-        let call = super::current_extension_call(&invocation, &mut || builds += 1)
-            .await
-            .expect("no transition: the call starts");
+        let (contexts, _) =
+            super::current_extension_file_contexts(&invocation, &mut || builds += 1)
+                .await
+                .expect("no transition: the call starts");
         assert_eq!(builds, 1);
-        assert_eq!(file_contexts(&call), granted);
+        assert_eq!(file_contexts(contexts), granted);
     }
 
     /// #1057 (D71): a transition between building the call (its grants
@@ -911,7 +918,7 @@ mod tests {
     async fn issue_1057_extension_call_built_before_a_transition_is_rebuilt() {
         let (controller, invocation, granted, _outside) = granted_invocation().await;
         let mut builds = 0;
-        let call = super::current_extension_call(&invocation, &mut || {
+        let (contexts, _) = super::current_extension_file_contexts(&invocation, &mut || {
             builds += 1;
             if builds == 1 {
                 commit_transition(&controller, codex_security_policy::SecurityLevel::Moderate);
@@ -919,10 +926,10 @@ mod tests {
         })
         .await
         .expect("rebuilt under the new policy");
-        let current = file_contexts(&super::to_extension_call(&invocation).await);
+        let current = file_contexts(super::extension_file_contexts(&invocation).await);
         assert_ne!(current, granted, "the transition ended the grant");
         assert_eq!(
-            file_contexts(&call),
+            file_contexts(contexts),
             current,
             "no stale grant reaches the extension"
         );
@@ -935,7 +942,7 @@ mod tests {
     async fn issue_1057_extension_call_refused_when_transitions_keep_landing() {
         let (controller, invocation, _granted, _outside) = granted_invocation().await;
         let mut builds = 0;
-        let result = super::current_extension_call(&invocation, &mut || {
+        let result = super::current_extension_file_contexts(&invocation, &mut || {
             builds += 1;
             let level = if builds % 2 == 1 {
                 codex_security_policy::SecurityLevel::Moderate
@@ -947,7 +954,7 @@ mod tests {
         .await;
         assert_eq!(builds, 2);
         assert_eq!(
-            result.err(),
+            result.map(|_| ()).err(),
             Some(codex_tools::FunctionCallError::RespondToModel(
                 super::EXTENSION_PREPARED_REFUSAL.to_string()
             ))

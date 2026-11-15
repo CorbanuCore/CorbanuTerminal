@@ -478,10 +478,16 @@ async fn accounting_chat_frame_guard_denies_provider_change_before_client_public
             ..Default::default()
         };
         match path {
-            "settings" => owner.update_settings(updates).await?,
+            "settings" => {
+                owner.update_settings(updates).await?;
+            }
             "turn" => {
                 owner
-                    .new_turn_with_sub_id("provider-change".into(), updates)
+                    .new_turn_with_sub_id(
+                        "provider-change".into(),
+                        updates,
+                        crate::session::turn_context::NewTurnContextOptions::default(),
+                    )
                     .await?;
             }
             _ => unreachable!(),

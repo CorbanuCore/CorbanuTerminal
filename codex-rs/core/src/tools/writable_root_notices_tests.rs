@@ -21,7 +21,9 @@ fn excluded_writable_links_are_explained_once_per_thread() {
     let write = |path: &std::path::Path| {
         FileSystemSandboxEntry::new(
             FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+                path: AbsolutePathBuf::from_absolute_path(path)
+                    .expect("absolute")
+                    .into(),
             },
             FileSystemAccessMode::Write,
         )

@@ -208,16 +208,20 @@ async fn pf_30_s04_provider_change_invalidates_bound_client() {
 async fn pf_30_s04_inherited_policy_is_not_weakened_by_permissive_worker_configuration() {
     let parent = owner(SecurityLevel::Moderate).await;
     let (mut child, _) = crate::session::tests::make_session_and_context().await;
-    child.services.agent_control = parent
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            SecurityLevel::Permissive,
-            child.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )
-        .unwrap();
+    child.services.agent_control = Arc::new(
+        parent
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                SecurityLevel::Permissive,
+                child.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )
+            .unwrap(),
+    );
     assert!(matches!(
         client(&Arc::new(child)).await,
         Err(StageOneMemoryError::Denied(
@@ -285,6 +289,7 @@ async fn pf_30_s04_http_attempt_guard_withholds_canary_after_live_change() {
         ),
         &server.uri(),
         codex_http_client::ClientRouteClass::Api,
+        codex_login::default_client::ClientRedirectPolicy::Default,
     )
     .unwrap();
     let transport = StageOneGuardedTransport::new(
@@ -669,13 +674,13 @@ fn rollout_message(role: &str, text: &str) -> ResponseItem {
 }
 
 fn opened_by(id: ThreadId) -> RolloutItem {
-    RolloutItem::SessionMeta(codex_protocol::protocol::SessionMetaLine {
+    RolloutItem::SessionMeta(Box::new(codex_protocol::protocol::SessionMetaLine {
         meta: codex_protocol::protocol::SessionMeta {
             id,
             ..Default::default()
         },
         git: None,
-    })
+    }))
 }
 
 fn texts(contents: &str) -> Vec<String> {
@@ -684,7 +689,7 @@ fn texts(contents: &str) -> Vec<String> {
         .iter()
         .map(|item| match item {
             ResponseItem::Message { content, .. } => match content.as_slice() {
-                [ContentItem::InputText { text } | ContentItem::OutputText { text }] => {
+                [ContentItem::InputText { text } | ContentItem::OutputText { text, .. }] => {
                     text.clone()
                 }
                 _ => String::new(),
@@ -965,7 +970,7 @@ async fn pf_23_s03_past_session_level_is_a_floor_for_its_memory() {
         let lines: Vec<String> = rollout(level)
             .into_iter()
             .map(|item| {
-                serde_json::to_string(&codex_protocol::protocol::RolloutLine {
+                serde_json::to_string(&codex_history::RolloutLine {
                     timestamp: "2026-10-07T00:00:00Z".into(),
                     ordinal: None,
                     item,

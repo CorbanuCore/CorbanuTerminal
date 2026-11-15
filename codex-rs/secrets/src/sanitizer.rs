@@ -4,8 +4,10 @@ use std::sync::LazyLock;
 static OPENAI_KEY_REGEX: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"sk-[A-Za-z0-9]{20,}"));
 static AWS_ACCESS_KEY_ID_REGEX: LazyLock<Regex> =
     LazyLock::new(|| compile_regex(r"\bAKIA[0-9A-Z]{16}\b"));
+// S3b: any whitespace after "Bearer", as main (`\s+`): upstream's `[ \t]+`
+// left a token after a newline or no-break space unredacted.
 static BEARER_TOKEN_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| compile_regex(r"(?i:\bBearer)[ \t]+[A-Za-z0-9._~+/-]{16,}=*"));
+    LazyLock::new(|| compile_regex(r"(?i:\bBearer)\s+[A-Za-z0-9._~+/-]{16,}=*"));
 static SECRET_ASSIGNMENT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     compile_regex(r#"(?i)\b(api[_-]?key|token|secret|password)\b(\s*[:=]\s*)(["']?)[^\s"']{8,}"#)
 });
@@ -61,6 +63,9 @@ mod tests {
                 "authorization: Bearer [REDACTED_SECRET]",
             ),
             ("Bearer   abcdefghijklmnop", "Bearer [REDACTED_SECRET]"),
+            ("Bearer\nabcdefghijklmnop", "Bearer [REDACTED_SECRET]"),
+            ("Bearer\u{a0}abcdefghijklmnop", "Bearer [REDACTED_SECRET]"),
+            ("Bearer\r\nabcdefghijklmnop", "Bearer [REDACTED_SECRET]"),
         ];
 
         for (input, expected) in cases {
@@ -75,8 +80,6 @@ mod tests {
             "Bearer abcdefghijklmno",
             "NotABearer abcdefghijklmnop",
             "Bearerabcdefghijklmnop",
-            "Bearer\nabcdefghijklmnop",
-            "Bearer\u{a0}abcdefghijklmnop",
             "Bearer abcdefghijklmno\u{212a}",
         ];
 

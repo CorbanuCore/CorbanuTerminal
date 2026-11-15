@@ -474,7 +474,10 @@ impl ToolExecutor<ToolInvocation> for OwnerRecordingHandler {
         test_spec(&self.tool_name)
     }
 
-    fn handle(&self, _invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle<'a>(&'a self, _invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'a>
+    where
+        ToolInvocation: 'a,
+    {
         Box::pin(async {
             *self.owner.lock().expect("owner") =
                 Some(crate::model_broker_auth::refusals::current_owner());
@@ -504,7 +507,7 @@ async fn issue_878_tools_resolve_brokered_auth_for_their_session() {
     };
     let invocation = test_invocation(Arc::new(session), Arc::new(turn), "call-878", tool_name);
     assert_eq!(crate::model_broker_auth::refusals::current_owner(), None);
-    handle_any_tool(&handler, invocation)
+    handle_any_tool(&handler, invocation, /*call_state*/ None)
         .await
         .expect("tool runs");
     assert_eq!(*handler.owner.lock().expect("owner"), Some(Some(thread_id)));

@@ -267,6 +267,9 @@ fn pf_30_realtime_start(
         accounting: None,
         websocket_credential: super::RealtimeRecordKey::None,
         api_provider,
+        http_client_factory: codex_http_client::HttpClientFactory::new(
+            codex_http_client::OutboundProxyPolicy::ReqwestDefault,
+        ),
         realtime_sideband_base_url: None,
         extra_headers: None,
         client_managed_handoffs: false,
@@ -274,11 +277,13 @@ fn pf_30_realtime_start(
         codex_responses_as_items: false,
         codex_response_item_prefix: None,
         codex_response_handoff_mode: CodexResponseHandoffMode::default(),
+        backend_reasoning_status: false,
         codex_response_handoff_channel_prefixes: None,
         realtime_call_api_provider: None,
         session_config: codex_api::RealtimeSessionConfig {
             instructions: "unadmitted-initial-instructions".into(),
             initial_items: Vec::new(),
+            delegation_ack_filler: None,
             model: None,
             session_id: None,
             event_parser: RealtimeEventParser::V1,
@@ -288,6 +293,14 @@ fn pf_30_realtime_start(
         },
         model_client,
         sdp,
+        existing_call_id: None,
+    }
+}
+
+fn pf_30_mode_instructions() -> super::RealtimeModeInstructions {
+    super::RealtimeModeInstructions {
+        start: None,
+        end: None,
     }
 }
 
@@ -307,7 +320,11 @@ async fn pf_30_s01_realtime_transports_deny_protected_start_before_network() {
                 .with_ingress_level(level);
             let manager = super::RealtimeConversationManager::new();
             let result = manager
-                .start(pf_30_realtime_start(model_client, base_url.clone(), sdp))
+                .start_inner(
+                    pf_30_realtime_start(model_client, base_url.clone(), sdp),
+                    pf_30_mode_instructions(),
+                    "pf-30-sub",
+                )
                 .await;
             let error = result.err().expect("protected realtime must fail closed");
             assert!(error.to_string().contains("source admission"), "{error}");
@@ -372,11 +389,11 @@ async fn pf_30_s01_realtime_live_strengthening_stops_next_frame() {
     });
     let manager = super::RealtimeConversationManager::new();
     let output = manager
-        .start(pf_30_realtime_start(
-            model_client,
-            base_url,
-            /*sdp*/ None,
-        ))
+        .start_inner(
+            pf_30_realtime_start(model_client, base_url, /*sdp*/ None),
+            pf_30_mode_instructions(),
+            "pf-30-sub",
+        )
         .await
         .unwrap();
     let initial = tokio::time::timeout(Duration::from_secs(5), frames_rx.recv())
@@ -415,7 +432,7 @@ async fn pf_30_s01_realtime_live_strengthening_stops_next_frame() {
         .unwrap()
         .unwrap();
     assert!(
-        matches!(event, codex_api::RealtimeEvent::Error(error) if error.contains("source admission"))
+        matches!(event, (codex_api::RealtimeEvent::Error(error), _) if error.contains("source admission"))
     );
     // Await task completion before checking the recording, so absence is not a
     // race with the sender. No transcript tail may re-enter Core after denial.
@@ -891,6 +908,7 @@ async fn pf_60_s03_realtime_call_is_recorded() -> anyhow::Result<()> {
             codex_api::RealtimeSessionConfig {
                 instructions: String::new(),
                 initial_items: Vec::new(),
+                delegation_ack_filler: None,
                 model: Some("gpt-realtime-1.5".into()),
                 session_id: None,
                 event_parser: RealtimeEventParser::V1,
@@ -1197,17 +1215,22 @@ async fn realtime_ledger_session_with_events(
 fn realtime_websocket_params() -> codex_protocol::protocol::ConversationStartParams {
     codex_protocol::protocol::ConversationStartParams {
         client_managed_handoffs: false,
+        delegation_ack_filler: None,
         flush_transcript_tail_on_session_end: false,
         codex_responses_as_items: false,
         codex_response_item_prefix: None,
         codex_response_handoff_mode: CodexResponseHandoffMode::default(),
+        backend_reasoning_status: false,
         codex_response_handoff_channel_prefixes: None,
         model: Some("gpt-realtime-1.5".into()),
         output_modality: codex_protocol::protocol::RealtimeOutputModality::Text,
         include_startup_context: false,
         initial_items: Vec::new(),
+        realtime_start_instructions: None,
+        realtime_end_instructions: None,
         prompt: Some(Some("fixture prompt".into())),
         realtime_session_id: None,
+        voice_session_id: None,
         transport: Some(codex_protocol::protocol::ConversationStartTransport::Websocket),
         version: Some(codex_protocol::protocol::RealtimeConversationVersion::V2),
         voice: None,
@@ -1625,6 +1648,7 @@ fn pf_824_websocket_session_is_recorded_as_api_key_work() {
     let config = codex_api::RealtimeSessionConfig {
         instructions: String::new(),
         initial_items: Vec::new(),
+        delegation_ack_filler: None,
         model: Some("gpt-realtime-1.5".into()),
         session_id: None,
         event_parser: RealtimeEventParser::RealtimeV2,
@@ -1640,11 +1664,11 @@ fn pf_824_websocket_session_is_recorded_as_api_key_work() {
             &config,
             "sub",
         ),
-        (
+        Some((
             "https://proxy.example/v1".to_string(),
             Some(codex_protocol::auth::AuthMode::ApiKey),
             "realtime:ws:sub".to_string(),
-        )
+        ))
     );
     assert_eq!(
         super::realtime_accounting_route(
@@ -1654,11 +1678,11 @@ fn pf_824_websocket_session_is_recorded_as_api_key_work() {
             &config,
             "sub",
         ),
-        (
+        Some((
             "https://calls.example/v1".to_string(),
             /*auth_mode*/ None,
             "realtime:sub".to_string(),
-        )
+        ))
     );
 }
 

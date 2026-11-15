@@ -398,6 +398,7 @@ async fn pf_889_webrtc_replacement_shutdown_and_stale_stop_keep_attempt_identity
         .state
         .lock()
         .await
+        .conversation
         .as_ref()
         .expect("first state")
         .stop_token
@@ -542,7 +543,7 @@ async fn pf_889_webrtc_session_inactive_when_sideband_connects_ends_once() -> an
     tokio::time::timeout(Duration::from_secs(5), sideband.accepted.recv()).await??;
     let input_task_done = {
         let state = owner.conversation.state.lock().await;
-        let state = state.as_ref().expect("running state");
+        let state = state.conversation.as_ref().expect("running state");
         state
             .realtime_active
             .store(false, std::sync::atomic::Ordering::Relaxed);
@@ -563,6 +564,7 @@ async fn pf_889_webrtc_session_inactive_when_sideband_connects_ends_once() -> an
             .state
             .lock()
             .await
+            .conversation
             .as_ref()
             .expect("running state")
             .input_task
@@ -595,15 +597,20 @@ async fn pf_889_webrtc_sideband_task_for_inactive_session_does_not_connect() -> 
     let (_audio_tx, audio_rx) = async_channel::bounded(1);
     let (events_tx, events_rx) = async_channel::bounded(1);
     let (transcript_tail_tx, _transcript_tail_rx) = async_channel::bounded(1);
-    let before = chrono::Utc::now().timestamp_millis();
-    let task =
-        realtime::run_webrtc_sideband_input_task(realtime::RealtimeWebrtcSidebandInputTask {
+    let task = realtime::sideband::spawn_webrtc_sideband_input_task(
+        realtime::RealtimeWebrtcSidebandInputTask {
             model_client,
-            client: codex_api::RealtimeWebsocketClient::new(api_provider)
-                .with_webrtc_sideband_base_url(sideband.endpoint.clone()),
+            client: codex_api::RealtimeWebsocketClient::new(
+                api_provider,
+                codex_http_client::HttpClientFactory::new(
+                    codex_http_client::OutboundProxyPolicy::ReqwestDefault,
+                ),
+            )
+            .with_webrtc_sideband_base_url(sideband.endpoint.clone()),
             session_config: codex_api::RealtimeSessionConfig {
                 instructions: "fixture".into(),
                 initial_items: Vec::new(),
+                delegation_ack_filler: None,
                 model: None,
                 session_id: None,
                 event_parser: codex_api::RealtimeEventParser::V1,
@@ -613,6 +620,7 @@ async fn pf_889_webrtc_sideband_task_for_inactive_session_does_not_connect() -> 
             },
             call_id: "rtc_fixture".into(),
             sideband_headers: http::HeaderMap::new(),
+            session_initialization: realtime::RealtimeSidebandSessionInitialization::CoreCreated,
             input_channels: realtime::RealtimeInputChannels {
                 text_rx,
                 handoff_output_rx,
@@ -627,6 +635,7 @@ async fn pf_889_webrtc_sideband_task_for_inactive_session_does_not_connect() -> 
                 codex_responses_as_items: false,
                 codex_response_item_prefix: None,
                 codex_response_handoff_mode: Default::default(),
+                backend_reasoning_status: false,
                 codex_response_handoff_channel_prefixes: Arc::new(Default::default()),
                 session_kind: realtime::RealtimeSessionKind::V1,
                 event_parser: codex_api::RealtimeEventParser::V1,
@@ -634,13 +643,18 @@ async fn pf_889_webrtc_sideband_task_for_inactive_session_does_not_connect() -> 
             session_kind: realtime::RealtimeSessionKind::V1,
             event_parser: codex_api::RealtimeEventParser::V1,
             realtime_active: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            flush_transcript_tail_on_session_end: false,
-            transcript_tail_tx,
+            transcript_tail_flush: realtime::RealtimeTranscriptTailFlush {
+                enabled: false,
+                event_parser: codex_api::RealtimeEventParser::V1,
+                tx: transcript_tail_tx,
+            },
             stop_token: tokio_util::sync::CancellationToken::new(),
-        });
+        },
+        /*record*/ None,
+    );
     // A task that connected would run until stopped; this one must return.
-    let ended = tokio::time::timeout(Duration::from_secs(5), task).await?;
-    assert!(ended >= before);
+    // (Upstream's task no longer returns its end time; main asserted it.)
+    tokio::time::timeout(Duration::from_secs(5), task).await??;
     assert!(events_rx.is_empty(), "no error for an inactive session");
     assert!(sideband.accepted.is_empty(), "nothing connected");
     Ok(())
