@@ -798,7 +798,9 @@ async fn evaluate_mitm_policy(
 
 fn hook_actions_touch_authorization(actions: Option<&MitmHookActions>) -> bool {
     actions.is_some_and(|actions| {
-        actions.strip_request_headers.contains(&AUTHORIZATION)
+        // SigV4 signing rewrites `Authorization`.
+        actions.aws_sigv4.is_some()
+            || actions.strip_request_headers.contains(&AUTHORIZATION)
             || actions
                 .inject_request_headers
                 .iter()
