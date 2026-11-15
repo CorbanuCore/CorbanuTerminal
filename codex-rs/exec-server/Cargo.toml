@@ -98,6 +98,7 @@ windows-sys = { workspace = true, features = [
 [dev-dependencies]
 anyhow = { workspace = true }
 codex-exec-server-test-support = { workspace = true }
+codex-log-guard = { workspace = true }
 codex-test-binary-support = { workspace = true }
 codex-utils-cargo-bin = { workspace = true }
 codex-windows-sandbox-test-support = { workspace = true }

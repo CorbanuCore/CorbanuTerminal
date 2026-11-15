@@ -18,6 +18,7 @@ use super::SNAPSHOT_RETRY_BACKOFF;
 use super::ShellSnapshotCache;
 use super::SnapshotReplay;
 use super::parse_snapshot;
+use crate::process_sandbox::NetworkPolicyHooks;
 use crate::process_sandbox::prepare_exec_request_with_telemetry;
 use crate::process_telemetry::ProcessTelemetry;
 use crate::protocol::ExecEnvPolicy;
@@ -99,9 +100,7 @@ async fn snapshot_failure_retries_are_bounded_and_single_flight(
             &params,
             params.env.clone(),
             /*runtime_paths*/ None,
-            /*network_policy_decider*/ None,
-            /*network_denial_reporter*/ None,
-            /*network_policy_audit_observer*/ None,
+            NetworkPolicyHooks::default(),
             &codex_network_proxy::RemoteCredentialBrokerCache::default(),
             &ProcessTelemetry::default(),
         )
@@ -111,9 +110,7 @@ async fn snapshot_failure_retries_are_bounded_and_single_flight(
             &params,
             params.env.clone(),
             /*runtime_paths*/ None,
-            /*network_policy_decider*/ None,
-            /*network_denial_reporter*/ None,
-            /*network_policy_audit_observer*/ None,
+            NetworkPolicyHooks::default(),
             &codex_network_proxy::RemoteCredentialBrokerCache::default(),
             &ProcessTelemetry::default(),
         )
