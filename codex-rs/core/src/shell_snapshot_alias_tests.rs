@@ -192,9 +192,17 @@ fn snapshots_refuse_startup_aliases_that_embed_credentials(
     )?;
     for render in [Render::Plain, Render::Brokered] {
         let raw = capture_raw(kind, executable, home.path(), render)?;
-        let error = snapshot(kind, &raw, &[], render).unwrap_err();
+        let result = snapshot(kind, &raw, &[], render);
+        if kind == ShellType::Sh {
+            // POSIX sh capture runs `unalias -a` and has no function printer,
+            // so its snapshot carries neither; it must still omit the value.
+            let snapshot = result?;
+            assert!(!snapshot.contains("ghx"), "{render:?}: {snapshot}");
+            assert!(!snapshot.contains("snapshot-exported-Canary-2314"));
+            continue;
+        }
         assert_eq!(
-            error.to_string(),
+            result.unwrap_err().to_string(),
             "Snapshot contains protected credential values",
             "{kind:?} {render:?}"
         );
