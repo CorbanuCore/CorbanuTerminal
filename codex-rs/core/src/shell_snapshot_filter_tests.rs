@@ -128,3 +128,16 @@ fn broker_marker_is_not_a_credential_but_short_secret_values_fail_closed() -> Re
     );
     Ok(())
 }
+
+#[test]
+fn snapshot_drops_capture_helper_exports() -> Result<()> {
+    // The value section skips the capture's helper names, so an export using
+    // that prefix could only be checked in its shell-quoted form: drop it.
+    let raw = "# Snapshot file\n\0\0#values\0SAFE_EXPORT\0ordinary\0\0__codex_snapshot_x\0export __codex_snapshot_x='q\"uoted'\n\0SAFE_EXPORT\0export SAFE_EXPORT=ordinary\n\0\0";
+    let snapshot = filter_with_gate(raw, &[], &OutputGate::new())?;
+    assert_eq!(
+        snapshot,
+        "# Snapshot file\n# exports (native declarations)\nexport SAFE_EXPORT=ordinary\n"
+    );
+    Ok(())
+}

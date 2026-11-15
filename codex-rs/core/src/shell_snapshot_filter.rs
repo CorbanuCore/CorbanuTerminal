@@ -86,8 +86,9 @@ fn retain_with_gate<'g>(
                 .map(|(name, value)| (*name, value.as_ref())),
         )
     {
-        // The broker's own marker lists brokered variable names (often "[]");
-        // it holds no credential and is too short to register.
+        // The broker's own marker lists brokered variables as (name, dummy
+        // placeholder) pairs, "[]" when none: no real credential, and too short
+        // to register. The placeholders stay protected through their variables.
         if is_secret_name(name)
             && !value.is_empty()
             && !name.eq_ignore_ascii_case(BROKERED_CREDENTIALS_ENV_KEY)
@@ -111,7 +112,10 @@ fn retain_with_gate<'g>(
         process: process_gate,
     };
     capture.retain_exports_by_value(|name, declaration, value| {
-        !is_secret_name(name)
+        // The capture's own helper names are never real exports, and the value
+        // section skips them, so they could only be checked by declaration.
+        !name.starts_with("__codex_snapshot_")
+            && !is_secret_name(name)
             && !value.is_some_and(|value| filter.sensitive(value))
             && !filter.sensitive(declaration)
     });

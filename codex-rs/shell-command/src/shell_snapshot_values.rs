@@ -34,11 +34,8 @@ pub(super) fn script(shell_type: ShellType) -> String {
     case "$__codex_snapshot_value_name" in
       ""|[0-9]*|*[!A-Za-z0-9_]*|__codex_snapshot_*) continue ;;
     esac
-    # Shell-managed specials (commands, functions, history...) are large and
-    # hold no startup credentials; exported ones such as PATH are still read.
-    case "${(tP)__codex_snapshot_value_name}" in
-      *special*) case "${(tP)__codex_snapshot_value_name}" in *export*) ;; *) continue ;; esac ;;
-    esac
+    # zsh's default IFS includes a NUL. It is shell plumbing, not a credential.
+    [[ "$__codex_snapshot_value_name" == IFS && "$IFS" == $' \t\n\0' ]] && continue
     # A zsh scalar can hold NULs, which would forge records. Fail the capture.
     [[ "${(P)__codex_snapshot_value_name}" == *$'\0'* ]] && exit 1
     RECORD "${(P)__codex_snapshot_value_name}"

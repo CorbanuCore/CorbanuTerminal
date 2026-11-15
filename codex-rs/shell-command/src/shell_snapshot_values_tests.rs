@@ -56,7 +56,10 @@ fn write_startup(home: &std::path::Path, startup: &str) -> Result<()> {
 fn snapshot_capture_records_raw_values_of_every_shell_variable() -> Result<()> {
     let home = tempdir()?;
     // nounset in startup must not abort the value section on unset parameters.
-    write_startup(home.path(), &format!("{STARTUP}set -u\n"))?;
+    write_startup(
+        home.path(),
+        &format!("{STARTUP}PSVAR=special-Canary-2314\nset -u\n"),
+    )?;
     for (shell, shell_type) in SHELLS {
         if !std::path::Path::new(shell).exists() {
             continue;
@@ -90,6 +93,10 @@ fn snapshot_capture_records_raw_values_of_every_shell_variable() -> Result<()> {
                     .any(|name| name.starts_with("__codex_snapshot_")),
                 "{shell}"
             );
+            if shell_type == ShellType::Zsh {
+                // Specials are read too, as on main (PSVAR is zsh's prompt array).
+                assert_eq!(values.get("PSVAR"), Some(&"special-Canary-2314"));
+            }
             // The section must not shift the export records that follow it.
             assert!(
                 captured
