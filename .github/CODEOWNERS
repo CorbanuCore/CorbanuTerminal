@@ -115,6 +115,8 @@
 /codex-rs/deny.toml @corbanu-security
 /codex-rs/.cargo/audit.toml @corbanu-security
 /.github/workflows/cargo-deny.yml @corbanu-security
+/.github/scripts/cargo_deny.py @corbanu-security
+/.github/scripts/test_cargo_deny.py @corbanu-security
 # Security CI (D465): workflows that run security checks, and the scripts only they run.
 # Not owned (changed too often): rust-ci.yml and rust-ci-full.yml, which call
 # rust-ci-core-security.yml; see the handoff, section 4.
