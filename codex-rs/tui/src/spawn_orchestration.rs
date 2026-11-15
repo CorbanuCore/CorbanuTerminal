@@ -3269,7 +3269,7 @@ impl App {
             ));
             return false;
         }
-        let (resume_config, model_override, permission_settings) =
+        let (resume_config, model_override, permission_overrides) =
             self.native_spawn_resume_request(saved_runtime.as_ref());
         let model_settings = if model_override.is_some() {
             crate::app_server_session::ResumeModelSettings::OverrideFromCurrentConfig
@@ -3277,11 +3277,12 @@ impl App {
             crate::app_server_session::ResumeModelSettings::RestoreFromThread
         };
         match app_server
-            .resume_thread(
+            .resume_thread_with_permission_overrides(
+                &self.local_settings.reloaded(&resume_config),
                 resume_config,
                 thread_id,
                 model_settings,
-                permission_settings,
+                permission_overrides,
             )
             .await
         {
@@ -3352,7 +3353,7 @@ impl App {
     ) -> (
         crate::legacy_core::config::Config,
         Option<ResumeModelOverride>,
-        crate::app_server_session::ResumePermissionSettings,
+        crate::resume_permissions::ResumePermissions,
     ) {
         let mut resume_config = self.config.clone();
         let model_override = saved_runtime.map(|runtime| {
@@ -3374,7 +3375,7 @@ impl App {
         (
             resume_config,
             model_override,
-            self.resume_permission_settings(),
+            self.resume_permission_overrides(&resume_config),
         )
     }
 
