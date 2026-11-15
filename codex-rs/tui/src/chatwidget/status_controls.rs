@@ -5,14 +5,10 @@
 //! history-facing `/status` surface.
 
 use super::*;
-<<<<<<< HEAD
-use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
-use codex_model_provider_info::ZAI_DEFAULT_MODEL;
-||||||| 413492cd6c
-=======
 use crate::bottom_pane::footer_content::FooterContent;
 use crate::status::thread_cost_micros;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
+use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 
 impl ChatWidget {
     /// Update the status indicator header and details.
@@ -94,7 +90,6 @@ impl ChatWidget {
         self.bottom_pane.set_status_line(status_line);
     }
 
-<<<<<<< HEAD
     pub(crate) fn set_gpu_spend_status(&mut self, status: Option<String>) {
         if self.gpu_spend_status == status {
             return;
@@ -103,19 +98,6 @@ impl ChatWidget {
         self.refresh_status_line();
     }
 
-    /// Sets the terminal hyperlink target for the currently rendered footer status line.
-    pub(crate) fn set_status_line_hyperlink(&mut self, url: Option<String>) {
-        self.bottom_pane.set_status_line_hyperlink(url);
-    }
-
-||||||| 413492cd6c
-    /// Sets the terminal hyperlink target for the currently rendered footer status line.
-    pub(crate) fn set_status_line_hyperlink(&mut self, url: Option<String>) {
-        self.bottom_pane.set_status_line_hyperlink(url);
-    }
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     /// Forwards the contextual active-agent label into the bottom-pane footer pipeline.
     ///
     /// `ChatWidget` stays a pass-through here so `App` remains the owner of "which thread is the
@@ -317,8 +299,32 @@ impl ChatWidget {
             self.refreshing_status_outputs
                 .push((request_id, handle.clone()));
         }
-<<<<<<< HEAD
-        self.add_to_history(cell);
+        if self.thread_usage_is_available() {
+            handle.reserve_thread_usage_label_width();
+            handle.set_thread_usage(self.estimated_thread_usage().cloned());
+            self.add_to_history(cell);
+            self.request_thread_usage_for_status(handle.clone());
+        } else {
+            self.add_to_history(cell);
+        }
+        // Capture the displayed status inputs before later configuration or thread changes.
+        let mut copy_targets = vec![
+            ("Model".to_string(), Arc::<str>::from(model)),
+            (
+                "Directory".to_string(),
+                Arc::from(self.config.cwd.display().to_string()),
+            ),
+        ];
+        if let Some(name) = self.thread_name.as_deref().filter(|name| !name.is_empty()) {
+            copy_targets.push(("Thread name".to_string(), Arc::from(name)));
+        }
+        if let Some(thread_id) = self.thread_id {
+            copy_targets.push(("Session ID".to_string(), Arc::from(thread_id.to_string())));
+        }
+        self.transcript.last_status_copy_targets = Some(super::transcript::StatusCopySource {
+            handle,
+            fields: copy_targets,
+        });
         // #1193/#1251: refresh the cached answers in the background so a
         // change made by another process shows on the next `/status`.
         if refresh_named_accounts {
@@ -385,36 +391,6 @@ impl ChatWidget {
         usage: Vec<codex_app_server_protocol::ThreadAccountTokenUsage>,
     ) {
         self.session_account_usage.record(thread_id, usage);
-||||||| 413492cd6c
-        self.add_to_history(cell);
-=======
-        if self.thread_usage_is_available() {
-            handle.reserve_thread_usage_label_width();
-            handle.set_thread_usage(self.estimated_thread_usage().cloned());
-            self.add_to_history(cell);
-            self.request_thread_usage_for_status(handle.clone());
-        } else {
-            self.add_to_history(cell);
-        }
-        // Capture the displayed status inputs before later configuration or thread changes.
-        let mut copy_targets = vec![
-            ("Model".to_string(), Arc::<str>::from(model)),
-            (
-                "Directory".to_string(),
-                Arc::from(self.config.cwd.display().to_string()),
-            ),
-        ];
-        if let Some(name) = self.thread_name.as_deref().filter(|name| !name.is_empty()) {
-            copy_targets.push(("Thread name".to_string(), Arc::from(name)));
-        }
-        if let Some(thread_id) = self.thread_id {
-            copy_targets.push(("Session ID".to_string(), Arc::from(thread_id.to_string())));
-        }
-        self.transcript.last_status_copy_targets = Some(super::transcript::StatusCopySource {
-            handle,
-            fields: copy_targets,
-        });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) fn finish_status_rate_limit_refresh(

@@ -123,6 +123,8 @@ use codex_config::types::ApprovalsReviewer;
 use codex_config::types::Notifications;
 use codex_connectors::AppInfo;
 use codex_features::Feature;
+#[cfg(test)]
+use codex_git_utils::CommitLogEntry;
 use codex_git_utils::current_branch_name;
 use codex_git_utils::get_git_repo_root;
 use codex_git_utils::local_git_branches;
@@ -158,9 +160,12 @@ use crossterm::event::KeyEventKind;
 use crossterm::event::KeyModifiers;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
+use ratatui::style::Color;
 use ratatui::style::Style;
 use ratatui::style::Stylize;
 use ratatui::text::Line;
+#[cfg(test)]
+use ratatui::text::Text;
 use ratatui::widgets::Clear;
 use ratatui::widgets::Paragraph;
 use ratatui::widgets::Widget;
@@ -170,20 +175,8 @@ use tracing::debug;
 use tracing::warn;
 
 const DEFAULT_MODEL_DISPLAY_NAME: &str = "loading";
-<<<<<<< HEAD
 /// #855: how many recent error messages a masked credential entry checks.
 const SHOWN_ERROR_TEXTS_KEPT: usize = 16;
-const MULTI_AGENT_ENABLE_TITLE: &str = "Enable subagents?";
-const MULTI_AGENT_ENABLE_YES: &str = "Yes, enable";
-const MULTI_AGENT_ENABLE_NO: &str = "Not now";
-const MULTI_AGENT_ENABLE_NOTICE: &str = "Subagents will be enabled in the next session.";
-||||||| 413492cd6c
-const MULTI_AGENT_ENABLE_TITLE: &str = "Enable subagents?";
-const MULTI_AGENT_ENABLE_YES: &str = "Yes, enable";
-const MULTI_AGENT_ENABLE_NO: &str = "Not now";
-const MULTI_AGENT_ENABLE_NOTICE: &str = "Subagents will be enabled in the next session.";
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 const TRUSTED_ACCESS_FOR_CYBER_VERIFICATION_WARNING: &str = "Your conversations have multiple flags for possible cybersecurity risk. Responses may take longer because extra safety checks are on. To get authorized for security work, join the Trusted Access for Cyber program: https://chatgpt.com/cyber";
 const MEMORIES_ENABLE_NOTICE: &str = "Memories will be enabled in the next session.";
 const MEMORIES_DOC_URL: &str = "https://developers.openai.com/codex/memories";
@@ -258,6 +251,7 @@ use crate::key_hint::KeyBindingListExt;
 use crate::keymap::ChatKeymap;
 use crate::keymap::RuntimeKeymap;
 use crate::render::Insets;
+use crate::render::renderable::ColumnRenderable;
 use crate::render::renderable::FlexRenderable;
 use crate::render::renderable::Renderable;
 use crate::render::renderable::RenderableExt;
@@ -418,17 +412,11 @@ mod status_surfaces;
 use self::status_surface_commands::StatusSurfaceOverrides;
 mod streaming;
 use self::status_surfaces::CachedProjectRootName;
-<<<<<<< HEAD
+mod thread_usage;
+pub(crate) use self::thread_usage::ThreadUsageOutcome;
 mod tokens;
 pub(crate) use self::tokens::TokenActivityView;
 pub(crate) use tokens::cost_command;
-||||||| 413492cd6c
-mod tokens;
-pub(crate) use self::tokens::TokenActivityView;
-=======
-mod thread_usage;
-pub(crate) use self::thread_usage::ThreadUsageOutcome;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod tool_lifecycle;
 mod tool_requests;
 mod transcript;
@@ -458,7 +446,6 @@ mod tasknode_menu;
 pub(crate) mod telegram_setup;
 mod usage;
 mod user_messages;
-<<<<<<< HEAD
 mod vault_menu;
 mod wallet_account_actions;
 pub(crate) mod wallet_api;
@@ -468,11 +455,8 @@ pub(crate) mod wallet_receipt;
 mod wallet_render;
 mod wallet_unlock;
 pub(crate) mod wallet_usage;
-||||||| 413492cd6c
-=======
 mod working_directory;
 use self::user_messages::MessageDelivery;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use self::user_messages::PendingSteer;
 #[cfg(test)]
 use self::user_messages::PendingSteerCompareKey;
@@ -532,16 +516,16 @@ const ASK_FOR_APPROVAL_LABEL: &str = "Ask for approval";
 const APPROVE_FOR_ME_LABEL: &str = "Approve for me";
 const AUTO_REVIEW_DESCRIPTION: &str = "Only ask for actions detected as potentially unsafe";
 const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
-<<<<<<< HEAD
-const DEFAULT_STATUS_LINE_ITEMS: [&str; 4] =
-    ["model-with-reasoning", "current-dir", "brand", "tps"];
-||||||| 413492cd6c
-const DEFAULT_STATUS_LINE_ITEMS: [&str; 2] = ["model-with-reasoning", "current-dir"];
+/// Corbanu's brand and tokens-per-second items stay ahead of upstream's
+/// thread name, so they remain visible on narrow terminals.
+const DEFAULT_STATUS_LINE_ITEMS: [&str; 5] = [
+    "model-with-reasoning",
+    "current-dir",
+    "brand",
+    "tps",
+    "thread-name",
+];
 
-=======
-const DEFAULT_STATUS_LINE_ITEMS: [&str; 3] = ["model-with-reasoning", "current-dir", "thread-name"];
-
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 /// Common initialization parameters shared by all `ChatWidget` constructors.
 pub(crate) struct ChatWidgetInit {
     pub(crate) config: Config,
@@ -630,14 +614,9 @@ pub(crate) struct ChatWidget {
     session_header: SessionHeader,
     pub(crate) initial_user_message: Option<UserMessage>,
     status_account_display: Option<StatusAccountDisplay>,
-<<<<<<< HEAD
     gpu_spend_status: Option<String>,
     active_external_model_display: Option<String>,
     runtime_model_provider_base_url: Option<String>,
-||||||| 413492cd6c
-    runtime_model_provider_base_url: Option<String>,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub(crate) remote_connection: Option<RemoteConnectionStatus>,
     /// Remote app servers cannot read image paths on the TUI host.
     pub(crate) snapshot_local_images: bool,
@@ -649,29 +628,18 @@ pub(crate) struct ChatWidget {
     #[cfg(any(target_os = "windows", test))]
     pub(crate) windows_sandbox_elevated_setup_complete: bool,
     token_info: Option<TokenUsageInfo>,
-<<<<<<< HEAD
     // PF-84: per-account usage of every thread in this session, for `/status`.
     pub(crate) session_account_usage: crate::status::SessionAccountUsage,
     tps_estimator: TpsEstimator,
-||||||| 413492cd6c
-=======
     token_usage_pending: bool,
     // Status and polling use account usage reads; response streams may identify meters differently.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     rate_limit_snapshots_by_limit_id: BTreeMap<String, RateLimitSnapshotDisplay>,
     refreshing_status_outputs: Vec<(u64, StatusHistoryHandle)>,
     next_status_refresh_request_id: u64,
-<<<<<<< HEAD
     accounting_inspector: Option<tokens::Inspector>,
     refreshing_token_activity_output: Option<tokens::PendingTokenActivityOutput>,
     completed_token_activity_output: Option<history_cell::CompositeHistoryCell>,
     next_token_activity_request_id: u64,
-||||||| 413492cd6c
-    refreshing_token_activity_output: Option<tokens::PendingTokenActivityOutput>,
-    completed_token_activity_output: Option<history_cell::CompositeHistoryCell>,
-    next_token_activity_request_id: u64,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pending_rate_limit_reset_request_id: Option<u64>,
     pending_rate_limit_reset_idempotency_key: Option<String>,
     rate_limit_reset_picker_request_id: Option<u64>,
@@ -706,7 +674,6 @@ pub(crate) struct ChatWidget {
     // Stream lifecycle controller for proposed plan output.
     plan_stream_controller: Option<PlanStreamController>,
     pending_stream_consolidations: usize,
-<<<<<<< HEAD
     campaign_tracker_turn: Option<String>,
     campaign_tracker_indicator: Option<String>,
     campaign_tracker_automated_input: bool,
@@ -733,15 +700,10 @@ pub(crate) struct ChatWidget {
     telegram_discovery_generation: u64,
     wallet_payment_config: Option<crate::chatwidget::wallet_menu::WalletPaymentConfig>,
     wallet_balances: Option<codex_wallet::WalletBalances>,
-||||||| 413492cd6c
-    /// Holds the platform clipboard lease so copied text remains available while supported.
-    clipboard_lease: Option<crate::clipboard_copy::ClipboardLease>,
-=======
     /// Copy feedback is discarded with its originating conversation.
     pending_clipboard: Option<clipboard::PendingCopy>,
     /// Legacy terminals report auto-repeat as new presses; suppress the burst after a slow paste.
     suppress_image_paste_until: Instant,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     copy_last_response_binding: Vec<KeyBinding>,
     running_commands: HashMap<String, RunningCommand>,
     collab_agent_metadata: HashMap<ThreadId, AgentMetadata>,
@@ -1760,8 +1722,6 @@ impl ChatWidget {
     }
 
     pub(crate) fn add_error_message(&mut self, message: String) {
-        // A session that fails to start must not swallow its config warnings.
-        self.show_deferred_config_warnings();
         if self.shown_error_texts.len() == SHOWN_ERROR_TEXTS_KEPT {
             self.shown_error_texts.pop_front();
         }
@@ -1895,14 +1855,8 @@ impl ChatWidget {
     /// rebuilding runs through app-level resize reflow.
     pub(crate) fn on_terminal_resize(&mut self, width: u16) {
         let had_rendered_width = self.last_rendered_width.get().is_some();
-<<<<<<< HEAD
-        self.last_rendered_width.set(Some(width as usize));
-        self.reflow_accounting_inspector(width);
-||||||| 413492cd6c
-        self.last_rendered_width.set(Some(width as usize));
-=======
         self.last_rendered_width.set(Some(width));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        self.reflow_accounting_inspector(width);
         let stream_width = self.current_stream_width(/*reserved_cols*/ 2);
         let plan_stream_width = self.current_stream_width(/*reserved_cols*/ 4);
         if let Some(controller) = self.stream_controller.as_mut() {
@@ -2046,7 +2000,6 @@ impl ChatWidget {
         T: Into<AppCommand>,
     {
         let op: AppCommand = op.into();
-<<<<<<< HEAD
         if matches!(
             &op,
             AppCommand::UserTurn { .. } | AppCommand::Review { .. } | AppCommand::Compact
@@ -2055,10 +2008,9 @@ impl ChatWidget {
             .current_requires_recovery(&self.config.model_provider_id, self.current_model())
         {
             self.add_error_message(provider_model_policy::current_provider_blocked_message());
-||||||| 413492cd6c
-=======
+            return false;
+        }
         if self.rejects_misalignment_policy_op(&op) {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             return false;
         }
         if self.blocks_direct_input
