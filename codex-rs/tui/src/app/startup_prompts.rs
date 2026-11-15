@@ -117,7 +117,6 @@ pub(super) fn emit_system_bwrap_warning(app_event_tx: &AppEventSender, config: &
     )));
 }
 
-<<<<<<< HEAD
 #[cfg(target_os = "windows")]
 pub(super) fn emit_legacy_windows_sandbox_warning(app_event_tx: &AppEventSender, config: &Config) {
     let Some(message) = codex_sandboxing::legacy_windows_sandbox_warning(
@@ -138,8 +137,8 @@ pub(super) fn emit_legacy_windows_sandbox_warning(
     _app_event_tx: &AppEventSender,
     _config: &Config,
 ) {
-||||||| 413492cd6c
-=======
+}
+
 pub(super) fn model_upgrade_for_migration(
     model_provider_id: &str,
     model: &str,
@@ -162,7 +161,7 @@ pub(super) fn model_upgrade_for_migration(
         _ => return None,
     };
     let availability = if model == "openai.gpt-5.4" {
-        "no longer offered in Codex"
+        "no longer offered in Corbanu Terminal"
     } else {
         "no longer available"
     };
@@ -176,7 +175,6 @@ pub(super) fn model_upgrade_for_migration(
         )),
         retirement_at: None,
     })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub(super) fn should_show_model_migration_prompt(
@@ -303,90 +301,11 @@ pub(super) fn select_model_availability_nux(
 }
 
 pub(super) async fn prepare_startup_tooltip_override(
-<<<<<<< HEAD
-    _config: &mut Config,
+    _config: &mut crate::local_settings::LocalSettings,
     _available_models: &[ModelPreset],
     _is_first_run: bool,
-||||||| 413492cd6c
-    config: &mut Config,
-    available_models: &[ModelPreset],
-    is_first_run: bool,
-=======
-    config: &mut crate::local_settings::LocalSettings,
-    available_models: &[ModelPreset],
-    is_first_run: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 ) -> Option<String> {
-<<<<<<< HEAD
     None
-||||||| 413492cd6c
-    if is_first_run || !config.show_tooltips {
-        return None;
-    }
-
-    let tooltip_override =
-        select_model_availability_nux(available_models, &config.model_availability_nux)?;
-
-    let shown_count = config
-        .model_availability_nux
-        .shown_count
-        .get(&tooltip_override.model_slug)
-        .copied()
-        .unwrap_or_default();
-    let next_count = shown_count.saturating_add(1);
-    let mut updated_shown_count = config.model_availability_nux.shown_count.clone();
-    updated_shown_count.insert(tooltip_override.model_slug.clone(), next_count);
-
-    if let Err(err) = ConfigEditsBuilder::for_config(config)
-        .set_model_availability_nux_count(&updated_shown_count)
-        .apply()
-        .await
-    {
-        tracing::error!(
-            error = %err,
-            model = %tooltip_override.model_slug,
-            "failed to persist model availability nux count"
-        );
-        return Some(tooltip_override.message);
-    }
-
-    config.model_availability_nux.shown_count = updated_shown_count;
-    Some(tooltip_override.message)
-=======
-    if is_first_run || !config.tui.show_tooltips {
-        return None;
-    }
-
-    let tooltip_override =
-        select_model_availability_nux(available_models, &config.tui.model_availability_nux)?;
-
-    let shown_count = config
-        .tui
-        .model_availability_nux
-        .shown_count
-        .get(&tooltip_override.model_slug)
-        .copied()
-        .unwrap_or_default();
-    let next_count = shown_count.saturating_add(1);
-    let mut updated_shown_count = config.tui.model_availability_nux.shown_count.clone();
-    updated_shown_count.insert(tooltip_override.model_slug.clone(), next_count);
-
-    if let Err(err) = ConfigEditsBuilder::for_config_path(config.user_config_path.as_path())
-        .set_model_availability_nux_count(&updated_shown_count)
-        .apply()
-        .await
-    {
-        tracing::error!(
-            error = %err,
-            model = %tooltip_override.model_slug,
-            "failed to persist model availability nux count"
-        );
-        return Some(tooltip_override.message);
-    }
-
-    config.tui.model_availability_nux.shown_count = updated_shown_count;
-    Some(tooltip_override.message)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub(super) async fn handle_model_migration_prompt_if_needed(

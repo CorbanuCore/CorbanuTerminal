@@ -28,7 +28,7 @@ pub(super) async fn try_submit_user_turn(
     else {
         return Ok(false);
     };
-    if let Some(turn_id) = app.active_turn_id_for_thread(thread_id).await {
+    if let Some(turn_id) = app.active_turn_id_for_submission(thread_id).await {
         if *turn_trigger != "user" {
             color_eyre::eyre::bail!("the fork already has an active turn");
         }
@@ -86,20 +86,37 @@ pub(super) async fn try_submit_user_turn(
                                 let mut store = channel.store.lock().await;
                                 store.set_active_turn_id(actual_turn_id);
                             }
-                            return Err(error.into());
+                            // Corbanu: a failed steer stays local to its pane.
+                            app.note_thread_steer_failure(thread_id, error);
+                            return Ok(true);
                         }
-                        None => return Err(error.into()),
+                        None => {
+                            app.note_thread_steer_failure(thread_id, error);
+                            return Ok(true);
+                        }
                     }
                 }
             }
         }
+    }
+    // A permission change awaiting confirmation holds the next turn on its thread.
+    if app
+        .pending_permission_confirmation
+        .as_ref()
+        .is_some_and(|pending| pending.thread_id == thread_id)
+    {
+        app.chat_widget.defer_turn_for_permission_confirmation();
+        return Ok(true);
     }
     let eligible_account = app.chat_widget.daybreak_account_eligible();
     let enabled = app.chat_widget.daybreak_enabled
         && !app.chat_widget.side_conversation_active()
         && !app.side_threads.contains_key(&thread_id);
     let cyber_access_program = match crate::daybreak::program_for_turn(
-        &app.chat_widget.model_catalog().models,
+        &app.chat_widget
+            .model_catalog()
+            .try_list_models()
+            .unwrap_or_default(),
         model,
         eligible_account,
         enabled,
@@ -174,12 +191,34 @@ pub(super) async fn try_submit_user_turn(
             collaboration_mode.clone(),
             final_output_json_schema.clone(),
             cyber_access_program.map(Into::into),
+            app.spawn_additional_context_for_thread(thread_id),
         )
         .await?;
-    if app.active_thread_id == Some(thread_id) && app.chat_widget.thread_id() == Some(thread_id) {
-        crate::startup_recovery::acknowledged(client_user_message_id);
-        app.chat_widget
-            .record_safety_buffering_turn(response.turn.id, op);
+    match response {
+        crate::app_server_session::TurnStartOutcome::Started {
+            turn_id,
+            recovered_failures,
+        } => {
+            if !recovered_failures.is_empty() {
+                app.surface_turn_start_failure(
+                    thread_id,
+                    recovered_failures.join("\n"),
+                    /*will_retry*/ true,
+                )
+                .await;
+            }
+            if app.active_thread_id == Some(thread_id)
+                && app.chat_widget.thread_id() == Some(thread_id)
+            {
+                crate::startup_recovery::acknowledged(client_user_message_id);
+                app.chat_widget.record_safety_buffering_turn(turn_id, op);
+            }
+        }
+        crate::app_server_session::TurnStartOutcome::CapacityUnavailable { max_threads } => {
+            app.chat_widget.add_error_message(format!(
+                "Cannot start turn: all {max_threads} execution slots are in use."
+            ));
+        }
     }
     Ok(true)
 }
