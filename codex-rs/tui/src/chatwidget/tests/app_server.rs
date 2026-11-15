@@ -1329,6 +1329,8 @@ async fn startup_config_warning_and_its_session_repeat_are_shown_once() {
     let mut shown = drain_insert_history(&mut rx);
 
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
+        daybreak_enabled: false,
+        windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: ThreadId::new(),
         forked_from_id: None,
         fork_parent_title: None,
@@ -1345,7 +1347,6 @@ async fn startup_config_warning_and_its_session_repeat_are_shown_once() {
         instruction_source_paths: Vec::new(),
         reasoning_effort: Some(ReasoningEffortConfig::default()),
         collaboration_mode: None,
-        personality: None,
         message_history: None,
         network_proxy: None,
         rollout_path: None,
