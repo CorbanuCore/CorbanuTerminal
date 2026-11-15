@@ -319,9 +319,11 @@ async fn the_model_list_follows_a_mid_session_account_switch() {
 async fn mcp_refresh_updates_plugin_auth_mode_before_checking_pending_state() {
     let codex_home = tempfile::tempdir().expect("create auth test directory");
     let (session, _turn_context) = super::tests::make_session_and_context().await;
+    // The test session's plugins already follow an API key, so switch to a ChatGPT
+    // sign-in: a different auth mode the refresh must hand to the plugins.
     session.services.active_auth.replace_for_testing(
         codex_login::AuthManager::from_auth_for_testing_with_home(
-            codex_login::CodexAuth::from_api_key("old-api-key"),
+            codex_login::CodexAuth::create_dummy_chatgpt_auth_for_testing(),
             codex_home.path().to_path_buf(),
         ),
     );

@@ -2,7 +2,16 @@
 //! rules as the same settings in that project's `.codex/config.toml`: hook
 //! trust, project MCP servers, feature defaults, `[security]`,
 //! `agents.provider_allowlist` (which project config also may no longer
-//! widen) and skill settings. User roles are unchanged.
+//! widen) and skill settings.
+//!
+//! On the upstream-sync branch D526 (a) (owner-accepted 2026-11-14) narrows
+//! what any role applies to its child: upstream's role fields, base
+//! instructions and a provider choice, turning a few features or skills off,
+//! and stricter permissions. Hooks, MCP servers, other feature settings,
+//! skill enables and `agents.provider_allowlist` from a role file are not
+//! applied (startup warning), for project and user roles alike, so the child
+//! keeps its parent's. These tests check that, which is at least as strict as
+//! D525 for project roles.
 
 use super::*;
 use crate::config::ConfigBuilder;
@@ -125,6 +134,10 @@ fn trust_state(hook: &HookListEntry) -> String {
 }
 
 fn listed_hook(config: &Config) -> HookListEntry {
+    find_hook(config).expect("the hook is listed")
+}
+
+fn find_hook(config: &Config) -> Option<HookListEntry> {
     codex_hooks::list_hooks(HooksConfig {
         feature_enabled: true,
         config_layer_stack: Some(config.config_layer_stack.clone()),
@@ -138,7 +151,6 @@ fn listed_hook(config: &Config) -> HookListEntry {
             codex_hooks::HookListEntryHandler::Command { command, .. } if command == HOOK_COMMAND
         )
     })
-    .expect("the hook is listed")
 }
 
 #[tokio::test]
@@ -156,62 +168,51 @@ async fn project_config_hook_cannot_mark_itself_trusted() {
     );
 }
 
+/// The hook a project's config would add, with a `[hooks.state]` entry trying
+/// to mark itself trusted.
+async fn self_trusted_hook_toml(fixture: &Fixture) -> String {
+    fixture.write_project_config(&hook_toml(/*trust*/ None));
+    let hook = listed_hook(&fixture.config().await);
+    fixture.write_project_config("");
+    hook_toml(Some(&hook))
+}
+
+/// D526 (a): a project role's hook, even one marking itself trusted, is not
+/// applied to the child, so it never runs (D525 asked for project trust review).
 #[tokio::test]
 async fn project_role_hook_needs_the_same_trust_review_as_project_config_hooks() {
     let fixture = Fixture::new();
-    let role_path = fixture.write_project_role(&hook_toml(/*trust*/ None));
-    let hook = listed_hook(&fixture.child("relay").await);
-    fixture.write_project_role(&hook_toml(Some(&hook)));
+    let hook = self_trusted_hook_toml(&fixture).await;
+    fixture.write_project_role(&hook);
 
-    let hook = listed_hook(&fixture.child("relay").await);
-
-    assert_eq!(
-        (hook.source, hook.trust_status),
-        (HookSource::Project, HookTrustStatus::Untrusted)
-    );
-    // The trust key names the role file, so trusting it in one checkout does
-    // not trust a same-looking hook in another.
-    assert_eq!(hook.source_path.as_path(), role_path.as_path());
-
-    // Trust the person records in their own config is honoured.
-    fixture.write_user_config(&trust_state(&hook));
-    let hook = listed_hook(&fixture.child("relay").await);
-    assert_eq!(hook.trust_status, HookTrustStatus::Trusted);
+    assert_eq!(find_hook(&fixture.child("relay").await), None);
 }
 
+/// D526 (a): nor through a nested role.
 #[tokio::test]
 async fn project_role_hook_stays_a_project_hook_under_a_nested_role() {
     let fixture = Fixture::new();
-    fixture.write_project_role(&hook_toml(/*trust*/ None));
+    let hook = self_trusted_hook_toml(&fixture).await;
+    fixture.write_project_role(&hook);
     fixture.write_user_role("");
-    let hook = listed_hook(&fixture.child("relay").await);
-    fixture.write_project_role(&hook_toml(Some(&hook)));
 
     let mut grandchild = fixture.child("relay").await;
     apply_role_to_config(&mut grandchild, Some("helper"))
         .await
         .expect("nested role should apply");
-    let hook = listed_hook(&grandchild);
 
-    assert_eq!(
-        (hook.source, hook.trust_status),
-        (HookSource::Project, HookTrustStatus::Untrusted)
-    );
+    assert_eq!(find_hook(&grandchild), None);
 }
 
+/// D526 (a): a user role's hook is not applied either; the child keeps its
+/// parent's hooks.
 #[tokio::test]
 async fn user_role_hook_keeps_its_own_trust_state() {
     let fixture = Fixture::new();
-    fixture.write_user_role(&hook_toml(/*trust*/ None));
-    let hook = listed_hook(&fixture.child("helper").await);
-    fixture.write_user_role(&hook_toml(Some(&hook)));
+    let hook = self_trusted_hook_toml(&fixture).await;
+    fixture.write_user_role(&hook);
 
-    let hook = listed_hook(&fixture.child("helper").await);
-
-    assert_eq!(
-        (hook.source, hook.trust_status),
-        (HookSource::SessionFlags, HookTrustStatus::Trusted)
-    );
+    assert_eq!(find_hook(&fixture.child("helper").await), None);
 }
 
 const AGGRESSIVE: &str = "[security]\nversion = 1\nlevel = \"aggressive\"\n";
@@ -230,7 +231,11 @@ async fn project_role_cannot_turn_off_a_security_level_feature_default() {
         project_child.features.enabled(Feature::BrokerModelAuth),
         crate::model_broker_auth::LEVEL_DEFAULT_SUPPORTED
     );
-    assert!(!user_child.features.enabled(Feature::BrokerModelAuth));
+    // D526 (a): a role may turn off only upstream's short list of features.
+    assert_eq!(
+        user_child.features.enabled(Feature::BrokerModelAuth),
+        crate::model_broker_auth::LEVEL_DEFAULT_SUPPORTED
+    );
 }
 
 const USER_DOCS_SERVER: &str = "[mcp_servers.docs]\ncommand = \"docs-server\"\n";
@@ -245,24 +250,22 @@ async fn project_role_mcp_server_counts_as_a_project_server() {
     let project_child = fixture.child("relay").await;
     let user_child = fixture.child("helper").await;
 
-    // D52: no Aggressive "always allow" record for a server a project changes.
-    assert!(crate::mcp_tool_call::project_layer_mentions_mcp_server(
-        &project_child,
-        "docs"
-    ));
-    assert!(!crate::mcp_tool_call::project_layer_mentions_mcp_server(
-        &user_child,
-        "docs"
-    ));
-    // An approval for the role's server is not saved to the person's config.
-    assert!(!matches!(
-        crate::mcp_tool_call::custom_mcp_tool_approval_config_builder(&project_child, "docs"),
-        Ok(Some(_))
-    ));
-    assert!(matches!(
-        crate::mcp_tool_call::custom_mcp_tool_approval_config_builder(&user_child, "docs"),
-        Ok(Some(_))
-    ));
+    // D526 (a): neither role's server is applied; both children keep the
+    // person's own `docs` server, so no project layer mentions it (D52) and an
+    // approval for it may be saved to the person's config.
+    for child in [&project_child, &user_child] {
+        assert_eq!(
+            child.mcp_servers.get().get("docs"),
+            fixture.config().await.mcp_servers.get().get("docs")
+        );
+        assert!(!crate::mcp_tool_call::project_layer_mentions_mcp_server(
+            child, "docs"
+        ));
+        assert!(matches!(
+            crate::mcp_tool_call::custom_mcp_tool_approval_config_builder(child, "docs"),
+            Ok(Some(_))
+        ));
+    }
 }
 
 const PERMISSIVE: &str = "[security]\nversion = 1\nlevel = \"permissive\"\n";
@@ -326,10 +329,8 @@ async fn project_role_cannot_widen_the_provider_allowlist() {
     let user_child = fixture.child("helper").await;
 
     assert_eq!(allowed(&project_child), Some(vec!["openai".to_string()]));
-    assert_eq!(
-        allowed(&user_child),
-        Some(vec!["openai".to_string(), "relay".to_string()])
-    );
+    // D526 (a): a role's allowlist is not applied, so a user role cannot widen it either.
+    assert_eq!(allowed(&user_child), Some(vec!["openai".to_string()]));
 }
 
 #[tokio::test]
@@ -340,23 +341,16 @@ async fn project_config_and_roles_can_narrow_the_provider_allowlist() {
 
     let config = fixture.config().await;
     assert_eq!(allowed(&config), Some(vec!["openai".to_string()]));
-    // The role removes the last provider: none is allowed, with a warning.
+    // D526 (a): the role's allowlist is not applied; the child keeps the
+    // project-narrowed list.
     let project_child = fixture.child("relay").await;
-    assert_eq!(allowed(&project_child), Some(Vec::new()));
-    assert!(
-        project_child
-            .startup_warnings
-            .iter()
-            .any(|warning| warning.contains("No provider is allowed for spawned agents")),
-        "{:?}",
-        project_child.startup_warnings
-    );
+    assert_eq!(allowed(&project_child), Some(vec!["openai".to_string()]));
 
-    // Unrestricted until a project narrows it.
+    // Unrestricted until project config narrows it; a role does not.
     let fixture = Fixture::new();
     fixture.write_project_role(&allowlist(&["openai"]));
     let project_child = fixture.child("relay").await;
-    assert_eq!(allowed(&project_child), Some(vec!["openai".to_string()]));
+    assert_eq!(allowed(&project_child), None);
 }
 
 #[tokio::test]
@@ -392,11 +386,30 @@ async fn issue_2150_preflight_identifies_project_role_file() {
 
 #[tokio::test]
 async fn issue_2150_empty_project_lists_warn_without_an_operator_list() {
+    // D526 (a): a role's allowlist is not applied, so two nested project
+    // configs are what leave no provider.
     let fixture = Fixture::new();
     fixture.write_project_config(&allowlist(&["openai"]));
     fixture.write_project_role(&allowlist(&["anthropic"]));
-
-    let config = fixture.child("relay").await;
+    assert_eq!(
+        allowed(&fixture.child("relay").await),
+        Some(vec!["openai".to_string()])
+    );
+    let nested = fixture.repo.path().join("nested");
+    write_file(
+        &nested.join(".codex"),
+        CONFIG_TOML_FILE,
+        &allowlist(&["anthropic"]),
+    );
+    let config = ConfigBuilder::without_managed_config_for_tests()
+        .codex_home(fixture.codex_home.path().to_path_buf())
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(nested),
+            ..Default::default()
+        })
+        .build()
+        .await
+        .expect("load nested project config");
 
     assert_eq!(allowed(&config), Some(Vec::new()));
     let warning = config
@@ -427,8 +440,6 @@ async fn project_role_cannot_change_skill_settings() {
     };
 
     assert_eq!(names(&fixture.child("relay").await), Vec::<String>::new());
-    assert_eq!(
-        names(&fixture.child("helper").await),
-        vec!["deploy".to_string()]
-    );
+    // D526 (a): a role may only turn skills off.
+    assert_eq!(names(&fixture.child("helper").await), Vec::<String>::new());
 }

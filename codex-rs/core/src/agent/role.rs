@@ -259,12 +259,25 @@ async fn apply_role_to_config_inner(
     // not the caller's runtime one, so an Orc spawned from an xhigh Troll doesn't silently
     // inherit xhigh. A user role keeps the caller's runtime effort.
     if is_built_in && overrides.model_reasoning_effort.is_none() {
-        next_config.model_reasoning_effort = next_config
+        let configured = next_config
             .config_layer_stack
             .effective_config()
             .get("model_reasoning_effort")
             .and_then(TomlValue::as_str)
             .and_then(|value| ReasoningEffort::from_str(value).ok());
+        // The configured effort maps as config load mapped it, while the role keeps the
+        // provider and model it was loaded for.
+        let same_route = next_config.model == config.model
+            && next_config.model_provider_id == config.model_provider_id;
+        next_config.model_reasoning_effort = match (
+            configured,
+            config.configured_reasoning_effort_mapping.as_ref(),
+        ) {
+            (Some(configured), Some((loaded, mapped))) if same_route && configured == *loaded => {
+                Some(mapped.clone())
+            }
+            (configured, _) => configured,
+        };
     }
     *config = next_config;
     Ok(())
