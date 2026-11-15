@@ -4013,9 +4013,18 @@ async fn issue_1001_ask(
         let session = Arc::clone(session);
         let turn_context = Arc::clone(turn_context);
         async move {
+            let step_context = StepContext::for_test(Arc::clone(&turn_context));
+            // As `handle_mcp_tool_call`: the prompt's note is kept with the
+            // call's registered approval metadata.
+            let _approval_metadata = session.register_mcp_tool_approval_metadata(
+                "call-1001",
+                &invocation,
+                metadata.clone(),
+                GuardianReviewContext::from(&step_context),
+            );
             maybe_request_mcp_tool_approval(
                 &session,
-                &StepContext::for_test(Arc::clone(&turn_context)),
+                &step_context,
                 &CancellationToken::new(),
                 "call-1001",
                 &invocation,
@@ -4199,6 +4208,174 @@ fn issue_1011_prompt_options_limit_lasting_answers_to_what_was_offered() {
     );
 }
 
+/// An automatic reviewer (approval review extension) that answers every
+/// approval with `decision`.
+struct FixedReviewer(ReviewDecision);
+
+impl codex_extension_api::ApprovalReviewContributor for FixedReviewer {
+    fn decide<'a>(
+        &'a self,
+        _input: &'a codex_extension_api::ApprovalDecisionInput<'_>,
+    ) -> codex_extension_api::ExtensionFuture<'a, Option<codex_extension_api::ApprovalDecision>>
+    {
+        let decision = self.0.clone();
+        Box::pin(async move { Some(codex_extension_api::ApprovalDecision::Reviewed(decision)) })
+    }
+}
+
+/// Asks about a custom server's `post_message` call (destructive) through
+/// the whole approval flow, with `reviewer` as the automatic reviewer and
+/// `elicitation` deciding whether "always allow" can be offered. Under
+/// `level` (with source envelopes, so #942 applies above Permissive).
+async fn issue_2145_reviewed(
+    reviewer: ReviewDecision,
+    elicitation: bool,
+    level: codex_security_policy::SecurityLevel,
+) -> Option<McpToolApproval> {
+    let (mut session, mut turn_context, _events) = make_session_and_context_with_rx().await;
+    let mut extensions =
+        codex_extension_api::ExtensionRegistryBuilder::<crate::config::Config>::new();
+    extensions.approval_review_contributor(Arc::new(FixedReviewer(reviewer)));
+    Arc::get_mut(&mut session)
+        .expect("session should be uniquely owned")
+        .services
+        .extensions = Arc::new(extensions.build());
+    *session.active_turn.lock().await = Some(ActiveTurn::default());
+    let turn = Arc::get_mut(&mut turn_context).expect("single turn context ref");
+    let config = Arc::make_mut(&mut turn.config);
+    config
+        .permissions
+        .approval_policy
+        .set(AskForApproval::OnRequest)
+        .expect("test setup should allow updating approval policy");
+    let set_elicitation = if elicitation {
+        config.features.enable(Feature::ToolCallMcpElicitation)
+    } else {
+        config.features.disable(Feature::ToolCallMcpElicitation)
+    };
+    set_elicitation.expect("set MCP elicitation");
+    if level != codex_security_policy::SecurityLevel::Permissive {
+        let client = (*session.services.model_client())
+            .clone()
+            .with_ingress_level(level)
+            .with_source_envelopes(/*enabled*/ true);
+        session.services.replace_model_client(client);
+    }
+    let invocation = McpInvocation {
+        server: "custom_server".to_string(),
+        tool: "post_message".to_string(),
+        arguments: None,
+    };
+    let mut metadata = approval_metadata(
+        /*connector_id*/ None,
+        /*connector_name*/ None,
+        /*connector_description*/ None,
+        Some("Post Message"),
+        /*tool_description*/ None,
+    );
+    metadata.annotations = Some(annotations(
+        /*read_only*/ Some(false),
+        /*destructive*/ Some(true),
+        /*open_world*/ Some(true),
+    ));
+    tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        maybe_request_mcp_tool_approval(
+            &session,
+            &StepContext::for_test(Arc::clone(&turn_context)),
+            &CancellationToken::new(),
+            "call-2145",
+            &invocation,
+            &ToolName::namespaced(&invocation.server, &invocation.tool),
+            &HookToolName::new("mcp__custom_server__post_message"),
+            &metadata,
+            &approval_config(&turn_context),
+            turn_context.config.permissions.permission_profile(),
+            test_environment_id(&turn_context),
+            McpToolApprovalPolicy::for_server(AppToolApproval::Auto),
+            /*note*/ None,
+        ),
+    )
+    .await
+    .expect("the automatic reviewer decided without asking anyone")
+}
+
+/// #1011 (item 1) end to end (#2145): a lasting answer from the automatic
+/// reviewer is limited to what the prompt would have offered, like a
+/// person's. Without the elicitation form "always allow" isn't offered, and
+/// under a protected level, where #942's fresh-approval rule applies,
+/// neither lasting option is; offered, the answer stands. (A permission hook can only allow
+/// once or deny, so it can't give a lasting answer.)
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_2145_reviewer_lasting_answer_is_limited_to_what_was_offered() {
+    use codex_security_policy::SecurityLevel;
+    let reviewed = |decision| McpToolApproval {
+        decision,
+        source: Some(ApprovalResolutionSource::Guardian),
+        cancellation_reason: None,
+    };
+    for (answer, elicitation, level, expected) in [
+        (
+            ReviewDecision::ApprovedMcpPolicyAmendment,
+            /*elicitation*/ true,
+            SecurityLevel::Permissive,
+            ReviewDecision::ApprovedMcpPolicyAmendment,
+        ),
+        (
+            ReviewDecision::ApprovedMcpPolicyAmendment,
+            /*elicitation*/ false,
+            SecurityLevel::Permissive,
+            ReviewDecision::Approved,
+        ),
+        (
+            ReviewDecision::ApprovedForSession,
+            /*elicitation*/ false,
+            SecurityLevel::Permissive,
+            ReviewDecision::ApprovedForSession,
+        ),
+        (
+            ReviewDecision::ApprovedForSession,
+            /*elicitation*/ false,
+            SecurityLevel::Moderate,
+            ReviewDecision::Approved,
+        ),
+        (
+            ReviewDecision::ApprovedMcpPolicyAmendment,
+            /*elicitation*/ true,
+            SecurityLevel::Moderate,
+            ReviewDecision::Approved,
+        ),
+    ] {
+        assert_eq!(
+            issue_2145_reviewed(answer.clone(), elicitation, level).await,
+            Some(reviewed(expected)),
+            "{answer:?}, elicitation {elicitation}, {level:?}"
+        );
+    }
+}
+
+/// #822/#873 (#2145): a declined approval (here the automatic reviewer's
+/// denial, which the approval flow returns as `ToolError::Declined`) comes
+/// back as a denial with its message, which skips the call. The full call
+/// path (the MCP server never runs) is covered by `hooks_mcp`'s
+/// `permission_request_hook_denies_mcp_tool_without_user_or_guardian_review`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_2145_declined_approval_is_a_denial_with_its_message() {
+    assert_eq!(
+        issue_2145_reviewed(
+            ReviewDecision::denied("not this one"),
+            /*elicitation*/ false,
+            codex_security_policy::SecurityLevel::Permissive,
+        )
+        .await,
+        Some(McpToolApproval {
+            decision: ReviewDecision::denied("not this one"),
+            source: Some(ApprovalResolutionSource::Guardian),
+            cancellation_reason: None,
+        })
+    );
+}
+
 /// D52 (#1001): "Allow and don't ask me again" chosen while Aggressive is in
 /// force is recorded in the Corbanu home, so the tool's "always approve"
 /// applies under Aggressive; chosen under a less strict level it is not.
@@ -4359,9 +4536,18 @@ async fn issue_1057_elicitation_message(
         let session = Arc::clone(session);
         let turn_context = Arc::clone(turn_context);
         async move {
+            let step_context = StepContext::for_test(Arc::clone(&turn_context));
+            // As `handle_mcp_tool_call`: the prompt's note is kept with the
+            // call's registered approval metadata.
+            let _approval_metadata = session.register_mcp_tool_approval_metadata(
+                "call-1057",
+                &invocation,
+                metadata.clone(),
+                GuardianReviewContext::from(&step_context),
+            );
             maybe_request_mcp_tool_approval(
                 &session,
-                &StepContext::for_test(Arc::clone(&turn_context)),
+                &step_context,
                 &CancellationToken::new(),
                 "call-1057",
                 &invocation,
@@ -4508,9 +4694,18 @@ async fn issue_1057_no_session_only_note_without_always_allow() {
         let session = Arc::clone(&session);
         let turn_context = Arc::clone(&turn_context);
         async move {
+            let step_context = StepContext::for_test(Arc::clone(&turn_context));
+            // As `handle_mcp_tool_call`: the prompt's note is kept with the
+            // call's registered approval metadata.
+            let _approval_metadata = session.register_mcp_tool_approval_metadata(
+                "call-1057",
+                &invocation,
+                metadata.clone(),
+                GuardianReviewContext::from(&step_context),
+            );
             maybe_request_mcp_tool_approval(
                 &session,
-                &StepContext::for_test(Arc::clone(&turn_context)),
+                &step_context,
                 &CancellationToken::new(),
                 "call-1057",
                 &invocation,

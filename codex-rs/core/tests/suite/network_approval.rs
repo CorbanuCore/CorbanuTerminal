@@ -666,9 +666,13 @@ PY"#
     assert!(elapsed.parse::<u128>()? > 0);
     let message = &output[output.find(prefix).context("missing disconnect prefix")?..];
     let message = &message[..prefix.len() + elapsed.len() + suffix.len()];
-    insta::assert_snapshot!(message.replacen(elapsed, "<elapsed>", 1), @r"
-    Network request disconnected after <elapsed> ms, before approval could complete
-    ");
+    // Both cases share this inline snapshot; insta 1.48 (main's) treats the
+    // second assertion in the same process as a duplicate.
+    insta::allow_duplicates! {
+        insta::assert_snapshot!(message.replacen(elapsed, "<elapsed>", 1), @r"
+        Network request disconnected after <elapsed> ms, before approval could complete
+        ");
+    }
     Ok(())
 }
 
@@ -1338,7 +1342,6 @@ async fn user_network_approval_once_session_and_denial_semantics(
     Ok(())
 }
 
-<<<<<<< HEAD
 /// #945: a network prompt answered after the security level rose is for a
 /// stale prompt: through the real proxy, the request is asked again under
 /// the new level, and that answer decides it.
@@ -1452,8 +1455,11 @@ async fn issue_945_network_answer_after_a_level_change_is_asked_again() -> Resul
         if let Some(output) = request.function_call_output_text("issue-945-stale") {
             assert!(!output.contains("OK:"), "{output}");
         }
-||||||| 413492cd6c
-=======
+    }
+
+    Ok(())
+}
+
 #[derive(Clone, Copy)]
 enum OtherNetworkReview {
     Denied,
@@ -1653,7 +1659,6 @@ PY"#
         .await?;
         wait_for_completion_without_network_prompt(&test).await;
         assert_network_probe_allowed(&probe, probe_call_id);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     Ok(())
@@ -2554,7 +2559,7 @@ async fn guardian_receives_exact_trigger_for_single_network_request() -> Result<
 async fn remote_guardian_network_decisions_are_scoped_to_each_request_and_environment() -> Result<()>
 {
     // #722 (D246): remote network decisions reach this machine, so the user
-    // is asked as locally. "full" mode: a remote proxy can't run "limited".
+    // is asked as locally.
     skip_if_target_windows!(Ok(()), "uses the POSIX/Python network fixture");
     skip_if_host_windows!(Ok(()));
     skip_if_no_network!(Ok(()));
@@ -2562,7 +2567,7 @@ async fn remote_guardian_network_decisions_are_scoped_to_each_request_and_enviro
     skip_if_no_remote_env!(Ok(()));
 
     let server = start_mock_server().await;
-    let test = managed_network_unified_exec_test_in_mode(&server, "full").await?;
+    let test = managed_network_unified_exec_test(&server).await?;
     let remote = test.executor_environment().selection().clone();
     assert_eq!(remote.environment_id, REMOTE_ENVIRONMENT_ID);
     let session_call_id = "remote-guardian-session-approval";
@@ -2800,13 +2805,6 @@ async fn remote_guardian_network_decisions_are_scoped_to_each_request_and_enviro
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-<<<<<<< HEAD
-async fn approved_network_host_for_one_environment_still_prompts_in_another() -> Result<()> {
-    // #722 (D246): remote network decisions reach this machine, so the user
-    // is asked as locally. "full" mode: a remote proxy can't run "limited".
-||||||| 413492cd6c
-async fn approved_network_host_for_one_environment_still_prompts_in_another() -> Result<()> {
-=======
 async fn owner_network_policy_follows_the_selected_remote_command() -> Result<()> {
     skip_if_target_windows!(Ok(()), "uses the POSIX/Python network fixture");
     skip_if_host_windows!(Ok(()));
@@ -2885,6 +2883,7 @@ async fn owner_network_policy_follows_the_selected_remote_command() -> Result<()
         filesystem.entries.push(FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
                 pattern: "*.guardian-secret".into(),
+                scan: None,
             },
             FileSystemAccessMode::Deny,
         ));
@@ -2974,6 +2973,7 @@ async fn owner_network_policy_follows_the_selected_remote_command() -> Result<()
                 filesystem.entries.push(FileSystemSandboxEntry::new(
                     FileSystemPath::GlobPattern {
                         pattern: "**/secret.env".into(),
+                        scan: None,
                     },
                     FileSystemAccessMode::Deny,
                 ));
@@ -3299,9 +3299,14 @@ async fn escalated_owner_network_terminal_requires_stdin_approval(
     Ok(())
 }
 
+/// #722 (D246): remote network decisions reach this machine, so a remote
+/// request the local session grant doesn't cover is asked as locally, and
+/// the person's refusal ends the remote command as failed, with the reason.
+/// (Main's `approved_network_host_for_one_environment_still_prompts_in_another`
+/// on upstream's test; upstream expects no prompt, since its remote
+/// executors don't forward prompts.)
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn local_session_grant_does_not_allow_the_same_host_on_a_remote_executor() -> Result<()> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     skip_if_target_windows!(Ok(()), "uses the POSIX/Python network fixture");
     skip_if_host_windows!(Ok(()));
     skip_if_no_network!(Ok(()));
@@ -3309,7 +3314,7 @@ async fn local_session_grant_does_not_allow_the_same_host_on_a_remote_executor()
     skip_if_no_remote_env!(Ok(()));
 
     let server = start_mock_server().await;
-    let test = managed_network_unified_exec_test_in_mode(&server, "full").await?;
+    let test = managed_network_unified_exec_test(&server).await?;
     let local_cwd = TempDir::new()?;
     let environments = vec![
         local(local_cwd.path().abs()),
@@ -3346,7 +3351,7 @@ async fn local_session_grant_does_not_allow_the_same_host_on_a_remote_executor()
         &server,
         "resp-network-remote",
         "exec-network-remote",
-        network_probe_args(&command, REMOTE_ENVIRONMENT_ID),
+        network_fetch_args(REMOTE_ENVIRONMENT_ID),
     )
     .await?;
     submit_managed_network_turn(
@@ -3357,7 +3362,6 @@ async fn local_session_grant_does_not_allow_the_same_host_on_a_remote_executor()
         AskForApproval::OnRequest,
     )
     .await?;
-<<<<<<< HEAD
     let approval = expect_network_approval(&test, REMOTE_ENVIRONMENT_ID).await?;
     let rejection = "approval request failed because the client disconnected";
     test.codex
@@ -3375,55 +3379,9 @@ async fn local_session_grant_does_not_allow_the_same_host_on_a_remote_executor()
     assert!(output.starts_with("exec_command failed"), "{output}");
     assert!(output.ends_with(rejection), "{output}");
 
-    test.fs()
-        .remove(
-            &remote_cwd_uri,
-            RemoveOptions {
-                recursive: true,
-                force: true,
-            },
-            /*sandbox*/ None,
-        )
-        .await?;
-||||||| 413492cd6c
-    let approval = expect_network_approval(&test, REMOTE_ENVIRONMENT_ID).await?;
-    let rejection = "approval request failed because the client disconnected";
-    test.codex
-        .submit(Op::ExecApproval {
-            id: approval.effective_approval_id(),
-            turn_id: None,
-            decision: ReviewDecision::denied(rejection),
-        })
-        .await?;
-    wait_for_turn_complete(&test).await;
-    assert_eq!(
-        remote_responses.function_call_output_text("exec-network-remote"),
-        Some(rejection.to_string())
-    );
-
-    test.fs()
-        .remove(
-            &remote_cwd_uri,
-            RemoveOptions {
-                recursive: true,
-                force: true,
-            },
-            /*sandbox*/ None,
-        )
-        .await?;
-=======
-    // Remote executors do not forward manual prompts. The proxy must deny this request.
-    wait_for_completion_without_network_prompt(&test).await;
-    let output = remote_responses
-        .function_call_output_text("exec-network-remote")
-        .context("missing remote proxy response")?;
-    assert!(output.contains("PROXY:HTTP/1.1 403 Forbidden"), "{output}");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-
     Ok(())
 }
 
-<<<<<<< HEAD
 /// #722 (D246): a remote network request refused on this machine without a
 /// prompt (approvals off) ends the command as failed, as a local one does.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -3435,7 +3393,14 @@ async fn remote_network_refusal_without_prompt_ends_command_as_failed() -> Resul
     skip_if_no_remote_env!(Ok(()));
 
     let server = start_mock_server().await;
-    let test = managed_network_unified_exec_test_in_mode(&server, "full").await?;
+    let test = network_unified_exec_test(
+        &server,
+        "full",
+        /*managed_requirements*/ true,
+        "",
+        /*unmanaged_allowed_domains*/ &[],
+    )
+    .await?;
     let remote = test.executor_environment().selection().clone();
     assert_eq!(remote.environment_id, REMOTE_ENVIRONMENT_ID);
     let responses = mount_exec_network_turn(
@@ -3484,7 +3449,14 @@ async fn remote_limited_network_mode_still_fails_closed_without_asking() -> Resu
     skip_if_no_remote_env!(Ok(()));
 
     let server = start_mock_server().await;
-    let test = managed_network_unified_exec_test(&server).await?;
+    let test = network_unified_exec_test(
+        &server,
+        "limited",
+        /*managed_requirements*/ true,
+        "",
+        /*unmanaged_allowed_domains*/ &[],
+    )
+    .await?;
     let remote = test.executor_environment().selection().clone();
     let responses = mount_exec_network_turn(
         &server,
@@ -3655,10 +3627,13 @@ async fn remote_limited_mode_method_block_ends_command_as_failed() -> Result<()>
         "request method is blocked by the current network mode",
     )
     .await
-||||||| 413492cd6c
-=======
+}
+
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "S3b: configured credential providers are inert while main's broker engine brokers \
+            every proxy (network-proxy/src/credential_broker.rs ledger row); the real value \
+            reaches the command unmasked, as on main"]
 async fn agent_started_proxy_denies_brokered_provider_alias() -> Result<()> {
     const REAL_CREDENTIAL: &str = "alias_aaaaaaaaaaaaaaaaaaaaaaaa";
     let upstream = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
@@ -3884,39 +3859,9 @@ async fn start_concurrent_network_requests(
         queued.next().await?;
     }
     Ok((test, responses, prompts))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 async fn managed_network_unified_exec_test(server: &wiremock::MockServer) -> Result<TestCodex> {
-<<<<<<< HEAD
-    managed_network_unified_exec_test_in_mode(server, "limited").await
-}
-
-async fn managed_network_unified_exec_test_in_mode(
-    server: &wiremock::MockServer,
-    mode: &str,
-) -> Result<TestCodex> {
-    network_unified_exec_test(
-        server,
-        mode,
-        /*managed_requirements*/ true,
-        "",
-        /*unmanaged_allowed_domains*/ &[],
-    )
-    .await
-}
-
-/// `extra_network_toml` is appended to the profile's network table;
-/// `unmanaged_allowed_domains` go to the proxy built without managed rules.
-async fn network_unified_exec_test(
-    server: &wiremock::MockServer,
-    mode: &str,
-    managed_requirements: bool,
-    extra_network_toml: &str,
-    unmanaged_allowed_domains: &[&str],
-) -> Result<TestCodex> {
-||||||| 413492cd6c
-=======
     managed_network_unified_exec_test_with_features(server, &[]).await
 }
 
@@ -3927,6 +3872,12 @@ async fn managed_network_unified_exec_test_with_features(
     let test = managed_network_unified_exec_builder(features)?
         .build_with_remote_and_local_env(server)
         .await?;
+    // In the remote lane `config.cwd` is the container-side cwd, but these
+    // tests also run commands in the local environment with that same cwd.
+    // Make sure it exists on the host too (main 619c2f7aad).
+    if core_test_support::is_remote_test_environment() {
+        fs::create_dir_all(&test.config.cwd)?;
+    }
     assert!(test.config.managed_network_requirements_enabled());
     assert!(test.config.permissions.network.is_some());
     assert!(test.session_configured.network_proxy.is_some());
@@ -3934,14 +3885,66 @@ async fn managed_network_unified_exec_test_with_features(
 }
 
 fn managed_network_unified_exec_builder(features: &[Feature]) -> Result<TestCodexBuilder> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    network_unified_exec_builder(
+        features,
+        /*mode*/ None,
+        /*managed_requirements*/ true,
+        /*extra_network_toml*/ "",
+        /*unmanaged_allowed_domains*/ &[],
+    )
+}
+
+/// #722 (D278): a session for the remote network tests. `mode` `None` is
+/// upstream's choice (remote executors can't run "limited", which needs TLS
+/// interception); `extra_network_toml` is appended to the profile's network
+/// table; `unmanaged_allowed_domains` go to the proxy built without managed
+/// rules.
+async fn network_unified_exec_test(
+    server: &wiremock::MockServer,
+    mode: &str,
+    managed_requirements: bool,
+    extra_network_toml: &str,
+    unmanaged_allowed_domains: &[&str],
+) -> Result<TestCodex> {
+    let test = network_unified_exec_builder(
+        &[],
+        Some(mode),
+        managed_requirements,
+        extra_network_toml,
+        unmanaged_allowed_domains,
+    )?
+    .build_with_remote_and_local_env(server)
+    .await?;
+    // In the remote lane `config.cwd` is the container-side cwd, but these
+    // tests also run commands in the local environment with that same cwd.
+    // Make sure it exists on the host too (main 619c2f7aad).
+    if core_test_support::is_remote_test_environment() {
+        fs::create_dir_all(&test.config.cwd)?;
+    }
+    assert_eq!(
+        test.config.managed_network_requirements_enabled(),
+        managed_requirements,
+        "managed network requirements"
+    );
+    assert!(test.config.permissions.network.is_some());
+    assert!(test.session_configured.network_proxy.is_some());
+    Ok(test)
+}
+
+fn network_unified_exec_builder(
+    features: &[Feature],
+    mode: Option<&str>,
+    managed_requirements: bool,
+    extra_network_toml: &str,
+    unmanaged_allowed_domains: &[&str],
+) -> Result<TestCodexBuilder> {
     let home = Arc::new(TempDir::new()?);
     // Limited mode uses TLS interception, which remote executors cannot enforce.
-    let mode = if core_test_support::is_remote_test_environment() {
+    let mode = mode.unwrap_or(if core_test_support::is_remote_test_environment() {
         "full"
     } else {
         "limited"
-    };
+    });
     fs::write(
         home.path().join("config.toml"),
         format!(
@@ -3954,12 +3957,7 @@ fn managed_network_unified_exec_builder(features: &[Feature]) -> Result<TestCode
 enabled = true
 mode = "{mode}"
 allow_local_binding = true
-<<<<<<< HEAD
 {extra_network_toml}
-||||||| 413492cd6c
-"#,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 "#
         ),
     )?;
@@ -3970,20 +3968,18 @@ allow_local_binding = true
         /*exclude_tmpdir_env_var*/ false,
         /*exclude_slash_tmp*/ false,
     );
-<<<<<<< HEAD
-    let permission_profile_for_config = permission_profile.clone();
     // Without managed requirements the harness's config load leaves the
     // proxy off, so build the profile's proxy as a user config would.
     let unmanaged_network = (!managed_requirements)
         .then(|| {
-            let mut proxy = codex_network_proxy::NetworkProxyConfig {
+            let mut proxy = NetworkProxyConfig {
                 enabled: true,
                 mode: match mode {
                     "full" => codex_network_proxy::NetworkMode::Full,
                     _ => codex_network_proxy::NetworkMode::Limited,
                 },
-                allow_local_binding: true,
-                ..Default::default()
+                allow_local_binding: Some(true),
+                ..NetworkProxyConfig::default()
             };
             if !unmanaged_allowed_domains.is_empty() {
                 proxy.set_allowed_domains(
@@ -3993,106 +3989,35 @@ allow_local_binding = true
                         .collect(),
                 );
             }
-            codex_core::config::NetworkProxySpec::from_config_and_constraints(
+            NetworkProxySpec::from_config_and_constraints(
                 proxy,
                 /*requirements*/ None,
                 &permission_profile,
             )
         })
         .transpose()?;
+    let permission_profile_for_config = permission_profile;
+    let features = features.to_vec();
     let mut builder = test_codex().with_home(home);
     if managed_requirements {
         builder = builder.with_cloud_config_bundle(managed_network_requirements_loader());
     }
-    let mut builder = builder.with_config(move |config| {
+    Ok(builder.with_config(move |config| {
         if let Some(network) = unmanaged_network.clone() {
             config.permissions.network = Some(network);
         }
-        config.use_experimental_unified_exec_tool = true;
-        config
-            .features
-            .enable(Feature::UnifiedExec)
-            .expect("test config should allow feature update");
+        for feature in &features {
+            config
+                .features
+                .enable(*feature)
+                .expect("test config should allow feature update");
+        }
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
             .set_permission_profile(permission_profile_for_config)
             .expect("set permission profile");
-    });
-    let test = builder.build_with_remote_and_local_env(server).await?;
-    // In the remote lane `config.cwd` is the container-side cwd, but these
-    // tests also run commands in the local environment with that same cwd.
-    // Make sure it exists on the host too.
-    if core_test_support::is_remote_test_environment() {
-        fs::create_dir_all(&test.config.cwd)?;
-    }
-    assert_eq!(
-        test.config.managed_network_requirements_enabled(),
-        managed_requirements,
-        "managed network requirements"
-    );
-    assert!(
-        test.config.permissions.network.is_some(),
-        "expected managed network proxy config to be present"
-    );
-    test.session_configured
-        .network_proxy
-        .as_ref()
-        .expect("expected runtime managed network proxy addresses");
-
-    Ok(test)
-||||||| 413492cd6c
-    let permission_profile_for_config = permission_profile.clone();
-    let mut builder = test_codex()
-        .with_home(home)
-        .with_cloud_config_bundle(managed_network_requirements_loader())
-        .with_config(move |config| {
-            config.use_experimental_unified_exec_tool = true;
-            config
-                .features
-                .enable(Feature::UnifiedExec)
-                .expect("test config should allow feature update");
-            config.permissions.approval_policy = Constrained::allow_any(approval_policy);
-            config
-                .permissions
-                .set_permission_profile(permission_profile_for_config)
-                .expect("set permission profile");
-        });
-    let test = builder.build_with_remote_and_local_env(server).await?;
-    assert!(
-        test.config.managed_network_requirements_enabled(),
-        "expected managed network requirements to be enabled"
-    );
-    assert!(
-        test.config.permissions.network.is_some(),
-        "expected managed network proxy config to be present"
-    );
-    test.session_configured
-        .network_proxy
-        .as_ref()
-        .expect("expected runtime managed network proxy addresses");
-
-    Ok(test)
-=======
-    let permission_profile_for_config = permission_profile;
-    let features = features.to_vec();
-    Ok(test_codex()
-        .with_home(home)
-        .with_cloud_config_bundle(managed_network_requirements_loader())
-        .with_config(move |config| {
-            for feature in &features {
-                config
-                    .features
-                    .enable(*feature)
-                    .expect("test config should allow feature update");
-            }
-            config.permissions.approval_policy = Constrained::allow_any(approval_policy);
-            config
-                .permissions
-                .set_permission_profile(permission_profile_for_config)
-                .expect("set permission profile");
-        }))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    }))
 }
 
 async fn mount_exec_network_turn(
@@ -4134,9 +4059,8 @@ fn network_exec_args(command: &str) -> Value {
     })
 }
 
-<<<<<<< HEAD
-/// A remote environment runs only its own default shell, so its calls omit
-/// `shell`.
+/// #722: a remote environment runs only its own default shell, so its calls
+/// omit `shell`.
 fn network_exec_args_for(environment_id: &str, command: &str) -> Value {
     let mut args = network_exec_args(command);
     if environment_id != LOCAL_ENVIRONMENT_ID
@@ -4145,8 +4069,8 @@ fn network_exec_args_for(environment_id: &str, command: &str) -> Value {
         args.remove("shell");
     }
     args
-||||||| 413492cd6c
-=======
+}
+
 fn network_probe_args(command: &str, environment_id: &str) -> Value {
     // Remote executors accept only their configured shell.
     json!({ "cmd": command, "environment_id": environment_id, "login": false, "yield_time_ms": 10_000 })
@@ -4161,7 +4085,6 @@ fn assert_network_probe_allowed(responses: &ResponseMock, id: &str) {
         output.contains("PROXY:HTTP/1.1 502") || output.contains("PROXY:HTTP/1.1 200"),
         "{id}: {output}"
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn remote_network_proxy_request_command(marker: &str) -> String {

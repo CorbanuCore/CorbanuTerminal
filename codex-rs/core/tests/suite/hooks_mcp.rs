@@ -441,6 +441,14 @@ async fn run_mcp_permission_request_hook_test(outcome: PermissionRequestHookOutc
             "a denied MCP tool should surface the hook's rejection message",
         ),
     }
+    // #822/#873 (#2145): the denial reaches the approval flow as a declined
+    // approval, which skips the call: the server never echoes.
+    if let PermissionRequestHookOutcome::Deny(_) = outcome {
+        assert!(
+            !output_item.to_string().contains("ECHOING:"),
+            "a denied MCP tool must not run: {output_item}",
+        );
+    }
 
     let hook_inputs =
         read_hook_inputs(test.codex_home_path(), "permission_request_hook_log.jsonl")?;
@@ -586,6 +594,7 @@ async fn mcp_tool_hook_starts_cached_model_hidden_tools(
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             ..test.start_thread_options().await
         })
@@ -732,6 +741,7 @@ async fn mcp_tool_hook_timeout_includes_cached_server_startup() -> Result<()> {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             ..test.start_thread_options().await
         })
