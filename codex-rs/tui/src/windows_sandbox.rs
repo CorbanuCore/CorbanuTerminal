@@ -148,6 +148,7 @@ impl WindowsSandboxConfig {
 /// Corbanu: the Windows sandbox level this home's configuration selects, for the `/security`
 /// gate (#691/#783), the security inspector and the legacy-sandbox warning. The same mapping as
 /// core's `WindowsSandboxLevelExt::from_config`: MXC is none of these levels.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub(crate) fn level_from_config(config: &Config) -> WindowsSandboxLevel {
     match config.permissions.windows_sandbox_mode {
         Some(WindowsSandboxModeToml::Elevated) => WindowsSandboxLevel::Elevated,
