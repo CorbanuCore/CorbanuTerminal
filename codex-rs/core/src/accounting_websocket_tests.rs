@@ -305,15 +305,19 @@ async fn accounting_responses_ws_stream_guard_checks_live_policy_with_session_st
     use futures::FutureExt;
 
     let (mut owner, _) = crate::session::tests::make_session_and_context().await;
-    owner.services.agent_control = owner
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            SecurityLevel::Permissive,
-            owner.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )?;
+    owner.services.agent_control = Arc::new(
+        owner
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                SecurityLevel::Permissive,
+                owner.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )?,
+    );
     let owner = Arc::new(owner);
     let memory = StageOneMemoryClient::new(
         Arc::downgrade(&owner),
@@ -353,6 +357,8 @@ async fn accounting_responses_ws_stream_guard_checks_live_policy_with_session_st
     let controller = owner
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .trusted_security_controller()
         .unwrap();
     let change = controller.confirm_level_change(

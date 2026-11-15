@@ -140,7 +140,9 @@ async fn accounting_developer_activation_samples_http_and_installs_inspectable_d
 
     struct FixtureAuth;
     impl codex_api::AuthProvider for FixtureAuth {
-        fn add_auth_headers(&self, _: &mut http::HeaderMap) {}
+        fn add_auth_headers(&self, _: &mut http::HeaderMap) -> Result<(), codex_api::AuthError> {
+            Ok(())
+        }
     }
 
     let server = MockServer::start().await;
@@ -262,7 +264,9 @@ async fn accounting_developer_activation_samples_http_and_installs_inspectable_d
 struct DeniedAuth;
 
 impl codex_api::AuthProvider for DeniedAuth {
-    fn add_auth_headers(&self, _: &mut http::HeaderMap) {}
+    fn add_auth_headers(&self, _: &mut http::HeaderMap) -> Result<(), codex_api::AuthError> {
+        Ok(())
+    }
     fn apply_auth(&self, _: Request) -> codex_api::AuthProviderFuture<'_> {
         Box::pin(async {
             Err(codex_api::AuthError::Build(
