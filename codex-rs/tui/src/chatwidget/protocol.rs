@@ -312,13 +312,6 @@ impl ChatWidget {
                 let message = notification
                     .details
                     .map(|details| format!("{}: {details}", notification.summary))
-<<<<<<< HEAD
-                    .unwrap_or_else(|| notification.summary.clone());
-                self.on_config_warning(notification.summary, message);
-||||||| 413492cd6c
-                    .unwrap_or(notification.summary),
-            ),
-=======
                     .unwrap_or(notification.summary);
                 if self.warning_display_state.startup_complete {
                     self.on_warning(message);
@@ -329,7 +322,6 @@ impl ChatWidget {
                     self.add_to_history(history_cell::StartupWarningsCell::new(vec![message]));
                     self.request_redraw();
                 }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
             ServerNotification::McpServerStatusUpdated(notification) => {
                 self.on_mcp_server_status_updated(notification)
@@ -427,8 +419,9 @@ impl ChatWidget {
             | ServerNotification::ThreadRealtimeItemCompleted(_)
             | ServerNotification::ThreadRealtimeOutputAudioDelta(_)
             | ServerNotification::WindowsWorldWritableWarning(_)
-<<<<<<< HEAD
-            | ServerNotification::WindowsSandboxSetupCompleted(_) => {}
+            | ServerNotification::WindowsSandboxSetupCompleted(_)
+            | ServerNotification::ProjectChanged(_)
+            | ServerNotification::ThreadProjectUpdated(_) => {}
             ServerNotification::AccountLoginCompleted(notification) => {
                 self.app_event_tx
                     .send(AppEvent::ProviderAccountLoginCompleted {
@@ -436,15 +429,6 @@ impl ChatWidget {
                         success: notification.success,
                     });
             }
-||||||| 413492cd6c
-            | ServerNotification::WindowsSandboxSetupCompleted(_)
-            | ServerNotification::AccountLoginCompleted(_) => {}
-=======
-            | ServerNotification::WindowsSandboxSetupCompleted(_)
-            | ServerNotification::AccountLoginCompleted(_)
-            | ServerNotification::ProjectChanged(_)
-            | ServerNotification::ThreadProjectUpdated(_) => {}
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             ServerNotification::ContextCompacted(_) => {}
         }
         // Tool and hook activity can recreate a hidden row with its default
@@ -705,22 +689,9 @@ impl ChatWidget {
         notification: ItemCompletedNotification,
         replay_kind: Option<ReplayKind>,
     ) {
-<<<<<<< HEAD
         if replay_kind.is_none() {
-            self.tracker_item(&notification.item);
+            self.tracker_item(&notification.item.payload);
         }
-        self.handle_thread_item(
-            notification.item,
-            notification.turn_id,
-            replay_kind.map_or(ThreadItemRenderSource::Live, ThreadItemRenderSource::Replay),
-        );
-||||||| 413492cd6c
-        self.handle_thread_item(
-            notification.item,
-            notification.turn_id,
-            replay_kind.map_or(ThreadItemRenderSource::Live, ThreadItemRenderSource::Replay),
-        );
-=======
         self.restore_realtime_transcripts_before_turn(&notification.turn_id);
         if replay_kind.is_none()
             && self.is_realtime_delegated_reasoning_turn(&notification.turn_id)
@@ -759,6 +730,5 @@ impl ChatWidget {
                 replay_kind.map_or(ThreadItemRenderSource::Live, ThreadItemRenderSource::Replay),
             ),
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }

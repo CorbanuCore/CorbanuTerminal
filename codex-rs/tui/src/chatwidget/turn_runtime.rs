@@ -132,7 +132,6 @@ impl ChatWidget {
         self.request_redraw();
     }
 
-<<<<<<< HEAD
     pub(crate) fn begin_external_pane_turn(&mut self) {
         self.on_task_started();
     }
@@ -158,8 +157,8 @@ impl ChatWidget {
         self.update_task_running_state();
         self.bottom_pane.hide_status_indicator();
         self.request_redraw();
-||||||| 413492cd6c
-=======
+    }
+
     pub(super) fn on_replayed_task_started(&mut self, started_at: Option<i64>) {
         self.on_task_started();
         if let Some(started_at) = started_at {
@@ -168,7 +167,6 @@ impl ChatWidget {
                 elapsed_secs.try_into().unwrap_or_default(),
             ));
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(super) fn on_task_complete(
@@ -234,18 +232,14 @@ impl ChatWidget {
         self.clear_active_hook_cell();
         self.clear_guardian_review_status();
         self.turn_lifecycle.finish();
-<<<<<<< HEAD
         let tps_sample_recorded = self
             .tps_estimator
             .complete_turn(duration_ms, Instant::now());
-||||||| 413492cd6c
-=======
         self.status_state.program_status_after_turn = if from_replay {
             crate::terminal_program_status::ProgramStatus::Idle
         } else {
             crate::terminal_program_status::ProgramStatus::Done
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.clear_safety_buffering();
         self.update_task_running_state();
         if tps_sample_recorded {
@@ -410,17 +404,13 @@ impl ChatWidget {
         self.input_queue.user_turn_pending_start = false;
         self.clear_guardian_review_status();
         self.turn_lifecycle.finish();
-<<<<<<< HEAD
         self.tps_estimator.cancel_active();
-||||||| 413492cd6c
-=======
         self.status_state.program_status_after_turn = if self.thread_usage.replaying_turn_completion
         {
             crate::terminal_program_status::ProgramStatus::Idle
         } else {
             crate::terminal_program_status::ProgramStatus::Error
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.update_task_running_state();
         self.running_commands.clear();
         self.suppressed_exec_calls.clear();
@@ -579,27 +569,15 @@ impl ChatWidget {
             self.clear_backend_banner();
         }
         self.codex_rate_limit_reached_type = rate_limit_reached_type;
-<<<<<<< HEAD
-        match rate_limit_reached_type {
-            Some(RateLimitReachedType::WorkspaceOwnerCreditsDepleted) => {
-                self.on_error(
-                    "You're out of credits. Your workspace is out of credits. Add credits to continue using Corbanu Terminal."
-||||||| 413492cd6c
-        match rate_limit_reached_type {
-            Some(RateLimitReachedType::WorkspaceOwnerCreditsDepleted) => {
-                self.on_error(
-                    "You're out of credits. Your workspace is out of credits. Add credits to continue using Codex."
-=======
         // Keep owner remediation in history even when the optional backend banner is unavailable.
         let (message, nudge) = match rate_limit_reached_type {
             Some(RateLimitReachedType::WorkspaceOwnerCreditsDepleted) => (
-                    "You're out of credits. Your workspace is out of credits. Add credits to continue using Codex."
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                    "You're out of credits. Your workspace is out of credits. Add credits to continue using Corbanu Terminal."
                         .to_string(),
                     None,
             ),
             Some(RateLimitReachedType::WorkspaceOwnerUsageLimitReached) => (
-                    "Usage limit reached. You've reached your usage limit. Increase your limits to continue using codex."
+                    "Usage limit reached. You've reached your usage limit. Increase your limits to continue using Corbanu Terminal."
                         .to_string(),
                     None,
             ),
@@ -670,25 +648,6 @@ impl ChatWidget {
             self.bottom_pane.append_question_drafts(&drafts);
             self.refresh_pending_input_preview();
             self.request_redraw();
-        }
-    }
-
-    /// A config warning is shown once the session header is in place; the
-    /// session's own repeat of it is then not shown again (#419).
-    pub(super) fn on_config_warning(&mut self, summary: String, message: String) {
-        if !self.is_session_configured() {
-            self.warning_display_state
-                .defer_config_warning(summary, message);
-            return;
-        }
-        self.on_warning(message);
-        self.warning_display_state.config_warning_shown(summary);
-    }
-
-    pub(crate) fn show_deferred_config_warnings(&mut self) {
-        for (summary, message) in self.warning_display_state.take_pending_config_warnings() {
-            self.on_warning(message);
-            self.warning_display_state.config_warning_shown(summary);
         }
     }
 

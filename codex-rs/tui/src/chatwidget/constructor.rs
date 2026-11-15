@@ -141,14 +141,9 @@ impl ChatWidget {
             session_header: SessionHeader::new(header_model),
             initial_user_message,
             status_account_display,
-<<<<<<< HEAD
             gpu_spend_status: None,
             active_external_model_display: None,
             runtime_model_provider_base_url,
-||||||| 413492cd6c
-            runtime_model_provider_base_url,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             remote_connection: None,
             snapshot_local_images: false,
             pending_image_submission: None,
@@ -159,27 +154,16 @@ impl ChatWidget {
             #[cfg(any(target_os = "windows", test))]
             windows_sandbox_elevated_setup_complete: false,
             token_info: None,
-<<<<<<< HEAD
             session_account_usage: crate::status::SessionAccountUsage::default(),
             tps_estimator: TpsEstimator::default(),
-||||||| 413492cd6c
-=======
             token_usage_pending: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             rate_limit_snapshots_by_limit_id: BTreeMap::new(),
             refreshing_status_outputs: Vec::new(),
             next_status_refresh_request_id: 0,
-<<<<<<< HEAD
             accounting_inspector: None,
             refreshing_token_activity_output: None,
             completed_token_activity_output: None,
             next_token_activity_request_id: 0,
-||||||| 413492cd6c
-            refreshing_token_activity_output: None,
-            completed_token_activity_output: None,
-            next_token_activity_request_id: 0,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             pending_rate_limit_reset_request_id: None,
             pending_rate_limit_reset_idempotency_key: None,
             rate_limit_reset_picker_request_id: None,
@@ -211,7 +195,6 @@ impl ChatWidget {
             stream_controller: None,
             plan_stream_controller: None,
             pending_stream_consolidations: 0,
-<<<<<<< HEAD
             campaign_tracker_turn: None,
             campaign_tracker_indicator: None,
             campaign_tracker_automated_input: false,
@@ -232,12 +215,8 @@ impl ChatWidget {
             telegram_discovery_generation: 0,
             wallet_payment_config: None,
             wallet_balances: None,
-||||||| 413492cd6c
-            clipboard_lease: None,
-=======
             pending_clipboard: None,
             suppress_image_paste_until: Instant::now(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             copy_last_response_binding,
             running_commands: HashMap::new(),
             collab_agent_metadata: HashMap::new(),
