@@ -11,7 +11,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-85-S01"
 created: 2026-11-07
-updated: 2026-11-07
+updated: 2026-11-14
 ---
 
 # PF-85-S02 — Tier 2: core
@@ -43,10 +43,15 @@ updated: 2026-11-07
 ## Done
 
 - [x] Sprint record created and linked to one plan feature.
+- [x] S3a (security resolution, core paths and the Tier 1 sandbox crates) finished 2026-11-14: every S3a ledger
+  row is resolved on the sync branch, the last in #2237. Exit summary:
+  [#1628](https://github.com/CorbanuCore/CorbanuTerminal/issues/1628#issuecomment-6889180617) (also on #1532).
+  Its core tests ran, or were only type-checked, on scratch builds (codex-core tests don't build on the branch
+  yet); the compile pass reruns them.
 
 ## Remaining
 
-- [ ] Slice PRs S2a, S2b, S2c and S3a core paths.
+- [ ] Slice PRs S2a, S2b and S2c (S3a core paths: done, see `Done`).
 - [ ] Security-owner approval of `turn.rs`/`client.rs` call sites.
 - [ ] Main merge #2.
 - [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.

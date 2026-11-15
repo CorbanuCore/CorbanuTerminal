@@ -11,7 +11,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-85-S00"
 created: 2026-11-07
-updated: 2026-11-07
+updated: 2026-11-14
 ---
 
 # PF-85-S01 — Tier 1: crates below core
@@ -43,6 +43,7 @@ updated: 2026-11-07
 ## Done
 
 - [x] Sprint record created and linked to one plan feature.
+- [x] S3a Tier 1 sandbox crates resolved (with all of S3a, 2026-11-14; see PF-85-S02 and #1628).
 
 ## Remaining
 
