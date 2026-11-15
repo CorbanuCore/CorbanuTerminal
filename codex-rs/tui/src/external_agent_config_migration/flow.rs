@@ -18,14 +18,6 @@ use super::source::run_external_agent_config_source_prompt;
 
 pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_NO_ITEMS_MESSAGE: &str =
     "No compatible setup was found to import.";
-<<<<<<< HEAD
-pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_REMOTE_UNAVAILABLE_MESSAGE: &str = "Import from other apps is unavailable in remote sessions. Start Corbanu Terminal locally and run /import.";
-pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_DAEMON_UNAVAILABLE_MESSAGE: &str = "Import from other apps is unavailable while Corbanu Terminal is connected to the local app-server daemon. Stop the daemon, restart Corbanu Terminal, and run /import.";
-||||||| 413492cd6c
-pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_REMOTE_UNAVAILABLE_MESSAGE: &str = "Import from other apps is unavailable in remote sessions. Start Codex locally and run /import.";
-pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_DAEMON_UNAVAILABLE_MESSAGE: &str = "Import from other apps is unavailable while Codex is connected to the local app-server daemon. Stop the daemon, restart Codex, and run /import.";
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 pub(crate) enum ExternalAgentConfigMigrationFlowOutcome {
     Started(Vec<Line<'static>>),
@@ -263,14 +255,8 @@ fn remaining_items_handoff(remaining_item_count: usize) -> Option<String> {
 pub(crate) async fn handle_external_agent_config_migration_prompt(
     tui: &mut tui::Tui,
     app_server: &mut AppServerSession,
-<<<<<<< HEAD
-    config: &Config,
-    tui_events: &mut tokio::sync::mpsc::UnboundedReceiver<tui::TuiEvent>,
-||||||| 413492cd6c
-    config: &Config,
-=======
     cwd: Option<&Path>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    tui_events: &mut tokio::sync::mpsc::UnboundedReceiver<tui::TuiEvent>,
 ) -> Result<ExternalAgentConfigMigrationFlowOutcome, String> {
     if app_server.external_agent_config_import_in_progress() {
         return Err(EXTERNAL_AGENT_CONFIG_IMPORT_IN_PROGRESS_MESSAGE.to_string());
@@ -319,24 +305,11 @@ pub(crate) async fn handle_external_agent_config_migration_prompt(
             .iter()
             .map(|detected| detected.source)
             .collect::<Vec<_>>();
-<<<<<<< HEAD
-        let Some(source) = run_external_agent_config_source_prompt(tui, &sources, tui_events).await
-        else {
-            return Ok(ExternalAgentConfigMigrationFlowOutcome::Cancelled);
-        };
-        source
-||||||| 413492cd6c
-        let Some(source) = run_external_agent_config_source_prompt(tui, &sources).await else {
-            return Ok(ExternalAgentConfigMigrationFlowOutcome::Cancelled);
-        };
-        source
-=======
-        match run_external_agent_config_source_prompt(tui, &sources).await {
+        match run_external_agent_config_source_prompt(tui, &sources, tui_events).await {
             Ok(Some(source)) => source,
             Ok(None) => return Ok(ExternalAgentConfigMigrationFlowOutcome::Cancelled),
             Err(err) => return Ok(ExternalAgentConfigMigrationFlowOutcome::TerminalError(err)),
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
     let Some(detected_source) = detected_sources
         .into_iter()

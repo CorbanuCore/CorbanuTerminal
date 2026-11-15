@@ -56,18 +56,6 @@ impl AppEventSender {
     /// Send an event to the app event channel. If it fails, we swallow the
     /// error and log it.
     pub(crate) fn send(&self, event: AppEvent) {
-<<<<<<< HEAD
-        let _ = self.send_checked(event);
-||||||| 413492cd6c
-        // Record inbound events for high-fidelity session replay.
-        // Avoid double-logging Ops; those are logged at the point of submission.
-        if !matches!(event, AppEvent::CodexOp(_)) {
-            session_log::log_inbound_app_event(&event);
-        }
-        if let Err(e) = self.app_event_tx.send(event) {
-            tracing::error!("failed to send event: {e}");
-        }
-=======
         // A parked voice owner keeps processing its session, but its UI and queued
         // typed work must not act on the visible session. Thread-scoped metadata still applies.
         if self.voice_only.load(Ordering::Relaxed)
@@ -88,15 +76,7 @@ impl AppEventSender {
         {
             return;
         }
-        // Record inbound events for high-fidelity session replay.
-        // Avoid double-logging Ops; those are logged at the point of submission.
-        if !matches!(event, AppEvent::CodexOp(_)) {
-            session_log::log_inbound_app_event(&event);
-        }
-        if let Err(e) = self.app_event_tx.send(event) {
-            tracing::error!("failed to send event: {e}");
-        }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let _ = self.send_checked(event);
     }
 
     pub(crate) fn interrupt(&self) {

@@ -1881,51 +1881,6 @@ fn session_header_indicates_yolo_mode() {
 }
 
 #[test]
-<<<<<<< HEAD
-fn session_header_aligns_halfwidth_sound_marks() {
-    let cell: Box<dyn HistoryCell> = Box::new(SessionHeaderHistoryCell::new(
-        "gpt-5-ｶﾞ-ﾊﾟ".to_string(),
-        /*reasoning_effort*/ None,
-        /*show_fast_status*/ false,
-        PathBuf::from("project"),
-        "test",
-    ));
-
-    let width = 80;
-    let height = cell.desired_height(width);
-    let area = Rect::new(0, 0, width, height);
-    let mut buf = Buffer::empty(area);
-    cell.render(area, &mut buf);
-
-    insta::assert_snapshot!(
-        "session_header_halfwidth_sound_marks",
-        crate::status::snapshot_helpers::normalize_snapshot_version(&format!("{buf:?}"))
-    );
-}
-
-#[test]
-||||||| 413492cd6c
-fn session_header_aligns_halfwidth_sound_marks() {
-    let cell: Box<dyn HistoryCell> = Box::new(SessionHeaderHistoryCell::new(
-        "gpt-5-ｶﾞ-ﾊﾟ".to_string(),
-        /*reasoning_effort*/ None,
-        /*show_fast_status*/ false,
-        PathBuf::from("project"),
-        "test",
-    ));
-
-    let width = 80;
-    let height = cell.desired_height(width);
-    let area = Rect::new(0, 0, width, height);
-    let mut buf = Buffer::empty(area);
-    cell.render(area, &mut buf);
-
-    insta::assert_snapshot!("session_header_halfwidth_sound_marks", format!("{buf:?}"));
-}
-
-#[test]
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 fn session_header_truncates_halfwidth_directory() {
     let cell: Box<dyn HistoryCell> = Box::new(SessionHeaderHistoryCell::new(
         "gpt-5".to_string(),

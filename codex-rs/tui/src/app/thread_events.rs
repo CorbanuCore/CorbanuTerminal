@@ -596,15 +596,9 @@ fn file_change_item_changes(
 }
 
 #[derive(Debug)]
-<<<<<<< HEAD
 pub(crate) struct ThreadEventChannel {
-||||||| 413492cd6c
-pub(super) struct ThreadEventChannel {
-=======
-pub(super) struct ThreadEventChannel {
     /// Set on backend handoff so a retained channel is detached through its owning session.
     pub(super) backend_id: Option<crate::backend_id::BackendId>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub(super) sender: mpsc::Sender<ThreadBufferedEvent>,
     pub(super) receiver: Option<mpsc::Receiver<ThreadBufferedEvent>>,
     pub(super) store: Arc<Mutex<ThreadEventStore>>,
@@ -627,14 +621,12 @@ impl ThreadEventChannel {
         self.attachment = ThreadEventAttachment::ReplayOnly;
     }
 
-<<<<<<< HEAD
     pub(crate) fn mark_live(&mut self) {
         self.attachment = ThreadEventAttachment::Live;
-||||||| 413492cd6c
-=======
+    }
+
     pub(super) fn mark_external_writer(&mut self) {
         self.attachment = ThreadEventAttachment::ExternalWriter;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(super) fn attachment(&self) -> ThreadEventAttachment {

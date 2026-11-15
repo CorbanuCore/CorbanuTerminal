@@ -19,13 +19,7 @@ use ratatui::text::Span;
 use ratatui::widgets::Clear;
 use ratatui::widgets::Paragraph;
 use ratatui::widgets::WidgetRef;
-<<<<<<< HEAD
-||||||| 413492cd6c
-use tokio_stream::StreamExt;
-=======
 use ratatui::widgets::Wrap;
-use tokio_stream::StreamExt;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ExternalAgentConfigMigrationSource {
@@ -54,14 +48,8 @@ impl ExternalAgentConfigMigrationSource {
 pub(crate) async fn run_external_agent_config_source_prompt(
     tui: &mut Tui,
     sources: &[ExternalAgentConfigMigrationSource],
-<<<<<<< HEAD
     events: &mut tokio::sync::mpsc::UnboundedReceiver<TuiEvent>,
-) -> Option<ExternalAgentConfigMigrationSource> {
-||||||| 413492cd6c
-) -> Option<ExternalAgentConfigMigrationSource> {
-=======
 ) -> std::io::Result<Option<ExternalAgentConfigMigrationSource>> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut screen = ExternalAgentConfigSourceScreen::new(tui.frame_requester(), sources);
     if let Err(err) = tui.draw(u16::MAX, |frame| {
         frame.render_widget_ref(&screen, frame.area());
@@ -70,26 +58,9 @@ pub(crate) async fn run_external_agent_config_source_prompt(
         return Ok(None);
     }
 
-<<<<<<< HEAD
-||||||| 413492cd6c
-    let events = tui.event_stream();
-    tokio::pin!(events);
-
-=======
-    tui.discard_pending_input_before_interactive_screen()?;
-    let events = tui.event_stream();
-    tokio::pin!(events);
-
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     while !screen.is_done() {
-<<<<<<< HEAD
         if let Some(event) = events.recv().await {
-||||||| 413492cd6c
-        if let Some(event) = events.next().await {
-=======
-        if let Some(event) = events.next().await {
             let _ = tui.screen_size_for_event(&event);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             match event {
                 TuiEvent::Key(key_event) => screen.handle_key(key_event),
                 TuiEvent::Paste(_) | TuiEvent::FocusLost | TuiEvent::Mouse(_) => {}

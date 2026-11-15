@@ -1,15 +1,10 @@
 use super::*;
-<<<<<<< HEAD
-use crate::legacy_core::config::ConfigBuilder;
-||||||| 413492cd6c
-=======
 use crate::history_cell::HistoryCell;
 use crate::legacy_core::config::ConfigBuilder;
 use crate::legacy_core::config::ConfigOverrides;
 use codex_app_server_client::AppServerClient;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use color_eyre::eyre::WrapErr;
 use pretty_assertions::assert_eq;
 use std::path::Path;
