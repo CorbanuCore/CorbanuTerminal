@@ -49,17 +49,13 @@ pub(crate) struct AgentNavigationState {
     stopped_threads: HashSet<ThreadId>,
     /// Spawned child threads whose instructions are owned by their parent agent.
     parent_owned_threads: HashSet<ThreadId>,
-<<<<<<< HEAD
     /// #867: threads whose turn the security kill switch stopped, until their next turn starts.
     kill_switch_stopped: HashSet<ThreadId>,
-||||||| 413492cd6c
-=======
     picker_excluded_threads: HashSet<ThreadId>,
     /// Inactive threads with an approval outstanding in their event store.
     pub(super) pending_approvals: HashSet<ThreadId>,
     /// Thread IDs in the currently rendered picker, so a refresh can restore its cursor by ID.
     pub(super) picker_row_ids: Vec<ThreadId>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     /// Coalesces root refreshes while rejecting replies from a previous session.
     pub(super) picker_refresh: Option<AgentPickerRefreshState>,
 }
@@ -363,14 +359,10 @@ impl AgentNavigationState {
         self.order.clear();
         self.stopped_threads.clear();
         self.parent_owned_threads.clear();
-<<<<<<< HEAD
         self.kill_switch_stopped.clear();
-||||||| 413492cd6c
-=======
         self.picker_excluded_threads.clear();
         self.pending_approvals.clear();
         self.picker_row_ids.clear();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.picker_refresh = None;
     }
 
@@ -384,12 +376,8 @@ impl AgentNavigationState {
         self.order.retain(|candidate| *candidate != thread_id);
         self.stopped_threads.remove(&thread_id);
         self.parent_owned_threads.remove(&thread_id);
-<<<<<<< HEAD
         self.kill_switch_stopped.remove(&thread_id);
-||||||| 413492cd6c
-=======
         self.picker_excluded_threads.remove(&thread_id);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Returns whether there is at least one tracked thread other than the primary one.

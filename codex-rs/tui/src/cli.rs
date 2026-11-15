@@ -80,7 +80,6 @@ pub struct Cli {
     #[arg(long = "no-alt-screen", default_value_t = false)]
     pub no_alt_screen: bool,
 
-<<<<<<< HEAD
     /// Named account for this session (`<name>` for the session's provider,
     /// or `<provider>:<name>`). Another provider's account is used by spawned
     /// agents and workers on that provider and when you switch to it. Needs
@@ -88,12 +87,9 @@ pub struct Cli {
     /// default account.
     #[arg(long = "account", value_name = "[PROVIDER:]NAME")]
     pub account: Option<String>,
-||||||| 413492cd6c
-=======
     /// Run without the shared background server, even if it is already running.
     #[arg(long)]
     pub no_daemon: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     #[clap(skip)]
     pub config_overrides: CliConfigOverrides,

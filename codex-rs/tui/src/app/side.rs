@@ -519,12 +519,7 @@ impl App {
         self.discard_thread_local_state(thread_id).await;
     }
 
-<<<<<<< HEAD
     pub(crate) async fn discard_thread_local_state(&mut self, thread_id: ThreadId) {
-||||||| 413492cd6c
-    pub(super) async fn discard_thread_local_state(&mut self, thread_id: ThreadId) {
-=======
-    pub(super) async fn discard_thread_local_state(&mut self, thread_id: ThreadId) {
         self.pending_app_server_requests
             .cancel_thread_verification(&thread_id.to_string());
         let app_event_tx = self.app_event_tx.clone();
@@ -543,7 +538,6 @@ impl App {
                     true
                 }
             });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.abort_thread_event_listener(thread_id);
         self.thread_event_channels.remove(&thread_id);
         self.pending_server_profiles.remove(&thread_id);

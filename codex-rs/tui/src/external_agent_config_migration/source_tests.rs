@@ -57,7 +57,8 @@ async fn runtime_source_prompt_consumes_the_app_event_receiver() {
         &ExternalAgentConfigMigrationSource::ALL,
         &mut event_rx,
     )
-    .await;
+    .await
+    .expect("source prompt");
 
     assert_eq!(selected, Some(ExternalAgentConfigMigrationSource::Cur));
 }

@@ -26,14 +26,10 @@ use codex_config::loader::project_trust_key;
 use codex_exec_server::LOCAL_ENVIRONMENT_ID;
 use codex_exec_server::LOCAL_FS;
 use codex_features::FEATURES;
-<<<<<<< HEAD
+use codex_git_utils::resolve_root_git_project_for_trust;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::canonical_catalog_provider;
 use codex_model_provider_info::resolve_model_for_provider;
-||||||| 413492cd6c
-=======
-use codex_git_utils::resolve_root_git_project_for_trust;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::config_types::TrustLevel;
 use codex_utils_absolute_path::AbsolutePathBuf;

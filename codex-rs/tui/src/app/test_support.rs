@@ -11,7 +11,6 @@ use crate::test_support::boxed_future;
 use codex_models_manager::test_support::construct_model_info_offline_for_tests;
 use codex_models_manager::test_support::get_model_offline_for_tests;
 
-<<<<<<< HEAD
 pub(super) fn pending_confirmation(
     thread_id: ThreadId,
 ) -> permission_confirmation::PendingPermissionConfirmation {
@@ -26,17 +25,10 @@ pub(super) fn pending_confirmation(
     }
 }
 
-pub(super) async fn make_test_app() -> App {
-    let (chat_widget, app_event_tx, _rx, _op_rx) = make_chatwidget_manual_with_sender().await;
-||||||| 413492cd6c
-pub(super) async fn make_test_app() -> App {
-    let (chat_widget, app_event_tx, _rx, _op_rx) = make_chatwidget_manual_with_sender().await;
-=======
 pub(crate) async fn make_test_app() -> Box<App> {
     let (mut chat_widget, app_event_tx, _rx, _op_rx) =
         boxed_future!(make_chatwidget_manual_with_sender()).await;
     let test_codex_home = chat_widget.test_codex_home.take();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let config = chat_widget.config_ref().clone();
     let file_search = FileSearchManager::new(config.cwd.to_path_buf(), app_event_tx.clone());
     let model = get_model_offline_for_tests(config.model.as_deref());
@@ -71,18 +63,11 @@ pub(crate) async fn make_test_app() -> Box<App> {
         runtime_approval_policy_override: None,
         runtime_approvals_reviewer_override: None,
         runtime_permission_profile_override: None,
-<<<<<<< HEAD
         pending_permission_confirmation: None,
-||||||| 413492cd6c
-=======
         pending_server_profiles: HashMap::new(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         file_search,
         transcript_cells: Vec::new(),
-<<<<<<< HEAD
         claude_pane_transcript_cells: HashMap::new(),
-||||||| 413492cd6c
-=======
         native_history: Default::default(),
         turn_tips: Default::default(),
         transcript_view: Default::default(),
@@ -90,7 +75,6 @@ pub(crate) async fn make_test_app() -> Box<App> {
         last_rendered_history_tail: None,
         last_thread_usage_status_cell: None,
         pending_thread_usage_history_refresh: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         overlay: None,
         retained_analytics: None,
         deferred_history_lines: Vec::new(),
@@ -138,7 +122,6 @@ pub(crate) async fn make_test_app() -> Box<App> {
         pending_thread_titles: HashMap::new(),
         thread_event_listener_tasks: HashMap::new(),
         agent_navigation: AgentNavigationState::default(),
-<<<<<<< HEAD
         spawn_parent_by_thread: HashMap::new(),
         spawn_parent_by_node: HashMap::new(),
         spawn_native_runtime_by_node: HashMap::new(),
@@ -169,10 +152,7 @@ pub(crate) async fn make_test_app() -> Box<App> {
         orchestrate_next_whip_seq: 0,
         orchestrate_now_override: None,
         orchestrate_idle_generation_by_target: Box::new(HashMap::new()),
-||||||| 413492cd6c
-=======
         agents_overview: Default::default(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         side_threads: HashMap::new(),
         claude_panes: Default::default(),
         abandoned_side_threads: HashSet::new(),
