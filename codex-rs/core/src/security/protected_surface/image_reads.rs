@@ -7,7 +7,7 @@ use super::ask_human;
 use super::classify_mcp;
 use crate::function_tool::FunctionCallError;
 use crate::session::session::Session;
-use crate::session::turn_context::TurnContext;
+use crate::session::step_context::StepContext;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
 use codex_utils_path_uri::PathUri;
@@ -45,7 +45,7 @@ pub(crate) async fn check_image_generation(
     // Prompt prose and images already in history are not new local reads.
     check_local_reads(
         &invocation.session,
-        &invocation.turn,
+        &invocation.step_context,
         &invocation.call_id,
         environment.cwd().clone(),
         paths.clone(),
@@ -56,12 +56,12 @@ pub(crate) async fn check_image_generation(
 /// Classify all paths together before reading any, with one exact-call approval.
 pub(crate) async fn check_local_reads(
     session: &Session,
-    turn: &TurnContext,
+    step: &StepContext,
     call_id: &str,
     cwd: PathUri,
     paths: Value,
 ) -> Result<(), FunctionCallError> {
-    let home = turn.config.codex_home.clone();
+    let home = step.turn.config.codex_home.clone();
     let count = paths.as_array().map_or(0, Vec::len);
     let shown = paths
         .as_array()
@@ -73,7 +73,10 @@ pub(crate) async fn check_local_reads(
         .collect::<Vec<_>>();
     let admission = admit(
         session,
-        turn.approval_policy.value(),
+        // Sync D543 (a): the step's captured settings, as for view_image and
+        // MCP calls (main reads the turn's live policy, which upstream's step
+        // context replaces).
+        step.settings.approval_policy(),
         Route::FileRead,
         call_id,
         move || {
@@ -99,7 +102,7 @@ pub(crate) async fn check_local_reads(
                 "Allow reading {count} local media file(s) (up to five paths shown): {shown:?}? {}",
                 check.reason()
             );
-            let approved = ask_human(session, turn, call_id, question).await;
+            let approved = ask_human(session, &step.turn, call_id, question).await;
             check
                 .resolve(session, approved)
                 .map_err(FunctionCallError::RespondToModel)

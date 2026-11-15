@@ -57,7 +57,7 @@ pub(crate) async fn prepare_agent_media(
         .collect::<Result<Vec<_>, _>>()?;
     check_local_reads(
         session,
-        &step.turn,
+        step,
         call_id,
         environment.cwd().clone(),
         serde_json::json!(
@@ -87,15 +87,23 @@ pub(crate) async fn prepare_agent_media(
                 let bytes = environment
                     .environment
                     .get_filesystem()
-                    .read_file(&uri, Some(&sandbox))
+                    .read_file(
+                        &uri,
+                        // Sync D543 (a): upstream's read options.
+                        codex_exec_server::ReadFileOptions::default(),
+                        Some(&sandbox),
+                    )
                     .await
                     .map_err(|error| {
                         FunctionCallError::RespondToModel(format!(
                             "Unable to read local media: {error}"
                         ))
                     })?;
+                // Sync D543 (a): upstream's image reference type.
                 UserInput::Image {
-                    image_url: data_url_from_bytes("application/octet-stream", &bytes),
+                    image: codex_protocol::models::ImageReference::Inline {
+                        image_url: data_url_from_bytes("application/octet-stream", &bytes),
+                    },
                     detail: *detail,
                 }
             }
@@ -120,15 +128,23 @@ pub(crate) async fn prepare_agent_media(
                 let bytes = environment
                     .environment
                     .get_filesystem()
-                    .read_file(&uri, Some(&sandbox))
+                    .read_file(
+                        &uri,
+                        // Sync D543 (a): upstream's read options.
+                        codex_exec_server::ReadFileOptions::default(),
+                        Some(&sandbox),
+                    )
                     .await
                     .map_err(|error| {
                         FunctionCallError::RespondToModel(format!(
                             "Unable to read local media: {error}"
                         ))
                     })?;
+                // Sync D543 (a): upstream's audio reference type.
                 UserInput::Audio {
-                    audio_url: data_url_from_bytes(mime, &bytes),
+                    audio: codex_protocol::models::AudioReference::Inline {
+                        audio_url: data_url_from_bytes(mime, &bytes),
+                    },
                 }
             }
             _ => continue,
