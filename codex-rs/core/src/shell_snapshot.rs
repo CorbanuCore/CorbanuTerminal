@@ -1219,8 +1219,8 @@ async fn run_script_with_timeout(
 
     if !output.status.success() {
         let status = output.status;
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("Snapshot command exited with status {status}: {stderr}");
+        // Startup diagnostics may contain the very credentials being captured.
+        bail!("Snapshot command exited with status {status}");
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
