@@ -259,7 +259,7 @@ pub(crate) async fn check_dispatch(
         }
         Coverage::PolicyRequest
             if invocation.tool_name.name != "request_permissions"
-                || automatic_reviewer_answers(invocation) =>
+                || automatic_reviewer_answers(invocation).await =>
         {
             (Route::PolicyRequest, ProtectedActionKind::SecurityPolicy)
         }
@@ -307,15 +307,27 @@ fn is_tainted(session: &Session) -> bool {
 /// Whether an automatic reviewer, not the person, answers this step's
 /// approval prompts. sync D543 (a): main's guardian routing rule
 /// (`routes_approval_to_guardian`, removed upstream), on upstream's step
-/// settings: on-request or granular approvals with the auto reviewer.
-fn automatic_reviewer_answers(invocation: &ToolInvocation) -> bool {
+/// settings: on-request or granular approvals with the auto reviewer. S3b:
+/// administrator requirements can also force the reviewer whatever the step
+/// says (upstream's `decide_approval`), so they count here too.
+async fn automatic_reviewer_answers(invocation: &ToolInvocation) -> bool {
     let settings = &invocation.step_context.settings;
-    matches!(
+    if matches!(
         settings.approval_policy(),
         codex_protocol::protocol::AskForApproval::OnRequest
             | codex_protocol::protocol::AskForApproval::Granular(_)
     ) && settings.approvals_reviewer()
         == codex_protocol::config_types::ApprovalsReviewer::AutoReview
+    {
+        return true;
+    }
+    invocation
+        .session
+        .get_config()
+        .await
+        .config_layer_stack
+        .requirements()
+        .automatic_reviewer_forced(&settings.model_info.slug)
 }
 
 /// D334 (#1702), D388: a follow-up task or V1 `send_input` to an agent with
