@@ -142,6 +142,12 @@ jobs:
           echo "Packages: $PACKAGES"
           cargo nextest run --locked --target "$TARGET" --cargo-profile "$PROFILE" "${args[@]}" --no-fail-fast --no-tests=pass
 
+      - name: Report disk use
+        if: always() && !cancelled()
+        run: |
+          df -h "$CI_BUILD_ROOT"
+          du -sh "$CARGO_TARGET_DIR" "${SCCACHE_DIR:-$CI_BUILD_ROOT/sccache}" || true
+
       - name: sccache stats
         if: always()
         continue-on-error: true

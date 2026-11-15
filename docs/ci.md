@@ -115,7 +115,8 @@ doesn't change (through a dependency) shows up on `main`.
   start from other crates (`codex`, the code-mode host, the Linux sandbox, the
   rmcp-client test servers, the wallet daemon) and installs the packaged
   ripgrep. A change to the job itself or `rust-ci.yml` selects
-  `codex-rmcp-client` and its reverse dependents (subject to the same cap). It uses postmerge's
+  `codex-rmcp-client` and its reverse dependents, currently exceeding the cap
+  and running every member. It uses postmerge's
   `ci-test` profile and restores its sccache (saves nothing). Before this no
   Linux or macOS PR job ran most crates' tests: #1963 went green while
   breaking two rmcp-client tests. Part of `CI results (required)` whenever it

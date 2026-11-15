@@ -12,8 +12,9 @@ and local dependency edges. Linux adds transitive reverse dependents, including
 dev/build and target-specific dependencies. Above MAX_PACKAGES it runs every
 member instead of truncating coverage; workspace-wide inputs do the same.
 
-A change to this job itself selects CANARY_PACKAGE, which also needs a helper
-binary from another crate, so the PR proves the whole path still works.
+A change to this job itself seeds CANARY_PACKAGE and expands its dependents.
+That currently exceeds the cap and runs every member, proving the fallback
+and helper-binary path on workflow changes too.
 
 Prints one package name per line, or with --helpers the extra `cargo build`
 arguments for helper binaries the given packages' tests need.
