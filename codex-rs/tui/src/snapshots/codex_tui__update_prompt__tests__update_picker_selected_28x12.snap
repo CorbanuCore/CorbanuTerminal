@@ -1,13 +1,14 @@
 ---
 source: tui/src/update_prompt.rs
+assertion_line: 367
 expression: rendered
 ---
 
-  Update available · 0.0.0
-  → 9.9.9
+  Update available ·
+  0.1.48 → 9.9.9
   Release notes:
-  https://github.com/opena
-  i/codex/releases/latest
+  https://github.com/Corba
+  nuCore/CorbanuTerminal/r
 ↑
 › 3. Skip until next version
 

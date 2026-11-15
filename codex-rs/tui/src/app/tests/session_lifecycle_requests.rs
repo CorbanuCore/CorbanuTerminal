@@ -491,7 +491,14 @@ pub(super) async fn start_recording_app_server_with_realtime_speech(
     let mut embedded = crate::start_embedded_app_server(
         codex_arg0::Arg0DispatchPaths::default(),
         config.clone(),
-        Vec::new(),
+        // A server given its own user config file keeps the provider that file selects.
+        if loader_overrides.user_config_path.is_some()
+            || loader_overrides.user_config_profile.is_some()
+        {
+            Vec::new()
+        } else {
+            crate::test_provider_session_flags(config)
+        },
         loader_overrides,
         /*strict_config*/ false,
         codex_config::CloudConfigBundleLoader::default(),

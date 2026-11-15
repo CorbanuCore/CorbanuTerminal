@@ -1,5 +1,6 @@
 ---
 source: tui/src/app/composer_hints_tests.rs
+assertion_line: 121
 expression: "crate::chatwidget::tests::helpers::normalize_snapshot_paths(snapshots.join(\"\\n\\n\"))"
 ---
 80 columns, 10 rows, running=false, queued=false
@@ -9,9 +10,9 @@ Conversation
   breakdown.
                                                   ⚠ 5h limit: 8% left · /status
 
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
-  GPT-5.6-Sol default · /tmp/project
+  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…
   ? for shortcuts                                      ⚠ 1 warning · f2 to view
 
 80 columns, 12 rows, running=true, queued=false
@@ -25,7 +26,7 @@ Conversation
 
 › draft stays
 
-  GPT-5.6-Sol default · /tmp/project
+  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…
   tab to queue message
 
 32 columns, 10 rows, running=true, queued=false
@@ -37,7 +38,7 @@ Conversation
 
 › draft stays
 
-  GPT-5.6-Sol default · /tmp/pr…
+  Z.AI GLM 5.3 Flash via zai de…
   tab to queue message
 
 18 columns, 10 rows, running=true, queued=false
@@ -49,7 +50,7 @@ Conversation
 
 › draft stays
 
-  GPT-5.6-Sol def…
+  Z.AI GLM 5.3 Fl…
   tab to queue mes
 
 80 columns, 18 rows, running=true, queued=true
@@ -69,7 +70,7 @@ Conversation row 19
 › draft stays
   second line
 
-  GPT-5.6-Sol default · /tmp/project
+  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…
   tab to queue message
 
 80 columns, 11 rows, running=true, queued=true
@@ -82,7 +83,7 @@ Conversation row 19
 › draft stays
   second line
 
-  GPT-5.6-Sol default · /tmp/project
+  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…
   tab to queue message
 
 80 columns, 6 rows, running=true, queued=false
@@ -90,5 +91,5 @@ Conversation row 19
 
 › draft stays
 
-  GPT-5.6-Sol default · /tmp/project
+  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…
   tab to queue message

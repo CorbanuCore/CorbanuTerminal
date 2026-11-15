@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/permissions.rs
+assertion_line: 1099
 expression: popup
 ---
   Set up the Codex agent sandbox to protect your files and control network access. Learn more
@@ -7,7 +8,8 @@ expression: popup
 
 
 › 1. Set up default sandbox (requires Administrator permissions)
-  2. Use non-admin sandbox (higher risk if prompt injected)
+  2. Use non-admin sandbox (higher risk if prompt injected)       Doesn't block reading your files; its network block
+                                                                  can be bypassed
   3. Quit
 
   enter select · esc back

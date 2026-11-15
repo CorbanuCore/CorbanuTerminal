@@ -1,16 +1,17 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 3690
 expression: popup
 ---
   Select Model and Effort
   OpenRouter API key
 
-  OpenAI  Ambient  Corbanu API  Kimi Code  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel  Baseten  [OpenRouter]
+  ‹  Ambient   Corbanu API   Kimi Code   Z.AI   DeepSeek   Claude Plan   Anthropic   Meta   Vercel   Baseten   OpenRouter
 
 › 1. OpenRouter Grok 4.7 (current)     Model: x-ai/grok-4.7. OpenRouter: Grok 4.7 — $1.60/M input, $4.8/M output. Rates double
                                        above 200K prompt tokens.
-  2. OpenRouter DeepSeek V4.1 Flash    Model: deepseek/deepseek-v4.1-flash. OpenRouter: DeepSeek V4.1 Flash — $0.15/M input,
-                                       $0.6/M output. Provider/time-of-day rates vary; peak prices are higher.
+  2. OpenRouter DeepSeek V4.1 Flash    Model: deepseek/deepseek-v4.1-flash. OpenRouter: DeepSeek V4.1 Flash — $0.15/M input, $0.6/
+                                       M output. Provider/time-of-day rates vary; peak prices are higher.
   3. OpenRouter MiMo V2.6 Pro          Model: xiaomi/mimo-v2.6-pro. OpenRouter: Xiaomi MiMo V2.6 Pro — $0.435/M input, $0.87/M
                                        output. Provider/time-of-day rates vary; peak prices are higher.
   4. OpenRouter GLM 5.3 Flash          Model: z-ai/glm-5.3-flash. OpenRouter: GLM 5.3 Flash — $0.15/M input, $0.5/M output.

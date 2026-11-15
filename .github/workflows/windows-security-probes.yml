@@ -15,6 +15,7 @@ on:
       - "codex-rs/process-hardening/**"
       - "codex-rs/utils/pty/src/win/**"
       - "codex-rs/windows-sandbox-rs/**"
+      - "codex-rs/windows-sandbox-service/**"
       - "codex-rs/network-proxy/src/credential_broker/**"
       - "codex-rs/network-proxy/src/credential_broker.rs"
       - "codex-rs/network-proxy/src/native_certs.rs"
@@ -58,6 +59,7 @@ on:
       - "codex-rs/process-hardening/**"
       - "codex-rs/utils/pty/src/win/**"
       - "codex-rs/windows-sandbox-rs/**"
+      - "codex-rs/windows-sandbox-service/**"
       - "codex-rs/network-proxy/src/credential_broker/**"
       - "codex-rs/network-proxy/src/credential_broker.rs"
       - "codex-rs/network-proxy/src/native_certs.rs"
@@ -240,6 +242,19 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib credential_watch -- --nocapture --test-threads=1
+      - name: Service provisioning refuses linked leaves (#2315)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset CORBANU_HOME CODEX_HOME PFTERMINAL_HOME
+          export CORBANU_TEST_NO_NATIVE_KEYRING=1
+          export CODEX_HOME="$(mktemp -d "$RUNNER_TEMP/provisioning-home.XXXXXXXX")"
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- issue_2315 setup_provisioning::acl_tests:: file_write::tests:: no_reparse_dir::tests:: --nocapture --test-threads=1 2>&1 | tee "$RUNNER_TEMP/provisioning-2315.log"
+          grep -q 'test result: ok. 23 passed; 0 failed; 0 ignored' "$RUNNER_TEMP/provisioning-2315.log"
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox-service --lib -- issue_2315 --nocapture --test-threads=1 2>&1 | tee "$RUNNER_TEMP/provisioning-service-2315.log"
+          grep -q 'test result: ok. 2 passed; 0 failed; 0 ignored' "$RUNNER_TEMP/provisioning-service-2315.log"
+          rm -r "$CODEX_HOME" < /dev/null
       - name: Build the elevated sandbox helpers
         if: ${{ !cancelled() }}
         shell: bash

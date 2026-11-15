@@ -1,11 +1,13 @@
 ---
 source: tui/src/bottom_pane/approval_overlay_grant_tests.rs
+assertion_line: 187
 expression: "render(&view, 100)"
 ---
 
   Would you like to run the following command?
 
   $ cat ../home/team-notes.txt
+
 
 › 1. Yes, proceed (y)
   2. No, and tell Corbanu Terminal what to do differently (esc)

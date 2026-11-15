@@ -1,10 +1,14 @@
 ---
 source: tui/src/chatwidget/tests/model_display_name_tests.rs
+assertion_line: 42
 expression: "render_bottom_popup(&chat, 80)"
 ---
   Select Model and Effort
+  Access hidden models by running corbanu -m <model_name> or in your
+  config.toml
 
 
-› 1. GPT-5.6 Luna (current)  Custom provider model
+› 1. GPT-5.6 Luna (current)  Model: us.openai.gpt-5.6-luna. Custom provider
+                             model
 
   enter select · esc back

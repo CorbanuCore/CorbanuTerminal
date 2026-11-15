@@ -1,14 +1,15 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 831
 expression: confirmation
 ---
                 Plugins
 › Ask Corbanu   Remove Repo Marketplace marketplace?
                 This removes the configured marketplace from Corbanu Terminal.
-  Z.AI GLM 5.
+  Z.AI GLM 5.3
 
-              › 1. Remove marketplace  Remove this marketplace from the available
-                                       plugin list
-                2. Back to plugins     Keep this marketplace installed
+                Remove marketplace  Remove this marketplace from the available plugin
+                                    list
+              › Back to plugins     Keep this marketplace installed
 
                 enter select · esc close

@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/status_and_layout.rs
+assertion_line: 6399
 expression: missing
 ---
-│  Account:              Corbanu API not configured (set it up in /providers)  │
+Account:             Corbanu API not configured (set it up in /providers)

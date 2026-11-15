@@ -102,41 +102,28 @@ fn assert_probe(output: &str, zai: &str) {
     }
 }
 
-async fn assert_tool_hides_provider_keys(tool_name: &str, login: bool) -> anyhow::Result<()> {
-    let (arguments, unified_exec) = match tool_name {
-        "shell_command" => (json!({ "command": PROBE, "login": login }), false),
-        _ => (
-            json!({ "cmd": PROBE, "login": login, "yield_time_ms": 5_000 }),
-            true,
-        ),
-    };
-    let feature = format!("features.unified_exec={unified_exec}");
-    let (output, auth) = probe_tool_env(tool_name, arguments, &[feature.as_str()]).await?;
+// Upstream removed the `shell_command` tool; `exec_command` is the only shell
+// tool, so these two cases replace main's `shell_command` and
+// `login_shell_command` variants (#2277).
+async fn assert_exec_command_hides_provider_keys(login: bool) -> anyhow::Result<()> {
+    let arguments = json!({ "cmd": PROBE, "login": login, "yield_time_ms": 5_000 });
+    let (output, auth) =
+        probe_tool_env("exec_command", arguments, &["features.unified_exec=true"]).await?;
     assert_probe(&output, "ABSENT");
     assert_provider_authenticated(auth);
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn shell_command_does_not_inherit_provider_keys() -> anyhow::Result<()> {
-    assert_tool_hides_provider_keys("shell_command", /*login*/ false).await
+async fn unified_exec_does_not_inherit_provider_keys() -> anyhow::Result<()> {
+    assert_exec_command_hides_provider_keys(/*login*/ false).await
 }
 
 /// Login shells source the session's shell snapshot, which must not
 /// re-export the keys either.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn login_shell_command_does_not_inherit_provider_keys() -> anyhow::Result<()> {
-    assert_tool_hides_provider_keys("shell_command", /*login*/ true).await
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn unified_exec_does_not_inherit_provider_keys() -> anyhow::Result<()> {
-    assert_tool_hides_provider_keys("exec_command", /*login*/ false).await
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn login_unified_exec_does_not_inherit_provider_keys() -> anyhow::Result<()> {
-    assert_tool_hides_provider_keys("exec_command", /*login*/ true).await
+    assert_exec_command_hides_provider_keys(/*login*/ true).await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

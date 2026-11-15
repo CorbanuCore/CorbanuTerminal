@@ -1,8 +1,9 @@
 ---
 source: tui/src/app/tests/new_session_tests.rs
+assertion_line: 188
 expression: "normalize_snapshot_paths(render_bottom_popup(&app.chat_widget, 80))"
 ---
-  >_ OpenAI Codex (v0.0.0)
+  >_ Corbanu Terminal (v<V>)  
      /tmp/project
 
 
@@ -13,4 +14,4 @@ expression: "normalize_snapshot_paths(render_bottom_popup(&app.chat_widget, 80))
 
 › $stat
 
-  GPT-5.6-Sol default · /tmp/project
+  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…

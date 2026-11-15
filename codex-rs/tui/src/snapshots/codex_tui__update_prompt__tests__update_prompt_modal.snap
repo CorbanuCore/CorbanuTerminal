@@ -1,13 +1,16 @@
 ---
 source: tui/src/update_prompt.rs
+assertion_line: 305
 expression: terminal.backend()
 ---
 
-  Update available · 0.0.0 → 9.9.9
-  Release notes: https://github.com/CorbanuCore/CorbanuTerminal/releases/latest
+  Update available · 0.1.48 → 9.9.9
+  Release notes:
+  https://github.com/CorbanuCore/CorbanuTerminal/releases/latest
 
-› 1. Update now (runs `sh -c 's=$(curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.sh) && CORBANU_NON_INTERACTIVE=1 eval "$s"'`)
+› 1. Update now (runs `sh -c 's=$(curl -fsSL https://github.com/CorbanuCore/    
+     CorbanuTerminal/releases/latest/download/install.sh) &&                    
+     CORBANU_NON_INTERACTIVE=1 eval "$s"'`)                                     
   2. Skip
-  3. Skip until next version
-
+↓
   enter continue · esc skip

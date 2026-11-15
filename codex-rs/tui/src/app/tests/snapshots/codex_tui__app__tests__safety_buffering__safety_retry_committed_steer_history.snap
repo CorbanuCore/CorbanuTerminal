@@ -1,10 +1,11 @@
 ---
 source: tui/src/app/tests/safety_buffering.rs
-assertion_line: 960
+assertion_line: 1409
 expression: rendered_retry
 ---
 › Handle the safety-buffered request
   Keep the accepted steer
 
 • done
+  Worked for [duration] • [completion time]
 • goal continued
