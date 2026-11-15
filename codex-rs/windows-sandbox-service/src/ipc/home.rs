@@ -3,14 +3,13 @@
 
 use anyhow::Context;
 use anyhow::Result;
-use anyhow::bail;
 use codex_windows_sandbox::DirectoryOpenDisposition;
 use codex_windows_sandbox::SetupRuntime;
 use codex_windows_sandbox::create_directory_guard;
 use codex_windows_sandbox::open_directory_no_reparse;
+use codex_windows_sandbox::open_provisioning_entry;
 use codex_windows_sandbox::to_wide;
 use codex_windows_sandbox::validate_local_directory_path;
-use std::os::windows::fs::MetadataExt;
 use std::os::windows::io::AsHandle;
 use std::os::windows::io::OwnedHandle;
 use std::path::Component;
@@ -20,6 +19,10 @@ use windows_sys::Win32::Foundation as foundation;
 use windows_sys::Win32::Storage::FileSystem as filesystem;
 
 use super::ServiceUnavailable;
+
+#[cfg(test)]
+#[path = "home_tests.rs"]
+mod tests;
 
 const DRIVE_FIXED: u32 = 3;
 
@@ -120,21 +123,22 @@ pub(super) fn prepare_codex_home(
             )?);
             handles.push(guard);
         }
-        handles.push(handle);
         if index == 0 {
+            handles.push(handle);
             continue;
         }
         for entry in std::fs::read_dir(directory)? {
             let entry = entry?;
-            let metadata = entry.path().symlink_metadata()?;
-            if metadata.file_attributes() & filesystem::FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-                bail!("refusing reparse point {}", entry.path().display());
-            }
+            drop(open_provisioning_entry(
+                handle.as_handle(),
+                &entry.file_name(),
+            )?);
         }
+        handles.push(handle);
     }
 
-    // Pinned parent handles prevent directory replacement, but existing helper file
-    // opens remain pathname-based; hardlink/leaf-file races need a follow-up redesign.
+    // This is admission only. The privileged helper rechecks every leaf through
+    // handles before use, including the explicit ACL-inheritance walk (#2315).
     Ok((home, handles))
 }
 
