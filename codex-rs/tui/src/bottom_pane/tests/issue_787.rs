@@ -147,14 +147,23 @@ fn issue_787_keys_for_the_question_never_answer_the_childs_prompt() {
     assert!(
         events.iter().any(|event| matches!(
             event,
-            AppEvent::CodexOp(crate::app_command::AppCommand::UserInputAnswer { .. })
+            AppEvent::SubmitThreadOp {
+                op: crate::app_command::AppCommand::UserInputAnswer { .. },
+                ..
+            }
         )),
         "the question took its keys"
     );
+    // Upstream answers the question on its thread too, so look for the
+    // child's decision only.
     assert!(
-        !events
-            .iter()
-            .any(|event| matches!(event, AppEvent::SubmitThreadOp { .. })),
+        !events.iter().any(|event| matches!(
+            event,
+            AppEvent::SubmitThreadOp {
+                op: Op::ExecApproval { .. },
+                ..
+            }
+        )),
         "no key reached the child's prompt"
     );
 

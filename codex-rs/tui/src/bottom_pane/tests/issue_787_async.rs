@@ -321,7 +321,7 @@ fn issue_787_dropped_keys_make_an_async_question_wait_for_navigation() {
     assert_eq!(draft(&pane), "");
     assert_eq!(take_answer(&mut pane), None);
     press_at(&mut pane, &[plain(KeyCode::Up)], quiet);
-    press_at(&mut pane, &text("because"), quiet);
+    pane.handle_paste_at("because".to_string(), quiet);
     press_at(&mut pane, &[plain(KeyCode::Enter)], quiet);
     assert!(take_answer(&mut pane).unwrap().contains("because"));
 }

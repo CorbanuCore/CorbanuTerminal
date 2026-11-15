@@ -169,13 +169,14 @@ impl AsyncQuestions {
         if self.shows_early_input_notice() {
             // #787: as a request prompt says when it dropped keys; it waits for navigation.
             let next_step = if self.has_options() {
-                " Choose an option with ↑/↓, then press enter."
+                "Choose an option with ↑/↓, then press enter."
             } else {
-                " Press ↑/↓ first, then answer."
+                "Press ↑/↓ first, then answer."
             };
-            return vec![Line::from(
-                format!("Keys pressed as this question appeared were ignored.{next_step}").cyan(),
-            )];
+            return vec![
+                Line::from("Keys pressed as this question appeared were ignored.".cyan()),
+                Line::from(next_step.cyan()),
+            ];
         }
         if !self.focus_is_notes()
             && let Some(flash) = self.composer.inline_flash()

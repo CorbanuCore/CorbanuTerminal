@@ -87,9 +87,10 @@ fn answers(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> Vec<Answe
                 op: Op::ResolveElicitation { .. },
                 ..
             } => Some(Answer::Elicitation),
-            AppEvent::CodexOp(crate::app_command::AppCommand::UserInputAnswer { .. }) => {
-                Some(Answer::Question)
-            }
+            AppEvent::SubmitThreadOp {
+                op: crate::app_command::AppCommand::UserInputAnswer { .. },
+                ..
+            } => Some(Answer::Question),
             AppEvent::OpenUrlInBrowser { .. } => Some(Answer::Link),
             _ => None,
         })
