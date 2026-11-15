@@ -77,6 +77,24 @@ impl ToolSearchInfo {
         Self::from_spec(search_text, spec, source_info)
     }
 
+    /// A runtime's search entry with its spec prepared for one step (catalog
+    /// function prefixes). The runtime's ranking text already describes the tool,
+    /// so it is kept as is: per-step guidance does not change how a tool ranks.
+    pub fn from_prepared_spec(
+        search_text: String,
+        spec: ToolSpec,
+        source_info: Option<ToolSearchSourceInfo>,
+    ) -> Option<Self> {
+        let output = normalize_search_spec(spec)?;
+        Some(Self {
+            entry: ToolSearchEntry {
+                search_text,
+                spec: Arc::new(output.into()),
+            },
+            source_info,
+        })
+    }
+
     pub fn from_spec(
         search_text: String,
         spec: ToolSpec,

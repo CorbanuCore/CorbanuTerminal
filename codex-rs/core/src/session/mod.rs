@@ -2746,7 +2746,7 @@ impl Session {
                 .step_settings
                 .resolve_model_info(
                     self.services.models_manager.as_ref(),
-                    &configuration.model_info_overrides,
+                    &configuration.effective_model_info_overrides(),
                 )
                 .await;
             if let Some(effort) = config
@@ -5677,8 +5677,17 @@ impl Session {
         // Corbanu (#1545): the whole communication, its mailbox message id
         // included, so a resume knows it was applied (`applied_agent_message_ids`).
         let mut persisted = (*communication).clone();
-        if let ResponseItem::AgentMessage { id, .. } = &response_item.item {
+        if let ResponseItem::AgentMessage {
+            id,
+            internal_chat_message_metadata_passthrough,
+            ..
+        } = &response_item.item
+        {
             persisted.id = id.clone();
+            // The recorded item's metadata (its turn, creation time and the collaboration
+            // provenance of its content), so a resume rebuilds the same item.
+            persisted.internal_chat_message_metadata_passthrough =
+                internal_chat_message_metadata_passthrough.clone();
         }
         self.persist_rollout_items(&[RolloutItem::InterAgentCommunication(persisted)])
             .await;

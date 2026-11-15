@@ -505,6 +505,9 @@ async fn issue_1504_external_header_sign_in_rotation_reconnects_the_prewarmed_so
         let mut provider =
             create_oss_provider_with_base_url(&format!("{}/v1", server.uri()), WireApi::Responses);
         provider.supports_websockets = true;
+        // Upstream: a provider that takes no sign-in never inherits the ambient login, so
+        // the external headers are this provider's sign-in.
+        provider.requires_openai_auth = true;
         let mut headers = HeaderMap::new();
         headers.insert("authorization", HeaderValue::from_static(value));
         let auth = CodexAuth::Headers(codex_login::AuthHeaders::new(headers));

@@ -1647,7 +1647,8 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
         ));
     }
 
-    if environment_mode.has_environment() && edit_tools_allowed_by_permission_profile(turn_context)
+    if environment_mode.has_environment()
+        && edit_tools_allowed_by_permission_profile(turn_context, context.environments)
     {
         let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
         if native_structured_edit_protocol_enabled_for(turn_context, context.model_info) {
@@ -1684,8 +1685,14 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
     }
 }
 
-fn edit_tools_allowed_by_permission_profile(turn_context: &TurnContext) -> bool {
-    let permission_profile = turn_context.permission_profile();
+/// Corbanu: edit tools are offered only when the step's environments can write. Like
+/// upstream's environment tools, this follows the step's environments, not the turn's
+/// initial ones.
+fn edit_tools_allowed_by_permission_profile(
+    turn_context: &TurnContext,
+    environments: &TurnEnvironmentSnapshot,
+) -> bool {
+    let permission_profile = turn_context.permission_profile_for_environments(environments);
     let file_system_policy = permission_profile.file_system_sandbox_policy();
     match file_system_policy.kind {
         FileSystemSandboxKind::Unrestricted | FileSystemSandboxKind::ExternalSandbox => true,

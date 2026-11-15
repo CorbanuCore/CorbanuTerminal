@@ -193,10 +193,22 @@ async fn local_compaction_retries_preserve_instructions_and_tool_metadata(
     .await?;
 
     let requests = mock.requests();
+    // Corbanu sends base instructions in the Responses `instructions` field except to
+    // Responses Lite, so a retry that trimmed the recorded instructions item carries them
+    // there; otherwise they are the first developer message.
+    let request_instructions = |request: &responses::ResponsesRequest| {
+        request
+            .body_json()
+            .get("instructions")
+            .and_then(serde_json::Value::as_str)
+            .filter(|instructions| !instructions.is_empty())
+            .map(str::to_owned)
+            .or_else(|| request.message_input_texts("developer").into_iter().next())
+    };
     assert_eq!(
         requests
             .iter()
-            .map(|request| request.message_input_texts("developer").into_iter().next())
+            .map(request_instructions)
             .collect::<Vec<_>>(),
         [
             Some("Window A".to_string()),
