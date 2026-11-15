@@ -28,19 +28,14 @@ impl LocalAgentControl {
                     .await
             };
             thread.wait_until_terminated().await;
+            // Only remove a thread that the public agent lookup admitted.
+            // Internal threads are hidden by get_thread and belong to their
+            // internal lifecycle owner, even when their id is supplied here.
+            let _ = state.remove_thread(&agent_id).await;
             result
         } else {
-            state
-                .send_op(
-                    agent_id,
-                    Op::Shutdown {},
-                    /*parent_turn_id*/ None,
-                    /*root_turn_id*/ None,
-                    /*message_delivery*/ None,
-                )
-                .await
+            Err(CodexErr::ThreadNotFound(agent_id))
         };
-        let _ = state.remove_thread(&agent_id).await;
         self.forget_v2_residency(agent_id);
         self.runtime.registry.release_spawned_thread(agent_id);
         self.runtime.mailboxes.remove(agent_id);

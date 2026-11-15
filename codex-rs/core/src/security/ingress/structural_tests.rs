@@ -33,7 +33,7 @@ fn texts(item: &ResponseItem) -> Vec<String> {
         ResponseItem::Message { content, .. } => content
             .iter()
             .filter_map(|part| match part {
-                ContentItem::InputText { text } | ContentItem::OutputText { text } => {
+                ContentItem::InputText { text } | ContentItem::OutputText { text, .. } => {
                     Some(text.clone())
                 }
                 _ => None,
@@ -448,7 +448,9 @@ fn pf_30_s01_labelled_human_standing_survives_image_stripping() {
                 text: "what is in this picture?".into(),
             },
             ContentItem::InputImage {
-                image_url: "data:image/png;base64,AAAA".into(),
+                image: codex_protocol::models::ImageReference::Inline {
+                    image_url: "data:image/png;base64,AAAA".into(),
+                },
                 detail: None,
             },
         ],

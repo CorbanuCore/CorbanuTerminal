@@ -230,7 +230,9 @@ fn issue_907_dump_applied_policies() {
                 ))
                 .chain(paths.iter().map(|folder| {
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::Path { path: abs(folder) },
+                        FileSystemPath::Path {
+                            path: abs(folder).into(),
+                        },
                         FileSystemAccessMode::Write,
                     )
                 }))
@@ -248,7 +250,7 @@ fn issue_907_dump_applied_policies() {
         let (mut file_system, network) = profile.to_runtime_permissions();
         file_system.entries.push(FileSystemSandboxEntry::new(
             FileSystemPath::Path {
-                path: abs(&project.join("tie")),
+                path: abs(&project.join("tie")).into(),
             },
             FileSystemAccessMode::Read,
         ));

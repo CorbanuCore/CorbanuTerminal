@@ -645,10 +645,10 @@ fn issue_651_a_missing_database_folder_is_made_on_linux() {
     }
     let backups = fixture.workspace.join("data/db.db-backups");
     let denies_backups = |file_system: &FileSystemSandboxPolicy| {
-        file_system
-            .entries
-            .iter()
-            .any(|entry| matches!(&entry.path, FileSystemPath::Path { path } if *path == backups))
+        file_system.entries.iter().any(|entry| {
+            matches!(&entry.path, FileSystemPath::Path { path }
+                    if *path == codex_utils_path_uri::PathUri::from_abs_path(&backups))
+        })
     };
     assert_eq!(denies_backups(&file_system), !linux);
     std::fs::create_dir_all(backups.as_path()).expect("backups");

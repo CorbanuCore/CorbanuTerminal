@@ -169,11 +169,14 @@ fn configure_guardian_mock_provider(config: &mut Config, base_url: &str) {
 fn apply_guardian_mock_turn_config(turn: &mut TurnContext, config: Arc<Config>) {
     turn.config = Arc::clone(&config);
     turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
-    turn.model_info = construct_model_info_offline_for_tests(
+    let mut model_info = construct_model_info_offline_for_tests(
         GUARDIAN_TEST_MODEL,
         &config.to_models_manager_config(),
     );
-    turn.model_info.slug = GUARDIAN_TEST_MODEL.to_string();
+    model_info.slug = GUARDIAN_TEST_MODEL.to_string();
+    crate::session::tests::update_turn_settings_for_test(turn, |settings| {
+        settings.model_info = Arc::new(model_info);
+    });
 }
 
 async fn guardian_test_session_turn_and_rx(
@@ -4065,15 +4068,20 @@ async fn guardian_review_session_config_keeps_deepseek_review_on_deepseek() {
     );
     turn.config = Arc::clone(&config);
     turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
-    turn.model_info = construct_model_info_offline_for_tests(
+    let model_info = construct_model_info_offline_for_tests(
         DEEPSEEK_DEFAULT_MODEL,
         &config.to_models_manager_config(),
     );
+    crate::session::tests::update_turn_settings_for_test(&mut turn, |settings| {
+        settings.model_info = Arc::new(model_info);
+    });
+    let turn = Arc::new(turn);
 
-    let guardian_config = guardian_review_session_config(&session, &turn)
-        .await
-        .expect("DeepSeek guardian config")
-        .spawn_config;
+    let guardian_config =
+        guardian_review_session_config(&session, &GuardianReviewContext::from(&turn))
+            .await
+            .expect("DeepSeek guardian config")
+            .spawn_config;
     let mut expected_provider = ModelProviderInfo::create_deepseek_provider();
     expected_provider.request_max_retries = Some(1);
     expected_provider.stream_max_retries = Some(1);
@@ -4115,17 +4123,25 @@ async fn guardian_review_session_config_uses_active_model_for_unknown_provider()
     session.services.models_manager = Arc::new(StaticModelsManager::new(
         Some(session.services.auth_manager()),
         ModelsResponse {
-            models: vec![parent_model.clone(), openai_hidden_model],
+            models: vec![
+                parent_model.model.as_ref().clone(),
+                openai_hidden_model.model.as_ref().clone(),
+            ],
         },
+        codex_models_manager::ModelOrigin::ExplicitConfig,
     ));
     turn.config = Arc::clone(&config);
     turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
-    turn.model_info = parent_model;
+    crate::session::tests::update_turn_settings_for_test(&mut turn, |settings| {
+        settings.model_info = Arc::new(parent_model);
+    });
+    let turn = Arc::new(turn);
 
-    let guardian_config = guardian_review_session_config(&session, &turn)
-        .await
-        .expect("custom-provider guardian config")
-        .spawn_config;
+    let guardian_config =
+        guardian_review_session_config(&session, &GuardianReviewContext::from(&turn))
+            .await
+            .expect("custom-provider guardian config")
+            .spawn_config;
 
     assert_eq!(
         (guardian_config.model, guardian_config.model_provider_id,),

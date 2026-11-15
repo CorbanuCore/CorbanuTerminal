@@ -645,6 +645,8 @@ fn with_contents_within(
     entries: Vec<NestedMetadata>,
     budget: &ContentBudget,
 ) -> Vec<NestedMetadata> {
+    // Above the shared budget, scheduling decides which folders get truncated.
+    // Each truncated folder is flagged; ordinary in-budget results stay stable.
     crate::par_map::par_map(&entries, |entry| NestedMetadata {
         contents: entry
             .identity

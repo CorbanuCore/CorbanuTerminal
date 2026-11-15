@@ -215,7 +215,9 @@ fn issue_748_denials_moderate_did_not_add_are_not_attributed() {
     let (mut file_system, network) = Fixture::profile().to_runtime_permissions();
     file_system.entries.push(FileSystemSandboxEntry::new(
         FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(&auth).expect("auth"),
+            path: AbsolutePathBuf::from_absolute_path(&auth)
+                .expect("auth")
+                .into(),
         },
         FileSystemAccessMode::Deny,
     ));

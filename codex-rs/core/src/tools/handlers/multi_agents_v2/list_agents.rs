@@ -64,20 +64,26 @@ impl Handler {
         // #1756 (as #1701 for `wait_agent`): list only the caller itself and its own agents
         // (and theirs), not other loaded threads and their results. The ownership check needs
         // Corbanu's local backend (D527 (a)); any other backend fails closed.
-        let mut own_agents = session
+        let local_agent_control = session
             .services
             .agent_control
             .local_or_unsupported()
-            .map_err(collab_spawn_error)?
+            .map_err(collab_spawn_error)?;
+        let mut own_agents = local_agent_control
             .own_agent_names(session.thread_id)
             .await
             .unwrap_or_default();
-        own_agents.push(
-            turn.session_source
-                .get_agent_path()
-                .unwrap_or_else(AgentPath::root)
-                .to_string(),
-        );
+        let caller_path = turn
+            .session_source
+            .get_agent_path()
+            .unwrap_or_else(AgentPath::root);
+        // #1779: the caller's own row only when it is a registered agent with this thread id.
+        if local_agent_control
+            .get_agent_metadata_for_path(&caller_path)
+            .is_some_and(|metadata| metadata.agent_id == Some(session.thread_id))
+        {
+            own_agents.push(caller_path.to_string());
+        }
         agents.retain(|agent| own_agents.contains(&agent.agent_name));
         Ok(boxed_tool_output(ListAgentsResult { agents }))
     }

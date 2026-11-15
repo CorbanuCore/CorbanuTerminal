@@ -445,11 +445,12 @@ async fn exec_command_reuses_foreign_windows_grant() {
     }
 
     let step_context = StepContext::for_test(Arc::clone(&turn));
-    step_context.turn.record_granted_permissions(
+    assert!(step_context.turn.record_granted_permissions(
         codex_exec_server::REMOTE_ENVIRONMENT_ID,
         granted_permissions.clone(),
         /*strict_auto_review*/ false,
-    );
+        session.services.authority_marker(),
+    ));
     let response = ExecCommandHandler::default()
         .handle(ToolInvocation {
             session: Arc::clone(&session),
