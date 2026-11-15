@@ -1238,3 +1238,142 @@ async fn scored_prompt_keeps_its_submission_item_id() {
     assert_eq!(ui_ids.len(), 3);
     session.abort_all_tasks(TurnAbortReason::Interrupted).await;
 }
+
+/// PF-83 steering authority (main 23915e5c6f, 44bbf0db17; ported from main's
+/// `steer_input_rejects_changed_authorization_without_mutating_active_work` in
+/// session/tests.rs): input steered into a turn admitted under other execution
+/// authority is refused, queues nothing and leaves the running turn as it was.
+#[tokio::test]
+async fn steer_rejects_changed_authorization_without_mutating_active_work() {
+    let updates = [
+        crate::session::session::SessionSettingsUpdate {
+            step_settings: StepSettingsUpdate {
+                approval_policy: Some(AskForApproval::UnlessTrusted),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        crate::session::session::SessionSettingsUpdate {
+            permission_profile: Some(codex_protocol::models::PermissionProfile::Disabled),
+            ..Default::default()
+        },
+        crate::session::session::SessionSettingsUpdate {
+            step_settings: StepSettingsUpdate {
+                approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    ];
+    for update in updates {
+        let (session, turn_context, _rx) = make_session_and_context_with_rx().await;
+        let captured = (
+            turn_context.approval_policy(),
+            turn_context.permission_profile(),
+            turn_context.config.approvals_reviewer,
+        );
+        session
+            .spawn_task(
+                Arc::clone(&turn_context),
+                Vec::new(),
+                NeverEndingTask {
+                    kind: TaskKind::Regular,
+                    listen_to_cancellation_token: false,
+                },
+            )
+            .await;
+        session
+            .update_settings(update)
+            .await
+            .expect("update settings");
+
+        let submission = submit_steer_only(
+            &session,
+            vec![UserInput::Text {
+                text: "new work".to_string(),
+                text_elements: Vec::new(),
+            }],
+            &turn_context.sub_id,
+        )
+        .await;
+
+        assert_eq!(
+            submission,
+            TurnInputSubmission::NotSubmitted {
+                reason: NotSubmittedReason::AuthorizationChanged,
+            }
+        );
+        assert_eq!(
+            session
+                .input_queue
+                .get_pending_input_for_running_task(&session, &turn_context.sub_id)
+                .await
+                .0,
+            Vec::new()
+        );
+        {
+            let active = session.active_turn.lock().await;
+            let task = active
+                .as_ref()
+                .expect("active turn")
+                .task
+                .as_ref()
+                .expect("running task");
+            assert!(Arc::ptr_eq(&task.turn_context, &turn_context));
+        }
+        assert_eq!(
+            (
+                turn_context.approval_policy(),
+                turn_context.permission_profile(),
+                turn_context.config.approvals_reviewer,
+            ),
+            captured
+        );
+    }
+}
+
+/// PF-83 (ported from main's `steer_input_accepts_unchanged_authorization_after_settings_update`):
+/// a settings update that leaves the execution authority as it was still lets input steer.
+#[tokio::test]
+async fn steer_accepts_unchanged_authorization_after_settings_update() {
+    let (session, turn_context, _rx) = make_session_and_context_with_rx().await;
+    session
+        .spawn_task(
+            Arc::clone(&turn_context),
+            Vec::new(),
+            NeverEndingTask {
+                kind: TaskKind::Regular,
+                listen_to_cancellation_token: false,
+            },
+        )
+        .await;
+    session
+        .update_settings(crate::session::session::SessionSettingsUpdate {
+            step_settings: StepSettingsUpdate {
+                approval_policy: Some(turn_context.approval_policy()),
+                reasoning_summary: Some(codex_protocol::config_types::ReasoningSummary::Detailed),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .await
+        .expect("no-op authorization and unrelated setting update");
+
+    let submission = submit_steer_only(
+        &session,
+        vec![UserInput::Text {
+            text: "new work".to_string(),
+            text_elements: Vec::new(),
+        }],
+        &turn_context.sub_id,
+    )
+    .await;
+
+    assert_eq!(
+        submission,
+        TurnInputSubmission::Steered {
+            root_turn_id: turn_context.sub_id.clone(),
+            turn_id: turn_context.sub_id.clone(),
+        }
+    );
+}

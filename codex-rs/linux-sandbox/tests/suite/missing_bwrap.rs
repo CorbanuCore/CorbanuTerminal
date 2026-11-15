@@ -51,7 +51,9 @@ fn profiles(dir: &Path) -> Vec<(&'static str, PermissionProfile)> {
             FileSystemAccessMode::Write,
         ),
         FileSystemSandboxEntry::new(
-            FileSystemPath::Path { path: secret },
+            FileSystemPath::Path {
+                path: secret.into(),
+            },
             FileSystemAccessMode::Deny,
         ),
     ]);

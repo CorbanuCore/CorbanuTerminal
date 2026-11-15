@@ -7,6 +7,8 @@ const CLOSE: &str = "</corbanu_untrusted_data>";
 
 fn message(role: &str, text: &str) -> ResponseItem {
     ResponseItem::Message {
+        encrypted_content: None,
+        status: None,
         id: None,
         role: role.into(),
         content: vec![ContentItem::InputText { text: text.into() }],
@@ -17,8 +19,10 @@ fn message(role: &str, text: &str) -> ResponseItem {
 
 fn tool_output(call_id: &str, text: &str) -> ResponseItem {
     ResponseItem::FunctionCallOutput {
+        name: None,
+        namespace: None,
         id: None,
-        call_id: call_id.into(),
+        call_id: Some(call_id.into()),
         output: FunctionCallOutputPayload::from_text(text.into()),
         internal_chat_message_metadata_passthrough: None,
     }
@@ -154,6 +158,8 @@ fn pf_30_s01_labelled_conversation_keeps_human_and_model_items_and_labels_the_re
     let assistant = message("assistant", "Reading it now.");
     ingress.register_messages(std::slice::from_ref(&assistant), MessageOrigin::Model);
     let call = ResponseItem::FunctionCall {
+        encrypted_content: None,
+        status: None,
         id: None,
         name: "shell".into(),
         namespace: None,
@@ -328,6 +334,8 @@ fn pf_30_s01_labelled_restored_history_stays_labelled_and_reinjects_host_context
         ),
         message("assistant", "earlier answer"),
         ResponseItem::FunctionCall {
+            encrypted_content: None,
+            status: None,
             id: None,
             name: "shell".into(),
             namespace: None,
@@ -370,6 +378,8 @@ fn pf_30_s01_labelled_model_structure_needs_the_stream_seam() {
         internal_chat_message_metadata_passthrough: None,
     };
     let call = |call_id: &str| ResponseItem::FunctionCall {
+        encrypted_content: None,
+        status: None,
         id: None,
         name: "transfer".into(),
         namespace: None,
@@ -429,6 +439,8 @@ fn pf_30_s01_labelled_human_standing_survives_image_stripping() {
     let mut ingress = NativeIngress::default();
     ingress.set_labelled_mode(/*enabled*/ true);
     let with_image = ResponseItem::Message {
+        encrypted_content: None,
+        status: None,
         id: None,
         role: "user".into(),
         content: vec![
@@ -482,6 +494,8 @@ fn another_providers_items_stay_recognisable_after_labelling() {
     let mut ingress = NativeIngress::default();
     ingress.set_labelled_mode(/*enabled*/ true);
     let mut call = ResponseItem::FunctionCall {
+        encrypted_content: None,
+        status: None,
         id: Some(codex_protocol::ResponseItemId::from_server(
             "fc_call_1".into(),
         )),

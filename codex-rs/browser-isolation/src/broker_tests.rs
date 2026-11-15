@@ -5,13 +5,18 @@ use codex_network_proxy::RemoteNetworkProxyLaunchConfig;
 use pretty_assertions::assert_eq;
 
 fn policy() -> NetworkProxyState {
-    NetworkProxyState::from_remote_launch_config(RemoteNetworkProxyLaunchConfig::new(
-        RemoteNetworkProxyConfig::from_effective_config(&NetworkProxyConfig {
-            enabled: true,
-            ..NetworkProxyConfig::default()
-        })
-        .unwrap(),
-    ))
+    NetworkProxyState::from_remote_launch_config(
+        RemoteNetworkProxyLaunchConfig::new(
+            RemoteNetworkProxyConfig::from_effective_config(&NetworkProxyConfig {
+                enabled: true,
+                ..NetworkProxyConfig::default()
+            })
+            .unwrap(),
+        ),
+        codex_network_proxy::Platform::native(),
+        &codex_network_proxy::RemoteCredentialBrokerCache::default(),
+        &std::collections::HashMap::new(),
+    )
     .unwrap()
 }
 

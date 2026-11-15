@@ -3,16 +3,20 @@ use pretty_assertions::assert_eq;
 
 async fn owner(level: SecurityLevel) -> Arc<Session> {
     let (mut session, _) = crate::session::tests::make_session_and_context().await;
-    session.services.agent_control = session
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            level,
-            session.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )
-        .unwrap();
+    session.services.agent_control = Arc::new(
+        session
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                level,
+                session.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )
+            .unwrap(),
+    );
     Arc::new(session)
 }
 
@@ -137,6 +141,8 @@ async fn pf_30_s04_live_strengthening_is_sticky_through_later_downgrade() {
     let controller = owner
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .trusted_security_controller()
         .unwrap();
     for level in [SecurityLevel::Moderate, SecurityLevel::Permissive] {
@@ -245,6 +251,8 @@ async fn pf_30_s04_kill_switch_denies_an_existing_worker_binding() {
     let controller = owner
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .trusted_security_controller()
         .unwrap();
     controller
@@ -292,6 +300,8 @@ async fn pf_30_s04_http_attempt_guard_withholds_canary_after_live_change() {
     let controller = owner
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .trusted_security_controller()
         .unwrap();
     controller
@@ -320,21 +330,27 @@ async fn pf_30_s04_http_attempt_guard_withholds_canary_after_live_change() {
 #[tokio::test]
 async fn pf_30_s04_websocket_connect_race_denies_before_first_frame() {
     let (mut session, context) = crate::session::tests::make_session_and_context().await;
-    session.services.agent_control = session
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            SecurityLevel::Permissive,
-            session.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )
-        .unwrap();
+    session.services.agent_control = Arc::new(
+        session
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                SecurityLevel::Permissive,
+                session.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )
+            .unwrap(),
+    );
     let owner = Arc::new(session);
     let mut client = client(&owner).await.unwrap();
     let controller = owner
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .trusted_security_controller()
         .unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -411,16 +427,20 @@ async fn pf_30_s04_websocket_connect_race_denies_before_first_frame() {
 #[tokio::test]
 async fn pf_30_s04_owner_termination_cancels_pending_http_without_a_retry() {
     let (mut session, context) = crate::session::tests::make_session_and_context().await;
-    session.services.agent_control = session
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            SecurityLevel::Permissive,
-            session.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )
-        .unwrap();
+    session.services.agent_control = Arc::new(
+        session
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                SecurityLevel::Permissive,
+                session.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )
+            .unwrap(),
+    );
     let owner = Arc::new(session);
     let (terminate, terminated) = tokio::sync::oneshot::channel();
     let mut client = StageOneMemoryClient::new(
@@ -560,16 +580,20 @@ async fn pf_60_s03_stage_one_extraction_records_its_own_turn() -> anyhow::Result
     // Accounting attributes attempts to a persisted thread; ephemeral sessions
     // run uncollected, so the fixture needs a live thread like a real session.
     crate::session::tests::open_thread_persistence(&mut session).await;
-    session.services.agent_control = session
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            SecurityLevel::Permissive,
-            session.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )
-        .unwrap();
+    session.services.agent_control = Arc::new(
+        session
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                SecurityLevel::Permissive,
+                session.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )
+            .unwrap(),
+    );
     let owner = Arc::new(session);
     db.upsert_thread(
         &ThreadMetadataBuilder::new(
@@ -1014,16 +1038,20 @@ async fn memory_extraction_respects_and_records_the_provider_request_throttle() 
         home: _home,
         cwd: _cwd,
     } = fixture;
-    session.services.agent_control = session
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            SecurityLevel::Permissive,
-            session.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )
-        .unwrap();
+    session.services.agent_control = Arc::new(
+        session
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                SecurityLevel::Permissive,
+                session.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )
+            .unwrap(),
+    );
     let owner = Arc::new(session);
     let mut client = client(&owner).await.unwrap();
     let prompt = Prompt::default();
