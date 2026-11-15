@@ -1,11 +1,12 @@
 ---
 source: tui/src/chatwidget/tests/app_server.rs
-expression: "format!(\"transcript:\\n{transcript}\\nfooter:\\n{footer}\\ntitle: {title}\")"
+assertion_line: 2347
+expression: "normalize_snapshot_paths(format!(\"transcript:\\n{transcript}\\nfooter:\\n{footer}\\ntitle: {title}\"))"
 ---
 transcript:
 
 footer:
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
-  GPT-5.6-Sol default · /tmp/project · review-fix
+  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…
 title: review-fix | project

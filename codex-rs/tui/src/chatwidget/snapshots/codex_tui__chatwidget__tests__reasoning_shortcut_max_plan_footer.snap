@@ -1,9 +1,10 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 5644
 expression: snapshot
 ---
 "                                                                                "
 "                                                                                "
-"› Ask Codex to do anything                                                      "
+"› Ask Corbanu Terminal to do anything                                           "
 "                                                                                "
 "  GPT-5.5 max                                        Plan mode (⇧tab to cycle)  "

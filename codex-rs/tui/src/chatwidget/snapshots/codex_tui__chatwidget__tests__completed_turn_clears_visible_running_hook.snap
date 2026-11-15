@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/status_and_layout.rs
+assertion_line: 4348
 expression: "format!(\"before completion:\\n{before_completion}\\nafter completion:\\n{}\",\nhook_status_frame(&chat, 80))"
 ---
 before completion:
@@ -7,12 +8,12 @@ before completion:
 "• Working (0s • esc to interrupt) · Running hook                                "
 "                                                                                "
 "                                                                                "
-"› Ask Codex to do anything                                                      "
+"› Ask Corbanu Terminal to do anything                                           "
 "                                                                                "
-"  GPT-5.6-Sol default · /tmp/project                                            "
+"  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…"
 after completion:
 "                                                                                "
 "                                                                                "
-"› Ask Codex to do anything                                                      "
+"› Ask Corbanu Terminal to do anything                                           "
 "                                                                                "
-"  GPT-5.6-Sol default · /tmp/project                                            "
+"  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…"
