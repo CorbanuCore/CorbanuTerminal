@@ -5,16 +5,6 @@ expression: "render_bottom_popup(&chat, 80)"
   Usage
   Account usage and resets.
 
-<<<<<<< HEAD
-› 1. Show usage                View recent account token usage.
-     Redeem usage limit reset  No usage limit resets available.
-  2. Recorded requests         Explain this thread's recorded requests for
-                               today (UTC).
-||||||| 413492cd6c
-› 1. Show usage                View recent account token usage.
-     Redeem usage limit reset  No usage limit resets available.
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 › 1. View analytics  Usage history
      Redeem reset    None available

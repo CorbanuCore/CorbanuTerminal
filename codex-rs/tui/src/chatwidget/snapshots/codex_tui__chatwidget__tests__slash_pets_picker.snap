@@ -7,43 +7,6 @@ expression: popup
   Choose a pet to wake in the terminal.
 
   Type to filter pets...
-<<<<<<< HEAD
-  Disable terminal pets
-  BSOD                   A tiny blue-screen
-                         gremlin
-› Codex                  The original Codex
-                         companion
-  Dewey                  A tidy duck for calm         Loading preview...
-                         workspace days
-  Fireball               Hot path energy for
-                         fast iteration
-  Null Signal            Quiet signal from the
-                         void
-  Rocky                  A steady rock when
-                         the diff gets large
-  Seedy                  Small green shoots
-                         for new ideas
-                                         3 / 9
-  Press enter to confirm or esc to go back
-||||||| 413492cd6c
-  Disable terminal pets
-  BSOD                   A tiny blue-screen
-                         gremlin
-› Codex                  The original Codex
-                         companion
-  Dewey                  A tidy duck for calm         Loading preview...
-                         workspace days
-  Fireball               Hot path energy for
-                         fast iteration
-  Null Signal            Quiet signal from the
-                         void
-  Rocky                  A steady rock when
-                         the diff gets large
-  Seedy                  Small green shoots
-                         for new ideas
-
-  Press enter to confirm or esc to go back
-=======
 
   Disable terminal pets
   BSOD                                                Loading preview...
@@ -55,4 +18,3 @@ expression: popup
   Seedy
 ↓
   enter select · esc back
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

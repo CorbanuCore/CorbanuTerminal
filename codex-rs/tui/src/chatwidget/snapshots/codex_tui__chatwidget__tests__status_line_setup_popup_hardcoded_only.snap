@@ -7,13 +7,6 @@ expression: status_line_popup_snapshot(&mut chat)
 
   Type to search
 
-<<<<<<< HEAD
-  tmp · feat/awesome-feature · thread title
-  Press space to toggle; ←/→ to move; enter to confirm and close; esc to close
-||||||| 413492cd6c
-  my-project · feat/awesome-feature · thread title
-  Press space to toggle; ←/→ to move; enter to confirm and close; esc to close
-=======
 › [x] Use theme colors     Apply colors from the active /theme
   ───────────────────────
   [x] project-name         Project name (omitted when unavailable)
@@ -25,4 +18,3 @@ expression: status_line_popup_snapshot(&mut chat)
 ↓
   my-project · feat/awesome-feature · thread title · profile: <name> · provider: <id>
   space toggle · ←/→ reorder · enter save · esc cancel
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
