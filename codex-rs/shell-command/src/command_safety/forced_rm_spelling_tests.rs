@@ -21,7 +21,7 @@ fn issue_2285_force_prefixes() {
             &["rm", "-r", "target", option],
             Some(DangerousCommandMatch::ForcedRm),
         );
-        check(&["rm", "--", option], None);
+        check(&["rm", "--", option], /*expected*/ None);
     }
     for option in [
         "--fo?",
@@ -32,7 +32,7 @@ fn issue_2285_force_prefixes() {
         "-r",
         "-i",
     ] {
-        check(&["rm", option, "target"], None);
+        check(&["rm", option, "target"], /*expected*/ None);
     }
 }
 
@@ -58,6 +58,8 @@ fn issue_2285_quoted_force_flags() {
         r#"echo "$(rm $'-rf' target)""#,
         r#"bash -c "rm \$'-rf' target""#,
         r#"trap "rm \$'-rf' target" EXIT"#,
+        r"bash -c $'rm -rf target;'#",
+        r"trap $'rm -rf target;'# EXIT",
     ] {
         check(
             &["bash", "-lc", script],
@@ -70,6 +72,8 @@ fn issue_2285_quoted_force_flags() {
 fn issue_2285_non_forced_commands_stay_quiet() {
     for script in [
         "rm target",
+        r"bash -c $'rm -r target;'#",
+        r"trap $'echo rm -rf target;'# EXIT",
         "rm -r target",
         "rm $'-r' target",
         r#"rm $"-r" target"#,
@@ -85,7 +89,7 @@ fn issue_2285_non_forced_commands_stay_quiet() {
         r#"rm $"$FLAGS" target"#,
         r#"rm $'\\x2df' target"#,
     ] {
-        check(&["bash", "-lc", script], None);
+        check(&["bash", "-lc", script], /*expected*/ None);
     }
 }
 

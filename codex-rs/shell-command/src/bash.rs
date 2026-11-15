@@ -391,9 +391,22 @@ fn parse_literal_shell_word(node: Node<'_>, src: &str, mode: LiteralWordMode) ->
                 return parse_literal_shell_word(node.named_child(0)?, src, mode);
             }
             "word" | "number" if is_literal_word_or_number(node) => {
-                return shlex::split(node.utf8_text(src.as_bytes()).ok()?)
-                    .filter(|words| words.len() == 1)
-                    .and_then(|words| words.into_iter().next());
+                // Tree-sitter has already identified this as a word, including
+                // a literal '#' joined to a quoted segment. Do not lex it
+                // again as standalone shell source (where '#' is a comment).
+                let mut chars = node.utf8_text(src.as_bytes()).ok()?.chars();
+                let mut decoded = String::new();
+                while let Some(ch) = chars.next() {
+                    if ch == '\\' {
+                        let escaped = chars.next()?;
+                        if escaped != '\n' {
+                            decoded.push(escaped);
+                        }
+                    } else {
+                        decoded.push(ch);
+                    }
+                }
+                return Some(decoded);
             }
             _ => {}
         }
