@@ -23,6 +23,7 @@ use std::io;
 
 #[derive(Default)]
 struct RolloutResumeState {
+    model: Option<String>,
     provider_account: Option<RecordedProviderAccount>,
 }
 
@@ -38,6 +39,11 @@ impl RecordedProviderAccount {
     pub(crate) fn selection(&self) -> String {
         format!("{}:{}", self.provider_id, self.account)
     }
+}
+
+#[derive(Deserialize)]
+struct TurnContextModelState {
+    model: String,
 }
 
 #[derive(Deserialize)]
@@ -119,6 +125,15 @@ pub(crate) async fn read_session_cwd(
     }
 }
 
+/// PF-84 (#545): the model the thread at `path` last ran, for checking its
+/// recorded provider before an app server is started (`resume_launch`).
+pub(crate) async fn read_session_model(path: &Path) -> Option<String> {
+    read_rollout_resume_state(path)
+        .await
+        .ok()
+        .and_then(|state| state.model)
+}
+
 /// PF-84 (#545): the account the thread at `path` ran on, read the same way
 /// the app server picks it on resume (the newest turn context only), so the
 /// TUI can check it before deciding whether provider onboarding is needed.
@@ -189,9 +204,10 @@ pub(crate) fn cwds_differ(current_cwd: &Path, session_cwd: &Path) -> bool {
     !path_utils::paths_match_after_normalization(current_cwd, session_cwd)
 }
 
-/// PF-84 (#545): the newest turn context's provider account in the rollout at
-/// `path`. Upstream reads the session cwd from the app server, so only the
-/// account is read here, the same way the app server picks it on resume.
+/// PF-84 (#545): the newest turn context's model and provider account in the
+/// rollout at `path`, read the same way the app server picks the account on
+/// resume. Upstream reads the session cwd from the app server; these are read
+/// before one is started.
 async fn read_rollout_resume_state(path: &Path) -> io::Result<RolloutResumeState> {
     let mut reader = open_rollout_line_reader(path).await?;
     let mut state = RolloutResumeState::default();
@@ -210,6 +226,11 @@ async fn read_rollout_resume_state(path: &Path) -> io::Result<RolloutResumeState
             continue;
         };
         if record.item_type == "turn_context" {
+            if let Ok(turn_context) =
+                serde_json::from_value::<TurnContextModelState>(payload.clone())
+            {
+                state.model = Some(turn_context.model);
+            }
             state.provider_account = serde_json::from_value::<TurnContextAccountState>(payload)
                 .ok()
                 .and_then(|turn_context| {
