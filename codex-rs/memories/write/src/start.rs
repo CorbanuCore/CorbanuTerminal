@@ -87,103 +87,41 @@ pub fn start_memories_startup_task(
             }
 
             // Run phase 1.
-            phase1::run(Arc::clone(&context), Arc::clone(&config)).await;
+            if !phase1::run(Arc::clone(&context), Arc::clone(&config)).await {
+                context.counter(
+                    MEMORY_STARTUP,
+                    /*inc*/ 1,
+                    &[("status", "skipped_policy")],
+                );
+                return;
+            }
+            let Ok(current) = context.current_stage_one_config(&config).await else {
+                context.counter(
+                    MEMORY_STARTUP,
+                    /*inc*/ 1,
+                    &[("status", "skipped_policy")],
+                );
+                return;
+            };
+            // PF-23-S01: above Permissive only stage one runs (on labelled input).
+            // Consolidation is a full agent session over those memories and is not
+            // yet qualified there.
+            if context
+                .stage_one_client(&current)
+                .await
+                .map_or(true, |client| client.requires_labelled_input())
+            {
+                context.counter(
+                    MEMORY_STARTUP,
+                    /*inc*/ 1,
+                    &[("status", "skipped_policy_consolidation")],
+                );
+                return;
+            }
+            // Refresh above is a live policy gate only. Consolidation still uses
+            // the startup provider helper, so retain its matching configuration.
             // Run phase 2.
             phase2::run(context, config, parent_permission_profile).await;
         });
     }
-<<<<<<< HEAD
-
-    tokio::spawn(async move {
-        let root = memory_root(&config.codex_home);
-        if let Err(err) = tokio::fs::create_dir_all(&root).await {
-            warn!("failed creating memories root: {err}");
-            return;
-        }
-        if let Err(err) = seed_extension_instructions(&root).await {
-            warn!("failed seeding memory extension instructions: {err}");
-        }
-
-        // Clean memories to make preserve DB size. This does not consume tokens so can be
-        // done before the quota check.
-        phase1::prune(context.as_ref(), &config).await;
-
-        if !guard::rate_limits_ok(&auth_manager, &config).await {
-            context.counter(
-                MEMORY_STARTUP,
-                /*inc*/ 1,
-                &[("status", "skipped_rate_limit")],
-            );
-            return;
-        }
-
-        // Run phase 1.
-        if !phase1::run(Arc::clone(&context), Arc::clone(&config)).await {
-            context.counter(
-                MEMORY_STARTUP,
-                /*inc*/ 1,
-                &[("status", "skipped_policy")],
-            );
-            return;
-        }
-        let Ok(current) = context.current_stage_one_config(&config).await else {
-            context.counter(
-                MEMORY_STARTUP,
-                /*inc*/ 1,
-                &[("status", "skipped_policy")],
-            );
-            return;
-        };
-        // PF-23-S01: above Permissive only stage one runs (on labelled input).
-        // Consolidation is a full agent session over those memories and is not
-        // yet qualified there.
-        if context
-            .stage_one_client(&current)
-            .await
-            .map_or(true, |client| client.requires_labelled_input())
-        {
-            context.counter(
-                MEMORY_STARTUP,
-                /*inc*/ 1,
-                &[("status", "skipped_policy_consolidation")],
-            );
-            return;
-        }
-        // Refresh above is a live policy gate only. Consolidation still uses
-        // the startup provider helper, so retain its matching configuration.
-        // Run phase 2.
-        phase2::run(context, config, parent_permission_profile).await;
-    });
-||||||| 413492cd6c
-
-    tokio::spawn(async move {
-        let root = memory_root(&config.codex_home);
-        if let Err(err) = tokio::fs::create_dir_all(&root).await {
-            warn!("failed creating memories root: {err}");
-            return;
-        }
-        if let Err(err) = seed_extension_instructions(&root).await {
-            warn!("failed seeding memory extension instructions: {err}");
-        }
-
-        // Clean memories to make preserve DB size. This does not consume tokens so can be
-        // done before the quota check.
-        phase1::prune(context.as_ref(), &config).await;
-
-        if !guard::rate_limits_ok(&auth_manager, &config).await {
-            context.counter(
-                MEMORY_STARTUP,
-                /*inc*/ 1,
-                &[("status", "skipped_rate_limit")],
-            );
-            return;
-        }
-
-        // Run phase 1.
-        phase1::run(Arc::clone(&context), Arc::clone(&config)).await;
-        // Run phase 2.
-        phase2::run(context, config, parent_permission_profile).await;
-    });
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
