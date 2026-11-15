@@ -263,6 +263,10 @@ pub(crate) fn apply_spawn_agent_runtime_overrides(
                 .snapshot(),
         )
         .map_err(|err| format!("permission_profile is invalid: {err}"))?;
+    // #2000 (main): never give a child a weaker Windows sandbox than its turn's. Upstream's
+    // role application already starts from the raised config, so this is defense in depth;
+    // a role's stronger setting stays.
+    crate::windows_sandbox::raise_windows_sandbox(config, turn.windows_sandbox_level);
     Ok(())
 }
 

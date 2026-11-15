@@ -404,9 +404,13 @@ async fn windows_sandbox_env_preserves_denied_reads_or_rejects_unsupported_backe
         )
         .await
         .expect_err("restricted-token Windows sandbox cannot enforce deny-read restrictions");
+    // Corbanu (#300): main's refusal explains how to switch to the elevated sandbox.
     assert_eq!(
         error.to_string(),
-        "unsupported operation: windows unelevated restricted-token sandbox cannot enforce deny-read restrictions directly; refusing to run unsandboxed"
+        format!(
+            "unsupported operation: {}",
+            codex_sandboxing::UNELEVATED_DENY_READ_REFUSAL
+        )
     );
 }
 

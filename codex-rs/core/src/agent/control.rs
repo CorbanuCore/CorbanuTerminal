@@ -429,6 +429,8 @@ impl LocalAgentControl {
         start_options: TurnStartOptions,
     ) -> CodexResult<String> {
         let thread = state.get_thread(agent_id).await?;
+        #[cfg(test)]
+        state.capture_user_input_for_tests(agent_id, &input);
         // PF-30-S02: record the sender's standing on this exact input before submitting it.
         Box::pin(register_agent_input_origin(state, agent_id, sender, &input)).await;
         let result = match thread

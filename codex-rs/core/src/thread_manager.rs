@@ -1997,6 +1997,35 @@ impl ThreadManager {
             .unwrap_or_default()
     }
 
+    /// User input the control plane handed to each thread, in order. Upstream delivers agent
+    /// input through `start_or_steer_turn` rather than `send_op`, so `captured_ops` does not see
+    /// it; this restores what main's tests read from the captured `Op::UserInput`.
+    #[cfg(test)]
+    pub(crate) fn captured_user_inputs(
+        &self,
+    ) -> Vec<(ThreadId, Vec<codex_protocol::user_input::UserInput>)> {
+        self.state
+            .ops_log
+            .as_ref()
+            .and_then(|ops_log| {
+                ops_log.lock().ok().map(|log| {
+                    log.iter()
+                        .filter_map(|(thread_id, op)| match op {
+                            Op::TurnInput { request, .. } => match &request.input {
+                                codex_protocol::turn_input::TurnInput::UserInput {
+                                    content,
+                                    ..
+                                } => Some((*thread_id, content.clone())),
+                                _ => None,
+                            },
+                            _ => None,
+                        })
+                        .collect()
+                })
+            })
+            .unwrap_or_default()
+    }
+
     /// The captured-ops log. `send_op` locks it right before it hands an op to the thread, so
     /// a test that holds it stops a sender at the hand-off.
     #[cfg(test)]
@@ -2006,6 +2035,31 @@ impl ThreadManager {
 }
 
 impl ThreadManagerState {
+    /// Records user input delivered through `start_or_steer_turn` for `captured_user_inputs`.
+    /// `captured_ops` filters these entries out, so its contents are unchanged.
+    #[cfg(test)]
+    pub(crate) fn capture_user_input_for_tests(
+        &self,
+        thread_id: ThreadId,
+        input: &[codex_protocol::user_input::UserInput],
+    ) {
+        if let Some(ops_log) = &self.ops_log
+            && let Ok(mut log) = ops_log.lock()
+        {
+            let (reply, _) = tokio::sync::oneshot::channel();
+            log.push((
+                thread_id,
+                Op::TurnInput {
+                    request: Box::new(codex_protocol::turn_input::TurnInputRequest::user_input(
+                        input.to_vec(),
+                    )),
+                    mode: codex_protocol::turn_input::TurnInputMode::StartOrSteer,
+                    reply,
+                },
+            ));
+        }
+    }
+
     pub(crate) fn shared_thread_instructions_provider(
         &self,
         root_thread_id: ThreadId,

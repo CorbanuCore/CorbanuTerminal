@@ -26,12 +26,18 @@ enum ExecutionCancellationTiming {
 #[test_case(ExecutionCancellationTiming::PendingReview; "pending_review")]
 #[test_case(ExecutionCancellationTiming::AcceptedReview; "accepted_review")]
 #[test_case(ExecutionCancellationTiming::TurnFinished; "turn_finishes_during_review")]
-#[tokio::test]
+fn execution_cancellation_respects_network_approval_boundary(timing: ExecutionCancellationTiming) {
+    // #2294: needs more than the harness's 8 MiB stack in a debug build.
+    crate::session::tests::block_on_production_stack(move || {
+        execution_cancellation_respects_network_approval_boundary_body(timing)
+    });
+}
+
 #[allow(
     clippy::await_holding_invalid_type,
     reason = "hold the commit lock to cancel execution after the review decision is accepted"
 )]
-async fn execution_cancellation_respects_network_approval_boundary(
+async fn execution_cancellation_respects_network_approval_boundary_body(
     timing: ExecutionCancellationTiming,
 ) {
     use crate::session::tests::make_session_and_context_with_rx;

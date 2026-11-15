@@ -4,6 +4,7 @@ use super::*;
 use crate::session::tests::make_session_and_context_with_rx;
 use crate::state::ActiveTurn;
 use crate::tools::sandboxing::with_cached_approval;
+use codex_protocol::approvals::ExecApprovalKind;
 use pretty_assertions::assert_eq;
 use std::time::Duration;
 
@@ -35,13 +36,17 @@ async fn command_answer(
                     session
                         .request_command_approval(
                             &turn,
+                            ExecApprovalKind::Command,
+                            crate::guardian::GuardianReviewContext::from(Arc::clone(&turn))
+                                .model_context(),
                             KEY.to_string(),
+                            Some(KEY),
                             Some("issue-2213-subcommand".to_string()),
                             /*environment_id*/ None,
                             vec![KEY.to_string()],
-                            cwd,
+                            cwd.into(),
                             /*reason*/ None,
-                            /*network_approval_context*/ None,
+                            /*network_approval*/ None,
                             proposed,
                             additional_permissions,
                             offered,
@@ -60,13 +65,10 @@ async fn command_answer(
     let EventMsg::ExecApprovalRequest(prompt) = event.msg else {
         panic!("expected command approval");
     };
-    handlers::exec_approval(
-        &session,
-        prompt.effective_approval_id(),
-        Some(prompt.turn_id),
-        answer,
-    )
-    .await;
+    // Upstream resolves `Op::ExecApproval` through `Session::resolve_exec_approval`.
+    session
+        .resolve_exec_approval(prompt.effective_approval_id(), Some(prompt.turn_id), answer)
+        .await;
     let decision = tokio::time::timeout(WAIT, ask).await.unwrap().unwrap();
     let cached = session.services.approval_cache().await.get(&KEY);
     let saved =
@@ -226,13 +228,13 @@ async fn issue_2213_patch_rejects_command_amendments_and_preserves_session_choic
 
 #[tokio::test]
 async fn issue_2213_permissions_never_cache_unrequested_access() {
+    use crate::tools::handlers::PreparedPermissionRequest;
     use codex_protocol::models::NetworkPermissions;
-    use codex_protocol::request_permissions::RequestPermissionsArgs;
 
     for scope in [PermissionGrantScope::Turn, PermissionGrantScope::Session] {
         let (session, turn, events) = make_session_and_context_with_rx().await;
         *session.active_turn.lock().await = Some(ActiveTurn::default());
-        let environment = turn.environments.primary().unwrap().selection();
+        let environment = turn.initial_environments.primary().unwrap().selection();
         let environment_id = environment.environment_id.clone();
         let requested = RequestPermissionProfile {
             network: Some(NetworkPermissions {
@@ -245,14 +247,13 @@ async fn issue_2213_permissions_never_cache_unrequested_access() {
             async move {
                 session
                     .request_permissions_for_environment(
-                        &turn,
+                        &StepContext::for_test(Arc::clone(&turn)),
                         KEY.to_string(),
-                        RequestPermissionsArgs {
-                            environment_id: None,
+                        PreparedPermissionRequest {
+                            environment_id: environment.environment_id,
                             reason: None,
                             permissions: requested,
                         },
-                        environment,
                         CancellationToken::new(),
                     )
                     .await

@@ -254,3 +254,7 @@ pub(crate) fn get_command(
 #[cfg(test)]
 #[path = "unified_exec_tests.rs"]
 mod tests;
+
+#[cfg(all(test, unix))]
+#[path = "unified_exec/shell_parity_tests.rs"]
+mod shell_parity_tests;

@@ -2,6 +2,18 @@ use super::*;
 use codex_protocol::protocol::InternalSessionSource;
 use pretty_assertions::assert_eq;
 
+/// What reached any thread: the captured ops (`Op` has no `PartialEq` on the sync branch;
+/// their debug forms compare the same ops) and the user input handed over through
+/// `start_or_steer_turn`, which `captured_ops` doesn't show.
+fn delivered(manager: &ThreadManager) -> (Vec<String>, Vec<(ThreadId, Vec<UserInput>)>) {
+    let ops = manager
+        .captured_ops()
+        .iter()
+        .map(|op| format!("{op:?}"))
+        .collect();
+    (ops, manager.captured_user_inputs())
+}
+
 struct UnloadedAgent {
     session: Arc<crate::session::session::Session>,
     turn: Arc<TurnContext>,
@@ -34,7 +46,7 @@ impl UnloadedAgent {
             .start_thread(StartThreadOptions::new(config.clone()))
             .await
             .expect("other root");
-        session.services.agent_control = manager.agent_control();
+        set_agent_control(&mut session, manager.agent_control());
         session.thread_id = root.thread_id;
         set_turn_config(&mut turn, config);
         let session = Arc::new(session);
@@ -50,7 +62,7 @@ impl UnloadedAgent {
             .expect("spawn owned worker");
         let agent = session
             .services
-            .agent_control
+            .local_agent_runtime
             .resolve_agent_reference(session.thread_id, &turn.session_source, "worker")
             .await
             .expect("worker id");
@@ -83,6 +95,8 @@ impl UnloadedAgent {
             self.session
                 .services
                 .agent_control
+                .local()
+                .expect("local agent control")
                 .get_agent_metadata(self.agent)
                 .is_some()
         );
@@ -132,7 +146,7 @@ async fn issue_1779_close_refuses_unloaded_foreign_agent_without_closing_edge() 
 async fn issue_1779_send_input_refuses_foreign_agent_before_cold_load() {
     let mut fixture = UnloadedAgent::new().await;
     fixture.use_other_root();
-    let before = fixture.manager.captured_ops();
+    let before = delivered(&fixture.manager);
     let error = SendInputHandler.handle(invocation(
         fixture.session.clone(), fixture.turn.clone(), "send_input",
         function_payload(json!({"target": fixture.agent.to_string(), "message": "must not arrive", "interrupt": true})),
@@ -143,7 +157,7 @@ async fn issue_1779_send_input_refuses_foreign_agent_before_cold_load() {
             .contains("can only target agents spawned")
     );
     fixture.assert_still_open_and_unloaded().await;
-    assert_eq!(fixture.manager.captured_ops(), before);
+    assert_eq!(delivered(&fixture.manager), before);
     fixture.stop().await;
 }
 
@@ -162,7 +176,7 @@ async fn issue_1779_send_input_rechecks_actual_parent_after_cold_load() {
         .await
         .expect("stale graph fixture");
     fixture.use_other_root();
-    let before = fixture.manager.captured_ops();
+    let before = delivered(&fixture.manager);
     let error = SendInputHandler.handle(invocation(
         fixture.session.clone(), fixture.turn.clone(), "send_input",
         function_payload(json!({"target": fixture.agent.to_string(), "message": "must not arrive", "interrupt": true})),
@@ -176,7 +190,7 @@ async fn issue_1779_send_input_rechecks_actual_parent_after_cold_load() {
         fixture.manager.get_thread(fixture.agent).await.is_ok(),
         "must exercise the post-load check"
     );
-    assert_eq!(fixture.manager.captured_ops(), before);
+    assert_eq!(delivered(&fixture.manager), before);
     fixture.stop().await;
 }
 
@@ -235,10 +249,10 @@ async fn issue_1779_list_does_not_alias_another_roots_entry() {
         .await
         .unwrap();
     let pathless_child = start_own_child(&manager, config, caller.thread_id).await;
-    session.services.agent_control = manager.agent_control();
+    set_agent_control(&mut session, manager.agent_control());
     session
         .services
-        .agent_control
+        .local_agent_runtime
         .register_session_root(registered.thread_id, /*current_parent_thread_id*/ None);
     let turn = Arc::new(turn);
     // Neither an unregistered root nor a path-less child may borrow /root.
@@ -279,8 +293,9 @@ async fn issue_1779_wait_lists_own_unloaded_agent() {
                 Vec::new(),
                 "completed".to_string(),
                 /*trigger_turn*/ false,
-            ),
-            /*parent_turn_id*/ None,
+            )
+            .into(),
+            Default::default(),
         )
         .await;
     let output = WaitAgentHandlerV2::default()
@@ -315,7 +330,7 @@ async fn issue_1779_agent_shutdown_cannot_remove_internal_threads() {
         })
         .await
         .expect("internal thread");
-    session.services.agent_control = manager.agent_control();
+    set_agent_control(&mut session, manager.agent_control());
     let control = manager.agent_control();
     assert!(
         CloseAgentHandler
