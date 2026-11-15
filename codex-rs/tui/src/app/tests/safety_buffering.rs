@@ -39,12 +39,8 @@ const RETRY_PROMPT: &str = "Handle the safety-buffered request";
 const COMMITTED_STEER: &str = "Keep the accepted steer";
 const UNSENT_DRAFT: &str = "Keep this unsent draft";
 const RETRY_GOAL: &str = "Preserve this goal across the retry";
-<<<<<<< HEAD
 const GOAL_CONTINUATION_REPLY: &str = "goal continued";
-||||||| 413492cd6c
-=======
 const SAFETY_RETRY_THREAD_NAME: &str = "Safety retry source";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SafetyRetryScenario {
@@ -917,14 +913,8 @@ goals = true
     let mut tui = crate::tui::test_support::make_test_tui()?;
     watchdog.step("starting the embedded app server");
     let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
-<<<<<<< HEAD
     watchdog.step("starting the source thread");
-    let started = app_server.start_thread(&app.config).await?;
-||||||| 413492cd6c
-    let started = app_server.start_thread(&app.config).await?;
-=======
     let mut started = app_server.start_thread(&app.config).await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let source_thread_id = started.session.thread_id;
     // Keep ordered response fixtures focused on safety retries, not background naming.
     app_server
@@ -1102,10 +1092,7 @@ goals = true
     app.primary_thread_id = Some(source_thread_id);
     while app_event_rx.try_recv().is_ok() {}
 
-<<<<<<< HEAD
     watchdog.step("retrying the interrupted turn");
-||||||| 413492cd6c
-=======
     if scenario == SafetyRetryScenario::UnsupportedPermissions {
         app_server
             .thread_settings_update(ThreadSettingsUpdateParams {
@@ -1214,7 +1201,6 @@ goals = true
         .await;
     }
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     Box::pin(app.retry_safety_buffered_turn(
         &mut tui,
         &mut app_server,
@@ -1357,17 +1343,8 @@ goals = true
         return Ok(());
     }
 
-<<<<<<< HEAD
     watchdog.step("waiting for the goal continuation");
     drive_until_request_count(&mut app, &mut app_server, &server, expected_request_count).await;
-    // The goal continuation's reply may or may not have rendered when its request arrives, so
-    // wait for it: the history is then the same on every run.
-||||||| 413492cd6c
-    drive_until_request_count(&mut app, &mut app_server, &server, expected_request_count).await;
-=======
-    let retry_thread_id = app.chat_widget.thread_id().expect("retry thread id");
-    // Capture the completed retry before processing its automatic goal continuation.
-    wait_for_turn_completed(&mut app, &mut app_server, retry_thread_id).await;
     if scenario == SafetyRetryScenario::PendingPermissions {
         assert_eq!(
             app.chat_widget
@@ -1377,36 +1354,24 @@ goals = true
             &PermissionProfile::read_only()
         );
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    // The goal continuation's reply may or may not have rendered when its request arrives, so
+    // wait for it: the history is then the same on every run.
     let mut replayed_history = String::new();
-<<<<<<< HEAD
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(/*secs*/ 5);
     loop {
         while let Ok(event) = app_event_rx.try_recv() {
             if let AppEvent::InsertHistoryCell(cell) = event {
-                replayed_history.push_str(&lines_to_single_string(
-                    &cell.transcript_lines(/*width*/ 80),
-                ));
+                let rendered = lines_to_single_string(&cell.transcript_lines(/*width*/ 80));
+                if cell
+                    .as_any()
+                    .is::<crate::history_cell::FinalMessageSeparator>()
+                {
+                    replayed_history
+                        .push_str(&normalize_completion_timestamps(cell.as_ref(), rendered));
+                } else {
+                    replayed_history.push_str(&rendered);
+                }
                 replayed_history.push('\n');
-||||||| 413492cd6c
-    while let Ok(event) = app_event_rx.try_recv() {
-        if let AppEvent::InsertHistoryCell(cell) = event {
-            replayed_history.push_str(&lines_to_single_string(
-                &cell.transcript_lines(/*width*/ 80),
-            ));
-=======
-    while let Ok(event) = app_event_rx.try_recv() {
-        if let AppEvent::InsertHistoryCell(cell) = event {
-            let rendered = lines_to_single_string(&cell.transcript_lines(/*width*/ 80));
-            if cell
-                .as_any()
-                .is::<crate::history_cell::FinalMessageSeparator>()
-            {
-                replayed_history
-                    .push_str(&normalize_completion_timestamps(cell.as_ref(), rendered));
-            } else {
-                replayed_history.push_str(&rendered);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
         }
         if replayed_history.contains(GOAL_CONTINUATION_REPLY) {
@@ -1441,14 +1406,8 @@ goals = true
         insta::assert_snapshot!("safety_retry_committed_steer_history", rendered_retry);
     }
 
-<<<<<<< HEAD
     watchdog.step("reading the source and retry threads");
     let retry_thread_id = app.chat_widget.thread_id().expect("retry thread id");
-||||||| 413492cd6c
-    let retry_thread_id = app.chat_widget.thread_id().expect("retry thread id");
-=======
-    drive_until_request_count(&mut app, &mut app_server, &server, expected_request_count).await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let source = app_server
         .thread_read(source_thread_id, /*include_turns*/ true)
         .await?;
@@ -1502,17 +1461,11 @@ goals = true
     let expected_source_tokens = if committed_steer.is_some() { 150 } else { 50 };
     assert_eq!(source_goal.objective, RETRY_GOAL);
     assert_eq!(source_goal.tokens_used, expected_source_tokens);
-<<<<<<< HEAD
     assert!(
         (12..=12 + goal_active_seconds).contains(&source_goal.time_used_seconds),
         "source goal should keep its 12s and gain at most the {goal_active_seconds}s it was active, got {}",
         source_goal.time_used_seconds
     );
-||||||| 413492cd6c
-    assert_eq!(source_goal.time_used_seconds, 12);
-=======
-    assert!(source_goal.time_used_seconds >= 12);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     assert_eq!(retry_goal.objective, RETRY_GOAL);
     assert!(retry_goal.tokens_used >= expected_source_tokens);
     assert!(retry_goal.time_used_seconds >= source_goal.time_used_seconds);

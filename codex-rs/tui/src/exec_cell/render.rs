@@ -198,10 +198,22 @@ fn dimmed_output_line(raw: &str) -> Line<'static> {
     line
 }
 
-fn output_preview_lines(output: &CommandOutput, width: usize) -> Vec<HyperlinkLine> {
+/// `label` prefixes the first output line before wrapping, so it never widens a row (#873).
+fn output_preview_lines(
+    output: &CommandOutput,
+    width: usize,
+    label: Option<&'static str>,
+) -> Vec<HyperlinkLine> {
     let (total, _) = output.line_counts();
+    let mut label = label;
     tool_output_hyperlink_preview(
-        output.lines().map(|raw| dimmed_output_line(raw.as_ref())),
+        output.lines().map(|raw| {
+            let mut line = dimmed_output_line(raw.as_ref());
+            if let Some(label) = label.take() {
+                line.spans.insert(/*index*/ 0, label.dim());
+            }
+            line
+        }),
         width,
         total,
     )
@@ -242,7 +254,10 @@ impl HistoryCell for ExecCell {
     }
 
     fn compact_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
-        if self.group.calls.iter().any(ExecCall::is_user_shell_command) {
+        // A multi-call group with a #873 outcome has no single-command compact row.
+        if self.group.calls.iter().any(ExecCall::is_user_shell_command)
+            || (self.is_exploring_cell() && !self.shows_exploring_summary())
+        {
             return self.display_hyperlink_lines(width);
         }
         if self.is_exploring_cell() {
@@ -255,7 +270,8 @@ impl HistoryCell for ExecCell {
                 .filter(|call| {
                     call.output
                         .as_ref()
-                        .is_some_and(|output| output.exit_code != 0)
+                        .and_then(CommandOutput::exit_code)
+                        .is_some_and(|code| code != 0)
                 })
                 .count();
             if nonzero_exits > 0
@@ -280,22 +296,11 @@ impl HistoryCell for ExecCell {
     }
 
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-<<<<<<< HEAD
-        if self.is_exploring_cell()
-            && !self
-                .calls
-                .iter()
-                .any(|call| call.is_declined() || call.is_refused() || call.is_unknown())
-        {
-||||||| 413492cd6c
-        if self.is_exploring_cell() {
-=======
         visible_lines(self.display_hyperlink_lines(width))
     }
 
     fn display_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
-        if self.is_exploring_cell() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        if self.shows_exploring_summary() {
             self.exploring_display_lines(width)
         } else {
             self.command_display_lines(width)
@@ -306,79 +311,6 @@ impl HistoryCell for ExecCell {
         visible_lines(self.transcript_hyperlink_lines(width))
     }
 
-<<<<<<< HEAD
-            if call.is_declined() {
-                lines.push(Line::from("✗ Did not run (approval declined)".red()));
-                continue;
-            }
-
-            // #873: neutral, since a network-policy refusal can come after
-            // the command ran; the reason below says what happened.
-            if call.is_refused() {
-                lines.push(Line::from("✗ Refused".red()));
-            }
-            if let Some(output) = call.output.as_ref() {
-                if !call.is_unified_exec_interaction() || call.is_refused() {
-                    let wrap_width = width.max(1) as usize;
-                    let wrap_opts = RtOptions::new(wrap_width);
-                    for unwrapped in output
-                        .transcript_lines()
-                        .map(|line| ansi_escape_line(line.as_ref()))
-                    {
-                        let wrapped = adaptive_wrap_line(&unwrapped, wrap_opts.clone());
-                        push_owned_lines(&wrapped, &mut lines);
-                    }
-                }
-                if call.is_unknown() {
-                    lines.push(Line::from(
-                        "✗ Execution unconfirmed (no exit status received)".red(),
-                    ));
-                }
-                if let Some(duration) = call.duration
-                    && let CommandOutcome::Exited(exit_code) = output.outcome
-                {
-                    let duration = format_duration(duration);
-                    let mut result: Line = if exit_code == 0 {
-                        Line::from("✓".green().bold())
-                    } else {
-                        Line::from(vec!["✗".red().bold(), format!(" ({exit_code})").into()])
-                    };
-                    result.push_span(format!(" • {duration}").dim());
-                    lines.push(result);
-                }
-            }
-        }
-        lines
-||||||| 413492cd6c
-            if let Some(output) = call.output.as_ref() {
-                if !call.is_unified_exec_interaction() {
-                    let wrap_width = width.max(1) as usize;
-                    let wrap_opts = RtOptions::new(wrap_width);
-                    for unwrapped in output
-                        .transcript_lines()
-                        .map(|line| ansi_escape_line(line.as_ref()))
-                    {
-                        let wrapped = adaptive_wrap_line(&unwrapped, wrap_opts.clone());
-                        push_owned_lines(&wrapped, &mut lines);
-                    }
-                }
-                if let Some(duration) = call.duration {
-                    let duration = format_duration(duration);
-                    let mut result: Line = if output.exit_code == 0 {
-                        Line::from("✓".green().bold())
-                    } else {
-                        Line::from(vec![
-                            "✗".red().bold(),
-                            format!(" ({})", output.exit_code).into(),
-                        ])
-                    };
-                    result.push_span(format!(" • {duration}").dim());
-                    lines.push(result);
-                }
-            }
-        }
-        lines
-=======
     fn transcript_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
         self.detailed_hyperlink_lines(width, HistoryRenderMode::Rich)
     }
@@ -387,7 +319,6 @@ impl HistoryCell for ExecCell {
         self.iter_calls()
             .map(|call| format!("exec:{}", call.call_id))
             .collect()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn raw_lines(&self) -> Vec<Line<'static>> {
@@ -398,6 +329,17 @@ impl HistoryCell for ExecCell {
 }
 
 impl ExecCell {
+    /// #873: a declined, refused or unconfirmed call is never folded into the "Explored"
+    /// summary; the group is shown call by call so that outcome stays visible.
+    fn shows_exploring_summary(&self) -> bool {
+        self.is_exploring_cell()
+            && !self
+                .group
+                .calls
+                .iter()
+                .any(|call| call.is_declined() || call.is_refused() || call.is_unknown())
+    }
+
     fn output_ellipsis_text(omitted: usize) -> String {
         let noun = if omitted == 1 { "line" } else { "lines" };
         format!("… +{omitted} {noun} ({})", transcript_hint())
@@ -431,7 +373,7 @@ impl ExecCell {
         let nonzero_exit = |call: &ExecCall| {
             call.duration
                 .and(call.output.as_ref())
-                .map(|output| output.exit_code)
+                .and_then(CommandOutput::exit_code)
                 .filter(|code| *code != 0)
         };
         while let Some((call, remaining)) = calls.split_first() {
@@ -544,29 +486,26 @@ impl ExecCell {
         out
     }
 
-<<<<<<< HEAD
-    fn command_display_lines(&self, width: u16) -> Vec<Line<'static>> {
-        self.iter_calls()
-            .flat_map(|call| self.call_display_lines(call, width))
-            .collect()
-    }
-
-    fn call_display_lines(&self, call: &ExecCall, width: u16) -> Vec<Line<'static>> {
-||||||| 413492cd6c
-    fn command_display_lines(&self, width: u16) -> Vec<Line<'static>> {
-        let [call] = &self.calls.as_slice() else {
-            panic!("Expected exactly one call in a command display cell");
-        };
-=======
     fn command_display_lines(&self, width: u16) -> Vec<HyperlinkLine> {
         self.command_display_lines_with_hidden_details(width).lines
     }
 
+    /// Main renders every call: an exploring group that holds a declined, refused or
+    /// unconfirmed call (#873) is shown call by call instead of as an "Explored" summary.
     fn command_display_lines_with_hidden_details(&self, width: u16) -> CommandDisplay {
-        let [call] = &self.group.calls.as_slice() else {
-            panic!("Expected exactly one call in a command display cell");
+        let mut display = CommandDisplay {
+            lines: Vec::new(),
+            hidden_details: false,
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        for call in self.iter_calls() {
+            let call_display = self.call_display_lines(call, width);
+            display.lines.extend(call_display.lines);
+            display.hidden_details |= call_display.hidden_details;
+        }
+        display
+    }
+
+    fn call_display_lines(&self, call: &ExecCall, width: u16) -> CommandDisplay {
         let layout = EXEC_DISPLAY_LAYOUT;
         let success = call.duration.and_then(|_| {
             call.output
@@ -604,13 +543,7 @@ impl ExecCell {
             "Ran"
         };
 
-<<<<<<< HEAD
-        let mut header_line = if untitled {
-||||||| 413492cd6c
-        let mut header_line = if is_interaction {
-=======
-        let header_line = if is_interaction {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let header_line = if untitled {
             Line::from(vec![bullet.clone(), " ".into()])
         } else {
             Line::from(vec![bullet.clone(), " ".into(), title.bold(), " ".into()])
@@ -688,32 +621,31 @@ impl ExecCell {
         }
 
         if call.is_declined() {
-            lines.push(Line::from("  └ Approval declined".dim()));
-            return lines;
+            lines.push(Line::from("  └ Approval declined".dim()).into());
+            return CommandDisplay {
+                lines,
+                hidden_details,
+            };
         }
         if call.is_unknown() {
-            lines.push(Line::from("  └ No exit status received".dim()));
+            lines.push(Line::from("  └ No exit status received".dim()).into());
         }
 
         if let Some(output) = call.output.as_ref() {
-<<<<<<< HEAD
-            let line_limit = if call.is_user_shell_command() {
-                USER_SHELL_TOOL_CALL_MAX_LINES
-            } else {
-                TOOL_CALL_MAX_LINES
-            };
-            let mut raw_output = output_lines(
-||||||| 413492cd6c
-            let line_limit = if call.is_user_shell_command() {
-                USER_SHELL_TOOL_CALL_MAX_LINES
-            } else {
-                TOOL_CALL_MAX_LINES
-            };
-            let raw_output = output_lines(
-=======
             if !call.is_user_shell_command() {
-                let preview = output_preview_lines(output, layout.output_block.wrap_width(width));
-                let preview = if preview.is_empty() && !call.is_unified_exec_interaction() {
+                // #873: one detail line, "└ Refused: <reason>".
+                let mut preview = output_preview_lines(
+                    output,
+                    layout.output_block.wrap_width(width),
+                    call.is_refused().then_some("Refused: "),
+                );
+                if call.is_refused() && preview.is_empty() {
+                    preview.push(Line::from("Refused".dim()).into());
+                }
+                let preview = if preview.is_empty()
+                    && !call.is_unified_exec_interaction()
+                    && !call.is_unknown()
+                {
                     vec![Line::from("(no output)".dim()).into()]
                 } else {
                     preview
@@ -731,8 +663,7 @@ impl ExecCell {
                     hidden_details,
                 };
             }
-            let raw_output = output_lines(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            let mut raw_output = output_lines(
                 Some(output),
                 OutputLinesParams {
                     line_limit: USER_SHELL_TOOL_CALL_MAX_LINES,
@@ -741,7 +672,6 @@ impl ExecCell {
                     include_prefix: false,
                 },
             );
-<<<<<<< HEAD
             // #873: one detail line, "└ Refused: <reason>".
             if call.is_refused() {
                 let label = if raw_output.lines.is_empty() {
@@ -754,34 +684,11 @@ impl ExecCell {
                     None => raw_output.lines.push(Line::from(label.dim())),
                 }
             }
-            let display_limit = if call.is_user_shell_command() {
-                USER_SHELL_TOOL_CALL_MAX_LINES
-            } else {
-                layout.output_max_lines
-            };
-||||||| 413492cd6c
-            let display_limit = if call.is_user_shell_command() {
-                USER_SHELL_TOOL_CALL_MAX_LINES
-            } else {
-                layout.output_max_lines
-            };
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
             if raw_output.lines.is_empty() {
-<<<<<<< HEAD
                 if !call.is_unified_exec_interaction() && !call.is_refused() && !call.is_unknown() {
-                    lines.extend(prefix_lines(
-                        vec![Line::from("(no output)".dim())],
-||||||| 413492cd6c
-                if !call.is_unified_exec_interaction() {
-                    lines.extend(prefix_lines(
-                        vec![Line::from("(no output)".dim())],
-=======
-                if !call.is_unified_exec_interaction() {
                     lines.extend(prefix_hyperlink_lines(
                         vec![Line::from("(no output)".dim()).into()],
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                         Span::from(layout.output_block.initial_prefix).dim(),
                         Span::from(layout.output_block.subsequent_prefix),
                     ));
@@ -1066,13 +973,21 @@ mod tests {
                 CommandOutput::declined(),
                 std::time::Duration::ZERO,
             ));
-            assert_eq!(cell.calls[0].duration, None);
+            assert_eq!(cell.group.calls[0].duration, None);
             assert!(!cell.is_active());
             assert!(cell.should_flush());
             cell.mark_failed(); // Turn finalization must not replace a refusal with an exit code.
             let preview = cell.display_lines(/*width*/ 80);
             assert_eq!(preview[0].spans[0].style.fg, Some(Color::Red));
             let transcript = cell.transcript_lines(/*width*/ 80);
+            // The owned transcript's compact row names the outcome too, never "(no output)".
+            let compact = crate::terminal_hyperlinks::visible_lines(
+                cell.compact_hyperlink_lines(/*width*/ 80),
+            );
+            assert_eq!(
+                compact.iter().map(render_line_text).collect::<Vec<_>>(),
+                vec!["✗ Did not run echo refused", "  └ Approval declined"]
+            );
             insta::allow_duplicates! {
                 insta::assert_snapshot!(
                     preview.iter().map(render_line_text).chain(
@@ -1216,7 +1131,7 @@ mod tests {
                 CommandOutput::unknown(String::new()),
                 std::time::Duration::ZERO,
             ));
-            assert_eq!(cell.calls[0].duration, None);
+            assert_eq!(cell.group.calls[0].duration, None);
             assert!(!cell.is_active());
             assert!(cell.should_flush());
             cell.mark_failed();

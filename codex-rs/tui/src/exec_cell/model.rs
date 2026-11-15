@@ -69,6 +69,18 @@ impl CommandOutput {
         }
     }
 
+    /// The exit code, when the command is known to have exited (not declined, refused,
+    /// unconfirmed or still running).
+    pub(super) fn exit_code(&self) -> Option<i32> {
+        match self.outcome {
+            CommandOutcome::Exited(code) => Some(code),
+            CommandOutcome::Running
+            | CommandOutcome::Declined
+            | CommandOutcome::Refused
+            | CommandOutcome::Unknown => None,
+        }
+    }
+
     /// Returns the total number of logical lines and the number retained for rendering.
     pub(super) fn line_counts(&self) -> (usize, usize) {
         match self.live_output.as_ref() {

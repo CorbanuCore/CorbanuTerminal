@@ -46,7 +46,7 @@ pub(crate) fn with_border_with_inner_width(
 pub(crate) fn codex_title(version: &str) -> Vec<Span<'static>> {
     vec![
         ">_ ".fg(accent_color()),
-        "OpenAI Codex".bold(),
+        PRODUCT_NAME.bold(),
         format!(" (v{version})").dim(),
     ]
 }
@@ -122,7 +122,6 @@ impl HistoryCell for ForkedThreadHistoryCell {
 #[derive(Debug)]
 pub struct SessionInfoCell(CompositeHistoryCell);
 
-<<<<<<< HEAD
 impl SessionInfoCell {
     pub(crate) fn update_header(&self, details: &SessionHeaderDetails) -> bool {
         self.0
@@ -134,8 +133,9 @@ impl SessionInfoCell {
                     .map(|header| header.update(details))
             })
             .unwrap_or(false)
-||||||| 413492cd6c
-=======
+    }
+}
+
 /// Fullscreen transcript presentation omits tips; scrollback retains the original cells.
 pub(crate) fn fullscreen_session_lines(
     cell: &dyn HistoryCell,
@@ -162,7 +162,6 @@ pub(crate) fn fullscreen_session_lines(
         cell.retained_hyperlink_lines(width, detailed)
     } else {
         cell.display_hyperlink_lines_for_mode(width, mode)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
@@ -307,30 +306,22 @@ pub(crate) fn has_yolo_permissions(
                 }
         )
 }
-<<<<<<< HEAD
+/// Header values that can change after the header is inserted (`/model`, reasoning effort).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct SessionHeaderDetails {
     model: String,
     reasoning_effort: Option<ReasoningEffortConfig>,
-    show_fast_status: bool,
 }
 
 impl SessionHeaderDetails {
-    pub(crate) fn new(
-        model: String,
-        reasoning_effort: Option<ReasoningEffortConfig>,
-        show_fast_status: bool,
-    ) -> Self {
+    pub(crate) fn new(model: String, reasoning_effort: Option<ReasoningEffortConfig>) -> Self {
         Self {
             model,
             reasoning_effort,
-            show_fast_status,
         }
     }
 }
 
-||||||| 413492cd6c
-=======
 /// The fresh terminal header marks the start of visible scrollback after Ctrl+L.
 /// It has no transcript representation because the original session header is still retained.
 #[derive(Debug)]
@@ -355,22 +346,10 @@ impl HistoryCell for ClearScreenHeader {
 }
 
 /// Session banner with a model label already resolved for presentation by its caller.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[derive(Debug)]
 pub(crate) struct SessionHeaderHistoryCell {
     version: &'static str,
-<<<<<<< HEAD
     details: RwLock<SessionHeaderDetails>,
-    model_style: Style,
-||||||| 413492cd6c
-    model: String,
-    model_style: Style,
-    reasoning_effort: Option<ReasoningEffortConfig>,
-    show_fast_status: bool,
-=======
-    model: String,
-    reasoning_effort: Option<ReasoningEffortConfig>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     directory: PathBuf,
     yolo_mode: bool,
 }
@@ -384,22 +363,7 @@ impl SessionHeaderHistoryCell {
     ) -> Self {
         Self {
             version,
-<<<<<<< HEAD
-            details: RwLock::new(SessionHeaderDetails::new(
-                model,
-                reasoning_effort,
-                show_fast_status,
-            )),
-            model_style,
-||||||| 413492cd6c
-            model,
-            model_style,
-            reasoning_effort,
-            show_fast_status,
-=======
-            model,
-            reasoning_effort,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            details: RwLock::new(SessionHeaderDetails::new(model, reasoning_effort)),
             directory,
             yolo_mode: false,
         }
@@ -459,129 +423,9 @@ impl SessionHeaderHistoryCell {
 
 impl HistoryCell for SessionHeaderHistoryCell {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-<<<<<<< HEAD
-        let Some(inner_width) = card_inner_width(width, SESSION_HEADER_MAX_INNER_WIDTH) else {
-            return Vec::new();
-        };
-        let details = self
-            .details
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-
-        let make_row = |spans: Vec<Span<'static>>| Line::from(spans);
-
-        // Title line rendered inside the box: ">_ Corbanu Terminal (vX)"
-        let title_spans: Vec<Span<'static>> = vec![
-            Span::from(">_ ").dim(),
-            Span::from(PRODUCT_NAME).bold(),
-            Span::from(" ").dim(),
-            Span::from(format!("(v{})", self.version)).dim(),
-        ];
-
-        const CHANGE_MODEL_HINT_COMMAND: &str = "/model";
-        const CHANGE_MODEL_HINT_EXPLANATION: &str = " to change";
-        const DIR_LABEL: &str = "directory:";
-        const PERMISSIONS_LABEL: &str = "permissions:";
-        let label_width = if self.yolo_mode {
-            DIR_LABEL.len().max(PERMISSIONS_LABEL.len())
-        } else {
-            DIR_LABEL.len()
-        };
-
-        let model_label = format!(
-            "{model_label:<label_width$}",
-            model_label = "model:",
-            label_width = label_width
-        );
-        let reasoning_label = Self::reasoning_label(&details);
-        let model_spans: Vec<Span<'static>> = {
-            let mut spans = vec![
-                Span::from(format!("{model_label} ")).dim(),
-                Span::styled(details.model.clone(), self.model_style),
-            ];
-            if let Some(reasoning) = reasoning_label {
-                spans.push(Span::from(" "));
-                spans.push(Span::from(reasoning.to_owned()));
-            }
-            if details.show_fast_status {
-                spans.push("   ".into());
-                spans.push(Span::styled("fast", self.model_style.magenta()));
-            }
-            spans.push("   ".dim());
-            spans.push(CHANGE_MODEL_HINT_COMMAND.cyan());
-            spans.push(CHANGE_MODEL_HINT_EXPLANATION.dim());
-            spans
-        };
-
-        let dir_label = format!("{DIR_LABEL:<label_width$}");
-        let dir_prefix = format!("{dir_label} ");
-        let dir_prefix_width = display_width(dir_prefix.as_str());
-        let dir_max_width = inner_width.saturating_sub(dir_prefix_width);
-        let dir = self.format_directory(Some(dir_max_width));
-        let dir_spans = vec![Span::from(dir_prefix).dim(), Span::from(dir)];
-
-||||||| 413492cd6c
-        let Some(inner_width) = card_inner_width(width, SESSION_HEADER_MAX_INNER_WIDTH) else {
-            return Vec::new();
-        };
-
-        let make_row = |spans: Vec<Span<'static>>| Line::from(spans);
-
-        // Title line rendered inside the box: ">_ OpenAI Codex (vX)"
-        let title_spans: Vec<Span<'static>> = vec![
-            Span::from(">_ ").dim(),
-            Span::from("OpenAI Codex").bold(),
-            Span::from(" ").dim(),
-            Span::from(format!("(v{})", self.version)).dim(),
-        ];
-
-        const CHANGE_MODEL_HINT_COMMAND: &str = "/model";
-        const CHANGE_MODEL_HINT_EXPLANATION: &str = " to change";
-        const DIR_LABEL: &str = "directory:";
-        const PERMISSIONS_LABEL: &str = "permissions:";
-        let label_width = if self.yolo_mode {
-            DIR_LABEL.len().max(PERMISSIONS_LABEL.len())
-        } else {
-            DIR_LABEL.len()
-        };
-
-        let model_label = format!(
-            "{model_label:<label_width$}",
-            model_label = "model:",
-            label_width = label_width
-        );
-        let reasoning_label = self.reasoning_label();
-        let model_spans: Vec<Span<'static>> = {
-            let mut spans = vec![
-                Span::from(format!("{model_label} ")).dim(),
-                Span::styled(self.model.clone(), self.model_style),
-            ];
-            if let Some(reasoning) = reasoning_label {
-                spans.push(Span::from(" "));
-                spans.push(Span::from(reasoning.to_owned()));
-            }
-            if self.show_fast_status {
-                spans.push("   ".into());
-                spans.push(Span::styled("fast", self.model_style.magenta()));
-            }
-            spans.push("   ".dim());
-            spans.push(CHANGE_MODEL_HINT_COMMAND.cyan());
-            spans.push(CHANGE_MODEL_HINT_EXPLANATION.dim());
-            spans
-        };
-
-        let dir_label = format!("{DIR_LABEL:<label_width$}");
-        let dir_prefix = format!("{dir_label} ");
-        let dir_prefix_width = display_width(dir_prefix.as_str());
-        let dir_max_width = inner_width.saturating_sub(dir_prefix_width);
-        let dir = self.format_directory(Some(dir_max_width));
-        let dir_spans = vec![Span::from(dir_prefix).dim(), Span::from(dir)];
-
-=======
         let width = usize::from(width);
         let mut title = vec!["  ".into()];
         title.extend(codex_title(self.version));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let mut lines = vec![
             Line::default(),
             Line::from(title),

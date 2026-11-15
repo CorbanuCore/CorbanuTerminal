@@ -159,17 +159,13 @@ pub enum SessionPickerAction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SessionPickerLaunchContext {
     Startup,
-<<<<<<< HEAD
     /// PF-84 (#555): `corbanu resume` picks the thread before onboarding,
     /// because a new session would need provider credentials first. Esc
     /// leaves instead of starting a new session that would open onboarding.
     StartupBeforeOnboarding,
-    ExistingSession,
-||||||| 413492cd6c
-    ExistingSession,
-=======
-    ExistingSession { current_thread_id: Option<ThreadId> },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    ExistingSession {
+        current_thread_id: Option<ThreadId>,
+    },
 }
 
 impl SessionPickerAction {
@@ -524,29 +520,15 @@ pub async fn run_resume_picker_with_app_server(
     app_server: AppServerSession,
     launch_context: SessionPickerLaunchContext,
 ) -> Result<SessionSelection> {
-<<<<<<< HEAD
-    let mut tui_events = tui.event_stream();
-    run_resume_picker_with_launch_context(
-||||||| 413492cd6c
-    run_resume_picker_with_launch_context(
-=======
     run_resume_picker_with_app_servers(
         uses_remote_filesystem,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         tui,
         config,
         local_settings,
         show_all,
         include_non_interactive,
-<<<<<<< HEAD
-        app_server,
-        launch_context,
-        &mut tui_events,
-||||||| 413492cd6c
-        app_server,
-        SessionPickerLaunchContext::Startup,
-=======
         ResumePickerAppServers::singleton(app_server),
+        launch_context,
     )
     .await
 }
@@ -559,6 +541,7 @@ pub(crate) async fn run_resume_picker_with_app_servers(
     show_all: bool,
     include_non_interactive: bool,
     app_servers: ResumePickerAppServers,
+    launch_context: SessionPickerLaunchContext,
 ) -> Result<SessionSelection> {
     let (backends, displayed_owner) = resume_picker_backends(
         uses_remote_filesystem,
@@ -574,8 +557,7 @@ pub(crate) async fn run_resume_picker_with_app_servers(
         show_all,
         backends,
         displayed_owner,
-        SessionPickerLaunchContext::Startup,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        launch_context,
     )
     .await
 }
@@ -591,15 +573,8 @@ pub(crate) async fn run_resume_picker_from_existing_session_with_app_servers(
     local_settings: &crate::local_settings::LocalSettings,
     show_all: bool,
     include_non_interactive: bool,
-<<<<<<< HEAD
-    app_server: AppServerSession,
-    tui_events: &mut (dyn tokio_stream::Stream<Item = TuiEvent> + Send + Unpin),
-||||||| 413492cd6c
-    app_server: AppServerSession,
-=======
     app_servers: ResumePickerAppServers,
     current_thread_id: Option<ThreadId>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 ) -> Result<SessionSelection> {
     let (backends, displayed_owner) = resume_picker_backends(
         uses_remote_filesystem,
@@ -613,20 +588,9 @@ pub(crate) async fn run_resume_picker_from_existing_session_with_app_servers(
         config,
         local_settings,
         show_all,
-<<<<<<< HEAD
-        include_non_interactive,
-        app_server,
-        SessionPickerLaunchContext::ExistingSession,
-        tui_events,
-||||||| 413492cd6c
-        include_non_interactive,
-        app_server,
-        SessionPickerLaunchContext::ExistingSession,
-=======
         backends,
         displayed_owner,
         SessionPickerLaunchContext::ExistingSession { current_thread_id },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     )
     .await
 }
@@ -644,7 +608,6 @@ async fn run_resume_picker_with_launch_context(
     app_servers: Vec<AppServerPickerBackend>,
     displayed_owner: crate::backend_id::BackendId,
     launch_context: SessionPickerLaunchContext,
-    tui_events: &mut (dyn tokio_stream::Stream<Item = TuiEvent> + Send + Unpin),
 ) -> Result<SessionSelection> {
     let has_multiple_backends = app_servers.len() > 1;
     let Some(app_server) = app_servers
@@ -654,31 +617,6 @@ async fn run_resume_picker_with_launch_context(
         unreachable!("displayed owner must belong to the resume picker's nonempty backend set");
     };
     let (bg_tx, bg_rx) = mpsc::unbounded_channel();
-<<<<<<< HEAD
-    let uses_remote_workspace = app_server.uses_remote_workspace();
-    let cwd_filter = picker_cwd_filter(
-        config.cwd.as_path(),
-        /*show_all*/ false,
-        uses_remote_workspace,
-        app_server.remote_cwd_override(),
-    );
-    let local_filter_cwd = local_picker_cwd_filter(&cwd_filter, uses_remote_workspace);
-    // A saved chat remains resumable when the current chat uses another provider.
-    // The selected thread's persisted provider is restored by the resume path.
-    let provider_filter = ProviderFilter::Any;
-    let runtime_keymap = picker_runtime_keymap(config)?;
-||||||| 413492cd6c
-    let uses_remote_workspace = app_server.uses_remote_workspace();
-    let cwd_filter = picker_cwd_filter(
-        config.cwd.as_path(),
-        /*show_all*/ false,
-        uses_remote_workspace,
-        app_server.remote_cwd_override(),
-    );
-    let local_filter_cwd = local_picker_cwd_filter(&cwd_filter, uses_remote_workspace);
-    let provider_filter = picker_provider_filter(config, uses_remote_workspace);
-    let runtime_keymap = picker_runtime_keymap(config)?;
-=======
     let uses_remote_workspace = app_server.session.uses_remote_workspace();
     // A single path cannot describe both local and remote workspaces. Until the
     // picker owns per-backend filters, a mixed listing starts unfiltered.
@@ -693,9 +631,10 @@ async fn run_resume_picker_with_launch_context(
         })
         .flatten();
     let local_filter_cwd = local_picker_cwd_filter(&cwd_filter, uses_remote_filesystem);
+    // A saved chat remains resumable when the current chat uses another provider.
+    // The selected thread's persisted provider is restored by the resume path.
     let provider_filter = ProviderFilter::All;
     let runtime_keymap = picker_runtime_keymap(local_settings)?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let options = SessionPickerRunOptions {
         backend_id: app_server.session.backend_id(),
         use_theme_colors: local_settings.tui.status_line_use_colors,
@@ -726,7 +665,6 @@ async fn run_resume_picker_with_launch_context(
         options,
         spawn_app_server_page_loaders(app_servers, bg_tx),
         bg_rx,
-        tui_events,
     )
     .await
 }
@@ -739,12 +677,7 @@ pub async fn run_fork_picker_with_app_server(
     show_all: bool,
     app_server: AppServerSession,
 ) -> Result<SessionSelection> {
-<<<<<<< HEAD
-    let mut tui_events = tui.event_stream();
-||||||| 413492cd6c
-=======
     let archive_request_handle = app_server.request_handle();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let (bg_tx, bg_rx) = mpsc::unbounded_channel();
     let uses_remote_workspace = app_server.uses_remote_workspace();
     let cwd_filter = picker_cwd_filter(
@@ -794,7 +727,6 @@ pub async fn run_fork_picker_with_app_server(
             bg_tx,
         ),
         bg_rx,
-        &mut tui_events,
     )
     .await
 }
@@ -817,7 +749,6 @@ async fn run_session_picker_event_loop(
     options: SessionPickerRunOptions,
     picker_loader: PickerLoader,
     bg_rx: mpsc::UnboundedReceiver<BackgroundEvent>,
-    tui_events: &mut (dyn tokio_stream::Stream<Item = TuiEvent> + Send + Unpin),
 ) -> Result<SessionSelection> {
     let (repo_filter_tx, repo_filter_rx) = mpsc::unbounded_channel();
     if let Some(cwd) = options.local_filter_cwd.clone() {
@@ -851,24 +782,19 @@ async fn run_session_picker_event_loop(
     state.start_initial_load();
     state.request_frame();
 
-<<<<<<< HEAD
-    // The caller owns input. In-app pickers must consume the main drainer's
-    // queue, never create a second reader competing for the shared event broker.
-    let mut tui_events = tui_events.fuse();
-||||||| 413492cd6c
-    let mut tui_events = alt.tui.event_stream().fuse();
-=======
     if let Ok(size) = alt.tui.terminal.size() {
         let list_height = usize::from(layout::areas(Rect::from(size)).list.height);
         state.update_viewport(list_height, list_viewport_width(size.width));
         state.ensure_minimum_rows_for_view(list_height);
     }
     draw_picker(alt.tui, &state, alt.tui.terminal.last_known_screen_size)?;
-    if state.launch_context == SessionPickerLaunchContext::Startup {
+    if matches!(
+        state.launch_context,
+        SessionPickerLaunchContext::Startup | SessionPickerLaunchContext::StartupBeforeOnboarding
+    ) {
         alt.tui.discard_pending_input_before_interactive_screen()?;
     }
     let mut tui_events = alt.tui.event_stream().fuse();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut background_events = UnboundedReceiverStream::new(bg_rx).fuse();
     let mut repo_filter_events = UnboundedReceiverStream::new(repo_filter_rx).fuse();
 
@@ -1678,7 +1604,7 @@ impl PickerState {
                             SessionSelection::Exit
                         }
                         SessionPickerLaunchContext::Startup
-                        | SessionPickerLaunchContext::ExistingSession => {
+                        | SessionPickerLaunchContext::ExistingSession { .. } => {
                             SessionSelection::StartFresh
                         }
                     }));
@@ -2620,15 +2546,8 @@ fn thread_list_params(
         sort_key: Some(sort_key),
         sort_direction: None,
         model_providers: match provider_filter {
-<<<<<<< HEAD
-            // Omission means the server's default provider, not all providers.
-            ProviderFilter::Any => Some(Vec::new()),
-||||||| 413492cd6c
-            ProviderFilter::Any => None,
-=======
             ProviderFilter::Any => None,
             ProviderFilter::All => Some(Vec::new()),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             ProviderFilter::MatchDefault(default_provider) => Some(vec![default_provider]),
         },
         source_kinds: Some(crate::resume_source_kinds(include_non_interactive)),
@@ -3007,30 +2926,16 @@ fn footer_hint_lines(state: &PickerState, width: u16) -> Vec<Line<'static>> {
     let (esc_label, esc_compact_label) = if state.query.is_empty() {
         match state.launch_context {
             SessionPickerLaunchContext::Startup => ("start new", "new"),
-<<<<<<< HEAD
             SessionPickerLaunchContext::StartupBeforeOnboarding => ("quit", "quit"),
-            SessionPickerLaunchContext::ExistingSession => ("exit", "exit"),
-||||||| 413492cd6c
-            SessionPickerLaunchContext::ExistingSession => ("exit", "exit"),
-=======
             SessionPickerLaunchContext::ExistingSession { .. } => ("exit", "exit"),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     } else {
         ("clear search", "clear")
     };
     let ctrl_c_label = match state.launch_context {
-<<<<<<< HEAD
         SessionPickerLaunchContext::Startup
         | SessionPickerLaunchContext::StartupBeforeOnboarding => "quit",
-        SessionPickerLaunchContext::ExistingSession => "exit",
-||||||| 413492cd6c
-        SessionPickerLaunchContext::Startup => "quit",
-        SessionPickerLaunchContext::ExistingSession => "exit",
-=======
-        SessionPickerLaunchContext::Startup => "quit",
         SessionPickerLaunchContext::ExistingSession { .. } => "exit",
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
     let density_label = match state.density {
         SessionListDensity::Comfortable => "dense view",
@@ -4187,25 +4092,19 @@ fn render_empty_state_line(state: &PickerState) -> Line<'static> {
         .into();
     }
 
-<<<<<<< HEAD
     // Sessions are recorded against the folder they started in, so a new
     // working directory (e.g. an SSH login's home) looks empty even when the
     // user has plenty of sessions elsewhere.
     if state.filter_mode == SessionFilterMode::Cwd {
         return vec![
             "No sessions in this folder. Press ←/→ to show sessions from all folders."
-                .italic()
-                .dim(),
+                .set_style(secondary_text_style())
+                .italic(),
         ]
         .into();
     }
 
-    vec!["No sessions yet".italic().dim()].into()
-||||||| 413492cd6c
-    vec!["No sessions yet".italic().dim()].into()
-=======
     vec!["No sessions yet".set_style(secondary_text_style()).italic()].into()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[cfg(test)]
@@ -5089,6 +4988,7 @@ mod tests {
     fn empty_cwd_filter_points_to_all_folders() {
         let loader = page_only_loader(|_| {});
         let mut state = PickerState::new(
+            crate::backend_id::BackendId::new(),
             FrameRequester::test_dummy(),
             loader,
             ProviderFilter::Any,
@@ -8308,6 +8208,7 @@ session_picker_view = "dense"
     async fn esc_before_onboarding_quits() {
         let loader = page_only_loader(|_| {});
         let mut state = PickerState::new(
+            crate::backend_id::BackendId::new(),
             FrameRequester::test_dummy(),
             loader,
             ProviderFilter::MatchDefault(String::from("openai")),

@@ -18,8 +18,8 @@ use anyhow::ensure;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
-<<<<<<< HEAD
-const STARTUP_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 15);
+// Full startup continues after the composer first appears and can be slower under Rosetta in CI.
+const STARTUP_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 30);
 /// How long typed input may take to show after a focus event. Input that is
 /// discarded never shows, and the blocking refresh this guards against sends
 /// new color queries, which the test checks separately (the PTY is the
@@ -27,13 +27,6 @@ const STARTUP_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 15);
 /// So the bound only has to allow for a slow machine: 500 ms was too short for
 /// nightly Bazel runs (#636), where the first input sometimes took longer to
 /// render.
-||||||| 413492cd6c
-const STARTUP_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 15);
-const FOCUS_INPUT_TIMEOUT: Duration = Duration::from_millis(/*millis*/ 500);
-=======
-// Full startup continues after the composer first appears and can be slower under Rosetta in CI.
-const STARTUP_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 30);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 const FOCUS_INPUT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 5);
 const FOCUS_PROBE_INPUT: &str = "focus-palette-24527";
 
@@ -385,25 +378,12 @@ impl PtyCodex {
         let stdin = slave.try_clone().context("clone pseudo-terminal stdin")?;
         let stdout = slave.try_clone().context("clone pseudo-terminal stdout")?;
 
-<<<<<<< HEAD
-        let codex = codex_utils_cargo_bin::cargo_bin("codex")
-            .or_else(|_| codex_utils_cargo_bin::cargo_bin("codex-tui"))?;
-        let mut command = Command::new(codex);
-        command
-            .arg("--no-alt-screen")
-||||||| 413492cd6c
-        let codex = codex_utils_cargo_bin::cargo_bin("codex")
-            .or_else(|_| codex_utils_cargo_bin::cargo_bin("codex-tui"))?;
-        let child = Command::new(codex)
-            .arg("--no-alt-screen")
-=======
         let mut command = Command::new(codex);
         if let Some(editor) = editor {
             command.env("VISUAL", editor);
         }
-        let child = command
+        command
             .args(extra_args)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             .arg("-C")
             .arg(repo_root)
             .env("TERM", "xterm-256color")
@@ -417,8 +397,7 @@ impl PtyCodex {
             .env("CODEX_HOME", codex_home.path())
             .stdin(stdin)
             .stdout(stdout)
-<<<<<<< HEAD
-            .stderr(slave);
+            .stderr(slave.try_clone()?);
         // Make the PTY the child's controlling terminal, as a real terminal
         // is. crossterm writes its color queries to `/dev/tty`; without this
         // they would go to the test runner's terminal, if it has one, and the
@@ -438,11 +417,6 @@ impl PtyCodex {
             });
         }
         let child = command
-||||||| 413492cd6c
-            .stderr(slave)
-=======
-            .stderr(slave.try_clone()?)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             .spawn()
             .context("start Codex in focus-test pseudo-terminal")?;
 

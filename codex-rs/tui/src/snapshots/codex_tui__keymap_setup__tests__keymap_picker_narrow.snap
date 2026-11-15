@@ -23,11 +23,6 @@ expression: "render_picker(params, 78)"
   Global         Toggle Side Conversation   ctrl-/
   Global         Leader                     ctrl-x
   Chat           Interrupt Turn             esc
-<<<<<<< HEAD
-                                                                     1 / 109
-||||||| 413492cd6c
-
-=======
   Chat           Decrease Reasoning Effort  alt-,, shift-down
   Chat           Increase Reasoning Effort  alt-., shift-up
   Chat         - Previous Permission Mode   unbound
@@ -41,5 +36,4 @@ expression: "render_picker(params, 78)"
   Composer       Submit                     enter
   Composer       Queue                      tab
 ↓
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
   left/right group · enter edit shortcut · * custom · - unbound · esc close

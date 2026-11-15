@@ -1,5 +1,6 @@
 //! Owned-transcript command previews with full command/output retained for local disclosure.
 
+use super::model::CommandOutput;
 use super::model::ExecCell;
 use crate::exec_command::strip_bash_lc_and_escape;
 use crate::history_cell::ActivityDisclosure;
@@ -72,13 +73,21 @@ impl ExecCell {
         if call.is_unified_exec_interaction()
             && !self.is_active()
             && call.output.as_ref().is_some_and(|output| {
-                output.exit_code == 0 && output.lines().all(|line| line.trim().is_empty())
+                output.exit_code() == Some(0) && output.lines().all(|line| line.trim().is_empty())
             })
         {
             return Vec::new();
         }
-        let nonzero_exit = call.output.as_ref().filter(|output| output.exit_code != 0);
-        let marker = if nonzero_exit.is_some() {
+        // #873: a declined, refused or unconfirmed command is never shown as "Ran".
+        let unfinished = call.is_declined() || call.is_refused() || call.is_unknown();
+        let nonzero_exit = call
+            .output
+            .as_ref()
+            .and_then(CommandOutput::exit_code)
+            .filter(|code| *code != 0);
+        let marker = if unfinished {
+            "✗".red().bold()
+        } else if nonzero_exit.is_some() {
             "•".bold()
         } else if self.is_active() {
             activity_indicator(
@@ -90,8 +99,14 @@ impl ExecCell {
         } else {
             "•".green().bold()
         };
-        let title = if let Some(output) = nonzero_exit {
-            format!("Exited (status {})", output.exit_code)
+        let title = if call.is_declined() {
+            "Did not run".to_owned()
+        } else if call.is_refused() {
+            "Refused".to_owned()
+        } else if call.is_unknown() {
+            "Execution unconfirmed".to_owned()
+        } else if let Some(code) = nonzero_exit {
+            format!("Exited (status {code})")
         } else if self.is_active() {
             "Running".to_owned()
         } else if call.is_unified_exec_interaction() {
@@ -123,7 +138,19 @@ impl ExecCell {
                 });
                 lines.push(clipped_line(line, width));
             }
-            if lines.len() == 1 && !call.is_unified_exec_interaction() {
+            // #873: as in the full view, these states name themselves instead of "(no output)".
+            if lines.len() == 1 && call.is_declined() {
+                lines.push(clipped_line(
+                    Line::from("  └ Approval declined".dim()),
+                    width,
+                ));
+            } else if lines.len() == 1 && call.is_unknown() {
+                lines.push(clipped_line(
+                    Line::from("  └ No exit status received".dim()),
+                    width,
+                ));
+            } else if lines.len() == 1 && !call.is_unified_exec_interaction() && !call.is_refused()
+            {
                 lines.push(clipped_line(Line::from("  └ (no output)".dim()), width));
             }
         }
