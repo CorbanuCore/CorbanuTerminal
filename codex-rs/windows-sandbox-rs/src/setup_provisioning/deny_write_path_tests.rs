@@ -119,8 +119,7 @@ fn issue_1953_attribute_only_junction_swap_cannot_redirect_creation_or_acl() {
         AFTER_PIN.with(|hook| hook.borrow_mut().take());
         if let Ok(pins) = result.as_ref() {
             unsafe {
-                let sid = crate::convert_string_sid_to_sid("S-1-5-21-1-2-3-999")
-                    .expect("SID");
+                let sid = crate::convert_string_sid_to_sid("S-1-5-21-1-2-3-999").expect("SID");
                 let applied = crate::add_deny_write_ace_to_handle(
                     pins.last().expect("target").as_raw_handle() as _,
                     sid,
@@ -189,8 +188,7 @@ fn issue_1953_deny_path_stays_pinned_until_acl_write_finishes() {
     // Pins must permit the helper's ACL operation, while preventing a
     // replacement before its path-based security API opens the object.
     unsafe {
-        let sid = crate::convert_string_sid_to_sid("S-1-5-21-1-2-3-999")
-            .expect("test SID");
+        let sid = crate::convert_string_sid_to_sid("S-1-5-21-1-2-3-999").expect("test SID");
         let applied = crate::add_deny_write_ace_to_handle(
             pins.last().expect("target").as_raw_handle() as _,
             sid,

@@ -505,7 +505,8 @@ impl Session {
             environments
                 .turn_environments()
                 .map(|environment| {
-                    let mut sandbox = environment.sandbox_context(/*additional_permissions*/ None);
+                    let mut sandbox =
+                        environment.sandbox_context(/*additional_permissions*/ None);
                     // #2088: the same refusal as file tools in this environment (MXC as
                     // none, D522 (a)).
                     sandbox.unsandboxed_refusal =
