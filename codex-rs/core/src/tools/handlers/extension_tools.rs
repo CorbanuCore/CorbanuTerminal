@@ -68,42 +68,53 @@ impl ToolExecutor<ToolInvocation> for ExtensionToolAdapter {
     where
         ToolInvocation: 'a,
     {
-        Box::pin(async move {
-            crate::security::protected_surface::check_image_generation(&invocation).await?;
-            let (contexts, built_under) =
-                current_extension_file_contexts(&invocation, &mut || {}).await?;
-            let accessors: Vec<_> = contexts
-                .into_iter()
-                .map(|(environment, sandbox)| {
-                    (
-                        environment,
-                        FileSystemEnvironmentAccessor::new(
-                            environment.environment.filesystem_ref(),
-                            sandbox,
-                        ),
-                    )
-                })
-                .collect();
-            let environments = accessors
-                .iter()
-                .map(|(environment, fs)| {
-                    ToolEnvironment::new(
-                        environment.selection.environment_id.clone(),
-                        environment.cwd().clone(),
-                        fs,
-                    )
-                })
-                .collect();
-            let call = to_extension_call(&invocation, environments).await;
-            // D71 (a): building the call awaits the history; a transition meanwhile
-            // refuses it, as one during the file contexts' build would.
-            if extension_call_basis(invocation.session.as_ref()) != built_under {
-                return Err(codex_tools::FunctionCallError::RespondToModel(
-                    EXTENSION_PREPARED_REFUSAL.to_string(),
-                ));
-            }
-            self.0.handle(call).await
-        })
+        Box::pin(self.handle_with(invocation, || {}))
+    }
+}
+
+impl ExtensionToolAdapter {
+    /// [`ToolExecutor::handle`]. `before_call_built` runs once the file contexts are built,
+    /// before the call is built with the history (a test seam, #2292).
+    async fn handle_with(
+        &self,
+        invocation: ToolInvocation,
+        before_call_built: impl FnOnce() + Send,
+    ) -> Result<Box<dyn codex_tools::ToolOutput>, codex_tools::FunctionCallError> {
+        crate::security::protected_surface::check_image_generation(&invocation).await?;
+        let (contexts, built_under) =
+            current_extension_file_contexts(&invocation, &mut || {}).await?;
+        before_call_built();
+        let accessors: Vec<_> = contexts
+            .into_iter()
+            .map(|(environment, sandbox)| {
+                (
+                    environment,
+                    FileSystemEnvironmentAccessor::new(
+                        environment.environment.filesystem_ref(),
+                        sandbox,
+                    ),
+                )
+            })
+            .collect();
+        let environments = accessors
+            .iter()
+            .map(|(environment, fs)| {
+                ToolEnvironment::new(
+                    environment.selection.environment_id.clone(),
+                    environment.cwd().clone(),
+                    fs,
+                )
+            })
+            .collect();
+        let call = to_extension_call(&invocation, environments).await;
+        // D71 (a): building the call awaits the history; a transition meanwhile
+        // refuses it, as one during the file contexts' build would.
+        if extension_call_basis(invocation.session.as_ref()) != built_under {
+            return Err(codex_tools::FunctionCallError::RespondToModel(
+                EXTENSION_PREPARED_REFUSAL.to_string(),
+            ));
+        }
+        self.0.handle(call).await
     }
 }
 
@@ -959,5 +970,82 @@ mod tests {
                 super::EXTENSION_PREPARED_REFUSAL.to_string()
             ))
         );
+    }
+
+    /// Records whether the extension was started.
+    struct StartRecordingExecutor(Arc<std::sync::atomic::AtomicBool>);
+
+    impl<'call> codex_extension_api::ToolExecutor<codex_tools::ToolCall<'call>>
+        for StartRecordingExecutor
+    {
+        fn tool_name(&self) -> codex_tools::ToolName {
+            codex_tools::ToolName::plain("extension_echo")
+        }
+
+        fn spec(&self) -> codex_tools::ToolSpec {
+            codex_tools::ToolSpec::Function(codex_tools::ResponsesApiTool {
+                name: "extension_echo".to_string(),
+                description: "Records that it started.".to_string(),
+                strict: false,
+                parameters: codex_tools::JsonSchema::default(),
+                output_schema: None,
+                defer_loading: None,
+            })
+        }
+
+        fn handle<'a>(
+            &'a self,
+            _call: codex_tools::ToolCall<'call>,
+        ) -> codex_tools::ToolExecutorFuture<'a>
+        where
+            'call: 'a,
+        {
+            self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async {
+                Ok(
+                    Box::new(codex_tools::JsonToolOutput::new(json!({ "ok": true })))
+                        as Box<dyn codex_tools::ToolOutput>,
+                )
+            })
+        }
+    }
+
+    /// #2292 (#1057, D71): a transition that lands after the file contexts are built, while
+    /// the call is built with the conversation history, refuses the call: the extension
+    /// never starts and the model is told why. (Main rebuilt the call instead.)
+    #[tokio::test]
+    async fn issue_2292_transition_while_the_call_is_built_refuses_it() {
+        let (controller, invocation, _granted, _outside) = granted_invocation().await;
+        let started = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let adapter = super::ExtensionToolAdapter::new(Arc::new(StartRecordingExecutor(
+            Arc::clone(&started),
+        )));
+        let result = adapter
+            .handle_with(invocation, || {
+                commit_transition(&controller, codex_security_policy::SecurityLevel::Moderate)
+            })
+            .await;
+        assert_eq!(
+            result.map(|_| ()).err(),
+            Some(codex_tools::FunctionCallError::RespondToModel(
+                super::EXTENSION_PREPARED_REFUSAL.to_string()
+            ))
+        );
+        assert!(!started.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    /// The same call with no transition starts the extension (the control for the test above).
+    #[tokio::test]
+    async fn issue_2292_call_built_without_a_transition_starts_the_extension() {
+        let (_controller, invocation, _granted, _outside) = granted_invocation().await;
+        let started = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let adapter = super::ExtensionToolAdapter::new(Arc::new(StartRecordingExecutor(
+            Arc::clone(&started),
+        )));
+        adapter
+            .handle_with(invocation, || {})
+            .await
+            .expect("the extension runs");
+        assert!(started.load(std::sync::atomic::Ordering::SeqCst));
     }
 }
