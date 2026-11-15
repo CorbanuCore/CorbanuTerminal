@@ -22,6 +22,7 @@ use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::ThreadHistoryMode;
 use codex_protocol::protocol::ThreadSource;
 use codex_protocol::protocol::TurnEnvironmentSelections;
+use futures::FutureExt;
 use std::sync::OnceLock;
 use tokio::sync::Semaphore;
 
@@ -1146,10 +1147,12 @@ impl Session {
             );
             if live_level != codex_security_policy::SecurityLevel::Permissive {
                 for environment in resolved_environments.turn_environments() {
+                    // Bound the remote connection future's Send proof during session creation.
                     if let Some(gap) = crate::security::windows_unsandboxed::remote_gap(
                         &environment.environment,
                         session_configuration.windows_sandbox_level,
                     )
+                    .boxed()
                     .await
                     {
                         post_session_configured_events.push(Event {
