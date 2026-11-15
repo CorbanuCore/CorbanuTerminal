@@ -1149,7 +1149,9 @@ impl Session {
                     if let Some(gap) = crate::security::windows_unsandboxed::remote_gap(
                         &environment.environment,
                         session_configuration.windows_sandbox_level,
-                    ).await {
+                    )
+                    .await
+                    {
                         post_session_configured_events.push(Event {
                             id: INITIAL_SUBMIT_ID.to_owned(),
                             msg: EventMsg::Warning(WarningEvent {

@@ -133,7 +133,11 @@ async fn issue_2088_discovery_refuses_before_sending_roots_to_an_unconfined_exec
         assert!(error.to_string().contains(REFUSAL), "{error}");
         assert_eq!(
             methods.lock().expect("methods").clone(),
-            vec!["initialize".to_string(), "environment/info".to_string()]
+            vec![
+                "initialize".to_string(),
+                "initialized".to_string(),
+                "environment/info".to_string(),
+            ]
         );
     }
 }

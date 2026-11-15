@@ -245,7 +245,10 @@ async fn issue_2050_remote_windows_without_its_sandbox_refuses_commands_and_file
                 warning.contains("agent commands and file tools are refused")
                     && warning.contains("environment `remote`")
                     && warning.contains(name)
-                    && warning.contains("Set up default sandbox")
+                    && warning.contains(match host {
+                        Host::OlderWindows => "Update Corbanu Terminal",
+                        Host::Windows | Host::Linux => "Set up default sandbox",
+                    })
             });
             assert_eq!(
                 startup_notice, refused,
