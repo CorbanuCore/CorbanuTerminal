@@ -24,6 +24,7 @@ use codex_protocol::dynamic_tools::DynamicToolSpec;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ApplyPatchToolType;
+use codex_protocol::openai_models::CatalogModel;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelInfo;
@@ -61,6 +62,7 @@ use crate::tools::handlers::WaitForEnvironmentHandler;
 use crate::tools::handlers::multi_agents_spec::MULTI_AGENT_V1_NAMESPACE;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::RegisteredTool;
+use crate::tools::registry::ToolRegistry;
 use crate::tools::router::ToolRouter;
 use crate::tools::router::ToolSuggestCandidates;
 use crate::tools::router::ToolSuggestPresentation;
@@ -229,7 +231,7 @@ async fn planned_router(
     let (_session, mut turn) = make_session_and_context().await;
     use_openai_provider(&mut turn);
     configure_turn(&mut turn);
-    ToolPlanProbe::from_router(plan_with_model(&turn, turn.model_info(), inputs))
+    plan_with_model(&turn, turn.model_info(), inputs)
 }
 
 fn plan_with_model(
@@ -334,8 +336,11 @@ fn use_openai_provider(turn: &mut TurnContext) {
         config.model_provider = provider_info.clone();
     });
     turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
-    update_turn_settings_for_test(&mut turn, |settings| {
-        settings.model_info = Arc::new(model_info::model_info_from_slug("gpt-5.4"));
+    update_turn_settings_for_test(turn, |settings| {
+        settings.model_info = Arc::new(CatalogModel {
+            model: Arc::new(model_info::model_info_from_slug("gpt-5.4")),
+            origin: settings.model_info.origin,
+        });
     });
 }
 
@@ -373,8 +378,11 @@ fn use_claude_plan_provider(turn: &mut TurnContext) {
         config.model_provider = provider_info.clone();
     });
     turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
-    update_turn_settings_for_test(&mut turn, |settings| {
-        settings.model_info = Arc::new(model_info::model_info_from_slug("claude-fable-5-plan"));
+    update_turn_settings_for_test(turn, |settings| {
+        settings.model_info = Arc::new(CatalogModel {
+            model: Arc::new(model_info::model_info_from_slug("claude-fable-5-plan")),
+            origin: settings.model_info.origin,
+        });
     });
 }
 
@@ -447,6 +455,17 @@ impl<'call> ToolExecutor<ExtensionToolCall<'call>> for DeferredExtensionTool {
         'call: 'a,
     {
         Box::pin(async { panic!("spec planning should not execute extension tools") })
+    }
+}
+
+/// Main's tests set the turn's single permission profile; upstream keeps one per
+/// environment, so give every ready environment the same profile.
+fn set_environment_permission_profile(turn: &mut TurnContext, profile: PermissionProfile) {
+    for environment in &mut turn.initial_environments.environments {
+        if let TurnEnvironmentState::Ready(environment) = environment {
+            environment.config_mut().permission_profile =
+                codex_protocol::models::PermissionProfileSnapshot::legacy(profile.clone());
+        }
     }
 }
 
@@ -568,7 +587,6 @@ fn apply_patch_accepts_environment_id(spec: &ToolSpec) -> bool {
 
 #[tokio::test]
 async fn allowed_tools_filter_sources_before_code_mode_and_discovery() {
-    use crate::tools::registry::ToolRegistry;
     use codex_extension_api::ToolPolicy;
 
     for allowed in [
@@ -1156,7 +1174,7 @@ async fn dynamic_tools_cannot_reclaim_the_reserved_exec_command_name() {
 async fn multiple_environments_expose_environment_selectors() {
     let multiple_environments = probe(|turn| {
         duplicate_primary_environment(turn);
-        turn.permission_profile = PermissionProfile::workspace_write();
+        set_environment_permission_profile(turn, PermissionProfile::workspace_write());
         set_feature(turn, Feature::ShellTool, /*enabled*/ true);
         set_feature(turn, Feature::RequestPermissionsTool, /*enabled*/ true);
         update_turn_settings_for_test(turn, |settings| {
@@ -1192,7 +1210,7 @@ async fn environment_tools_follow_the_step_context() {
         Arc::make_mut(&mut settings.model_info).apply_patch_tool_type =
             Some(ApplyPatchToolType::Freeform);
     });
-    turn.permission_profile = PermissionProfile::workspace_write();
+    set_environment_permission_profile(&mut turn, PermissionProfile::workspace_write());
 
     let environments = turn.initial_environments.clone();
     turn.initial_environments.environments.clear();
@@ -3160,7 +3178,8 @@ async fn multi_agent_v2_openai_plan_uses_reserved_collaboration_schemas() {
         function("spawn_agent")
             .output_schema
             .as_ref()
-            .expect("spawn output schema")["required"],
+            .expect("spawn output schema")
+            .to_value()["required"],
         serde_json::json!(["task_name"])
     );
     assert_eq!(
@@ -3178,14 +3197,16 @@ async fn multi_agent_v2_openai_plan_uses_reserved_collaboration_schemas() {
         function("wait_agent")
             .output_schema
             .as_ref()
-            .expect("wait output schema")["required"],
+            .expect("wait output schema")
+            .to_value()["required"],
         serde_json::json!(["message", "timed_out"])
     );
     assert_eq!(
         function("list_agents")
             .output_schema
             .as_ref()
-            .expect("list output schema")["properties"]["agents"]["items"]["required"],
+            .expect("list output schema")
+            .to_value()["properties"]["agents"]["items"]["required"],
         serde_json::json!(["agent_name", "agent_status"])
     );
 }
@@ -3297,11 +3318,22 @@ fn flat_call(name: &str) -> crate::tools::router::ToolCall {
 
 async fn router_with(
     configure_turn: fn(&mut TurnContext),
-    tool_runtimes: Vec<Arc<dyn CoreToolRuntime>>,
+    tool_runtimes: Vec<RegisteredTool>,
 ) -> ToolRouter {
     let (_session, mut turn) = make_session_and_context().await;
     configure_turn(&mut turn);
-    ToolRouter::from_tools(&turn, tool_runtimes, Vec::new(), &Default::default())
+    // Only the given tools, as main's `ToolRouter::from_tools` built.
+    let mut registry = ToolRegistry::default();
+    for tool in tool_runtimes {
+        registry.register_trusted_with_exposure(tool.runtime, tool.exposure);
+    }
+    ToolRouter::from_registry(
+        &turn,
+        turn.model_info(),
+        registry,
+        Vec::new(),
+        &Default::default(),
+    )
 }
 
 async fn mcp_router(configure_turn: fn(&mut TurnContext)) -> ToolRouter {
@@ -3328,16 +3360,22 @@ fn use_generic_chat_provider(turn: &mut TurnContext) {
     turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
 }
 
-fn plain_dynamic_runtime(name: &str) -> Arc<dyn CoreToolRuntime> {
+fn plain_dynamic_runtime(name: &str) -> RegisteredTool {
     let DynamicToolSpec::Function(function) =
         dynamic_tool(/*namespace*/ None, name, /*defer_loading*/ false)
     else {
         unreachable!("plain dynamic tools are functions");
     };
-    Arc::new(
+    let runtime: Arc<dyn CoreToolRuntime> = Arc::new(
         crate::tools::handlers::DynamicToolHandler::new(&function)
             .expect("dynamic tool spec should build"),
-    )
+    );
+    RegisteredTool {
+        exposure: runtime.exposure(),
+        runtime,
+        native_review: Default::default(),
+        model_spec: None,
+    }
 }
 
 #[tokio::test]
@@ -3452,7 +3490,7 @@ async fn mcp_tools_are_flattened_and_resolved_on_wires_without_namespace_tools()
                 resolved.tool_name,
                 ToolName::namespaced("mcp__orders", name)
             );
-            assert!(router.tool_runtime(&resolved).is_some());
+            assert!(router.registered_tool(&resolved.tool_name).is_some());
         }
 
         let unknown = router.resolve_flat_tool_call(flat_call("mcp__orders__missing"));
@@ -3526,7 +3564,10 @@ async fn non_mcp_namespaced_tools_are_flattened_and_resolved_without_namespace_t
             );
             let resolved = router.resolve_flat_tool_call(flat_call(flat));
             assert_eq!(resolved.tool_name, ToolName::namespaced(namespace, name));
-            assert!(router.tool_runtime(&resolved).is_some(), "{flat}");
+            assert!(
+                router.registered_tool(&resolved.tool_name).is_some(),
+                "{flat}"
+            );
         }
     }
 }
@@ -3916,7 +3957,7 @@ async fn standalone_image_generation_is_offered_on_an_openai_api_key() {
     let api_key = probe_with(
         |turn| {
             use_api_key_auth(turn);
-            update_turn_settings_for_test(&mut turn, |settings| {
+            update_turn_settings_for_test(turn, |settings| {
                 Arc::make_mut(&mut settings.model_info).input_modalities =
                     vec![InputModality::Image];
             });
@@ -3944,7 +3985,7 @@ async fn standalone_image_generation_is_offered_on_an_openai_api_key() {
                 config.model_provider = provider_info.clone();
             });
             turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
-            update_turn_settings_for_test(&mut turn, |settings| {
+            update_turn_settings_for_test(turn, |settings| {
                 Arc::make_mut(&mut settings.model_info).input_modalities =
                     vec![InputModality::Image];
             });
@@ -3969,7 +4010,7 @@ async fn standalone_image_generation_is_offered_on_an_openai_api_key() {
                 config.model_provider = provider_info.clone();
             });
             turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
-            update_turn_settings_for_test(&mut turn, |settings| {
+            update_turn_settings_for_test(turn, |settings| {
                 Arc::make_mut(&mut settings.model_info).input_modalities =
                     vec![InputModality::Image];
             });
@@ -4077,7 +4118,7 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
     let zai_native_web_search = probe(|turn| {
         use_zai_provider(turn);
         set_web_search_mode(turn, WebSearchMode::Live);
-        update_turn_settings_for_test(&mut turn, |settings| {
+        update_turn_settings_for_test(turn, |settings| {
             Arc::make_mut(&mut settings.model_info).supports_search_tool = false;
         });
     })
@@ -4087,10 +4128,10 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
     let zai_native_web_search_for_responses_lite = probe(|turn| {
         use_zai_provider(turn);
         set_web_search_mode(turn, WebSearchMode::Live);
-        update_turn_settings_for_test(&mut turn, |settings| {
+        update_turn_settings_for_test(turn, |settings| {
             Arc::make_mut(&mut settings.model_info).supports_search_tool = false;
         });
-        update_turn_settings_for_test(&mut turn, |settings| {
+        update_turn_settings_for_test(turn, |settings| {
             Arc::make_mut(&mut settings.model_info).use_responses_lite = true;
         });
     })
@@ -4100,10 +4141,10 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
     let openrouter_server_web_search_for_chat = probe(|turn| {
         use_openrouter_provider(turn);
         set_web_search_mode(turn, WebSearchMode::Live);
-        update_turn_settings_for_test(&mut turn, |settings| {
+        update_turn_settings_for_test(turn, |settings| {
             Arc::make_mut(&mut settings.model_info).supports_search_tool = false;
         });
-        update_turn_settings_for_test(&mut turn, |settings| {
+        update_turn_settings_for_test(turn, |settings| {
             Arc::make_mut(&mut settings.model_info).use_responses_lite = true;
         });
     })

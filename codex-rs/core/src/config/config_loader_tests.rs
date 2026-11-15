@@ -4288,8 +4288,9 @@ async fn project_config_cannot_replay_a_config_lock() -> std::io::Result<()> {
     tokio::fs::write(
         &lock_path,
         format!(
-            "version = {}\ncodex_version = \"older-version\"\n\n[config]\nsqlite_home = {}\nlog_dir = {}\n",
-            crate::config_lock::CONFIG_LOCK_VERSION,
+            // Upstream removed config-lock replay (and its version constant);
+            // the planted lock keeps main's shape.
+            "version = 1\ncodex_version = \"older-version\"\n\n[config]\nsqlite_home = {}\nlog_dir = {}\n",
             TomlValue::String(lock_sqlite_home.to_string_lossy().into_owned()),
             TomlValue::String(lock_log_dir.to_string_lossy().into_owned()),
         ),
@@ -4326,7 +4327,8 @@ async fn project_config_cannot_replay_a_config_lock() -> std::io::Result<()> {
         .build()
         .await?;
 
-    assert!(config.config_lock_toml.is_none(), "the lock was replayed");
+    // Main also checked `config.config_lock_toml`; upstream has no lock replay,
+    // so the lock's settings not applying (below) is what remains to check.
     assert_eq!(config.model.as_deref(), Some("project-model"));
     assert_ne!(config.sqlite.home(), lock_sqlite_home);
     assert_eq!(config.log_dir, config.codex_home.join("log").to_path_buf());
@@ -5124,11 +5126,7 @@ async fn home_dot_codex_is_not_a_project_layer_inside_a_repository() -> std::io:
 
     assert!(
         layers
-            .get_layers(
-                ConfigLayerStackOrdering::HighestPrecedenceFirst,
-                /*include_disabled*/ true,
-            )
-            .into_iter()
+            .all_layers_high_to_low()
             .all(|layer| !matches!(layer.name, ConfigLayerSource::Project { .. }))
     );
     assert_eq!(layers.effective_config().get("model"), None);

@@ -945,6 +945,7 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
         &excluded_credential_broker.shell_environment_policy,
         Some(&excluded_credential_broker),
         /*sandbox*/ None,
+        /*removed_env_vars*/ &[],
     )
     .await?;
     assert_eq!(
@@ -1547,6 +1548,7 @@ async fn snapshot_discovers_and_restores_inherited_credential_aliases() -> Resul
         &inherited_credential_broker.shell_environment_policy,
         Some(&inherited_credential_broker),
         /*sandbox*/ None,
+        /*removed_env_vars*/ &[],
     )
     .await;
     assert!(
@@ -1564,6 +1566,7 @@ async fn snapshot_discovers_and_restores_inherited_credential_aliases() -> Resul
         &inherited_credential_broker.shell_environment_policy,
         Some(&inherited_credential_broker),
         /*sandbox*/ None,
+        /*removed_env_vars*/ &[],
     )
     .await?;
     assert!(!unset_path_snapshot.contains("declare -x PATH="));
@@ -1586,6 +1589,7 @@ async fn snapshot_discovers_and_restores_inherited_credential_aliases() -> Resul
             &inherited_credential_broker.shell_environment_policy,
             Some(&inherited_credential_broker),
             /*sandbox*/ None,
+            /*removed_env_vars*/ &[],
         )
         .await?;
         assert!(!snapshot.contains(real));
@@ -1644,6 +1648,7 @@ async fn snapshot_discovers_and_restores_inherited_credential_aliases() -> Resul
                 &broker.shell_environment_policy,
                 Some(&broker),
                 /*sandbox*/ None,
+                /*removed_env_vars*/ &[],
             )
             .await?;
             assert!(!snapshot.contains(real));
@@ -1690,12 +1695,42 @@ async fn snapshot_discovers_and_restores_inherited_credential_aliases() -> Resul
     Ok(())
 }
 
+/// Main's per-shell snapshot scripts filtered secret exports inside the shell.
+/// Upstream captures with `snapshot_capture_script` and `capture_snapshot`
+/// filters the parsed capture in Rust; these helpers run that capture script
+/// and apply the same filter and rendering as the no-broker path.
+#[cfg(unix)]
+fn capture_script(shell_type: ShellType) -> String {
+    snapshot_capture_script(
+        shell_type,
+        SnapshotCaptureOptions {
+            startup: SnapshotStartup::Interactive,
+            declarations: true,
+            environment: false,
+        },
+    )
+    .expect("shell supports snapshots")
+}
+
+#[cfg(unix)]
+fn filtered_snapshot(
+    shell_type: ShellType,
+    output: &std::process::Output,
+    removed_env_vars: &[String],
+) -> String {
+    let mut capture =
+        CapturedSnapshot::parse(shell_type, &output.stdout).expect("valid snapshot capture");
+    let secret_exports = secret_export_patterns(removed_env_vars);
+    capture.retain_exports(|key| !secret_exports.iter().any(|pattern| pattern.matches(key)));
+    capture.render_script(&ShellEnvironmentPolicy::default())
+}
+
 #[cfg(unix)]
 #[test]
 fn bash_snapshot_filters_secret_and_invalid_exports() -> Result<()> {
     let output = Command::new("/bin/bash")
         .arg("-c")
-        .arg(bash_snapshot_script(/*removed_env_vars*/ &[]))
+        .arg(capture_script(ShellType::Bash))
         .env("BASH_ENV", "/dev/null")
         .env("VALID_NAME", "ok")
         .env("KIMI_API_KEY", "must-not-be-persisted")
@@ -1710,7 +1745,7 @@ fn bash_snapshot_filters_secret_and_invalid_exports() -> Result<()> {
 
     assert!(output.status.success());
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = filtered_snapshot(ShellType::Bash, &output, /*removed_env_vars*/ &[]);
     assert!(stdout.contains("VALID_NAME"));
     assert!(!stdout.contains("KIMI_API_KEY"));
     assert!(!stdout.contains("lowercase_api_key"));
@@ -1735,7 +1770,7 @@ fn bash_snapshot_filters_secrets_when_bashrc_shadows_filter_helpers() -> Result<
     )?;
     let output = Command::new("/bin/bash")
         .arg("-c")
-        .arg(bash_snapshot_script(/*removed_env_vars*/ &[]))
+        .arg(capture_script(ShellType::Bash))
         .env_remove("BASH_ENV")
         .env("HOME", home.path())
         .env("PATH", "/usr/bin:/bin")
@@ -1744,7 +1779,7 @@ fn bash_snapshot_filters_secrets_when_bashrc_shadows_filter_helpers() -> Result<
 
     assert!(output.status.success());
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = filtered_snapshot(ShellType::Bash, &output, /*removed_env_vars*/ &[]);
     assert!(!stdout.contains("lowercase_api_key"));
     assert!(!stdout.contains("must-not-be-persisted"));
 
@@ -1763,40 +1798,47 @@ fn snapshots_drop_provider_credentials_exported_by_startup_files() -> Result<()>
     std::fs::write(home.path().join(".zshrc"), rc)?;
 
     let mut outputs = vec![
-        Command::new("/bin/bash")
-            .arg("-c")
-            .arg(bash_snapshot_script(&removed))
-            .env_remove("BASH_ENV")
-            .env("HOME", home.path())
-            .env("PATH", "/usr/bin:/bin")
-            .output()?,
+        (
+            ShellType::Bash,
+            Command::new("/bin/bash")
+                .arg("-c")
+                .arg(capture_script(ShellType::Bash))
+                .env_remove("BASH_ENV")
+                .env("HOME", home.path())
+                .env("PATH", "/usr/bin:/bin")
+                .output()?,
+        ),
         // Non-interactive dash ignores `$ENV`, so pass the exports directly.
-        Command::new("/bin/sh")
-            .arg("-c")
-            .arg(sh_snapshot_script(&removed))
-            .env_remove("ENV")
-            .env("PATH", "/usr/bin:/bin")
-            .env("CORP_LLM_CRED", "must-not-be-persisted")
-            .env("corp_llm_cred", "must-not-be-persisted")
-            .env("VALID_NAME", "ok")
-            .output()?,
+        (
+            ShellType::Sh,
+            Command::new("/bin/sh")
+                .arg("-c")
+                .arg(capture_script(ShellType::Sh))
+                .env_remove("ENV")
+                .env("PATH", "/usr/bin:/bin")
+                .env("CORP_LLM_CRED", "must-not-be-persisted")
+                .env("corp_llm_cred", "must-not-be-persisted")
+                .env("VALID_NAME", "ok")
+                .output()?,
+        ),
     ];
     if std::path::Path::new("/bin/zsh").exists() {
-        outputs.push(
+        outputs.push((
+            ShellType::Zsh,
             Command::new("/bin/zsh")
                 .arg("-f")
                 .arg("-c")
-                .arg(zsh_snapshot_script(&removed))
+                .arg(capture_script(ShellType::Zsh))
                 .env_clear()
                 .env("PATH", "/usr/bin:/bin")
                 .env("ZDOTDIR", home.path())
                 .output()?,
-        );
+        ));
     }
 
-    for output in outputs {
+    for (shell_type, output) in outputs {
         assert!(output.status.success(), "{output:?}");
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stdout = filtered_snapshot(shell_type, &output, &removed);
         assert!(stdout.contains("VALID_NAME"), "{stdout}");
         assert!(!stdout.contains("must-not-be-persisted"), "{stdout}");
     }
