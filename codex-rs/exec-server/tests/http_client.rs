@@ -209,6 +209,115 @@ async fn http_request_with_address_policy_requires_executor_support() -> Result<
     Ok(())
 }
 
+/// What this tests: PF-27-S02 (#2333). Once the orchestrator arms protected
+/// launch, it refuses before sending any request whose header would read an
+/// executor variable outside the launch allowlist, although the executor (a
+/// scripted stand-in) never arms itself. Unarmed requests and allowed names
+/// are forwarded unchanged. Arming is process-wide, so this runs in a child.
+#[test]
+fn pf_27_s02_armed_orchestrator_refuses_header_env_vars_for_an_unarmed_executor() -> Result<()> {
+    const CHILD: &str = "CODEX_EXEC_SERVER_HEADER_ENV_ORCHESTRATOR_CHILD";
+    const TEST: &str =
+        "pf_27_s02_armed_orchestrator_refuses_header_env_vars_for_an_unarmed_executor";
+    if std::env::var_os(CHILD).is_none() {
+        let output = std::process::Command::new(std::env::current_exe()?)
+            .args([TEST, "--nocapture"])
+            .env(CHILD, "1")
+            .output()?;
+        assert!(
+            output.status.success() && String::from_utf8_lossy(&output.stdout).contains("1 passed"),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return Ok(());
+    }
+    let params = |env_var: &str| HttpRequestParams {
+        method: "GET".to_string(),
+        url: "https://mcp.example.test/mcp".to_string(),
+        headers: vec![HttpHeader {
+            name: "authorization".to_string(),
+            value: "Bearer ".to_string(),
+            value_env_var: Some(env_var.to_string()),
+        }],
+        body: None,
+        timeout_ms: None,
+        redirect_policy: HttpRedirectPolicy::Stop,
+        request_id: "header-env".to_string(),
+        stream_response: false,
+        address_policy: None,
+    };
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()?
+        .block_on(async move {
+            let executor = spawn_scripted_exec_server(|mut peer| async move {
+                for expected in ["LINEAR_API_KEY", "PF27_HEADER_HOME"] {
+                    let (request_id, params) = peer.read_http_request().await?;
+                    assert_eq!(
+                        params.headers[0].value_env_var.as_deref(),
+                        Some(expected),
+                        "a refused header reached the executor"
+                    );
+                    peer.write_response(
+                        request_id,
+                        HttpRequestResponse {
+                            status: 204,
+                            headers: Vec::new(),
+                            body: Vec::new().into(),
+                        },
+                    )
+                    .await?;
+                }
+                let next = timeout(Duration::from_millis(300), peer.read_message()).await;
+                assert!(
+                    !matches!(next, Ok(Ok(JSONRPCMessage::Request(_)))),
+                    "a refused header reached the executor: {next:?}"
+                );
+                Ok(())
+            })
+            .await?;
+            let client = executor.connect_client().await?;
+
+            let unarmed = timeout(TEST_TIMEOUT, client.http_request(params("LINEAR_API_KEY")))
+                .await
+                .context("unarmed http/request should complete")??;
+            assert_eq!(unarmed.status, 204);
+
+            codex_protocol::secretless_launch::arm();
+            for refused in [
+                "LINEAR_API_KEY",
+                "linear_api_key",
+                "ZAI_API_KEY",
+                "NODE_OPTIONS",
+                "PF27_PLAIN",
+                "CORBANU_*",
+                "CORBANU_\u{212A}EY",
+            ] {
+                let expected = format!(
+                    "request not sent: http/request header authorization cannot use executor environment variable {refused} while protected launch is armed; set the credential in the MCP server's own http_headers configuration"
+                );
+                let buffered = client
+                    .http_request(params(refused))
+                    .await
+                    .expect_err("armed buffered request must be refused");
+                assert_eq!(buffered.to_string(), expected);
+                let Err(streamed) = client.http_request_stream(params(refused)).await else {
+                    panic!("armed streamed request must be refused");
+                };
+                assert_eq!(streamed.to_string(), expected);
+            }
+
+            let allowed = timeout(TEST_TIMEOUT, client.http_request(params("PF27_HEADER_HOME")))
+                .await
+                .context("allowed http/request should complete")??;
+            assert_eq!(allowed.status, 204);
+            drop(client);
+            executor.finish().await
+        })
+}
+
 /// What this tests: streamed executor HTTP response frames are routed by the
 /// client's generated request id, delivered in sequence, and concatenated by
 /// the caller.

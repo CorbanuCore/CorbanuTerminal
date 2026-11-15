@@ -30,6 +30,7 @@ codex-build-info = { workspace = true }
 codex-config = { workspace = true }
 codex-core-plugin-common = { workspace = true }
 codex-http-client = { workspace = true }
+codex-model-provider-info = { workspace = true }
 codex-exec-server-protocol = { workspace = true }
 codex-file-system = { workspace = true }
 codex-file-watcher = { workspace = true }
