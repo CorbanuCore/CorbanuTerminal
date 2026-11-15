@@ -10,12 +10,13 @@ async fn clipped_full_access_confirmation_discloses_hidden_warning_text() {
         let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
         chat.set_feature_enabled(Feature::GuardianApproval, /*enabled*/ false);
         let current_model = chat.current_model().to_owned();
-        Arc::make_mut(&mut chat.model_catalog)
-            .models
-            .iter_mut()
-            .find(|model| model.model == current_model)
-            .expect("the selected model is in the catalog")
-            .model_specialty = specialty.map(str::to_owned);
+        chat.model_catalog.update_models(|models| {
+            models
+                .iter_mut()
+                .find(|model| model.model == current_model)
+                .expect("the selected model is in the catalog")
+                .model_specialty = specialty.map(str::to_owned);
+        });
         let preset = builtin_approval_presets()
             .into_iter()
             .find(|preset| preset.id == "full-access")

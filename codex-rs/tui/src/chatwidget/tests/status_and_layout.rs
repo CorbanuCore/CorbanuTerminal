@@ -2477,6 +2477,7 @@ async fn issue_787_dropped_esc_neither_interrupts_nor_pauses_the_goal() {
         turn_id: "turn-1".to_string(),
         questions: Vec::new(),
         auto_resolution_ms: None,
+        is_blocking: true,
     });
     let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
 
@@ -3266,8 +3267,9 @@ async fn status_line_tps_updates_from_completed_turn_average() {
         },
         model_context_window: Some(128_000),
     }));
-    chat.on_task_complete(
+    chat.on_task_complete_with_duration(
         /*last_agent_message*/ None,
+        /*completion*/ None,
         Some(2_000),
         /*from_replay*/ false,
     );
@@ -3284,8 +3286,9 @@ async fn status_line_tps_uses_streamed_text_when_usage_is_missing() {
 
     chat.on_task_started();
     chat.on_agent_message_delta("12345678901234567890".to_string());
-    chat.on_task_complete(
+    chat.on_task_complete_with_duration(
         /*last_agent_message*/ None,
+        /*completion*/ None,
         Some(1_000),
         /*from_replay*/ false,
     );
@@ -3301,8 +3304,9 @@ async fn status_line_tps_updates_when_usage_arrives_after_completion() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
 
     chat.on_task_started();
-    chat.on_task_complete(
+    chat.on_task_complete_with_duration(
         /*last_agent_message*/ None,
+        /*completion*/ None,
         Some(2_000),
         /*from_replay*/ false,
     );

@@ -48,6 +48,7 @@ async fn issue1290_dismissal_during_save_or_summary_keeps_the_committed_result()
                 agent_identity: None,
                 personal_access_token: None,
                 bedrock_api_key: None,
+                bedrock_access_keys: None,
             };
             codex_login::save_named_account_auth(
                 home.path(),
@@ -160,7 +161,7 @@ async fn issue1290_dismissal_during_save_or_summary_keeps_the_committed_result()
     }
 }
 
-async fn app_with_named_accounts(extra_config: &str) -> (App, TempDir) {
+async fn app_with_named_accounts(extra_config: &str) -> (Box<App>, TempDir) {
     let mut app = make_test_app().await;
     let home = tempdir().expect("home");
     std::fs::write(
@@ -333,7 +334,7 @@ async fn named_bedrock_account_offers_bedrock_models() {
     let offered = bedrock_models(&app);
     assert!(
         offered.iter().any(
-            |preset| preset.model == codex_model_provider_info::AMAZON_BEDROCK_GPT_5_4_MODEL_ID
+            |preset| preset.model == codex_model_provider_info::AMAZON_BEDROCK_GPT_5_5_MODEL_ID
         ),
         "{offered:?}"
     );
@@ -350,7 +351,7 @@ async fn named_bedrock_account_offers_bedrock_models() {
     // widget; `config.model` keeps the model the session started with.)
     app.config.model_provider_id = AMAZON_BEDROCK_PROVIDER_ID.to_string();
     app.chat_widget
-        .set_model(codex_model_provider_info::AMAZON_BEDROCK_GPT_5_4_MODEL_ID);
+        .set_model(codex_model_provider_info::AMAZON_BEDROCK_GPT_5_5_MODEL_ID);
     vault
         .remove_provider_account(AMAZON_BEDROCK_PROVIDER_ID, &name("work"))
         .expect("remove account");
@@ -360,7 +361,7 @@ async fn named_bedrock_account_offers_bedrock_models() {
         kept.iter()
             .map(|preset| preset.model.as_str())
             .collect::<Vec<_>>(),
-        vec![codex_model_provider_info::AMAZON_BEDROCK_GPT_5_4_MODEL_ID]
+        vec![codex_model_provider_info::AMAZON_BEDROCK_GPT_5_5_MODEL_ID]
     );
     // It keeps its Bedrock metadata.
     assert!(!kept[0].supported_reasoning_efforts.is_empty(), "{kept:?}");
@@ -401,7 +402,7 @@ async fn openai_add_methods_follow_only_the_configured_login_method() {
 }
 
 /// Like [`app_with_named_accounts`], with `top` before the `[features]` table.
-async fn app_with_named_accounts_at_top(top: &str) -> (App, TempDir) {
+async fn app_with_named_accounts_at_top(top: &str) -> (Box<App>, TempDir) {
     let mut app = make_test_app().await;
     let home = tempdir().expect("home");
     std::fs::write(

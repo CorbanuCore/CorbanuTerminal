@@ -46,6 +46,7 @@ async fn session_status_follows_existing_lifecycle_state() {
         call_id: "background-call".to_string(),
         command_display: "sleep 5".to_string(),
         recent_chunks: Vec::new(),
+        interrupt_notes: Vec::new(),
     });
     states.push(chat.desired_program_status());
     chat.unified_exec_processes.clear();

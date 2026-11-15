@@ -285,6 +285,7 @@ pub(in crate::app) fn overview_thread(
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })
         }),
         can_accept_direct_input: Some(parent_thread_id.is_none()),
@@ -1405,10 +1406,11 @@ async fn shared_overview_shows_only_root_sessions() {
     threads.push(side);
     let default_model = app
         .model_catalog
-        .models
+        .models()
         .first()
+        .cloned()
         .expect("test model catalog");
-    threads[0].model = Some(default_model.model.clone());
+    threads[0].model = Some(default_model.model);
     let view = app.agents_overview_view(threads, /*selected_thread_id*/ None);
 
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();

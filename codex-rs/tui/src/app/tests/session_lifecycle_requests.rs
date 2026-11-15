@@ -205,9 +205,9 @@ async fn daybreak_command_persists_and_confirms_each_selection() -> Result<()> {
     app.chat_widget.set_daybreak_enabled(/*enabled*/ true);
     app.chat_widget
         .set_feature_enabled(Feature::ApiKeyCyberAccessPrograms, /*enabled*/ false);
-    let models = app.chat_widget.model_catalog().models.clone();
+    let models = app.chat_widget.model_catalog().models();
     app.chat_widget.update_account_state(
-        Some(crate::status::StatusAccountDisplay::ApiKey),
+        Some(crate::status::StatusAccountDisplay::ApiKey { env_var: None }),
         /*plan_type*/ None,
         /*has_chatgpt_account*/ false,
         /*has_codex_backend_auth*/ false,
@@ -1872,7 +1872,7 @@ async fn older_external_server_starts_without_unsupported_dynamic_tools_or_histo
 
     let starts = recorded_params(&requests, "thread/start");
     assert_eq!(starts.len(), 6);
-    for attempts in starts.chunks_exact(3) {
+    for attempts in starts.as_chunks::<3>().0 {
         assert_eq!(attempts[0]["dynamicTools"][0]["type"], "namespace");
         assert_eq!(attempts[0]["historyMode"], "paginated");
         assert_eq!(attempts[1]["dynamicTools"], serde_json::Value::Null);
@@ -3553,6 +3553,7 @@ async fn cold_paginated_subagent_transcript_excludes_inherited_parent_history() 
                 ),
                 agent_nickname: Some("worker".to_string()),
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             }),
             parent_thread_id.into(),
             parent_thread_id,
@@ -4789,23 +4790,23 @@ fn session_lifecycle_avoids_redundant_subagent_metadata_reads() -> Result<()> {
                 .await?;
                 let backend_id = app_server.backend_id();
                 let root = app_server
-                    .resume_thread(
+                    .resume_thread_with_permission_overrides(
                         &app.local_settings,
                         app.config.clone(),
                         root_thread_id,
                         app.resume_model_settings(),
-                        app.resume_permission_settings(),
+                        app.resume_permission_overrides(&app.config),
                     )
                     .await?;
                 app.enqueue_primary_thread_session(root.session, root.turns)
                     .await?;
                 app_server
-                    .resume_thread(
+                    .resume_thread_with_permission_overrides(
                         &app.local_settings,
                         app.config.clone(),
                         child_thread_id,
                         app.resume_model_settings(),
-                        app.resume_permission_settings(),
+                        app.resume_permission_overrides(&app.config),
                     )
                     .await?;
                 let mut tui = crate::tui::test_support::make_test_tui()?;

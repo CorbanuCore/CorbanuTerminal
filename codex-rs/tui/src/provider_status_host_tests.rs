@@ -773,11 +773,14 @@ async fn a_named_openai_account_reports_what_it_holds() {
             access_token: "access-canary-0609".to_string(),
             refresh_token: "refresh-canary-0609".to_string(),
             account_id: Some("ws-1".to_string()),
+            login_owner_id: None,
+            oauth_provenance: None,
         }),
         last_refresh: None,
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        bedrock_access_keys: None,
     };
     codex_login::save_named_account_auth(
         home.path(),
@@ -806,6 +809,7 @@ async fn a_named_openai_account_reports_what_it_holds() {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        bedrock_access_keys: None,
     })
     .unwrap();
     codex_vault::Vault::new(home.path().to_path_buf())

@@ -453,7 +453,7 @@ impl ChatWidget {
                     )
                 };
                 let actions: Vec<SelectionAction> = if requires_advanced_selection {
-                    let preset_for_action = preset.clone();
+                    let preset_for_action = preset;
                     vec![Box::new(move |tx| {
                         tx.send(AppEvent::OpenReasoningPopup {
                             model: preset_for_action.clone(),
@@ -469,7 +469,7 @@ impl ChatWidget {
                     self.model_selection_actions(
                         model.clone(),
                         provider,
-                        Some(preset.default_reasoning_effort.clone()),
+                        Some(preset.default_reasoning_effort),
                         should_prompt_plan_mode_scope,
                     )
                 };
@@ -839,7 +839,7 @@ impl ChatWidget {
         {
             display_name = format!("{display_name} via {provider}");
         }
-        let model = preset.model.clone();
+        let model = preset.model;
         let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
             let preset_for_event = preset_for_action.clone();
             tx.send(AppEvent::OpenReasoningPopup {
@@ -2033,6 +2033,8 @@ mod tests {
             availability_nux: None,
             supported_in_api: true,
             input_modalities: default_input_modalities(),
+            available_access_programs: None,
+            model_specialty: None,
         }
     }
 }

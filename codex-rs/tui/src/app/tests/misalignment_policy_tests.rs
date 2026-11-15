@@ -91,7 +91,8 @@ async fn misalignment_continuation_requires_current_review_and_submits_once() ->
         app.chat_widget.handle_thread_session(session);
         if !reject {
             app.chat_widget.update_account_state(
-                (!has_chatgpt_account).then_some(crate::status::StatusAccountDisplay::ApiKey),
+                (!has_chatgpt_account)
+                    .then_some(crate::status::StatusAccountDisplay::ApiKey { env_var: None }),
                 /*plan_type*/ None,
                 has_chatgpt_account,
                 /*has_codex_backend_auth*/ has_chatgpt_account,

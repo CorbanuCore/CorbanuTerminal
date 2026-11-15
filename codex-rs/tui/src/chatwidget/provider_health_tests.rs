@@ -53,6 +53,7 @@ async fn late_turn_failure_names_original_provider_and_ignores_recovered_attempt
                 message: "synthetic rejection".into(),
                 codex_error_info: Some(CodexErrorInfo::Unauthorized),
                 additional_details: None,
+                misalignment: None,
             },
         })
     };
@@ -265,6 +266,7 @@ fn assert_named_account_rejection(
                 started_at: Some(0),
                 completed_at: None,
                 duration_ms: None,
+                root_turn_id: None,
             },
         },
     ));
@@ -278,6 +280,7 @@ fn assert_named_account_rejection(
                 message: "synthetic rejection".into(),
                 codex_error_info: Some(CodexErrorInfo::Unauthorized),
                 additional_details: None,
+                misalignment: None,
             },
         },
     ));

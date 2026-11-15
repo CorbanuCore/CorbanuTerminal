@@ -1,8 +1,8 @@
 //! Issue912: a billed warm-up is not proof that a conversation has saved turns.
 //! Uses actual cost pages and the rollout reader used by resume, with owned data.
 use super::*;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
+use codex_history::RolloutItem;
+use codex_history::RolloutLine;
 use codex_protocol::protocol::SessionMeta;
 use codex_protocol::protocol::SessionMetaLine;
 use codex_protocol::protocol::SessionSource;
@@ -29,7 +29,7 @@ fn warmup_packet() -> Inspection {
 
 async fn saved_turn_control(owner: ThreadId, append_turn: bool) -> bool {
     let home = tempfile::tempdir().unwrap();
-    let meta = RolloutItem::SessionMeta(SessionMetaLine {
+    let meta = RolloutItem::SessionMeta(Box::new(SessionMetaLine {
         meta: SessionMeta {
             id: owner,
             timestamp: "2026-10-16T01:00:00Z".into(),
@@ -40,7 +40,7 @@ async fn saved_turn_control(owner: ThreadId, append_turn: bool) -> bool {
             ..SessionMeta::default()
         },
         git: None,
-    });
+    }));
     let mut jsonl = serde_json::to_string(&RolloutLine {
         timestamp: "2026-10-16T01:00:00Z".into(),
         ordinal: None,

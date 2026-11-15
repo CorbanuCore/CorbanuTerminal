@@ -31,7 +31,7 @@ async fn held_enter_requires_a_fresh_confirmation_to_save_a_prefilled_api_key() 
             panic!("expected API key entry");
         };
         input.value = "test-api-key".into();
-        input.prepopulated_from_env = true;
+        input.prepopulated_env_var = Some("OPENAI_API_KEY".into());
     }
     let (request_frame, mut frames) = FrameRequester::test_channel();
     widget.request_frame = request_frame;
@@ -50,6 +50,6 @@ async fn held_enter_requires_a_fresh_confirmation_to_save_a_prefilled_api_key() 
     frames.recv().await.expect("API key save should finish");
     assert!(matches!(
         *widget.sign_in_state.read().unwrap(),
-        SignInState::ApiKeyConfigured
+        SignInState::ApiKeyConfigured { .. }
     ));
 }

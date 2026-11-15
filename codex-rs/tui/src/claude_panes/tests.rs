@@ -3356,7 +3356,9 @@ fn interrupted_partial_output_prefers_stdout_session_id() {
 fn prompt_from_user_turn_rejects_images() {
     let op = AppCommand::UserTurn {
         items: vec![UserInput::Image {
-            url: "data:image/png;base64,abc".to_string(),
+            image: codex_app_server_protocol::ImageReference::Inline {
+                url: "data:image/png;base64,abc".to_string(),
+            },
             detail: None,
         }],
         cwd: PathBuf::from("/tmp"),
@@ -3369,7 +3371,8 @@ fn prompt_from_user_turn_rejects_images() {
         service_tier: None,
         final_output_json_schema: None,
         collaboration_mode: None,
-        personality: None,
+        client_user_message_id: "test-message".to_string(),
+        turn_trigger: "user",
     };
 
     assert!(prompt_from_user_turn(&op).is_err());

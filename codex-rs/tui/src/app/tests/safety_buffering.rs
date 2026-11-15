@@ -1381,7 +1381,7 @@ goals = true
             .await
             .expect("the goal continuation's reply should render")
             .expect("app-server event stream should remain open");
-        Box::pin(app.handle_app_server_event(&app_server, event)).await;
+        Box::pin(app.handle_app_server_event(&app_server, event.event)).await;
         drain_active_thread_events(&mut app);
     }
     assert_eq!(

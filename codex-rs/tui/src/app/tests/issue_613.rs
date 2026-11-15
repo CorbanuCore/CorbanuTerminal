@@ -100,7 +100,7 @@ async fn issue_613_the_same_task_sent_again_while_it_waits_is_delivered_once() {
 
     issue_507_switch(&app, HumanRevocation::KillSwitchOff);
     app.on_kill_switch_turned_off();
-    app.submit_claude_pane_task(orc_pane_id.clone(), "pf613 next".to_string());
+    app.submit_claude_pane_task(orc_pane_id, "pf613 next".to_string());
     assert!(app.kill_switch_held_claude_tasks.is_empty());
     let prompt = &app.claude_panes.prepared_prompts[0].1;
     assert_eq!(prompt.matches("pf613 task").count(), 1, "{prompt}");

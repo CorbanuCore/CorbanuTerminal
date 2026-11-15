@@ -152,7 +152,7 @@ impl ChatWidget {
 
     fn codex_account_status_description(&self) -> String {
         match self.status_account_display() {
-            Some(StatusAccountDisplay::ChatGpt { email, plan }) => {
+            Some(StatusAccountDisplay::ChatGpt { email, plan, .. }) => {
                 signed_in_description(email.as_deref(), plan.as_deref())
             }
             _ if self.has_codex_backend_auth() => "Signed in".to_string(),

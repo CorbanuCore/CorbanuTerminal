@@ -437,6 +437,40 @@ impl ModelCatalog {
         })
     }
 
+    /// Tests: replaces every model (upstream's tests assign the plain field).
+    #[cfg(test)]
+    pub(crate) fn replace_models_for_test(&self, models: Vec<ModelPreset>) {
+        *self
+            .models
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = models;
+    }
+
+    /// Tests: a catalog with these models and this one's collaboration modes.
+    #[cfg(test)]
+    pub(crate) fn with_collaboration_modes_for_test(
+        &self,
+        modes: Vec<CollaborationModeMask>,
+    ) -> Self {
+        Self::new(self.models()).with_collaboration_modes(modes)
+    }
+
+    /// A snapshot of the catalog's models (upstream reads them as a plain field; here they sit
+    /// behind a lock because runtime and GPU providers update them).
+    pub(crate) fn models(&self) -> Vec<ModelPreset> {
+        self.with_models(<[ModelPreset]>::to_vec)
+    }
+
+    /// Reads the models without copying them, for paths that run on every redraw.
+    pub(crate) fn with_models<R>(&self, read: impl FnOnce(&[ModelPreset]) -> R) -> R {
+        read(
+            &self
+                .models
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
+    }
+
     pub(crate) fn try_list_models(&self) -> Result<Vec<ModelPreset>, Infallible> {
         Ok(self
             .models

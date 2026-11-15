@@ -931,7 +931,7 @@ impl App {
                 "Pick a Worker and Manager; defaults to 8 hours and Draft with Manager."
                     .to_string(),
             ),
-            display_shortcut: Some(key_hint::plain(KeyCode::Char('n'))),
+            display_shortcut: Some(key_hint::plain(KeyCode::Char('n')).into()),
             actions: vec![Box::new(|tx| {
                 tx.send(AppEvent::OpenOrchestrateFastTargetPicker);
             })],
@@ -1714,7 +1714,7 @@ impl App {
         items.push(SelectionItem {
             name: "New assignment".to_string(),
             description: Some("Open the guided setup flow.".to_string()),
-            display_shortcut: Some(key_hint::plain(KeyCode::Char('n'))),
+            display_shortcut: Some(key_hint::plain(KeyCode::Char('n')).into()),
             actions: vec![Box::new(|tx| {
                 tx.send(AppEvent::OpenOrchestrateTargetPicker)
             })],

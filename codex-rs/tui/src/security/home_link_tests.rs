@@ -38,13 +38,17 @@ fn writable(root: &Path) -> FileSystemSandboxPolicy {
     FileSystemSandboxPolicy::restricted(vec![
         FileSystemSandboxEntry::new(
             FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path("/").unwrap(),
+                path: codex_utils_path_uri::PathUri::from_abs_path(
+                    &AbsolutePathBuf::from_absolute_path("/").unwrap(),
+                ),
             },
             FileSystemAccessMode::Read,
         ),
         FileSystemSandboxEntry::new(
             FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(root).unwrap(),
+                path: codex_utils_path_uri::PathUri::from_abs_path(
+                    &AbsolutePathBuf::from_absolute_path(root).unwrap(),
+                ),
             },
             FileSystemAccessMode::Write,
         ),

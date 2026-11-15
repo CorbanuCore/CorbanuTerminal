@@ -13,7 +13,6 @@
 use std::path::Path;
 
 use codex_config::ConfigLayerSource;
-use codex_config::ConfigLayerStackOrdering;
 use codex_config::types::ShellEnvironmentPolicyToml;
 use codex_execpolicy::Decision;
 use codex_features::Feature;
@@ -400,10 +399,7 @@ fn verify_sandbox(config: &Config, failures: &mut Vec<String>) {
     }
     // Only the launch overrides may define the profile; any other layer
     // (user, `-p` profile, project) could widen it through a table merge.
-    for layer in config.config_layer_stack.get_layers(
-        ConfigLayerStackOrdering::LowestPrecedenceFirst,
-        /*include_disabled*/ false,
-    ) {
+    for layer in config.config_layer_stack.layers_low_to_high() {
         let defines_profile = layer
             .config
             .get("permissions")
@@ -483,8 +479,14 @@ fn verify_credential_names(
     if cfg!(target_os = "macos") {
         expected.extend(credential_file_globs("/"));
     }
-    let matcher = ReadDenyMatcher::try_new(file_system, cwd).ok().flatten();
-    let probe = |path: &Path| matcher.as_ref().is_some_and(|m| m.is_read_denied(path));
+    let matcher = ReadDenyMatcher::try_new_for_local_paths(file_system, cwd)
+        .ok()
+        .flatten();
+    let probe = |path: &Path| {
+        matcher
+            .as_ref()
+            .is_some_and(|m| m.is_local_path_read_denied(path))
+    };
     let probes_denied = [".env", "app/.env.local", ".envrc"]
         .iter()
         .all(|name| probe(&cwd.join("corbanu-new").join(name)));

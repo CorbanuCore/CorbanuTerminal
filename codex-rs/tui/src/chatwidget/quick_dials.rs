@@ -103,9 +103,8 @@ impl ChatWidget {
     }
 
     pub(super) fn current_model_quick_dial(&self) -> Result<QuickDial, &'static str> {
-        let Some(model) = self
-            .model_catalog
-            .models
+        let models = self.model_catalog.models();
+        let Some(model) = models
             .iter()
             .find(|model| model.model == self.current_model() && model.show_in_picker)
             .filter(|_| !self.restrict_model_picker_to_luna_reserve())
