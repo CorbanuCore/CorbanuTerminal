@@ -1029,6 +1029,18 @@ impl App {
                     | AppEvent::BeginThreadSwitchHistoryReplayBuffer
                     | AppEvent::EndInitialHistoryReplayBuffer
                     | AppEvent::FatalExitRequest(_)
+                    // Corbanu: safety and local-pane events never wait for the app server; the
+                    // watchers send a change only once.
+                    | AppEvent::KillSwitchTurnedOn
+                    | AppEvent::KillSwitchTurnedOff
+                    | AppEvent::KillSwitchChangedElsewhere { .. }
+                    | AppEvent::SecurityLevelRaisedElsewhere { .. }
+                    | AppEvent::WhipSweepTick
+                    | AppEvent::ClaudePaneTurnFinished { .. }
+                    | AppEvent::ClaudePaneApprovalRequested(_)
+                    | AppEvent::ClaudePaneApprovalsSettled
+                    | AppEvent::ClaudePaneLaunchProblem { .. }
+                    | AppEvent::ClaudePaneTurnProgress { .. }
             )
         {
             return Ok(AppRunControl::Continue);
@@ -5558,21 +5570,7 @@ impl App {
                                 }
                             } else {
                                 // Corbanu: permissions change only through the profile selection,
-                                // which applies the security-level checks.
-                                self.app_event_tx.send(AppEvent::CodexOp(
-                                    AppCommand::override_turn_context(
-                                        /*cwd*/ None,
-                                        /*approval_policy*/ None,
-                                        /*approvals_reviewer*/ None,
-                                        /*permission_profile*/ None,
-                                        /*active_permission_profile*/ None,
-                                        /*model*/ None,
-                                        /*effort*/ None,
-                                        /*summary*/ None,
-                                        /*service_tier*/ None,
-                                        /*collaboration_mode*/ None,
-                                    ),
-                                ));
+                                // which applies the security-level check.
                                 self.app_event_tx.send(AppEvent::SelectPermissionProfile(PermissionProfileSelection {
                                     profile_id: preset.active_permission_profile.id.clone(),
                                     approval_policy: Some(AskForApproval::from(preset.approval)),

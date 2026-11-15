@@ -17,6 +17,16 @@ use crate::session_start::complete_session_start;
 use crate::session_start::session_start_refusal_exit;
 use crate::unarchive_prompt::run_unarchive_prompt;
 
+/// Upstream's prompt edit reports these after the server already reverted history; the TUI must
+/// stop rather than keep accepting input against the old transcript.
+fn server_history_changed(err: &color_eyre::eyre::Report) -> bool {
+    err.chain().any(|cause| {
+        let message = cause.to_string();
+        message.starts_with("prompt edit could not be confirmed")
+            || message.starts_with("history was reverted, but refreshing the session timed out")
+    })
+}
+
 fn spawn_startup_thread_start(
     app_server: &AppServerSession,
     local_settings: crate::local_settings::LocalSettings,
@@ -1638,6 +1648,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
         let mut settled_size_tags = crate::terminal_size_telemetry::tags(last_screen_size);
         let mut pending_resize: Option<(ratatui::layout::Size, Instant)> = None;
         let mut reconnect = None;
+        let mut embedded_stream_closed_notified = false;
         let mut gpu_runtime_overlay_tick = tokio::time::interval(Duration::from_secs(5));
         gpu_runtime_overlay_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut waiting_for_initial_session_configured = wait_for_initial_session_configured;
@@ -1859,6 +1870,8 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
                             }
                             Ok(AppRunControl::Exit(reason)) => AppRunControl::Exit(reason),
                             Err(err) if app.recover_transport_error(&err) => AppRunControl::Continue,
+                            // Server history already changed: accepting input would hide it.
+                            Err(err) if server_history_changed(&err) => break Err(err),
                             Err(err) => {
                                 tracing::error!(error = ?err, "contained app event handler failure");
                                 app.chat_widget.add_error_message(format!(
@@ -1934,7 +1947,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
                         if let Err(err) = signal {
                             tracing::warn!(error = %err, "failed to listen for SIGINT");
                             AppRunControl::Continue
-                        } else if app.active_thread_id.is_some() {
+                        } else if app.active_thread_id.is_some() && !app.reconnect.offline {
                             match Box::pin(app.handle_event(
                                 tui,
                                 backends.session_at_mut(displayed_session),
@@ -1970,6 +1983,17 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
                             }
                             Some(_) => {}
                             None => {
+                                // Corbanu: an embedded server is not reconnected; say so once.
+                                if owner == displayed_owner
+                                    && matches!(app.app_server_target, AppServerTarget::Embedded)
+                                    && !embedded_stream_closed_notified
+                                {
+                                    embedded_stream_closed_notified = true;
+                                    app.chat_widget.add_error_message(
+                                        "The app server stopped; restart Corbanu Terminal to continue."
+                                            .to_string(),
+                                    );
+                                }
                                 if owner == displayed_owner {
                                     if app.reconnect.offline && app.pending_startup_thread_start {
                                         reconnect = None;
