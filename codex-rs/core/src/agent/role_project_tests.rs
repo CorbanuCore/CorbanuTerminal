@@ -97,7 +97,6 @@ fn protected_settings(config: &Config) -> impl std::fmt::Debug + PartialEq + use
         config.notify.clone(),
         config.sqlite.clone(),
         config.log_dir.clone(),
-        config.config_lock_export_dir.clone(),
     )
 }
 
@@ -197,7 +196,6 @@ async fn user_role_file_still_chooses_its_provider_for_its_child() {
     assert_eq!(config.notify, parent.notify);
     assert_eq!(config.log_dir, parent.log_dir);
     assert_eq!(config.sqlite, parent.sqlite);
-    assert_eq!(config.config_lock_export_dir, parent.config_lock_export_dir);
     assert_eq!(config.permissions, parent.permissions);
     assert!(role_warnings(&config).is_empty());
     assert_eq!(

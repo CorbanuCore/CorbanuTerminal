@@ -5,13 +5,13 @@
 
 use std::sync::Arc;
 
+use codex_history::InitialHistory;
+use codex_history::RolloutItem;
 use codex_login::NamedChatgptAccount;
 use codex_login::login_named_account_with_api_key;
 use codex_model_provider_info::NamedProviderAccount;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::RolloutItem;
 use codex_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 
@@ -218,6 +218,7 @@ async fn a_turn_that_changes_the_provider_moves_the_account() {
                 model_provider: Some("openai-work".to_string()),
                 ..Default::default()
             },
+            super::turn_context::NewTurnContextOptions::default(),
         )
         .await
         .expect("turn");
@@ -247,7 +248,10 @@ async fn a_switch_that_keeps_the_account_does_not_reconnect() {
     );
     session
         .update_settings(SessionSettingsUpdate {
-            collaboration_mode: Some(collaboration_mode),
+            step_settings: super::step_settings::StepSettingsUpdate {
+                collaboration_mode: Some(collaboration_mode),
+                ..Default::default()
+            },
             ..Default::default()
         })
         .await
@@ -390,13 +394,14 @@ async fn a_prompt_refused_for_a_removed_account_is_not_recorded_as_its_turn() {
         .ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
         .await;
     let session = Arc::new(session);
-    let turn = session
+    let (turn, _) = session
         .new_turn_with_sub_id(
             "turn-refused".to_string(),
             SessionSettingsUpdate {
                 model_provider: Some("openai-work".to_string()),
                 ..Default::default()
             },
+            super::turn_context::NewTurnContextOptions::default(),
         )
         .await
         .expect("turn");
@@ -490,7 +495,6 @@ async fn a_prompt_refused_for_a_removed_account_is_not_recorded_as_its_turn() {
         .clone_history()
         .await
         .raw_items()
-        .iter()
         .filter_map(|item| serde_json::to_string(item).ok())
         .filter(|line| line.contains(REFUSED_PROMPT))
         .collect::<Vec<_>>();

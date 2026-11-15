@@ -6,9 +6,10 @@
 
 use super::*;
 use crate::config::ConfigBuilder;
+use crate::config::ConfigOverrides;
 use codex_config::CONFIG_TOML_FILE;
-use codex_core_skills::config_rules::SkillConfigRuleSelector;
-use codex_core_skills::config_rules::skill_config_rules_from_stack;
+use codex_config::SkillConfigRuleSelector;
+use codex_config::skill_config_rules_from_stack;
 use codex_features::Feature;
 use codex_hooks::HookListEntry;
 use codex_hooks::HooksConfig;
@@ -131,7 +132,12 @@ fn listed_hook(config: &Config) -> HookListEntry {
     })
     .hooks
     .into_iter()
-    .find(|hook| hook.command.as_deref() == Some(HOOK_COMMAND))
+    .find(|hook| {
+        matches!(
+            &hook.handler,
+            codex_hooks::HookListEntryHandler::Command { command, .. } if command == HOOK_COMMAND
+        )
+    })
     .expect("the hook is listed")
 }
 

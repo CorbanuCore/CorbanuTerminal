@@ -5,9 +5,9 @@
 use super::handlers;
 use super::tests::make_session_and_context;
 use super::tests::open_thread_persistence;
+use codex_history::RolloutItem;
 use codex_protocol::ThreadId;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::RolloutItem;
 use codex_protocol::protocol::StreamErrorEvent;
 use codex_protocol::protocol::UserMessageEvent;
 use codex_thread_store::AppendThreadItemsParams;
@@ -66,7 +66,10 @@ impl ThreadStore for DeniableStore {
         self.local().create_thread(params)
     }
 
-    fn resume_thread(&self, params: ResumeThreadParams) -> ThreadStoreFuture<'_, ()> {
+    fn resume_thread(
+        &self,
+        params: ResumeThreadParams,
+    ) -> ThreadStoreFuture<'_, std::sync::Arc<Vec<RolloutItem>>> {
         self.local().resume_thread(params)
     }
 
@@ -75,9 +78,13 @@ impl ThreadStore for DeniableStore {
             .unwrap_or_else(|| self.local().append_items(params))
     }
 
-    fn persist_thread(&self, thread_id: ThreadId) -> ThreadStoreFuture<'_, ()> {
+    fn persist_thread(
+        &self,
+        thread_id: ThreadId,
+        context: codex_thread_store::PersistContext,
+    ) -> ThreadStoreFuture<'_, ()> {
         self.denial()
-            .unwrap_or_else(|| self.local().persist_thread(thread_id))
+            .unwrap_or_else(|| self.local().persist_thread(thread_id, context))
     }
 
     fn flush_thread(&self, thread_id: ThreadId) -> ThreadStoreFuture<'_, ()> {
@@ -119,7 +126,7 @@ impl ThreadStore for DeniableStore {
     fn update_thread_metadata(
         &self,
         params: UpdateThreadMetadataParams,
-    ) -> ThreadStoreFuture<'_, StoredThread> {
+    ) -> ThreadStoreFuture<'_, Option<StoredThread>> {
         self.local().update_thread_metadata(params)
     }
 
