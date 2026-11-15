@@ -107,9 +107,11 @@ async fn steer_accepts_runtime_user_layer_reload() {
     .expect("write user config");
     let current_config = sess.get_config().await;
     let next_config = load_latest_config_for_session(&sess).await;
-    let _ = sess
-        .refresh_runtime_config(current_config, next_config)
-        .await;
+    assert_eq!(
+        sess.refresh_runtime_config(current_config, next_config)
+            .await,
+        crate::ConfigRefreshOutcome::Published
+    );
 
     let submission = submit_steer_only(&sess, text_input("after reload"), &tc.sub_id).await;
     assert!(
@@ -402,10 +404,13 @@ async fn authorization_changed_deferred_input_survives_interrupt() {
 
 /// PF-13 (main's `user_turn_updates_approvals_reviewer`; upstream deleted the test with
 /// `Op::UserInput`): a user turn that changes the approvals reviewer starts with that reviewer,
-/// and the MCP state its tool calls use carries it.
+/// and the MCP state its tool calls use is republished with it before the turn executes: the
+/// turn's step capture (which runs before each sampling request) leaves no MCP refresh pending
+/// and the published runtime config, which MCP tool approvals and elicitation reviews read,
+/// carries the new reviewer.
 #[tokio::test]
 async fn user_turn_updates_approvals_reviewer_for_mcp() {
-    let (session, turn_context, _rx) = make_session_and_context_with_rx().await;
+    let (session, _turn_context, _rx) = make_session_and_context_with_rx().await;
     let config = session.get_config().await;
     let request = TurnInputRequest::new(SubmittedTurnInput::UserInput {
         content: text_input("hello"),
@@ -435,19 +440,28 @@ async fn user_turn_updates_approvals_reviewer_for_mcp() {
         started.config.approvals_reviewer,
         codex_config::types::ApprovalsReviewer::AutoReview
     );
-    let mcp = session
-        .latest_mcp_desired_state(
-            /*auth*/ None,
-            turn_context.initial_environments.clone(),
-        )
-        .await;
+    let step = session
+        .capture_step_context(Arc::clone(&started), &CancellationToken::new())
+        .await
+        .expect("capture the started turn's step");
+    assert!(
+        !session.mcp_refresh.is_pending(),
+        "the user-turn path must publish the refreshed MCP state before execution"
+    );
+    let published = session
+        .services
+        .mcp_runtime
+        .current_config()
+        .expect("the user-turn path should publish an MCP runtime config");
     let state = session.state.lock().await;
     assert_eq!(
         (
             state.session_configuration.step_settings.approvals_reviewer,
-            mcp.config.approvals_reviewer,
+            published.approvals_reviewer,
+            step.mcp.config().approvals_reviewer,
         ),
         (
+            codex_config::types::ApprovalsReviewer::AutoReview,
             codex_config::types::ApprovalsReviewer::AutoReview,
             codex_config::types::ApprovalsReviewer::AutoReview,
         )
@@ -768,7 +782,16 @@ async fn deferred_mail_does_not_interrupt_turn_local_sleep() {
 /// Main's `authorization_changed_public_injection_waits_for_later_model_turn`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn authorization_changed_public_injection_waits_for_later_model_turn() -> anyhow::Result<()> {
-    assert_authorization_changed_model_admission(/*schema*/ None).await
+    assert_authorization_changed_model_admission(NewWork::Injection).await
+}
+
+/// End-to-end form of the returned-input refusal: user input sent after the running turn's
+/// permissions changed is refused with `AuthorizationChanged`, never reaches that turn's model
+/// requests and, sent again, reaches the next turn.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn authorization_changed_returned_input_never_reaches_superseded_turn() -> anyhow::Result<()>
+{
+    assert_authorization_changed_model_admission(NewWork::UserInput { schema: None }).await
 }
 
 /// Main's `authorization_changed_natural_completion_preserves_model_output_schema`. Upstream
@@ -776,20 +799,28 @@ async fn authorization_changed_public_injection_waits_for_later_model_turn() -> 
 /// keeps its output schema.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn authorization_changed_returned_input_keeps_model_output_schema() -> anyhow::Result<()> {
-    assert_authorization_changed_model_admission(Some(json!({
-        "type": "object",
-        "properties": {"answer": {"type": "string"}},
-        "required": ["answer"],
-        "additionalProperties": false
-    })))
+    assert_authorization_changed_model_admission(NewWork::UserInput {
+        schema: Some(json!({
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+            "required": ["answer"],
+            "additionalProperties": false
+        })),
+    })
     .await
+}
+
+/// New work sent while the running turn's permissions changed.
+enum NewWork {
+    /// Public response-item injection (deferred by Core, recorded at the turn's end).
+    Injection,
+    /// User input (returned to the client, sent again after the turn).
+    UserInput { schema: Option<serde_json::Value> },
 }
 
 /// Real model requests: new work sent after the running turn's permissions changed never
 /// enters that turn's requests and is not lost.
-async fn assert_authorization_changed_model_admission(
-    schema: Option<serde_json::Value>,
-) -> anyhow::Result<()> {
+async fn assert_authorization_changed_model_admission(new_work: NewWork) -> anyhow::Result<()> {
     use core_test_support::responses::ev_function_call_with_namespace;
     use core_test_support::streaming_sse::start_streaming_sse_server;
 
@@ -868,27 +899,29 @@ async fn assert_authorization_changed_model_admission(
     })
     .await;
     let injected = "pf83 new work must wait for current authorization";
-    if let Some(schema) = schema.as_ref() {
+    let schema = match &new_work {
+        NewWork::UserInput { schema } => schema.clone(),
+        NewWork::Injection => None,
+    };
+    if let NewWork::UserInput { schema } = &new_work {
         let returned = test
             .codex
             .start_or_steer_turn(TurnInputRequest::user_input(text_input(injected)).on_start(
                 TurnStartOptions {
-                    final_output_json_schema: Some(schema.clone()),
+                    final_output_json_schema: schema.clone(),
                     ..Default::default()
                 },
             ))
             .await?;
-        // The running turn's output schema differs too; upstream reports that first. Either way
-        // the input goes back to the client instead of joining the turn.
-        assert!(
-            matches!(
-                returned,
-                TurnInputSubmission::NotSubmitted {
-                    reason: NotSubmittedReason::AuthorizationChanged
-                        | NotSubmittedReason::ActiveTurnOutputSchemaMismatch,
-                }
-            ),
-            "{returned:?}"
+        // A schema that differs from the running turn's is reported before the permissions.
+        let expected = if schema.is_some() {
+            NotSubmittedReason::ActiveTurnOutputSchemaMismatch
+        } else {
+            NotSubmittedReason::AuthorizationChanged
+        };
+        assert_eq!(
+            returned,
+            TurnInputSubmission::NotSubmitted { reason: expected }
         );
     } else {
         test.codex
@@ -913,14 +946,13 @@ async fn assert_authorization_changed_model_admission(
     .await;
     // Injected items are recorded at completion and start no turn; returned input is submitted
     // again by the client, with its schema.
-    let next_turn = match schema.as_ref() {
-        Some(schema) => {
-            TurnInputRequest::user_input(text_input(injected)).on_start(TurnStartOptions {
-                final_output_json_schema: Some(schema.clone()),
+    let next_turn = match &new_work {
+        NewWork::UserInput { schema } => TurnInputRequest::user_input(text_input(injected))
+            .on_start(TurnStartOptions {
+                final_output_json_schema: schema.clone(),
                 ..Default::default()
-            })
-        }
-        None => TurnInputRequest::user_input(text_input("read deferred items")),
+            }),
+        NewWork::Injection => TurnInputRequest::user_input(text_input("read deferred items")),
     };
     assert!(matches!(
         test.codex.start_or_steer_turn(next_turn).await?,
@@ -1008,11 +1040,7 @@ async fn authorization_changed_turn_receives_user_shell_output() {
             .expect("channel open");
         if let EventMsg::ExecCommandEnd(event) = event.msg {
             assert_eq!(event.exit_code, 0);
-            assert!(
-                event.aggregated_output.contains("pf83-shell-output"),
-                "{}",
-                event.aggregated_output
-            );
+            assert_eq!(event.aggregated_output.trim(), "pf83-shell-output");
             break;
         }
     }
