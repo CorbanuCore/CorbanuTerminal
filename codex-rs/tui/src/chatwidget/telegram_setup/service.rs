@@ -412,7 +412,8 @@ fn process_is_running(pid: u32) -> bool {
     use windows_sys::Win32::System::Threading::OpenProcess;
     use windows_sys::Win32::System::Threading::PROCESS_QUERY_LIMITED_INFORMATION;
     let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-    if handle == 0 {
+    // windows-sys 0.60+: HANDLE is a raw pointer.
+    if handle.is_null() {
         return false;
     }
     unsafe { CloseHandle(handle) };
