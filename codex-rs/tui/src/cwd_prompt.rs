@@ -133,17 +133,6 @@ pub(crate) async fn run_cwd_selection_prompt(
         frame.render_widget_ref(&screen, frame.area());
     })?;
 
-<<<<<<< HEAD
-||||||| 413492cd6c
-    let events = tui.event_stream();
-    tokio::pin!(events);
-
-=======
-    tui.discard_pending_input_before_interactive_screen()?;
-    let events = tui.event_stream();
-    tokio::pin!(events);
-
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     while !screen.is_done() {
         if let Some(event) = events.next().await {
             tui.screen_size_for_event(&event)?;

@@ -20,23 +20,11 @@ use crate::history_cell::HistoryCell;
 use crate::key_hint;
 use crate::key_hint::KeyBinding;
 use crate::key_hint::KeyBindingListExt;
-<<<<<<< HEAD
-use crate::keymap::ListKeymap;
-||||||| 413492cd6c
-=======
 use crate::key_hint::ShortcutHint;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use crate::keymap::ListKeymap;
 use crate::keymap::PagerKeymap;
-<<<<<<< HEAD
 use crate::mkdocs_overlay::MkDocsOverlay;
 use crate::mkdocs_viewer::MkDocsSite;
-use crate::render::Insets;
-use crate::render::renderable::InsetRenderable;
-||||||| 413492cd6c
-use crate::render::Insets;
-use crate::render::renderable::InsetRenderable;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::render::renderable::Renderable;
 use crate::terminal_hyperlinks::HyperlinkLine;
 use crate::tui;
@@ -61,12 +49,8 @@ use scrolling::render_offset_content;
 pub(crate) enum Overlay {
     Transcript(TranscriptOverlay),
     Static(StaticOverlay),
-<<<<<<< HEAD
     MkDocs(MkDocsOverlay),
-||||||| 413492cd6c
-=======
     Analytics(Box<crate::analytics::AnalyticsView>),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl Overlay {
@@ -117,22 +101,19 @@ impl Overlay {
     pub(crate) fn handle_event(&mut self, tui: &mut tui::Tui, event: TuiEvent) -> Result<()> {
         let mouse_capture = match self {
             Overlay::Transcript(_) | Overlay::Analytics(_) => tui::MouseCapture::Enabled,
-            Overlay::Static(_) => tui::MouseCapture::Disabled,
+            // The MkDocs viewer is keyboard-only, like the static pager.
+            Overlay::Static(_) | Overlay::MkDocs(_) => tui::MouseCapture::Disabled,
         };
         tui.set_mouse_capture(mouse_capture)?;
         let result = match self {
             Overlay::Transcript(o) => o.handle_event(tui, event).map(drop),
             Overlay::Static(o) => o.handle_event(tui, event),
-<<<<<<< HEAD
             Overlay::MkDocs(o) => o.handle_event(tui, event),
-||||||| 413492cd6c
-=======
             Overlay::Analytics(o) => o.handle_event(tui, event),
         };
         if result.is_err() || self.is_done() {
             let restore = tui.set_mouse_capture(tui::MouseCapture::Inherit);
             return result.and(restore);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         result
     }
@@ -141,12 +122,8 @@ impl Overlay {
         match self {
             Overlay::Transcript(o) => o.is_done(),
             Overlay::Static(o) => o.is_done(),
-<<<<<<< HEAD
             Overlay::MkDocs(o) => o.is_done(),
-||||||| 413492cd6c
-=======
             Overlay::Analytics(o) => o.is_done,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 }

@@ -36,21 +36,12 @@ async fn fork_current_session_preserves_conversation_ultra() -> Result<()> {
         daybreak_enabled: false,
         windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         model: "gpt-5.4".to_string(),
-<<<<<<< HEAD
         model_provider_id: codex_model_provider_info::OPENAI_PROVIDER_ID.to_string(),
-||||||| 413492cd6c
-=======
-        model_provider_id: app.config.model_provider_id.clone(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         reasoning_effort: Some(ReasoningEffortConfig::Ultra),
         ..test_thread_session(source_thread_id, test_path_buf("/tmp/project"))
     });
-<<<<<<< HEAD
-    while app_event_rx.try_recv().is_ok() {}
-||||||| 413492cd6c
-=======
     app.ensure_thread_channel(source_thread_id);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    while app_event_rx.try_recv().is_ok() {}
     let mut tui = crate::tui::test_support::make_test_tui()?;
 
     let control = Box::pin(app.handle_event(
@@ -61,7 +52,6 @@ async fn fork_current_session_preserves_conversation_ultra() -> Result<()> {
     .await?;
 
     assert!(matches!(control, AppRunControl::Continue));
-<<<<<<< HEAD
     let history = std::iter::from_fn(|| app_event_rx.try_recv().ok())
         .filter_map(|event| match event {
             AppEvent::InsertHistoryCell(cell) => {
@@ -75,17 +65,12 @@ async fn fork_current_session_preserves_conversation_ultra() -> Result<()> {
         Some(source_thread_id),
         "fork history: {history:?}"
     );
-||||||| 413492cd6c
-    assert_ne!(app.chat_widget.thread_id(), Some(source_thread_id));
-=======
-    assert_ne!(app.chat_widget.thread_id(), Some(source_thread_id));
     assert!(
         app.agents_overview
             .dispatched_requests
             .contains_key(&source_thread_id)
     );
     assert!(!app.thread_event_channels.contains_key(&source_thread_id));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     assert_eq!(app.chat_widget.current_model(), "gpt-5.4");
     assert_eq!(
         app.chat_widget.current_reasoning_effort(),

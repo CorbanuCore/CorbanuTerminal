@@ -197,24 +197,19 @@ impl ExecCell {
     }
 
     pub(crate) fn should_flush(&self) -> bool {
-<<<<<<< HEAD
+        // Exploration stays open for adjacent calls, including after a failed read/list/search,
+        // unless a call was declined, refused or ended with an unknown outcome.
         (!self.is_exploring_cell()
             || self
+                .group
                 .calls
                 .iter()
                 .any(|call| call.is_declined() || call.is_refused() || call.is_unknown()))
-            && self.calls.iter().all(ExecCall::is_complete)
-||||||| 413492cd6c
-        !self.is_exploring_cell() && self.calls.iter().all(|c| c.duration.is_some())
-=======
-        // Exploration stays open for adjacent calls, including after a failed read/list/search.
-        !self.is_exploring_cell() && self.group.calls.iter().all(|c| c.duration.is_some())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            && self.group.calls.iter().all(ExecCall::is_complete)
     }
 
     pub(crate) fn mark_failed(&mut self) {
-<<<<<<< HEAD
-        for call in self.calls.iter_mut() {
+        for call in self.group.calls.iter_mut() {
             if !call.is_complete() {
                 // ItemStarted can precede approval. Only captured output establishes that an
                 // incomplete call ran; silence also covers admitted commands that emitted nothing.
@@ -224,13 +219,6 @@ impl ExecCell {
                     call.duration = None;
                     continue;
                 }
-||||||| 413492cd6c
-        for call in self.calls.iter_mut() {
-            if call.duration.is_none() {
-=======
-        for call in self.group.calls.iter_mut() {
-            if call.duration.is_none() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 let elapsed = call
                     .start_time
                     .map(|st| st.elapsed())
@@ -249,13 +237,7 @@ impl ExecCell {
     }
 
     pub(crate) fn is_active(&self) -> bool {
-<<<<<<< HEAD
-        self.calls.iter().any(|c| !c.is_complete())
-||||||| 413492cd6c
-        self.calls.iter().any(|c| c.duration.is_none())
-=======
-        self.group.calls.iter().any(|c| c.duration.is_none())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        self.group.calls.iter().any(|c| !c.is_complete())
     }
 
     pub(crate) fn active_start_time(&self) -> Option<Instant> {
