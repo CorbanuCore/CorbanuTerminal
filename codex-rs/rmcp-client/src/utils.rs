@@ -42,9 +42,13 @@ pub(crate) fn create_env_overlay_for_remote_mcp_server(
     // Remote stdio should inherit PATH/HOME/etc. from the executor side, not
     // from the orchestrator process. Only forward variables explicitly named
     // by the MCP config plus literal env overrides from that config.
+    let armed = codex_protocol::secretless_launch::is_armed();
     env_vars
         .iter()
         .filter(|var| !var.is_remote_source())
+        .filter(|var| {
+            !armed || codex_protocol::secretless_launch::is_launch_env_name_allowed(var.name())
+        })
         .filter_map(|var| env::var_os(var.name()).map(|value| (OsString::from(var.name()), value)))
         .chain(extra_env.unwrap_or_default())
         .collect()

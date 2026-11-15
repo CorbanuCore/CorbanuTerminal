@@ -648,7 +648,8 @@ impl ExecutorStdioServerLauncher {
     }
 
     fn remote_env_policy(remote_env_vars: &[String]) -> ExecEnvPolicy {
-        let include_only = if remote_env_vars.is_empty() {
+        let armed = codex_protocol::secretless_launch::is_armed();
+        let include_only = if remote_env_vars.is_empty() && !armed {
             Vec::new()
         } else {
             // `source = "remote"` means the value is read from the executor's
@@ -659,6 +660,16 @@ impl ExecutorStdioServerLauncher {
                 .iter()
                 .map(|name| (*name).to_string())
                 .chain(remote_env_vars.iter().cloned())
+                // The executor need not have armed PF-27-S02 itself. Apply the
+                // same inherited-name boundary as local MCP before sending it
+                // the policy; literal server `env` remains a separate overlay.
+                // include_only is a glob list, so never let an allowed-looking
+                // name such as CORBANU_* widen it to credential variables.
+                .filter(|name| {
+                    !armed
+                        || (!name.contains(['*', '?'])
+                            && codex_protocol::secretless_launch::is_launch_env_name_allowed(name))
+                })
                 .collect()
         };
         ExecEnvPolicy {
@@ -674,6 +685,10 @@ impl ExecutorStdioServerLauncher {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "stdio_secretless_tests.rs"]
+mod secretless_tests;
 
 #[cfg(test)]
 mod tests {
