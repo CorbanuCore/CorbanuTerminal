@@ -147,16 +147,57 @@ fn session_start_error(
     color_eyre::eyre::eyre!("Failed to {action} session from {target_label}: {err}")
 }
 
+/// A resume/fork the app server refused (archived thread, account rules, ...) ends the launch
+/// with a plain `ERROR:` line like other launch refusals (#656). Anything else (transport
+/// failure, bad response) stays an error report.
+pub(crate) fn session_start_refusal_exit(
+    action: &str,
+    thread_id: codex_protocol::ThreadId,
+    err: &color_eyre::Report,
+) -> Option<AppExitInfo> {
+    if let Some(message) = archived_session_guidance(err) {
+        return Some(AppExitInfo::fatal(message));
+    }
+    let message = session_start_refusal(action, err)?;
+    Some(AppExitInfo::fatal(format!(
+        "Could not {action} session {thread_id}: {message}"
+    )))
+}
+
+/// The server's own message when `thread/{action}` was answered with a JSON-RPC error, without
+/// the bootstrap context and error code.
+fn session_start_refusal(action: &str, err: &color_eyre::Report) -> Option<String> {
+    let err = err.to_string();
+    let server_prefix = format!("thread/{action} failed: ");
+    let message = &err[err.find(&server_prefix)? + server_prefix.len()..];
+    // `{message} (code {code})`, then `, data: {data}` when the error has data; either part may
+    // itself contain ` (code `.
+    let (end, _) = message.match_indices(" (code ").find(|(start, marker)| {
+        message[start + marker.len()..]
+            .split_once(')')
+            .is_some_and(|(code, rest)| {
+                code.parse::<i64>().is_ok() && (rest.is_empty() || rest.starts_with(", data: "))
+            })
+    })?;
+    let message = message[..end].trim();
+    (!message.is_empty()).then(|| message.to_string())
+}
+
+/// The server's archive guidance, naming the `corbanu` command.
 fn archived_session_guidance(err: &color_eyre::Report) -> Option<String> {
     let err = err.to_string();
     let message = &err[err.find("session ")?..];
-    if !message.contains(" is archived. Run `codex unarchive ") {
+    if !message.contains(" is archived. Run `") || !message.contains(" unarchive ") {
         return None;
     }
     let message = message
         .split_once(" (code ")
         .map_or(message, |(message, _)| message);
-    Some(message.to_string())
+    Some(
+        message
+            .replace("Run `codex unarchive ", "Run `corbanu unarchive ")
+            .replace("Run `pfterminal unarchive ", "Run `corbanu unarchive "),
+    )
 }
 
 #[cfg(test)]

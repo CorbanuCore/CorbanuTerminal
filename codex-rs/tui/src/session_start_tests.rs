@@ -179,13 +179,16 @@ fn session_start_error_surfaces_archived_guidance_without_rollout_path() {
         cwd: None,
         history_mode: None,
     };
-    let expected = format!(
+    let server_message = format!(
         "session {thread_id} is archived. Run `codex unarchive {thread_id}` to unarchive it first."
+    );
+    let expected = format!(
+        "session {thread_id} is archived. Run `corbanu unarchive {thread_id}` to unarchive it first."
     );
 
     for action in ["resume", "fork"] {
         let err = color_eyre::eyre::eyre!(
-            "thread/{action} failed during TUI bootstrap: thread/{action} failed: {expected} (code -32600)"
+            "thread/{action} failed during TUI bootstrap: thread/{action} failed: {server_message} (code -32600)"
         );
 
         assert_eq!(

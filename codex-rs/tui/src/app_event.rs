@@ -68,21 +68,12 @@ use codex_features::Feature;
 use codex_plugin::PluginCapabilitySummary;
 use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::models::ActivePermissionProfile;
-<<<<<<< HEAD
 use codex_protocol::openai_models::ReasoningEffort;
-use zeroize::Zeroize;
-||||||| 413492cd6c
-use codex_protocol::openai_models::ReasoningEffort;
-=======
 use codex_realtime_webrtc::StartedRealtimeWebrtcSession;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use zeroize::Zeroize;
 
 use crate::history_cell::HistoryCell;
-<<<<<<< HEAD
 use crate::mkdocs_viewer::MkDocsSite;
-||||||| 413492cd6c
-
-=======
 
 #[derive(Debug)]
 pub(crate) struct RealtimeWebrtcStartupFailure {
@@ -140,7 +131,6 @@ pub(crate) struct ManagedWorktreeCreated {
     >,
 }
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ThreadGoalSetMode {
     ConfirmIfExists,
@@ -2021,19 +2011,12 @@ pub(crate) enum AppEvent {
     /// Update the current model slug in the running app and widget.
     UpdateModel(String),
 
-<<<<<<< HEAD
     /// Update model and provider together so active thread settings stay coherent.
     UpdateModelSelection {
         model: String,
         provider: Option<String>,
     },
 
-    /// Update the current personality in the running app and widget.
-    UpdatePersonality(Personality),
-||||||| 413492cd6c
-    /// Update the current personality in the running app and widget.
-    UpdatePersonality(Personality),
-=======
     /// Apply a model-picker selection to the active conversation and saved local defaults.
     ApplyModelSelection {
         model: String,
@@ -2066,7 +2049,6 @@ pub(crate) enum AppEvent {
     StopRealtimeConversation {
         thread_id: ThreadId,
     },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     /// Finish a settings selection after its preceding update events have been applied.
     SettingsSelectionClosed,
