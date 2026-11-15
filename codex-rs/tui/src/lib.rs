@@ -776,11 +776,17 @@ pub(crate) async fn start_embedded_app_server_for_picker(
 /// test model); an embedded server reloads config from disk for resume and input checks, so it
 /// must see the same provider or each resume is refused as a provider mismatch. Only other
 /// built-in providers: the server already defaults to OpenAI, and a custom in-memory provider
-/// is not in the server's config.
+/// is not in the server's config. A test that chose the server's model or provider in its
+/// own `config.toml` keeps that choice.
 #[cfg(test)]
 pub(crate) fn test_provider_session_flags(config: &Config) -> Vec<(String, toml::Value)> {
     let provider = config.model_provider_id.clone();
-    (provider != codex_model_provider_info::OPENAI_PROVIDER_ID
+    let server_chooses_model = std::fs::read_to_string(config.codex_home.join("config.toml"))
+        .ok()
+        .and_then(|text| text.parse::<toml::Table>().ok())
+        .is_some_and(|table| table.contains_key("model") || table.contains_key("model_provider"));
+    (!server_chooses_model
+        && provider != codex_model_provider_info::OPENAI_PROVIDER_ID
         && codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
             .contains_key(&provider))
     .then(|| ("model_provider".to_string(), toml::Value::String(provider)))
