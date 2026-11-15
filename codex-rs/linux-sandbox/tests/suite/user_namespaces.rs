@@ -242,10 +242,10 @@ async fn issue_826_denied_user_namespaces_keep_hidden_files_hidden() {
 /// namespace through it), and a raw `clone(CLONE_NEWUSER)` is refused like
 /// `unshare`.
 ///
-/// Upstream's sandbox now runs the inner stage (which then becomes the
-/// command) as PID 1 and adds its own filters there: a VM-socket filter on
-/// every restricted-filesystem run, and the inner stage's copy of the
-/// user-namespace programs. So PID 1 is checked for what #826 needs, the two
+/// Upstream's sandbox now runs the inner stage as PID 1 (`--as-pid-1`); it
+/// forks the command and stays PID 1 as its reaper, with its own filters on
+/// top of bubblewrap's: a VM-socket filter on every restricted-filesystem
+/// run, and its copy of the user-namespace programs. So PID 1 is checked for what #826 needs, the two
 /// user-namespace programs on top of whatever a run without the entry gets,
 /// rather than for an exact count.
 #[tokio::test]
