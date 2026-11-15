@@ -24,7 +24,7 @@ async fn zai_session(
 
 fn open_all_models(chat: &mut ChatWidget) -> String {
     let presets = chat.model_catalog.try_list_models().expect("catalog");
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     render_bottom_popup_with_height(chat, /*width*/ 110, /*height*/ 36)
 }
 
@@ -421,7 +421,7 @@ async fn a_default_models_connections_stay_together_with_distinct_ids() {
     let unique = zai_ids.iter().collect::<std::collections::HashSet<_>>();
     assert_eq!(unique.len(), zai_ids.len(), "{zai_ids:?}");
 
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 110, /*height*/ 36);
     let position = |label: &str| {
         popup

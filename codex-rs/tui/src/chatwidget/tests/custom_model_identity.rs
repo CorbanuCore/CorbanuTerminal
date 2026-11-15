@@ -23,7 +23,7 @@ async fn custom_model_routes_are_distinguishable_before_selection() {
     let mut other = preset.clone();
     other.provider_id = Some("qa-b".to_string());
 
-    chat.open_all_models_popup(vec![preset, other]);
+    chat.open_all_models_popup_for_purpose(vec![preset, other], ModelSelectionPurpose::Session);
     let popup = render_bottom_popup(&chat, /*width*/ 100);
     assert!(popup.contains("fixture-model via qa-a (current)"));
     assert!(popup.contains("fixture-model via qa-b"));

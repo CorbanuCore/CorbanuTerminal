@@ -38,6 +38,7 @@ impl ChatWidget {
         let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
             tx.send(AppEvent::OpenReasoningPopup {
                 model: preset.clone(),
+                purpose: ModelSelectionPurpose::Session,
             });
         })];
         let header = self.model_menu_header(
