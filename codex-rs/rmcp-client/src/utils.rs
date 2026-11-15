@@ -11,6 +11,28 @@ use std::ffi::OsString;
 
 const MCP_USER_AGENT: &str = concat!("codex-mcp-client/", env!("CARGO_PKG_VERSION"));
 
+/// One snapshot for both halves of an executor MCP launch's environment.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum McpInheritedEnv {
+    Configured,
+    Secretless,
+}
+
+impl McpInheritedEnv {
+    pub(crate) fn current() -> Self {
+        if codex_protocol::secretless_launch::is_armed() {
+            Self::Secretless
+        } else {
+            Self::Configured
+        }
+    }
+
+    pub(crate) fn allows_name(self, name: &str) -> bool {
+        self == Self::Configured
+            || codex_protocol::secretless_launch::is_launch_env_name_allowed(name)
+    }
+}
+
 pub(crate) fn create_env_for_mcp_server(
     extra_env: Option<HashMap<OsString, OsString>>,
     env_vars: &[McpServerEnvVar],
@@ -38,17 +60,15 @@ pub(crate) fn create_env_for_mcp_server(
 pub(crate) fn create_env_overlay_for_remote_mcp_server(
     extra_env: Option<HashMap<OsString, OsString>>,
     env_vars: &[McpServerEnvVar],
+    inheritance: McpInheritedEnv,
 ) -> HashMap<OsString, OsString> {
     // Remote stdio should inherit PATH/HOME/etc. from the executor side, not
     // from the orchestrator process. Only forward variables explicitly named
     // by the MCP config plus literal env overrides from that config.
-    let armed = codex_protocol::secretless_launch::is_armed();
     env_vars
         .iter()
         .filter(|var| !var.is_remote_source())
-        .filter(|var| {
-            !armed || codex_protocol::secretless_launch::is_launch_env_name_allowed(var.name())
-        })
+        .filter(|var| inheritance.allows_name(var.name()))
         .filter_map(|var| env::var_os(var.name()).map(|value| (OsString::from(var.name()), value)))
         .chain(extra_env.unwrap_or_default())
         .collect()
@@ -131,8 +151,7 @@ pub(crate) fn build_default_headers(
     Ok(headers)
 }
 
-#[cfg(unix)]
-pub(crate) const DEFAULT_ENV_VARS: &[&str] = &[
+pub(crate) const UNIX_DEFAULT_ENV_VARS: &[&str] = &[
     "HOME",
     "LOGNAME",
     "PATH",
@@ -145,6 +164,9 @@ pub(crate) const DEFAULT_ENV_VARS: &[&str] = &[
     "TMPDIR",
     "TZ",
 ];
+
+#[cfg(unix)]
+pub(crate) const DEFAULT_ENV_VARS: &[&str] = UNIX_DEFAULT_ENV_VARS;
 
 #[cfg(windows)]
 pub(crate) const DEFAULT_ENV_VARS: &[&str] =
@@ -234,8 +256,11 @@ mod tests {
         let _default_guard = EnvVarGuard::set(default_var, "from-default");
         let _custom_guard = EnvVarGuard::set(custom_var, &custom_value);
 
-        let env =
-            create_env_overlay_for_remote_mcp_server(/*extra_env*/ None, &[custom_var.into()]);
+        let env = create_env_overlay_for_remote_mcp_server(
+            /*extra_env*/ None,
+            &[custom_var.into()],
+            McpInheritedEnv::Configured,
+        );
 
         assert_eq!(
             env,
@@ -264,6 +289,7 @@ mod tests {
                     source: Some("local".to_string()),
                 },
             ],
+            McpInheritedEnv::Configured,
         );
 
         assert_eq!(

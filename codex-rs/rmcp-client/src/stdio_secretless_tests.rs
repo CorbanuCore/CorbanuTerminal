@@ -60,7 +60,21 @@ impl ExecBackend for RecordingExecutor {
     }
 }
 
+#[derive(Clone, Copy)]
+enum ExecutorPlatform {
+    Host,
+    Windows,
+    Unix,
+}
+
 fn remote_env(env_vars: Vec<McpServerEnvVar>) -> HashMap<String, String> {
+    remote_env_on_platform(env_vars, ExecutorPlatform::Host)
+}
+
+fn remote_env_on_platform(
+    env_vars: Vec<McpServerEnvVar>,
+    platform: ExecutorPlatform,
+) -> HashMap<String, String> {
     let backend = Arc::new(RecordingExecutor::default());
     let command = StdioServerCommand::new(
         OsString::from("fixture-mcp"),
@@ -89,7 +103,7 @@ fn remote_env(env_vars: Vec<McpServerEnvVar>) -> HashMap<String, String> {
     assert!(error.to_string().contains("fixture captured launch"));
     let params = backend.0.lock().unwrap().take().expect("launch request");
     let exec_policy = params.env_policy.expect("explicit environment policy");
-    let policy = ShellEnvironmentPolicy {
+    let mut policy = ShellEnvironmentPolicy {
         inherit: exec_policy.inherit,
         ignore_default_excludes: exec_policy.ignore_default_excludes,
         exclude: exec_policy
@@ -121,6 +135,41 @@ fn remote_env(env_vars: Vec<McpServerEnvVar>) -> HashMap<String, String> {
             "synthetic-remote".to_string(),
         ),
     ]);
+    inherited.insert("LC_CTYPE".to_string(), "synthetic-locale".to_string());
+    if matches!(platform, ExecutorPlatform::Windows) {
+        inherited.extend([
+            ("SYSTEMROOT".to_string(), "C:\\Windows".to_string()),
+            (
+                "COMSPEC".to_string(),
+                "C:\\Windows\\System32\\cmd.exe".to_string(),
+            ),
+            ("TEMP".to_string(), "C:\\Temp".to_string()),
+            ("TMP".to_string(), "C:\\Temp".to_string()),
+            ("USERNAME".to_string(), "fixture-user".to_string()),
+            ("HOMEPATH".to_string(), "\\Users\\fixture".to_string()),
+            (
+                "APPDATA".to_string(),
+                "C:\\Users\\fixture\\AppData".to_string(),
+            ),
+        ]);
+    }
+    let receiver_core = match platform {
+        ExecutorPlatform::Host => None,
+        ExecutorPlatform::Windows => Some(shell_environment::WINDOWS_CORE_ENV_VARS),
+        ExecutorPlatform::Unix => Some(shell_environment::UNIX_CORE_ENV_VARS),
+    };
+    if let Some(core_names) = receiver_core
+        && policy.inherit == ShellEnvironmentPolicyInherit::Core
+    {
+        // Model the receiver's Core selection before the shared policy
+        // filters; using the host's Core list would hide cross-OS regressions.
+        inherited.retain(|name, _| {
+            core_names
+                .iter()
+                .any(|core| name.eq_ignore_ascii_case(core))
+        });
+        policy.inherit = ShellEnvironmentPolicyInherit::All;
+    }
     let mut env =
         shell_environment::create_env_from_vars(inherited, &policy, /*thread_id*/ None);
     env.extend(params.env);
@@ -220,6 +269,55 @@ fn pf_27_s02_remote_host_overlay_matches_local_mcp() {
                 local.get(std::ffi::OsStr::new("CORBANU_TEST_NO_NATIVE_KEYRING")),
                 Some(&OsString::from("1"))
             );
+        },
+    );
+}
+
+#[test]
+fn pf_27_s02_remote_platform_defaults_survive_on_any_host() {
+    isolated(
+        "stdio_server_launcher::secretless_tests::pf_27_s02_remote_platform_defaults_survive_on_any_host",
+        || {
+            codex_protocol::secretless_launch::arm();
+            for vars in [
+                Vec::new(),
+                vec![McpServerEnvVar::Config {
+                    name: "ZAI_API_KEY".to_string(),
+                    source: Some("remote".to_string()),
+                }],
+            ] {
+                let unix = remote_env_on_platform(vars.clone(), ExecutorPlatform::Unix);
+                let env = remote_env_on_platform(vars, ExecutorPlatform::Windows);
+                assert_protected(&env);
+                let names = [
+                    "SYSTEMROOT",
+                    "COMSPEC",
+                    "TEMP",
+                    "TMP",
+                    "USERNAME",
+                    "HOMEPATH",
+                ];
+                assert_eq!(
+                    names.map(|name| env.get(name).map(String::as_str)),
+                    [
+                        Some("C:\\Windows"),
+                        Some("C:\\Windows\\System32\\cmd.exe"),
+                        Some("C:\\Temp"),
+                        Some("C:\\Temp"),
+                        Some("fixture-user"),
+                        Some("\\Users\\fixture")
+                    ]
+                );
+                assert!(
+                    !env.contains_key("APPDATA"),
+                    "off-allowlist defaults stay filtered"
+                );
+                assert_protected(&unix);
+                assert_eq!(
+                    unix.get("LC_CTYPE").map(String::as_str),
+                    Some("synthetic-locale")
+                );
+            }
         },
     );
 }

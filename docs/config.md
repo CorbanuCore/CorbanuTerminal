@@ -405,8 +405,10 @@ value. For example, a server using the GitHub API can receive a dedicated token:
 GITHUB_TOKEN = "replace-with-a-token-for-this-server"
 ```
 
-That value belongs only to this server's configuration; Corbanu does not copy
-its inherited `GITHUB_TOKEN`. Without protected launch, named `env_vars` keep
+Keep this token in your private user configuration, not in a project file
+committed to version control. While protected launch is armed, Corbanu uses
+that server's configured value instead of copying its inherited `GITHUB_TOKEN`.
+Without protected launch, named `env_vars` keep
 their existing behavior. A shell profile that exports a key itself (for example
 a login shell reading `~/.zprofile`) is outside this environment filter.
 
