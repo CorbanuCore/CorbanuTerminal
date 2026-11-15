@@ -1,11 +1,13 @@
 ---
 source: tui/src/bottom_pane/mod.rs
+assertion_line: 3966
 expression: "render_snapshot(&pane, area)"
 ---
                                                             
   Would you like to run the following command?              
                                                             
   $ echo ok                                                 
+                                                            
                                                             
 › 1. Yes, proceed (y)                                       
   2. No, and tell Corbanu Terminal what to do differently   
