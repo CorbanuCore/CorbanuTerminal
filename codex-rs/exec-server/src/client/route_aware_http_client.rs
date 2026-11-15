@@ -62,8 +62,8 @@ const HTTP_HEADER_ENV_DENYLIST: &[&str] = &[
     "AZURE_CLIENT_SECRET",
     "AZURE_FEDERATED_TOKEN_FILE",
     "GOOGLE_APPLICATION_CREDENTIALS",
-    // Corbanu provider credentials no built-in provider names as its `env_key`
-    // (the rest come from the built-in provider table, #2316).
+    // Provider credentials Corbanu reads that no built-in provider names as its
+    // `env_key`; the rest come from the built-in provider table (#2316).
     "AZURE_OPENAI_API_KEY",
     "ANTHROPIC_AUTH_TOKEN",
     "CLAUDE_CODE_OAUTH_TOKEN",
