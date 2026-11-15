@@ -2597,6 +2597,11 @@ async fn multi_agent_v2_list_agents_lists_only_the_callers_agents() {
         .start_thread(StartThreadOptions::new((*turn.config).clone()))
         .await
         .expect("root thread should start");
+    // This positive control must register the caller's /root before the foreign
+    // spawn does. The second-root regression test covers the opposite ordering.
+    manager
+        .agent_control()
+        .register_session_root(root.thread_id, /*current_parent_thread_id*/ None);
     let other_root = manager
         .start_thread(StartThreadOptions::new((*turn.config).clone()))
         .await
