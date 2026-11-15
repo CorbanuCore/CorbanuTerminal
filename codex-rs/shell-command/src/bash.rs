@@ -226,6 +226,12 @@ pub fn parse_shell_lc_plain_commands(command: &[String]) -> Option<Vec<Vec<Strin
     parse_shell_script_into_commands(script)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LiteralWordMode {
+    Verbatim,
+    DecodeForForcedRm,
+}
+
 /// Extracts the literal portions of command invocations from a shell script.
 ///
 /// Unlike [`parse_shell_lc_plain_commands`], this accepts complex shell syntax
@@ -233,7 +239,10 @@ pub fn parse_shell_lc_plain_commands(command: &[String]) -> Option<Vec<Vec<Strin
 /// syntax tree. Dynamic words and redirections are omitted. This is suitable
 /// for identifying dangerous literal commands, but must not be used to prove
 /// that a command is safe.
-pub(crate) fn parse_shell_lc_literal_commands(command: &[String]) -> Option<Vec<Vec<String>>> {
+pub(crate) fn parse_shell_lc_literal_commands(
+    command: &[String],
+    mode: LiteralWordMode,
+) -> Option<Vec<Vec<String>>> {
     let (_, script) = extract_bash_command(command)?;
     let tree = try_parse_shell(script)?;
     let root = tree.root_node();
@@ -245,7 +254,7 @@ pub(crate) fn parse_shell_lc_literal_commands(command: &[String]) -> Option<Vec<
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
         if node.kind() == "command"
-            && let Some(command) = parse_literal_command_from_node(node, script)
+            && let Some(command) = parse_literal_command_from_node(node, script, mode)
         {
             commands.push(command);
         }
@@ -337,7 +346,11 @@ fn parse_plain_command_from_node(cmd: tree_sitter::Node, src: &str) -> Option<Ve
     Some(words)
 }
 
-fn parse_literal_command_from_node(cmd: Node<'_>, src: &str) -> Option<Vec<String>> {
+fn parse_literal_command_from_node(
+    cmd: Node<'_>,
+    src: &str,
+    mode: LiteralWordMode,
+) -> Option<Vec<String>> {
     if cmd.kind() != "command" {
         return None;
     }
@@ -347,10 +360,11 @@ fn parse_literal_command_from_node(cmd: Node<'_>, src: &str) -> Option<Vec<Strin
     let mut cursor = cmd.walk();
     for child in cmd.named_children(&mut cursor) {
         if child.kind() == "command_name" {
-            let command_name = parse_literal_shell_word(child.named_child(0)?, src)?;
+            let command_name = parse_literal_shell_word(child.named_child(0)?, src, mode)?;
             words.push(command_name);
             found_command_name = true;
-        } else if found_command_name && let Some(word) = parse_literal_shell_word(child, src) {
+        } else if found_command_name && let Some(word) = parse_literal_shell_word(child, src, mode)
+        {
             words.push(word);
         }
     }
@@ -358,7 +372,32 @@ fn parse_literal_command_from_node(cmd: Node<'_>, src: &str) -> Option<Vec<Strin
     found_command_name.then_some(words)
 }
 
-fn parse_literal_shell_word(node: Node<'_>, src: &str) -> Option<String> {
+#[path = "bash/ansi_c.rs"]
+mod ansi_c;
+
+fn parse_literal_shell_word(node: Node<'_>, src: &str, mode: LiteralWordMode) -> Option<String> {
+    if mode == LiteralWordMode::DecodeForForcedRm {
+        match node.kind() {
+            "ansi_c_string" => return ansi_c::decode(node.utf8_text(src.as_bytes()).ok()?),
+            "string" => {
+                // Reject substitutions before removing shell quote/escape syntax.
+                parse_double_quoted_string(node, src)?;
+                return shlex::split(node.utf8_text(src.as_bytes()).ok()?)
+                    .filter(|words| words.len() == 1)
+                    .and_then(|words| words.into_iter().next());
+            }
+            "translated_string" => {
+                // Inspect the literal source message; never load locale catalogs.
+                return parse_literal_shell_word(node.named_child(0)?, src, mode);
+            }
+            "word" | "number" if is_literal_word_or_number(node) => {
+                return shlex::split(node.utf8_text(src.as_bytes()).ok()?)
+                    .filter(|words| words.len() == 1)
+                    .and_then(|words| words.into_iter().next());
+            }
+            _ => {}
+        }
+    }
     match node.kind() {
         "word" | "number" if is_literal_word_or_number(node) => {
             Some(node.utf8_text(src.as_bytes()).ok()?.to_owned())
@@ -369,7 +408,7 @@ fn parse_literal_shell_word(node: Node<'_>, src: &str) -> Option<String> {
             let mut concatenated = String::new();
             let mut cursor = node.walk();
             for part in node.named_children(&mut cursor) {
-                concatenated.push_str(&parse_literal_shell_word(part, src)?);
+                concatenated.push_str(&parse_literal_shell_word(part, src, mode)?);
             }
             (!concatenated.is_empty()).then_some(concatenated)
         }

@@ -1,3 +1,4 @@
+use crate::bash::LiteralWordMode;
 use crate::bash::parse_shell_lc_literal_commands;
 use std::path::Path;
 #[cfg(windows)]
@@ -17,34 +18,49 @@ const MAX_DANGEROUS_COMMAND_WRAPPER_DEPTH: usize = 8;
 
 /// Returns the dangerous-command rule matched by an already-tokenized command.
 pub fn dangerous_command_match(command: &[String]) -> Option<DangerousCommandMatch> {
-    dangerous_command_match_with_depth(command, /*wrapper_depth*/ 0)
+    dangerous_command_match_with_depth(command, /*wrapper_depth*/ 0, LiteralWordMode::Verbatim)
+        .or_else(|| {
+            // Only add forced-rm matches. Keeping the old pass means decoding a
+            // previously omitted "--" cannot weaken an existing refusal.
+            dangerous_command_match_with_depth(
+                command,
+                /*wrapper_depth*/ 0,
+                LiteralWordMode::DecodeForForcedRm,
+            )
+            .filter(|matched| *matched == DangerousCommandMatch::ForcedRm)
+        })
 }
 
 fn dangerous_command_match_with_depth(
     command: &[String],
     wrapper_depth: usize,
+    mode: LiteralWordMode,
 ) -> Option<DangerousCommandMatch> {
     if wrapper_depth > MAX_DANGEROUS_COMMAND_WRAPPER_DEPTH {
         return None;
     }
 
-    if let Some(dangerous_match) = dangerous_command_match_for_exec(command, wrapper_depth) {
+    if let Some(dangerous_match) = dangerous_command_match_for_exec(command, wrapper_depth, mode) {
         return Some(dangerous_match);
     }
 
     // Support shell scripts where any literal command might be dangerous,
     // including commands nested in control flow or substitutions.
-    if let Some(dangerous_match) = parse_shell_lc_literal_commands(command).and_then(|commands| {
-        commands
-            .iter()
-            .find_map(|command| dangerous_command_match_with_depth(command, wrapper_depth + 1))
-    }) {
+    if let Some(dangerous_match) =
+        parse_shell_lc_literal_commands(command, mode).and_then(|commands| {
+            commands.iter().find_map(|command| {
+                dangerous_command_match_with_depth(command, wrapper_depth + 1, mode)
+            })
+        })
+    {
         return Some(dangerous_match);
     }
 
     #[cfg(windows)]
     {
-        if windows_dangerous_commands::is_dangerous_command_windows(command) {
+        if mode == LiteralWordMode::Verbatim
+            && windows_dangerous_commands::is_dangerous_command_windows(command)
+        {
             return Some(DangerousCommandMatch::Other);
         }
     }
@@ -169,6 +185,7 @@ pub(crate) fn find_git_subcommand<'a>(
 fn dangerous_command_match_for_exec(
     command: &[String],
     wrapper_depth: usize,
+    mode: LiteralWordMode,
 ) -> Option<DangerousCommandMatch> {
     let cmd0 = command
         .first()
@@ -180,13 +197,13 @@ fn dangerous_command_match_for_exec(
         }
 
         // For sudo <cmd>, simply check <cmd>.
-        Some("sudo") => dangerous_command_match_with_depth(&command[1..], wrapper_depth + 1),
+        Some("sudo") => dangerous_command_match_with_depth(&command[1..], wrapper_depth + 1, mode),
 
         // Skip environment assignments before checking the command run by env.
-        Some("env") => dangerous_command_match_for_env(command, wrapper_depth),
+        Some("env") => dangerous_command_match_for_env(command, wrapper_depth, mode),
 
         // A trap action is shell source stored in the first operand.
-        Some("trap") => dangerous_command_match_for_trap(command, wrapper_depth),
+        Some("trap") => dangerous_command_match_for_trap(command, wrapper_depth, mode),
 
         // ── anything else ─────────────────────────────────────────────────
         _ => None,
@@ -196,6 +213,7 @@ fn dangerous_command_match_for_exec(
 fn dangerous_command_match_for_env(
     command: &[String],
     wrapper_depth: usize,
+    mode: LiteralWordMode,
 ) -> Option<DangerousCommandMatch> {
     let mut command_index = 1;
     while let Some(argument) = command.get(command_index) {
@@ -213,12 +231,13 @@ fn dangerous_command_match_for_env(
         }
         break;
     }
-    dangerous_command_match_with_depth(&command[command_index..], wrapper_depth + 1)
+    dangerous_command_match_with_depth(&command[command_index..], wrapper_depth + 1, mode)
 }
 
 fn dangerous_command_match_for_trap(
     command: &[String],
     wrapper_depth: usize,
+    mode: LiteralWordMode,
 ) -> Option<DangerousCommandMatch> {
     let mut action_index = 1;
     if command
@@ -231,19 +250,25 @@ fn dangerous_command_match_for_trap(
         .get(action_index)
         .filter(|action| !action.starts_with('-'))?;
     let shell_command = vec!["sh".to_string(), "-c".to_string(), action.clone()];
-    dangerous_command_match_with_depth(&shell_command, wrapper_depth + 1)
+    dangerous_command_match_with_depth(&shell_command, wrapper_depth + 1, mode)
 }
 
 fn rm_args_include_force_option(args: &[String]) -> bool {
     args.iter()
         .take_while(|arg| arg.as_str() != "--")
         .any(|arg| {
-            arg == "--force"
+            // GNU getopt_long accepts every nonempty, unambiguous prefix.
+            arg.strip_prefix("--")
+                .is_some_and(|option| !option.is_empty() && "force".starts_with(option))
                 || arg
                     .strip_prefix('-')
                     .is_some_and(|flags| !flags.starts_with('-') && flags.contains('f'))
         })
 }
+
+#[cfg(test)]
+#[path = "forced_rm_spelling_tests.rs"]
+mod forced_rm_spelling_tests;
 
 #[cfg(test)]
 mod tests {
