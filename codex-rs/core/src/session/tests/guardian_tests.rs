@@ -683,7 +683,7 @@ async fn strict_auto_review_turn_grant_forces_guardian_for_exec_command_policy_s
 
     let (mut session, mut turn_context_raw, _codex_home) =
         make_session_and_context_with_provider_auth().await;
-    session.record_granted_request_permissions_for_turn(
+    assert!(session.record_granted_request_permissions_for_turn(
         &RequestPermissionsResponse {
             permissions: RequestPermissionProfile {
                 network: Some(NetworkPermissions {
@@ -697,7 +697,7 @@ async fn strict_auto_review_turn_grant_forces_guardian_for_exec_command_policy_s
         codex_exec_server::LOCAL_ENVIRONMENT_ID,
         &turn_context_raw,
         session.services.authority_marker(),
-    );
+    ));
 
     Arc::make_mut(&mut turn_context_raw.config)
         .permissions
@@ -1229,7 +1229,7 @@ async fn exec_command_allows_sticky_turn_permissions_without_inline_request_perm
         .features
         .enable(Feature::RequestPermissionsTool)
         .expect("test setup should allow enabling request permissions tool");
-    turn_context_raw.record_granted_permissions(
+    assert!(turn_context_raw.record_granted_permissions(
         codex_exec_server::LOCAL_ENVIRONMENT_ID,
         PermissionProfile {
             network: Some(NetworkPermissions {
@@ -1239,7 +1239,7 @@ async fn exec_command_allows_sticky_turn_permissions_without_inline_request_perm
         },
         /*strict_auto_review*/ false,
         session.services.authority_marker(),
-    );
+    ));
     let session = Arc::new(session);
     let turn_context = Arc::new(turn_context_raw);
 

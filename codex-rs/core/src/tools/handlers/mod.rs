@@ -811,8 +811,8 @@ mod tests {
         )
     }
 
-    #[test]
-    fn issue_1057_grants_are_carried() {
+    #[tokio::test]
+    async fn issue_1057_grants_are_carried() {
         let cwd = PathUri::from_abs_path(
             &AbsolutePathBuf::from_absolute_path(std::env::temp_dir()).expect("absolute temp dir"),
         );
