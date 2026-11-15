@@ -2620,8 +2620,12 @@ mod tests {
     }
 
     fn answered(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> Option<Vec<String>> {
+        // Answers go to the request's thread (upstream's `SubmitThreadOp`).
         std::iter::from_fn(|| rx.try_recv().ok()).find_map(|event| match event {
-            AppEvent::CodexOp(Op::UserInputAnswer { response, .. }) => {
+            AppEvent::SubmitThreadOp {
+                op: Op::UserInputAnswer { response, .. },
+                ..
+            } => {
                 let mut answers: Vec<String> = response
                     .answers
                     .into_values()
