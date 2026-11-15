@@ -31,7 +31,21 @@ struct SummaryOutput {
 }
 
 impl StageOneOutput {
+    /// Parses the stage-one answer. Some providers (GLM) wrap the JSON in one
+    /// Markdown code fence despite the output schema, so exactly one fenced
+    /// block tagged `json` or untagged is also accepted. Nothing else is
+    /// loosened.
     pub(crate) fn parse(source: &str, version: MemoryVersion) -> serde_json::Result<Self> {
+        match Self::parse_json(source, version) {
+            Ok(output) => Ok(output),
+            Err(err) => match single_fenced_json_block(source) {
+                Some(inner) => Self::parse_json(inner, version),
+                None => Err(err),
+            },
+        }
+    }
+
+    fn parse_json(source: &str, version: MemoryVersion) -> serde_json::Result<Self> {
         let (raw_memory, rollout_summary, rollout_slug) = match version {
             MemoryVersion::V1 => {
                 let output: LegacyOutput = serde_json::from_str(source)?;
@@ -56,6 +70,16 @@ impl StageOneOutput {
             rollout_slug: rollout_slug.map(redact_secrets),
         })
     }
+}
+
+fn single_fenced_json_block(text: &str) -> Option<&str> {
+    let rest = text.trim().strip_prefix("```")?;
+    let (info, body) = rest.split_once('\n')?;
+    if !matches!(info.trim(), "" | "json") {
+        return None;
+    }
+    // A second block, or prose after the fence, is not JSON: serde rejects it.
+    body.trim_end().strip_suffix("```")
 }
 
 pub(crate) fn output_schema(version: MemoryVersion) -> Value {
