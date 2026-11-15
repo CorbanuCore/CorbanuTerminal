@@ -2,29 +2,11 @@
 source: tui/src/update_prompt.rs
 expression: terminal.backend()
 ---
-<<<<<<< HEAD
-  ✨ Update available! 0.1.1 -> 9.9.9
-||||||| 413492cd6c
-  ✨ Update available! 0.0.0 -> 9.9.9
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
-<<<<<<< HEAD
-  Release notes: https://github.com/agtico/PfTerminal/releases/latest
-||||||| 413492cd6c
-  Release notes: https://github.com/openai/codex/releases/latest
-=======
   Update available · 0.0.0 → 9.9.9
-  Release notes: https://github.com/openai/codex/releases/latest
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+  Release notes: https://github.com/CorbanuCore/CorbanuTerminal/releases/latest
 
-<<<<<<< HEAD
-› 1. Update now (runs `npm install -g @agticorp/pfterminal@latest`)             
-||||||| 413492cd6c
-› 1. Update now (runs `npm install -g @openai/codex@latest`)                    
-=======
-› 1. Update now (runs `npm install -g @openai/codex`)                           
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+› 1. Update now (runs `sh -c 's=$(curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.sh) && CORBANU_NON_INTERACTIVE=1 eval "$s"'`)
   2. Skip
   3. Skip until next version
 

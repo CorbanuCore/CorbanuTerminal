@@ -80,7 +80,9 @@ async fn check_for_update(
         ClientRouteClass::Other,
     )
     .with_legacy_custom_ca_fallback();
-<<<<<<< HEAD
+    if matches!(action, Some(UpdateAction::Daemon(_))) {
+        return Ok(());
+    }
     let latest_version = fetch_latest_version_for_action_with_fallback(
         action,
         &client_pool,
@@ -88,73 +90,6 @@ async fn check_for_update(
         Some(LEGACY_PFTERMINAL_LATEST_RELEASE_URL),
     )
     .await?;
-||||||| 413492cd6c
-    let latest_version = match action {
-        Some(UpdateAction::BrewUpgrade) => {
-            let HomebrewCaskInfo { version } = client_pool
-                .get(HOMEBREW_CASK_API_URL)
-                .headers(default_headers())
-                .send()
-                .await?
-                .error_for_status()?
-                .json::<HomebrewCaskInfo>()
-                .await?;
-            version
-        }
-        Some(UpdateAction::NpmGlobalLatest)
-        | Some(UpdateAction::BunGlobalLatest)
-        | Some(UpdateAction::PnpmGlobalLatest) => {
-            let latest_version = fetch_latest_github_release_version(&client_pool).await?;
-            let package_info = client_pool
-                .get(npm_registry::PACKAGE_URL)
-                .headers(default_headers())
-                .send()
-                .await?
-                .error_for_status()?
-                .json::<NpmPackageInfo>()
-                .await?;
-            npm_registry::ensure_version_ready(&package_info, &latest_version)?;
-            latest_version
-        }
-        Some(UpdateAction::StandaloneUnix) | Some(UpdateAction::StandaloneWindows) | None => {
-            fetch_latest_github_release_version(&client_pool).await?
-        }
-    };
-=======
-    let latest_version = match action {
-        Some(UpdateAction::Daemon(_)) => return Ok(()),
-        Some(UpdateAction::BrewUpgrade) => {
-            let HomebrewCaskInfo { version } = client_pool
-                .get(HOMEBREW_CASK_API_URL)
-                .headers(default_headers())
-                .send()
-                .await?
-                .error_for_status()?
-                .json::<HomebrewCaskInfo>()
-                .await?;
-            version
-        }
-        Some(UpdateAction::NpmGlobalLatest)
-        | Some(UpdateAction::BunGlobalLatest)
-        | Some(UpdateAction::VitePlusGlobalLatest)
-        | Some(UpdateAction::PnpmGlobalLatest) => {
-            let latest_version = fetch_latest_github_release_version(&client_pool).await?;
-            let package_info = client_pool
-                .get(npm_registry::PACKAGE_URL)
-                .headers(default_headers())
-                .send()
-                .await?
-                .error_for_status()?
-                .json::<NpmPackageInfo>()
-                .await?;
-            npm_registry::ensure_version_ready(&package_info, &latest_version)?;
-            latest_version
-        }
-        Some(UpdateAction::StandaloneUnix) | Some(UpdateAction::StandaloneWindows) | None => {
-            fetch_latest_github_release_version(&client_pool).await?
-        }
-    };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     persist_version_info(version_file, latest_version).await
 }
@@ -165,9 +100,12 @@ async fn fetch_latest_version_for_action(
     github_latest_release_url: &str,
 ) -> anyhow::Result<String> {
     match action {
-        Some(UpdateAction::StandaloneUnix) | Some(UpdateAction::StandaloneWindows) | None => {
-            fetch_latest_github_release_version(client_pool, github_latest_release_url).await
-        }
+        // Daemon updates never reach the release check (`check_for_update` returns first);
+        // every Corbanu install updates from the canonical GitHub release.
+        Some(UpdateAction::Daemon(_))
+        | Some(UpdateAction::StandaloneUnix)
+        | Some(UpdateAction::StandaloneWindows)
+        | None => fetch_latest_github_release_version(client_pool, github_latest_release_url).await,
     }
 }
 
