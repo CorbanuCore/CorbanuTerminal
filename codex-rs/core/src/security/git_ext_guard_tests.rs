@@ -299,10 +299,27 @@ async fn d447_shell_command_after_untrusted_content_gets_the_entry() {
     for tool in ["exec_command"] {
         for tainted in [false, true] {
             let (session, mut turn) = crate::session::tests::make_session_and_context().await;
-            turn.approval_policy
+            Arc::make_mut(&mut turn.config)
+                .permissions
+                .approval_policy
                 .set(AskForApproval::Never)
                 .expect("approval policy");
-            turn.permission_profile = PermissionProfile::Disabled;
+            // Upstream keeps the turn's permission profile on its environments (and the
+            // config as the fallback); set both, as main's field did.
+            Arc::make_mut(&mut turn.config)
+                .permissions
+                .set_permission_profile(PermissionProfile::Disabled)
+                .expect("permission profile");
+            for environment in &mut turn.initial_environments.environments {
+                if let crate::environment_selection::TurnEnvironmentState::Ready(environment) =
+                    environment
+                {
+                    environment.config_mut().permission_profile =
+                        crate::config::PermissionProfileSnapshot::legacy(
+                            PermissionProfile::Disabled,
+                        );
+                }
+            }
             // Moderate keeps commands in the sandbox, which needs its helper
             // on Linux.
             let mut config = (*turn.config).clone();
@@ -314,8 +331,10 @@ async fn d447_shell_command_after_untrusted_content_gets_the_entry() {
                 .with_source_envelopes(/*enabled*/ true);
             if tainted {
                 client.note_recorded_for_taint(&[ResponseItem::FunctionCallOutput {
+                    name: None,
+                    namespace: None,
                     id: None,
-                    call_id: "call-read".into(),
+                    call_id: Some("call-read".into()),
                     output: FunctionCallOutputPayload::from_text("README".into()),
                     internal_chat_message_metadata_passthrough: None,
                 }]);
@@ -326,6 +345,8 @@ async fn d447_shell_command_after_untrusted_content_gets_the_entry() {
             let session = Arc::new(session);
             let turn = Arc::new(turn);
             let invocation = ToolInvocation {
+                environments: Default::default(),
+                native_call: None,
                 session: Arc::clone(&session),
                 step_context: StepContext::for_test(Arc::clone(&turn)),
                 turn: Arc::clone(&turn),

@@ -86,6 +86,8 @@ fn turn_diff_notifications_render_only_changes() -> anyhow::Result<()> {
         final_message_rendered: false,
         emit_final_message_on_shutdown: false,
         last_total_token_usage: None,
+        shown_config_warnings: Vec::new(),
+        rejected_account_message: None,
         last_turn_diff: String::new(),
     };
     let first = "@@ -1 +1 @@\n-value=1\n+value=2";
@@ -677,6 +679,7 @@ fn session_repeat_of_a_config_warning_is_consumed_once() {
         last_total_token_usage: None,
         shown_config_warnings: Vec::new(),
         rejected_account_message: None,
+        last_turn_diff: String::new(),
     };
     let warning = "`[provider_accounts]` is ignored".to_string();
     processor.process_server_notification(ServerNotification::ConfigWarning(
@@ -738,6 +741,7 @@ async fn a_rejected_turn_prints_the_account_line() {
         /*with_ansi*/ false, &config, /*last_message_path*/ None,
     );
     let error = |info| codex_app_server_protocol::TurnError {
+        misalignment: None,
         message: "unexpected status 401 Unauthorized".to_string(),
         codex_error_info: info,
         additional_details: None,

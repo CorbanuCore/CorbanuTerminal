@@ -177,16 +177,22 @@ fn skills(body: &str) -> String {
     format!("<skills_instructions>{body}</skills_instructions>")
 }
 
+/// A developer context message with one section per producer (#578). Main's
+/// `build_developer_update_item` is gone upstream; this builds the same message
+/// with upstream's `context_message`.
 fn developer_context(sections: Vec<(String, Option<&'static str>)>) -> ResponseItem {
-    crate::context_manager::updates::build_developer_update_item(
-        sections
-            .into_iter()
-            .map(|(text, source_id)| {
-                crate::context_manager::updates::ContextSection::new(text, source_id)
-            })
-            .collect(),
+    codex_context_fragments::context_message(
+        "developer",
+        sections.into_iter().map(|(text, source_id)| {
+            (
+                codex_context_fragments::AnnotatedContent::new(
+                    codex_protocol::models::ContentItem::InputText { text },
+                    codex_protocol::models::ContentItemKind("unknown".to_string()),
+                ),
+                source_id,
+            )
+        }),
     )
-    .expect("developer context")
 }
 
 fn user_message(text: &str) -> ResponseItem {

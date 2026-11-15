@@ -2519,6 +2519,7 @@ async fn login_survives_same_owner_token_refresh(
         AccountUpdatedNotification {
             auth_mode: Some(AuthMode::Chatgpt),
             plan_type: Some(AccountPlanType::Enterprise),
+            api_key_env_var: None,
         }
     );
     assert_eq!(read_account(&mut server).await?, expected_account);
@@ -3339,6 +3340,7 @@ async fn get_account_names_openai_api_key_from_environment() -> Result<()> {
                 env_var: Some("OPENAI_API_KEY".to_string()),
             }),
             requires_openai_auth: true,
+            workspace_routing: None,
         }
     );
     Ok(())

@@ -81,6 +81,7 @@ fn pf_28_s01_delivered_events_are_gated_once_more() {
     // An event sent on a cloned sender (MCP startup, elicitation) never
     // passed `send_event`; delivery still gates it.
     let error = EventMsg::Error(ErrorEvent {
+        misalignment: None,
         message: format!("mcp server failed: --token {CANARY}"),
         codex_error_info: None,
     });
@@ -148,8 +149,10 @@ SERVICE_API_KEY = "pf28-mcp-env-key-4444"
 fn pf_28_s01_tool_result_and_error_are_gated() {
     let gate = gate();
     let item = ResponseItem::FunctionCallOutput {
+        name: None,
+        namespace: None,
         id: None,
-        call_id: "call-pf28".to_string(),
+        call_id: Some("call-pf28".to_string()),
         output: FunctionCallOutputPayload::from_text(format!("token={CANARY}\nok")),
         internal_chat_message_metadata_passthrough: None,
     };
@@ -161,6 +164,7 @@ fn pf_28_s01_tool_result_and_error_are_gated() {
     assert!(serialized.contains("token=[REDACTED:env:PF28_CANARY_API_KEY]"));
 
     let error = EventMsg::Error(ErrorEvent {
+        misalignment: None,
         message: format!("request failed: Authorization: Bearer {CANARY}"),
         codex_error_info: None,
     });
@@ -238,6 +242,8 @@ fn pf_28_s01_split_agent_message_never_shows_a_fragment() {
         &gate,
         "turn-pf28-split",
         EventMsg::TurnAborted(TurnAbortedEvent {
+            error: None,
+            root_turn_id: None,
             turn_id: Some("turn-pf28-split".to_string()),
             reason: TurnAbortReason::Interrupted,
             started_at: None,
@@ -276,8 +282,10 @@ fn pf_28_s01_model_request_is_gated() {
     let gate = gate();
     let mut prompt = crate::client_common::Prompt {
         input: vec![ResponseItem::FunctionCallOutput {
+            name: None,
+            namespace: None,
             id: None,
-            call_id: "call-pf28-prompt".to_string(),
+            call_id: Some("call-pf28-prompt".to_string()),
             output: FunctionCallOutputPayload::from_text(CANARY.to_string()),
             internal_chat_message_metadata_passthrough: None,
         }],
@@ -406,6 +414,8 @@ fn pf_28_s01_forwarded_sub_session_stream_is_gated_twice_without_leaking() {
     );
     let aborted = |turn: &str| {
         EventMsg::TurnAborted(TurnAbortedEvent {
+            error: None,
+            root_turn_id: None,
             turn_id: Some(turn.to_string()),
             reason: TurnAbortReason::Interrupted,
             started_at: None,
@@ -458,6 +468,8 @@ fn pf_28_s01_reasoning_section_break_releases_the_earlier_section_first() {
         &gate,
         "turn-pf28-reasoning",
         EventMsg::TurnAborted(TurnAbortedEvent {
+            error: None,
+            root_turn_id: None,
             turn_id: Some("turn-pf28-reasoning".to_string()),
             reason: TurnAbortReason::Interrupted,
             started_at: None,
@@ -577,8 +589,10 @@ fn pf_28_s01_escaped_value_inside_a_string_is_found_in_the_serialized_item() {
         .expect("register");
     // `cat config.json` output: the text already holds the escaped form.
     let item = ResponseItem::FunctionCallOutput {
+        name: None,
+        namespace: None,
         id: None,
-        call_id: "call-pf28-escaped".to_string(),
+        call_id: Some("call-pf28-escaped".to_string()),
         output: FunctionCallOutputPayload::from_text(
             "{\"password\": \"pf28\\\"quoted\\\"pw-77\"}".to_string(),
         ),
@@ -691,8 +705,10 @@ async fn issue_434_vault_values_are_gated_after_restart_and_when_added_mid_sessi
         .expect("config arms the gate");
     let read_notes = |value: &str| {
         let item = ResponseItem::FunctionCallOutput {
+            name: None,
+            namespace: None,
             id: None,
-            call_id: "call-agg16".to_string(),
+            call_id: Some("call-agg16".to_string()),
             output: FunctionCallOutputPayload::from_text(format!(
                 "buy coffee\nreview budget\n{value}\n"
             )),

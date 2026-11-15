@@ -856,10 +856,10 @@ async fn pf_30_s03_untainted_permissive_and_ordinary_calls_are_unchanged() -> an
     Ok(())
 }
 
-/// PF-30-S03: "approve for this session" does not carry over to a protected
-/// command once untrusted content has arrived; the human is asked again.
+/// #2213/PF-30-S03: an unoffered "approve for this session" answer never
+/// carries over, in Permissive or after untrusted content in Moderate.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn pf_30_s03_session_approval_does_not_cover_a_tainted_repeat() -> anyhow::Result<()> {
+async fn pf_30_s03_unoffered_session_approval_does_not_cover_a_repeat() -> anyhow::Result<()> {
     use codex_protocol::protocol::AskForApproval;
     use codex_protocol::protocol::ReviewDecision;
     skip_if_no_network!(Ok(()));
@@ -867,10 +867,7 @@ async fn pf_30_s03_session_approval_does_not_cover_a_tainted_repeat() -> anyhow:
         Ok(()),
         "this security test runs host shell commands; Wine-exec routes them to a Windows executor with a non-native cwd"
     );
-    for (level, asks_again) in [
-        (SecurityLevel::Moderate, true),
-        (SecurityLevel::Permissive, false),
-    ] {
+    for level in [SecurityLevel::Moderate, SecurityLevel::Permissive] {
         let (test, captured) = pf_30_s03_two_call_turn(
             level,
             AskForApproval::UnlessTrusted,
@@ -886,6 +883,11 @@ async fn pf_30_s03_session_approval_does_not_cover_a_tainted_repeat() -> anyhow:
         let first = pf_30_s03_next_approval(&test)
             .await
             .expect("first vault call asks (untrusted command)");
+        assert!(
+            !first
+                .effective_available_decisions()
+                .contains(&ReviewDecision::ApprovedForSession)
+        );
         test.codex
             .submit(Op::ExecApproval {
                 id: first.effective_approval_id(),
@@ -894,13 +896,18 @@ async fn pf_30_s03_session_approval_does_not_cover_a_tainted_repeat() -> anyhow:
             })
             .await?;
         let second = pf_30_s03_next_approval(&test).await;
-        assert_eq!(second.is_some(), asks_again, "{level:?}");
+        assert!(
+            second.is_some(),
+            "{level:?}: unoffered answer must not be cached"
+        );
         if let Some(second) = second {
-            let reason = second.reason.clone().unwrap_or_default();
-            assert!(
-                reason.contains("a cached or automatic approval does not count"),
-                "{reason}"
-            );
+            if level == SecurityLevel::Moderate {
+                let reason = second.reason.clone().unwrap_or_default();
+                assert!(
+                    reason.contains("a cached or automatic approval does not count"),
+                    "{reason}"
+                );
+            }
             test.codex
                 .submit(Op::ExecApproval {
                     id: second.effective_approval_id(),

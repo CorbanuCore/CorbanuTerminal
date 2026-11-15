@@ -1458,13 +1458,18 @@ impl ServerHandler for ToolAppsMcpServer {
                 )])
                 .into());
             }
-            assert_eq!(
-                serde_json::to_value(result).expect("elicitation response"),
-                json!({
-                    "action": "accept",
-                    "content": {},
-                    "_meta": { "approvals_reviewer": "auto_review" },
-                })
+            let response = serde_json::to_value(result).expect("elicitation response");
+            // S3b (#945, D50, PF-30): with the person as reviewer, the person
+            // answers the strict request (no reviewer metadata).
+            assert!(
+                response
+                    == json!({
+                        "action": "accept",
+                        "content": {},
+                        "_meta": { "approvals_reviewer": "auto_review" },
+                    })
+                    || response == json!({ "action": "accept", "content": {} }),
+                "{response}"
             );
         }
 

@@ -182,6 +182,7 @@ fn provider_report(input: i64, output: i64) -> TokenUsage {
         output_tokens: output,
         reasoning_output_tokens: 0,
         total_tokens: input + output,
+        codex_rollout_budget_units: None,
     }
 }
 
@@ -191,6 +192,7 @@ fn provider_report(input: i64, output: i64) -> TokenUsage {
 fn recomputed(info: Option<TokenUsageInfo>, estimate: i64) -> ThreadTokenUsage {
     let mut info = info.unwrap_or(TokenUsageInfo {
         total_token_usage: TokenUsage::default(),
+        last_usage_includes_reasoning: None,
         last_token_usage: TokenUsage::default(),
         model_context_window: None,
     });
@@ -206,13 +208,10 @@ fn recomputed(info: Option<TokenUsageInfo>, estimate: i64) -> ThreadTokenUsage {
 fn reported_thread() -> TokenUsageInfo {
     let mut info = TokenUsageInfo::new_or_append(
         /*info*/ &None,
-        &Some(provider_report(
-            /*input*/ 683_203_904,
-            /*output*/ 1_681_470,
-        )),
+        &provider_report(/*input*/ 683_203_904, /*output*/ 1_681_470),
+        /*includes_reasoning*/ false,
         Some(WINDOW),
-    )
-    .expect("a report creates usage info");
+    );
     info.last_token_usage = provider_report(/*input*/ 177_000, /*output*/ 1_010);
     info
 }
@@ -314,7 +313,12 @@ fn fill_then_report_shows_the_report_and_the_counter_total() {
     let before = info.clone();
     info.fill_to_context_window(WINDOW);
     let filled = info.clone();
-    info.append_last_usage(&provider_report(/*input*/ 50_000, /*output*/ 500));
+    let info = TokenUsageInfo::new_or_append(
+        &Some(info),
+        &provider_report(/*input*/ 50_000, /*output*/ 500),
+        /*includes_reasoning*/ false,
+        /*model_context_window*/ None,
+    );
     assert_eq!(info.total_token_usage.total_tokens, WINDOW + 50_500);
     let usage = fold(vec![before.into(), filled.into(), info.into()]);
 
@@ -360,10 +364,10 @@ fn issue1638_fill_seen_first_shows_the_full_window() {
 fn fill_seen_first_below_the_window_shows_what_it_added() {
     let mut info = TokenUsageInfo::new_or_append(
         /*info*/ &None,
-        &Some(provider_report(/*input*/ 300_000, /*output*/ 0)),
+        &provider_report(/*input*/ 300_000, /*output*/ 0),
+        /*includes_reasoning*/ false,
         Some(WINDOW),
-    )
-    .expect("a report creates usage info");
+    );
     info.fill_to_context_window(WINDOW);
     let usage = fold(vec![info.into()]);
 
@@ -472,12 +476,10 @@ fn a_recompute_after_a_fill_without_history_shows_the_estimate() {
 fn a_resent_update_changes_nothing() {
     let mut info = TokenUsageInfo::new_or_append(
         /*info*/ &None,
-        &Some(provider_report(
-            /*input*/ 99_000, /*output*/ 1_000,
-        )),
+        &provider_report(/*input*/ 99_000, /*output*/ 1_000),
+        /*includes_reasoning*/ false,
         Some(WINDOW),
-    )
-    .expect("a report creates usage info");
+    );
     let before = info.clone();
     info.fill_to_context_window(WINDOW);
     assert_eq!(info.last_token_usage.total_tokens, WINDOW - 100_000);

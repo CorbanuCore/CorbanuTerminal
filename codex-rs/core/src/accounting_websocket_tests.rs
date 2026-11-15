@@ -305,15 +305,19 @@ async fn accounting_responses_ws_stream_guard_checks_live_policy_with_session_st
     use futures::FutureExt;
 
     let (mut owner, _) = crate::session::tests::make_session_and_context().await;
-    owner.services.agent_control = owner
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            SecurityLevel::Permissive,
-            owner.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )?;
+    owner.services.agent_control = Arc::new(
+        owner
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                SecurityLevel::Permissive,
+                owner.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )?,
+    );
     let owner = Arc::new(owner);
     let memory = StageOneMemoryClient::new(
         Arc::downgrade(&owner),
@@ -353,6 +357,8 @@ async fn accounting_responses_ws_stream_guard_checks_live_policy_with_session_st
     let controller = owner
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .trusted_security_controller()
         .unwrap();
     let change = controller.confirm_level_change(
@@ -714,8 +720,8 @@ fn accounting_websocket_pin_matches_the_client_route() -> anyhow::Result<()> {
     let mut provider =
         ModelProviderInfo::create_openai_provider(Some("https://example.invalid/v1".to_string()));
     provider.query_params = Some(std::collections::HashMap::from([
-        ("api-version".to_string(), "2025-04-01".to_string()),
-        ("deployment".to_string(), "fixture".to_string()),
+        ("api-version".to_string(), "2025-04-01".into()),
+        ("deployment".to_string(), "fixture".into()),
     ]));
     let api = provider.to_api_provider(/*auth_mode*/ None)?;
     let requested = api.websocket_url_for_path("responses")?.to_string();

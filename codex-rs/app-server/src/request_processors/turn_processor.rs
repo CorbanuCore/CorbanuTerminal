@@ -1184,13 +1184,7 @@ impl TurnRequestProcessor {
                         "settings confirmation requires a live thread listener and connection",
                     )
                 })?;
-            let submission = codex_protocol::protocol::Submission {
-                id: operation_id.clone(),
-                op: Op::ThreadSettings { thread_settings },
-                client_user_message_id: None,
-                parent_turn_id: None,
-                trace,
-            };
+            let (reply, core_result) = tokio::sync::oneshot::channel();
             let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
             tokio::spawn(crate::settings_confirmation::complete_settings_submission(
                 state.clone(),
@@ -1200,11 +1194,24 @@ impl TurnRequestProcessor {
                 self.outgoing.clone(),
                 deadline,
             ));
+            // Core accepts or rejects the update on this reply instead of an
+            // event; forward it to the confirmation registered above. A lost
+            // reply leaves the confirmation to its deadline (uncertain).
+            tokio::spawn(crate::settings_confirmation::forward_core_settings_result(
+                state.clone(),
+                operation_id.clone(),
+                core_result,
+                deadline,
+            ));
             // Keep enqueue order under the native per-thread request serializer.
             // The deferred owner already exists if this handler is cancelled.
+            let op = Op::ThreadSettings {
+                thread_settings,
+                reply: Some(reply),
+            };
             if !matches!(
-                tokio::time::timeout_at(deadline, thread.submit_with_id(submission)).await,
-                Ok(Ok(()))
+                tokio::time::timeout_at(deadline, thread.submit_with_trace(op, trace)).await,
+                Ok(Ok(_))
             ) {
                 state.lock().await.pending_settings.remove(&operation_id);
             }
@@ -1847,6 +1854,9 @@ mod tests {
     use super::super::thread_input::direct_input_to_v2_thread_spawn_is_blocked;
     use super::*;
     use codex_protocol::crew::AgentClass;
+    use codex_protocol::protocol::MultiAgentVersion;
+    use codex_protocol::protocol::SessionSource;
+    use codex_protocol::protocol::SubAgentSource;
 
     /// #2000: the refreshed level is config's, read by the server; the
     /// default sandbox needs its setup first; other platforms keep theirs.

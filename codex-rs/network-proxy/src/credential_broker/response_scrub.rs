@@ -39,13 +39,16 @@ pub(crate) fn request_identity_body(headers: &mut HeaderMap) {
     headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
 }
 
-/// Adds the values MITM hooks inject (for `Bearer <token>`, the token too).
+/// Adds the values MITM hooks inject (for `Bearer <token>`, the token too),
+/// including the real AWS values a SigV4 hook sends.
 /// Values too short to be secrets are skipped; a full gate fails closed.
 pub(crate) fn with_hook_values(
     gate: Option<ResponseGate>,
     actions: Option<&MitmHookActions>,
 ) -> Result<Option<ResponseGate>, RegisterError> {
-    let Some(actions) = actions.filter(|actions| !actions.inject_request_headers.is_empty()) else {
+    let Some(actions) = actions.filter(|actions| {
+        !actions.inject_request_headers.is_empty() || actions.aws_sigv4.is_some()
+    }) else {
         return Ok(gate);
     };
     let gate = match gate {
@@ -61,6 +64,14 @@ pub(crate) fn with_hook_values(
             .filter(|part| part.len() >= MIN_HOOK_PART_BYTES && *part != value);
         for part in std::iter::once(value).chain(parts) {
             match gate.add(&label, part) {
+                Ok(()) | Err(RegisterError::TooShort) => {}
+                Err(err) => return Err(err),
+            }
+        }
+    }
+    if let Some(signer) = &actions.aws_sigv4 {
+        for value in signer.sent_credential_values() {
+            match gate.add("hook:aws_sigv4", value) {
                 Ok(()) | Err(RegisterError::TooShort) => {}
                 Err(err) => return Err(err),
             }

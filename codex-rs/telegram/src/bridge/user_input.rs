@@ -7,6 +7,7 @@ use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::JSONRPCErrorError;
 use codex_app_server_protocol::THREAD_UNMATERIALIZED_ERROR_CODE;
 use codex_app_server_protocol::ThreadItem;
+use codex_app_server_protocol::ThreadItemPayload;
 use codex_app_server_protocol::ThreadReadParams;
 use codex_app_server_protocol::ThreadReadResponse;
 use codex_app_server_protocol::TurnStartParams;
@@ -205,6 +206,7 @@ impl BridgeRuntime {
                             client_user_message_id: Some(client_user_message_id),
                             responsesapi_client_metadata: None,
                             additional_context: None,
+                            responsesapi_client_metadata_patch: None,
                             expected_turn_id: turn_id,
                         },
                     },
@@ -243,6 +245,7 @@ impl BridgeRuntime {
                         output_schema: None,
                         collaboration_mode: None,
                         multi_agent_mode: None,
+                        ..Default::default()
                     },
                 },
                 "turn/start",
@@ -322,8 +325,8 @@ fn turn_items_contain_client_message<'a>(
     turn_items.into_iter().any(|items| {
         items.iter().any(|item| {
             matches!(
-                item,
-                ThreadItem::UserMessage {
+                &item.payload,
+                ThreadItemPayload::UserMessage {
                     client_id: Some(client_id),
                     ..
                 } if client_id == client_user_message_id

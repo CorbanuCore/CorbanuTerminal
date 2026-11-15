@@ -1,3 +1,4 @@
+use crate::session::tests::update_turn_settings_for_test;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -55,8 +56,11 @@ fn use_openai_provider(turn: &mut TurnContext) {
     config.model_provider = provider_info.clone();
     turn.config = Arc::new(config);
     turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
-    update_turn_settings_for_test(&mut turn, |settings| {
-        settings.model_info = Arc::new(model_info::model_info_from_slug("gpt-5.4"));
+    update_turn_settings_for_test(turn, |settings| {
+        settings.model_info = Arc::new(codex_protocol::openai_models::CatalogModel {
+            model: Arc::new(model_info::model_info_from_slug("gpt-5.4")),
+            origin: settings.model_info.origin,
+        });
     });
 }
 
@@ -344,7 +348,17 @@ fn truncated_structured_write_returns_structured_diagnostic() {
         "x".repeat(8192)
     );
 
-    let result = ToolRouter::build_tool_call(ResponseItem::FunctionCall {
+    // Upstream made `build_tool_call` a router method; an empty router parses
+    // a plain function call the same way.
+    let router = ToolRouter::from_parts(
+        crate::tools::registry::ToolRegistry::default(),
+        Vec::new(),
+        codex_protocol::openai_models::ToolMode::Direct,
+        BTreeMap::new(),
+        /*tool_namespaces_info*/ None,
+        /*child_management_tools*/ &[],
+    );
+    let result = router.build_tool_call(ResponseItem::FunctionCall {
         encrypted_content: None,
         status: None,
         id: None,

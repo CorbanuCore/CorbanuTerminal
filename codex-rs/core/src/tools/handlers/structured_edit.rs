@@ -865,7 +865,9 @@ fn patch_lines(text: &str) -> Vec<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::session::tests::update_turn_settings_for_test;
     use serde_json::Value;
+    use std::sync::Arc;
 
     fn assert_model_error<T>(result: Result<T, FunctionCallError>, expected: &str) {
         match result {

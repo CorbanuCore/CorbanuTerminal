@@ -205,6 +205,7 @@ async fn realtime_keeps_provider_auth_until_runtime_integration(
             },
             http::HeaderMap::new(),
             Some(provider),
+            &Default::default(),
         )
         .await
         .unwrap();

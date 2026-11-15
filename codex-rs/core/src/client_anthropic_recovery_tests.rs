@@ -48,12 +48,21 @@ fn forwarded_history_rejection_is_not_retryable() {
     let Err(error) = terminalize(Err(rejection())) else {
         panic!("expected failure");
     };
-    assert!(!codex_api::map_api_error(error).is_retryable());
+    // Upstream replaced `is_retryable` with `retry_delay`: `None` is terminal.
+    assert!(
+        codex_api::map_api_error(error)
+            .retry_delay(/*retry_count*/ 1)
+            .is_none()
+    );
     let Err(error) = terminalize(Err(ApiError::Stream("ordinary connection loss".to_owned())))
     else {
         panic!("expected failure");
     };
-    assert!(codex_api::map_api_error(error).is_retryable());
+    assert!(
+        codex_api::map_api_error(error)
+            .retry_delay(/*retry_count*/ 1)
+            .is_some()
+    );
 }
 
 fn rejection() -> ApiError {

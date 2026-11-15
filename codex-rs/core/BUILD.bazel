@@ -49,9 +49,14 @@ codex_rust_crate(
         "@platforms//os:macos": 1,
         "//conditions:default": 0,
     }),
-    # Unit tests that run a command in the Linux sandbox (D447's
-    # git_ext_guard tests) need bubblewrap: the Bazel runner has none on PATH.
-    unit_test_extra_binaries = ["//codex-rs/bwrap:bwrap"],
+    # Sandboxed unit tests need the platform helpers in their runfiles too:
+    # D447's git_ext_guard tests use bubblewrap; #2222's media reads use the
+    # elevated Windows filesystem sandbox.
+    unit_test_extra_binaries = [
+        "//codex-rs/bwrap:bwrap",
+        "//codex-rs/windows-sandbox-rs:codex-command-runner",
+        "//codex-rs/windows-sandbox-rs:codex-windows-sandbox-setup",
+    ],
     unit_test_srcs = glob([
         "src/**/*_test.rs",
         "src/**/*_tests.rs",

@@ -223,7 +223,6 @@ async fn untrusted_project_security_stays_disabled() {
     assert!(
         stack
             .layers_high_to_low()
-            .iter()
             .all(|layer| !matches!(layer.name, ConfigLayerSource::Project { .. }))
     );
     assert_eq!(fixture.recovered_level(&stack), SecurityLevel::Moderate);

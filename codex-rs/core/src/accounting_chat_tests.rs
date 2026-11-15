@@ -221,7 +221,9 @@ impl HttpTransport for Probe {
 }
 struct Denied;
 impl codex_api::AuthProvider for Denied {
-    fn add_auth_headers(&self, _: &mut http::HeaderMap) {}
+    fn add_auth_headers(&self, _: &mut http::HeaderMap) -> Result<(), codex_api::AuthError> {
+        Ok(())
+    }
     fn apply_auth(&self, _: Request) -> codex_api::AuthProviderFuture<'_> {
         Box::pin(async {
             tokio::task::yield_now().await;
@@ -273,15 +275,19 @@ async fn accounting_chat_auth_and_guard_before_admission() -> anyhow::Result<()>
         (0, 0)
     );
     let (mut owner, _) = crate::session::tests::make_session_and_context().await;
-    owner.services.agent_control = owner
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            codex_security_policy::SecurityLevel::Permissive,
-            owner.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )?;
+    owner.services.agent_control = Arc::new(
+        owner
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                codex_security_policy::SecurityLevel::Permissive,
+                owner.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )?,
+    );
     let owner = Arc::new(owner);
     let memory = crate::memory_stage_one::StageOneMemoryClient::new(
         Arc::downgrade(&owner),
@@ -298,6 +304,8 @@ async fn accounting_chat_auth_and_guard_before_admission() -> anyhow::Result<()>
     let controller = owner
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .trusted_security_controller()
         .unwrap();
     let change = controller.confirm_level_change(
@@ -322,15 +330,19 @@ async fn accounting_chat_auth_and_guard_before_admission() -> anyhow::Result<()>
 async fn accounting_chat_borrowed_binding_denies_existing_and_future_clones() -> anyhow::Result<()>
 {
     let (mut owner, _) = crate::session::tests::make_session_and_context().await;
-    owner.services.agent_control = owner
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            codex_security_policy::SecurityLevel::Permissive,
-            owner.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )?;
+    owner.services.agent_control = Arc::new(
+        owner
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                codex_security_policy::SecurityLevel::Permissive,
+                owner.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )?,
+    );
     let owner = Arc::new(owner);
     let memory = crate::memory_stage_one::StageOneMemoryClient::new(
         Arc::downgrade(&owner),
@@ -347,6 +359,8 @@ async fn accounting_chat_borrowed_binding_denies_existing_and_future_clones() ->
     let controller = owner
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .trusted_security_controller()
         .unwrap();
     let change = controller.confirm_level_change(
@@ -428,15 +442,19 @@ async fn accounting_chat_frame_guard_denies_provider_change_before_client_public
     let mut observed = Vec::new();
     for path in ["settings", "turn"] {
         let (mut owner, _) = crate::session::tests::make_session_and_context().await;
-        owner.services.agent_control = owner
-            .services
-            .agent_control
-            .clone()
-            .with_effective_security_policy(
-                SecurityLevel::Permissive,
-                owner.thread_id,
-                /*inherits_from_spawn_parent*/ false,
-            )?;
+        owner.services.agent_control = Arc::new(
+            owner
+                .services
+                .agent_control
+                .local()
+                .expect("local agent control")
+                .clone()
+                .with_effective_security_policy(
+                    SecurityLevel::Permissive,
+                    owner.thread_id,
+                    /*inherits_from_spawn_parent*/ false,
+                )?,
+        );
         let probe = Arc::new(FrameAtConfigChange::default());
         let mut extensions = codex_extension_api::ExtensionRegistryBuilder::new();
         extensions.config_contributor(probe.clone());
@@ -460,10 +478,16 @@ async fn accounting_chat_frame_guard_denies_provider_change_before_client_public
             ..Default::default()
         };
         match path {
-            "settings" => owner.update_settings(updates).await?,
+            "settings" => {
+                owner.update_settings(updates).await?;
+            }
             "turn" => {
                 owner
-                    .new_turn_with_sub_id("provider-change".into(), updates)
+                    .new_turn_with_sub_id(
+                        "provider-change".into(),
+                        updates,
+                        crate::session::turn_context::NewTurnContextOptions::default(),
+                    )
                     .await?;
             }
             _ => unreachable!(),
@@ -694,7 +718,9 @@ fn body() -> codex_api::ChatCompletionsRequest {
 
 struct Mutate(&'static str);
 impl codex_api::AuthProvider for Mutate {
-    fn add_auth_headers(&self, _: &mut http::HeaderMap) {}
+    fn add_auth_headers(&self, _: &mut http::HeaderMap) -> Result<(), codex_api::AuthError> {
+        Ok(())
+    }
     fn apply_auth(&self, mut request: Request) -> codex_api::AuthProviderFuture<'_> {
         Box::pin(async move {
             tokio::task::yield_now().await;

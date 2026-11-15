@@ -116,6 +116,22 @@ async fn model_guardian_policy_controls_cua(
         })
         .await?;
     let _: TurnStartResponse = timeout(TIMEOUT, app_server.read_response(id)).await??;
+    if matches!(user_mode, UserMode::User) {
+        // S3b (#945, D50, PF-30): the node_repl strict confirmation reaches the
+        // person instead of being auto-accepted.
+        let request = timeout(TIMEOUT, app_server.read_stream_until_request_message()).await??;
+        let ServerRequest::McpServerElicitationRequest { request_id, params } = request else {
+            panic!("expected the person's confirmation, got {request:?}");
+        };
+        assert!(
+            matches!(&params.request, McpServerElicitationRequest::Form { message, .. }
+                if message == "Review tool execution"),
+            "{params:?}"
+        );
+        app_server
+            .send_response(request_id, json!({ "action": "accept", "content": {} }))
+            .await?;
+    }
     let completed: TurnCompletedNotification =
         timeout(TIMEOUT, app_server.read_notification("turn/completed")).await??;
     assert_eq!(completed.turn.status, TurnStatus::Completed);

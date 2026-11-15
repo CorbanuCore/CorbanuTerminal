@@ -343,6 +343,10 @@ impl ExecServerHandler {
         params: DiscoverV2CapabilitiesRequest,
     ) -> Result<Arc<DiscoverV2CapabilitiesResponse>, JSONRPCErrorError> {
         self.require_initialized_for("capability discovery")?;
+        // #2088 (D491/D510): as V1 discovery and file reads, a request marked for
+        // refusal is refused where this executor has no platform sandbox for it.
+        crate::local_file_system::refuse_without_platform_sandbox(params.sandbox.as_ref())
+            .map_err(|error| internal_error(error.to_string()))?;
         self.capability_manager
             .get_or_refresh_discovery(params)
             .await

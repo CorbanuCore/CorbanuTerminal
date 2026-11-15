@@ -287,7 +287,7 @@ fn pretrust_git_sync_ignores_repository_local_transport_config() {
         ),
     );
 
-    let err = sync_openai_plugins_repo_via_git(&codex_home, &git_wrapper)
+    let err = sync_openai_plugins_repo_via_git(&codex_home, test_git(&git_wrapper))
         .expect_err("isolated probe should use the missing global-config remote");
 
     assert!(err.contains("git ls-remote curated plugins repo"));

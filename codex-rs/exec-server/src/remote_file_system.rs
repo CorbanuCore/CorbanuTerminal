@@ -607,7 +607,7 @@ impl Drop for FileWriteRegistration {
 
 /// #2050 (D510) on upstream's sandbox selection: the Windows sandbox level the executor applies
 /// for this context. MXC counts as no Windows sandbox here, as in the local refusal (D522 (a)).
-fn host_sandbox_level(
+pub(crate) fn host_sandbox_level(
     selection: codex_file_system::WindowsSandboxSelection,
 ) -> codex_protocol::config_types::WindowsSandboxLevel {
     use codex_file_system::WindowsSandboxSelection;

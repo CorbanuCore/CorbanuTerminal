@@ -510,7 +510,7 @@ impl CredentialBroker {
     pub(crate) fn configure(&self, config: &NetworkProxyConfig) {
         if self.hardened.armed() && !config.credential_providers.is_empty() {
             tracing::warn!(
-                "network.credential_providers are not brokered while Corbanu credential hardening is active"
+                "network.credential_providers are not brokered while Corbanu credential hardening is active; their environment variables are withheld from commands"
             );
         }
         let mut state = self.write_state();
@@ -772,7 +772,9 @@ impl CredentialBroker {
         environment_id: Option<&str>,
     ) {
         if self.hardened.armed() {
-            self.hardened.virtualize_child_env(env);
+            self.virtualize_withholding_configured_sources(env, |env| {
+                self.hardened.virtualize_child_env(env);
+            });
             return;
         }
         self.virtualize_env(env, environment_id, CredentialEnvironment::Child);
@@ -784,10 +786,62 @@ impl CredentialBroker {
         environment_id: Option<&str>,
     ) {
         if self.hardened.armed() {
-            self.hardened.virtualize_snapshot_env(env);
+            self.virtualize_withholding_configured_sources(env, |env| {
+                self.hardened.virtualize_snapshot_env(env);
+            });
             return;
         }
         self.virtualize_env(env, environment_id, CredentialEnvironment::Snapshot);
+    }
+
+    /// Corbanu's engine does not broker `network.credential_providers`
+    /// (see `configure`), so their sources would reach the child unmasked.
+    /// Fail closed around `virtualize`, the hardened engine's pass: drop each
+    /// provider's environment variables first (keys a built-in provider owns
+    /// stay with the hardened engine), then drop any variable still carrying
+    /// one of their values, from the child or from Core's own environment. A
+    /// built-in variable the hardened engine masked holds a placeholder by
+    /// then and is kept.
+    fn virtualize_withholding_configured_sources(
+        &self,
+        env: &mut HashMap<String, String>,
+        virtualize: impl FnOnce(&mut HashMap<String, String>),
+    ) {
+        /// Shorter values are too common to match other variables on.
+        const MIN_COPIED_VALUE_BYTES: usize = 8;
+        let keys = {
+            let state = self.read_state();
+            if !state.enabled {
+                Vec::new()
+            } else {
+                state
+                    .configured_provider_configs
+                    .values()
+                    .flat_map(|provider| provider.env.iter().cloned())
+                    .filter(|key| {
+                        !providers::credential_env_keys()
+                            .any(|builtin| env_key_matches(key, builtin))
+                    })
+                    .collect::<Vec<_>>()
+            }
+        };
+        if keys.is_empty() {
+            virtualize(env);
+            return;
+        }
+        let is_source = |name: &str| keys.iter().any(|key| env_key_matches(name, key));
+        let mut values = env
+            .iter()
+            .filter(|(name, _)| is_source(name))
+            .map(|(_, value)| value.clone())
+            .chain(keys.iter().filter_map(|key| std::env::var(key).ok()))
+            .filter(|value| value.len() >= MIN_COPIED_VALUE_BYTES)
+            .collect::<Vec<_>>();
+        values.sort_unstable();
+        values.dedup();
+        env.retain(|name, _| !is_source(name));
+        virtualize(env);
+        env.retain(|_, value| !values.iter().any(|secret| value.contains(secret.as_str())));
     }
 
     fn virtualize_env(

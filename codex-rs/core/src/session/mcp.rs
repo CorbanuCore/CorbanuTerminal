@@ -25,9 +25,7 @@ use codex_protocol::capabilities::CapabilityRootLocation;
 use codex_protocol::capabilities::SelectedCapabilityRoot;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::mcp::is_node_repl_backed_connector;
-use codex_protocol::mcp::is_node_repl_backed_server;
 use codex_protocol::mcp_approval_meta::APPROVAL_KIND_KEY as MCP_ELICITATION_APPROVAL_KIND_KEY;
-use codex_protocol::mcp_approval_meta::APPROVAL_KIND_MCP_TOOL_CALL as MCP_ELICITATION_APPROVAL_KIND_MCP_TOOL_CALL;
 use codex_protocol::mcp_approval_meta::APPROVAL_KIND_TOOL_SUGGESTION as MCP_ELICITATION_APPROVAL_KIND_TOOL_SUGGESTION;
 use codex_protocol::mcp_approval_meta::CONNECTOR_ID_KEY as MCP_ELICITATION_CONNECTOR_ID_KEY;
 use codex_protocol::mcp_approval_meta::PERSIST_KEY as MCP_ELICITATION_PERSIST_KEY;
@@ -81,6 +79,49 @@ impl ElicitationReviewer for GuardianMcpElicitationReviewer {
             review_guardian_mcp_elicitation(session, request).await
         })
     }
+
+    fn person_answers(&self, request: ElicitationReviewRequest) -> BoxFuture<'static, bool> {
+        let session = self.session.clone();
+        Box::pin(async move {
+            let Some(session) = session.upgrade() else {
+                return false;
+            };
+            let Some((turn_context, _)) =
+                session.active_turn_context_and_cancellation_token().await
+            else {
+                return false;
+            };
+            let Some(mcp_config) = session.services.mcp_runtime.current_config() else {
+                return false;
+            };
+            let step_settings = turn_context.next_step_settings.load_full();
+            mcp_elicitation_approvals_reviewer(&turn_context, &step_settings, &mcp_config, &request)
+                != ApprovalsReviewer::AutoReview
+        })
+    }
+}
+
+/// Corbanu (#945, D50, PF-30): who answers this server's confirmations in the
+/// issuing step, as the ordinary path resolves it: the person's reviewer setting
+/// (or the step's live override), per-app settings and administrator
+/// requirements. A server's own strict automatic-review request does not change
+/// it.
+fn mcp_elicitation_approvals_reviewer(
+    turn_context: &TurnContext,
+    step_settings: &super::step_settings::ResolvedStepSettings,
+    mcp_config: &codex_mcp::McpConfig,
+    request: &ElicitationReviewRequest,
+) -> ApprovalsReviewer {
+    crate::connectors::mcp_approvals_reviewer_from_layers(
+        &mcp_config.config_layer_stack,
+        step_settings
+            .mcp_approvals_reviewer_override
+            .unwrap_or(mcp_config.approvals_reviewer),
+        Some(turn_context.model_info().slug.as_str()),
+        request.server_name.as_str(),
+        elicitation_connector_id(&request.elicitation),
+        /*link_id*/ None,
+    )
 }
 
 impl Session {
@@ -489,21 +530,43 @@ impl Session {
                 })
             },
         );
+        // D491/D510 also apply when a protected level has a full-disk profile.
+        // Keep a context for discovery and subsequent skill resource reads.
+        let level = self.services.model_client().live_level();
+        let protected_level = level != codex_security_policy::SecurityLevel::Permissive;
+        // The session's Windows sandbox level, as commands and file tools judge it.
+        let session_windows_level = self
+            .state
+            .lock()
+            .await
+            .session_configuration
+            .windows_sandbox_level;
         if !restricted_file_system
+            && !protected_level
             && !config
                 .features
                 .enabled(Feature::ExecutorCapabilityDiscovery)
         {
             return (None, false);
         }
-        let sandbox_contexts = if restricted_file_system {
+        let sandbox_contexts = if restricted_file_system || protected_level {
             environments
                 .turn_environments()
                 .map(|environment| {
-                    (
-                        environment.selection.environment_id.clone(),
-                        environment.sandbox_context(/*additional_permissions*/ None),
-                    )
+                    let mut sandbox =
+                        environment.sandbox_context(/*additional_permissions*/ None);
+                    // #2088: the same refusal as file tools in this environment (MXC as
+                    // none, D522 (a)).
+                    sandbox.unsandboxed_refusal =
+                        crate::security::windows_unsandboxed::environment_file_refusal(
+                            level,
+                            crate::tools::orchestrator::unsandboxed_check_level(
+                                environment.config(),
+                                session_windows_level,
+                            ),
+                            environment,
+                        );
+                    (environment.selection.environment_id.clone(), sandbox)
                 })
                 .collect::<HashMap<_, _>>()
         } else {
@@ -517,7 +580,7 @@ impl Session {
             .iter()
             .filter(|root| {
                 let selected_root = root.selected_root();
-                if !restricted_file_system {
+                if !restricted_file_system && !protected_level {
                     return true;
                 }
                 let CapabilityRootLocation::Environment { environment_id, .. } =
@@ -563,6 +626,13 @@ impl Session {
         cache.ensure_capacity(remote_environment_count);
         let mut snapshots = Vec::new();
         let mut skipped_incompatible_executor = false;
+        // The session's Windows sandbox level, as commands and file tools judge it.
+        let session_windows_level = self
+            .state
+            .lock()
+            .await
+            .session_configuration
+            .windows_sandbox_level;
         for selected in environments.turn_environments() {
             if !selected.environment.is_remote() {
                 continue;
@@ -582,9 +652,32 @@ impl Session {
                 skipped_incompatible_executor = true;
                 continue;
             }
+            // #2088 (D491/D510): as V1 discovery, nothing is discovered under a protected
+            // level on an executor that cannot confine it (MXC as none, D522 (a)).
+            let mut sandbox = selected.sandbox_context(/*additional_permissions*/ None);
+            let check_level = crate::tools::orchestrator::unsandboxed_check_level(
+                selected.config(),
+                session_windows_level,
+            );
+            sandbox.unsandboxed_refusal =
+                crate::security::windows_unsandboxed::environment_file_refusal(
+                    self.services.model_client().live_level(),
+                    check_level,
+                    selected,
+                );
+            if sandbox.unsandboxed_refusal.is_some()
+                && info.host_sandbox_verdict(check_level)
+                    != codex_exec_server::HostSandboxVerdict::Confined
+            {
+                tracing::warn!(
+                    environment_id,
+                    "skipped executor discovery V2 without the executor's sandbox"
+                );
+                continue;
+            }
             let request = DiscoverV2CapabilitiesRequest {
                 cwd: selected.cwd().clone(),
-                sandbox: Some(selected.sandbox_context(/*additional_permissions*/ None)),
+                sandbox: Some(sandbox),
             };
             let result = cache
                 .discover(environment_id, &selected.environment, request)
@@ -937,35 +1030,25 @@ async fn review_guardian_mcp_elicitation(
         return Ok(None);
     };
     let step_settings = turn_context.next_step_settings.load_full();
-
-    // User approval skips ordinary CUA checks, not separate sensitive requests.
-    let user_cua_execution = step_settings.approvals_reviewer() == ApprovalsReviewer::User
-        && is_node_repl_backed_server(&request.server_name)
-        && request.elicitation.meta().is_some_and(|meta| {
-            metadata_str(meta, MCP_ELICITATION_TOOL_NAME_KEY) == Some("js")
-                && metadata_str(meta, MCP_ELICITATION_CONNECTOR_ID_KEY) == Some("node_repl")
-                && metadata_str(meta, MCP_ELICITATION_APPROVAL_KIND_KEY)
-                    == Some(MCP_ELICITATION_APPROVAL_KIND_MCP_TOOL_CALL)
-                && meta.get(MCP_ELICITATION_SENSITIVE_ACTION_KEY) != Some(&Value::Bool(true))
-                && meta.get("codex_requires_user_input") != Some(&Value::Bool(true))
-        });
+    // Corbanu (#945, D50, PF-30): upstream auto-accepted node_repl/cua_repl
+    // confirmations when the person is the reviewer; they now reach the person
+    // like any other MCP confirmation.
+    let approvals_reviewer =
+        mcp_elicitation_approvals_reviewer(&turn_context, &step_settings, &mcp_config, &request);
 
     // Full Access skips inference, not the active-turn and cancellation checks.
-    if (user_cua_execution
-        || turn_context.initial_environments.has_full_access(
-            turn_context.approval_policy(),
-            &turn_context
-                .config
-                .permissions
-                .effective_permission_profile(),
-        ))
-        && matches!(
-            &request.elicitation,
-            Elicitation::Mcp(rmcp::model::ElicitRequestParams::FormElicitationParams {
-                requested_schema, ..
-            }) if requested_schema.properties.is_empty()
-        )
-    {
+    if turn_context.initial_environments.has_full_access(
+        turn_context.approval_policy(),
+        &turn_context
+            .config
+            .permissions
+            .effective_permission_profile(),
+    ) && matches!(
+        &request.elicitation,
+        Elicitation::Mcp(rmcp::model::ElicitRequestParams::FormElicitationParams {
+            requested_schema, ..
+        }) if requested_schema.properties.is_empty()
+    ) {
         let decision = if cancellation_token.is_cancelled() {
             ReviewDecision::Abort
         } else {
@@ -1017,13 +1100,17 @@ async fn review_guardian_mcp_elicitation(
         .as_ref()
         .map(|context| context.review_context.clone())
         .unwrap_or_else(|| crate::guardian::GuardianReviewContext::from(&turn_context));
-    let strict_auto_review = matches!(
-        request
-            .elicitation
-            .meta()
-            .and_then(|meta| meta.get(MCP_ELICITATION_STRICT_AUTO_REVIEW_KEY)),
-        Some(Value::Bool(true))
-    );
+    // Corbanu (#945, D50, PF-30): a server's strict request applies only when the
+    // automatic reviewer already answers this server's confirmations; otherwise
+    // the person answers (codex-mcp asks `person_answers` first).
+    let strict_auto_review = approvals_reviewer == ApprovalsReviewer::AutoReview
+        && matches!(
+            request
+                .elicitation
+                .meta()
+                .and_then(|meta| meta.get(MCP_ELICITATION_STRICT_AUTO_REVIEW_KEY)),
+            Some(Value::Bool(true))
+        );
     let mut guardian_request: crate::guardian::ReviewAction = if strict_auto_review {
         let connector_id = elicitation_connector_id(&request.elicitation);
         // A live Browser invocation can review a nested action with its own identity.
@@ -1140,16 +1227,6 @@ async fn review_guardian_mcp_elicitation(
             | AskForApproval::Granular(_) => {}
         }
 
-        let approvals_reviewer = crate::connectors::mcp_approvals_reviewer_from_layers(
-            &mcp_config.config_layer_stack,
-            step_settings
-                .mcp_approvals_reviewer_override
-                .unwrap_or(mcp_config.approvals_reviewer),
-            Some(turn_context.model_info().slug.as_str()),
-            request.server_name.as_str(),
-            elicitation_connector_id(&request.elicitation),
-            /*link_id*/ None,
-        );
         review_context.approval_policy = approval_policy;
         review_context.approvals_reviewer = approvals_reviewer;
         match guardian_elicitation_review_request(&request, originating_call_id) {

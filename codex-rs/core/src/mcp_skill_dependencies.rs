@@ -114,7 +114,7 @@ async fn admit_mcp_dependencies(
     candidates
 }
 
-async fn maybe_install_mcp_dependencies(
+pub(crate) async fn maybe_install_mcp_dependencies(
     sess: &Session,
     turn_context: &TurnContext,
     missing: HashMap<String, McpServerConfig>,
@@ -477,7 +477,7 @@ fn mcp_dependency_to_server_config(
     Err(format!("unsupported transport {transport}"))
 }
 
-fn collect_missing_mcp_dependencies(
+pub(crate) fn collect_missing_mcp_dependencies(
     mentioned_skills: &[SkillMetadata],
     installed: &HashMap<String, McpServerConfig>,
 ) -> HashMap<String, McpServerConfig> {

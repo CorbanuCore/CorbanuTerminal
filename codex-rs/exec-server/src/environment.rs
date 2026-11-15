@@ -1072,6 +1072,27 @@ impl Environment {
                 let connection_state = client.subscribe_connection_state();
                 let client = client.get().await?;
                 let discover = || async {
+                    // #2088 (D491/D510): a root carrying a refusal is discovered only where the
+                    // executor confines it, as the remote file system's reads (MXC as none).
+                    if params.roots.iter().any(|root| {
+                        root.sandbox
+                            .as_ref()
+                            .is_some_and(|sandbox| sandbox.unsandboxed_refusal.is_some())
+                    }) {
+                        let info = client.environment_info().await?;
+                        for root in &params.roots {
+                            if let Some(sandbox) = &root.sandbox
+                                && let Some(refusal) = &sandbox.unsandboxed_refusal
+                                && info.host_sandbox_verdict(
+                                    crate::remote_file_system::host_sandbox_level(
+                                        sandbox.windows_sandbox_selection,
+                                    ),
+                                ) != crate::HostSandboxVerdict::Confined
+                            {
+                                return Err(ExecServerError::Protocol(refusal.clone()));
+                            }
+                        }
+                    }
                     if params.roots.iter().any(|root| {
                         root.sandbox.as_ref().is_some_and(|sandbox| {
                             sandbox.windows_sandbox_selection == crate::WindowsSandboxSelection::Mxc

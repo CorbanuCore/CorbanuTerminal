@@ -290,8 +290,8 @@ const MODERATE: Setup = Setup {
 };
 
 /// In a session with untrusted content: a known tool's request to run
-/// outside the sandbox is offered with the warning, every time (also after
-/// "for the session"), through both shell tools, and the approved run may
+/// outside the sandbox is offered with the warning, every time (an unoffered
+/// "for the session" answer is refused), through both shell tools, and the approved run may
 /// create user namespaces; podman and bwrap are offered too (declined here). Any other
 /// command, and the tricks around a known tool, get no warning and keep
 /// the rule, approved or not; so does a known tool in the sandbox.
@@ -381,9 +381,16 @@ async fn d48_after_untrusted_content_only_known_tools_are_offered() -> anyhow::R
             call.explained
         );
         let ok = match n {
-            // Unshare approved in D48's prompt (also "for the session", then
-            // asked again) and in a protected action's.
-            0..=2 => {
+            // #2213: the unoffered session answer never runs the command.
+            0 => {
+                call.asked.len() == 1
+                    && call.warned()
+                    && !call.made
+                    && !call.refused
+                    && call.output.contains("not offered")
+            }
+            // Unshare approved in D48's prompt and in a protected action's.
+            1 | 2 => {
                 call.asked.len() == 1
                     && call.warned()
                     && call.allowed()

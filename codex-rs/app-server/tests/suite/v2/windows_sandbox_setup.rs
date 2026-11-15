@@ -253,8 +253,8 @@ async fn windows_sandbox_setup_start_rejects_relative_cwd() -> Result<()> {
 #[tokio::test]
 async fn issue_2000_a_sandbox_set_up_mid_thread_applies_to_it() -> Result<()> {
     use app_test_support::MockResponsesConfig;
+    use app_test_support::create_command_execution_sse_response;
     use app_test_support::create_final_assistant_message_sse_response;
-    use app_test_support::create_shell_command_sse_response;
     use codex_app_server_protocol::ThreadSettingsUpdateOutcome;
     use codex_app_server_protocol::ThreadSettingsUpdateParams;
     use codex_app_server_protocol::ThreadSettingsUpdateResponse;
@@ -270,7 +270,7 @@ async fn issue_2000_a_sandbox_set_up_mid_thread_applies_to_it() -> Result<()> {
     const MISSING: &str = "runs agent commands only inside the default Windows sandbox";
     const UNELEVATED: &str = "this Windows sandbox mode (unelevated) can't";
     let echo = |call_id: &str| {
-        create_shell_command_sse_response(
+        create_command_execution_sse_response(
             vec!["echo".to_string(), RAN.to_string()],
             /*workdir*/ None,
             Some(10_000),

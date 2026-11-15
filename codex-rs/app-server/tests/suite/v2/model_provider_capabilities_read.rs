@@ -37,7 +37,6 @@ async fn read_default_provider_capabilities() -> Result<()> {
         ModelProviderCapabilitiesReadResponse {
             // The unconfigured provider is OpenAI, so it has OpenAI's
             // capabilities; explicit Ambient is pinned separately below.
-            namespace_tools: true,
             image_generation: true,
             web_search: true,
         }
@@ -74,10 +73,9 @@ async fn read_default_provider_capabilities_profiles_cover_all_branches() -> Res
 "#,
     )?;
     let received = read_capabilities(codex_home.path()).await?;
-    // Explicitly-configured Ambient intentionally exposes no namespace tools,
-    // image generation, or web search.
+    // Explicitly-configured Ambient intentionally exposes no image generation
+    // or web search.
     let expected = ModelProviderCapabilitiesReadResponse {
-        namespace_tools: false,
         image_generation: false,
         web_search: false,
     };
@@ -92,7 +90,6 @@ async fn read_default_provider_capabilities_profiles_cover_all_branches() -> Res
     let received = read_capabilities(codex_home.path()).await?;
     // Explicitly-configured OpenRouter exposes hosted web search only.
     let expected = ModelProviderCapabilitiesReadResponse {
-        namespace_tools: false,
         image_generation: false,
         web_search: true,
     };
@@ -107,7 +104,6 @@ async fn read_default_provider_capabilities_profiles_cover_all_branches() -> Res
     let received = read_capabilities(codex_home.path()).await?;
     // Explicitly-configured OpenAI uses ProviderCapabilities::default().
     let expected = ModelProviderCapabilitiesReadResponse {
-        namespace_tools: true,
         image_generation: true,
         web_search: true,
     };
@@ -120,10 +116,9 @@ async fn read_default_provider_capabilities_profiles_cover_all_branches() -> Res
 "#,
     )?;
     let received = read_capabilities(codex_home.path()).await?;
-    // Anthropic Messages has plain function tools but no Responses namespace
-    // container, so collaboration tools must be flattened at this boundary.
+    // Anthropic Messages exposes hosted web search only. (Its missing namespace
+    // container is a Core-side capability; the wire no longer reports it.)
     let expected = ModelProviderCapabilitiesReadResponse {
-        namespace_tools: false,
         image_generation: false,
         web_search: true,
     };

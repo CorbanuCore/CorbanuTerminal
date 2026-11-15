@@ -510,11 +510,11 @@ async fn standalone_image_generation_uses_the_images_api_with_an_openai_api_key(
     )
     .await??;
 
-    let ThreadItem::ImageGeneration(ImageGenerationItem {
+    let ThreadItemPayload::ImageGeneration(ImageGenerationItem {
         status,
         saved_path: Some(saved_path),
         ..
-    }) = completed.item
+    }) = completed.item.payload
     else {
         panic!("expected completed image generation item with saved path");
     };

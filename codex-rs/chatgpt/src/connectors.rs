@@ -32,46 +32,20 @@ const DIRECTORY_CONNECTORS_TIMEOUT: Duration = Duration::from_secs(60);
 const CONNECTOR_METADATA_TIMEOUT: Duration = Duration::from_secs(60);
 const DEFAULT_APPS_PRODUCT_SKU: &str = "codex";
 
-<<<<<<< HEAD
-async fn apps_enabled(config: &Config) -> bool {
+async fn apps_enabled(config: &Config) -> anyhow::Result<bool> {
     let auth = AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false)
-        .await
+        .await?
         .session_auth()
         .await;
-    config
-||||||| 413492cd6c
-async fn apps_enabled(config: &Config) -> bool {
-    let auth_manager =
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await;
-    let auth = auth_manager.auth().await;
-    config
-=======
-async fn apps_enabled(config: &Config) -> anyhow::Result<bool> {
-    let auth_manager =
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await?;
-    let auth = auth_manager.auth().await;
     Ok(config
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .features
         .apps_enabled_for_auth(auth.as_ref().is_some_and(CodexAuth::uses_codex_backend)))
 }
 
 async fn connector_auth(config: &Config) -> anyhow::Result<CodexAuth> {
-<<<<<<< HEAD
     let auth = AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false)
-        .await
+        .await?
         .session_auth()
-||||||| 413492cd6c
-    let auth_manager =
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await;
-    let auth = auth_manager
-        .auth()
-=======
-    let auth_manager =
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await?;
-    let auth = auth_manager
-        .auth()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .await
         .ok_or_else(|| anyhow::anyhow!("ChatGPT auth not available"))?;
     anyhow::ensure!(

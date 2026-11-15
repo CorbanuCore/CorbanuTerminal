@@ -1,8 +1,11 @@
 use super::*;
+use crate::mcp_skill_dependencies::collect_missing_mcp_dependencies;
 use crate::mcp_skill_dependencies::maybe_install_mcp_dependencies;
-use crate::skills::model::SkillDependencies;
-use crate::skills::model::SkillToolDependency;
 use codex_config::load_global_mcp_servers;
+use codex_protocol::protocol::SkillScope;
+use codex_skills::SkillDependencies;
+use codex_skills::SkillMetadata;
+use codex_skills::SkillToolDependency;
 use pretty_assertions::assert_eq;
 
 fn stdio_dependency(name: &str) -> SkillToolDependency {
@@ -13,6 +16,7 @@ fn stdio_dependency(name: &str) -> SkillToolDependency {
         transport: Some("stdio".to_string()),
         command: Some(format!("{name}-server")),
         url: None,
+        oauth_callback_port: None,
     }
 }
 
@@ -54,17 +58,20 @@ async fn skill_dependency_install_skips_servers_in_reserved_namespaces() {
                 .collect(),
         }),
         policy: None,
-        path_to_skills_md: cwd.path().join("SKILL.md").abs(),
+        path_to_skills_md: codex_utils_path_uri::PathUri::from_abs_path(
+            &cwd.path().join("SKILL.md").abs(),
+        ),
         scope: SkillScope::Repo,
         plugin_id: None,
         remote_plugin_id: None,
     };
 
+    // Upstream's installer takes the missing servers; main's took the skills.
+    let missing = collect_missing_mcp_dependencies(&[skill], &std::collections::HashMap::new());
     maybe_install_mcp_dependencies(
         &session,
         &turn_context,
-        turn_context.config.as_ref(),
-        &[skill],
+        missing,
         /*elicitation_reviewer*/ None,
     )
     .await;

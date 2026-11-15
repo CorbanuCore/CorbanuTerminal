@@ -3,13 +3,7 @@ use crate::workspace::memory_storage_bytes;
 use codex_core::CodexThread;
 use codex_core::NewThread;
 use codex_core::Prompt;
-<<<<<<< HEAD
-||||||| 413492cd6c
-use codex_core::ResponseEvent;
-=======
-use codex_core::ResponseEvent;
 use codex_core::StartIfIdleSubmission;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_core::StartThreadOptions;
 use codex_core::ThreadManager;
 use codex_core::TurnInputRequest;
@@ -42,23 +36,9 @@ use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::ThreadSource;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::user_input::UserInput;
-<<<<<<< HEAD
-use codex_state::StateRuntime;
-||||||| 413492cd6c
-use codex_rollout_trace::InferenceTraceContext;
-use codex_state::StateRuntime;
-=======
-use codex_rollout_trace::InferenceTraceContext;
 use codex_state::MemoryStore;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_terminal_detection::user_agent;
-<<<<<<< HEAD
-||||||| 413492cd6c
-use futures::StreamExt;
-=======
-use futures::StreamExt;
 use std::path::Path;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -389,49 +369,6 @@ impl MemoryStartupContext {
         let session_source = config_snapshot.session_source;
         let session_id = SessionId::from(self.thread_id);
         let session_id_string = session_id.to_string();
-<<<<<<< HEAD
-||||||| 413492cd6c
-        let model_client = ModelClient::new(
-            Some(Arc::clone(&self.auth_manager)),
-            AgentIdentityAuthPolicy::JwtOnly,
-            self.thread_id,
-            config.model_provider.clone(),
-            session_source.clone(),
-            config_snapshot.originator,
-            config.model_verbosity,
-            config.features.enabled(Feature::EnableRequestCompression),
-            config.features.enabled(Feature::RuntimeMetrics),
-            /*beta_features_header*/ None,
-            /*concurrent_reasoning_summaries_enabled*/ false,
-            /*attestation_provider*/ None,
-            config.http_client_factory(),
-        );
-
-        let mut client_session = model_client.new_session();
-=======
-        let model_client = ModelClient::new(
-            Some(Arc::clone(&self.auth_manager)),
-            AgentIdentityAuthPolicy::JwtOnly,
-            self.thread_id,
-            config.model_provider.clone(),
-            session_source.clone(),
-            config_snapshot.originator,
-            config.model_verbosity,
-            config.features.enabled(Feature::ContentItemKinds),
-            config.features.enabled(Feature::ReasoningEffortOverride),
-            config.features.enabled(Feature::EnableRequestCompression),
-            config.features.enabled(Feature::RuntimeMetrics),
-            /*beta_features_header*/ None,
-            /*concurrent_reasoning_summaries_enabled*/ false,
-            /*output_token_replay_enabled*/ false,
-            /*attestation_provider*/ None,
-            config.http_client_factory(),
-            config.workspace_routing_context(),
-            Vec::new(),
-        );
-
-        let mut client_session = model_client.new_session();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let window_id = format!("{}:0", self.thread_id);
         let responses_metadata = detached_memory_responses_metadata(
             &self.thread_manager,

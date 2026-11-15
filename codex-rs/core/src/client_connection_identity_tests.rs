@@ -32,8 +32,9 @@ use pretty_assertions::assert_eq;
 struct HeaderAuth(HeaderMap);
 
 impl AuthProvider for HeaderAuth {
-    fn add_auth_headers(&self, headers: &mut HeaderMap) {
+    fn add_auth_headers(&self, headers: &mut HeaderMap) -> Result<(), codex_api::AuthError> {
         headers.extend(self.0.clone());
+        Ok(())
     }
 }
 
@@ -238,7 +239,7 @@ async fn api_only_rotation_reconnects_a_prewarmed_socket_and_keeps_same_key_reus
         let mut provider =
             create_oss_provider_with_base_url(&format!("{}/v1", server.uri()), WireApi::Responses);
         provider.supports_websockets = true;
-        provider.experimental_bearer_token = Some(token.to_string());
+        provider.experimental_bearer_token = Some(token.into());
         test_model_client_with_provider(thread_id, SessionSource::Cli, provider)
     };
     let mut session = client_with_token("synthetic-old-token").new_session();
@@ -261,7 +262,7 @@ async fn api_only_rotation_reconnects_a_prewarmed_socket_and_keeps_same_key_reus
             .is_none()
     );
     session
-        .preconnect_websocket(&telemetry, &metadata)
+        .preconnect_websocket(&model, /*service_tier*/ None, &telemetry, &metadata)
         .await
         .expect("preconnect");
 
@@ -343,7 +344,7 @@ async fn configured_header_rotation_reconnects_prewarmed_socket_and_keeps_same_v
                 WireApi::Responses,
             );
             provider.supports_websockets = true;
-            provider.http_headers = Some([(header_name.to_string(), value.to_string())].into());
+            provider.http_headers = Some([(header_name.to_string(), value.into())].into());
             test_model_client_with_provider(thread_id, SessionSource::Cli, provider)
         };
         let mut session = client_with_header("synthetic-old-value").new_session();
@@ -362,13 +363,19 @@ async fn configured_header_rotation_reconnects_prewarmed_socket_and_keeps_same_v
             .await
             .expect("setup");
         assert!(setup.auth.is_none());
-        assert!(setup.api_auth.to_auth_headers().is_empty());
+        assert!(
+            setup
+                .api_auth
+                .to_auth_headers()
+                .expect("auth headers")
+                .is_empty()
+        );
         assert_eq!(
             setup.api_provider.headers.get(header_name),
             Some(&HeaderValue::from_static("synthetic-old-value"))
         );
         session
-            .preconnect_websocket(&telemetry, &metadata)
+            .preconnect_websocket(&model, /*service_tier*/ None, &telemetry, &metadata)
             .await
             .expect("preconnect");
 
@@ -440,7 +447,9 @@ async fn configured_header_rotation_reconnects_prewarmed_socket_and_keeps_same_v
 fn issue_1343_brokered_identities_never_match() {
     struct BrokeredAuth;
     impl AuthProvider for BrokeredAuth {
-        fn add_auth_headers(&self, _headers: &mut HeaderMap) {}
+        fn add_auth_headers(&self, _headers: &mut HeaderMap) -> Result<(), codex_api::AuthError> {
+            Ok(())
+        }
     }
     let placeholder = CodexAuth::from_api_key(codex_model_provider::BROKERED_KEY_PLACEHOLDER);
     let removed_account =
@@ -507,12 +516,19 @@ async fn issue_1504_external_header_sign_in_rotation_reconnects_the_prewarmed_so
             SessionSource::Cli,
             "test_originator".to_string(),
             /*model_verbosity*/ None,
+            /*content_item_kinds_enabled*/ true,
+            /*reasoning_effort_override_enabled*/ false,
             /*enable_request_compression*/ false,
             /*include_timing_metrics*/ false,
             /*beta_features_header*/ None,
             /*concurrent_reasoning_summaries_enabled*/ false,
+            /*output_token_replay_enabled*/ false,
             /*attestation_provider*/ None,
             HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
+            codex_model_provider::WorkspaceRoutingContext::new(
+                "https://chatgpt.com/backend-api".into(),
+            ),
+            Vec::new(),
         )
     };
     let mut session = client_signed_in_as("Bearer synthetic-old-user").new_session();
@@ -525,7 +541,11 @@ async fn issue_1504_external_header_sign_in_rotation_reconnects_the_prewarmed_so
         .expect("setup");
     assert!(matches!(setup.auth, Some(CodexAuth::Headers(_))));
     assert_eq!(
-        setup.api_auth.to_auth_headers().get("authorization"),
+        setup
+            .api_auth
+            .to_auth_headers()
+            .expect("auth headers")
+            .get("authorization"),
         Some(&HeaderValue::from_static("Bearer synthetic-old-user"))
     );
     let metadata = test_responses_metadata_for_client(
@@ -536,7 +556,7 @@ async fn issue_1504_external_header_sign_in_rotation_reconnects_the_prewarmed_so
         TestCodexResponsesRequestKind::WebsocketConnection,
     );
     session
-        .preconnect_websocket(&telemetry, &metadata)
+        .preconnect_websocket(&model, /*service_tier*/ None, &telemetry, &metadata)
         .await
         .expect("preconnect");
 
@@ -675,7 +695,7 @@ async fn issue_1343_header_sign_in_rotation_reconnects_the_prewarmed_socket() {
         provider.supports_websockets = true;
         provider.http_headers = Some(std::collections::HashMap::from([(
             "x-api-key".to_string(),
-            key.to_string(),
+            key.into(),
         )]));
         test_model_client_with_provider(thread_id, SessionSource::Cli, provider)
     };
@@ -688,7 +708,13 @@ async fn issue_1343_header_sign_in_rotation_reconnects_the_prewarmed_socket() {
         .await
         .expect("setup");
     assert!(setup.auth.is_none());
-    assert!(setup.api_auth.to_auth_headers().is_empty());
+    assert!(
+        setup
+            .api_auth
+            .to_auth_headers()
+            .expect("auth headers")
+            .is_empty()
+    );
     let metadata = test_responses_metadata_for_client(
         &session.client,
         /*turn_id*/ None,
@@ -697,7 +723,7 @@ async fn issue_1343_header_sign_in_rotation_reconnects_the_prewarmed_socket() {
         TestCodexResponsesRequestKind::WebsocketConnection,
     );
     session
-        .preconnect_websocket(&telemetry, &metadata)
+        .preconnect_websocket(&model, /*service_tier*/ None, &telemetry, &metadata)
         .await
         .expect("preconnect");
 

@@ -5,6 +5,7 @@ use crate::agent::AgentStatus;
 use crate::agent::types::SpawnAgentOptions;
 use crate::config::RolloutBudgetConfig;
 use crate::config::test_config;
+use crate::exec_policy::ApprovedUnder;
 use crate::init_state_db;
 use crate::installation_id::INSTALLATION_ID_FILENAME;
 use crate::mcp::McpEnvironmentScope;
@@ -205,13 +206,14 @@ async fn child_and_grandchild_inherit_session_amendments_and_managed_rules() {
         .unwrap();
     let requirements = RequirementsExecPolicy::new(managed);
     config.config_layer_stack = managed_stack(Some(requirements));
-    let source = ExecPolicyManager::load(&config.config_layer_stack)
+    let source = ExecPolicyManager::load(&config.config_layer_stack, /*strict_rules*/ false)
         .await
         .unwrap();
     source
         .append_amendment_and_update(
             home.path(),
             &ExecPolicyAmendment::new(vec!["git".into(), "status".into()]),
+            ApprovedUnder::LessStrict,
         )
         .await
         .unwrap();
@@ -1201,11 +1203,15 @@ async fn start_thread_refuses_a_ruled_out_default_login_without_logging_it_out()
     // The process's default-login manager, built from the named session's
     // config, hides the ruled-out login; one built from a default session's
     // config does not.
-    let hiding = AuthManager::shared_from_config(&named, /*enable_codex_api_key_env*/ false).await;
+    let hiding = AuthManager::shared_from_config(&named, /*enable_codex_api_key_env*/ false)
+        .await
+        .expect("auth manager");
     assert!(hiding.hides_restricted_default_login());
     assert!(hiding.auth_cached().is_none());
     let enforcing =
-        AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false).await;
+        AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false)
+            .await
+            .expect("auth manager");
     assert!(!enforcing.hides_restricted_default_login());
 
     let message = crate::config::default_login_restriction_error(&config, &hiding)
@@ -1225,7 +1231,9 @@ async fn start_thread_refuses_a_ruled_out_default_login_without_logging_it_out()
     unrestricted.configured_forced_login_method = None;
     unrestricted.forced_login_method = None;
     let hiding_nothing =
-        AuthManager::shared_from_config(&unrestricted, /*enable_codex_api_key_env*/ false).await;
+        AuthManager::shared_from_config(&unrestricted, /*enable_codex_api_key_env*/ false)
+            .await
+            .expect("auth manager");
     assert!(hiding_nothing.hides_restricted_default_login());
     assert!(hiding_nothing.auth_cached().is_some());
     for (other, manager) in [
@@ -2048,7 +2056,8 @@ async fn resumed_subagent_rejoins_loaded_parent_control_plane() {
             parent_trace: None,
             environments: Some(Vec::new()),
             thread_extension_init: Default::default(),
-            supports_openai_form_elicitation: false,
+            client_mcp_extensions: Default::default(),
+            ..StartThreadOptions::new(config.clone())
         })
         .await
         .expect("start child thread");
@@ -2092,23 +2101,23 @@ async fn resumed_subagent_rejoins_loaded_parent_control_plane() {
     let auth_manager =
         AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
     let resumed_parent = resumed_manager
-        .resume_thread_from_rollout(
+        .resume_legacy_thread_from_rollout(
             config.clone(),
             parent_rollout,
             auth_manager.clone(),
             /*parent_trace*/ None,
-            /*supports_openai_form_elicitation*/ false,
+            ClientMcpExtensions::default(),
         )
         .await
         .expect("resume parent first");
     assert_eq!(resumed_parent.thread_id, parent_id);
     let resumed_child = resumed_manager
-        .resume_thread_from_rollout(
+        .resume_legacy_thread_from_rollout(
             config.clone(),
             child_rollout,
             auth_manager,
             /*parent_trace*/ None,
-            /*supports_openai_form_elicitation*/ false,
+            ClientMcpExtensions::default(),
         )
         .await
         .expect("resume child after parent");
@@ -2128,6 +2137,8 @@ async fn resumed_subagent_rejoins_loaded_parent_control_plane() {
         .services
         .agent_control
         .clone();
+    let parent_control = parent_control.local().expect("local agent control");
+    let child_control = child_control.local().expect("local agent control");
     assert_eq!(parent_control.session_id(), child_control.session_id());
     assert_eq!(
         parent_control
@@ -2210,7 +2221,8 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
             parent_trace: None,
             environments: Some(Vec::new()),
             thread_extension_init: Default::default(),
-            supports_openai_form_elicitation: false,
+            client_mcp_extensions: Default::default(),
+            ..StartThreadOptions::new(config.clone())
         })
         .await
         .expect("start child thread");
@@ -2250,7 +2262,8 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
             parent_trace: None,
             environments: Some(Vec::new()),
             thread_extension_init: Default::default(),
-            supports_openai_form_elicitation: false,
+            client_mcp_extensions: Default::default(),
+            ..StartThreadOptions::new(config.clone())
         })
         .await
         .expect("start verifier thread");
@@ -2310,12 +2323,12 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
     let auth_manager =
         AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
     let resumed_parent = resumed_manager
-        .resume_thread_from_rollout(
+        .resume_legacy_thread_from_rollout(
             config.clone(),
             parent_rollout,
             auth_manager,
             /*parent_trace*/ None,
-            /*supports_openai_form_elicitation*/ false,
+            ClientMcpExtensions::default(),
         )
         .await
         .expect("resume only the root thread");
@@ -2328,6 +2341,7 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
         .services
         .agent_control
         .clone();
+    let control = control.local().expect("local agent control");
     assert_eq!(
         control
             .get_agent_metadata_for_path(&child_path)
@@ -2366,16 +2380,17 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
         .await
         .expect("list restored descendants");
     assert!(listed.iter().any(|agent| {
-        agent.agent_name == child_path.as_str() && agent.agent_status == AgentStatus::Unloaded
+        agent.metadata.agent_path.as_ref() == Some(&child_path)
+            && agent.status == AgentStatus::Unloaded
     }));
     assert!(listed.iter().any(|agent| {
-        agent.agent_name == verifier_path.as_str()
-            && agent.agent_status == AgentStatus::Unloaded
-            && agent.agent_nickname.as_deref() == Some("Godel")
+        agent.metadata.agent_path.as_ref() == Some(&verifier_path)
+            && agent.status == AgentStatus::Unloaded
+            && agent.metadata.agent_nickname.as_deref() == Some("Godel")
     }));
 
     control
-        .ensure_v2_agent_loaded(config.clone(), verifier_id)
+        .ensure_v2_agent_loaded(config.clone(), verifier_id, /*parent*/ None)
         .await
         .expect("addressing the restored verifier should load it");
     let verifier_snapshot = control
@@ -2468,7 +2483,8 @@ async fn durable_thread_spawn_materializes_lazy_parent_child_and_core_graph_edge
             parent_trace: None,
             environments: Some(Vec::new()),
             thread_extension_init: Default::default(),
-            supports_openai_form_elicitation: false,
+            client_mcp_extensions: Default::default(),
+            ..StartThreadOptions::new(config.clone())
         })
         .await
         .expect("spawn durable child beneath lazy root");
@@ -2556,6 +2572,8 @@ async fn resumed_root_quarantines_provider_running_mail_without_replay() {
         .to_string();
     let control = root.thread.codex.session.services.agent_control.clone();
     control
+        .local()
+        .expect("local agent control")
         .admit_inter_agent_communication(root_id, &ambiguous)
         .await
         .expect("admit root mailbox message");
@@ -2609,12 +2627,12 @@ async fn resumed_root_quarantines_provider_running_mail_without_replay() {
     let auth_manager =
         AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
     let resumed_root = resumed_manager
-        .resume_thread_from_rollout(
+        .resume_legacy_thread_from_rollout(
             config,
             root_rollout,
             auth_manager,
             /*parent_trace*/ None,
-            /*supports_openai_form_elicitation*/ false,
+            ClientMcpExtensions::default(),
         )
         .await
         .expect("resume root thread");
@@ -4716,7 +4734,9 @@ async fn named_chatgpt_account_loads_in_a_session_on_a_third_party_provider() {
     assert_eq!(config.configured_forced_login_method, None);
     assert_eq!(crate::config::session_account_error(&config), None);
 
-    let base = AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false).await;
+    let base = AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false)
+        .await
+        .expect("auth manager");
     let named = base.for_named_account(work);
     assert!(
         named

@@ -19,7 +19,9 @@ async fn settle(db: &StateRuntime) {
 
 struct FixtureAuth;
 impl codex_api::AuthProvider for FixtureAuth {
-    fn add_auth_headers(&self, _: &mut http::HeaderMap) {}
+    fn add_auth_headers(&self, _: &mut http::HeaderMap) -> Result<(), codex_api::AuthError> {
+        Ok(())
+    }
 }
 
 /// Image generation is billed model inference that ships on by default, and it
@@ -115,7 +117,7 @@ async fn accounting_extension_client_records_its_own_request() -> anyhow::Result
             http::HeaderMap::new(),
         )
         .await
-        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        .map_err(|error| anyhow::anyhow!(error.into_parts().0.to_string()))?;
 
     settle(&db).await;
     let pool = db
@@ -246,7 +248,7 @@ async fn accounting_extension_client_without_its_session_records_nothing() -> an
             http::HeaderMap::new(),
         )
         .await
-        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        .map_err(|error| anyhow::anyhow!(error.into_parts().0.to_string()))?;
     let pool = db
         .sqlite()
         .open_read_only_pool(&db.sqlite().state_db_path(), /*busy_timeout*/ None)
@@ -364,7 +366,7 @@ async fn accounting_extension_client_binds_the_route_it_actually_sends_to() -> a
             http::HeaderMap::new(),
         )
         .await
-        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        .map_err(|error| anyhow::anyhow!(error.into_parts().0.to_string()))?;
 
     settle(&db).await;
     let pool = db
@@ -726,7 +728,8 @@ async fn accounting_store_failure_never_fails_search_or_image() -> anyhow::Resul
                         http::HeaderMap::new(),
                     )
                     .await
-                    .map(|response| response.data.len().to_string()),
+                    .map(|(response, _)| response.data.len().to_string())
+                    .map_err(|error| error.into_parts().0),
                 _ => codex_api::SearchClient::new(transport, api, Arc::new(FixtureAuth))
                     .search(
                         &codex_api::SearchRequest {
@@ -882,12 +885,12 @@ async fn accounting_extension_prices_an_api_key_image_generation() -> anyhow::Re
             http::HeaderMap::new(),
         )
         .await
-        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        .map_err(|error| anyhow::anyhow!(error.into_parts().0.to_string()))?;
     client("images/edits", "image-edit")
         .await
         .edit(
             &codex_api::ImageEditRequest {
-                images: vec![codex_api::ImageUrl {
+                images: vec![codex_protocol::models::ImageReference::Inline {
                     image_url: "data:image/png;base64,aW1hZ2U=".into(),
                 }],
                 prompt: "fixture".into(),
@@ -900,7 +903,7 @@ async fn accounting_extension_prices_an_api_key_image_generation() -> anyhow::Re
             http::HeaderMap::new(),
         )
         .await
-        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        .map_err(|error| anyhow::anyhow!(error.into_parts().0.to_string()))?;
 
     settle(&db).await;
     let day = chrono::Utc::now().timestamp_millis() / 86_400_000;

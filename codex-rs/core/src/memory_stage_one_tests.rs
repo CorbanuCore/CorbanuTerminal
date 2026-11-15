@@ -3,16 +3,20 @@ use pretty_assertions::assert_eq;
 
 async fn owner(level: SecurityLevel) -> Arc<Session> {
     let (mut session, _) = crate::session::tests::make_session_and_context().await;
-    session.services.agent_control = session
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            level,
-            session.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )
-        .unwrap();
+    session.services.agent_control = Arc::new(
+        session
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                level,
+                session.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )
+            .unwrap(),
+    );
     Arc::new(session)
 }
 
@@ -137,6 +141,8 @@ async fn pf_30_s04_live_strengthening_is_sticky_through_later_downgrade() {
     let controller = owner
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .trusted_security_controller()
         .unwrap();
     for level in [SecurityLevel::Moderate, SecurityLevel::Permissive] {
@@ -202,16 +208,20 @@ async fn pf_30_s04_provider_change_invalidates_bound_client() {
 async fn pf_30_s04_inherited_policy_is_not_weakened_by_permissive_worker_configuration() {
     let parent = owner(SecurityLevel::Moderate).await;
     let (mut child, _) = crate::session::tests::make_session_and_context().await;
-    child.services.agent_control = parent
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            SecurityLevel::Permissive,
-            child.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )
-        .unwrap();
+    child.services.agent_control = Arc::new(
+        parent
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                SecurityLevel::Permissive,
+                child.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )
+            .unwrap(),
+    );
     assert!(matches!(
         client(&Arc::new(child)).await,
         Err(StageOneMemoryError::Denied(
@@ -245,6 +255,8 @@ async fn pf_30_s04_kill_switch_denies_an_existing_worker_binding() {
     let controller = owner
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .trusted_security_controller()
         .unwrap();
     controller
@@ -277,6 +289,7 @@ async fn pf_30_s04_http_attempt_guard_withholds_canary_after_live_change() {
         ),
         &server.uri(),
         codex_http_client::ClientRouteClass::Api,
+        codex_login::default_client::ClientRedirectPolicy::Default,
     )
     .unwrap();
     let transport = StageOneGuardedTransport::new(
@@ -292,6 +305,8 @@ async fn pf_30_s04_http_attempt_guard_withholds_canary_after_live_change() {
     let controller = owner
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .trusted_security_controller()
         .unwrap();
     controller
@@ -320,21 +335,27 @@ async fn pf_30_s04_http_attempt_guard_withholds_canary_after_live_change() {
 #[tokio::test]
 async fn pf_30_s04_websocket_connect_race_denies_before_first_frame() {
     let (mut session, context) = crate::session::tests::make_session_and_context().await;
-    session.services.agent_control = session
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            SecurityLevel::Permissive,
-            session.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )
-        .unwrap();
+    session.services.agent_control = Arc::new(
+        session
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                SecurityLevel::Permissive,
+                session.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )
+            .unwrap(),
+    );
     let owner = Arc::new(session);
     let mut client = client(&owner).await.unwrap();
     let controller = owner
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .trusted_security_controller()
         .unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -411,16 +432,20 @@ async fn pf_30_s04_websocket_connect_race_denies_before_first_frame() {
 #[tokio::test]
 async fn pf_30_s04_owner_termination_cancels_pending_http_without_a_retry() {
     let (mut session, context) = crate::session::tests::make_session_and_context().await;
-    session.services.agent_control = session
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            SecurityLevel::Permissive,
-            session.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )
-        .unwrap();
+    session.services.agent_control = Arc::new(
+        session
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                SecurityLevel::Permissive,
+                session.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )
+            .unwrap(),
+    );
     let owner = Arc::new(session);
     let (terminate, terminated) = tokio::sync::oneshot::channel();
     let mut client = StageOneMemoryClient::new(
@@ -560,16 +585,20 @@ async fn pf_60_s03_stage_one_extraction_records_its_own_turn() -> anyhow::Result
     // Accounting attributes attempts to a persisted thread; ephemeral sessions
     // run uncollected, so the fixture needs a live thread like a real session.
     crate::session::tests::open_thread_persistence(&mut session).await;
-    session.services.agent_control = session
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            SecurityLevel::Permissive,
-            session.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )
-        .unwrap();
+    session.services.agent_control = Arc::new(
+        session
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                SecurityLevel::Permissive,
+                session.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )
+            .unwrap(),
+    );
     let owner = Arc::new(session);
     db.upsert_thread(
         &ThreadMetadataBuilder::new(
@@ -645,13 +674,13 @@ fn rollout_message(role: &str, text: &str) -> ResponseItem {
 }
 
 fn opened_by(id: ThreadId) -> RolloutItem {
-    RolloutItem::SessionMeta(codex_protocol::protocol::SessionMetaLine {
+    RolloutItem::SessionMeta(Box::new(codex_protocol::protocol::SessionMetaLine {
         meta: codex_protocol::protocol::SessionMeta {
             id,
             ..Default::default()
         },
         git: None,
-    })
+    }))
 }
 
 fn texts(contents: &str) -> Vec<String> {
@@ -660,7 +689,7 @@ fn texts(contents: &str) -> Vec<String> {
         .iter()
         .map(|item| match item {
             ResponseItem::Message { content, .. } => match content.as_slice() {
-                [ContentItem::InputText { text } | ContentItem::OutputText { text }] => {
+                [ContentItem::InputText { text } | ContentItem::OutputText { text, .. }] => {
                     text.clone()
                 }
                 _ => String::new(),
@@ -941,7 +970,7 @@ async fn pf_23_s03_past_session_level_is_a_floor_for_its_memory() {
         let lines: Vec<String> = rollout(level)
             .into_iter()
             .map(|item| {
-                serde_json::to_string(&codex_protocol::protocol::RolloutLine {
+                serde_json::to_string(&codex_history::RolloutLine {
                     timestamp: "2026-10-07T00:00:00Z".into(),
                     ordinal: None,
                     item,
@@ -1014,16 +1043,20 @@ async fn memory_extraction_respects_and_records_the_provider_request_throttle() 
         home: _home,
         cwd: _cwd,
     } = fixture;
-    session.services.agent_control = session
-        .services
-        .agent_control
-        .clone()
-        .with_effective_security_policy(
-            SecurityLevel::Permissive,
-            session.thread_id,
-            /*inherits_from_spawn_parent*/ false,
-        )
-        .unwrap();
+    session.services.agent_control = Arc::new(
+        session
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .clone()
+            .with_effective_security_policy(
+                SecurityLevel::Permissive,
+                session.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )
+            .unwrap(),
+    );
     let owner = Arc::new(session);
     let mut client = client(&owner).await.unwrap();
     let prompt = Prompt::default();

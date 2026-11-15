@@ -199,6 +199,7 @@ fn wrong_variant_retains_login_id_for_correlated_cancel_cleanup() {
             login_id: Some("wrong-mode-login".into()),
             success: true,
             error: Some("must be discarded".into()),
+            onboarding_entrypoint: None,
         }),
         None
     );
@@ -239,6 +240,7 @@ fn cancel_request_and_not_found_preserve_late_completion_correlation() {
             login_id: Some("login-1".into()),
             success: true,
             error: Some("canary server text".into()),
+            onboarding_entrypoint: None,
         })
         .expect("late completion should retain correlation");
     assert!(!format!("{action:?}").contains("canary"));
@@ -260,6 +262,7 @@ fn stale_notifications_and_definite_cancel_are_dropped() {
             login_id: Some("stale".into()),
             success: true,
             error: None,
+            onboarding_entrypoint: None,
         }),
         None
     );
@@ -274,6 +277,7 @@ fn stale_notifications_and_definite_cancel_are_dropped() {
             login_id: Some("login-1".into()),
             success: false,
             error: Some("arbitrary".into()),
+            onboarding_entrypoint: None,
         }),
         None
     );
@@ -282,6 +286,7 @@ fn stale_notifications_and_definite_cancel_are_dropped() {
             login_id: None,
             success: true,
             error: None,
+            onboarding_entrypoint: None,
         }),
         None
     );

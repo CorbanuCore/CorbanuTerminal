@@ -480,6 +480,7 @@ fn test_parse_patch() {
                 change_context: None,
                 old_lines: vec!["old".to_string()],
                 new_lines: vec!["new".to_string()],
+                context_line_indices: vec![],
                 is_end_of_file: false,
             }],
         }]

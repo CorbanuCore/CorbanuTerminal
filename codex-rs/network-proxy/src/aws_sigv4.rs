@@ -102,6 +102,14 @@ pub(crate) struct AwsSigV4Signer {
     credentials: Credentials,
 }
 
+impl AwsSigV4Signer {
+    /// Real values a signed request carries (the access key ID inside
+    /// `Authorization`, and the session token), for the response gate.
+    pub(crate) fn sent_credential_values(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.credentials.access_key_id()).chain(self.credentials.session_token())
+    }
+}
+
 impl std::fmt::Debug for AwsSigV4Signer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AwsSigV4Signer")

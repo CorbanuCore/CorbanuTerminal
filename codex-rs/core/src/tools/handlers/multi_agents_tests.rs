@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "multi_agents_media_tests.rs"]
+mod media_tests;
+
 #[path = "multi_agents_interrupt_mail_tests.rs"]
 mod interrupt_mail_tests;
 #[path = "multi_agents_source_identity_route_tests.rs"]
@@ -40,7 +43,6 @@ use crate::tools::handlers::multi_agents_v2::SpawnAgentHandler as SpawnAgentHand
 use crate::tools::handlers::multi_agents_v2::WaitAgentHandler as WaitAgentHandlerV2;
 use crate::tools::handlers::multi_agents_v2::message_tool::MessageToolResult;
 use crate::turn_diff_tracker::TurnDiffTracker;
-use codex_extension_api::ExtensionDataInit;
 use codex_extension_api::empty_extension_registry;
 use codex_features::Feature;
 use codex_history::InitialHistory;
@@ -513,7 +515,7 @@ async fn register_v2_wait_child(
         .start_thread((*turn.config).clone())
         .await
         .expect("root thread should start");
-    set_agent_control(&mut session, manager.agent_control());
+    set_agent_control(session, manager.agent_control());
     session.thread_id = root.thread_id;
     let child = session
         .services
