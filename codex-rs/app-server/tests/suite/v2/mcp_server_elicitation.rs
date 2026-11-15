@@ -870,7 +870,8 @@ impl ElicitationRoundTripFixture {
         let denied_burst = review_outcomes.len() == 3;
         let mut resolved = matches!(
             self.scenario,
-            ElicitationScenario::Strict(strict) if !strict.expects_user_confirmation()
+            ElicitationScenario::Strict(strict)
+                if !strict.expects_user_confirmation() && !strict.person_answers()
         );
         let mut guardian_review_events = 0;
         loop {
