@@ -196,81 +196,12 @@ fn retry_uses_original_unified_exec_request_and_stops_after_second_failure() {
     assert_eq!(vec![expected_refresh], *refresh_observations.borrow());
 }
 
-/// A request for tests that don't look at it.
-fn plain_request() -> RunnerTransportRequest {
-    let workspace_root = AbsolutePathBuf::from_absolute_path(PathBuf::from(r"C:\workspace"))
-        .expect("absolute workspace root");
-    let permission_profile = PermissionProfile::workspace_write();
-    let permissions =
-        ResolvedWindowsSandboxPermissions::try_from_permission_profile_for_workspace_roots(
-            &permission_profile,
-            std::slice::from_ref(&workspace_root),
-        )
-        .expect("resolved permissions");
-    RunnerTransportRequest {
-        permissions,
-        codex_home: PathBuf::from(r"C:\Users\codex"),
-        cwd: PathBuf::from(r"C:\workspace"),
-        env_map: HashMap::new(),
-        logs_base_dir: None,
-        spawn_request: SpawnRequest {
-            command: vec!["cmd.exe".to_string()],
-            cwd: PathBuf::from(r"C:\workspace"),
-            env: HashMap::new(),
-            permission_profile,
-            workspace_roots: vec![workspace_root],
-            codex_home: PathBuf::from(r"C:\Users\codex\.sandbox"),
-            real_codex_home: PathBuf::from(r"C:\Users\codex"),
-            cap_sids: Vec::new(),
-            network_proxy_restricting_sid: None,
-            timeout_ms: None,
-            tty: false,
-            stdin_open: false,
-            use_private_desktop: false,
-        },
-        read_roots_override: None,
-        read_roots_include_platform_defaults: false,
-        write_roots_override: None,
-        deny_read_override: crate::DenyReadTargets::default(),
-        deny_write_paths_override: Vec::new(),
-        proxy_enforced: false,
-        proxy_settings_mode: WindowsSandboxProxySettingsMode::Preserve,
-    }
-}
-
 /// Stands in for the planted-folder watch: records the thread it ends on.
 struct Watch(std::sync::Arc<std::sync::Mutex<Option<std::thread::ThreadId>>>);
 
 impl Drop for Watch {
     fn drop(&mut self) {
         *self.0.lock().expect("lock") = Some(std::thread::current().id());
-    }
-}
-
-fn runner_cannot_start(
-    _codex_home: &Path,
-    _cwd: &Path,
-    _sandbox_creds: &SandboxCreds,
-    _log_dir: Option<&Path>,
-    _spawn_request: SpawnRequest,
-) -> anyhow::Result<()> {
-    anyhow::bail!("the runner can't start")
-}
-
-fn runner_starts(
-    _codex_home: &Path,
-    _cwd: &Path,
-    _sandbox_creds: &SandboxCreds,
-    _log_dir: Option<&Path>,
-    _spawn_request: SpawnRequest,
-) -> anyhow::Result<()> {
-    Ok(())
-}
-
-fn creds() -> SandboxCreds {
-    SandboxCreds {
-        username: "sandbox".to_string(),
-        password: "secret".to_string(),
     }
 }
 
@@ -284,24 +215,17 @@ async fn planted_watch_ends_off_the_async_thread_when_the_runner_cannot_start() 
     let ended = std::sync::Arc::new(std::sync::Mutex::new(None));
 
     let failed = start_runner_off_async_thread(
-        creds(),
-        plain_request(),
         Watch(std::sync::Arc::clone(&ended)),
-        runner_cannot_start,
+        || -> anyhow::Result<()> { anyhow::bail!("the runner can't start") },
     )
     .await
     .map(|_| ())
     .map_err(|err| err.to_string());
     let ended_on = ended.lock().expect("lock").take();
 
-    let started = start_runner_off_async_thread(
-        creds(),
-        plain_request(),
-        Watch(std::sync::Arc::clone(&ended)),
-        runner_starts,
-    )
-    .await
-    .expect("runner starts");
+    let started = start_runner_off_async_thread(Watch(std::sync::Arc::clone(&ended)), || Ok(()))
+        .await
+        .expect("runner starts");
     let still_running = ended.lock().expect("lock").is_none();
     drop(started);
 

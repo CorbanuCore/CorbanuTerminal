@@ -138,6 +138,27 @@ struct LegacyProcessHandles {
     desktop: Option<LaunchDesktop>,
 }
 
+/// Owns a started command and its labels until the async caller takes them.
+/// If cancellation discards the blocking task's result, use the same job
+/// termination and bounded wait as the normal exit path before releasing labels.
+struct StartedLegacySession {
+    handles: Option<LegacyProcessHandles>,
+    integrity_lease: Option<IntegrityLease>,
+}
+
+impl Drop for StartedLegacySession {
+    fn drop(&mut self) {
+        if let Some(handles) = &self.handles
+            && let Some(lease) = self.integrity_lease.take()
+        {
+            lease.release_after_job(
+                Arc::clone(&handles.job),
+                /*descendants_preserved*/ false,
+            );
+        }
+    }
+}
+
 /// Starts the command with `token`, which is closed if it can't start.
 #[allow(clippy::too_many_arguments)]
 fn spawn_legacy_process(
@@ -517,7 +538,7 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
             );
             #[cfg(test)]
             if let Ok(prepared) = &prepared {
-                test_hooks::after_blocking_step(&command, &[prepared.token.raw()]);
+                test_hooks::after_blocking_step(&command, &[prepared.token.raw()], None);
             }
             prepared
         })
@@ -536,7 +557,7 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
 
     // Starting the process (its desktop, console and pipes) runs off the
     // async thread too.
-    let (spawned, integrity_lease) = {
+    let mut started = {
         let command = command.clone();
         let cwd = cwd.to_path_buf();
         let stderr_tx = stderr_rx.as_ref().map(|(tx, _rx)| tx.clone());
@@ -555,8 +576,14 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
                 writer_rx,
                 logs_base_dir.as_deref(),
             );
+            // Own the lease and process together before any further work can
+            // panic or the task returns a result to an abandoned caller.
+            let started = StartedLegacySession {
+                handles: Some(spawned?),
+                integrity_lease,
+            };
             #[cfg(test)]
-            if let Ok(handles) = &spawned {
+            if let Some(handles) = &started.handles {
                 test_hooks::after_blocking_step(
                     &command,
                     &[
@@ -564,20 +591,15 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
                         handles.process.0.hProcess,
                         handles.process.0.hThread,
                     ],
+                    Some(&handles.job),
                 );
             }
-            match spawned {
-                Ok(handles) => (Ok(handles), integrity_lease),
-                Err(err) => {
-                    // Ending the watch walks the writable roots again.
-                    drop(integrity_lease);
-                    (Err(err), None)
-                }
-            }
+            Ok::<_, anyhow::Error>(started)
         })
         .await
-        .map_err(|err| anyhow::anyhow!("legacy spawn task failed: {err}"))?
+        .map_err(|err| anyhow::anyhow!("legacy spawn task failed: {err}"))??
     };
+    let integrity_lease = started.integrity_lease.take();
     let LegacyProcessHandles {
         process,
         job,
@@ -587,7 +609,10 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
         mut conpty_owner,
         token,
         desktop,
-    } = spawned?;
+    } = started
+        .handles
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("started legacy process is missing its handles"))?;
     // From here on (nothing awaits) the wait thread closes them.
     let pi = process.into_raw();
     let token_handle = token.into_raw();
@@ -680,20 +705,26 @@ pub(crate) mod test_hooks {
     use std::sync::Mutex;
     use std::sync::PoisonError;
 
-    pub(crate) type Hook = Arc<dyn Fn(&[String], &[HANDLE]) + Send + Sync>;
+    use codex_utils_pty::JobObject;
+
+    pub(crate) type Hook = Arc<dyn Fn(&[String], &[HANDLE], Option<&Arc<JobObject>>) + Send + Sync>;
 
     /// #1909: run on the blocking thread at the end of each legacy spawn's
     /// preparation (with its token) and start (token, process and thread
     /// handles), before the step returns them.
     pub(crate) static AFTER_BLOCKING_STEP: Mutex<Option<Hook>> = Mutex::new(None);
 
-    pub(crate) fn after_blocking_step(command: &[String], handles: &[HANDLE]) {
+    pub(crate) fn after_blocking_step(
+        command: &[String],
+        handles: &[HANDLE],
+        job: Option<&Arc<JobObject>>,
+    ) {
         let hook = AFTER_BLOCKING_STEP
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone();
         if let Some(hook) = hook {
-            hook(command, handles);
+            hook(command, handles, job);
         }
     }
 }
