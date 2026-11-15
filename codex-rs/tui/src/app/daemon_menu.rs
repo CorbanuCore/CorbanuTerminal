@@ -71,28 +71,25 @@ impl App {
             .package_layout
             .is_some()
         });
-        let mut items: Vec<SelectionItem> = [
-            (
-                DaemonUpdateSource::PublicStable,
-                "Install latest public stable",
-            ),
-            (DaemonUpdateSource::ThisCli, "Use this CLI build"),
-        ]
-        .into_iter()
-        .map(|(source, name)| SelectionItem {
-            name: name.to_string(),
-            is_disabled: unavailable.is_some(),
-            disabled_reason: (unavailable.is_none()
-                && source == DaemonUpdateSource::ThisCli
-                && !has_package)
-                .then(|| "This CLI has no local package to copy".to_string()),
-            actions: vec![Box::new(move |tx| {
-                tx.send(AppEvent::ConfirmDaemonUpdate(source));
-            })],
-            dismiss_on_select: true,
-            ..Default::default()
-        })
-        .collect();
+        // Corbanu does not offer upstream's public-stable daemon install: the daemon's
+        // self-update stays off until it uses the Corbanu installer (D564). Update the CLI,
+        // then copy this build into the daemon.
+        let mut items: Vec<SelectionItem> = [(DaemonUpdateSource::ThisCli, "Use this CLI build")]
+            .into_iter()
+            .map(|(source, name)| SelectionItem {
+                name: name.to_string(),
+                is_disabled: unavailable.is_some(),
+                disabled_reason: (unavailable.is_none()
+                    && source == DaemonUpdateSource::ThisCli
+                    && !has_package)
+                    .then(|| "This CLI has no local package to copy".to_string()),
+                actions: vec![Box::new(move |tx| {
+                    tx.send(AppEvent::ConfirmDaemonUpdate(source));
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            })
+            .collect();
         items.push(SelectionItem {
             name: "Restart background server".to_string(),
             is_disabled: !self
@@ -164,12 +161,19 @@ impl App {
             return;
         }
         let mut explanation = match source {
-            DaemonUpdateSource::PublicStable => "Install the latest public stable release. Restore production updates; keep your automatic-update setting.".to_string(),
+            // Not offered in Corbanu (see `open_daemon_menu`); refuse a stray request.
+            DaemonUpdateSource::PublicStable => return,
             DaemonUpdateSource::ThisCli => {
                 let version = codex_install_context::InstallContext::current()
                     .package_manifest()
-                    .map_or_else(|| CODEX_CLI_VERSION.to_string(), |manifest| manifest.version.to_string());
-                format!("Use this CLI package v{version} from {}. Copy the complete package and pin it against automatic updates.", executable.display())
+                    .map_or_else(
+                        || CODEX_CLI_VERSION.to_string(),
+                        |manifest| manifest.version.to_string(),
+                    );
+                format!(
+                    "Use this CLI package v{version} from {}. Copy the complete package and pin it against automatic updates.",
+                    executable.display()
+                )
             }
         };
         explanation.push_str("\nThis may restart the daemon and interrupt active or queued work.\nCodex exits to update in this terminal. Relaunch it afterward.");

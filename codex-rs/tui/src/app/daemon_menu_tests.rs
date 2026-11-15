@@ -91,24 +91,15 @@ async fn daemon_menu_is_read_only_and_confirmation_can_cancel_or_handoff() {
     let overview = render_bottom_popup(&app.chat_widget, /*width*/ 80);
     insta::assert_snapshot!(overview.lines().find(|line| line.contains("Service v")).unwrap().trim(), @"Service v0.153.0 < Codex CLI v0.154.0 · /daemon");
     let executable = app.daemon_cli_executable.clone();
-    for (width, source, snapshot) in [
-        (
-            80,
-            DaemonUpdateSource::PublicStable,
-            "daemon_stable_confirmation",
-        ),
-        (100, DaemonUpdateSource::ThisCli, "daemon_cli_confirmation"),
-    ] {
+    // Corbanu offers only this CLI build (no public-stable daemon install; D564).
+    for (width, source, snapshot) in [(100, DaemonUpdateSource::ThisCli, "daemon_cli_confirmation")]
+    {
         app.daemon_cli_executable = executable.clone();
         app.open_daemon_menu();
-        if source == DaemonUpdateSource::PublicStable {
-            insta::assert_snapshot!(
-                "daemon_menu",
-                render_bottom_popup(&app.chat_widget, /*width*/ 80)
-            );
-        } else {
-            app.chat_widget.handle_key_event(KeyCode::Down.into());
-        }
+        insta::assert_snapshot!(
+            "daemon_menu",
+            render_bottom_popup(&app.chat_widget, /*width*/ 80)
+        );
         assert!(rx.try_recv().is_err());
         app.chat_widget.handle_key_event(KeyCode::Enter.into());
         assert!(
@@ -159,7 +150,6 @@ async fn daemon_menu_is_read_only_and_confirmation_can_cancel_or_handoff() {
                 .unwrap()
         },
     );
-    app.chat_widget.handle_key_event(KeyCode::Down.into());
     app.chat_widget.handle_key_event(KeyCode::Down.into());
     app.chat_widget.handle_key_event(KeyCode::Enter.into());
     assert!(matches!(
@@ -224,12 +214,12 @@ async fn daemon_menu_is_read_only_and_confirmation_can_cancel_or_handoff() {
         "daemon_unmanaged",
         render_bottom_popup(&app.chat_widget, /*width*/ 80)
     );
-    app.chat_widget.handle_key_event(KeyCode::Down.into());
+    // The disabled restart is skipped, so selection stays on this CLI build.
     app.chat_widget.handle_key_event(KeyCode::Down.into());
     app.chat_widget.handle_key_event(KeyCode::Enter.into());
     assert!(matches!(
         rx.try_recv().unwrap(),
-        AppEvent::ConfirmDaemonUpdate(_)
+        AppEvent::ConfirmDaemonUpdate(DaemonUpdateSource::ThisCli)
     ));
     app.confirm_daemon_restart();
     assert!(rx.try_recv().is_err());
@@ -238,19 +228,12 @@ async fn daemon_menu_is_read_only_and_confirmation_can_cancel_or_handoff() {
     app.app_server_target = AppServerTarget::Embedded;
     app.chat_widget.remote_connection = None;
     app.daemon_cli_executable = executable;
-    for source in [
-        DaemonUpdateSource::PublicStable,
-        DaemonUpdateSource::ThisCli,
-    ] {
+    for source in [DaemonUpdateSource::ThisCli] {
         app.open_daemon_menu();
-        if source == DaemonUpdateSource::PublicStable {
-            insta::assert_snapshot!(
-                "daemon_disconnected",
-                render_bottom_popup(&app.chat_widget, /*width*/ 80)
-            );
-        } else {
-            app.chat_widget.handle_key_event(KeyCode::Down.into());
-        }
+        insta::assert_snapshot!(
+            "daemon_disconnected",
+            render_bottom_popup(&app.chat_widget, /*width*/ 80)
+        );
         assert!(rx.try_recv().is_err());
         app.chat_widget.handle_key_event(KeyCode::Enter.into());
         assert!(
@@ -277,11 +260,9 @@ async fn daemon_menu_is_read_only_and_confirmation_can_cancel_or_handoff() {
         "daemon_unpackaged_cli",
         render_bottom_popup(&app.chat_widget, /*width*/ 80)
     );
+    // Without a package to copy, no update choice is enabled.
     app.chat_widget.handle_key_event(KeyCode::Enter.into());
-    assert!(matches!(
-        rx.try_recv().unwrap(),
-        AppEvent::ConfirmDaemonUpdate(DaemonUpdateSource::PublicStable)
-    ));
+    assert!(rx.try_recv().is_err());
 
     app.daemon_cli_executable = None;
     app.open_daemon_menu();
@@ -318,6 +299,24 @@ async fn unavailable_daemon_menu_offers_guidance_without_update_actions() {
         render_bottom_popup(&app.chat_widget, /*width*/ 80)
     );
     app.chat_widget.handle_key_event(KeyCode::Enter.into());
+    assert!(rx.try_recv().is_err());
+    assert_eq!(app.pending_update_action, None);
+}
+
+#[tokio::test]
+async fn public_stable_daemon_install_is_not_offered_or_confirmed() {
+    let mut app = make_test_app().await;
+    let (chat, _, mut rx, _) = make_chatwidget_manual_with_sender().await;
+    app.chat_widget = chat;
+    app.daemon_cli_executable =
+        Some(AbsolutePathBuf::from_absolute_path(std::env::current_exe().unwrap()).unwrap());
+    app.app_server_target = AppServerTarget::Embedded;
+    app.open_daemon_menu();
+    let menu = render_bottom_popup(&app.chat_widget, /*width*/ 80);
+    assert!(!menu.contains("public stable"), "{menu}");
+    // A stray request is refused: no confirmation opens and nothing is handed off.
+    app.confirm_daemon_update(DaemonUpdateSource::PublicStable);
+    assert_eq!(render_bottom_popup(&app.chat_widget, /*width*/ 80), menu);
     assert!(rx.try_recv().is_err());
     assert_eq!(app.pending_update_action, None);
 }
