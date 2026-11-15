@@ -24,17 +24,11 @@ use codex_app_server_protocol::MarketplaceRemoveParams;
 use codex_app_server_protocol::MarketplaceRemoveResponse;
 use codex_app_server_protocol::MarketplaceUpgradeParams;
 use codex_app_server_protocol::MarketplaceUpgradeResponse;
-<<<<<<< HEAD
-use std::future::Future;
-
-||||||| 413492cd6c
-
-=======
 use codex_app_server_protocol::McpServerOauthLoginParams;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::ThreadRecordSentModelRequestParams;
 use codex_app_server_protocol::ThreadRecordSentModelRequestResponse;
+use std::future::Future;
 
 use crate::hooks_rpc::HooksListTarget;
 use crate::hooks_rpc::fetch_hooks_list;
@@ -257,33 +251,11 @@ impl App {
 
     /// Starts the initial skills refresh without delaying the first interactive frame.
     pub(super) fn refresh_startup_skills(&mut self, app_server: &AppServerSession) {
-<<<<<<< HEAD
         self.refresh_skills(
             app_server,
             vec![self.config.cwd.to_path_buf()],
             /*force_reload*/ true,
         );
-||||||| 413492cd6c
-        let request_handle = app_server.request_handle();
-        let app_event_tx = self.app_event_tx.clone();
-        let cwd = self.config.cwd.to_path_buf();
-        tokio::spawn(async move {
-            let result = fetch_skills_list(request_handle, cwd)
-                .await
-                .map_err(|err| format!("{err:#}"));
-            app_event_tx.send(AppEvent::SkillsListLoaded { result });
-        });
-=======
-        let request_handle = app_server.request_handle();
-        let app_event_tx = self.app_event_tx.clone();
-        let cwd = self.config.cwd.to_path_buf();
-        tokio::spawn(async move {
-            let result = fetch_skills_list(request_handle, cwd.clone())
-                .await
-                .map_err(|err| format!("{err:#}"));
-            app_event_tx.send(AppEvent::SkillsListLoaded { cwd, result });
-        });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Refreshes skills without holding the main TUI event loop on app-server work.
@@ -299,7 +271,13 @@ impl App {
         let app_event_tx = self.app_event_tx.clone();
         let generations = Arc::clone(&self.skills_refresh_generation);
         let generation = generations.fetch_add(1, Ordering::AcqRel).wrapping_add(1);
-        spawn_correlated_skills_refresh(generations, generation, app_event_tx, async move {
+        // The result is tagged with the refresh's primary cwd, so a result for a session that has
+        // since moved elsewhere is dropped (upstream's stale-cwd check in event dispatch).
+        let cwd = cwds
+            .first()
+            .cloned()
+            .unwrap_or_else(|| self.config.cwd.to_path_buf());
+        spawn_correlated_skills_refresh(generations, generation, app_event_tx, cwd, async move {
             fetch_skills_list(request_handle, SkillsListParams { cwds, force_reload })
                 .await
                 .map_err(|err| format!("{err:#}"))
@@ -311,6 +289,7 @@ fn spawn_correlated_skills_refresh<F>(
     generations: Arc<AtomicU64>,
     generation: u64,
     app_event_tx: AppEventSender,
+    cwd: PathBuf,
     request: F,
 ) where
     F: Future<Output = Result<SkillsListResponse, String>> + Send + 'static,
@@ -318,7 +297,7 @@ fn spawn_correlated_skills_refresh<F>(
     tokio::spawn(async move {
         let result = request.await;
         if generations.load(Ordering::Acquire) == generation {
-            app_event_tx.send(AppEvent::SkillsListLoaded { result });
+            app_event_tx.send(AppEvent::SkillsListLoaded { cwd, result });
         }
     });
 }
@@ -1566,6 +1545,7 @@ mod tests {
             generations,
             /*generation*/ 1,
             sender.clone(),
+            PathBuf::from("/tmp/project"),
             std::future::pending(),
         );
 
@@ -1587,15 +1567,22 @@ mod tests {
             Arc::clone(&generations),
             /*generation*/ 1,
             sender.clone(),
+            PathBuf::from("/tmp/project"),
             empty(),
         );
         tokio::task::yield_now().await;
         assert!(rx.try_recv().is_err());
 
-        spawn_correlated_skills_refresh(generations, /*generation*/ 2, sender, empty());
+        spawn_correlated_skills_refresh(
+            generations,
+            /*generation*/ 2,
+            sender,
+            PathBuf::from("/tmp/project"),
+            empty(),
+        );
         assert!(matches!(
             tokio::time::timeout(Duration::from_secs(1), rx.recv()).await,
-            Ok(Some(AppEvent::SkillsListLoaded { result: Ok(_) }))
+            Ok(Some(AppEvent::SkillsListLoaded { result: Ok(_), .. }))
         ));
     }
 

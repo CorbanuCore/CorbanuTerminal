@@ -1,19 +1,15 @@
 // Aggregates all former standalone integration tests as modules.
 #[cfg(unix)]
-<<<<<<< HEAD
 mod claude_auth;
 #[cfg(all(unix, feature = "developer-accounting"))]
 mod cost_scope;
-||||||| 413492cd6c
-=======
+#[cfg(unix)]
 mod daemon_compatibility;
 #[cfg(unix)]
 mod directory_trust;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(unix)]
 mod focus_palette;
 #[cfg(unix)]
-<<<<<<< HEAD
 mod memory_human_fixture;
 #[cfg(unix)]
 mod memory_stage_one_policy;
@@ -26,15 +22,12 @@ mod output_text_stream;
 mod provider_convergence;
 #[cfg(unix)]
 mod provider_management;
-||||||| 413492cd6c
-=======
+#[cfg(unix)]
 mod provider_defaults;
 #[cfg(unix)]
 mod reconnect;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod resize_reflow;
 #[cfg(unix)]
-<<<<<<< HEAD
 mod resume_provider_accounts;
 #[cfg(unix)]
 mod resume_recorded_account;
@@ -44,10 +37,8 @@ mod security_profiles;
 mod side_refusal;
 #[cfg(unix)]
 mod slash_dispatch;
-||||||| 413492cd6c
-=======
+#[cfg(unix)]
 mod screen_reader;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod status_indicator;
 mod vt100_history;
 mod vt100_live_commit;

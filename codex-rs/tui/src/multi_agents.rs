@@ -336,26 +336,16 @@ pub(crate) fn sub_agent_activity_display(
     })
 }
 
-<<<<<<< HEAD
-pub(crate) fn sub_agent_activity_history_cell(item: &ThreadItem) -> Option<PlainHistoryCell> {
-    let ThreadItem::SubAgentActivity {
+pub(crate) fn sub_agent_activity_history_cell(
+    item: &ThreadItemPayload,
+) -> Option<PlainHistoryCell> {
+    let ThreadItemPayload::SubAgentActivity {
         kind,
         agent_path,
         agent_nickname,
         agent_role,
         task_preview,
         ..
-||||||| 413492cd6c
-pub(crate) fn sub_agent_activity_history_cell(item: &ThreadItem) -> Option<PlainHistoryCell> {
-    let ThreadItem::SubAgentActivity {
-        kind, agent_path, ..
-=======
-pub(crate) fn sub_agent_activity_history_cell(
-    item: &ThreadItemPayload,
-) -> Option<PlainHistoryCell> {
-    let ThreadItemPayload::SubAgentActivity {
-        kind, agent_path, ..
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     } = item
     else {
         return None;
@@ -378,7 +368,6 @@ pub(crate) fn sub_agent_activity_history_cell(
     ))
 }
 
-<<<<<<< HEAD
 fn activity_identity(
     agent_path: &str,
     agent_nickname: Option<&str>,
@@ -393,25 +382,6 @@ fn activity_identity(
     }
 }
 
-pub(crate) fn sub_agent_activity_summary(kind: SubAgentActivityKind, agent_path: &str) -> String {
-    match kind {
-        SubAgentActivityKind::Started => format!("Started `{agent_path}`"),
-        SubAgentActivityKind::Interacted => format!("Interacted with `{agent_path}`"),
-        SubAgentActivityKind::Interrupted => format!("Interrupted `{agent_path}`"),
-    }
-}
-
-||||||| 413492cd6c
-pub(crate) fn sub_agent_activity_summary(kind: SubAgentActivityKind, agent_path: &str) -> String {
-    match kind {
-        SubAgentActivityKind::Started => format!("Started `{agent_path}`"),
-        SubAgentActivityKind::Interacted => format!("Interacted with `{agent_path}`"),
-        SubAgentActivityKind::Interrupted => format!("Interrupted `{agent_path}`"),
-    }
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 fn sub_agent_activity_title(kind: SubAgentActivityKind, agent_path: &str) -> Line<'static> {
     let (prefix, path) = match kind {
         SubAgentActivityKind::Started => ("Started ", agent_path),
@@ -738,17 +708,9 @@ fn status_summary_line(status: Option<&CollabAgentState>, fallback_error: &str) 
 
 fn status_summary_spans(status: &CollabAgentState) -> Vec<Span<'static>> {
     match status.status {
-<<<<<<< HEAD
-        CollabAgentStatus::PendingInit => vec![Span::from("Pending init").cyan()],
-        CollabAgentStatus::Unloaded => vec![Span::from("Unloaded").dim()],
-        CollabAgentStatus::Running => vec![Span::from("Running").cyan().bold()],
-||||||| 413492cd6c
-        CollabAgentStatus::PendingInit => vec![Span::from("Pending init").cyan()],
-        CollabAgentStatus::Running => vec![Span::from("Running").cyan().bold()],
-=======
         CollabAgentStatus::PendingInit => vec![Span::from("Pending init").fg(accent_color())],
+        CollabAgentStatus::Unloaded => vec![Span::from("Unloaded").dim()],
         CollabAgentStatus::Running => vec![Span::from("Running").fg(accent_color()).bold()],
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         // Allow `.yellow()`
         #[allow(clippy::disallowed_methods)]
         CollabAgentStatus::Interrupted => vec![Span::from("Interrupted").yellow()],

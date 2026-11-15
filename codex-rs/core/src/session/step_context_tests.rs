@@ -116,3 +116,81 @@ async fn pf_23_s01_step_file_access_gets_the_read_denials() {
         step.file_access_context(&session, environment).await
     ));
 }
+
+async fn metadata(
+    access: &dyn codex_file_system::EnvironmentAccess,
+    path: &PathUri,
+) -> Result<(), (std::io::ErrorKind, String)> {
+    access
+        .get_metadata(path, codex_file_system::GetMetadataOptions::default())
+        .await
+        .map(drop)
+        .map_err(|error| (error.kind(), error.to_string()))
+}
+
+/// #2183 review: a step's file access is built once per step, so a security
+/// transition committed during the step (here a revocation, which moves the
+/// policy marker and keeps the level) refuses every later operation through
+/// it; the next step's access is decided under the new policy and works.
+#[tokio::test]
+async fn file_access_built_before_a_transition_is_refused_after_it() {
+    let (session, _events) = crate::session::tests::make_session_with_config_and_rx(|_| {})
+        .await
+        .expect("session");
+    let control = session
+        .services
+        .agent_control
+        .local()
+        .expect("the local agent backend")
+        .clone()
+        .with_effective_security_policy(
+            SecurityLevel::Permissive,
+            session.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
+        .expect("policy");
+    let controller = control.trusted_security_controller().expect("controller");
+    let turn = session.new_default_turn().await;
+    let step = StepContext::for_test(Arc::clone(&turn));
+    let before = step.environments(&session).await;
+    let (environment, access) = before.first().expect("an environment");
+    let cwd = environment.cwd().clone();
+    assert_eq!(metadata(access, &cwd).await, Ok(()));
+
+    let mut revocations = codex_security_policy::RevocationState::new();
+    revocations
+        .apply(
+            &codex_security_policy::RevocationEvent::new(
+                codex_security_policy::PolicyPrincipal::new(
+                    codex_security_policy::PrincipalKind::Human,
+                    "human:step-file-access",
+                )
+                .expect("principal"),
+                codex_security_policy::RevocationTarget::Grant {
+                    grant_id: codex_security_policy::BoundedText::new("step-file-access-grant")
+                        .expect("grant id"),
+                },
+                codex_security_policy::RevocationReason::HumanRequest,
+                /*created_at_unix_seconds*/ 1,
+            )
+            .expect("event"),
+        )
+        .expect("apply");
+    controller
+        .apply_confirmed_change(
+            controller
+                .confirm_level_change(SecurityLevel::Permissive, revocations)
+                .expect("confirm"),
+        )
+        .expect("transition");
+
+    assert_eq!(
+        metadata(access, &cwd).await,
+        Err((
+            std::io::ErrorKind::PermissionDenied,
+            super::STEP_FILE_ACCESS_STALE.to_string()
+        ))
+    );
+    let after = step.environments(&session).await;
+    assert_eq!(metadata(&after[0].1, &cwd).await, Ok(()));
+}
