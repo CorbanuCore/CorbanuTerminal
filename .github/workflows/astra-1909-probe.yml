@@ -18,4 +18,12 @@ jobs:
         run: |
           Remove-Item Env:CORBANU_HOME,Env:CODEX_HOME,Env:PFTERMINAL_HOME -ErrorAction SilentlyContinue
           python scripts/isolated_rust_tests.py -p codex-windows-sandbox --lib --locked -j 8 -E 'test(file_print_flags_growth_during_the_read) | test(legacy_spawn_cancelled_while_starting_closes_its_handles) | test(direct_retag_without_the_privilege)'
+          if ($LASTEXITCODE -eq 0) { throw 'Expected fail-before regressions' }
+      - name: Privilege refusal pass-after
+        shell: pwsh
+        run: |
+          python -c 'from pathlib import Path; p=Path("codex-rs/windows-sandbox-rs/src/git_watch_tests.rs"); s=p.read_text(); old="                        panic!(\"retag failed: {err}\");"; assert s.count(old)==1; p.write_text(s.replace(old,"                        retagged.set(Some(false));"))'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item Env:CORBANU_HOME,Env:CODEX_HOME,Env:PFTERMINAL_HOME -ErrorAction SilentlyContinue
+          python scripts/isolated_rust_tests.py -p codex-windows-sandbox --lib --locked -j 8 -E 'test(direct_retag_without_the_privilege)'
           exit $LASTEXITCODE
