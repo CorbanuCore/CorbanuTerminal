@@ -163,6 +163,9 @@ async fn model_picker_refresh_updates_app_catalog_from_app_server() -> Result<()
 
 fn model_presets_with_test_upgrades() -> Vec<ModelPreset> {
     let mut presets = all_model_presets();
+    // The bundled catalog may list a real gpt-5.2 with its own migration copy;
+    // this fixture's retired model must be the only one.
+    presets.retain(|preset| preset.model != "gpt-5.2");
     let mut preset = presets
         .iter()
         .find(|preset| preset.model == "gpt-5.5")

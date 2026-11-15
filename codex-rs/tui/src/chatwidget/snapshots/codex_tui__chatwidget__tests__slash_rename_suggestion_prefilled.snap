@@ -1,8 +1,9 @@
 ---
 source: tui/src/chatwidget/tests/slash_commands.rs
+assertion_line: 1473
 expression: popup
 ---
-  Rename thread
+  Rename pane
   Suggested from this conversation
 
 › Fix login timeout

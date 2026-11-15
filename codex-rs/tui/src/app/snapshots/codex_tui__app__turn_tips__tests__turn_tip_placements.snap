@@ -1,6 +1,6 @@
 ---
 source: tui/src/app/turn_tips_tests.rs
-assertion_line: 387
+assertion_line: 393
 expression: "crate::chatwidget::tests::helpers::normalize_snapshot_paths(screens.join(\"\\n\\n\"))"
 ---
 working=true, response rows=1, 80x12
@@ -12,17 +12,17 @@ Response row 0
   └ Tip: Try /help.
 
 
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
-  gpt-test default · /tmp/project
+  gpt-test via test-provider default · /tmp/project · Corbanu Terminal · TPS: -…
   ? for shortcuts
 
 working=true, response rows=1, 80x6
 • Working (0s • esc to interrupt)
 
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
-  gpt-test default · /tmp/project
+  gpt-test via test-provider default · /tmp/project · Corbanu Terminal · TPS: -…
   ? for shortcuts
 
 working=false, response rows=1, 80x12
@@ -34,9 +34,9 @@ working=false, response rows=1, 80x12
   Worked for [duration] • [completion time]
 
 
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
-  gpt-test default · /tmp/project
+  gpt-test via test-provider default · /tmp/project · Corbanu Terminal · TPS: -…
   ? for shortcuts
 
 working=false, response rows=1, 80x24
@@ -60,9 +60,9 @@ Response row 0
 
 
 
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
-  gpt-test default · /tmp/project
+  gpt-test via test-provider default · /tmp/project · Corbanu Terminal · TPS: -…
   ? for shortcuts
 
 Completion tip selected, 80x24
@@ -86,9 +86,9 @@ Response row 0
 
                                                                Copying 5 chars…
 
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
-  gpt-test default · /tmp/project
+  gpt-test via test-provider default · /tmp/project · Corbanu Terminal · TPS: -…
   ? for shortcuts
 
 working=false, response rows=30, 80x12
@@ -100,9 +100,9 @@ working=false, response rows=30, 80x12
   Worked for [duration] • [completion time]
 
 
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
-  gpt-test default · /tmp/project
+  gpt-test via test-provider default · /tmp/project · Corbanu Terminal · TPS: -…
   ? for shortcuts
 
 working=false, response rows=1, 80x9
@@ -111,9 +111,9 @@ working=false, response rows=1, 80x9
   Worked for [duration] • [completion time]
 
 
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
-  gpt-test default · /tmp/project
+  gpt-test via test-provider default · /tmp/project · Corbanu Terminal · TPS: -…
   ? for shortcuts
 
 working=false, response rows=1, 80x10
@@ -123,9 +123,9 @@ working=false, response rows=1, 80x10
   Worked for [duration] • [completion time]
 
 
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
-  gpt-test default · /tmp/project
+  gpt-test via test-provider default · /tmp/project · Corbanu Terminal · TPS: -…
   ? for shortcuts
 
 working=false, response rows=1, 80x11
@@ -136,9 +136,9 @@ working=false, response rows=1, 80x11
   Worked for [duration] • [completion time]
 
 
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
-  gpt-test default · /tmp/project
+  gpt-test via test-provider default · /tmp/project · Corbanu Terminal · TPS: -…
   ? for shortcuts
 
 working=false, response rows=1, 12x12
@@ -150,13 +150,13 @@ working=false, response rows=1, 12x12
   [completion time]
 
 
-› Ask Codex
+› Ask Corba
 
   gpt-test …
   ? for shor
 
 working=false, response rows=1, 80x4
 
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
   ? for shortcuts

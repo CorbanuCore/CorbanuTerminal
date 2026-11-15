@@ -1,11 +1,13 @@
 ---
 source: tui/src/onboarding/gcp_tests.rs
+assertion_line: 34
 expression: terminal.backend().to_string()
 ---
-  Sign in with ChatGPT to use Codex as part of your paid plan
-  or connect an API key for usage-based billing
+  Choose a provider account for Corbanu Terminal
 
-> 1. Sign in with ChatGPT
-  2. Sign in with Device Code
-  3. Sign in another way
-  Press enter to continue
+  1. Provider: OpenAI Codex Account
+     Sign in with device code
+
+  2. Provider: Anthropic Claude Account
+     Use Claude subscription access; long-lived token recommended or Claude
+  Use ↑/↓ to choose · Press enter to continue · 1 / 9

@@ -12,6 +12,8 @@ async fn custom_model_display_name_in_pickers_preserves_selection_slug() {
     preset.model = slug.to_string();
     preset.display_name = "GPT-5.6 Luna".to_string();
     preset.description = "Custom provider model".to_string();
+    // The bundled catalog now hides gpt-5.5, the template for this custom model.
+    preset.show_in_picker = true;
     preset.default_reasoning_effort = ReasoningEffortConfig::High;
     preset.supported_reasoning_efforts = vec![
         ReasoningEffortPreset {
