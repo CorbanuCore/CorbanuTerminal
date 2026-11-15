@@ -143,7 +143,17 @@ pub(crate) fn refuse_without_platform_sandbox(
         context.windows_sandbox_selection,
         codex_file_system::WindowsSandboxSelection::Disabled
     );
-    if codex_sandboxing::get_platform_sandbox(windows_sandbox_enabled).is_some() {
+    // Recheck setup on the executor too: another server may answer behind
+    // the same URL after the client checked environment/info (#2088).
+    let elevated_not_set_up = cfg!(windows)
+        && matches!(
+            context.windows_sandbox_selection,
+            codex_file_system::WindowsSandboxSelection::Elevated
+        )
+        && !codex_sandboxing::windows_elevated_sandbox_set_up();
+    if codex_sandboxing::get_platform_sandbox(windows_sandbox_enabled).is_some()
+        && !elevated_not_set_up
+    {
         return Ok(());
     }
     Err(io::Error::new(

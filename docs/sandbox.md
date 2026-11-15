@@ -51,7 +51,11 @@ the level and the environment. "No Windows sandbox for this session" means
 either that this computer's config asks for none (no `[windows] sandbox`
 setting: the remote machine uses the setting of the computer that sends the
 work) or that it asks for the default sandbox and that machine has not set
-it up. To fix it:
+it up. A ready remote environment reports this at session startup as well.
+The refusal also covers executor skill/plugin discovery and skill resource
+reads, even with a full-disk permission profile (#2088). The executor rechecks
+marked file requests before access, including whether the requested default
+sandbox is actually set up. To fix it:
 
 - On the remote machine, run Corbanu Terminal with the same Corbanu home as
   its exec-server, open `/permissions`, choose a mode that uses the sandbox
