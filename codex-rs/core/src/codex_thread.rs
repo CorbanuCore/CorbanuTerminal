@@ -1128,6 +1128,8 @@ impl CodexThread {
     #[cfg(test)]
     pub(crate) async fn inject_user_message_without_turn(&self, message: String) {
         let item = ResponseItem::Message {
+            encrypted_content: None,
+            status: None,
             id: None,
             role: "user".to_string(),
             content: vec![ContentItem::InputText { text: message }],

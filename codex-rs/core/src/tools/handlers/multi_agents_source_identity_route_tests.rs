@@ -93,7 +93,7 @@ async fn issue863_custom_native_spawn_send_followup_keep_source_and_ciphertext()
                 return None;
             }
             match op {
-                Op::InterAgentCommunication { communication } => Some(json!({
+                Op::InterAgentCommunication { communication, .. } => Some(json!({
                     "content": communication.content,
                     "encrypted_content": communication.encrypted_content,
                     "trigger_turn": communication.trigger_turn,
@@ -174,7 +174,7 @@ async fn issue863_custom_native_send_followup_reject_builtin_before_mailbox_muta
         .iter()
         .filter_map(|(id, op)| {
             if *id == builtin.thread_id
-                && let Op::InterAgentCommunication { communication } = op
+                && let Op::InterAgentCommunication { communication, .. } = op
             {
                 return Some(communication.clone());
             }
@@ -325,7 +325,7 @@ async fn issue1144_aggressive_native_spawn_on_another_account_is_refused_before_
                 let mut config = (*turn.config).clone();
                 config.security_level = codex_security_policy::SecurityLevel::Aggressive;
                 set_turn_config(turn, config);
-                turn.approval_policy
+                turn.approval_policy()
                     .set(approval)
                     .expect("approval policy should be set");
             },
@@ -422,7 +422,7 @@ async fn issue1127_custom_native_send_followup_to_another_account_are_refused() 
         .iter()
         .filter_map(|(id, op)| {
             if *id == work_child.thread_id
-                && let Op::InterAgentCommunication { communication } = op
+                && let Op::InterAgentCommunication { communication, .. } = op
             {
                 return Some(communication.clone());
             }
@@ -505,7 +505,7 @@ async fn issue1016_custom_native_spawn_default_model_keeps_source_and_ciphertext
     let new_operations = operations_after
         .strip_prefix(operations_before.as_slice())
         .expect("spawn must preserve all prior captured operations");
-    let [(actual_child, Op::InterAgentCommunication { communication })] = new_operations else {
+    let [(actual_child, Op::InterAgentCommunication { communication, .. })] = new_operations else {
         panic!("spawn must add exactly one captured communication operation");
     };
     assert_eq!(*actual_child, child);

@@ -166,6 +166,7 @@ fn assert_executor_rule(
 fn deny_glob_entry(pattern: impl Into<String>) -> FileSystemSandboxEntry {
     FileSystemSandboxEntry::new(
         FileSystemPath::GlobPattern {
+            scan: None,
             pattern: pattern.into(),
         },
         Deny,

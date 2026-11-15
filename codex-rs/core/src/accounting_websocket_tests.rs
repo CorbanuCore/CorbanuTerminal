@@ -262,7 +262,10 @@ impl Fixture {
         let pool = self
             .db
             .sqlite()
-            .open_read_only_pool(&self.db.sqlite().state_db_path())
+            .open_read_only_pool(
+                &self.db.sqlite().state_db_path(),
+                /*busy_timeout*/ None,
+            )
             .await?;
         let rows: Vec<String> = sqlx::query_scalar(match table {
             "draft_accounting_attempts" => {

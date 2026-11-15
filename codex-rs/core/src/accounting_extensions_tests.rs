@@ -120,7 +120,7 @@ async fn accounting_extension_client_records_its_own_request() -> anyhow::Result
     settle(&db).await;
     let pool = db
         .sqlite()
-        .open_read_only_pool(&db.sqlite().state_db_path())
+        .open_read_only_pool(&db.sqlite().state_db_path(), /*busy_timeout*/ None)
         .await?;
     let attempts: Vec<String> =
         sqlx::query_scalar("SELECT payload FROM draft_accounting_attempts ORDER BY rowid")
@@ -249,7 +249,7 @@ async fn accounting_extension_client_without_its_session_records_nothing() -> an
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let pool = db
         .sqlite()
-        .open_read_only_pool(&db.sqlite().state_db_path())
+        .open_read_only_pool(&db.sqlite().state_db_path(), /*busy_timeout*/ None)
         .await?;
     let installed: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM sqlite_master WHERE name = 'draft_accounting_attempts'",
@@ -369,7 +369,7 @@ async fn accounting_extension_client_binds_the_route_it_actually_sends_to() -> a
     settle(&db).await;
     let pool = db
         .sqlite()
-        .open_read_only_pool(&db.sqlite().state_db_path())
+        .open_read_only_pool(&db.sqlite().state_db_path(), /*busy_timeout*/ None)
         .await?;
     let attempts: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
         .fetch_one(&pool)
@@ -445,7 +445,7 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
     settle(&db).await;
     let pool = db
         .sqlite()
-        .open_read_only_pool(&db.sqlite().state_db_path())
+        .open_read_only_pool(&db.sqlite().state_db_path(), /*busy_timeout*/ None)
         .await?;
     let attempts: Vec<String> =
         sqlx::query_scalar("SELECT payload FROM draft_accounting_attempts ORDER BY rowid")

@@ -32,6 +32,7 @@ async fn a_panicking_task_fails_its_turn_instead_of_leaving_it_running() {
     sess.spawn_task(
         Arc::clone(&tc),
         vec![TurnInput::UserInput {
+            metadata: Default::default(),
             content: vec![UserInput::Text {
                 text: "hello".to_string(),
                 text_elements: Vec::new(),

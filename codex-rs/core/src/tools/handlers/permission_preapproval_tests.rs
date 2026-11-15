@@ -84,6 +84,7 @@ fn preapproval_fails_closed_when_materialization_rejects_both_profiles() {
     let cwd = tempdir().expect("tempdir");
     let invalid = file_system_permissions(vec![FileSystemSandboxEntry::new(
         FileSystemPath::GlobPattern {
+            scan: None,
             pattern: "**/secrets".to_string(),
         },
         FileSystemAccessMode::Write,
