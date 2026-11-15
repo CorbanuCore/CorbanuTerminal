@@ -56,6 +56,7 @@ impl ToolExecutor<ToolInvocation> for ExtensionToolAdapter {
 
     fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
         Box::pin(async move {
+            crate::security::protected_surface::check_image_generation(&invocation).await?;
             let call = current_extension_call(&invocation, &mut || {}).await?;
             self.0.handle(call).await
         })
