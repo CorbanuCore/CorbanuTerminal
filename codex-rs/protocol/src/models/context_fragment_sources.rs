@@ -28,7 +28,8 @@ impl ResponseItem {
             .and_then(|sources| sources.get(index)?.as_deref())
     }
 
-    /// Retains message content items, keeping recorded fragment provenance aligned.
+    /// Retains message content items, keeping recorded fragment provenance aligned, along with
+    /// upstream's per-item kinds and metadata (each kept only while it aligns with the content).
     pub fn retain_message_content(&mut self, mut keep: impl FnMut(&mut ContentItem) -> bool) {
         let Self::Message {
             content,
@@ -38,31 +39,48 @@ impl ResponseItem {
         else {
             return;
         };
-        let Some(sources) = metadata
-            .as_mut()
-            .and_then(|metadata| metadata.context_fragment_sources.take())
-        else {
-            content.retain_mut(keep);
-            return;
-        };
-        let mut sources = (sources.len() == content.len()).then(|| sources.into_iter());
-        let mut retained_sources = Vec::with_capacity(content.len());
+        let mut kept = Vec::with_capacity(content.len());
         content.retain_mut(|content_item| {
-            let source = sources.as_mut().and_then(Iterator::next).flatten();
             let retained = keep(content_item);
-            if retained {
-                retained_sources.push(source);
-            }
+            kept.push(retained);
             retained
         });
-        if sources.is_some()
-            && retained_sources.iter().any(Option::is_some)
-            && let Some(metadata) = metadata.as_mut()
-        {
-            metadata.context_fragment_sources = Some(retained_sources);
-        } else {
-            clear_empty_passthrough(metadata);
+        let Some(passthrough) = metadata.as_mut() else {
+            return;
+        };
+        fn retain_aligned<T>(values: &mut Option<Vec<T>>, kept: &[bool]) {
+            if let Some(items) = values.take()
+                && items.len() == kept.len()
+            {
+                *values = Some(
+                    items
+                        .into_iter()
+                        .zip(kept)
+                        .filter_map(|(item, kept)| kept.then_some(item))
+                        .collect(),
+                );
+            } else {
+                // Not aligned with the content: dropped rather than mislabel other items.
+                *values = None;
+            }
         }
+        if passthrough.content_item_kinds.is_some() {
+            retain_aligned(&mut passthrough.content_item_kinds, &kept);
+        }
+        if passthrough.content_item_metadata.is_some() {
+            retain_aligned(&mut passthrough.content_item_metadata, &kept);
+        }
+        if passthrough.context_fragment_sources.is_some() {
+            retain_aligned(&mut passthrough.context_fragment_sources, &kept);
+            if passthrough
+                .context_fragment_sources
+                .as_ref()
+                .is_some_and(|sources| sources.iter().all(Option::is_none))
+            {
+                passthrough.context_fragment_sources = None;
+            }
+        }
+        clear_empty_passthrough(metadata);
     }
 
     /// Removes local fragment provenance before serializing the item for a model provider.

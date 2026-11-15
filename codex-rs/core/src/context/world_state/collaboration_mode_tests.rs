@@ -15,6 +15,19 @@ use codex_protocol::openai_models::ModelMessages;
 use codex_protocol_test_support::ContentItemTestExt;
 use pretty_assertions::assert_eq;
 
+/// Corbanu (S1c): World State stamps each rendered fragment with its section's producer ID
+/// (`context_fragment_sources`, used to deduplicate context for non-OpenAI providers), so the
+/// expected item carries the same ID.
+fn sourced<F: ContextualUserFragment + 'static>(
+    source_id: &'static str,
+    fragment: F,
+) -> ResponseItem {
+    ContextualUserFragment::into(codex_context_fragments::SourcedFragment::new(
+        source_id,
+        Box::new(fragment),
+    ))
+}
+
 #[test]
 fn snapshots() {
     use PreviousSectionState::Absent;
@@ -53,9 +66,12 @@ fn instruction_updates_are_applied_once_in_retained_history() {
             /*update_plan_enabled*/ true,
             /*custom_model_catalog*/ false,
         ));
-        let expected: ResponseItem = ContextualUserFragment::into(CollaborationModeInstructions {
-            instructions: instructions.unwrap_or_default().to_string(),
-        });
+        let expected: ResponseItem = sourced(
+            <CollaborationModeState as WorldStateSection>::ID,
+            CollaborationModeInstructions {
+                instructions: instructions.unwrap_or_default().to_string(),
+            },
+        );
         let (snapshot, fragments) =
             world_state.render_history_fragment_diff(previous.as_ref(), &history);
         let updates = fragments
