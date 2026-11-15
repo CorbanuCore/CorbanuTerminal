@@ -112,9 +112,11 @@ fn retain_with_gate<'g>(
         process: process_gate,
     };
     capture.retain_exports_by_value(|name, declaration, value| {
-        // The capture's own helper names are never real exports, and the value
-        // section skips them, so they could only be checked by declaration.
+        // The capture's own helper names, and bash's own script text, are
+        // skipped by the value section, so they could only be checked by their
+        // shell-quoted declaration: drop them (main drops __corbanu_snapshot_*).
         !name.starts_with("__codex_snapshot_")
+            && !matches!(name, "BASH_EXECUTION_STRING" | "BASH_COMMAND")
             && !is_secret_name(name)
             && !value.is_some_and(|value| filter.sensitive(value))
             && !filter.sensitive(declaration)

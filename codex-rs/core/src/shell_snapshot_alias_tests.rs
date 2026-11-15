@@ -29,6 +29,7 @@ $GH_TOKEN
 last"
 export SAFE_EXPORT='ordinary value'
 SAFE_LOCAL='not exported'
+export BASH_EXECUTION_STRING="quoted\"$GH_TOKEN"
 "#;
 
 const FORBIDDEN: [&str; 9] = [

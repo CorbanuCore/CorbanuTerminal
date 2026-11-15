@@ -162,11 +162,15 @@ fn malformed_value_section_rejects_capture() {
         // Unterminated section.
         "# Snapshot file\n\0\0#values\0GH_TOKEN\0value\0",
         // A record name that is not an identifier.
-        "# Snapshot file\n\0\0#values\0BAD-NAME\0value\0#end\0\0",
+        "# Snapshot file\n\0\0#values\0BAD-NAME\0value\0#end\x001\0\0",
         // A name without its value.
         "# Snapshot file\n\0\0#values\0GH_TOKEN",
         // A torn value (its NUL lost): an empty value must not end the section.
-        "# Snapshot file\n\0\0#values\0SCRIPT\0torn textNEXT\0\0LATER\0\0#end\0\0",
+        "# Snapshot file\n\0\0#values\0SCRIPT\0torn textNEXT\0\0LATER\0\0#end\x002\0\0",
+        // A record count that does not match (a dropped record).
+        "# Snapshot file\n\0\0#values\0GH_TOKEN\0value\0#end\x002\0\0",
+        // A missing or non-numeric count.
+        "# Snapshot file\n\0\0#values\0GH_TOKEN\0value\0#end\0one\0\0",
         // The old empty-record terminator is not accepted.
         "# Snapshot file\n\0\0#values\0GH_TOKEN\0value\0\0\0",
     ] {
@@ -177,7 +181,7 @@ fn malformed_value_section_rejects_capture() {
     }
     let captured = CapturedSnapshot::parse(
         ShellType::Bash,
-        b"# Snapshot file\n\0\0#values\0GH_TOKEN\0a\nb\0EMPTY\0\0#end\0SAFE\0declare -x SAFE=\"1\"\n\0\0",
+        b"# Snapshot file\n\0\0#values\0GH_TOKEN\0a\nb\0EMPTY\0\0#end\x002\0SAFE\0declare -x SAFE=\"1\"\n\0\0",
     )
     .unwrap();
     let values = captured.values.unwrap();
