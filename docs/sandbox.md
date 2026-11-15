@@ -120,6 +120,10 @@ Ctrl-C themselves or read it as raw input. The packaged console launcher runs
 with the command's existing restricted token and job; it changes no access
 controls. Custom Windows builds must also build `codex-conpty-launcher` and
 keep it beside the Corbanu executable or in its `codex-resources` directory.
+Bare executable names are resolved using the command's environment and working
+directory. Use an absolute executable path when that choice must be exact.
+If the launcher cannot start the requested program, the terminal reports the
+startup error and exits with code 1.
 
 **What the non-admin sandbox stops.** Sandboxed commands run at Low
 integrity. In both Read Only and workspace-write modes they can't create,

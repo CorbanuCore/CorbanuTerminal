@@ -31,6 +31,9 @@ pub(super) fn ignored_ctrl_c_host(test: &str) -> bool {
         assert!(unsafe { SetConsoleCtrlHandler(None, 1) } != 0);
         return true;
     }
+    // The child has its own mutex. Hold this host's lock as well so ordinary
+    // libtest cannot overlap it with another legacy session in this process.
+    let _guard = legacy_process_test_guard();
     let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
         .args(["--exact", test, "--nocapture", "--test-threads=1"])
         .env(HOST, "1")
