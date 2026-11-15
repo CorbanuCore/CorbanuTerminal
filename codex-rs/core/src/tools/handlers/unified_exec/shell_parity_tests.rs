@@ -106,6 +106,11 @@ fn output_line_after<'a>(text: &'a str, marker: &str) -> Option<&'a str> {
 /// `set` entry is an explicit opt-in and still reaches the command.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn issue_310_exec_command_keeps_provider_auth_env_set_explicitly_by_policy() {
+    // An inherited credential of a configured provider, set by nothing else.
+    let inherited = format!("S3B_PARITY_PROVIDER_TOKEN_{}", std::process::id());
+    // SAFETY: a variable unique to this test; nothing else reads it.
+    unsafe { std::env::set_var(&inherited, "inherited-provider-secret") };
+    let inherited_key = inherited.clone();
     let (session, turn) = session_with(
         |policy| {
             for (name, value) in [
@@ -116,24 +121,31 @@ async fn issue_310_exec_command_keeps_provider_auth_env_set_explicitly_by_policy
                 policy.r#set.insert(name.to_string(), value.to_string());
             }
         },
-        |config| {
+        move |config| {
             let mut custom_provider = config.model_provider.clone();
             custom_provider.env_key = Some("CORP_MODEL_TOKEN".to_string());
             config
                 .model_providers
-                .insert("corp".to_string(), custom_provider);
+                .insert("corp".to_string(), custom_provider.clone());
+            let mut inherited_provider = custom_provider;
+            inherited_provider.env_key = Some(inherited_key);
+            config
+                .model_providers
+                .insert("inherited".to_string(), inherited_provider);
         },
     )
     .await;
     let text = exec_command_output(
         &session,
         &turn,
-        r#"printf 'keys=%s|%s|%s\n' "$OPENAI_API_KEY" "$CORP_MODEL_TOKEN" "$GENERIC_API_KEY""#,
+        &format!(
+            r#"printf 'keys=%s|%s|%s|%s\n' "$OPENAI_API_KEY" "$CORP_MODEL_TOKEN" "$GENERIC_API_KEY" "${inherited}""#
+        ),
     )
     .await;
     assert_eq!(
         output_line_after(&text, "keys="),
-        Some("openai-provider-secret|custom-provider-secret|workflow-secret"),
+        Some("openai-provider-secret|custom-provider-secret|workflow-secret|"),
         "{text}"
     );
 }
