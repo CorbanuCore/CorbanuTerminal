@@ -39,8 +39,27 @@ async fn issue_1976_a_refusal_applies_only_without_a_platform_sandbox() -> io::R
         assert!(opened.is_ok());
     }
 
-    // With a Windows sandbox selected the refusal does not apply here.
+    // The non-admin sandbox needs no setup.
+    context.windows_sandbox_level = WindowsSandboxLevel::RestrictedToken;
+    assert_eq!(fs.read_file(&uri, Some(&context)).await?, b"plain".to_vec());
+
+    // #2088: merely asking for Elevated is insufficient. Recheck on the
+    // receiving executor even when a full-disk profile skips the helper.
     context.windows_sandbox_level = WindowsSandboxLevel::Elevated;
+    let read = fs.read_file(&uri, Some(&context)).await;
+    let opened = fs.open_file_for_read(&uri, Some(&context)).await;
+    if cfg!(windows) && !codex_sandboxing::windows_elevated_sandbox_set_up() {
+        for result in [read.map(|_| ()), opened.map(|_| ())] {
+            let error = result.expect_err("elevated sandbox not set up");
+            assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+            assert_eq!(error.to_string(), "refused for #1976");
+        }
+    } else {
+        assert_eq!(read?, b"plain".to_vec());
+        assert!(opened.is_ok());
+    }
+    // Unmarked requests (Permissive) retain their old behavior.
+    context.unsandboxed_refusal = None;
     assert_eq!(fs.read_file(&uri, Some(&context)).await?, b"plain".to_vec());
     Ok(())
 }

@@ -816,19 +816,33 @@ impl Environment {
         match &self.remote_client {
             Some(client) => {
                 let client = client.get().await?;
-                if params.roots.iter().any(|root| {
+                let needs_sandbox = params.roots.iter().any(|root| {
                     root.sandbox
                         .as_ref()
                         .is_some_and(crate::FileSystemSandboxContext::should_run_in_sandbox)
-                }) && !client
-                    .environment_info()
-                    .await?
-                    .capabilities
-                    .capability_discovery_sandbox
-                {
-                    return Err(ExecServerError::Protocol(
-                        "exec-server does not support sandboxed capability discovery".to_string(),
-                    ));
+                });
+                let has_refusal = params.roots.iter().any(|root| {
+                    root.sandbox
+                        .as_ref()
+                        .is_some_and(|sandbox| sandbox.unsandboxed_refusal.is_some())
+                });
+                if needs_sandbox || has_refusal {
+                    let info = client.environment_info().await?;
+                    for root in &params.roots {
+                        if let Some(sandbox) = &root.sandbox
+                            && let Some(refusal) = &sandbox.unsandboxed_refusal
+                            && info.host_sandbox_verdict(sandbox.windows_sandbox_level)
+                                != crate::HostSandboxVerdict::Confined
+                        {
+                            return Err(ExecServerError::Protocol(refusal.clone()));
+                        }
+                    }
+                    if needs_sandbox && !info.capabilities.capability_discovery_sandbox {
+                        return Err(ExecServerError::Protocol(
+                            "exec-server does not support sandboxed capability discovery"
+                                .to_string(),
+                        ));
+                    }
                 }
                 client.discover_capability_roots(params).await
             }

@@ -318,14 +318,19 @@ impl Session {
             .permissions
             .file_system_sandbox_policy()
             .has_full_disk_read_access();
+        // D491/D510 also apply when a protected level has a full-disk profile.
+        // Keep a context for discovery and subsequent skill resource reads.
+        let level = self.services.model_client().live_level();
+        let protected_level = level != codex_security_policy::SecurityLevel::Permissive;
         if !restricted_file_system
+            && !protected_level
             && !config
                 .features
                 .enabled(Feature::ExecutorCapabilityDiscovery)
         {
             return None;
         }
-        let sandbox_contexts = if restricted_file_system {
+        let sandbox_contexts = if restricted_file_system || protected_level {
             environments
                 .turn_environments()
                 .map(|environment| {
@@ -338,6 +343,12 @@ impl Session {
                     sandbox.windows_sandbox_private_desktop =
                         config.permissions.windows_sandbox_private_desktop;
                     sandbox.use_legacy_landlock = config.features.use_legacy_landlock();
+                    sandbox.unsandboxed_refusal =
+                        crate::security::windows_unsandboxed::environment_file_refusal(
+                            level,
+                            windows_sandbox_level,
+                            environment,
+                        );
                     (environment.environment_id.clone(), sandbox)
                 })
                 .collect::<HashMap<_, _>>()
@@ -352,7 +363,7 @@ impl Session {
         let selected_capability_roots = ready_selected_capability_roots
             .iter()
             .filter(|selected_root| {
-                if !restricted_file_system {
+                if !restricted_file_system && !protected_level {
                     return true;
                 }
                 let CapabilityRootLocation::Environment { environment_id, .. } =

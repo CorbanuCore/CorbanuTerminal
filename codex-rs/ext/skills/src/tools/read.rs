@@ -99,15 +99,21 @@ impl ToolExecutor<ToolCall> for ReadTool {
             let sandbox = requested_resource
                 .environment_path()
                 .and_then(|(environment_id, _)| {
-                    self.context.sandbox_contexts.as_ref().and_then(|contexts| {
-                        contexts.get(environment_id).map(|captured| {
-                            call.environments
-                                .iter()
-                                .find(|environment| environment.environment_id == environment_id)
-                                .map(|environment| environment.file_system_sandbox_context.clone())
-                                .unwrap_or_else(|| captured.clone())
-                        })
-                    })
+                    let live = call
+                        .environments
+                        .iter()
+                        .find(|environment| environment.environment_id == environment_id)
+                        .map(|environment| &environment.file_system_sandbox_context);
+                    let captured = self
+                        .context
+                        .sandbox_contexts
+                        .as_ref()
+                        .and_then(|contexts| contexts.get(environment_id));
+                    // D491/D510 must survive a catalog captured without a sandbox
+                    // context, including a live rise from Permissive (#2088).
+                    live.filter(|context| context.unsandboxed_refusal.is_some())
+                        .or_else(|| captured.map(|captured| live.unwrap_or(captured)))
+                        .cloned()
                 });
             if self.context.sandbox_contexts.is_some()
                 && requested_resource.environment_path().is_some()
