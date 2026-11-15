@@ -140,9 +140,9 @@ use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::TurnSteerParams;
 use codex_app_server_protocol::TurnSteerResponse;
 use codex_app_server_protocol::UserInput;
+use codex_config::ConfigLayerSource;
 use codex_login::AuthDotJson;
 use codex_login::load_auth_dot_json;
-use codex_config::ConfigLayerSource;
 use codex_otel::TelemetryAuthMode;
 use codex_protocol::ThreadId;
 use codex_protocol::approvals::GuardianAssessmentEvent;
@@ -1044,7 +1044,7 @@ impl AppServerSession {
                 requirements,
             );
         }
-        if matches!(account.account, Some(Account::ApiKey {})) {
+        if matches!(account.account, Some(Account::ApiKey { .. })) {
             available_models = self
                 .constrain_api_key_models(
                     config,
@@ -3066,14 +3066,11 @@ fn thread_resume_params_from_config(
     let sandbox = permissions
         .is_none()
         .then(|| {
-            permissions.is_none().then(|| {
-                sandbox_mode_from_permission_profile(
-                    &config.permissions.effective_permission_profile(),
-                    config.cwd.as_path(),
-                )
-            })
+            sandbox_mode_from_permission_profile(
+                &config.permissions.effective_permission_profile(),
+                config.cwd.as_path(),
+            )
         })
-        .flatten()
         .flatten();
     let mut config_overrides = config_request_overrides_from_config(&config, thread_params_mode);
     if model_settings == ResumeModelSettings::RestoreFromThread
@@ -3713,6 +3710,8 @@ mod tests {
             bedrock_api_key: None,
         };
         assert!(!auth_dot_json_has_codex_backend_auth(&auth));
+    }
+
     #[test]
     fn picker_views_use_distinct_request_id_namespaces() {
         let (client, _commands, _events) =
@@ -3835,7 +3834,7 @@ mod tests {
                 .bootstrap_with_account(
                     &client_config,
                     GetAccountResponse {
-                        account: Some(Account::ApiKey {}),
+                        account: Some(Account::ApiKey { env_var: None }),
                         requires_openai_auth: true,
                         workspace_routing: None,
                     },
@@ -5018,7 +5017,10 @@ mod tests {
         // Corbanu always forwards the effective `agents.max_depth`.
         assert_eq!(
             params.config,
-            Some(HashMap::from([("agents.max_depth".to_string(), serde_json::json!(1))]))
+            Some(HashMap::from([(
+                "agents.max_depth".to_string(),
+                serde_json::json!(1)
+            )]))
         );
     }
 
@@ -5131,7 +5133,7 @@ mod tests {
         std::fs::write(
             codex_home.path().join("config.toml"),
             r#"
-model = "gpt-5.4"
+model = "gpt-5.5"
 model_provider = "resume-fixture"
 cli_auth_credentials_store = "file"
 [features]

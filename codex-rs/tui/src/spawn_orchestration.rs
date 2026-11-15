@@ -3372,11 +3372,8 @@ impl App {
                 model_provider: Some(runtime.provider.clone()),
             }
         });
-        (
-            resume_config,
-            model_override,
-            self.resume_permission_overrides(&resume_config),
-        )
+        let permission_overrides = self.resume_permission_overrides(&resume_config);
+        (resume_config, model_override, permission_overrides)
     }
 
     async fn recover_native_spawn_edges_from_saved_context(

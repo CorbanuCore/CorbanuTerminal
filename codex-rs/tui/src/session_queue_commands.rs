@@ -171,6 +171,10 @@ async fn resume_if_unloaded(app_server: &mut AppServerSession, thread_id: Thread
         // A fresh loaded thread can accept input before it has any history to resume.
         return Ok(());
     }
+    // PF-29-S01: the same security-level check as every other TUI resume.
+    if let Some(message) = crate::security::preflight::resume_refusal(&thread_id) {
+        return Err(eyre!(message));
+    }
     handle
         .request_typed::<IgnoredAny>(ClientRequest::ThreadResume {
             request_id: app_server.next_request_id(),

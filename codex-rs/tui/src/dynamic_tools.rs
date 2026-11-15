@@ -485,6 +485,7 @@ async fn execute_inner(
                 return Err("title must not be empty".to_string());
             }
             let source_thread = read_thread(&handle, &params.thread_id).await?;
+            refuse_resume_under_security_level(&params.thread_id)?;
             if source_thread.ephemeral {
                 return Err(
                     "ephemeral tasks cannot create inspectable background tasks".to_string()
@@ -606,6 +607,7 @@ async fn execute_inner(
             let thread_id = arguments
                 .thread_id
                 .unwrap_or_else(|| params.thread_id.clone());
+            refuse_resume_under_security_level(&thread_id)?;
             let thread = read_thread(&handle, &thread_id).await?;
             // Keep source requests routable while the fork is being created.
             register_background_thread(
@@ -696,6 +698,7 @@ async fn execute_inner(
             let prompt = delegated_prompt(&params.thread_id, &arguments.prompt);
             validate_prompt(&prompt, MAX_DELEGATED_INPUT_BYTES)?;
             let thread = read_thread(&handle, &arguments.thread_id).await?;
+            refuse_resume_under_security_level(&arguments.thread_id)?;
             let exclude_turns = thread.history_mode == ThreadHistoryMode::Paginated;
             let resumed: ThreadResumeResponse = request_with_history_fallback(
                 &handle,
@@ -1218,6 +1221,19 @@ async fn request_with_history_fallback<T: DeserializeOwned>(
                 .map_err(|error| error.to_string())
         }
         result => result.map_err(|error| error.to_string()),
+    }
+}
+
+/// PF-29-S01: resumes and forks these tools request pass the same security-level check as the
+/// TUI's own (`crate::security::preflight::resume_refusal`).
+fn refuse_resume_under_security_level(thread_id: &str) -> Result<(), String> {
+    match codex_protocol::ThreadId::from_string(thread_id) {
+        Ok(thread_id) => match crate::security::preflight::resume_refusal(&thread_id) {
+            Some(message) => Err(message),
+            None => Ok(()),
+        },
+        // The server rejects an invalid id before it resumes anything.
+        Err(_) => Ok(()),
     }
 }
 
