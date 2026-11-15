@@ -118,11 +118,10 @@ async fn issue_2088_discovery_refuses_before_sending_roots_to_an_unconfined_exec
     for level in [WindowsSandboxLevel::Disabled, WindowsSandboxLevel::Elevated] {
         let (url, methods) = fake_executor(windows(/*set_up*/ false)).await;
         let environment = Environment::create_for_tests(Some(url)).expect("environment");
-        let mut context =
-            FileSystemSandboxContext::from_permission_profile(
-                PermissionProfile::Disabled,
-                PathUri::parse("file:///C:/work").expect("cwd uri"),
-            );
+        let mut context = FileSystemSandboxContext::from_permission_profile(
+            PermissionProfile::Disabled,
+            PathUri::parse("file:///C:/work").expect("cwd uri"),
+        );
         context.windows_sandbox_selection = level.into();
         context.unsandboxed_refusal = Some(REFUSAL.to_string());
         let error = environment
@@ -160,11 +159,10 @@ async fn issue_2088_discovery_keeps_confined_and_unmarked_requests_working() {
     ] {
         let (url, methods) = fake_executor(info).await;
         let environment = Environment::create_for_tests(Some(url)).expect("environment");
-        let mut context =
-            FileSystemSandboxContext::from_permission_profile(
-                PermissionProfile::Disabled,
-                PathUri::parse("file:///C:/work").expect("cwd uri"),
-            );
+        let mut context = FileSystemSandboxContext::from_permission_profile(
+            PermissionProfile::Disabled,
+            PathUri::parse("file:///C:/work").expect("cwd uri"),
+        );
         context.windows_sandbox_selection = WindowsSandboxLevel::Elevated.into();
         context.unsandboxed_refusal = refusal;
         let path = PathUri::parse("file:///skills").expect("uri");

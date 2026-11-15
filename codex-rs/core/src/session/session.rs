@@ -1795,11 +1795,12 @@ impl Session {
                         post_session_configured_events.push(Event {
                             id: INITIAL_SUBMIT_ID.to_owned(),
                             msg: EventMsg::Warning(WarningEvent {
-                                message: crate::security::windows_unsandboxed::remote_startup_notice(
-                                    live_level,
-                                    &environment.selection.environment_id,
-                                    gap,
-                                ),
+                                message:
+                                    crate::security::windows_unsandboxed::remote_startup_notice(
+                                        live_level,
+                                        &environment.selection.environment_id,
+                                        gap,
+                                    ),
                             }),
                         });
                     }
