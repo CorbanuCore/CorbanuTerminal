@@ -13,14 +13,13 @@ use uuid::Uuid;
 
 const TEST_OVERLAY_VIEW_ID: &str = "usage-test-overlay";
 
-<<<<<<< HEAD
 /// The menu offers recorded requests only where costs are recorded
 /// (PF-60-S03); elsewhere moving past the last item wraps to "Show usage".
 fn assert_recorded_requests_or_wrapped(event: Result<AppEvent, TryRecvError>) {
     if cfg!(feature = "developer-accounting") {
         assert_matches!(event, Ok(AppEvent::OpenAccountingInspector { .. }));
     } else {
-        assert_matches!(event, Ok(AppEvent::OpenTokenActivity));
+        assert_matches!(event, Ok(AppEvent::OpenAnalytics { view: None }));
     }
 }
 
@@ -46,8 +45,8 @@ async fn accounting_inspect_menu_and_reset_regression() {
         }
         chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         match (expected, rx.try_recv()) {
-            (0, Ok(AppEvent::OpenTokenActivity)) | (1, Ok(AppEvent::OpenRateLimitResetCredits)) => {
-            }
+            (0, Ok(AppEvent::OpenAnalytics { view: None }))
+            | (1, Ok(AppEvent::OpenRateLimitResetCredits)) => {}
             (2, event) => assert_recorded_requests_or_wrapped(event),
             (_, other) => panic!("{other:?}"),
         }
@@ -111,8 +110,8 @@ async fn accounting_inspect_cancel_refresh_generation() {
     );
     assert!(chat.accounting_inspector.is_none());
     assert!(!render_bottom_popup(&chat, /*width*/ 80).contains("Cost — this conversation"));
-||||||| 413492cd6c
-=======
+}
+
 #[tokio::test]
 async fn usage_menu_opens_analytics() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
@@ -120,7 +119,6 @@ async fn usage_menu_opens_analytics() {
     chat.dispatch_command(SlashCommand::Usage);
     chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_matches!(rx.try_recv(), Ok(AppEvent::OpenAnalytics { view: None }));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn reset_credits(available_count: i64) -> RateLimitResetCreditsSummary {
@@ -260,21 +258,9 @@ async fn usage_command_disables_reset_after_cached_zero_snapshot() {
             origin: RateLimitRefreshOrigin::UsageMenu { request_id: 1 }
         })
     );
-<<<<<<< HEAD
     // The disabled reset is skipped; the appended inspector is now next.
-    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
-||||||| 413492cd6c
-    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-<<<<<<< HEAD
     assert_recorded_requests_or_wrapped(rx.try_recv());
-||||||| 413492cd6c
-    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenTokenActivity));
-=======
-    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenAnalytics { view: None }));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]
@@ -330,24 +316,11 @@ async fn usage_menu_refresh_failure_preserves_disabled_known_zero() {
         Err("backend unavailable".to_string()),
     );
 
-<<<<<<< HEAD
-    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("No usage limit resets available."));
+    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("None available"));
     // The disabled reset is skipped; the appended inspector is now next.
     chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
-||||||| 413492cd6c
-    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("No usage limit resets available."));
-    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
-=======
-    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("None available"));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-<<<<<<< HEAD
     assert_recorded_requests_or_wrapped(rx.try_recv());
-||||||| 413492cd6c
-    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenTokenActivity));
-=======
-    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenAnalytics { view: None }));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]
@@ -843,13 +816,7 @@ async fn no_credit_outcome_disables_reset_entry_in_usage_menu() {
     );
     chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
-<<<<<<< HEAD
     assert_recorded_requests_or_wrapped(rx.try_recv());
-||||||| 413492cd6c
-    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenTokenActivity));
-=======
-    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenAnalytics { view: None }));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     chat.available_rate_limit_reset_credits = Some(2);
     let consume_request_id = chat.show_rate_limit_reset_consuming_popup();

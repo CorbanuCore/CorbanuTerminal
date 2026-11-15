@@ -209,6 +209,8 @@ async fn resumed_named_account_rejection_names_the_recorded_account() {
     let (mut chat, _tx, mut rx, _op_rx) =
         super::super::tests::make_chatwidget_manual_with_sender().await;
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
+        daybreak_enabled: false,
+        windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: codex_protocol::ThreadId::new(),
         forked_from_id: None,
         fork_parent_title: None,
@@ -225,7 +227,6 @@ async fn resumed_named_account_rejection_names_the_recorded_account() {
         instruction_source_paths: Vec::new(),
         reasoning_effort: None,
         collaboration_mode: None,
-        personality: None,
         message_history: None,
         network_proxy: None,
         rollout_path: None,

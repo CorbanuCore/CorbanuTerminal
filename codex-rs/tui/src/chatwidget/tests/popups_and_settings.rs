@@ -2,12 +2,8 @@ use super::*;
 use crate::app_event::ConnectorsSnapshot;
 use crate::bottom_pane::ExperimentalFeatureItem;
 use crate::chatwidget::connectors::ConnectorsCacheState;
-<<<<<<< HEAD
-use crate::spawn_orchestration::SpawnRole;
-||||||| 413492cd6c
-=======
 use crate::hooks_rpc::HooksListTarget;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use crate::spawn_orchestration::SpawnRole;
 use codex_app_server_protocol::HookErrorInfo;
 use codex_app_server_protocol::HooksListEntry;
 use codex_app_server_protocol::MarketplaceLoadErrorInfo;
@@ -17,8 +13,6 @@ use codex_app_server_protocol::PluginShareContext;
 use codex_app_server_protocol::PluginShareDiscoverability;
 use codex_app_server_protocol::PluginSource;
 use codex_connectors::AppInfo;
-<<<<<<< HEAD
-use codex_features::Stage;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
@@ -50,10 +44,6 @@ use codex_model_provider_info::VERCEL_KIMI_K3_MODEL;
 use codex_model_provider_info::VERCEL_PROVIDER_ID;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 use codex_protocol::openai_models::ReasoningEffort;
-||||||| 413492cd6c
-use codex_features::Stage;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use pretty_assertions::assert_eq;
 
 #[tokio::test]
@@ -3636,13 +3626,7 @@ async fn memories_reset_confirmation_sends_event_on_confirm() {
 
 #[tokio::test]
 async fn model_selection_popup_snapshot() {
-<<<<<<< HEAD
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some(AMBIENT_DEFAULT_MODEL)).await;
-||||||| 413492cd6c
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2")).await;
-=======
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     chat.thread_id = Some(ThreadId::new());
     chat.open_model_popup();
 
@@ -3656,7 +3640,6 @@ fn apply_model_list_response(chat: &mut ChatWidget, presets: Vec<ModelPreset>) {
 }
 
 #[tokio::test]
-<<<<<<< HEAD
 async fn model_selection_popup_openai_provider_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some(AMBIENT_DEFAULT_MODEL)).await;
     chat.thread_id = Some(ThreadId::new());
@@ -3667,7 +3650,7 @@ async fn model_selection_popup_openai_provider_snapshot() {
     for preset in &mut presets {
         preset.is_default = preset.model == "gpt-5.6-sol";
     }
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     chat.handle_key_event(KeyEvent::from(KeyCode::Left));
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
@@ -3684,7 +3667,7 @@ async fn model_selection_popup_openrouter_provider_snapshot() {
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 130, /*height*/ 44);
     for model in [
@@ -3715,7 +3698,7 @@ async fn model_selection_popup_zai_flash_provider_snapshot() {
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 32);
     assert_chatwidget_snapshot!("model_selection_popup_zai_flash_provider", popup);
@@ -3774,7 +3757,7 @@ async fn model_selection_popup_kimi_code_provider_snapshot() {
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 24);
     assert_chatwidget_snapshot!("model_selection_popup_kimi_code_provider", popup);
@@ -4136,7 +4119,7 @@ async fn astra_model_and_reasoning_picker_snapshots() {
         .find(|preset| preset.model == "gpt-6-astra")
         .expect("bundled Astra preset")
         .clone();
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 30);
     assert_chatwidget_snapshot!("astra_openai_model_picker", popup);
     chat.open_reasoning_popup(astra);
@@ -4159,17 +4142,13 @@ async fn gpt_5_6_model_selection_popup_snapshot() {
         }
         preset.is_default = preset.model == "gpt-5.6-sol";
     }
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 96, /*height*/ 30);
     assert_chatwidget_snapshot!("gpt_5_6_model_selection_popup", popup);
 }
 
 #[tokio::test]
-async fn personality_selection_popup_snapshot() {
-||||||| 413492cd6c
-async fn personality_selection_popup_snapshot() {
-=======
 async fn model_picker_refresh_rejects_obsolete_and_unusable_replies() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
     chat.thread_id = Some(ThreadId::new());
@@ -4332,7 +4311,6 @@ async fn model_picker_refresh_preserves_highlight() {
 
 #[tokio::test]
 async fn model_picker_refreshes_service_tier_controls() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
     chat.thread_id = Some(ThreadId::new());
     set_fast_mode_test_catalog(&mut chat);
@@ -4591,7 +4569,7 @@ async fn model_picker_claude_recovery_refresh_restores_full_subscription_catalog
         "claude-plan",
     );
     let presets = chat.model_catalog.try_list_models().unwrap();
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 30);
     for model in [
         CLAUDE_PLAN_MODEL,
@@ -4656,7 +4634,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 40);
 
     assert!(
@@ -4694,7 +4672,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    claude_plan_chat.open_all_models_popup(presets);
+    claude_plan_chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let claude_plan_popup =
         render_bottom_popup_with_height(&claude_plan_chat, /*width*/ 140, /*height*/ 36);
     assert!(
@@ -4721,7 +4699,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    anthropic_chat.open_all_models_popup(presets);
+    anthropic_chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let anthropic_popup =
         render_bottom_popup_with_height(&anthropic_chat, /*width*/ 140, /*height*/ 36);
 
@@ -4754,7 +4732,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    baseten_chat.open_all_models_popup(presets);
+    baseten_chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let baseten_popup =
         render_bottom_popup_with_height(&baseten_chat, /*width*/ 140, /*height*/ 28);
 
@@ -4775,7 +4753,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    kimi_chat.open_all_models_popup(presets);
+    kimi_chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let kimi_popup =
         render_bottom_popup_with_height(&kimi_chat, /*width*/ 140, /*height*/ 24);
     assert_eq!(
@@ -4796,7 +4774,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    vercel_chat.open_all_models_popup(presets);
+    vercel_chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let vercel_popup =
         render_bottom_popup_with_height(&vercel_chat, /*width*/ 140, /*height*/ 28);
 
@@ -4834,7 +4812,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    vercel_fast_chat.open_all_models_popup(presets);
+    vercel_fast_chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let vercel_fast_popup =
         render_bottom_popup_with_height(&vercel_fast_chat, /*width*/ 140, /*height*/ 28);
 
@@ -4856,7 +4834,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    minimax_chat.open_all_models_popup(presets);
+    minimax_chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let minimax_popup =
         render_bottom_popup_with_height(&minimax_chat, /*width*/ 140, /*height*/ 28);
 
@@ -4895,7 +4873,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    openai_chat.open_all_models_popup(presets);
+    openai_chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let openai_popup =
         render_bottom_popup_with_height(&openai_chat, /*width*/ 140, /*height*/ 28);
     assert!(
@@ -4953,7 +4931,7 @@ async fn corbanu_api_model_picker_preserves_ambient_and_shows_the_seven_public_r
         .try_list_models()
         .expect("model catalog should load");
     presets.extend(ChatWidget::corbanu_api_presets(&presets));
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 40);
 
     assert_chatwidget_snapshot!("corbanu_api_model_picker", popup);
@@ -4996,7 +4974,7 @@ async fn model_picker_dismisses_after_selecting_openrouter_model_without_effort_
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Right));
     move_model_picker_selection_to(&mut chat, "minimax/minimax-m3");
@@ -5041,7 +5019,7 @@ async fn model_picker_selects_kimi_k3_with_required_max_reasoning() {
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     move_model_picker_selection_to(&mut chat, "moonshotai/kimi-k3");
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
 
@@ -5091,7 +5069,7 @@ async fn model_picker_opens_openrouter_reasoning_options_for_gemini() {
         .model_catalog
         .try_list_models()
         .expect("model catalog should load");
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Right));
     move_model_picker_selection_to(&mut chat, "google/gemini-3.5-flash");
@@ -5270,15 +5248,8 @@ async fn model_reasoning_selection_popup_applies_custom_effort() {
 
     let selected_effort_events = std::iter::from_fn(|| rx.try_recv().ok())
         .filter_map(|event| match event {
-<<<<<<< HEAD
             AppEvent::UpdateReasoningEffort(effort) => Some((None, effort)),
             AppEvent::PersistModelSelection { model, effort, .. } => Some((Some(model), effort)),
-||||||| 413492cd6c
-            AppEvent::UpdateReasoningEffort(effort) => Some((None, effort)),
-            AppEvent::PersistModelSelection { model, effort } => Some((Some(model), effort)),
-=======
-            AppEvent::ApplyModelSelection { model, effort } => Some((model, effort)),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -5958,7 +5929,6 @@ async fn reasoning_popup_escape_returns_to_model_popup() {
 }
 
 #[tokio::test]
-<<<<<<< HEAD
 async fn model_picker_runtime_refresh_keeps_claude_out_of_openai_tab() {
     use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
     let (mut chat, _, _) = make_chatwidget_manual(Some(CLAUDE_FABLE_5_PLAN_MODEL)).await;
@@ -5970,7 +5940,7 @@ async fn model_picker_runtime_refresh_keeps_claude_out_of_openai_tab() {
         CLAUDE_PLAN_PROVIDER_ID,
     );
     let presets = chat.model_catalog.try_list_models().unwrap();
-    chat.open_all_models_popup(presets);
+    chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let claude = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 36);
     assert!(claude.contains("[Claude Plan]"), "{claude}");
     assert!(claude.contains(&format!("Model: {CLAUDE_FABLE_5_PLAN_MODEL}.")));
@@ -5987,8 +5957,8 @@ async fn model_picker_runtime_refresh_keeps_claude_out_of_openai_tab() {
         chat.handle_key_event(KeyEvent::from(KeyCode::Right));
     }
     panic!("OpenAI tab unavailable");
-||||||| 413492cd6c
-=======
+}
+
 async fn account_change_dismisses_the_previous_app_directory_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.thread_id = Some(ThreadId::new());
@@ -6014,5 +5984,4 @@ async fn account_change_dismisses_the_previous_app_directory_snapshot() {
         "connector_scope_invalidation",
         format!("Before account change:\n{before}\n\nAfter account change:\n{after}")
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

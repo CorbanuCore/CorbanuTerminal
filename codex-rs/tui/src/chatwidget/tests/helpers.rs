@@ -11,29 +11,6 @@ pub(super) async fn test_config() -> (tempfile::TempDir, Config) {
     let codex_home = tempfile::Builder::new()
         .prefix("chatwidget-tests-")
         .tempdir()
-<<<<<<< HEAD
-        .expect("tempdir")
-        .keep();
-    let mut config =
-        Config::load_default_with_cli_overrides_for_codex_home(codex_home.clone(), Vec::new())
-            .await
-            .expect("config");
-    config.codex_home = codex_home.abs();
-    config.sqlite = codex_state::SqliteConfig::new_for_testing(codex_home.as_path().abs());
-    config.log_dir = codex_home.join("log");
-    config.cwd = test_project_path().abs();
-||||||| 413492cd6c
-        .expect("tempdir")
-        .keep();
-    let mut config =
-        Config::load_default_with_cli_overrides_for_codex_home(codex_home.clone(), Vec::new())
-            .await
-            .expect("config");
-    config.codex_home = codex_home.abs();
-    config.sqlite = codex_state::SqliteConfig::new_for_testing(codex_home.as_path().abs());
-    config.log_dir = codex_home.join("log");
-    config.cwd = PathBuf::from(test_path_display("/tmp/project")).abs();
-=======
         .expect("tempdir");
     let mut config = Config::load_default_with_cli_overrides_for_codex_home(
         codex_home.path().to_path_buf(),
@@ -46,8 +23,7 @@ pub(super) async fn test_config() -> (tempfile::TempDir, Config) {
     config.codex_home = codex_home.path().abs();
     config.sqlite = codex_state::SqliteConfig::new_for_testing(codex_home.path().abs());
     config.log_dir = codex_home.path().join("log");
-    config.cwd = PathBuf::from(test_path_display("/tmp/project")).abs();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    config.cwd = test_project_path().abs();
     config.config_layer_stack = ConfigLayerStack::default();
     config.startup_warnings.clear();
     (codex_home, config)
@@ -86,16 +62,8 @@ pub(super) fn truncated_path_variants(path: &str) -> Vec<String> {
         .collect()
 }
 
-<<<<<<< HEAD
-pub(super) fn normalize_snapshot_paths(text: impl Into<String>) -> String {
-    let mut text = crate::status::snapshot_helpers::normalize_snapshot_version(&text.into());
-||||||| 413492cd6c
-pub(super) fn normalize_snapshot_paths(text: impl Into<String>) -> String {
-    let mut text = text.into();
-=======
 pub(crate) fn normalize_snapshot_paths(text: impl Into<String>) -> String {
-    let mut text = text.into();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let mut text = crate::status::snapshot_helpers::normalize_snapshot_version(&text.into());
 
     for unix_path in ["/tmp/project", "/tmp/hooks.json"] {
         let platform_path = test_path_display(unix_path);
@@ -103,7 +71,6 @@ pub(crate) fn normalize_snapshot_paths(text: impl Into<String>) -> String {
             text = text.replace(&platform_path, unix_path);
         }
     }
-<<<<<<< HEAD
     let test_cwd = test_cwd_display();
     if test_cwd != "/tmp/project" {
         text = text.replace(&test_cwd, "/tmp/project");
@@ -115,10 +82,7 @@ pub(crate) fn normalize_snapshot_paths(text: impl Into<String>) -> String {
             text = text.replace(&format!("{platform_prefix}…"), &format!("{unix_prefix}…"));
         }
     }
-||||||| 413492cd6c
-=======
     text = text.replace("/tmp/project\\", "/tmp/project/");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let platform_test_cwd = test_path_display("/tmp/project");
     if platform_test_cwd == "/tmp/project" {
@@ -424,22 +388,6 @@ pub(super) async fn make_chatwidget_manual_with_auth(
     widget.windows_sandbox_config.requirements = Some(None);
     widget.transcript.active_cell = None;
     widget.transcript.active_cell_revision = 0;
-<<<<<<< HEAD
-    widget.normal_placeholder_text = "Ask Corbanu Terminal to do anything".to_string();
-    widget.side_placeholder_text =
-        "Check recently modified functions for compatibility".to_string();
-    widget
-        .bottom_pane
-        .set_placeholder_text(widget.normal_placeholder_text.clone());
-||||||| 413492cd6c
-    widget.normal_placeholder_text = "Ask Codex to do anything".to_string();
-    widget.side_placeholder_text =
-        "Check recently modified functions for compatibility".to_string();
-    widget
-        .bottom_pane
-        .set_placeholder_text(widget.normal_placeholder_text.clone());
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     widget.set_model(&resolved_model);
     (widget, rx, op_rx)
 }

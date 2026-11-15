@@ -244,15 +244,11 @@ mod composer_submission;
 mod computer_activity_tests;
 #[path = "tests/config_errors_tests.rs"]
 mod config_errors;
-<<<<<<< HEAD
-mod custom_model_identity;
-||||||| 413492cd6c
-=======
 #[path = "tests/copy_export_picker_tests.rs"]
 mod copy_export_picker_tests;
+mod custom_model_identity;
 #[path = "tests/dynamic_activity_tests.rs"]
 mod dynamic_activity_tests;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod exec_flow;
 mod goal_menu;
 mod goal_validation;
@@ -266,39 +262,31 @@ mod home_cleanup_tests;
 #[path = "tests/luna_reserve_usage_tests.rs"]
 mod luna_reserve_usage_tests;
 mod mcp_startup;
-<<<<<<< HEAD
-mod model_route_choice;
-||||||| 413492cd6c
-=======
 #[path = "tests/misalignment_policy_tests.rs"]
 mod misalignment_policy;
 #[path = "tests/model_display_name_tests.rs"]
 mod model_display_name_tests;
 #[path = "tests/model_picker_tests.rs"]
 mod model_picker_tests;
+mod model_route_choice;
 #[path = "tests/permission_picker_tests.rs"]
 mod permission_picker_tests;
 #[path = "tests/permission_shortcuts_tests.rs"]
 mod permission_shortcuts_tests;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod permissions;
 mod plan_mode;
 #[path = "tests/plugin_catalog_tests.rs"]
 mod plugin_catalog;
 mod popups_and_settings;
-<<<<<<< HEAD
-mod refusal_diagnostics;
-||||||| 413492cd6c
-=======
 #[path = "tests/program_status.rs"]
 mod program_status;
 #[path = "tests/rate_limit_recovery_tests.rs"]
 mod rate_limit_recovery_tests;
 #[path = "tests/reasoning_status_tests.rs"]
 mod reasoning_status_tests;
+mod refusal_diagnostics;
 #[path = "tests/replay_render_tests.rs"]
 mod replay_render_tests;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod review_mode;
 #[path = "tests/review_picker_tests.rs"]
 mod review_picker_tests;
@@ -325,13 +313,9 @@ mod terminal_title;
 #[path = "tests/tool_activity_tests.rs"]
 mod tool_activity_tests;
 mod usage;
-<<<<<<< HEAD
 mod vault_add_failure;
-||||||| 413492cd6c
-=======
 #[path = "tests/worktree_picker_tests.rs"]
 mod worktree_picker;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 pub(crate) use helpers::make_chatwidget_manual_with_sender;
 pub(crate) use helpers::render_bottom_popup;
