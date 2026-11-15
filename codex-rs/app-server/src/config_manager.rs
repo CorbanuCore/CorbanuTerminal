@@ -639,6 +639,10 @@ impl ConfigManager {
     }
 
     /// Reload sources using the task's session flags before materializing config.
+    ///
+    /// Production passes the thread's runtime model and provider through
+    /// [`Self::load_permission_config_for_thread_runtime`]; this form is kept for tests.
+    #[cfg(test)]
     pub(crate) async fn load_permission_config_for_thread(
         &self,
         thread_config: &Config,

@@ -34,7 +34,7 @@ use anyhow::Context;
 use clap::Parser;
 use codex_app_server_client::DEFAULT_IN_PROCESS_CHANNEL_CAPACITY;
 use codex_app_server_client::EnvironmentManager;
-use codex_app_server_client::ExecServerRuntimePaths;
+use codex_app_server_client::ExecServerRuntimeOptions;
 use codex_app_server_client::InProcessAppServerClient;
 use codex_app_server_client::InProcessClientStartArgs;
 use codex_arg0::Arg0DispatchPaths;
@@ -126,7 +126,9 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         );
     }
 
-    let core_config = build_core_config(
+    let embedded_network_policy =
+        codex_app_server_client::EmbeddedNetworkPolicy::load(&loader_overrides).await;
+    let mut core_config = build_core_config(
         &telegram_config,
         &arg0_paths,
         cli_overrides.clone(),
@@ -134,6 +136,7 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         cli.strict_config,
     )
     .await?;
+    embedded_network_policy.activate(&mut core_config);
     if cli.health {
         return run_health_check(&token, &telegram_config, &core_config).await;
     }
@@ -153,23 +156,26 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
     }
     sandbox_preflight::warn_if_sandbox_may_fail(&sandbox_policy);
     let state_db = codex_core::init_state_db(&core_config).await;
-    let runtime_paths = ExecServerRuntimePaths::from_optional_paths(
+    let runtime_paths = ExecServerRuntimeOptions::from_optional_paths(
         arg0_paths.codex_self_exe.clone(),
         arg0_paths.codex_linux_sandbox_exe.clone(),
     )?;
     let environment_manager = EnvironmentManager::from_codex_home(
         core_config.codex_home.clone(),
         Some(runtime_paths),
-        core_config.http_client_factory(),
+        embedded_network_policy.bind(core_config.http_client_factory()),
     )
     .await?;
     let start_args = InProcessClientStartArgs {
+        // Telegram approvals are chat replies, not fresh local human decisions.
+        required_human_approval: false,
         arg0_paths,
         config: Arc::new(core_config.clone()),
         cli_overrides,
         loader_overrides,
         strict_config: cli.strict_config,
         cloud_config_bundle: CloudConfigBundleLoader::default(),
+        embedded_network_policy,
         feedback: CodexFeedback::new(),
         log_db: None,
         state_db,
@@ -188,7 +194,7 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         .await
         .context("failed to initialize in-process app-server client")?;
     let auth_manager =
-        AuthManager::shared_from_config(&core_config, /*enable_codex_api_key_env*/ true).await;
+        AuthManager::shared_from_config(&core_config, /*enable_codex_api_key_env*/ true).await?;
     let sessions = SessionStore::load(&codex_home).await?;
     let outbound_client = teloxide::net::default_reqwest_settings()
         .timeout(OUTBOUND_CLIENT_TIMEOUT)

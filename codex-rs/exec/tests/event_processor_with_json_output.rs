@@ -261,8 +261,12 @@ fn command_execution_started_and_completed_translate_to_thread_events() {
 fn command_execution_refused_maps_to_refused_status() {
     let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
     let completed = processor.collect_thread_events(ServerNotification::ItemCompleted(
-        ItemCompletedNotification {
-            item: ThreadItem::CommandExecution {
+        ItemCompletedNotification::new(
+            "thread-1".to_string(),
+            "turn-1".to_string(),
+            ThreadItemPayload::CommandExecution {
+                model_context: None,
+                sandbox_type: None,
                 id: "cmd-refused".to_string(),
                 command: "echo blocked".to_string(),
                 cwd: test_path_buf("/tmp/project").abs().into(),
@@ -276,10 +280,9 @@ fn command_execution_refused_maps_to_refused_status() {
                 exit_code: Some(-1),
                 duration_ms: Some(0),
             },
-            thread_id: "thread-1".to_string(),
-            turn_id: "turn-1".to_string(),
-            completed_at_ms: 0,
-        },
+            /*started_at_ms*/ None,
+            /*completed_at_ms*/ 0,
+        ),
     ));
     let item = ExecThreadItem {
         id: "item_0".to_string(),
@@ -1864,6 +1867,7 @@ fn completed_turn(thread_id: &str, turn_id: &str) -> ServerNotification {
         thread_id: thread_id.to_string(),
         turn: Turn {
             id: turn_id.to_string(),
+            root_turn_id: None,
             items_view: codex_app_server_protocol::TurnItemsView::Full,
             items: Vec::new(),
             status: TurnStatus::Completed,
@@ -1916,10 +1920,19 @@ fn issue1577_usage_after_a_context_window_fill_keeps_the_earlier_reports() {
         ..CoreTokenUsage::default()
     };
     // Core's thread totals: a real report, a context-window fill, another report.
-    let mut info = TokenUsageInfo::new_or_append(&None, &Some(report(4_200, 300)), Some(200_000))
-        .expect("first report creates the info");
+    let mut info = TokenUsageInfo::new_or_append(
+        &None,
+        &report(4_200, 300),
+        /*includes_reasoning*/ false,
+        Some(200_000),
+    );
     info.fill_to_context_window(/*context_window*/ 200_000);
-    info.append_last_usage(&report(500, 60));
+    let info = TokenUsageInfo::new_or_append(
+        &Some(info),
+        &report(500, 60),
+        /*includes_reasoning*/ false,
+        /*model_context_window*/ None,
+    );
 
     let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
     let _ = processor.collect_thread_events(ServerNotification::ThreadTokenUsageUpdated(

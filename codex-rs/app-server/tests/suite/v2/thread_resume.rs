@@ -2381,6 +2381,7 @@ async fn unloaded_thread_goal_mutations_respect_parent_ownership() -> Result<()>
         agent_path: None,
         agent_nickname: None,
         agent_role: None,
+        agent_class: None,
     });
     let mut app = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -4338,6 +4339,7 @@ async fn cold_paginated_resume_restores_usage_without_loading_turns() -> Result<
                 model_context_window: Some(200_000),
             }),
             rate_limits: None,
+            account_usage: None,
         })),
     )
     .await?;
@@ -4448,6 +4450,7 @@ async fn cold_paginated_resume_omits_usage_when_its_turn_is_ambiguous() -> Resul
                 model_context_window: Some(200_000),
             }),
             rate_limits: None,
+            account_usage: None,
         })),
     )
     .await?;

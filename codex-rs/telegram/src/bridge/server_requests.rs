@@ -353,6 +353,7 @@ mod tests {
                 PendingApproval {
                     request_id: request_id.clone(),
                     kind: PendingApprovalKind::Command(CommandExecutionRequestApprovalParams {
+                        kind: Default::default(),
                         thread_id: "thread".into(),
                         turn_id: "turn".into(),
                         item_id: "item".into(),

@@ -1566,7 +1566,7 @@ mod tests {
     #[tokio::test]
     async fn typed_request_roundtrip_works() {
         let TestClient {
-            _codex_home,
+            _test_folder,
             client,
         } = start_test_client(SessionSource::Exec).await;
         let client = AppServerClient::InProcess(client);
@@ -1717,8 +1717,8 @@ mod tests {
                     notification.as_ref(),
                     ServerNotification::ItemCompleted(notification)
                         if matches!(
-                            &notification.item,
-                            codex_app_server_protocol::ThreadItem::AgentMessage { text, .. }
+                            &notification.item.payload,
+                            codex_app_server_protocol::ThreadItemPayload::AgentMessage { text, .. }
                                 if text == "hello"
                         )
                 )
@@ -2603,6 +2603,7 @@ mod tests {
                         thread_id: "thread".to_string(),
                         turn: codex_app_server_protocol::Turn {
                             id: "turn".to_string(),
+                            root_turn_id: None,
                             items_view: codex_app_server_protocol::TurnItemsView::Full,
                             items: Vec::new(),
                             status: codex_app_server_protocol::TurnStatus::Completed,
@@ -2634,12 +2635,16 @@ mod tests {
                         thread_id: "thread".to_string(),
                         turn_id: "turn".to_string(),
                         completed_at_ms: 0,
-                        item: codex_app_server_protocol::ThreadItem::AgentMessage {
-                            id: "item".to_string(),
-                            text: "hello".to_string(),
-                            phase: None,
-                            memory_citation: None,
-                        },
+                        item: codex_app_server_protocol::ThreadItem::untimed(
+                            codex_app_server_protocol::ThreadItemPayload::AgentMessage {
+                                id: "item".to_string(),
+                                text: "hello".to_string(),
+                                phase: None,
+                                memory_citation: None,
+                                delivery: None,
+                                questions: None,
+                            },
+                        ),
                     }
                 )
             ))

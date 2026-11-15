@@ -22,7 +22,7 @@ async fn startup_reports_shared_and_fallback_recovery() -> Result<()> {
                 format!("log_dir = {:?}\n", home.path().join("log")),
             )?;
         }
-        let sqlite = core_test_support::load_default_config_for_test(&home)
+        let sqlite = app_test_support::load_default_config_for_test(&home)
             .await
             .sqlite;
         let runtime = StateRuntime::init(sqlite.clone(), "openai".to_string()).await?;

@@ -167,6 +167,7 @@ impl AccountRequestProcessor {
             let mut opts = self
                 .login_chatgpt_common(
                     /*codex_streamlined_login*/ true,
+                    /*allow_forced_api_for_provider_login*/ false,
                     LoginSuccessPage::default(),
                 )
                 .await?;

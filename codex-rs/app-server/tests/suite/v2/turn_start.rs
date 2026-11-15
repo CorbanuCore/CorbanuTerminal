@@ -2169,6 +2169,7 @@ async fn permission_reload_preserves_active_runtime_despite_incompatible_saved_d
                 limit: None,
                 detail: None,
                 thread_id: Some(thread.id.clone()),
+                server_name: None,
             },
         })
         .await?;

@@ -102,6 +102,7 @@ async fn installed_extension_exposes_and_invokes_history_notes_tools() -> TestRe
         agent_path: Some(AgentPath::root().join("worker").expect("agent path")),
         agent_nickname: None,
         agent_role: None,
+        agent_class: None,
     });
 
     for contributor in registry.thread_lifecycle_contributors() {
