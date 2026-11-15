@@ -148,7 +148,7 @@ async fn d334_agent_tools_after_untrusted_content_on_every_route() {
             name: None,
             namespace: None,
             id: None,
-            call_id: "call-read".Some(into()),
+            call_id: Some("call-read".into()),
             output: FunctionCallOutputPayload::from_text("README".into()),
             internal_chat_message_metadata_passthrough: None,
         }]);
@@ -736,7 +736,7 @@ async fn goal_tools_after_untrusted_content_under_either_name() {
             name: None,
             namespace: None,
             id: None,
-            call_id: "call-read".Some(into()),
+            call_id: Some("call-read".into()),
             output: FunctionCallOutputPayload::from_text("README".into()),
             internal_chat_message_metadata_passthrough: None,
         }]);

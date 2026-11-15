@@ -22,7 +22,7 @@ fn tool_output(call_id: &str, text: &str) -> ResponseItem {
         name: None,
         namespace: None,
         id: None,
-        call_id: call_id.Some(into()),
+        call_id: Some(call_id.into()),
         output: FunctionCallOutputPayload::from_text(text.into()),
         internal_chat_message_metadata_passthrough: None,
     }

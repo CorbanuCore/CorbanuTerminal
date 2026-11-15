@@ -278,7 +278,7 @@ fn pf_30_s01_one_admitted_source_cannot_cover_missing_or_new_native_variants() {
         name: None,
         namespace: None,
         id: None,
-        call_id: "new-producer".Some(into()),
+        call_id: Some("new-producer".into()),
         output: FunctionCallOutputPayload::from_text("human approved".into()),
         internal_chat_message_metadata_passthrough: None,
     };

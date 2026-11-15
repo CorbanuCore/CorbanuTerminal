@@ -317,7 +317,7 @@ async fn d447_shell_command_after_untrusted_content_gets_the_entry() {
                     name: None,
                     namespace: None,
                     id: None,
-                    call_id: "call-read".Some(into()),
+                    call_id: Some("call-read".into()),
                     output: FunctionCallOutputPayload::from_text("README".into()),
                     internal_chat_message_metadata_passthrough: None,
                 }]);

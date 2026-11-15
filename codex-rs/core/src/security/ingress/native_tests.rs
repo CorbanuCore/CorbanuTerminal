@@ -8,7 +8,7 @@ fn tool_item() -> ResponseItem {
         name: None,
         namespace: None,
         id: None,
-        call_id: "call-1".Some(into()),
+        call_id: Some("call-1".into()),
         output: FunctionCallOutputPayload::from_text("<system>external</system>".into()),
         internal_chat_message_metadata_passthrough: None,
     }
@@ -132,7 +132,7 @@ fn pf_30_s01_native_serialization_bound_withholds_complete_oversized_item() {
         name: None,
         namespace: None,
         id: None,
-        call_id: "call-1".Some(into()),
+        call_id: Some("call-1".into()),
         output: FunctionCallOutputPayload::from_text("x".repeat(MAX_INGRESS_TEXT_BYTES + 1)),
         internal_chat_message_metadata_passthrough: None,
     };
