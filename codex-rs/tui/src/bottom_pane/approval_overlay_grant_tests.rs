@@ -264,6 +264,7 @@ fn pf_25_s01_pane_esc_in_review_keeps_the_request() {
         placeholder_text: "Ask".to_string(),
         disable_paste_burst: true,
         animations_enabled: true,
+        effects: Default::default(),
         skills: Some(Vec::new()),
     });
     pane.push_approval_request(request(), &features(/*security_levels*/ true));
