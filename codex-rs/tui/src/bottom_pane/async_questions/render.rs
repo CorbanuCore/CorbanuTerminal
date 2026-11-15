@@ -166,6 +166,12 @@ impl AsyncQuestions {
         width: u16,
         option_tip: Option<Span<'static>>,
     ) -> Vec<Line<'static>> {
+        if self.shows_early_input_notice() {
+            // #787: as a request prompt says when it dropped keys.
+            return vec![Line::from(
+                "Keys pressed as this question appeared were ignored.".cyan(),
+            )];
+        }
         if !self.focus_is_notes()
             && let Some(flash) = self.composer.inline_flash()
         {

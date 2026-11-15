@@ -78,7 +78,7 @@ pub(super) fn has_explicit_resume_permission_override(
 }
 
 impl App {
-    pub(super) fn resume_permission_overrides(
+    pub(crate) fn resume_permission_overrides(
         &self,
         config: &Config,
     ) -> crate::resume_permissions::ResumePermissions {

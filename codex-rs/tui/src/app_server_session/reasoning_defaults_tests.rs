@@ -153,8 +153,12 @@ stream_max_retries = 0
                     /*collaboration_mode*/ None,
                     /*output_schema*/ None,
                     /*cyber_access_program*/ None,
+                    /*additional_context*/ None,
                 )
                 .await?;
+            let crate::app_server_session::TurnStartOutcome::Started { turn_id, .. } = turn else {
+                panic!("expected turn/start to start a turn: {turn:?}");
+            };
             tokio::time::timeout(std::time::Duration::from_secs(/*secs*/ 30), async {
                 while let Some(event) = app_server.next_event().await {
                     if let AppServerEvent::ServerNotification(notification) = event.event
@@ -199,7 +203,7 @@ stream_max_retries = 0
                 ),
                 (
                     &json!(started.session.thread_id),
-                    &json!(turn.turn.id),
+                    &json!(turn_id),
                     &json!("user"),
                 )
             );

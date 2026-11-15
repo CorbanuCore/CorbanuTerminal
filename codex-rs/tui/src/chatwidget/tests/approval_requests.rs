@@ -635,3 +635,51 @@ async fn exec_approval_decision_truncates_multiline_and_long_commands() {
         lines_to_single_string(&aborted_long)
     );
 }
+
+/// #624 under centered views: an approval that arrives while a centered
+/// confirmation is open waits under it, and the confirmation says so on the
+/// chat surface and as the standalone dialog the owned transcript paints.
+/// The notice goes once the approval shows.
+#[tokio::test]
+async fn issue_624_centered_confirmation_over_a_waiting_approval_says_so() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let waiting = "A request is waiting; it shows when you close this.";
+    chat.open_feature_enable_prompt(Feature::Collab);
+    assert!(!render_bottom_popup(&chat, /*width*/ 80).contains(waiting));
+
+    let ev = ExecApprovalRequestEvent {
+        kind: Default::default(),
+        call_id: "call-waiting".into(),
+        approval_id: Some("call-waiting".into()),
+        turn_id: "turn-waiting".into(),
+        environment_id: None,
+        command: vec!["echo".into(), "waiting".into()],
+        cwd: AbsolutePathBuf::current_dir().expect("current dir"),
+        reason: None,
+        network_approval_context: None,
+        proposed_execpolicy_amendment: None,
+        proposed_network_policy_amendments: None,
+        additional_permissions: None,
+        available_decisions: None,
+    };
+    handle_exec_approval_request(&mut chat, "sub-waiting", ev);
+
+    let screen = render_bottom_popup(&chat, /*width*/ 80);
+    assert!(screen.contains(waiting), "{screen}");
+    assert!(screen.contains("Enable subagents?"), "{screen}");
+    let area = Rect::new(0, 0, 80, 24);
+    let mut buf = ratatui::buffer::Buffer::empty(area);
+    chat.centered_dialog()
+        .expect("the confirmation stays on top")
+        .render(area, &mut buf);
+    let painted: String = buf
+        .content
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect();
+    assert!(painted.contains(waiting), "{painted}");
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Esc));
+    assert!(chat.centered_dialog().is_none());
+    assert!(!render_bottom_popup(&chat, /*width*/ 80).contains("A request is waiting"));
+}

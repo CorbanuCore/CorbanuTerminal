@@ -51,7 +51,7 @@ fn centered_dialog_retains_backdrop_and_routes_cursor() {
     };
     let overlay = DialogOverlay {
         backdrop: RenderableItem::Borrowed(&backdrop),
-        dialog: CenteredView(&dialog),
+        dialog: CenteredView::new(&dialog),
     };
     let mut snapshots = Vec::new();
     for (width, height, expected_cursor) in [(80, 9, (4, 3)), (24, 7, (2, 2)), (12, 2, (2, 0))] {

@@ -931,12 +931,19 @@ impl BottomPane {
         self.push_view(Box::new(modal));
     }
 
-    /// #787: the request on top, if any, by its shown generation.
+    /// #787: the request on top, if any, by its shown generation: the view
+    /// on top, or with no view the expanded async question, which takes keys
+    /// then.
     fn top_request_generation(&self) -> Option<u64> {
-        self.view_stack
-            .last()
-            .filter(|view| view.answers_request())
-            .map(|view| view.shown_request_generation())
+        match self.view_stack.last() {
+            Some(view) => view
+                .answers_request()
+                .then(|| view.shown_request_generation()),
+            None => self
+                .questions
+                .as_ref()
+                .and_then(|questions| questions.displayed_question_generation()),
+        }
     }
 
     /// #787: before each draw, note when the request on top first shows.
@@ -965,6 +972,8 @@ impl BottomPane {
             self.request_quiet_until = now.checked_add(self.request_input_guard);
             if let Some(view) = self.view_stack.last_mut() {
                 view.on_early_input();
+            } else if let Some(questions) = self.questions.as_mut() {
+                questions.on_early_input();
             }
             self.request_redraw();
         }
@@ -1086,6 +1095,21 @@ impl BottomPane {
             }
             self.request_redraw();
             return InputResult::None;
+        }
+        if self.view_stack.is_empty() && self.questions.as_ref().is_some_and(|q| q.expanded) {
+            // #787: keys reach the async question on show no sooner than a
+            // request view's (it may have just shown: arrived, advanced,
+            // answered elsewhere, expanded, or uncovered); Ctrl+C never
+            // reaches it as a key.
+            self.sync_top_view();
+            let ctrl_c = key_event.code == KeyCode::Char('c')
+                && key_event.modifiers.contains(KeyModifiers::CONTROL);
+            if key_event.kind != KeyEventKind::Release
+                && !ctrl_c
+                && self.drop_early_request_input(now)
+            {
+                return InputResult::None;
+            }
         }
         if self.view_stack.is_empty()
             && let Some(questions) = self.questions.as_mut().filter(|q| q.expanded)
@@ -1265,6 +1289,13 @@ impl BottomPane {
             self.request_redraw();
             return;
         }
+        // #523: a view uncovered since the last key learns it first.
+        self.sync_top_view();
+        // #787: nor does a paste reach a request (or the async question on
+        // show) before it could be seen.
+        if self.drop_early_request_input(now) {
+            return;
+        }
         if self.view_stack.is_empty()
             && let Some(questions) = self.questions.as_mut().filter(|q| q.expanded)
         {
@@ -1274,12 +1305,6 @@ impl BottomPane {
             return;
         }
         let has_pasted_text = !pasted.is_empty();
-        // #523: a view uncovered since the last key learns it first.
-        self.sync_top_view();
-        // #787: nor does a paste reach a request before it could be seen.
-        if self.drop_early_request_input(now) {
-            return;
-        }
         if let Some(view) = self.view_stack.last_mut() {
             let needs_redraw = view.handle_paste(pasted);
             let view_complete = view.is_complete();
@@ -2800,7 +2825,11 @@ impl BottomPane {
             .filter(|view| {
                 !self.warnings_active() && view.presentation() == ViewPresentation::Centered
             })
-            .map(CenteredView)
+            .map(|view| CenteredView {
+                view,
+                // #624: the dialog says a request waits under it.
+                notice: self.waiting_request_notice(),
+            })
     }
 
     pub(crate) fn backdrop_with_options<'a>(
@@ -2832,7 +2861,19 @@ impl BottomPane {
         }
         if let Some(view) = views.last() {
             if view.presentation() == ViewPresentation::Centered {
-                RenderableItem::Owned(Box::new(view_stack::ViewStack(views)))
+                match self.centered_dialog() {
+                    // #624: the whole stack, so a request may wait under the
+                    // dialog: its notice shows in the dialog.
+                    Some(dialog) if views.len() == self.view_stack.len() => {
+                        RenderableItem::Owned(Box::new(view_stack::DialogOverlay {
+                            backdrop: RenderableItem::Owned(Box::new(view_stack::ViewStack(
+                                &views[..views.len() - 1],
+                            ))),
+                            dialog,
+                        }))
+                    }
+                    _ => RenderableItem::Owned(Box::new(view_stack::ViewStack(views))),
+                }
             } else if views.len() == self.view_stack.len()
                 && let Some(notice) = self.waiting_request_notice()
             {
@@ -3091,6 +3132,10 @@ mod tests {
 
     // tests/issue_787.rs
     mod issue_787;
+    // tests/issue_787_async.rs
+    mod issue_787_async;
+    // tests/issue_624_centered.rs
+    mod issue_624_centered;
     // tests/issue_817.rs
     mod issue_817;
     use crate::app::app_server_requests::ResolvedAppServerRequest;

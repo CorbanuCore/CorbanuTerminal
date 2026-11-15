@@ -1,3 +1,7 @@
+// Corbanu accounting wraps the request transport, which deepens the tool
+// future past the default limit when its `Send` bound is checked.
+#![recursion_limit = "256"]
+
 mod artifact;
 mod backend;
 mod extension;

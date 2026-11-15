@@ -70,13 +70,10 @@ mod input_boundary;
 #[cfg(unix)]
 mod job_control;
 mod keyboard_modes;
-<<<<<<< HEAD
 mod panic_diagnostics;
 #[cfg(all(test, unix))]
 #[path = "tui/terminal_ownership_tests.rs"]
 mod terminal_ownership_tests;
-||||||| 413492cd6c
-=======
 mod link_pointer;
 mod notification_preview;
 #[cfg(test)]
@@ -92,7 +89,6 @@ mod size_monitor;
 #[cfg(all(test, unix))]
 #[path = "tui_startup_tests.rs"]
 mod startup_tests;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod terminal_stderr;
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -115,7 +111,6 @@ pub(crate) struct InitializedTerminal {
     pub(crate) enhanced_keys_supported: bool,
     pub(crate) terminal_app_over_ssh: bool,
     pub(crate) stderr_guard: terminal_stderr::TerminalStderrGuard,
-    pub(crate) restore_guard: TerminalRestoreGuard,
 }
 
 pub(crate) use keyboard_modes::VscodeDetection;
@@ -257,20 +252,12 @@ mod tests {
     }
 }
 
-enum TerminalOwnership<'a> {
-    Existing,
-    Acquire(&'a mut TerminalRestoreGuard),
-}
-
-fn set_modes_with_ownership(ownership: TerminalOwnership<'_>) -> Result<()> {
+pub fn set_modes() -> Result<()> {
     ensure_virtual_terminal_processing()?;
 
     execute!(stdout(), EnableBracketedPaste)?;
 
     enable_raw_mode()?;
-    if let TerminalOwnership::Acquire(guard) = ownership {
-        guard.activate();
-    }
     #[cfg(windows)]
     windows_console::set_input_record_mode()?;
     // Enable keyboard enhancement flags so modifiers for keys like Enter are disambiguated.
@@ -286,10 +273,6 @@ fn set_modes_with_ownership(ownership: TerminalOwnership<'_>) -> Result<()> {
     #[cfg(windows)]
     let _ = execute!(stdout(), DisableFocusChange);
     Ok(())
-}
-
-pub fn set_modes() -> Result<()> {
-    set_modes_with_ownership(TerminalOwnership::Existing)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -435,18 +418,6 @@ pub(super) fn reapply_raw_mode_after_resume() -> Result<()> {
 /// Uses a stronger keyboard reset than `restore` so the parent shell recovers even if a
 /// terminal missed the stack pop that normally pairs with [`set_modes`].
 pub fn restore_after_exit() -> Result<()> {
-<<<<<<< HEAD
-    let mut first_error =
-        restore_common(RawModeRestore::Disable, KeyboardRestore::ResetAfterExit).err();
-    // Discard keystrokes the TUI never read, such as the rest of a typed or
-    // non-bracketed pasted secret, so they never reach the parent shell (#461).
-    if stdin().is_terminal() {
-        flush_terminal_input_buffer();
-    }
-||||||| 413492cd6c
-    let mut first_error =
-        restore_common(RawModeRestore::Disable, KeyboardRestore::ResetAfterExit).err();
-=======
     restore_after_exit_with_events(/*events*/ None)
 }
 
@@ -470,7 +441,11 @@ pub(super) fn restore_after_exit_with_events(events: Option<&EventBroker>) -> Re
         TerminalHandoff::Restore,
     )
     .err();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    // Discard keystrokes the TUI never read, such as the rest of a typed or
+    // non-bracketed pasted secret, so they never reach the parent shell (#461).
+    if raw_mode_restore == RawModeRestore::Disable && stdin().is_terminal() {
+        flush_terminal_input_buffer();
+    }
     if let Err(err) = terminal_stderr::finish() {
         first_error.get_or_insert(err);
     }
@@ -490,46 +465,17 @@ pub(crate) fn configure_panic_diagnostics(log_dir: std::path::PathBuf) {
     }
 }
 
-pub(crate) struct TerminalRestoreGuard {
-    active: bool,
+/// Records the current thread as the terminal owner for panic diagnostics (#616/#638): a panic
+/// on this thread restores the terminal; panics contained in tasks and background threads do not.
+/// `crate::TerminalRestoreGuard` calls it on the thread that runs the TUI.
+pub(crate) fn mark_terminal_owner_thread() {
+    panic_diagnostics::terminal_acquired();
 }
 
-impl TerminalRestoreGuard {
-    fn new() -> Self {
-        Self { active: false }
-    }
-
-    fn activate(&mut self) {
-        debug_assert!(!self.active, "terminal ownership activated twice");
-        self.active = true;
-        panic_diagnostics::terminal_acquired();
-    }
-
-    #[cfg_attr(debug_assertions, allow(dead_code))]
-    pub(crate) fn restore(&mut self) -> color_eyre::Result<()> {
-        if self.active {
-            panic_diagnostics::record_owner_drop();
-            restore_after_exit()?;
-            self.active = false;
-            panic_diagnostics::terminal_released();
-        }
-        Ok(())
-    }
-
-    pub(crate) fn restore_silently(&mut self) {
-        if self.active {
-            panic_diagnostics::record_owner_drop();
-            crate::restore();
-            self.active = false;
-            panic_diagnostics::terminal_released();
-        }
-    }
-}
-
-impl Drop for TerminalRestoreGuard {
-    fn drop(&mut self) {
-        self.restore_silently();
-    }
+/// Records that the terminal owner is handing the terminal back to the shell.
+pub(crate) fn mark_terminal_released() {
+    panic_diagnostics::record_owner_drop();
+    panic_diagnostics::terminal_released();
 }
 
 /// Restore the terminal to its original state, but keep raw mode enabled.
@@ -584,15 +530,8 @@ pub(crate) fn init() -> Result<InitializedTerminal> {
     if !stdout().is_terminal() {
         return Err(std::io::Error::other("stdout is not a terminal"));
     }
-<<<<<<< HEAD
-    let mut restore_guard = TerminalRestoreGuard::new();
-    set_modes_with_ownership(TerminalOwnership::Acquire(&mut restore_guard))?;
-||||||| 413492cd6c
-    set_modes()?;
-=======
     let mut restore_guard = TerminalInitializationGuard { active: true };
     set_modes()?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     set_panic_hook();
 
@@ -680,16 +619,9 @@ pub(crate) fn init() -> Result<InitializedTerminal> {
         #[cfg(not(unix))]
         terminal_app_over_ssh: false,
         stderr_guard,
-<<<<<<< HEAD
-        restore_guard,
-    })
-||||||| 413492cd6c
-    })
-=======
     };
     restore_guard.active = false;
     Ok(initialized_terminal)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[cfg(not(unix))]
@@ -908,7 +840,6 @@ impl Tui {
         }
     }
 
-<<<<<<< HEAD
     #[cfg(test)]
     pub(crate) fn for_dispatch_integration_test() -> std::io::Result<Self> {
         let backend = CrosstermBackend::new(stdout());
@@ -930,12 +861,7 @@ impl Tui {
         Ok(tui)
     }
 
-    /// Set whether alternate screen is enabled. When false, enter_alt_screen() becomes a no-op.
-||||||| 413492cd6c
-    /// Set whether alternate screen is enabled. When false, enter_alt_screen() becomes a no-op.
-=======
     /// Set whether overlays switch to the alternate screen or stay inline.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub fn set_alt_screen_enabled(&mut self, enabled: bool) {
         if !enabled && self.owned_screen {
             let _ = self.set_owned_screen(/*owned*/ false);

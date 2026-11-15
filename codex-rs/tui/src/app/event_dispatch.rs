@@ -6807,7 +6807,7 @@ impl App {
                 }];
                 let sent = match self.active_turn_id_for_submission(thread_id).await {
                     Some(turn_id) => app_server
-                        .turn_steer(thread_id, turn_id, items, /*client_user_message_id*/ None)
+                        .turn_steer(thread_id, turn_id, Uuid::now_v7().to_string(), items)
                         .await
                         .map(|_| ())
                         .map_err(|error| {
