@@ -205,8 +205,22 @@ fn spawn_legacy_process(
     // SAFETY: `token` owns the handle and outlives this synchronous spawn.
     let borrowed_token = unsafe { BorrowedHandle::borrow_raw(token.raw()) };
     let (pi, job, output_readers, writer_handle, hpc, conpty_owner, desktop) = if tty {
-        let (pi, mut conpty) =
-            spawn_conpty_process_as_user(borrowed_token, command, cwd, env_map, launch_desktop)?;
+        let launcher = crate::helper_materialization::conpty_launcher()?;
+        // Preserve the command line exactly as the direct launch serialized it.
+        // The launcher runs under the same token and job from its first instruction.
+        let command_line = command
+            .iter()
+            .map(|arg| crate::winutil::quote_windows_arg(arg))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let launch_command = vec![launcher.display().to_string(), command_line];
+        let (pi, mut conpty) = spawn_conpty_process_as_user(
+            borrowed_token,
+            &launch_command,
+            cwd,
+            env_map,
+            launch_desktop,
+        )?;
         let pi = StartedProcess(pi);
         let job = conpty
             .job()

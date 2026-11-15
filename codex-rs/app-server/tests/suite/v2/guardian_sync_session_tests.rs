@@ -192,7 +192,7 @@ async fn managed_reviewer_refreshes_global_instructions_before_reuse() -> Result
     let codex_home = TempDir::new()?;
     let instructions_path = codex_home.path().join("AGENTS.md");
     sync_config(server.uri())
-        .with_provider_name("OpenAI")
+        .with_builtin_openai_provider()
         .enable_feature(Feature::ContentItemKinds)
         .enable_feature(Feature::GuardianRecordedItems)
         .with_extra_config(&format!(

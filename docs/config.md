@@ -389,10 +389,28 @@ fetching the key from the vault inside that command:
 `OPENROUTER_API_KEY="$(corbanu vault auth-helper provider/openrouter_api_key)" my-tool`.
 
 MCP servers started over stdio only receive a short list of basic variables
-plus the ones named in that server's `env_vars` or `env`, so a provider key
-reaches one only if you list it there. A shell profile that exports a key
-itself (for example a login shell reading `~/.zprofile`) is outside this
-filter.
+plus the ones named in that server's `env_vars` or `env`. With
+`secretless_agent_launch` armed, inherited names must also pass the protected
+launch allowlist, both locally and on an executor. This includes `env_vars`
+read from the host and entries with `source = "remote"`; provider credentials,
+Corbanu vault credentials, Task Node tokens and startup helpers cannot pass
+through that list. Remote inherited variable names must be ASCII exact names,
+not wildcard grants, while protected launch is armed.
+
+If an MCP server needs a credential, give that server its own explicit `env`
+value. For example, a server using the GitHub API can receive a dedicated token:
+
+```toml
+[mcp_servers.github.env]
+GITHUB_TOKEN = "replace-with-a-token-for-this-server"
+```
+
+Keep this token in your private user configuration, not in a project file
+committed to version control. While protected launch is armed, Corbanu uses
+that server's configured value instead of copying its inherited `GITHUB_TOKEN`.
+Without protected launch, named `env_vars` keep
+their existing behavior. A shell profile that exports a key itself (for example
+a login shell reading `~/.zprofile`) is outside this environment filter.
 
 <a id="mcp-oauth-addresses"></a>
 

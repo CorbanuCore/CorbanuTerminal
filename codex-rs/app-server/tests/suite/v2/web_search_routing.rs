@@ -138,10 +138,8 @@ async fn standalone_web_search_uses_workspace_routing(
             bootstrap.uri()
         ))
         .with_root_config("memories.disable_on_external_context = true")
-        .with_model_provider("openai-custom")
-        .with_provider_name("OpenAI")
         .with_provider_base_url(&format!("{}/backend-api/codex", bootstrap.uri()))
-        .with_provider_config("requires_openai_auth = true\nsupports_websockets = false")
+        .with_builtin_openai_provider()
         .enable_feature(Feature::StandaloneWebSearch)
         .write(home.path())?;
     std::fs::write(

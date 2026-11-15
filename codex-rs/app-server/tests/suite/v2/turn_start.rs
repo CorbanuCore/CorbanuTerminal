@@ -411,8 +411,7 @@ async fn tool_call_metadata_stays_out_of_raw_response_item_notifications(
         .await;
     let codex_home = TempDir::new()?;
     let mut config = MockResponsesConfig::new(&server.uri())
-        .with_provider_name("OpenAI")
-        .with_provider_config("supports_websockets = false")
+        .with_builtin_openai_provider()
         .with_root_config(&format!(
             "chatgpt_base_url = \"{}\"\ncli_auth_credentials_store = \"file\"",
             apps.chatgpt_base_url

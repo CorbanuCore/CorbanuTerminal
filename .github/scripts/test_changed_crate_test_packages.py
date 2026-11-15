@@ -9,6 +9,8 @@ from argument_comment_lint_packages import workspace_packages
 from changed_crate_test_packages import CANARY_PACKAGE
 from changed_crate_test_packages import HELPER_BINARIES
 from changed_crate_test_packages import ROOT
+from changed_crate_test_packages import affected_packages
+from changed_crate_test_packages import cargo_metadata
 from changed_crate_test_packages import helper_build_args
 from changed_crate_test_packages import selected_packages
 from changed_crate_test_packages import tested_packages
@@ -145,6 +147,85 @@ class ChangedCrateTestPackagesTest(unittest.TestCase):
             package for helpers in HELPER_BINARIES.values() for package, _ in helpers
         }
         self.assertEqual(named - names, set())
+
+
+class AffectedPackagesTest(unittest.TestCase):
+    def test_cargo_graph_handles_implicit_members_aliases_targets_and_cycles(
+        self,
+    ) -> None:
+        # Use real Cargo metadata from a registry-free fixture. The support
+        # crate isn't in members; dev dependencies make a cycle with its parent.
+        manifests = {
+            "Cargo.toml": '[workspace]\nresolver = "2"\nmembers = ["leaf", "app", "other"]\n',
+            "leaf/Cargo.toml": '[package]\nname = "leaf"\nversion = "0.1.0"\n',
+            "app/Cargo.toml": (
+                '[package]\nname = "app"\nversion = "0.1.0"\n'
+                "[target.'cfg(windows)'.build-dependencies]\n"
+                'renamed = { package = "leaf", path = "../leaf", optional = true }\n'
+                '[dev-dependencies]\nsupport = { path = "tests/support" }\n'
+            ),
+            "app/tests/support/Cargo.toml": (
+                '[package]\nname = "support"\nversion = "0.1.0"\n'
+                '[dependencies]\napp = { path = "../.." }\n'
+            ),
+            "other/Cargo.toml": '[package]\nname = "other"\nversion = "0.1.0"\n',
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name, contents in manifests.items():
+                path = root / "codex-rs" / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(contents)
+                if name != "Cargo.toml":
+                    source = path.parent / "src/lib.rs"
+                    source.parent.mkdir()
+                    source.write_text("")
+            metadata = cargo_metadata(root)
+            self.assertEqual(
+                affected_packages(["codex-rs/leaf/src/lib.rs"], metadata, root),
+                ["app", "leaf", "support"],
+            )
+            self.assertEqual(
+                affected_packages(
+                    ["codex-rs/app/tests/support/src/lib.rs"], metadata, root
+                ),
+                ["app", "support"],
+            )
+            # At the cap retain precise coverage; past it select everything.
+            self.assertEqual(
+                affected_packages(
+                    ["codex-rs/leaf/src/lib.rs"], metadata, root, limit=3
+                ),
+                ["app", "leaf", "support"],
+            )
+            self.assertEqual(
+                affected_packages(
+                    ["codex-rs/leaf/src/lib.rs"], metadata, root, limit=2
+                ),
+                ["app", "leaf", "other", "support"],
+            )
+            for path in (
+                "codex-rs/Cargo.lock",
+                "codex-rs/Cargo.toml",
+                "codex-rs/.cargo/config.toml",
+                "codex-rs/deleted/Cargo.toml",
+            ):
+                with self.subTest(path=path):
+                    self.assertEqual(
+                        affected_packages([path], metadata, root),
+                        ["app", "leaf", "other", "support"],
+                    )
+            self.assertEqual(affected_packages(["docs/ci.md"], metadata, root), [])
+
+    def test_real_test_support_crates_are_discovered(self) -> None:
+        packages = tested_packages(ROOT)
+        self.assertEqual(packages["codex-rs/core/tests/common"], "core_test_support")
+        self.assertEqual(
+            packages["codex-rs/app-server/tests/common"], "app_test_support"
+        )
+        # Sync: upstream removed the codex-mcp-server crate (and its
+        # mcp_test_support); main's third assertion doesn't apply here.
+        self.assertNotIn("codex-rs/mcp-server/tests/common", packages)
 
 
 class ChangedCrateTestsWorkflowTest(unittest.TestCase):

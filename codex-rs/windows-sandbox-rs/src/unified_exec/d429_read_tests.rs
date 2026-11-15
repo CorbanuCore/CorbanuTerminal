@@ -526,17 +526,40 @@ fn sec_win_d429_legacy_workloads_still_work() {
             failures.push(format!("{name}: exit={exit_code} stdout={stdout:?}"));
         }
     }
-    // In an elevated (admin) session Ctrl-C doesn't reach a legacy ConPTY
-    // command on main either (#1842).
-    let elevated = crate::setup::is_elevated().expect("elevation");
     for interrupt in [false, true] {
         let ended = runtime.block_on(end_a_running_command(root.path(), home, &cmd, interrupt));
         println!("\nd429 Core ends a command (ctrl_c={interrupt}): {ended}");
-        if !ended.starts_with("ended") && !(interrupt && elevated) {
+        if !ended.starts_with("ended") {
             failures.push(format!("ctrl_c={interrupt}: {ended}"));
         }
     }
     assert!(failures.is_empty(), "{failures:#?}\n{}", sandbox_log(home));
+}
+
+/// #1842: Ctrl-C must reach a legacy command even when Core is elevated.
+#[test]
+fn sec_win_1842_legacy_conpty_receives_ctrl_c() {
+    if !crate::unified_exec::tests::ctrl_c::ignored_ctrl_c_host(
+        "unified_exec::tests::command_identity::elevated::d429::sec_win_1842_legacy_conpty_receives_ctrl_c",
+    ) {
+        return;
+    }
+    let _guard = legacy_process_test_guard();
+    let root = user_owned_test_root();
+    let home = sandbox_home("1842-ctrl-c");
+    let cmd = system32_exe("cmd.exe").display().to_string();
+    let ended = current_thread_runtime().block_on(end_a_running_command(
+        root.path(),
+        home.path(),
+        &cmd,
+        /*interrupt*/ true,
+    ));
+    pretty_assertions::assert_eq!(
+        ended,
+        "ended exit=Ok(-1073741510)",
+        "{}",
+        sandbox_log(home.path())
+    );
 }
 
 /// Starts `cmd` running `ping` in a legacy command and ends it as Core does:

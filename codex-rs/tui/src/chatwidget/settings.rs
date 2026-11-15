@@ -387,6 +387,16 @@ impl ChatWidget {
     /// widget. A retained pane can use a different provider from its parent, so copying only the
     /// ID leaves `/status`, wire-specific controls, and auth affordances describing the parent.
     pub(super) fn apply_thread_model_provider(&mut self, model_provider_id: String) {
+        self.project_thread_model_provider(model_provider_id);
+        self.refresh_model_dependent_surfaces();
+    }
+
+    /// [`Self::apply_thread_model_provider`] without refreshing the surfaces
+    /// that depend on the model, for a caller that sets the thread's model
+    /// next and refreshes them then. Refreshing in between judged the
+    /// previous model, which stopped upstream's fresh-task sparkle on a new
+    /// Astra task (#2312).
+    pub(super) fn project_thread_model_provider(&mut self, model_provider_id: String) {
         let model_provider = self
             .config
             .model_providers
@@ -402,7 +412,9 @@ impl ChatWidget {
                     ..Default::default()
                 }
             });
-        self.set_model_provider(model_provider_id, model_provider);
+        self.runtime_model_provider_base_url = model_provider.base_url.clone();
+        self.config.model_provider_id = model_provider_id;
+        self.config.model_provider = model_provider;
     }
 
     pub(crate) fn current_model(&self) -> &str {
