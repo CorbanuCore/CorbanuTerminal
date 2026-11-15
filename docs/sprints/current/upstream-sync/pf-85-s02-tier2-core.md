@@ -46,8 +46,8 @@ updated: 2026-11-14
 - [x] S3a (security resolution, core paths and the Tier 1 sandbox crates) finished 2026-11-14: every S3a ledger
   row is resolved on the sync branch, the last in #2237. Exit summary:
   [#1628](https://github.com/CorbanuCore/CorbanuTerminal/issues/1628#issuecomment-6889180617) (also on #1532).
-  Its core tests ran only on scratch builds (codex-core tests don't build on the branch yet); the compile pass
-  reruns them.
+  Its core tests ran, or were only type-checked, on scratch builds (codex-core tests don't build on the branch
+  yet); the compile pass reruns them.
 
 ## Remaining
 
