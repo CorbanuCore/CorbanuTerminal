@@ -208,20 +208,24 @@ async fn pf_30_s04_provider_change_invalidates_bound_client() {
 async fn pf_30_s04_inherited_policy_is_not_weakened_by_permissive_worker_configuration() {
     let parent = owner(SecurityLevel::Moderate).await;
     let (mut child, _) = crate::session::tests::make_session_and_context().await;
-    child.services.agent_control = Arc::new(
-        parent
-            .services
-            .agent_control
-            .local()
-            .expect("local agent control")
-            .clone()
-            .with_effective_security_policy(
-                SecurityLevel::Permissive,
-                child.thread_id,
-                /*inherits_from_spawn_parent*/ false,
-            )
-            .unwrap(),
-    );
+    let control = parent
+        .services
+        .agent_control
+        .local()
+        .expect("local agent control")
+        .clone()
+        .with_effective_security_policy(
+            SecurityLevel::Permissive,
+            child.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
+        .unwrap();
+    // Upstream sessions read policy through `services.security_policy`, which a session
+    // takes from its agent control when it is built; join the child to the parent's
+    // control plane the same way.
+    child.services.security_policy = control.effective_security_policy();
+    child.services.local_agent_runtime = control.runtime.clone();
+    child.services.agent_control = Arc::new(control);
     assert!(matches!(
         client(&Arc::new(child)).await,
         Err(StageOneMemoryError::Denied(

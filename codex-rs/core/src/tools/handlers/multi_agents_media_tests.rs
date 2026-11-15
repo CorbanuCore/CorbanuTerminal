@@ -30,7 +30,9 @@ fn stage_windows_sandbox_helpers() {
 async fn issue_2222_agent_attachments(level: SecurityLevel, kind: &str) {
     let (mut session, turn) = make_session_and_context().await;
     let mut turn = with_spawn_eligible_runtime(&session, turn).await;
-    turn.approval_policy
+    Arc::make_mut(&mut turn.config)
+        .permissions
+        .approval_policy
         .set(AskForApproval::Never)
         .expect("approvals off");
     let manager = install_live_root(&mut session, &turn).await;
@@ -40,8 +42,10 @@ async fn issue_2222_agent_attachments(level: SecurityLevel, kind: &str) {
         .with_ingress_level(level)
         .with_source_envelopes(/*enabled*/ true);
     client.note_recorded_for_taint(&[ResponseItem::FunctionCallOutput {
+        name: None,
+        namespace: None,
         id: None,
-        call_id: "notes".into(),
+        call_id: Some("notes".to_string()),
         output: codex_protocol::models::FunctionCallOutputPayload::from_text(
             "untrusted notes".into(),
         ),
@@ -78,18 +82,12 @@ async fn issue_2222_agent_attachments(level: SecurityLevel, kind: &str) {
             );
         }
     }
+    // Upstream hands agent input to the thread through `start_or_steer_turn`; the test
+    // manager records those items in place of main's captured `Op::UserInput`.
     let delivered = manager
-        .captured_ops()
+        .captured_user_inputs()
         .into_iter()
-        .filter_map(|(id, op)| {
-            if id != child.thread_id {
-                return None;
-            }
-            match op {
-                Op::UserInput { items, .. } => Some(items),
-                _ => None,
-            }
-        })
+        .filter_map(|(id, items)| (id == child.thread_id).then_some(items))
         .collect::<Vec<_>>();
     let expected = if level == SecurityLevel::Permissive {
         vec![serde_json::from_value::<Vec<UserInput>>(items).expect("items")]
@@ -127,7 +125,7 @@ async fn issue_2222_agent_attachments_are_read_before_delivery(
         Some(core_test_support::find_codex_linux_sandbox_exe().expect("Linux sandbox helper"));
     #[cfg(not(target_os = "linux"))]
     let linux_sandbox = None;
-    let runtime = codex_exec_server::ExecServerRuntimePaths::new(
+    let runtime = codex_exec_server::ExecServerRuntimeOptions::new(
         std::env::current_exe().expect("test executable"),
         linux_sandbox,
     )
@@ -137,23 +135,23 @@ async fn issue_2222_agent_attachments_are_read_before_delivery(
     )
     .await;
     let current = turn
-        .environments
-        .turn_environments()
-        .next()
+        .initial_environments
+        .primary()
         .cloned()
         .expect("local environment");
-    let environment_cwd = current.cwd().clone();
-    turn.environments.environments[0] = crate::environment_selection::TurnEnvironmentState::Ready(
-        crate::session::turn_context::TurnEnvironment::new(
-            current.environment_id,
-            environments
-                .try_local_environment()
-                .expect("runtime environment"),
-            environment_cwd,
-            Vec::new(),
-            current.shell,
-        ),
-    );
+    let mut selection = current.selection.clone();
+    selection.workspace_roots = Vec::new();
+    turn.initial_environments.environments[0] =
+        crate::environment_selection::TurnEnvironmentState::Ready(
+            crate::session::turn_context::TurnEnvironment::new(
+                selection,
+                current.config_origin,
+                environments
+                    .try_local_environment()
+                    .expect("runtime environment"),
+                current.shell,
+            ),
+        );
     let manager = install_live_root(&mut session, &turn).await;
     let child = start_own_child(&manager, (*turn.config).clone(), session.thread_id).await;
     let client = (*session.services.model_client())
@@ -199,33 +197,34 @@ async fn issue_2222_agent_attachments_are_read_before_delivery(
     // Delivered items contain the bytes that were checked, not a path the
     // child will open after it could have changed.
     std::fs::write(&path, b"swapped bytes").expect("swap");
+    // Upstream hands agent input to the thread through `start_or_steer_turn`; the test
+    // manager records those items in place of main's captured `Op::UserInput`.
     let delivered = manager
-        .captured_ops()
+        .captured_user_inputs()
         .into_iter()
-        .filter_map(|(id, op)| {
-            if id != child.thread_id {
-                return None;
-            }
-            match op {
-                Op::UserInput { items, .. } => Some(items),
-                _ => None,
-            }
-        })
+        .filter_map(|(id, items)| (id == child.thread_id).then_some(items))
         .collect::<Vec<_>>();
     let expected = if denied {
         Vec::new()
     } else {
         let item = if kind == "local_image" {
             UserInput::Image {
-                image_url: codex_utils_image::data_url_from_bytes(
-                    "application/octet-stream",
-                    b"original bytes",
-                ),
+                image: codex_protocol::models::ImageReference::Inline {
+                    image_url: codex_utils_image::data_url_from_bytes(
+                        "application/octet-stream",
+                        b"original bytes",
+                    ),
+                },
                 detail: None,
             }
         } else {
             UserInput::Audio {
-                audio_url: codex_utils_image::data_url_from_bytes("audio/wav", b"original bytes"),
+                audio: codex_protocol::models::AudioReference::Inline {
+                    audio_url: codex_utils_image::data_url_from_bytes(
+                        "audio/wav",
+                        b"original bytes",
+                    ),
+                },
             }
         };
         vec![vec![item]]

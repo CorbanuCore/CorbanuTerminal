@@ -209,7 +209,7 @@ async fn issue_2088_discovery_and_skill_reads_keep_the_refusal_with_full_disk_ac
                         "ws://127.0.0.1:1".to_string(),
                     ))),
                     TurnEnvironmentState::Ready(
-                        turn.environments.primary().expect("local").clone(),
+                        turn.initial_environments.primary().expect("local").clone(),
                     ),
                 ],
             };
@@ -241,9 +241,11 @@ async fn issue_2088_discovery_and_skill_reads_keep_the_refusal_with_full_disk_ac
                         remote_file_refusal(level, "far")
                     })
                 );
+                // Upstream gives a remote Windows executor with no configured sandbox the
+                // restricted token (main forwarded Disabled); the refusal above stays.
                 assert_eq!(
                     context.windows_sandbox_selection,
-                    codex_file_system::WindowsSandboxSelection::Disabled
+                    codex_file_system::WindowsSandboxSelection::RestrictedToken
                 );
                 let local = snapshot
                     .sandbox_contexts()

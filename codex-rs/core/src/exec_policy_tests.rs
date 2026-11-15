@@ -3101,9 +3101,15 @@ prefix_rule(pattern=["python3", "src/notes.py", "list"], decision="allow")
             sandbox_permissions: SandboxPermissions::UseDefault,
             prefix_rule: None,
         },
-        ExecApprovalRequirement::Skip {
-            bypass_sandbox: false,
-            proposed_execpolicy_amendment: None,
+        // Upstream retired UnlessTrusted's known-safe list (#39630): every command no rule
+        // allows now asks, so the known-safe remainder is asked about too (main skipped it).
+        // The remembered prefix still covers only its own command.
+        ExecApprovalRequirement::NeedsApproval {
+            reason: None,
+            proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(vec![
+                "cat".to_string(),
+                ".env".to_string(),
+            ])),
         },
     )
     .await;

@@ -75,6 +75,21 @@ pub fn try_parse_shell_bounded(
 /// (parentheses, redirections, substitutions, control flow, etc.). Otherwise
 /// returns `None`.
 pub fn try_parse_word_only_commands_sequence(tree: &Tree, src: &str) -> Option<Vec<Vec<String>>> {
+    let mut commands = Vec::new();
+    for node in word_only_command_nodes(tree, src, /*require_literal_words*/ true)? {
+        commands.push(parse_plain_command_from_node(node, src)?);
+    }
+    Some(commands)
+}
+
+/// The command nodes of a word-only commands sequence, in source order.
+/// `require_literal_words`: reject a bare word that bash may still expand
+/// (upstream's check); main's parse accepted such words.
+fn word_only_command_nodes<'tree>(
+    tree: &'tree Tree,
+    src: &str,
+    require_literal_words: bool,
+) -> Option<Vec<Node<'tree>>> {
     if tree.root_node().has_error() {
         return None;
     }
@@ -109,7 +124,10 @@ pub fn try_parse_word_only_commands_sequence(tree: &Tree, src: &str) -> Option<V
             if !ALLOWED_KINDS.contains(&kind) {
                 return None;
             }
-            if matches!(kind, "word" | "number") && !is_literal_word_or_number(node, src) {
+            if require_literal_words
+                && matches!(kind, "word" | "number")
+                && !is_literal_word_or_number(node, src)
+            {
                 return None;
             }
             if kind == "command" {
@@ -133,18 +151,57 @@ pub fn try_parse_word_only_commands_sequence(tree: &Tree, src: &str) -> Option<V
 
     // Walk uses a stack (LIFO), so re-sort by position to restore source order.
     command_nodes.sort_by_key(Node::start_byte);
-
-    let mut commands = Vec::new();
-    for node in command_nodes {
-        commands.push(parse_plain_command_from_node(node, src)?);
-    }
-    Some(commands)
+    Some(command_nodes)
 }
 
 /// Parses a shell script consisting only of plain commands joined by safe operators.
 pub fn parse_shell_script_into_commands(script: &str) -> Option<Vec<Vec<String>>> {
     let tree = try_parse_shell(script)?;
     try_parse_word_only_commands_sequence(&tree, script)
+}
+
+/// Corbanu (D48): [`parse_shell_script_into_commands`] as main parsed it, where
+/// a bare word bash may still expand (a glob, brace, tilde, `#` or backslash)
+/// does not reject the script. Each word comes with whether its spelling is
+/// proven literal; a caller must not rely on the text of a word that is not.
+/// Expansions that run or substitute anything (`$`, backquotes, `$(...)`) still
+/// reject the script.
+pub fn parse_shell_script_into_words_with_literal_flags(
+    script: &str,
+) -> Option<Vec<Vec<(String, bool)>>> {
+    let tree = try_parse_shell(script)?;
+    let mut commands = Vec::new();
+    for node in word_only_command_nodes(&tree, script, /*require_literal_words*/ false)? {
+        let words = parse_plain_command_from_node(node, script)?;
+        let mut cursor = node.walk();
+        let literal: Vec<bool> = node
+            .named_children(&mut cursor)
+            .map(|child| plain_word_is_literal(child, script))
+            .collect();
+        if literal.len() != words.len() {
+            return None;
+        }
+        commands.push(words.into_iter().zip(literal).collect());
+    }
+    Some(commands)
+}
+
+/// Whether one word of a plain command (a child of its `command` node) has a
+/// proven literal spelling under upstream's check.
+fn plain_word_is_literal(node: Node<'_>, src: &str) -> bool {
+    match node.kind() {
+        "command_name" => node
+            .named_child(0)
+            .is_some_and(|word| plain_word_is_literal(word, src)),
+        "word" | "number" => is_literal_word_or_number(node, src),
+        "string" | "raw_string" => true,
+        "concatenation" => {
+            let mut cursor = node.walk();
+            node.named_children(&mut cursor)
+                .all(|part| plain_word_is_literal(part, src))
+        }
+        _ => false,
+    }
 }
 
 /// A word of a plain command (see [`parse_shell_script_into_plain_words`]).
@@ -682,6 +739,38 @@ mod tests {
             ]
         );
         assert_eq!(parse_shell_script_into_plain_words("echo $x"), None);
+    }
+
+    #[test]
+    fn words_with_literal_flags_keep_expandable_words_unproven() {
+        // Main's parse accepted a word bash may still expand; this keeps it,
+        // flagged, where upstream's stricter parse refuses the script.
+        assert_eq!(parse_shell_script_into_commands("nix build .#hello"), None);
+        assert_eq!(
+            parse_shell_script_into_words_with_literal_flags("nix build .#hello"),
+            Some(vec![vec![
+                ("nix".to_string(), true),
+                ("build".to_string(), true),
+                (".#hello".to_string(), false),
+            ]])
+        );
+        assert_eq!(
+            parse_shell_script_into_words_with_literal_flags("pod*man 'a*' x\"y\" ~/b"),
+            Some(vec![vec![
+                ("pod*man".to_string(), false),
+                ("a*".to_string(), true),
+                ("xy".to_string(), true),
+                ("~/b".to_string(), false),
+            ]])
+        );
+        // Substitutions and expansions still refuse the script.
+        for script in ["echo $x", "echo $(id)", "echo `id`", "(ls)", "ls > out"] {
+            assert_eq!(
+                parse_shell_script_into_words_with_literal_flags(script),
+                None,
+                "{script}"
+            );
+        }
     }
 
     #[test]

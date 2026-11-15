@@ -2031,7 +2031,11 @@ async fn resumed_subagent_rejoins_loaded_parent_control_plane() {
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
     );
     let parent = manager
-        .start_thread(config.clone())
+        .start_thread(StartThreadOptions {
+            // Upstream resumes a legacy rollout path only for legacy-history threads.
+            history_mode: Some(ThreadHistoryMode::Legacy),
+            ..StartThreadOptions::new(config.clone())
+        })
         .await
         .expect("start parent thread");
     let child_path = AgentPath::try_from("/root/troll_burzum").expect("child path");
@@ -2047,7 +2051,7 @@ async fn resumed_subagent_rejoins_loaded_parent_control_plane() {
         .start_thread_with_options(StartThreadOptions {
             config: config.clone(),
             allow_provider_model_fallback: false,
-            history_mode: None,
+            history_mode: Some(ThreadHistoryMode::Legacy),
             initial_history: InitialHistory::New,
             session_source: Some(child_source.clone()),
             thread_source: Some(ThreadSource::Subagent),
@@ -2196,7 +2200,11 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
         state_db.clone(),
     );
     let parent = manager
-        .start_thread(config.clone())
+        .start_thread(StartThreadOptions {
+            // Upstream resumes a legacy rollout path only for legacy-history threads.
+            history_mode: Some(ThreadHistoryMode::Legacy),
+            ..StartThreadOptions::new(config.clone())
+        })
         .await
         .expect("start parent thread");
     let child_path = AgentPath::try_from("/root/troll_burzum").expect("child path");
@@ -2212,7 +2220,7 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
         .start_thread_with_options(StartThreadOptions {
             config: config.clone(),
             allow_provider_model_fallback: false,
-            history_mode: None,
+            history_mode: Some(ThreadHistoryMode::Legacy),
             initial_history: InitialHistory::New,
             session_source: Some(child_source.clone()),
             thread_source: Some(ThreadSource::Subagent),
@@ -2253,7 +2261,7 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
         .start_thread_with_options(StartThreadOptions {
             config: verifier_config,
             allow_provider_model_fallback: false,
-            history_mode: None,
+            history_mode: Some(ThreadHistoryMode::Legacy),
             initial_history: InitialHistory::New,
             session_source: Some(verifier_source),
             thread_source: Some(ThreadSource::Subagent),
@@ -2538,7 +2546,11 @@ async fn resumed_root_quarantines_provider_running_mail_without_replay() {
         state_db.clone(),
     );
     let root = manager
-        .start_thread(config.clone())
+        .start_thread(StartThreadOptions {
+            // Upstream resumes a legacy rollout path only for legacy-history threads.
+            history_mode: Some(ThreadHistoryMode::Legacy),
+            ..StartThreadOptions::new(config.clone())
+        })
         .await
         .expect("start root thread");
     root.thread
