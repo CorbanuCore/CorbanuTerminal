@@ -39,14 +39,8 @@ impl ChatWidget {
                 (true, None) => (true, "Check availability".to_string()),
                 (true, Some(_)) | (false, _) => (false, "None available".to_string()),
             };
-<<<<<<< HEAD
-        let mut params = SelectionViewParams {
-||||||| 413492cd6c
-        SelectionViewParams {
-=======
 
-        SelectionViewParams {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let mut params = SelectionViewParams {
             view_id: Some(USAGE_MENU_VIEW_ID),
             title: Some("Usage".to_string()),
             subtitle: Some("Account usage and resets.".to_string()),
@@ -72,8 +66,7 @@ impl ChatWidget {
                     ..Default::default()
                 },
             ],
-<<<<<<< HEAD
-            ..Default::default()
+            ..SelectionViewParams::picker()
         };
         // The recorded-request view is developer-only (PF-60-S03); a build
         // that records no costs does not offer it.
@@ -91,11 +84,6 @@ impl ChatWidget {
                 dismiss_on_select: true,
                 ..Default::default()
             });
-||||||| 413492cd6c
-            ..Default::default()
-=======
-            ..SelectionViewParams::picker()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         params
     }

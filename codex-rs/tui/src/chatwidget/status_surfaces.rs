@@ -218,55 +218,66 @@ impl ChatWidget {
             }
         }
 
-<<<<<<< HEAD
-        let line = status_line_from_segments(segments, self.config.tui_status_line_use_colors);
-        if line.is_none()
-            && self.gpu_spend_status.is_none()
-            && self.campaign_tracker_indicator.is_none()
-        {
-            self.set_status_line(/*status_line*/ None);
-            self.set_status_line_hyperlink(/*url*/ None);
-            return;
-        }
-        let mut line = line.unwrap_or_default();
-        if let Some(gpu_spend_status) = self.gpu_spend_status.as_ref() {
-            if !line.spans.is_empty() {
-                line.spans.push(" · ".dim());
-            }
-            line.spans.push(gpu_spend_status.clone().red().bold());
-        }
-        if let Some(tracker) = &self.campaign_tracker_indicator {
-            if !line.spans.is_empty() {
-                line.spans.insert(0, " · ".dim());
-            }
-            line.spans.insert(0, tracker.clone().cyan());
-        }
-        self.set_status_line(Some(line));
-        let hyperlink_url = selections
-            .status_line_items
-            .contains(&StatusLineItem::PullRequestNumber)
-            .then(|| self.status_line_pull_request_url())
-            .flatten();
-        self.set_status_line_hyperlink(hyperlink_url);
-||||||| 413492cd6c
-        self.set_status_line(status_line_from_segments(
-            segments,
-            self.config.tui_status_line_use_colors,
-        ));
-        let hyperlink_url = selections
-            .status_line_items
-            .contains(&StatusLineItem::PullRequestNumber)
-            .then(|| self.status_line_pull_request_url())
-            .flatten();
-        self.set_status_line_hyperlink(hyperlink_url);
-=======
         let content = self.status_line_renderer().content(
             segments,
             self.local_settings.tui.status_line_use_colors,
             self.thread_id,
             self.status_line_pull_request_url(),
         );
+        let content = self.with_corbanu_status_line_extras(content);
         self.set_status_line(content);
+    }
+
+    /// Corbanu: the campaign tracker indicator leads the status line and the GPU
+    /// spend notice trails it, around whatever upstream's renderer produced.
+    fn with_corbanu_status_line_extras(
+        &self,
+        content: Option<crate::bottom_pane::footer_content::FooterContent>,
+    ) -> Option<crate::bottom_pane::footer_content::FooterContent> {
+        use crate::bottom_pane::footer_content::FooterContent;
+        if self.campaign_tracker_indicator.is_none() && self.gpu_spend_status.is_none() {
+            return content;
+        }
+        // Returns the width added in front, so hyperlink columns can be shifted.
+        let add_extras = |line: &mut Line<'static>| -> usize {
+            if let Some(gpu_spend_status) = self.gpu_spend_status.as_ref() {
+                if !line.spans.is_empty() {
+                    line.spans.push(" · ".dim());
+                }
+                line.spans.push(gpu_spend_status.clone().red().bold());
+            }
+            let Some(tracker) = &self.campaign_tracker_indicator else {
+                return 0;
+            };
+            let mut prefix = vec![tracker.clone().cyan()];
+            if !line.spans.is_empty() {
+                prefix.push(" · ".dim());
+            }
+            let width = prefix.iter().map(ratatui::text::Span::width).sum();
+            line.spans.splice(0..0, prefix);
+            width
+        };
+        match content {
+            None => {
+                let mut line = Line::default();
+                add_extras(&mut line);
+                Some(FooterContent::Line(line))
+            }
+            Some(FooterContent::Line(mut line)) => {
+                add_extras(&mut line);
+                Some(FooterContent::Line(line))
+            }
+            Some(FooterContent::HyperlinkLine(mut line)) => {
+                let shift = add_extras(&mut line.line);
+                for hyperlink in &mut line.hyperlinks {
+                    hyperlink.columns =
+                        hyperlink.columns.start + shift..hyperlink.columns.end + shift;
+                }
+                Some(FooterContent::HyperlinkLine(line))
+            }
+            // The extension renderer (behind a feature flag) draws its own tree.
+            Some(extension @ FooterContent::Extension { .. }) => Some(extension),
+        }
     }
 
     pub(super) fn status_line_renderer(&self) -> StatusLineRenderer {
@@ -279,7 +290,6 @@ impl ChatWidget {
         } else {
             StatusLineRenderer::Native
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Clears the terminal title Codex most recently wrote, if any.
@@ -782,15 +792,10 @@ impl ChatWidget {
         match item {
             StatusLineItem::ModelName => Some(self.status_model_display_name()),
             StatusLineItem::ModelWithReasoning => Some(self.model_with_reasoning_display_name()),
-<<<<<<< HEAD
             StatusLineItem::Reasoning => self
                 .active_external_model_display
                 .is_none()
                 .then(|| self.reasoning_display_name()),
-||||||| 413492cd6c
-            StatusLineItem::Reasoning => Some(self.reasoning_display_name()),
-=======
-            StatusLineItem::Reasoning => Some(self.reasoning_display_name()),
             StatusLineItem::Profile => {
                 let layer = self.config.config_layer_stack.get_active_user_layer()?;
                 let ConfigLayerSource::User { profile, .. } = &layer.name else {
@@ -801,7 +806,6 @@ impl ChatWidget {
             StatusLineItem::Provider => self
                 .thread_id
                 .map(|_| format!("provider: {}", self.config.model_provider_id)),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             StatusLineItem::CurrentDir => {
                 Some(format_directory_display(
                     self.status_line_cwd(),
@@ -960,14 +964,10 @@ impl ChatWidget {
             StatusSurfacePreviewItem::Model => StatusLineItem::ModelName,
             StatusSurfacePreviewItem::ModelWithReasoning => StatusLineItem::ModelWithReasoning,
             StatusSurfacePreviewItem::Reasoning => StatusLineItem::Reasoning,
-<<<<<<< HEAD
             StatusSurfacePreviewItem::Brand => StatusLineItem::Brand,
             StatusSurfacePreviewItem::Tps => StatusLineItem::Tps,
-||||||| 413492cd6c
-=======
             StatusSurfacePreviewItem::Profile => StatusLineItem::Profile,
             StatusSurfacePreviewItem::Provider => StatusLineItem::Provider,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
         self.status_line_value_for_item(status_line_item)
     }

@@ -262,15 +262,14 @@ impl ChatWidget {
 
         for name in server_names {
             match current.get(&name) {
-<<<<<<< HEAD
-                Some(McpStartupStatus::Ready | McpStartupStatus::Stopped) => {}
-||||||| 413492cd6c
-                Some(McpStartupStatus::Ready) => {}
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 Some(McpStartupStatus::Failed { .. }) => failed.push(name),
                 Some(McpStartupStatus::Cancelled) => cancelled.push(name),
-                Some(McpStartupStatus::Ready | McpStartupStatus::Starting) | None => {}
+                Some(
+                    McpStartupStatus::Ready
+                    | McpStartupStatus::Stopped
+                    | McpStartupStatus::Starting,
+                )
+                | None => {}
             }
         }
 

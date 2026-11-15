@@ -42,22 +42,61 @@ impl App {
         self.on_update_reasoning_effort(effort.clone());
         self.sync_active_thread_reasoning_setting(app_server, effort.clone())
             .await;
-        self.persist_default_model_selection(app_server.request_handle(), model, effort)
-            .await;
+        self.persist_default_model_selection(
+            app_server.request_handle(),
+            model,
+            /*provider*/ None,
+            effort,
+        )
+        .await;
     }
 
+    /// Save a model choice as the default. Corbanu: the provider is saved with it, an inactive
+    /// provider is refused, and a resume-only provider recovery is not saved (#653, D86).
     pub(super) async fn persist_default_model_selection(
         &mut self,
         request_handle: AppServerRequestHandle,
         model: String,
+        provider: Option<String>,
         effort: Option<ReasoningEffort>,
     ) {
+        let selected_provider = provider
+            .as_deref()
+            .unwrap_or(self.config.model_provider_id.as_str());
+        if !self
+            .model_catalog
+            .provider_is_selectable(selected_provider, &model)
+        {
+            // Match the in-session update path above. A queued persistence event must not
+            // retain the snapshot from before its provider credential was stored.
+            self.model_catalog.refresh_provider_policy();
+            if !self
+                .model_catalog
+                .provider_is_selectable(selected_provider, &model)
+            {
+                self.chat_widget.add_error_message(format!(
+                    "Cannot save `{model}` because provider `{selected_provider}` is inactive or unavailable."
+                ));
+                return;
+            }
+        }
+        if self.model_catalog.take_session_recovery_only() {
+            self.chat_widget.add_info_message(
+                "Provider recovery applied to this resumed session only.".to_string(),
+                Some("Use /model again to change the global default.".to_string()),
+            );
+            return;
+        }
         self.app_event_tx
             .send(crate::app_event::AppEvent::FollowTranscript);
         match self
             .persist_model_defaults(
                 request_handle,
-                crate::config_update::build_model_selection_edits(model.as_str(), effort.as_ref()),
+                crate::config_update::build_model_selection_edits(
+                    model.as_str(),
+                    provider.as_deref(),
+                    effort.as_ref(),
+                ),
                 "default model and reasoning effort",
             )
             .await
@@ -67,8 +106,45 @@ impl App {
                     .as_ref()
                     .map(std::string::ToString::to_string)
                     .unwrap_or_else(|| "default".to_string());
-                tracing::info!("Selected model: {model}, Selected effort: {effort_label}");
-                let mut message = format!("Model changed to {model}");
+                tracing::info!(
+                    "Selected model: {model}, Selected provider: {:?}, Selected effort: {effort_label}",
+                    provider
+                );
+                let model_label = self
+                    .model_catalog
+                    .try_list_models()
+                    .ok()
+                    .and_then(|models| {
+                        models
+                            .into_iter()
+                            .find(|preset| preset.model == model)
+                            .map(|preset| preset.display_name)
+                    })
+                    .filter(|display_name| !display_name.trim().is_empty())
+                    .unwrap_or_else(|| model.clone());
+                let provider_label = provider.as_deref().map(|provider_id| {
+                    if provider_id == codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID {
+                        "Corbanu API".to_string()
+                    } else {
+                        self.config
+                            .model_providers
+                            .get(provider_id)
+                            .map(|provider| provider.name.clone())
+                            .filter(|name| !name.trim().is_empty())
+                            .unwrap_or_else(|| provider_id.to_string())
+                    }
+                });
+                // #653: a model served over several connections names the one chosen.
+                let route = provider.as_deref().and_then(|provider_id| {
+                    codex_model_provider_info::model_route(&model, provider_id)
+                });
+                let mut message = if let Some(route) = route {
+                    format!("Model changed to {}", route.model_label(&model_label))
+                } else if let Some(provider_label) = provider_label {
+                    format!("Model changed to {model_label} via {provider_label}")
+                } else {
+                    format!("Model changed to {model_label}")
+                };
                 if let Some(label) = Self::reasoning_label_for(&model, effort.as_ref()) {
                     message.push(' ');
                     message.push_str(&label);
@@ -77,7 +153,10 @@ impl App {
             }
             Err(err) => {
                 let error = crate::config_update::format_config_error(&err);
-                tracing::error!(error = %error, "failed to persist model selection");
+                tracing::error!(
+                    error = %error,
+                    "failed to persist model selection"
+                );
                 self.chat_widget
                     .add_error_message(format!("Failed to save default model: {error}"));
             }
@@ -118,7 +197,7 @@ impl App {
                     self.chat_widget.config_ref(),
                     &self.local_settings.notices,
                     &model,
-                    &self.model_catalog.models,
+                    &self.model_catalog.try_list_models().unwrap_or_default(),
                 ),
             };
             if !self.send_model_settings_update(app_server, params).await {

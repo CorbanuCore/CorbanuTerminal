@@ -5,7 +5,6 @@ use crate::app_event::AppEvent;
 use crate::chatwidget::rate_limits::RATE_LIMIT_SWITCH_PROMPT_VIEW_ID;
 
 impl ChatWidget {
-<<<<<<< HEAD
     pub(crate) fn defer_turn_for_permission_confirmation(&mut self) {
         if self.input_queue.user_turn_pending_start {
             self.input_queue.user_turn_pending_start = false;
@@ -33,8 +32,6 @@ impl ChatWidget {
             .extend(runtime_providers.clone());
     }
 
-||||||| 413492cd6c
-=======
     pub(crate) fn set_daybreak_enabled(&mut self, enabled: bool) {
         self.daybreak_enabled = enabled && self.daybreak_feature_enabled();
         self.bottom_pane
@@ -48,7 +45,7 @@ impl ChatWidget {
             && (self.has_chatgpt_account
                 || !matches!(
                     self.status_account_display,
-                    Some(StatusAccountDisplay::ApiKey)
+                    Some(StatusAccountDisplay::ApiKey { .. })
                 )
                 || self
                     .config
@@ -69,7 +66,7 @@ impl ChatWidget {
             && (self.has_chatgpt_account
                 || matches!(
                     self.status_account_display,
-                    Some(StatusAccountDisplay::ApiKey)
+                    Some(StatusAccountDisplay::ApiKey { .. })
                 ))
     }
 
@@ -86,7 +83,6 @@ impl ChatWidget {
             }
         }
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     /// Set the approval policy in the widget's config copy.
     pub(crate) fn set_approval_policy(&mut self, policy: AskForApproval) {
         if let Err(err) = self
@@ -245,6 +241,13 @@ impl ChatWidget {
         self.status_account_display.as_ref()
     }
 
+    /// The base URL the thread's provider resolved to. Upstream dropped it from
+    /// `/status`; Corbanu's provider-switch tests still check it.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn runtime_model_provider_base_url(&self) -> Option<&str> {
+        self.runtime_model_provider_base_url.as_deref()
+    }
+
     #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn model_catalog(&self) -> Arc<ModelCatalog> {
         self.model_catalog.clone()
@@ -286,8 +289,13 @@ impl ChatWidget {
         // Account-update notifications are the identity boundary. The visible account fields can
         // be identical across two accounts, so always invalidate account-scoped requests and data.
         self.model_popup_request_id = None;
-        let api_key_changed = self.status_account_display == Some(StatusAccountDisplay::ApiKey)
-            || status_account_display == Some(StatusAccountDisplay::ApiKey);
+        let api_key_changed = matches!(
+            self.status_account_display,
+            Some(StatusAccountDisplay::ApiKey { .. })
+        ) || matches!(
+            status_account_display,
+            Some(StatusAccountDisplay::ApiKey { .. })
+        );
         self.invalidate_permission_discovery();
         self.permission_discovery = None;
         self.invalidate_connector_scope();
@@ -573,14 +581,8 @@ impl ChatWidget {
         self.invalidate_permission_discovery();
         let cwd_changed = self.config.cwd != settings.cwd;
         self.apply_thread_settings_cwd(settings.cwd.clone());
-<<<<<<< HEAD
         self.apply_thread_model_provider(settings.model_provider.clone());
-||||||| 413492cd6c
-        self.config.model_provider_id = settings.model_provider.clone();
-=======
-        self.config.model_provider_id = settings.model_provider.clone();
         self.set_daybreak_enabled(self.daybreak_enabled);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.set_service_tier(settings.service_tier.clone());
         if let Err(err) = self
             .config
@@ -692,18 +694,11 @@ impl ChatWidget {
         self.refresh_model_dependent_surfaces();
     }
 
-<<<<<<< HEAD
-    pub(super) fn model_display_name(&self) -> String {
-||||||| 413492cd6c
-    pub(super) fn model_display_name(&self) -> &str {
-=======
-    pub(crate) fn model_display_name(&self) -> &str {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    pub(crate) fn model_display_name(&self) -> String {
         let model = self.current_model();
         if model.is_empty() {
             DEFAULT_MODEL_DISPLAY_NAME.to_string()
         } else {
-<<<<<<< HEAD
             self.model_catalog
                 .try_list_models()
                 .ok()
@@ -714,12 +709,9 @@ impl ChatWidget {
                         .map(|preset| preset.display_name)
                 })
                 .filter(|display_name| !display_name.trim().is_empty())
-                .unwrap_or_else(|| model.to_string())
-||||||| 413492cd6c
-            model
-=======
-            self.model_catalog.display_name(model)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                // Upstream's fallback names (e.g. Luna Reserve) for models
+                // missing from the catalog.
+                .unwrap_or_else(|| crate::model_catalog::model_display_name(model).to_string())
         }
     }
 
