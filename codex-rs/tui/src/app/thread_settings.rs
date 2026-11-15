@@ -414,6 +414,7 @@ impl App {
     /// #2000/#2062 (main #2009, #2177): after Windows sandbox setup, ask the server to apply the
     /// mode its config now selects (never a weaker one) to the active session, confirmed, and
     /// report readiness only once the session confirms it.
+    #[cfg(any(target_os = "windows", test))]
     pub(super) async fn refresh_session_windows_sandbox(
         &mut self,
         app_server: &mut AppServerSession,
