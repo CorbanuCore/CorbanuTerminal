@@ -221,3 +221,78 @@ async fn tasknode_profile_scope_survives_exec_command_overrides() {
         );
     }
 }
+
+/// A session at `level` (the live level the model client reports), with the
+/// Linux sandbox helper so protected levels keep the command sandboxed.
+#[cfg(target_os = "linux")]
+async fn session_at_level(
+    level: codex_security_policy::SecurityLevel,
+) -> Option<(Arc<Session>, Arc<TurnContext>)> {
+    let (session, mut turn) = crate::session::tests::make_session_and_context().await;
+    let config = Arc::make_mut(&mut turn.config);
+    config
+        .permissions
+        .approval_policy
+        .set(AskForApproval::Never)
+        .expect("approval policy");
+    config.codex_linux_sandbox_exe = Some(core_test_support::find_codex_linux_sandbox_exe().ok()?);
+    let client = (*session.services.model_client())
+        .clone()
+        .with_ingress_level(level)
+        .with_source_envelopes(/*enabled*/ true);
+    session.services.replace_model_client(client);
+    Some((Arc::new(session), Arc::new(turn)))
+}
+
+/// #442 (AGG-09) on the unified-exec path: under Aggressive, a command whose
+/// read of a protected file the sandbox denied is explained in its output,
+/// naming the level and /security.
+#[cfg(target_os = "linux")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_442_exec_command_explains_a_denied_protected_read() {
+    let Some((session, turn)) =
+        session_at_level(codex_security_policy::SecurityLevel::Aggressive).await
+    else {
+        eprintln!("skipping: no codex-linux-sandbox helper");
+        return;
+    };
+    let home = turn.config.codex_home.to_path_buf();
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("auth.json"), "issue-442-secret").unwrap();
+    let text = exec_command_output(
+        &session,
+        &turn,
+        &format!("cat '{}'", home.join("auth.json").display()),
+    )
+    .await;
+    assert!(!text.contains("issue-442-secret"), "{text}");
+    assert!(
+        text.contains("Security level Aggressive blocked access to")
+            && text.contains("switch to Permissive in /security"),
+        "{text}"
+    );
+}
+
+/// #826 follow-up on the unified-exec path: under Moderate on Linux, a
+/// command reporting a refused user namespace is explained in its output,
+/// naming the level, instead of a bare "Operation not permitted".
+#[cfg(target_os = "linux")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_826_exec_command_explains_a_refused_user_namespace() {
+    let Some((session, turn)) =
+        session_at_level(codex_security_policy::SecurityLevel::Moderate).await
+    else {
+        eprintln!("skipping: no codex-linux-sandbox helper");
+        return;
+    };
+    let text = exec_command_output(
+        &session,
+        &turn,
+        "unshare --user true || { echo 'unshare: unshare failed: Operation not permitted' >&2; exit 1; }",
+    )
+    .await;
+    assert!(
+        text.contains("Security level Moderate blocks creating user namespaces"),
+        "{text}"
+    );
+}
