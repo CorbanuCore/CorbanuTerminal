@@ -140,6 +140,15 @@ impl StrictReviewScenario {
         matches!(self, Self::Approved | Self::ApproveForMe)
     }
 
+    /// S3b (#945, D50, PF-30): the person answers this server's confirmations,
+    /// so the strict request reaches the person instead of the reviewer.
+    fn person_answers(self) -> bool {
+        matches!(
+            self,
+            Self::ManagedReviewerForbidden | Self::AppReviewerUser | Self::AppDefaultReviewerUser
+        )
+    }
+
     fn review_outcomes(self) -> &'static [bool] {
         match self {
             Self::Approved | Self::ApproveForMe | Self::Never => &[true],
@@ -326,6 +335,26 @@ async fn mcp_server_openai_elicitation_form_round_trip() -> Result<()> {
 async fn mcp_server_strict_auto_review(scenario: Review) -> Result<()> {
     let mut fixture =
         ElicitationRoundTripFixture::start(ElicitationScenario::Strict(scenario)).await?;
+    if scenario.person_answers() {
+        let (request_id, params) = fixture.read_elicitation().await?;
+        assert!(
+            matches!(&params.request, McpServerElicitationRequest::Form { message, .. }
+                if message == "Strict automated review #0"),
+            "the strict request must reach the person: {params:?}"
+        );
+        fixture
+            .mcp
+            .send_response(
+                request_id.clone(),
+                serde_json::to_value(McpServerElicitationRequestResponse {
+                    action: McpServerElicitationAction::Decline,
+                    content: None,
+                    meta: None,
+                })?,
+            )
+            .await?;
+        return fixture.finish(request_id, "declined").await;
+    }
     if !scenario.expects_user_confirmation() {
         return fixture.finish(RequestId::Integer(0), "declined").await;
     }
@@ -634,8 +663,10 @@ impl ElicitationRoundTripFixture {
                     Review::Never | Review::FullAccess => AskForApproval::Never,
                     _ => AskForApproval::OnRequest,
                 }),
+                // S3b: strict review applies only with the automatic reviewer; the
+                // managed requirement below allows only the person.
                 approvals_reviewer: strict
-                    .filter(|strict| *strict == Review::ApproveForMe)
+                    .filter(|strict| *strict != Review::ManagedReviewerForbidden)
                     .map(|_| ApprovalsReviewer::AutoReview),
                 sandbox: strict
                     .filter(|strict| *strict == Review::FullAccess)
@@ -1187,6 +1218,7 @@ impl ServerHandler for ElicitationAppsMcpServer {
                                     ),
                                 },
                             }),
+                            None if strict.person_answers() => json!({ "action": "decline" }),
                             None => json!({
                                 "action": "decline",
                                 "_meta": { "message": STRICT_DECLINE_MESSAGE },
