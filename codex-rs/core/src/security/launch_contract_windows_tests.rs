@@ -92,14 +92,15 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
         ),
         Ok(())
     );
-    // Reads limited to the platform, the workspace and CODEX_HOME, so the
-    // sandbox user is explicitly granted CODEX_HOME and the base-profile
-    // control can show the files are readable without the contract.
+    // Upstream's elevated sandbox requires read access to the filesystem
+    // root (#44327; a narrower read profile is refused), so the base profile
+    // reads everything, with CODEX_HOME also named explicitly. The
+    // base-profile control shows the files are readable without the contract.
     let base = PermissionProfile::from_runtime_permissions(
         &FileSystemSandboxPolicy::restricted(vec![
             FileSystemSandboxEntry::new(
                 FileSystemPath::Special {
-                    value: FileSystemSpecialPath::Minimal,
+                    value: FileSystemSpecialPath::Root,
                 },
                 FileSystemAccessMode::Read,
             ),

@@ -756,11 +756,14 @@ async fn sec_win_d331_1810_legacy_format_profile_with_writable_inside_protected_
         outcomes.push((label, legacy_format, refused, written));
     }
 
+    // Upstream no longer reads these legacy workspace-write profiles as the
+    // legacy format (needs_direct_runtime_enforcement), so every case takes
+    // the direct path; the refusal and the protected folders are unchanged.
     let expected = [
-        (".git\\hooks", true, true, false),
-        (".codex\\sub", true, true, false),
-        (".agents\\x", true, true, false),
-        ("cwd through a junction, .git\\hooks", true, true, false),
+        (".git\\hooks", false, true, false),
+        (".codex\\sub", false, true, false),
+        (".agents\\x", false, true, false),
+        ("cwd through a junction, .git\\hooks", false, true, false),
         (".git\\hooks through a junction to .git", false, true, false),
         (
             ".git\\hooks through a symbolic link to .git",
@@ -768,7 +771,7 @@ async fn sec_win_d331_1810_legacy_format_profile_with_writable_inside_protected_
             true,
             false,
         ),
-        ("control: .git itself", true, false, true),
+        ("control: .git itself", false, false, true),
         ("control: a plain folder", false, false, true),
     ];
     let expected: Vec<_> = expected
