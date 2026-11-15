@@ -2,15 +2,15 @@
 source: tui/src/chatwidget/tests/slash_commands.rs
 expression: "whole_status.replace(&directory,\n\"[[workspace]]\").replace(crate::version::CODEX_CLI_VERSION, \"VERSION\")"
 ---
->_ OpenAI Codex (vVERSION)
+>_ Corbanu Terminal (vVERSION)
 
   Visit https://chatgpt.com/settings/usage for up-to-date
   information on rate limits and credits
 
   Model:               GPT-5.5 (reasoning medium, summaries auto)
-  Model provider:      openai
   Directory:           [[workspace]]
-  Permissions:         Read Only (Ask for approval)
+  Permissions:         Next turn: Read Only (Ask for approval)
+  Security:            Requested Permissive; effective protection unverified (/security)
   Agents.md:           <none>
   Thread name:         Clipboard example
   Collaboration mode:  Default
