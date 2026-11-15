@@ -60,6 +60,7 @@ use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::DUPLICATE_SAME_ACCESS;
 use windows_sys::Win32::Foundation::DuplicateHandle;
 use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
+use windows_sys::Win32::Foundation::ERROR_DIRECTORY;
 use windows_sys::Win32::Foundation::ERROR_INVALID_SECURITY_DESCR;
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::Foundation::GetLastError;
@@ -152,7 +153,14 @@ pub struct LogonError {
 
 impl std::fmt::Display for LogonError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CreateProcessWithLogonW failed: {}", self.code)
+        write!(f, "CreateProcessWithLogonW failed: {}", self.code)?;
+        if self.code == ERROR_DIRECTORY {
+            write!(
+                f,
+                ": the working directory is invalid or inaccessible to the sandbox account; check that it exists and that the sandbox can access it"
+            )?;
+        }
+        Ok(())
     }
 }
 

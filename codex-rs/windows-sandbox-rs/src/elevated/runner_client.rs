@@ -550,6 +550,53 @@ mod tests {
     use windows_sys::Win32::Foundation::ERROR_NOT_FOUND;
 
     #[test]
+    fn sec_win_2021_directory_failure_keeps_code_without_retrying() {
+        let mut attempts = 0;
+        let error = super::retry_runner_spawn_once::<()>(
+            crate::identity::SandboxCreds {
+                username: "test-sandbox-user".to_string(),
+                password: "unused-test-password".to_string(),
+            },
+            &["cmd.exe".to_string()],
+            |_| {
+                attempts += 1;
+                Err(anyhow::Error::new(RunnerLogonError {
+                    code: windows_sys::Win32::Foundation::ERROR_DIRECTORY,
+                })
+                .context("runner launch failed"))
+            },
+            || panic!("a directory failure must not refresh sandbox credentials"),
+        )
+        .expect_err("an inaccessible directory must remain a launch failure");
+
+        assert_eq!(attempts, 1);
+        assert_eq!(
+            error.downcast_ref::<RunnerLogonError>(),
+            Some(&RunnerLogonError {
+                code: windows_sys::Win32::Foundation::ERROR_DIRECTORY,
+            })
+        );
+        let message = format!("{error:#}");
+        assert!(message.contains("CreateProcessWithLogonW failed: 267"));
+        assert!(message.contains("working directory"));
+        assert!(message.contains("invalid or inaccessible to the sandbox account"));
+    }
+
+    #[test]
+    fn sec_win_2021_other_logon_errors_keep_their_diagnosis() {
+        for code in [
+            windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND,
+            windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED,
+            ERROR_LOGON_FAILURE,
+        ] {
+            assert_eq!(
+                RunnerLogonError { code }.to_string(),
+                format!("CreateProcessWithLogonW failed: {code}")
+            );
+        }
+    }
+
+    #[test]
     fn refreshable_sandbox_creds_error_recognizes_credential_and_child_start_failures() {
         assert_eq!(
             [
