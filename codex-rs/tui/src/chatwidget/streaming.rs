@@ -338,18 +338,8 @@ impl ChatWidget {
     }
 
     pub(super) fn on_agent_reasoning_delta(&mut self, delta: String) {
-<<<<<<< HEAD
         let tps_status_changed = self.tps_estimator.record_stream_delta(&delta);
-        // For reasoning deltas, do not stream to history. Accumulate the
-        // current reasoning block and extract the first bold element
-        // (between **/**) as the chunk header. Show this header as status.
-||||||| 413492cd6c
-        // For reasoning deltas, do not stream to history. Accumulate the
-        // current reasoning block and extract the first bold element
-        // (between **/**) as the chunk header. Show this header as status.
-=======
         // Accumulate the current reasoning block for history and activity text.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.reasoning_buffer.push_str(&delta);
 
         if self.safety_buffering_is_waiting() {
@@ -374,16 +364,10 @@ impl ChatWidget {
         self.reasoning_header =
             latest_summary_line(&self.reasoning_buffer).or(self.reasoning_header.take());
         let Some(header) = self.reasoning_header.as_deref() else {
-<<<<<<< HEAD
-            // Fallback while we don't yet have a bold header: leave existing header as-is.
+            // No usable summary has arrived yet.
             if tps_status_changed {
                 self.refresh_status_surfaces();
             }
-||||||| 413492cd6c
-            // Fallback while we don't yet have a bold header: leave existing header as-is.
-=======
-            // No usable summary has arrived yet.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             return;
         };
 

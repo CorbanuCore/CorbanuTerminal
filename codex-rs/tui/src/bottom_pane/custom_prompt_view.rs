@@ -38,7 +38,6 @@ use super::textarea::TextAreaState;
 /// Callback invoked when the user submits a custom prompt.
 pub(crate) type PromptSubmitted = Box<dyn Fn(String) + Send + Sync>;
 
-<<<<<<< HEAD
 /// Callback invoked when a one-line field got more than one line.
 pub(crate) type PromptRefused = Box<dyn Fn() + Send + Sync>;
 
@@ -65,13 +64,12 @@ pub(crate) enum CustomPromptSubmitMode {
 #[derive(Debug, Clone, Copy)]
 struct HeldSubmit {
     until: Instant,
-||||||| 413492cd6c
-=======
+}
+
 /// Correlates a pending generated prefill with its eventual display label.
 struct PendingTextSuggestion {
     request_id: Uuid,
     applied_label: String,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 /// Minimal multi-line text input view to collect custom review instructions.
@@ -80,32 +78,24 @@ pub(crate) struct CustomPromptView {
     placeholder: String,
     context_label: Option<String>,
     on_submit: PromptSubmitted,
-<<<<<<< HEAD
     on_refused: Option<PromptRefused>,
     submit_mode: CustomPromptSubmitMode,
-||||||| 413492cd6c
-=======
     submit_label: &'static str,
     preserve_whitespace: bool,
     dismiss_after_child_accept: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     // UI state
     textarea: TextArea,
     textarea_state: RefCell<TextAreaState>,
     paste_burst: PasteBurst,
     completion: Option<ViewCompletion>,
-<<<<<<< HEAD
+    pending_suggestion: Option<PendingTextSuggestion>,
+    user_edited: bool,
     /// One-line mode: a submit key was pressed; see [`SINGLE_LINE_SUBMIT_HOLD`].
     held_submit: Option<HeldSubmit>,
     /// One-line mode: the field got more than one line (input after the
     /// submit key, or the rest of a multi-line paste); refuse, never submit.
     got_extra_lines: bool,
-||||||| 413492cd6c
-=======
-    pending_suggestion: Option<PendingTextSuggestion>,
-    user_edited: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl CustomPromptView {
@@ -127,31 +117,22 @@ impl CustomPromptView {
             placeholder,
             context_label,
             on_submit,
-<<<<<<< HEAD
             on_refused: None,
             submit_mode: CustomPromptSubmitMode::Enter,
-||||||| 413492cd6c
-=======
             submit_label: "submit",
             preserve_whitespace: false,
             dismiss_after_child_accept: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             textarea,
             textarea_state: RefCell::new(TextAreaState::default()),
             paste_burst: PasteBurst::default(),
             completion: None,
-<<<<<<< HEAD
-            held_submit: None,
-            got_extra_lines: false,
-||||||| 413492cd6c
-=======
             pending_suggestion: None,
             user_edited: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            held_submit: None,
+            got_extra_lines: false,
         }
     }
 
-<<<<<<< HEAD
     pub(crate) fn with_submit_mode(mut self, submit_mode: CustomPromptSubmitMode) -> Self {
         self.submit_mode = submit_mode;
         self
@@ -165,9 +146,17 @@ impl CustomPromptView {
     }
 
     fn submit_current_text(&mut self) {
-        let text = self.textarea.text().trim().to_string();
-        if !text.is_empty() {
-            (self.on_submit)(text);
+        let text = self.textarea.text();
+        if text.trim().is_empty() {
+            return;
+        }
+        let text = if self.preserve_whitespace {
+            text.to_string()
+        } else {
+            text.trim().to_string()
+        };
+        (self.on_submit)(text);
+        if !self.dismiss_after_child_accept {
             self.completion = Some(ViewCompletion::Accepted);
         }
     }
@@ -215,8 +204,8 @@ impl CustomPromptView {
             self.submit_current_text();
         }
         true
-||||||| 413492cd6c
-=======
+    }
+
     /// Keep the prompt open while its submission opens a child view.
     pub(crate) fn with_child_flow(mut self, submit_label: &'static str) -> Self {
         self.submit_label = submit_label;
@@ -254,14 +243,9 @@ impl CustomPromptView {
             applied_label,
         });
         self
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn handle_key_event_at(&mut self, key_event: KeyEvent, now: Instant) {
-<<<<<<< HEAD
-        let single_line = self.submit_mode == CustomPromptSubmitMode::EnterSingleLine;
-||||||| 413492cd6c
-=======
         let previous_text = self
             .pending_suggestion
             .as_ref()
@@ -274,7 +258,7 @@ impl CustomPromptView {
             return;
         }
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let single_line = self.submit_mode == CustomPromptSubmitMode::EnterSingleLine;
         match key_event {
             KeyEvent {
                 code: KeyCode::Esc, ..
@@ -313,31 +297,11 @@ impl CustomPromptView {
                 }
                 if self.submit_mode == CustomPromptSubmitMode::CtrlD {
                     self.textarea.insert_str("\n");
+                    self.user_edited = true;
                     return;
                 }
                 if modifiers == KeyModifiers::NONE {
-<<<<<<< HEAD
                     self.submit_current_text();
-||||||| 413492cd6c
-                    let text = self.textarea.text().trim().to_string();
-                    if !text.is_empty() {
-                        (self.on_submit)(text);
-                        self.completion = Some(ViewCompletion::Accepted);
-                    }
-=======
-                    let text = self.textarea.text();
-                    if !text.trim().is_empty() {
-                        let text = if self.preserve_whitespace {
-                            text.to_string()
-                        } else {
-                            text.trim().to_string()
-                        };
-                        (self.on_submit)(text);
-                        if !self.dismiss_after_child_accept {
-                            self.completion = Some(ViewCompletion::Accepted);
-                        }
-                    }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 } else {
                     self.textarea.input(key_event);
                 }
@@ -421,6 +385,7 @@ impl BottomPaneView for CustomPromptView {
                     self.got_extra_lines = true;
                 }
                 self.textarea.insert_str(first_line);
+                self.user_edited = true;
                 self.paste_burst.clear_after_explicit_paste();
                 return true;
             }
@@ -431,22 +396,6 @@ impl BottomPaneView for CustomPromptView {
         true
     }
 
-<<<<<<< HEAD
-    fn is_in_paste_burst(&self) -> bool {
-        // Keeps the draw loop ticking until the held submit is due.
-        self.held_submit
-            .is_some_and(|held| Instant::now() < held.until)
-    }
-
-    fn pre_draw_tick(&mut self, now: Instant) -> bool {
-        self.finish_held_submit_if_due(now)
-    }
-
-    fn next_frame_delay(&self) -> Option<Duration> {
-        self.held_submit
-            .map(|held| held.until.saturating_duration_since(Instant::now()))
-||||||| 413492cd6c
-=======
     fn apply_text_suggestion(&mut self, request_id: Uuid, suggestion: Option<&str>) -> bool {
         if self.completion.is_some() {
             return false;
@@ -470,7 +419,21 @@ impl BottomPaneView for CustomPromptView {
         }
 
         true
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    }
+
+    fn is_in_paste_burst(&self) -> bool {
+        // Keeps the draw loop ticking until the held submit is due.
+        self.held_submit
+            .is_some_and(|held| Instant::now() < held.until)
+    }
+
+    fn pre_draw_tick(&mut self, now: Instant) -> bool {
+        self.finish_held_submit_if_due(now)
+    }
+
+    fn next_frame_delay(&self) -> Option<Duration> {
+        self.held_submit
+            .map(|held| held.until.saturating_duration_since(Instant::now()))
     }
 }
 
@@ -484,208 +447,8 @@ impl Renderable for CustomPromptView {
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
-<<<<<<< HEAD
-        if area.height == 0 || area.width == 0 {
-            return;
-        }
-
-        let input_height = self.input_height(area.width);
-
-        // Title line
-        let title_area = Rect {
-            x: area.x,
-            y: area.y,
-            width: area.width,
-            height: 1,
-        };
-        let title_spans: Vec<Span<'static>> = vec![gutter(), self.title.clone().bold()];
-        Paragraph::new(Line::from(title_spans)).render(title_area, buf);
-
-        // Optional context line
-        let mut input_y = area.y.saturating_add(1);
-        if let Some(context_label) = &self.context_label {
-            let context_area = Rect {
-                x: area.x,
-                y: input_y,
-                width: area.width,
-                height: 1,
-            };
-            let spans: Vec<Span<'static>> = vec![gutter(), context_label.clone().cyan()];
-            Paragraph::new(Line::from(spans)).render(context_area, buf);
-            input_y = input_y.saturating_add(1);
-        }
-
-        // Input line
-        let input_area = Rect {
-            x: area.x,
-            y: input_y,
-            width: area.width,
-            height: input_height,
-        };
-        if input_area.width >= 2 {
-            for row in 0..input_area.height {
-                Paragraph::new(Line::from(vec![gutter()])).render(
-                    Rect {
-                        x: input_area.x,
-                        y: input_area.y.saturating_add(row),
-                        width: 2,
-                        height: 1,
-                    },
-                    buf,
-                );
-            }
-
-            let text_area_height = input_area.height.saturating_sub(1);
-            if text_area_height > 0 {
-                if input_area.width > 2 {
-                    let blank_rect = Rect {
-                        x: input_area.x.saturating_add(2),
-                        y: input_area.y,
-                        width: input_area.width.saturating_sub(2),
-                        height: 1,
-                    };
-                    Clear.render(blank_rect, buf);
-                }
-                let textarea_rect = Rect {
-                    x: input_area.x.saturating_add(2),
-                    y: input_area.y.saturating_add(1),
-                    width: input_area.width.saturating_sub(2),
-                    height: text_area_height,
-                };
-                let mut state = self.textarea_state.borrow_mut();
-                StatefulWidgetRef::render_ref(&(&self.textarea), textarea_rect, buf, &mut state);
-                if self.textarea.text().is_empty() {
-                    Paragraph::new(Line::from(self.placeholder.clone().dim()))
-                        .render(textarea_rect, buf);
-                }
-            }
-        }
-
-        let hint_blank_y = input_area.y.saturating_add(input_height);
-        if hint_blank_y < area.y.saturating_add(area.height) {
-            let blank_area = Rect {
-                x: area.x,
-                y: hint_blank_y,
-                width: area.width,
-                height: 1,
-            };
-            Clear.render(blank_area, buf);
-        }
-
-        let hint_y = hint_blank_y.saturating_add(1);
-        if hint_y < area.y.saturating_add(area.height) {
-            Paragraph::new(self.footer_hint_line()).render(
-                Rect {
-                    x: area.x,
-                    y: hint_y,
-                    width: area.width,
-                    height: 1,
-                },
-                buf,
-            );
-||||||| 413492cd6c
-        if area.height == 0 || area.width == 0 {
-            return;
-        }
-
-        let input_height = self.input_height(area.width);
-
-        // Title line
-        let title_area = Rect {
-            x: area.x,
-            y: area.y,
-            width: area.width,
-            height: 1,
-        };
-        let title_spans: Vec<Span<'static>> = vec![gutter(), self.title.clone().bold()];
-        Paragraph::new(Line::from(title_spans)).render(title_area, buf);
-
-        // Optional context line
-        let mut input_y = area.y.saturating_add(1);
-        if let Some(context_label) = &self.context_label {
-            let context_area = Rect {
-                x: area.x,
-                y: input_y,
-                width: area.width,
-                height: 1,
-            };
-            let spans: Vec<Span<'static>> = vec![gutter(), context_label.clone().cyan()];
-            Paragraph::new(Line::from(spans)).render(context_area, buf);
-            input_y = input_y.saturating_add(1);
-        }
-
-        // Input line
-        let input_area = Rect {
-            x: area.x,
-            y: input_y,
-            width: area.width,
-            height: input_height,
-        };
-        if input_area.width >= 2 {
-            for row in 0..input_area.height {
-                Paragraph::new(Line::from(vec![gutter()])).render(
-                    Rect {
-                        x: input_area.x,
-                        y: input_area.y.saturating_add(row),
-                        width: 2,
-                        height: 1,
-                    },
-                    buf,
-                );
-            }
-
-            let text_area_height = input_area.height.saturating_sub(1);
-            if text_area_height > 0 {
-                if input_area.width > 2 {
-                    let blank_rect = Rect {
-                        x: input_area.x.saturating_add(2),
-                        y: input_area.y,
-                        width: input_area.width.saturating_sub(2),
-                        height: 1,
-                    };
-                    Clear.render(blank_rect, buf);
-                }
-                let textarea_rect = Rect {
-                    x: input_area.x.saturating_add(2),
-                    y: input_area.y.saturating_add(1),
-                    width: input_area.width.saturating_sub(2),
-                    height: text_area_height,
-                };
-                let mut state = self.textarea_state.borrow_mut();
-                StatefulWidgetRef::render_ref(&(&self.textarea), textarea_rect, buf, &mut state);
-                if self.textarea.text().is_empty() {
-                    Paragraph::new(Line::from(self.placeholder.clone().dim()))
-                        .render(textarea_rect, buf);
-                }
-            }
-        }
-
-        let hint_blank_y = input_area.y.saturating_add(input_height);
-        if hint_blank_y < area.y.saturating_add(area.height) {
-            let blank_area = Rect {
-                x: area.x,
-                y: hint_blank_y,
-                width: area.width,
-                height: 1,
-            };
-            Clear.render(blank_area, buf);
-        }
-
-        let hint_y = hint_blank_y.saturating_add(1);
-        if hint_y < area.y.saturating_add(area.height) {
-            Paragraph::new(standard_popup_hint_line()).render(
-                Rect {
-                    x: area.x,
-                    y: hint_y,
-                    width: area.width,
-                    height: 1,
-                },
-                buf,
-            );
-=======
         if !area.is_empty() {
             self.render_picker(area, buf);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
@@ -701,48 +464,3 @@ impl Renderable for CustomPromptView {
         }
     }
 }
-<<<<<<< HEAD
-
-impl CustomPromptView {
-    fn input_height(&self, width: u16) -> u16 {
-        let usable_width = width.saturating_sub(2);
-        let text_height = self.textarea.desired_height(usable_width).clamp(1, 8);
-        text_height.saturating_add(1).min(9)
-    }
-
-    fn footer_hint_line(&self) -> Line<'static> {
-        match self.submit_mode {
-            CustomPromptSubmitMode::Enter | CustomPromptSubmitMode::EnterSingleLine => {
-                standard_popup_hint_line()
-            }
-            CustomPromptSubmitMode::CtrlD => Line::from(vec![
-                "Press ".into(),
-                key_hint::ctrl(KeyCode::Char('d')).into(),
-                " when done editing, ".into(),
-                key_hint::plain(KeyCode::Enter).into(),
-                " for newline, or ".into(),
-                key_hint::plain(KeyCode::Esc).into(),
-                " to go back".into(),
-            ]),
-        }
-    }
-}
-
-fn gutter() -> Span<'static> {
-    "▌ ".cyan()
-}
-||||||| 413492cd6c
-
-impl CustomPromptView {
-    fn input_height(&self, width: u16) -> u16 {
-        let usable_width = width.saturating_sub(2);
-        let text_height = self.textarea.desired_height(usable_width).clamp(1, 8);
-        text_height.saturating_add(1).min(9)
-    }
-}
-
-fn gutter() -> Span<'static> {
-    "▌ ".cyan()
-}
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

@@ -7,7 +7,10 @@ use super::*;
 
 impl ChatWidget {
     pub(super) fn refresh_account_scoped_models(&mut self) {
-        if self.status_account_display == Some(StatusAccountDisplay::ApiKey) {
+        if matches!(
+            self.status_account_display,
+            Some(StatusAccountDisplay::ApiKey { .. })
+        ) {
             // The catalog is shared with App (Corbanu); edit it in place.
             self.model_catalog.update_models(|models| {
                 for model in models {

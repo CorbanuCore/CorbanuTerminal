@@ -1,0 +1,7 @@
+---
+source: tui/src/app/thread_settings_tests.rs
+expression: text
+---
+• Sandbox ready
+  This session uses the configured Windows sandbox from the next message.
+  Work already running keeps its earlier sandbox.
