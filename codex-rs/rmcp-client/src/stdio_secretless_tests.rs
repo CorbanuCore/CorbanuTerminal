@@ -14,6 +14,8 @@ const CREDENTIALS: &[&str] = &[
     "CORBANU_VAULT_PASSWORD",
     "TASKNODE_API_TOKEN",
     "CUSTOM_PROVIDER_CREDENTIAL",
+    "CARGO_REGISTRY_TOKEN",
+    "HOMEBREW_GITHUB_API_TOKEN",
     "SSH_AUTH_SOCK",
     "NODE_OPTIONS",
     "UNLISTED_SETTING",
@@ -328,7 +330,14 @@ fn pf_27_s02_remote_env_names_cannot_expand_as_globs() {
         "stdio_server_launcher::secretless_tests::pf_27_s02_remote_env_names_cannot_expand_as_globs",
         || {
             codex_protocol::secretless_launch::arm();
-            for name in ["CORBANU_*", "CORBANU_OTHER_?????", "*PATH"] {
+            for name in [
+                "CORBANU_*",
+                "CORBANU_OTHER_?????",
+                "*PATH",
+                "CORBANU_OTHER_TO\u{212a}EN",
+                "CARGO_REGISTRY_TO\u{212a}EN",
+                "HOMEBREW_GITHUB_API_TO\u{212a}EN",
+            ] {
                 let env = remote_env(vec![McpServerEnvVar::Config {
                     name: name.to_string(),
                     source: Some("remote".to_string()),

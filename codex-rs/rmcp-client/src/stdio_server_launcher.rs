@@ -679,11 +679,13 @@ impl ExecutorStdioServerLauncher {
                 // The executor need not have armed PF-27-S02 itself. Apply the
                 // same inherited-name boundary as local MCP before sending it
                 // the policy; literal server `env` remains a separate overlay.
-                // include_only is a glob list, so never let an allowed-looking
-                // name such as CORBANU_* widen it to credential variables.
+                // include_only is a Unicode case-insensitive glob list. Keep
+                // names ASCII and literal: CORBANU_* or a Kelvin-sign K could
+                // otherwise match credential names that the allowlist rejects.
                 .filter(|name| {
                     !armed
-                        || (!name.contains(['*', '?'])
+                        || (name.is_ascii()
+                            && !name.contains(['*', '?'])
                             && codex_protocol::secretless_launch::is_launch_env_name_allowed(name))
                 })
                 .collect()

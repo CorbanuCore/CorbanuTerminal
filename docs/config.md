@@ -394,8 +394,8 @@ plus the ones named in that server's `env_vars` or `env`. With
 launch allowlist, both locally and on an executor. This includes `env_vars`
 read from the host and entries with `source = "remote"`; provider credentials,
 Corbanu vault credentials, Task Node tokens and startup helpers cannot pass
-through that list. Remote variable names are exact names, not wildcard grants,
-while protected launch is armed.
+through that list. Remote inherited variable names must be ASCII exact names,
+not wildcard grants, while protected launch is armed.
 
 If an MCP server needs a credential, give that server its own explicit `env`
 value. For example, a server using the GitHub API can receive a dedicated token:
