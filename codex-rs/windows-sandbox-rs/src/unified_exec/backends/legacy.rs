@@ -175,9 +175,18 @@ fn spawn_legacy_process(
     logs_base_dir: Option<&Path>,
 ) -> Result<LegacyProcessHandles> {
     let (pi, job, output_readers, writer_handle, hpc, conpty_owner, desktop) = if tty {
+        let launcher = crate::helper_materialization::conpty_launcher()?;
+        // Preserve the command line exactly as the direct launch serialized it.
+        // The launcher runs under the same token and job from its first instruction.
+        let command_line = command
+            .iter()
+            .map(|arg| crate::winutil::quote_windows_arg(arg))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let launch_command = vec![launcher.display().to_string(), command_line];
         let (pi, mut conpty) = spawn_conpty_process_as_user(
             token.raw(),
-            command,
+            &launch_command,
             cwd,
             env_map,
             use_private_desktop,

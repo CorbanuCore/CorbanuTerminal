@@ -78,6 +78,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 extra_bins={"corbanu-acp": acp, "corbanu-walletd": walletd},
                 bwrap_bin=None,
                 codex_command_runner_bin=None,
+                codex_conpty_launcher_bin=None,
                 codex_windows_sandbox_setup_bin=None,
             )
 
@@ -131,6 +132,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 build_code_mode_host=False,
                 build_bwrap=False,
                 build_codex_command_runner=False,
+                build_codex_conpty_launcher=False,
                 build_codex_windows_sandbox_setup=False,
             ),
             ["pfterminal-debug", "pfterminal-walletd"],
@@ -159,6 +161,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 },
                 bwrap_bin=None,
                 codex_command_runner_bin=None,
+                codex_conpty_launcher_bin=None,
                 codex_windows_sandbox_setup_bin=None,
             )
 
@@ -175,6 +178,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 build_code_mode_host=False,
                 build_bwrap=False,
                 build_codex_command_runner=False,
+                build_codex_conpty_launcher=False,
                 build_codex_windows_sandbox_setup=False,
             ),
             [],
@@ -191,6 +195,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 build_code_mode_host=False,
                 build_bwrap=False,
                 build_codex_command_runner=False,
+                build_codex_conpty_launcher=False,
                 build_codex_windows_sandbox_setup=False,
             ),
             [],
@@ -207,6 +212,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 build_code_mode_host=False,
                 build_bwrap=False,
                 build_codex_command_runner=False,
+                build_codex_conpty_launcher=False,
                 build_codex_windows_sandbox_setup=False,
             ),
             [],
@@ -221,9 +227,14 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 build_code_mode_host=False,
                 build_bwrap=False,
                 build_codex_command_runner=True,
+                build_codex_conpty_launcher=True,
                 build_codex_windows_sandbox_setup=True,
             ),
-            ["codex-command-runner", "codex-windows-sandbox-setup"],
+            [
+                "codex-command-runner",
+                "codex-conpty-launcher",
+                "codex-windows-sandbox-setup",
+            ],
         )
 
     def test_missing_code_mode_host_is_built_for_app_server(self) -> None:
@@ -235,6 +246,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 build_code_mode_host=True,
                 build_bwrap=False,
                 build_codex_command_runner=False,
+                build_codex_conpty_launcher=False,
                 build_codex_windows_sandbox_setup=False,
             ),
             ["codex-code-mode-host"],
@@ -246,6 +258,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
             entrypoint = touch_file(root / "codex.exe")
             code_mode_host = touch_file(root / "codex-code-mode-host.exe")
             command_runner = touch_file(root / "codex-command-runner.exe")
+            conpty_launcher = touch_file(root / "codex-conpty-launcher.exe")
             sandbox_setup = touch_file(root / "codex-windows-sandbox-setup.exe")
             pfterminal = touch_file(root / "pfterminal.exe")
             walletd = touch_file(root / "pfterminal-walletd.exe")
@@ -259,6 +272,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 code_mode_host_bin=code_mode_host,
                 bwrap_bin=None,
                 codex_command_runner_bin=command_runner,
+                codex_conpty_launcher_bin=conpty_launcher,
                 codex_windows_sandbox_setup_bin=sandbox_setup,
                 extra_bins={
                     "pfterminal.exe": pfterminal,
@@ -269,6 +283,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
         self.assertEqual(outputs.entrypoint_bin, entrypoint)
         self.assertEqual(outputs.code_mode_host_bin, code_mode_host)
         self.assertEqual(outputs.codex_command_runner_bin, command_runner)
+        self.assertEqual(outputs.codex_conpty_launcher_bin, conpty_launcher)
         self.assertEqual(outputs.codex_windows_sandbox_setup_bin, sandbox_setup)
         self.assertEqual(outputs.extra_bins["pfterminal-walletd.exe"], walletd)
 

@@ -501,7 +501,11 @@ fn stage_windows_sandbox_helpers() {
     let exe = std::env::current_exe().expect("test binary");
     let resources = exe.parent().expect("test dir").join("codex-resources");
     std::fs::create_dir_all(&resources).expect("resources dir");
-    for helper in ["codex-windows-sandbox-setup", "codex-command-runner"] {
+    for helper in [
+        "codex-windows-sandbox-setup",
+        "codex-command-runner",
+        "codex-conpty-launcher",
+    ] {
         let source = codex_utils_cargo_bin::cargo_bin(helper).expect("sandbox helper built");
         let destination = resources.join(format!("{helper}.exe"));
         // A helper from an earlier test may still be running; keep its copy.
