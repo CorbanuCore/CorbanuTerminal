@@ -48,11 +48,17 @@ and setup or commands can be very slow. The sandbox account does not
 automatically have your account's access to every folder.
 
 Error 267 means the working directory is invalid or inaccessible to the
-sandbox account. Check that the directory exists. For project work, use
-`sandbox_mode = "workspace-write"` with `[windows] sandbox = "elevated"`,
+sandbox account. Check that the directory exists. A verified workaround for
+project work is a directory outside private user-profile folders with
+`sandbox_mode = "workspace-write"` and `[windows] sandbox = "elevated"`,
 keeping your security level. This limits writable access to the workspace
 and configured writable roots; it does not repair full access. Moving the
-project out of the user profile alone does not resolve the reported delay.
+project alone, while keeping full access, does not resolve the reported delay.
+
+Workspace-write alone is not a verified workaround for a private folder:
+in testing, PowerShell launched there but started at `C:\`, and relative
+file writes failed. Check the command's actual working directory and output;
+a successful shell exit code alone does not prove that it used your project.
 
 ### Remote Windows machines
 
