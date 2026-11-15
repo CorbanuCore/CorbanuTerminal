@@ -307,6 +307,9 @@ mod tests {
             "rm -{r,f} /",
             "rm -rf{,} /tmp/example",
             "rm -rf* /tmp/example",
+            "rm \"-rf\\\n\" /tmp/example",
+            "rm -r\"f\\\n\" /tmp/example",
+            "rm \"-r\\f\" /tmp/example",
         ] {
             let command = vec_str(&["bash", "-lc", script]);
             assert_eq!(

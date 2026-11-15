@@ -373,7 +373,7 @@ fn parse_literal_shell_word(node: Node<'_>, src: &str) -> Option<String> {
         "word" | "number" if has_no_named_children(node) => {
             Some(node.utf8_text(src.as_bytes()).ok()?.to_owned())
         }
-        "string" => parse_double_quoted_string(node, src),
+        "string" => parse_double_quoted_string_with_escapes(node, src),
         "raw_string" => parse_raw_string(node, src),
         "concatenation" => {
             let mut concatenated = String::new();
@@ -488,7 +488,8 @@ fn is_literal_word_or_number(node: Node<'_>, src: &str) -> bool {
         })
 }
 
-fn parse_double_quoted_string(node: Node, src: &str) -> Option<String> {
+/// A double-quoted string's contents when it has no expansions.
+fn double_quoted_contents<'a>(node: Node, src: &'a str) -> Option<&'a str> {
     if node.kind() != "string" {
         return None;
     }
@@ -500,9 +501,39 @@ fn parse_double_quoted_string(node: Node, src: &str) -> Option<String> {
         }
     }
     let raw = node.utf8_text(src.as_bytes()).ok()?;
-    let stripped = raw
-        .strip_prefix('"')
-        .and_then(|text| text.strip_suffix('"'))?;
+    raw.strip_prefix('"')
+        .and_then(|text| text.strip_suffix('"'))
+}
+
+/// S3b: the dangerous-command parse reads a double-quoted string as bash
+/// does, removing `\$ \` \" \\` escapes and backslash-newlines, so
+/// `rm "-rf\<newline>" /` still reads as `-rf`. Upstream's strict parse below
+/// refuses such strings, which hid them from the forced-rm check.
+fn parse_double_quoted_string_with_escapes(node: Node, src: &str) -> Option<String> {
+    let contents = double_quoted_contents(node, src)?;
+    let mut unescaped = String::with_capacity(contents.len());
+    let mut chars = contents.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            unescaped.push(c);
+            continue;
+        }
+        match chars.peek() {
+            Some('\n') => {
+                chars.next();
+            }
+            Some(&next @ ('$' | '`' | '"' | '\\')) => {
+                chars.next();
+                unescaped.push(next);
+            }
+            _ => unescaped.push(c),
+        }
+    }
+    Some(unescaped)
+}
+
+fn parse_double_quoted_string(node: Node, src: &str) -> Option<String> {
+    let stripped = double_quoted_contents(node, src)?;
     // Double quotes suppress globbing and brace expansion, but not escape
     // removal. Only accept contents whose source spelling is already literal.
     if stripped
