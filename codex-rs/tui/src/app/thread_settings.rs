@@ -1,5 +1,9 @@
 //! Thread settings sync between TUI-local state and app-server thread state.
 
+#[cfg(test)]
+#[path = "thread_settings_tests.rs"]
+mod tests;
+
 use super::App;
 use crate::app_command::AppCommand;
 use crate::app_event::AppEvent;
@@ -14,12 +18,8 @@ use codex_app_server_protocol::ThreadSettingsUpdateParams;
 use codex_config::types::ApprovalsReviewer;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::ModeKind;
-<<<<<<< HEAD
 use codex_protocol::models::ActivePermissionProfile;
-||||||| 413492cd6c
-=======
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::MODEL_SPECIALTY_CYBER;
 
@@ -64,7 +64,10 @@ impl App {
                         .map(codex_app_server_protocol::ApprovalsReviewer::to_core),
                     display_label: profile_id.clone(),
                 });
-        let settings_updated = self.send_thread_settings_update(app_server, params).await;
+        let settings_updated = self
+            .send_thread_settings_update(app_server, params)
+            .await
+            .is_confirmed();
         if settings_updated
             && let (Some(thread_id), Some(selection)) =
                 (self.active_thread_id, pending_cyber_profile)
@@ -200,6 +203,15 @@ impl App {
         else {
             return;
         };
+        // Corbanu: the security level can forbid permission changes (PF-24).
+        if (approval_policy.is_some()
+            || approvals_reviewer.is_some()
+            || active_permission_profile.is_some())
+            && let Some(reason) = crate::security::level::permission_change_block_reason()
+        {
+            self.chat_widget.add_error_message(reason);
+            return;
+        }
 
         let params = ThreadSettingsUpdateParams {
             thread_id: thread_id.to_string(),
@@ -249,51 +261,10 @@ impl App {
         &mut self,
         app_server: &mut AppServerSession,
         params: ThreadSettingsUpdateParams,
-<<<<<<< HEAD
     ) -> SettingsUpdateOutcome {
-||||||| 413492cd6c
-    ) {
-=======
-    ) -> bool {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if !thread_settings_update_has_changes(&params) {
-<<<<<<< HEAD
             return SettingsUpdateOutcome::NotSent;
-||||||| 413492cd6c
-            return;
-=======
-            return false;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
-<<<<<<< HEAD
-        let mut params = params;
-        let mut result = app_server.thread_settings_update(params.clone()).await;
-        match &result {
-            Ok(true) => return SettingsUpdateOutcome::Confirmed,
-            Err(err) if params.confirm => {
-                // PF-84: confirmation needs a live listener; the update itself
-                // must still apply, as it did before it was confirmed.
-                tracing::warn!(
-                    "confirmed thread settings update failed, sending it unconfirmed: {err}"
-                );
-                params.confirm = false;
-                result = app_server.thread_settings_update(params).await;
-            }
-            _ => {}
-        }
-        match result {
-            Ok(_) => SettingsUpdateOutcome::Accepted,
-            Err(err) => {
-                tracing::warn!("failed to update app-server thread settings from TUI: {err}");
-                self.chat_widget
-                    .add_error_message(format!("Failed to update thread settings: {err}"));
-                SettingsUpdateOutcome::Failed
-||||||| 413492cd6c
-        if let Err(err) = app_server.thread_settings_update(params).await {
-            tracing::warn!("failed to update app-server thread settings from TUI: {err}");
-            self.chat_widget
-                .add_error_message(format!("Failed to update thread settings: {err}"));
-=======
         let thread_id = ThreadId::from_string(&params.thread_id).ok();
         let changes_permissions = params.cwd.is_some()
             || params.approval_policy.is_some()
@@ -303,9 +274,26 @@ impl App {
         if changes_permissions
             && thread_id.is_some_and(|id| self.pending_server_profiles.contains_key(&id))
         {
-            return false;
+            return SettingsUpdateOutcome::NotSent;
         }
-        match app_server.thread_settings_update(params).await {
+        let mut params = params;
+        let mut result = app_server.thread_settings_update(params.clone()).await;
+        let mut sent_unconfirmed = false;
+        // PF-84: confirmation needs a live listener; the update itself must still apply, as it
+        // did before it was confirmed. A rejected Windows sandbox refresh (#2062) is reported,
+        // never hidden behind an unconfirmed retry.
+        if let Err(err) = &result
+            && params.confirm
+            && !params.refresh_windows_sandbox
+        {
+            tracing::warn!(
+                "confirmed thread settings update failed, sending it unconfirmed: {err}"
+            );
+            params.confirm = false;
+            sent_unconfirmed = true;
+            result = app_server.thread_settings_update(params).await;
+        }
+        match result {
             Ok(settings_updated) => {
                 if settings_updated
                     && changes_permissions
@@ -315,14 +303,17 @@ impl App {
                         .requested_permission_profiles
                         .remove(&thread_id);
                 }
-                settings_updated
+                if settings_updated && !sent_unconfirmed {
+                    SettingsUpdateOutcome::Confirmed
+                } else {
+                    SettingsUpdateOutcome::Accepted
+                }
             }
             Err(err) => {
                 tracing::warn!("failed to update app-server thread settings from TUI: {err}");
                 self.chat_widget
-                    .add_error_message(format!("Failed to update thread settings: {err}"));
-                false
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                    .add_error_message(format!("Failed to update thread settings: {err:#}"));
+                SettingsUpdateOutcome::Failed
             }
         }
     }
@@ -339,6 +330,13 @@ pub(super) enum SettingsUpdateOutcome {
     /// Accepted for core to apply later (not confirmed).
     Accepted,
     Failed,
+}
+
+impl SettingsUpdateOutcome {
+    /// Upstream's `bool` result: the server applied the update before replying.
+    pub(super) fn is_confirmed(self) -> bool {
+        self == Self::Confirmed
+    }
 }
 
 /// #437: [`ThreadSettings`] carries only the legacy sandbox projection of a
@@ -409,4 +407,57 @@ fn thread_settings_update_has_changes(params: &ThreadSettingsUpdateParams) -> bo
         || params.effort.is_some()
         || params.summary.is_some()
         || params.collaboration_mode.is_some()
+        || params.refresh_windows_sandbox
+}
+
+impl App {
+    /// #2000/#2062 (main #2009, #2177): after Windows sandbox setup, ask the server to apply the
+    /// mode its config now selects (never a weaker one) to the active session, confirmed, and
+    /// report readiness only once the session confirms it.
+    pub(super) async fn refresh_session_windows_sandbox(
+        &mut self,
+        app_server: &mut AppServerSession,
+    ) {
+        use ratatui::style::Stylize;
+        use ratatui::text::Line;
+
+        let Some(thread_id) = self.active_thread_id else {
+            return;
+        };
+        let params = ThreadSettingsUpdateParams {
+            thread_id: thread_id.to_string(),
+            refresh_windows_sandbox: true,
+            confirm: true,
+            ..ThreadSettingsUpdateParams::default()
+        };
+        let outcome = self.send_thread_settings_update(app_server, params).await;
+        if outcome == SettingsUpdateOutcome::Confirmed
+            && self.chat_widget.windows_sandbox_config.level()
+                == codex_protocol::config_types::WindowsSandboxLevel::Disabled
+        {
+            self.chat_widget.add_info_message(
+                "Windows sandbox settings confirmed for this session.".to_string(),
+                /*hint*/ None,
+            );
+        } else if outcome == SettingsUpdateOutcome::Confirmed {
+            self.chat_widget.add_plain_history_lines(vec![
+                Line::from(vec!["• ".dim(), "Sandbox ready".into()]),
+                Line::from(vec![
+                    "  ".into(),
+                    "This session uses the configured Windows sandbox from the next message."
+                        .dark_gray(),
+                ]),
+                Line::from(vec![
+                    "  ".into(),
+                    "Work already running keeps its earlier sandbox.".dark_gray(),
+                ]),
+            ]);
+        } else {
+            self.chat_widget.add_error_message(
+                "The Windows sandbox settings were saved, but their use by this session could \
+                 not be confirmed. Start a new session with /new to use the saved settings."
+                    .to_string(),
+            );
+        }
+    }
 }

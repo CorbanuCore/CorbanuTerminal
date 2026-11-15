@@ -35,7 +35,11 @@ impl App {
             collaboration_mode: Some(mode.clone()),
             ..ThreadSettingsUpdateParams::default()
         };
-        if self.send_thread_settings_update(app_server, params).await {
+        if self
+            .send_thread_settings_update(app_server, params)
+            .await
+            .is_confirmed()
+        {
             self.chat_widget.set_reasoning_effort(effort.clone());
             if mode.mode == ModeKind::Plan {
                 self.chat_widget.set_plan_mode_reasoning_effort(effort);
@@ -95,7 +99,11 @@ impl App {
         // Older remote servers can decline this method. Keep the existing recovery UI in that
         // case or on failure, rather than changing local selection before the task accepts it.
         // Event dispatch awaits this operation; a queued manual model selection runs afterward.
-        if self.send_thread_settings_update(app_server, params).await {
+        if self
+            .send_thread_settings_update(app_server, params)
+            .await
+            .is_confirmed()
+        {
             self.chat_widget.finish_backend_banner_fallback(mode);
             self.sync_active_thread_service_tier_to_cached_session()
                 .await;

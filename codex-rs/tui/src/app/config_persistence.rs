@@ -6,31 +6,11 @@
 
 use super::*;
 use codex_config::ConfigLayerSource;
-<<<<<<< HEAD
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::AMBIENT_KIMI_K2_7_CODE_MODEL;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
-#[cfg(target_os = "windows")]
-use codex_utils_approval_presets::ApprovalPreset;
-
-#[cfg(target_os = "windows")]
-pub(super) struct WindowsSetupPermissions {
-    pub(super) permission_profile: PermissionProfile,
-    pub(super) workspace_roots: Vec<AbsolutePathBuf>,
-}
-||||||| 413492cd6c
-#[cfg(target_os = "windows")]
-use codex_utils_approval_presets::ApprovalPreset;
-
-#[cfg(target_os = "windows")]
-pub(super) struct WindowsSetupPermissions {
-    pub(super) permission_profile: PermissionProfile,
-    pub(super) workspace_roots: Vec<AbsolutePathBuf>,
-}
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 async fn build_config_on_runtime_worker(
     builder: ConfigBuilder,
@@ -79,53 +59,6 @@ pub(crate) fn resume_model_settings_for_overrides(
     }
 }
 
-<<<<<<< HEAD
-/// A resume inherits the thread's last acknowledged permission contract unless this invocation
-/// explicitly selected a different contract. User config remains the default for new threads;
-/// only CLI/session flags and a selected profile are resume overrides.
-pub(super) fn resume_permission_settings_for_overrides(
-    config: &Config,
-    harness_overrides: &ConfigOverrides,
-) -> crate::app_server_session::ResumePermissionSettings {
-    let has_layer_override = config
-        .config_layer_stack
-        .layers_high_to_low()
-        .into_iter()
-        .any(|layer| {
-            matches!(
-                &layer.name,
-                ConfigLayerSource::SessionFlags
-                    | ConfigLayerSource::User {
-                        profile: Some(_),
-                        ..
-                    }
-            ) && [
-                "approval_policy",
-                "approvals_reviewer",
-                "sandbox_mode",
-                "default_permissions",
-                "permission_profiles",
-                "sandbox_workspace_write",
-                "workspace_roots",
-            ]
-            .iter()
-            .any(|key| layer.config.get(*key).is_some())
-        });
-    if harness_overrides.approval_policy.is_some()
-        || harness_overrides.approvals_reviewer.is_some()
-        || harness_overrides.sandbox_mode.is_some()
-        || harness_overrides.permission_profile.is_some()
-        || harness_overrides.default_permissions.is_some()
-        || !harness_overrides.additional_writable_roots.is_empty()
-        || harness_overrides.workspace_roots.is_some()
-        || has_layer_override
-    {
-        crate::app_server_session::ResumePermissionSettings::OverrideFromCurrentConfig
-    } else {
-        crate::app_server_session::ResumePermissionSettings::RestoreFromThread
-    }
-||||||| 413492cd6c
-=======
 pub(super) fn has_explicit_resume_permission_override(
     config: &Config,
     overrides: &ConfigOverrides,
@@ -142,7 +75,6 @@ pub(super) fn has_explicit_resume_permission_override(
         || selected.approvals_reviewer
         || selected.profile
         || selected.workspace_roots
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl App {
@@ -233,13 +165,11 @@ impl App {
         app_server: &mut AppServerSession,
         selection: PermissionProfileSelection,
     ) -> bool {
-<<<<<<< HEAD
         if let Some(reason) = crate::security::level::permission_change_block_reason() {
             self.chat_widget.add_error_message(reason);
-||||||| 413492cd6c
-=======
+            return false;
+        }
         if self.reject_pending_permission_change() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             return false;
         }
         let PermissionProfileSelection {
@@ -354,24 +284,6 @@ impl App {
             Some(RuntimePermissionProfileOverride::from_config(&self.config));
         self.sync_active_thread_permission_settings_to_cached_session()
             .await;
-<<<<<<< HEAD
-||||||| 413492cd6c
-        self.app_event_tx
-            .send(AppEvent::CodexOp(AppCommand::override_turn_context(
-                /*cwd*/ None,
-                approval_policy,
-                approvals_reviewer,
-                Some(permission_profile.clone()),
-                active_permission_profile,
-                /*windows_sandbox_level*/ None,
-                /*model*/ None,
-                /*effort*/ None,
-                /*summary*/ None,
-                /*service_tier*/ None,
-                /*collaboration_mode*/ None,
-                /*personality*/ None,
-            )));
-=======
         self.app_event_tx
             .send(AppEvent::CodexOp(AppCommand::override_turn_context(
                 /*cwd*/ None,
@@ -385,7 +297,6 @@ impl App {
                 /*service_tier*/ None,
                 /*collaboration_mode*/ None,
             )));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
             history_cell::new_info_event(
                 format!("Permissions selected for the new session: {display_label}. Application is not yet confirmed."),
@@ -400,6 +311,13 @@ impl App {
         app_server: &mut AppServerSession,
         mut selection: PermissionProfileSelection,
     ) {
+        // Corbanu: the security level can forbid permission changes (PF-24).
+        if let Some(reason) = crate::security::level::permission_change_block_reason() {
+            self.chat_widget
+                .retain_input_after_failed_permission_selection();
+            self.chat_widget.add_error_message(reason);
+            return;
+        }
         if self.reject_pending_permission_change() {
             self.chat_widget
                 .retain_input_after_failed_permission_selection();
@@ -835,7 +753,6 @@ impl App {
         if updates.is_empty() {
             return;
         }
-<<<<<<< HEAD
         // Auto-review rewrites approval and sandbox settings.
         if updates
             .iter()
@@ -843,14 +760,13 @@ impl App {
             && let Some(reason) = crate::security::level::permission_change_block_reason()
         {
             self.chat_widget.add_error_message(reason);
-||||||| 413492cd6c
-=======
+            return;
+        }
         if updates
             .iter()
             .any(|(feature, _)| *feature == Feature::GuardianApproval)
             && self.reject_pending_permission_change()
         {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             return;
         }
 
@@ -1325,21 +1241,6 @@ impl App {
         resume_model_settings_for_overrides(&self.config, &self.harness_overrides)
     }
 
-<<<<<<< HEAD
-    pub(crate) fn resume_permission_settings(
-        &self,
-    ) -> crate::app_server_session::ResumePermissionSettings {
-        resume_permission_settings_for_overrides(&self.config, &self.harness_overrides)
-    }
-
-    pub(super) fn on_update_personality(&mut self, personality: Personality) {
-        self.config.personality = Some(personality);
-        self.chat_widget.set_personality(personality);
-||||||| 413492cd6c
-    pub(super) fn on_update_personality(&mut self, personality: Personality) {
-        self.config.personality = Some(personality);
-        self.chat_widget.set_personality(personality);
-=======
     pub(super) fn reject_remote_resume_permission_override(
         &mut self,
         config: &Config,
@@ -1368,7 +1269,6 @@ impl App {
             return true;
         }
         false
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(super) fn sync_tui_theme_selection(&mut self, name: String) {

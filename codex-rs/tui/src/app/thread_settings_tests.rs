@@ -162,10 +162,13 @@ async fn issue_2062_disabled_sandbox_confirmation_does_not_claim_readiness()
     let thread_id = started.session.thread_id;
     // A confirmed refresh can leave sandboxing disabled: it must not claim
     // that a sandbox is ready merely because the request was acknowledged.
-    let op = sandbox_refresh_op(codex_protocol::config_types::WindowsSandboxLevel::Disabled);
+    set_sandbox_level(
+        &mut app,
+        thread_id,
+        codex_protocol::config_types::WindowsSandboxLevel::Disabled,
+    );
     while rx.try_recv().is_ok() {}
-    app.sync_override_turn_context_settings(&mut server, thread_id, &op)
-        .await;
+    app.refresh_session_windows_sandbox(&mut server).await;
     server.shutdown().await?;
     let text = history_text(&mut rx);
     assert!(!text.contains("Sandbox ready"), "{text}");
@@ -178,13 +181,13 @@ async fn issue_2062_disabled_sandbox_confirmation_does_not_claim_readiness()
 async fn issue_2062_sandbox_success_waits_for_confirmation() -> color_eyre::Result<()> {
     let (mut app, mut rx, _ops) = Box::pin(make_test_app_with_channels()).await;
     let (mut server, task) = reply_server(json!({"result": {"outcome": "applied"}})).await?;
-    while rx.try_recv().is_ok() {}
-    app.sync_override_turn_context_settings(
-        &mut server,
+    set_sandbox_level(
+        &mut app,
         ThreadId::new(),
-        &sandbox_refresh_op(codex_protocol::config_types::WindowsSandboxLevel::Elevated),
-    )
-    .await;
+        codex_protocol::config_types::WindowsSandboxLevel::Elevated,
+    );
+    while rx.try_recv().is_ok() {}
+    app.refresh_session_windows_sandbox(&mut server).await;
     server.shutdown().await?;
     assert_eq!(task.await?.len(), 1);
     let text = history_text(&mut rx);
@@ -193,21 +196,21 @@ async fn issue_2062_sandbox_success_waits_for_confirmation() -> color_eyre::Resu
     Ok(())
 }
 
-fn sandbox_refresh_op(level: codex_protocol::config_types::WindowsSandboxLevel) -> AppCommand {
-    AppCommand::OverrideTurnContext {
-        cwd: None,
-        approval_policy: None,
-        approvals_reviewer: None,
-        permission_profile: None,
-        active_permission_profile: None,
-        windows_sandbox_level: Some(level),
-        model: None,
-        effort: None,
-        summary: None,
-        service_tier: None,
-        collaboration_mode: None,
-        personality: None,
-    }
+/// The refresh targets the active thread; the configured mode decides whether a confirmed
+/// refresh means a sandbox is in use.
+fn set_sandbox_level(
+    app: &mut App,
+    thread_id: ThreadId,
+    level: codex_protocol::config_types::WindowsSandboxLevel,
+) {
+    use codex_app_server_protocol::WindowsSandboxSetupMode;
+    use codex_protocol::config_types::WindowsSandboxLevel;
+    app.active_thread_id = Some(thread_id);
+    app.chat_widget.windows_sandbox_config.mode = match level {
+        WindowsSandboxLevel::Disabled => None,
+        WindowsSandboxLevel::RestrictedToken => Some(WindowsSandboxSetupMode::Unelevated),
+        WindowsSandboxLevel::Elevated => Some(WindowsSandboxSetupMode::Elevated),
+    };
 }
 
 fn history_text(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> String {
@@ -238,13 +241,13 @@ async fn issue_2062_unconfirmed_sandbox_has_a_persistent_recovery_message() -> c
     ] {
         let (mut app, mut rx, _ops) = Box::pin(make_test_app_with_channels()).await;
         let (mut server, task) = reply_server(reply).await?;
-        while rx.try_recv().is_ok() {}
-        app.sync_override_turn_context_settings(
-            &mut server,
+        set_sandbox_level(
+            &mut app,
             ThreadId::new(),
-            &sandbox_refresh_op(codex_protocol::config_types::WindowsSandboxLevel::Elevated),
-        )
-        .await;
+            codex_protocol::config_types::WindowsSandboxLevel::Elevated,
+        );
+        while rx.try_recv().is_ok() {}
+        app.refresh_session_windows_sandbox(&mut server).await;
         server.shutdown().await?;
         assert_eq!(task.await?.len(), 1);
         let text = history_text(&mut rx);
