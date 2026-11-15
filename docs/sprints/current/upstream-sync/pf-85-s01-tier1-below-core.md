@@ -14,7 +14,7 @@ branch: "maint/contrib-2101-1111"
 base_commit: "787027b83ffa53875f49e40a2886284d26557075"
 depends_on: "PF-85-S00"
 created: 2026-11-07
-updated: 2026-11-11
+updated: 2026-11-14
 ---
 
 # PF-85-S01 — Tier 1: crates below core
@@ -50,6 +50,7 @@ updated: 2026-11-11
 - [x] #2101: pending same-owner and pool compatibility use the effective capped discovery budget; ready connections do not compare it.
 - [x] Three isolated discovery-budget regressions passed, covering differing budgets, equivalent/default/capped budgets and ready reuse (nextest `b763c88a-413b-4f12-8ca4-062e3ff98b39`). An initial test compilation failed on a missing `mut`; corrected and freshly rerun.
 - [x] Internal connection-lifecycle scope: code-blind TUI design is not applicable to this slice; PF-85-S05 retains final sync functional qualification.
+- [x] S3a Tier 1 sandbox crates resolved (with all of S3a, 2026-11-14; see PF-85-S02 and #1628).
 
 ## Remaining
 

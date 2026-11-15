@@ -385,6 +385,8 @@ class WindowsSandboxNextestGroupTest(unittest.TestCase):
                 "issue_2167_permissive_file_routes_are_unchanged",
                 "issue_2167_shell_read_asks_and_cancel_keeps_value_out",
                 "issue_2167_shell_read_with_approvals_off",
+                "issue_2222_agent_attachments_are_read_before_delivery",
+                "issue_2222_reference_image_read",
                 "pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write",
                 "pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory",
                 "pf_30_s01_source_envelopes_label_tool_output_and_keep_human_prompt",
