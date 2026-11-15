@@ -152,12 +152,11 @@ pub(crate) trait BottomPaneView: Renderable {
         None
     }
 
-<<<<<<< HEAD
-    /// Search text for a list that is refreshed while the user is interacting.
-    fn search_query(&self) -> Option<&str> {
+    /// Stable identity of the selected row across list and tab changes.
+    fn selected_item_id(&self) -> Option<&str> {
         None
-||||||| 413492cd6c
-=======
+    }
+
     /// Current toggle values for list items that preserve local choices across refreshes.
     fn selection_toggle_states(&self) -> Vec<Option<super::SelectionToggleState>> {
         Vec::new()
@@ -178,7 +177,6 @@ pub(crate) trait BottomPaneView: Renderable {
         _suggestion: Option<&str>,
     ) -> bool {
         false
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Active tab id for tabbed list-based views.

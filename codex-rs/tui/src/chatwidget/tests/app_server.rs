@@ -1255,14 +1255,10 @@ async fn live_app_server_guardian_warning_notification_renders_message() {
 #[tokio::test]
 async fn live_app_server_strict_review_required_notification_renders_message() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-<<<<<<< HEAD
     chat.thread_id = Some(ThreadId::new());
-||||||| 413492cd6c
-=======
     handle_turn_started(&mut chat, "turn-1");
     begin_exec(&mut chat, "cmd-1", "printf 'streamed output\\n'");
     drain_insert_history(&mut rx);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     chat.handle_server_notification(
         ServerNotification::StrictReviewRequired(
@@ -1313,11 +1309,12 @@ async fn config_warning_during_turn_retains_transcript_details() {
     );
 }
 
-/// #419: a config warning that arrives before the session header is shown
-/// after it (a startup redraw cannot hide it), and the session's repeat of
-/// the same warning is not shown a second time.
+/// #419: a config warning that arrives before the session header and the
+/// session's repeat of it are shown once. Upstream now inserts startup
+/// diagnostics at once as a `StartupWarningsCell` (kept across the header,
+/// `pending_header`), so the warning no longer waits for the header.
 #[tokio::test]
-async fn startup_config_warning_is_shown_once_after_the_session_header() {
+async fn startup_config_warning_and_its_session_repeat_are_shown_once() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     let summary = "`[provider_accounts]` is ignored because the `named_accounts` feature is off";
     chat.handle_server_notification(
@@ -1329,9 +1326,11 @@ async fn startup_config_warning_is_shown_once_after_the_session_header() {
         }),
         /*replay_kind*/ None,
     );
-    assert!(drain_insert_history(&mut rx).is_empty());
+    let mut shown = drain_insert_history(&mut rx);
 
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
+        daybreak_enabled: false,
+        windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: ThreadId::new(),
         forked_from_id: None,
         fork_parent_title: None,
@@ -1348,7 +1347,6 @@ async fn startup_config_warning_is_shown_once_after_the_session_header() {
         instruction_source_paths: Vec::new(),
         reasoning_effort: Some(ReasoningEffortConfig::default()),
         collaboration_mode: None,
-        personality: None,
         message_history: None,
         network_proxy: None,
         rollout_path: None,
@@ -1361,7 +1359,8 @@ async fn startup_config_warning_is_shown_once_after_the_session_header() {
         }),
         /*replay_kind*/ None,
     );
-    let warnings = drain_insert_history(&mut rx)
+    shown.extend(drain_insert_history(&mut rx));
+    let warnings = shown
         .iter()
         .map(|cell| lines_to_single_string(cell))
         .filter(|text| text.contains(summary))

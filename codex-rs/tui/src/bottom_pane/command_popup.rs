@@ -543,24 +543,11 @@ mod tests {
         insta::assert_snapshot!("command_popup_app", format!("{buf:?}"));
     }
 
-<<<<<<< HEAD
-||||||| 413492cd6c
-    #[cfg(target_os = "macos")]
-=======
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     #[test]
-    fn voice_command_popup_snapshot() {
-        let mut popup = CommandPopup::new(
-            CommandPopupFlags {
-                voice_command_enabled: true,
-                ..CommandPopupFlags::default()
-            },
-            Vec::new(),
-        );
-        popup.on_composer_text_change("/voice".to_string());
+    fn default_command_popup_items_snapshot() {
+        let mut popup = CommandPopup::new(CommandPopupFlags::default(), Vec::new());
+        popup.on_composer_text_change("/".to_string());
 
-<<<<<<< HEAD
         // Commands whose presence or description depends on the platform or
         // the build, each with whether this build shows it. They are checked
         // here and left out of the snapshot, so the snapshot is the same on
@@ -611,18 +598,22 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("\n");
-||||||| 413492cd6c
-        let commands = popup
-            .filtered_items()
-            .into_iter()
-            .map(|item| {
-                let command = item.command();
-                let description = item.description();
-                format!("/{command} - {description}")
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-=======
+
+        insta::assert_snapshot!("command_popup_default_items", commands);
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn voice_command_popup_snapshot() {
+        let mut popup = CommandPopup::new(
+            CommandPopupFlags {
+                voice_command_enabled: true,
+                ..CommandPopupFlags::default()
+            },
+            Vec::new(),
+        );
+        popup.on_composer_text_change("/voice".to_string());
+
         let width = 72;
         let area = Rect::new(
             /*x*/ 0,
@@ -632,7 +623,6 @@ mod tests {
         );
         let mut buf = Buffer::empty(area);
         popup.render_ref(area, &mut buf);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         insta::assert_snapshot!("command_popup_voice", format!("{buf:?}"));
     }

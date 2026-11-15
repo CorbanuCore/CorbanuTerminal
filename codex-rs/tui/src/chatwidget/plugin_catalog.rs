@@ -385,32 +385,12 @@ impl ChatWidget {
         marketplace_name: String,
         marketplace_display_name: String,
     ) -> SelectionViewParams {
-<<<<<<< HEAD
-        let mut header = ColumnRenderable::new();
-        header.push(Line::from("Plugins".bold()));
-        header.push(Line::from(
-            format!("Remove {marketplace_display_name} marketplace?").dim(),
-        ));
-        header.push(Line::from(
-            "This removes the configured marketplace from Corbanu Terminal.".dim(),
-        ));
-||||||| 413492cd6c
-        let mut header = ColumnRenderable::new();
-        header.push(Line::from("Plugins".bold()));
-        header.push(Line::from(
-            format!("Remove {marketplace_display_name} marketplace?").dim(),
-        ));
-        header.push(Line::from(
-            "This removes the configured marketplace from Codex.".dim(),
-        ));
-=======
         let header = Paragraph::new(vec![
             Line::from("Plugins".bold()),
             Line::from(format!("Remove {marketplace_display_name} marketplace?").dim()),
-            Line::from("This removes the configured marketplace from Codex.".dim()),
+            Line::from("This removes the configured marketplace from Corbanu Terminal.".dim()),
         ])
         .wrap(Wrap { trim: false });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         let cwd_for_remove = self.config.cwd.to_path_buf();
         let cwd_for_cancel = self.config.cwd.to_path_buf();
