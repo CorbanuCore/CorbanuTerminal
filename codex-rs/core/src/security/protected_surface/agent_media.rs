@@ -48,8 +48,8 @@ pub(crate) async fn prepare_agent_media(
     let paths = paths
         .into_iter()
         .map(|path| {
-            // Require absolute paths: a relative path must not be interpreted
-            // against a different working directory by the parent or child.
+            // Resolve once to an absolute path, so admission and the read use
+            // the same location even for a relative path.
             codex_utils_absolute_path::AbsolutePathBuf::try_from(path.as_path())
                 .map(|path| codex_utils_path_uri::PathUri::from_abs_path(&path))
                 .map_err(|error| FunctionCallError::RespondToModel(error.to_string()))

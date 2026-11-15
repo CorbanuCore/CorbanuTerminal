@@ -120,8 +120,38 @@ async fn issue_2222_agent_attachments_are_read_before_delivery(
         config.permissions.windows_sandbox_mode =
             Some(codex_config::types::WindowsSandboxModeToml::Elevated);
     }
-    let (mut session, turn) =
+    let (mut session, mut turn) =
         crate::session::tests::make_session_and_context_for_config(config).await;
+    #[cfg(target_os = "linux")]
+    let linux_sandbox =
+        Some(core_test_support::find_codex_linux_sandbox_exe().expect("Linux sandbox helper"));
+    #[cfg(not(target_os = "linux"))]
+    let linux_sandbox = None;
+    let runtime = codex_exec_server::ExecServerRuntimePaths::new(
+        std::env::current_exe().expect("test executable"),
+        linux_sandbox,
+    )
+    .expect("runtime paths");
+    let environments =
+        codex_exec_server::EnvironmentManager::create_for_tests_with_local(None, runtime).await;
+    let current = turn
+        .environments
+        .turn_environments()
+        .next()
+        .cloned()
+        .expect("local environment");
+    let environment_cwd = current.cwd().clone();
+    turn.environments.environments[0] = crate::environment_selection::TurnEnvironmentState::Ready(
+        crate::session::turn_context::TurnEnvironment::new(
+            current.environment_id,
+            environments
+                .try_local_environment()
+                .expect("runtime environment"),
+            environment_cwd,
+            Vec::new(),
+            current.shell,
+        ),
+    );
     let manager = install_live_root(&mut session, &turn).await;
     let child = start_own_child(&manager, (*turn.config).clone(), session.thread_id).await;
     let client = (*session.services.model_client())
