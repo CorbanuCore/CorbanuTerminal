@@ -11,7 +11,7 @@ use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
 use super::*;
-use crate::agent::AgentControl;
+use crate::agent::LocalAgentControl;
 
 fn revoked(kill: bool) -> RevocationState {
     let mut revocations = RevocationState::new();
@@ -44,7 +44,7 @@ fn save(home: &std::path::Path, state: DurableSecurityState) {
 /// from `recovery`.
 fn started(recovery: Recovery) -> (SecurityLevel, bool, u64) {
     let root = ThreadId::new();
-    let control = AgentControl::default()
+    let control = LocalAgentControl::default()
         .with_session_id(SessionId::from(root), /*max_threads*/ 1)
         .with_recovered_security_policy(recovery, root, /*inherits_from_spawn_parent*/ false)
         .unwrap();

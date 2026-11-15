@@ -2,7 +2,7 @@ use super::*;
 use crate::session::step_context::StepContext;
 use crate::session::tests::build_test_config;
 use crate::session::tests::make_session_and_context_for_config;
-use crate::tools::spec_plan::build_core_tool_runtimes;
+use crate::tools::spec_plan::build_core_tool_registry;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use serde_json::json;
@@ -63,13 +63,19 @@ async fn builtin_tools(zai: bool) -> (Vec<String>, Vec<String>) {
             codex_model_provider::create_model_provider(zai_provider, turn.auth_manager.clone());
     }
     let step = StepContext::for_test(Arc::new(turn));
-    let runtimes = build_core_tool_runtimes(
+    // Upstream builds the built-in tools into a registry; classify each one.
+    let registry = build_core_tool_registry(
         step.turn.as_ref(),
+        step.turn.model_info(),
         &step.environments,
         step.mcp.as_ref(),
         /*tool_suggest_candidates*/ None,
         /*wait_for_environment_tool_config*/ None,
     );
+    let runtimes: Vec<_> = registry
+        .entries()
+        .map(|tool| Arc::clone(&tool.runtime))
+        .collect();
     assert!(runtimes.len() > 10, "{}", runtimes.len());
     let names = runtimes
         .iter()

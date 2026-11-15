@@ -3,7 +3,6 @@ use crate::environment_selection::TurnEnvironmentState;
 use crate::security::protected_surface;
 use crate::security::tainted_action::ProtectedActionKind;
 use crate::session::tests::make_session_and_context;
-use crate::session::turn_context::TurnEnvironment;
 use pretty_assertions::assert_eq;
 use rmcp::model::ToolAnnotations;
 use serde_json::json;
@@ -148,33 +147,28 @@ async fn shared_context_uses_primary_step_cwd_and_turn_fallback() -> anyhow::Res
     #[allow(deprecated)]
     let fallback = PathUri::from_abs_path(&turn.cwd);
     let mut step = StepContext::for_test(Arc::new(turn));
-    let environment = step
-        .environments
-        .primary()
-        .expect("primary environment")
-        .environment
-        .clone();
     let primary_cwd = PathUri::parse("file:///C:/remote/primary")?;
     let secondary_cwd = PathUri::parse("file:///C:/remote/secondary")?;
+    // Upstream's `TurnEnvironment::new` takes a full selection; derive both
+    // environments from the step's primary one.
+    let environment_with = |environment_id: &str, cwd: PathUri| {
+        let mut environment = step
+            .environments
+            .primary()
+            .expect("primary environment")
+            .clone();
+        environment.selection.environment_id = environment_id.to_string();
+        environment.selection.cwd = cwd;
+        TurnEnvironmentState::Ready(environment)
+    };
+    let environments = vec![
+        environment_with("primary", primary_cwd.clone()),
+        environment_with("secondary", secondary_cwd),
+    ];
     Arc::get_mut(&mut step)
         .expect("unique step")
         .environments
-        .environments = vec![
-        TurnEnvironmentState::Ready(TurnEnvironment::new(
-            "primary".to_string(),
-            Arc::clone(&environment),
-            primary_cwd.clone(),
-            Vec::new(),
-            /*shell*/ None,
-        )),
-        TurnEnvironmentState::Ready(TurnEnvironment::new(
-            "secondary".to_string(),
-            environment,
-            secondary_cwd,
-            Vec::new(),
-            /*shell*/ None,
-        )),
-    ];
+        .environments = environments;
     let invocation = McpInvocation {
         server: "secondary".to_string(),
         tool: "read_file".to_string(),
