@@ -553,7 +553,7 @@ fn sec_win_1842_legacy_conpty_receives_ctrl_c() {
         &cmd,
         /*interrupt*/ true,
     ));
-    assert_eq!(
+    pretty_assertions::assert_eq!(
         ended,
         "ended exit=Ok(-1073741510)",
         "{}",
