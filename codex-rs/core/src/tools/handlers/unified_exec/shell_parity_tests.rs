@@ -108,7 +108,8 @@ fn output_line_after<'a>(text: &'a str, marker: &str) -> Option<&'a str> {
 async fn issue_310_exec_command_keeps_provider_auth_env_set_explicitly_by_policy() {
     // An inherited credential of a configured provider, set by nothing else.
     let inherited = format!("S3B_PARITY_PROVIDER_TOKEN_{}", std::process::id());
-    // SAFETY: a variable unique to this test; nothing else reads it.
+    // SAFETY: as in model_broker_auth_tests.rs: the name is unique to this
+    // test process and no other test reads or writes it.
     unsafe { std::env::set_var(&inherited, "inherited-provider-secret") };
     let inherited_key = inherited.clone();
     let (session, turn) = session_with(
@@ -280,6 +281,8 @@ async fn issue_442_exec_command_explains_a_denied_protected_read() {
         &format!("cat '{}'", home.join("auth.json").display()),
     )
     .await;
+    // The session's temp home was already dropped; remove what this test wrote.
+    let _ = std::fs::remove_dir_all(&home);
     assert!(!text.contains("issue-442-secret"), "{text}");
     assert!(
         text.contains("Security level Aggressive blocked access to")
@@ -288,9 +291,11 @@ async fn issue_442_exec_command_explains_a_denied_protected_read() {
     );
 }
 
-/// #826 follow-up on the unified-exec path: under Moderate on Linux, a
-/// command reporting a refused user namespace is explained in its output,
-/// naming the level, instead of a bare "Operation not permitted".
+/// #826 follow-up on the unified-exec path: under Moderate on Linux, the
+/// sandbox refuses a real `unshare --user`, and the refusal is explained in
+/// the command's output, naming the level, instead of a bare "Operation not
+/// permitted". It fails if `unshare` succeeds (the rule is not enforced) or is
+/// missing.
 #[cfg(target_os = "linux")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn issue_826_exec_command_explains_a_refused_user_namespace() {
@@ -300,12 +305,7 @@ async fn issue_826_exec_command_explains_a_refused_user_namespace() {
         eprintln!("skipping: no codex-linux-sandbox helper");
         return;
     };
-    let text = exec_command_output(
-        &session,
-        &turn,
-        "unshare --user true || { echo 'unshare: unshare failed: Operation not permitted' >&2; exit 1; }",
-    )
-    .await;
+    let text = exec_command_output(&session, &turn, "unshare --user true").await;
     assert!(
         text.contains("Security level Moderate blocks creating user namespaces"),
         "{text}"
