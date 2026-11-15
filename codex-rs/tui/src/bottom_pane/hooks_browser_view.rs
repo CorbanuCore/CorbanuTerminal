@@ -702,14 +702,8 @@ fn event_description(event_name: HookEventName) -> &'static str {
         HookEventName::UserPromptSubmit => "When the user submits a prompt",
         HookEventName::SubagentStart => "When a subagent is created",
         HookEventName::SubagentStop => "Right before a subagent ends its turn",
-<<<<<<< HEAD
         HookEventName::Stop => "Right before Corbanu Terminal ends its turn",
-||||||| 413492cd6c
-        HookEventName::Stop => "Right before Codex ends its turn",
-=======
-        HookEventName::Stop => "Right before Codex ends its turn",
         HookEventName::Interrupt => "Right before an interrupted turn is aborted",
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 

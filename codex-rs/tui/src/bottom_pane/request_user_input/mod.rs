@@ -171,13 +171,9 @@ pub(crate) struct RequestUserInputOverlay {
     request_started_at: Instant,
     auto_resolution_snoozed: bool,
     composer_submit_keys: Vec<KeyBinding>,
-<<<<<<< HEAD
     /// The composer's queue keys (Tab): in an answer field they submit too.
     composer_queue_keys: Vec<KeyBinding>,
-||||||| 413492cd6c
-=======
     composer_submit_hint: Option<ShortcutHint>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     interrupt_turn_keys: Vec<KeyBinding>,
     interrupt_turn_hint: Option<ShortcutHint>,
     list_keymap: ListKeymap,
@@ -242,12 +238,8 @@ impl RequestUserInputOverlay {
             request_started_at: Instant::now(),
             auto_resolution_snoozed: false,
             composer_submit_keys: keymap.composer.submit.clone(),
-<<<<<<< HEAD
             composer_queue_keys: keymap.composer.queue.clone(),
-||||||| 413492cd6c
-=======
             composer_submit_hint: keymap.primary_hint(KeymapContext::Composer, "submit"),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             interrupt_turn_keys: keymap.chat.interrupt_turn.clone(),
             interrupt_turn_hint: keymap.primary_hint(KeymapContext::Chat, "interrupt_turn"),
             list_keymap: keymap.list,
@@ -1341,10 +1333,18 @@ impl RequestUserInputOverlay {
             match self.typing_guard.on_confirm() {
                 Confirm::Option(idx) => {
                     self.highlight_option(idx);
+                    if self.other_option_selected() {
+                        self.open_other_option_notes();
+                        return;
+                    }
                     self.select_current_option(/*committed*/ true);
                     self.go_next_or_submit();
                 }
                 Confirm::Highlighted => {
+                    if self.other_option_selected() {
+                        self.open_other_option_notes();
+                        return;
+                    }
                     if self.selected_option_index().is_some() {
                         self.select_current_option(/*committed*/ true);
                     }
@@ -1420,6 +1420,21 @@ impl RequestUserInputOverlay {
         }
     }
 
+    /// Whether the highlighted option is the freeform "Other" row.
+    fn other_option_selected(&self) -> bool {
+        self.current_question().is_some_and(|question| {
+            Self::other_option_enabled_for_question(question)
+                && self.selected_option_index() == question.options.as_ref().map(Vec::len)
+        })
+    }
+
+    /// Upstream #38624: accepting "Other" opens its notes instead of
+    /// answering, so the person can type the answer.
+    fn open_other_option_notes(&mut self) {
+        self.focus = Focus::Notes;
+        self.ensure_selected_for_notes();
+    }
+
     /// Moves the highlight to option `idx` without answering.
     fn highlight_option(&mut self, idx: usize) {
         if let Some(answer) = self.current_answer_mut() {
@@ -1437,11 +1452,10 @@ fn idle_plain_chord(key_event: KeyEvent, idle: bool) -> bool {
 }
 
 impl BottomPaneView for RequestUserInputOverlay {
-<<<<<<< HEAD
     fn answers_request(&self) -> bool {
         true
-||||||| 413492cd6c
-=======
+    }
+
     fn keymap_contexts(&self) -> crate::keymap::KeymapContextSet {
         if self.confirm_unanswered_active() {
             return crate::keymap::KeymapContextSet::default();
@@ -1453,7 +1467,6 @@ impl BottomPaneView for RequestUserInputOverlay {
         self.composer
             .keymap_contexts()
             .with(crate::keymap::KeymapContext::Chat)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn prefer_esc_to_handle_key_event(&self) -> bool {
@@ -1610,94 +1623,9 @@ impl BottomPaneView for RequestUserInputOverlay {
                 self.move_question(/*next*/ true);
                 return;
             }
-<<<<<<< HEAD
-||||||| 413492cd6c
-            KeyEvent {
-                code: KeyCode::Char('h'),
-                modifiers: KeyModifiers::NONE,
-                ..
-            }
-            | KeyEvent {
-                code: KeyCode::Left,
-                modifiers: KeyModifiers::NONE,
-                ..
-            } if self.has_options() && matches!(self.focus, Focus::Options) => {
-                self.move_question(/*next*/ false);
-                return;
-            }
-            _ if self.has_options()
-                && matches!(self.focus, Focus::Options)
-                && self.list_keymap.move_left.is_pressed(key_event) =>
-            {
-                self.move_question(/*next*/ false);
-                return;
-            }
-            KeyEvent {
-                code: KeyCode::Char('l'),
-                modifiers: KeyModifiers::NONE,
-                ..
-            }
-            | KeyEvent {
-                code: KeyCode::Right,
-                modifiers: KeyModifiers::NONE,
-                ..
-            } if self.has_options() && matches!(self.focus, Focus::Options) => {
-                self.move_question(/*next*/ true);
-                return;
-            }
-            _ if self.has_options()
-                && matches!(self.focus, Focus::Options)
-                && self.list_keymap.move_right.is_pressed(key_event) =>
-            {
-                self.move_question(/*next*/ true);
-                return;
-            }
-=======
-            KeyEvent {
-                code: KeyCode::Char('h'),
-                modifiers: KeyModifiers::NONE,
-                ..
-            }
-            | KeyEvent {
-                code: KeyCode::Left,
-                modifiers: KeyModifiers::NONE,
-                ..
-            } if self.has_options() && matches!(self.focus, Focus::Options) => {
-                self.move_question(/*next*/ false);
-                return;
-            }
-            _ if self.has_options()
-                && matches!(self.focus, Focus::Options)
-                && self.list_keymap.action_for(key_event) == Some(ListAction::MoveLeft) =>
-            {
-                self.move_question(/*next*/ false);
-                return;
-            }
-            KeyEvent {
-                code: KeyCode::Char('l'),
-                modifiers: KeyModifiers::NONE,
-                ..
-            }
-            | KeyEvent {
-                code: KeyCode::Right,
-                modifiers: KeyModifiers::NONE,
-                ..
-            } if self.has_options() && matches!(self.focus, Focus::Options) => {
-                self.move_question(/*next*/ true);
-                return;
-            }
-            _ if self.has_options()
-                && matches!(self.focus, Focus::Options)
-                && self.list_keymap.action_for(key_event) == Some(ListAction::MoveRight) =>
-            {
-                self.move_question(/*next*/ true);
-                return;
-            }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             _ => {}
         }
 
-<<<<<<< HEAD
         let notes_empty = self.composer.current_text_with_pending().trim().is_empty();
         if self.has_options() && matches!(key_event.code, KeyCode::Tab) {
             self.clear_notes_and_focus_options();
@@ -1707,131 +1635,6 @@ impl BottomPaneView for RequestUserInputOverlay {
             self.save_current_draft();
             if let Some(answer) = self.current_answer_mut() {
                 answer.notes_visible = false;
-||||||| 413492cd6c
-        match self.focus {
-            Focus::Options => {
-                let options_len = self.options_len();
-                // Keep selection synchronized as the user moves.
-                match key_event.code {
-                    KeyCode::Up | KeyCode::Char('k') => {
-                        let moved = if let Some(answer) = self.current_answer_mut() {
-                            answer.options_state.move_up_wrap(options_len);
-                            answer.answer_committed = false;
-                            true
-                        } else {
-                            false
-                        };
-                        if moved {
-                            self.sync_composer_placeholder();
-                        }
-                    }
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        let moved = if let Some(answer) = self.current_answer_mut() {
-                            answer.options_state.move_down_wrap(options_len);
-                            answer.answer_committed = false;
-                            true
-                        } else {
-                            false
-                        };
-                        if moved {
-                            self.sync_composer_placeholder();
-                        }
-                    }
-                    KeyCode::Char(' ') => {
-                        self.select_current_option(/*committed*/ true);
-                    }
-                    KeyCode::Backspace | KeyCode::Delete => {
-                        self.clear_selection();
-                    }
-                    KeyCode::Tab if self.selected_option_index().is_some() => {
-                        self.focus = Focus::Notes;
-                        self.ensure_selected_for_notes();
-                    }
-                    KeyCode::Enter => {
-                        let has_selection = self.selected_option_index().is_some();
-                        if has_selection {
-                            self.select_current_option(/*committed*/ true);
-                        }
-                        self.go_next_or_submit();
-                    }
-                    KeyCode::Char(ch) => {
-                        if let Some(option_idx) = self.option_index_for_digit(ch) {
-                            if let Some(answer) = self.current_answer_mut() {
-                                answer.options_state.selected_idx = Some(option_idx);
-                            }
-                            self.select_current_option(/*committed*/ true);
-                            self.go_next_or_submit();
-                        }
-                    }
-                    _ => {}
-                }
-=======
-        match self.focus {
-            Focus::Options => {
-                let options_len = self.options_len();
-                // Keep selection synchronized as the user moves.
-                match (self.list_keymap.action_for(key_event), key_event.code) {
-                    (Some(ListAction::MoveUp), _) | (_, KeyCode::Up | KeyCode::Char('k')) => {
-                        let moved = if let Some(answer) = self.current_answer_mut() {
-                            answer.options_state.move_up_wrap(options_len);
-                            answer.answer_committed = false;
-                            true
-                        } else {
-                            false
-                        };
-                        if moved {
-                            self.sync_composer_placeholder();
-                        }
-                    }
-                    (Some(ListAction::MoveDown), _) | (_, KeyCode::Down | KeyCode::Char('j')) => {
-                        let moved = if let Some(answer) = self.current_answer_mut() {
-                            answer.options_state.move_down_wrap(options_len);
-                            answer.answer_committed = false;
-                            true
-                        } else {
-                            false
-                        };
-                        if moved {
-                            self.sync_composer_placeholder();
-                        }
-                    }
-                    (_, KeyCode::Char(' ')) => {
-                        self.select_current_option(/*committed*/ true);
-                    }
-                    (_, KeyCode::Backspace | KeyCode::Delete) => {
-                        self.clear_selection();
-                    }
-                    (_, KeyCode::Tab) | (Some(ListAction::Accept), _) | (_, KeyCode::Enter)
-                        if self.selected_option_index().is_some()
-                            && (key_event.code == KeyCode::Tab
-                                || self.current_question().is_some_and(|question| {
-                                    Self::other_option_enabled_for_question(question)
-                                        && self.selected_option_index()
-                                            == question.options.as_ref().map(Vec::len)
-                                })) =>
-                    {
-                        self.focus = Focus::Notes;
-                        self.ensure_selected_for_notes();
-                    }
-                    (Some(ListAction::Accept), _) | (_, KeyCode::Enter) => {
-                        let has_selection = self.selected_option_index().is_some();
-                        if has_selection {
-                            self.select_current_option(/*committed*/ true);
-                        }
-                        self.go_next_or_submit();
-                    }
-                    (_, KeyCode::Char(ch)) => {
-                        if let Some(option_idx) = self.option_index_for_digit(ch) {
-                            if let Some(answer) = self.current_answer_mut() {
-                                answer.options_state.selected_idx = Some(option_idx);
-                            }
-                            self.select_current_option(/*committed*/ true);
-                            self.go_next_or_submit();
-                        }
-                    }
-                    _ => {}
-                }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
             self.focus = Focus::Options;
             self.sync_composer_placeholder();

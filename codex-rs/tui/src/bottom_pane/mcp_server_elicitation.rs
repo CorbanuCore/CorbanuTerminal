@@ -55,17 +55,11 @@ use crate::bottom_pane::selection_popup_common::menu_surface_inset;
 use crate::bottom_pane::selection_popup_common::menu_surface_padding_height;
 use crate::bottom_pane::selection_popup_common::render_menu_surface;
 use crate::bottom_pane::selection_popup_common::render_rows;
-<<<<<<< HEAD
-use crate::key_hint;
-use crate::key_hint::KeyBindingListExt;
-||||||| 413492cd6c
-use crate::key_hint::KeyBindingListExt;
-=======
 use crate::footer_hint::shortcut;
+use crate::key_hint;
 use crate::key_hint::ShortcutHint;
 use crate::keymap::KeymapContext;
 use crate::keymap::ListAction;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::keymap::ListKeymap;
 use crate::keymap::RuntimeKeymap;
 use crate::render::renderable::Renderable;
@@ -726,7 +720,6 @@ pub(crate) struct McpServerElicitationOverlay {
     done: bool,
     validation_error: Option<String>,
     list_keymap: ListKeymap,
-<<<<<<< HEAD
     /// #192: keeps typed text from answering an approval, as in the main
     /// approval prompt. A number key only highlights its option and Enter
     /// confirms it. Used only for approvals.
@@ -734,10 +727,7 @@ pub(crate) struct McpServerElicitationOverlay {
     /// #787: counts the requests shown here (see
     /// [`BottomPaneView::shown_request_generation`]).
     shown_generation: u64,
-||||||| 413492cd6c
-=======
     composer_submit_hint: Option<ShortcutHint>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl McpServerElicitationOverlay {
@@ -787,16 +777,10 @@ impl McpServerElicitationOverlay {
             current_idx: 0,
             done: false,
             validation_error: None,
-<<<<<<< HEAD
-            list_keymap,
+            list_keymap: keymap.list,
             typing_guard: TypingGuard::default(),
             shown_generation: next_shown_request_generation(),
-||||||| 413492cd6c
-            list_keymap,
-=======
-            list_keymap: keymap.list,
             composer_submit_hint,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
         overlay.reset_for_request();
         overlay.restore_current_draft();
@@ -1056,16 +1040,10 @@ impl McpServerElicitationOverlay {
                 ));
             }
         }
-<<<<<<< HEAD
         if self.has_persistent_options() {
-            tips.push(FooterTip::new(PERSISTENT_OPTIONS_TIP));
+            tips.push(Line::from(PERSISTENT_OPTIONS_TIP));
         }
-        tips.push(FooterTip::new("esc to cancel"));
-||||||| 413492cd6c
-        tips.push(FooterTip::new("esc to cancel"));
-=======
         tips.push(shortcut("esc", "to cancel"));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         tips
     }
 
@@ -1081,7 +1059,9 @@ impl McpServerElicitationOverlay {
             ));
         }
         if let Some(notice) = self.approval_notice() {
-            tips.push(FooterTip::highlighted(notice));
+            tips.push(Line::from(
+                notice.fg(crate::style::accent_color()).bold().not_dim(),
+            ));
         }
         tips.extend(self.footer_tips());
         wrap_footer_tips(width, tips)
@@ -1746,11 +1726,10 @@ impl Renderable for McpServerElicitationOverlay {
 }
 
 impl BottomPaneView for McpServerElicitationOverlay {
-<<<<<<< HEAD
     fn answers_request(&self) -> bool {
         true
-||||||| 413492cd6c
-=======
+    }
+
     fn next_frame_delay(&self) -> Option<std::time::Duration> {
         self.composer.footer_flash_delay()
     }
@@ -1761,7 +1740,6 @@ impl BottomPaneView for McpServerElicitationOverlay {
         } else {
             self.composer.keymap_contexts()
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn prefer_esc_to_handle_key_event(&self) -> bool {
@@ -1918,41 +1896,27 @@ impl BottomPaneView for McpServerElicitationOverlay {
         if self.current_field_is_select() {
             self.validation_error = None;
             let options_len = self.options_len();
-<<<<<<< HEAD
             let plain = !key_hint::has_ctrl_or_alt(key_event.modifiers);
-            match key_event.code {
-                KeyCode::Up => {
-||||||| 413492cd6c
-            match key_event.code {
-                KeyCode::Up | KeyCode::Char('k') => {
-=======
             match (self.list_keymap.action_for(key_event), key_event.code) {
-                (Some(ListAction::MoveUp), _) | (_, KeyCode::Up | KeyCode::Char('k')) => {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                (Some(ListAction::MoveUp), _) | (_, KeyCode::Up) => {
                     if let Some(answer) = self.current_answer_mut() {
                         answer.selection.move_up_wrap(options_len);
                         answer.answer_committed = false;
                     }
                 }
-<<<<<<< HEAD
-                KeyCode::Char('k') if plain => {
+                (_, KeyCode::Char('k')) if plain => {
                     if let Some(answer) = self.current_answer_mut() {
                         answer.selection.move_up_wrap(options_len);
                         answer.answer_committed = false;
                     }
                 }
-                KeyCode::Down => {
+                (Some(ListAction::MoveDown), _) | (_, KeyCode::Down) => {
                     if let Some(answer) = self.current_answer_mut() {
                         answer.selection.move_down_wrap(options_len);
                         answer.answer_committed = false;
                     }
                 }
-                KeyCode::Char('j') if plain => {
-||||||| 413492cd6c
-                KeyCode::Down | KeyCode::Char('j') => {
-=======
-                (Some(ListAction::MoveDown), _) | (_, KeyCode::Down | KeyCode::Char('j')) => {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                (_, KeyCode::Char('j')) if plain => {
                     if let Some(answer) = self.current_answer_mut() {
                         answer.selection.move_down_wrap(options_len);
                         answer.answer_committed = false;
@@ -1966,14 +1930,8 @@ impl BottomPaneView for McpServerElicitationOverlay {
                     }
                     self.go_next_or_submit();
                 }
-<<<<<<< HEAD
                 // #192: a number key chooses its option; Enter submits.
-                KeyCode::Char(ch) if plain => {
-||||||| 413492cd6c
-                KeyCode::Char(ch) => {
-=======
-                (_, KeyCode::Char(ch)) => {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                (_, KeyCode::Char(ch)) if plain => {
                     if let Some(option_idx) = self.option_index_for_digit(ch) {
                         self.highlight_option(option_idx);
                         self.select_current_option(/*committed*/ true);
