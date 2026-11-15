@@ -19,7 +19,7 @@ fn agent_ops(manager: &ThreadManager, agent_id: ThreadId) -> Vec<Op> {
 fn deliveries_of(ops: &[Op], message_id: &str) -> usize {
     ops.iter()
         .filter(|op| {
-            matches!(op, Op::InterAgentCommunication { communication }
+            matches!(op, Op::InterAgentCommunication { communication, .. }
                 if communication.message_id.as_deref() == Some(message_id))
         })
         .count()
@@ -80,7 +80,7 @@ async fn spawn_unload_and_reload(interrupt: bool) -> Outcome {
     let first_id = agent_ops(&manager, agent_id)
         .iter()
         .find_map(|op| match op {
-            Op::InterAgentCommunication { communication } if communication.trigger_turn => {
+            Op::InterAgentCommunication { communication, .. } if communication.trigger_turn => {
                 communication.message_id.clone()
             }
             _ => None,

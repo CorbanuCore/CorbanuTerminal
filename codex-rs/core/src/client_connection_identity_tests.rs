@@ -254,7 +254,7 @@ async fn api_only_rotation_reconnects_a_prewarmed_socket_and_keeps_same_key_reus
     assert!(
         session
             .client
-            .current_client_setup()
+            .current_client_setup(crate::client::ClientRouting::Workspace)
             .await
             .expect("setup")
             .auth
@@ -356,7 +356,11 @@ async fn configured_header_rotation_reconnects_prewarmed_socket_and_keeps_same_v
             /*parent_thread_id*/ None,
             TestCodexResponsesRequestKind::WebsocketConnection,
         );
-        let setup = session.client.current_client_setup().await.expect("setup");
+        let setup = session
+            .client
+            .current_client_setup(crate::client::ClientRouting::Workspace)
+            .await
+            .expect("setup");
         assert!(setup.auth.is_none());
         assert!(setup.api_auth.to_auth_headers().is_empty());
         assert_eq!(
@@ -514,7 +518,11 @@ async fn issue_1504_external_header_sign_in_rotation_reconnects_the_prewarmed_so
     let mut session = client_signed_in_as("Bearer synthetic-old-user").new_session();
     let telemetry = test_session_telemetry();
     let model = test_model_info();
-    let setup = session.client.current_client_setup().await.expect("setup");
+    let setup = session
+        .client
+        .current_client_setup(crate::client::ClientRouting::Workspace)
+        .await
+        .expect("setup");
     assert!(matches!(setup.auth, Some(CodexAuth::Headers(_))));
     assert_eq!(
         setup.api_auth.to_auth_headers().get("authorization"),
@@ -674,7 +682,11 @@ async fn issue_1343_header_sign_in_rotation_reconnects_the_prewarmed_socket() {
     let mut session = client_with_header("synthetic-old-key").new_session();
     let telemetry = test_session_telemetry();
     let model = test_model_info();
-    let setup = session.client.current_client_setup().await.expect("setup");
+    let setup = session
+        .client
+        .current_client_setup(crate::client::ClientRouting::Workspace)
+        .await
+        .expect("setup");
     assert!(setup.auth.is_none());
     assert!(setup.api_auth.to_auth_headers().is_empty());
     let metadata = test_responses_metadata_for_client(

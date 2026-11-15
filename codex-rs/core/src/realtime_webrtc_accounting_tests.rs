@@ -362,7 +362,7 @@ async fn pf_889_webrtc_cancel_pending_sideband_preserves_creation_attempt() -> a
 async fn bound_ends(db: &codex_state::StateRuntime) -> anyhow::Result<Vec<(String, Value)>> {
     let pool = db
         .sqlite()
-        .open_read_only_pool(&db.sqlite().state_db_path())
+        .open_read_only_pool(&db.sqlite().state_db_path(), /*busy_timeout*/ None)
         .await?;
     let rows: Vec<(String, String)> = sqlx::query_as(
         "SELECT attempt_id, payload FROM draft_accounting_observations ORDER BY rowid",

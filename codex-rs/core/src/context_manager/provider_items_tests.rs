@@ -70,6 +70,7 @@ fn anthropic_web_search(producer: Option<&str>) -> ResponseItem {
     from(
         producer,
         ResponseItem::WebSearchCall {
+            encrypted_content: None,
             id: id("srvtoolu_1"),
             status: Some("completed".into()),
             action: None,
@@ -83,9 +84,13 @@ fn assistant(producer: Option<&str>) -> ResponseItem {
     from(
         producer,
         ResponseItem::Message {
+            encrypted_content: None,
+            status: None,
             id: id("msg_chatcmpl-1"),
             role: "assistant".into(),
             content: vec![ContentItem::OutputText {
+                annotations: None,
+                logprobs: None,
                 text: "answer".into(),
             }],
             phase: None,
@@ -98,6 +103,8 @@ fn call(producer: Option<&str>) -> ResponseItem {
     from(
         producer,
         ResponseItem::FunctionCall {
+            encrypted_content: None,
+            status: None,
             id: id("fc_call_-1"),
             name: "shell".into(),
             namespace: None,
