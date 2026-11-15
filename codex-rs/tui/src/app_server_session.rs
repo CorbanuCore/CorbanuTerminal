@@ -477,6 +477,17 @@ pub(crate) enum PermissionConfirmationResult {
     Uncertain(String),
 }
 
+/// How a `thread/settings/update` request was answered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ThreadSettingsUpdateReply {
+    /// Core applied it before replying (`Confirmed { Applied }`).
+    Applied,
+    /// Accepted for core to apply later, or the confirmed outcome is uncertain.
+    Accepted,
+    /// The server does not support the method.
+    Unsupported,
+}
+
 /// PF-84: only `Confirmed { Applied }` says core applied the update before
 /// replying; `Uncertain` (deadline passed, listener lost) and `Accepted` (a
 /// server that ignores `confirm`) do not.
@@ -2215,16 +2226,25 @@ impl AppServerSession {
             .wrap_err("thread/metadata/update failed while syncing git branch")
     }
 
-    /// Returns whether core applied the update before replying (a
-    /// `confirm` request answered `Confirmed { Applied }`); `false` when it
-    /// was only accepted, the outcome is uncertain, or the server does not
-    /// support the method.
+    /// Upstream's contract: `true` when a server that supports the method accepted the update,
+    /// `false` when the method is unsupported.
     pub(crate) async fn thread_settings_update(
         &mut self,
         params: ThreadSettingsUpdateParams,
     ) -> Result<bool> {
+        let reply = self.thread_settings_update_reply(params).await?;
+        Ok(reply != ThreadSettingsUpdateReply::Unsupported)
+    }
+
+    /// Corbanu (PF-84, #2062): whether core applied the update before replying (a `confirm`
+    /// request answered `Confirmed { Applied }`), only accepted it (unconfirmed or uncertain), or
+    /// the server does not support the method.
+    pub(crate) async fn thread_settings_update_reply(
+        &mut self,
+        params: ThreadSettingsUpdateParams,
+    ) -> Result<ThreadSettingsUpdateReply> {
         if !self.thread_settings_update_supported {
-            return Ok(false);
+            return Ok(ThreadSettingsUpdateReply::Unsupported);
         }
         let request_id = self.next_request_id();
         match self
@@ -2235,13 +2255,10 @@ impl AppServerSession {
             })
             .await
         {
-<<<<<<< HEAD
-            Ok(response) => Ok(applied_before_reply(&response)),
-||||||| 413492cd6c
-            Ok(_) => Ok(()),
-=======
-            Ok(_) => Ok(true),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            Ok(response) if applied_before_reply(&response) => {
+                Ok(ThreadSettingsUpdateReply::Applied)
+            }
+            Ok(_) => Ok(ThreadSettingsUpdateReply::Accepted),
             Err(TypedRequestError::Server { source, .. })
                 if is_thread_settings_update_unsupported(&source) =>
             {
@@ -2251,7 +2268,7 @@ impl AppServerSession {
                 // downgrade so local TUI setting changes stay best-effort instead
                 // of showing an error every time the user changes model, effort, or mode.
                 self.thread_settings_update_supported = false;
-                Ok(false)
+                Ok(ThreadSettingsUpdateReply::Unsupported)
             }
             Err(err) => Err(err).wrap_err("thread/settings/update failed in TUI"),
         }

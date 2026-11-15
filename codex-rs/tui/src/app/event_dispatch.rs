@@ -3283,7 +3283,9 @@ impl App {
                                 Some(SWITCH_LIST_NOT_REFRESHED.to_string())
                             }
                         }
-                        SettingsUpdateOutcome::Accepted => Some(SWITCH_NOT_CONFIRMED.to_string()),
+                        SettingsUpdateOutcome::Accepted | SettingsUpdateOutcome::Unsupported => {
+                            Some(SWITCH_NOT_CONFIRMED.to_string())
+                        }
                         // A failure already says so; nothing was sent otherwise.
                         SettingsUpdateOutcome::Failed | SettingsUpdateOutcome::NotSent => None,
                     };
@@ -5585,6 +5587,8 @@ impl App {
                                 self.chat_widget
                                     .add_to_history(history_cell::new_warning_event(message));
                             }
+                            // #2000/#2062: the session switches to the set-up sandbox, confirmed.
+                            self.refresh_session_windows_sandbox(app_server).await;
                     } else if self
                         .chat_widget
                         .recover_inline_permission_profile_selection()
