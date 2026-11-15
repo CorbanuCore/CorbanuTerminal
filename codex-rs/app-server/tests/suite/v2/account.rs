@@ -715,14 +715,21 @@ async fn external_auth_refreshes_on_unauthorized(model_path: &str) -> Result<()>
     create_config_toml(
         codex_home.path(),
         CreateConfigTomlParams {
-            model_provider_id: Some("routing".into()),
-            extra_provider_config: Some(format!(
-                "[model_providers.routing]\nname = \"OpenAI\"\nrequires_openai_auth = true\nbase_url = \"{}{model_path}\"\nrequest_max_retries = 0\nstream_max_retries = 0\n",
-                mock_server.uri(),
-            )),
+            model_provider_id: Some("openai".into()),
             chatgpt_base_url: Some(format!("{}/backend-api", backend.uri())),
             ..Default::default()
         },
+    )?;
+    // Corbanu refuses a custom provider named "OpenAI", so this uses the
+    // built-in OpenAI provider pointed at the mock.
+    let config_path = codex_home.path().join("config.toml");
+    std::fs::write(
+        &config_path,
+        format!(
+            "openai_base_url = \"{}{model_path}\"\n{}",
+            mock_server.uri(),
+            std::fs::read_to_string(&config_path)?
+        ),
     )?;
     write_models_cache(codex_home.path()).await?;
 
