@@ -36,10 +36,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?),
         ..NetworkProxyConfig::default()
     };
-    let policy =
-        NetworkProxyState::from_remote_launch_config(RemoteNetworkProxyLaunchConfig::new(
-            RemoteNetworkProxyConfig::from_effective_config(&config)?,
-        ))?;
+    let policy = NetworkProxyState::from_remote_launch_config(
+        RemoteNetworkProxyLaunchConfig::new(RemoteNetworkProxyConfig::from_effective_config(
+            &config,
+        )?),
+        codex_network_proxy::Platform::native(),
+        &codex_network_proxy::RemoteCredentialBrokerCache::default(),
+        &std::collections::HashMap::new(),
+    )?;
     if runtime.health(&authority, &cancel).await != (SecurityControlHealth::Enforcing {}) {
         return Err(BrowserError::HealthCheckFailed.into());
     }
