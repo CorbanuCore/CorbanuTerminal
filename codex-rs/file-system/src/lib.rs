@@ -5,7 +5,7 @@ mod glob_scan;
 mod local_logs;
 mod nfs;
 
-/// The chunk type of [`EnvironmentAccess::write_file_stream`], for implementors outside this crate.
+/// The chunk type of [`EnvironmentAccess::write_file_stream`], for implementers outside this crate.
 pub use bytes::Bytes;
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::config_types::WindowsSandboxProxySettingsMode;
