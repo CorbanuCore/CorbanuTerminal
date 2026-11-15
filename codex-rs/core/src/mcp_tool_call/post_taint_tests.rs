@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 fn metadata() -> McpToolApprovalMetadata {
     McpToolApprovalMetadata {
+        mcp_app_ui: None,
         annotations: None,
         connector_id: None,
         link_id: None,

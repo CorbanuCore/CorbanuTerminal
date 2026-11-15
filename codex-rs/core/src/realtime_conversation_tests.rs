@@ -6,14 +6,10 @@ use super::RealtimeOutbound;
 use super::RealtimePendingOutbound;
 use super::RealtimeSessionKind;
 use super::RealtimeStreamedItem;
-<<<<<<< HEAD
-use super::realtime_api_key;
-||||||| 413492cd6c
-=======
 use super::classify_realtime_input_error;
 use super::classify_realtime_input_error_with_pending;
 use super::prepare_realtime_start;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use super::realtime_api_key;
 use super::realtime_delegation_from_handoff;
 use super::realtime_request_headers;
 use super::realtime_text_from_handoff_request;
@@ -40,184 +36,6 @@ use std::time::Instant;
 use test_case::test_case;
 use tokio::sync::Mutex;
 
-<<<<<<< HEAD
-#[path = "realtime_webrtc_accounting_tests.rs"]
-mod webrtc_accounting;
-
-fn pf_30_realtime_start(
-    model_client: crate::client::ModelClient,
-    base_url: String,
-    sdp: Option<String>,
-) -> super::RealtimeStart {
-    let mut api_provider = model_client
-        .provider_info()
-        .to_api_provider(/*auth_mode*/ None)
-        .unwrap();
-    api_provider.base_url = base_url;
-    super::RealtimeStart {
-        accounting: None,
-        websocket_credential: super::RealtimeRecordKey::None,
-        api_provider,
-        realtime_sideband_base_url: None,
-        extra_headers: None,
-        client_managed_handoffs: false,
-        flush_transcript_tail_on_session_end: true,
-        codex_responses_as_items: false,
-        codex_response_item_prefix: None,
-        codex_response_handoff_mode: CodexResponseHandoffMode::default(),
-        codex_response_handoff_channel_prefixes: None,
-        realtime_call_api_provider: None,
-        session_config: codex_api::RealtimeSessionConfig {
-            instructions: "unadmitted-initial-instructions".into(),
-            initial_items: Vec::new(),
-            model: None,
-            session_id: None,
-            event_parser: RealtimeEventParser::V1,
-            session_mode: codex_api::RealtimeSessionMode::Conversational,
-            output_modality: codex_protocol::protocol::RealtimeOutputModality::Audio,
-            voice: codex_protocol::protocol::RealtimeVoice::Alloy,
-        },
-        model_client,
-        sdp,
-    }
-}
-
-#[tokio::test]
-async fn pf_30_s01_realtime_transports_deny_protected_start_before_network() {
-    use codex_security_policy::SecurityLevel;
-    let (session, _) = crate::session::tests::make_session_and_context().await;
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base_url = format!("http://{}", listener.local_addr().unwrap());
-    for level in [SecurityLevel::Moderate, SecurityLevel::Aggressive] {
-        for sdp in [None, Some("unadmitted-sdp".into())] {
-            let model_client = session
-                .services
-                .model_client()
-                .as_ref()
-                .clone()
-                .with_ingress_level(level);
-            let manager = super::RealtimeConversationManager::new();
-            let result = manager
-                .start(pf_30_realtime_start(model_client, base_url.clone(), sdp))
-                .await;
-            let error = result.err().expect("protected realtime must fail closed");
-            assert!(error.to_string().contains("source admission"), "{error}");
-            assert!(manager.running_state().await.is_none());
-        }
-    }
-    assert!(
-        tokio::time::timeout(std::time::Duration::from_millis(100), listener.accept())
-            .await
-            .is_err()
-    );
-}
-
-#[tokio::test]
-async fn pf_30_s01_realtime_live_strengthening_stops_next_frame() {
-    use crate::security::EffectivePolicyInitialization;
-    use crate::security::EffectivePolicyView;
-    use crate::security::PersistedHumanSecurityState;
-    use crate::security::TrustedSecurityController;
-    use codex_protocol::protocol::ConversationTextParams;
-    use codex_protocol::protocol::ConversationTextRole;
-    use codex_security_policy::PolicyPrincipal;
-    use codex_security_policy::PrincipalKind;
-    use codex_security_policy::RevocationState;
-    use codex_security_policy::SecurityLevel;
-    use codex_security_policy::SecuritySettings;
-    use futures::StreamExt;
-    use std::time::Duration;
-
-    let (session, _) = crate::session::tests::make_session_and_context().await;
-    let view = EffectivePolicyView::default();
-    let controller = TrustedSecurityController::initialize(
-        &view,
-        PersistedHumanSecurityState::new(
-            SecuritySettings::new(SecurityLevel::Permissive),
-            PolicyPrincipal::new(PrincipalKind::Human, "fixture-human").unwrap(),
-            RevocationState::new(),
-        )
-        .unwrap(),
-        session.thread_id,
-        codex_protocol::SessionId::from(session.thread_id),
-        EffectivePolicyInitialization::Root,
-    )
-    .unwrap();
-    let model_client = session
-        .services
-        .model_client()
-        .as_ref()
-        .clone()
-        .with_ingress_policy(SecurityLevel::Permissive, view);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base_url = format!("http://{}", listener.local_addr().unwrap());
-    let (frames_tx, frames_rx) = async_channel::unbounded();
-    let server = tokio::spawn(async move {
-        let (socket, _) = listener.accept().await.unwrap();
-        let mut websocket = tokio_tungstenite::accept_async(socket).await.unwrap();
-        while let Some(Ok(message)) = websocket.next().await {
-            if let tokio_tungstenite::tungstenite::Message::Text(text) = message {
-                frames_tx.send(text.to_string()).await.unwrap();
-            }
-        }
-    });
-    let manager = super::RealtimeConversationManager::new();
-    let output = manager
-        .start(pf_30_realtime_start(
-            model_client,
-            base_url,
-            /*sdp*/ None,
-        ))
-        .await
-        .unwrap();
-    let initial = tokio::time::timeout(Duration::from_secs(5), frames_rx.recv())
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(initial.contains("unadmitted-initial-instructions"));
-    manager
-        .text_in(ConversationTextParams {
-            text: "permissive-text".into(),
-            role: ConversationTextRole::User,
-        })
-        .await
-        .unwrap();
-    let text = tokio::time::timeout(Duration::from_secs(5), frames_rx.recv())
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(text.contains("permissive-text"));
-    controller
-        .apply_confirmed_change(
-            controller
-                .confirm_level_change(SecurityLevel::Moderate, RevocationState::new())
-                .unwrap(),
-        )
-        .unwrap();
-    manager
-        .text_in(ConversationTextParams {
-            text: "protected-canary".into(),
-            role: ConversationTextRole::User,
-        })
-        .await
-        .unwrap();
-    let event = tokio::time::timeout(Duration::from_secs(5), output.events_rx.recv())
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(
-        matches!(event, codex_api::RealtimeEvent::Error(error) if error.contains("source admission"))
-    );
-    // Await task completion before checking the recording, so absence is not a
-    // race with the sender. No transcript tail may re-enter Core after denial.
-    manager.shutdown().await.unwrap();
-    while let Ok(frame) = frames_rx.try_recv() {
-        assert!(!frame.contains("protected-canary"));
-    }
-    assert!(output.transcript_tail_rx.try_recv().is_err());
-    server.abort();
-||||||| 413492cd6c
-=======
 #[tokio::test]
 async fn prepared_realtime_routing_follows_selected_api_key_and_explicit_overrides() {
     for (api_key, base_url, realtime_base_url, expected_url, expected_fedramp_header) in [
@@ -430,7 +248,183 @@ async fn natural_close_finishes_before_successor_and_ignores_old_identity() {
         Some("B")
     );
     sess.conversation.shutdown().await.unwrap();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+}
+
+#[path = "realtime_webrtc_accounting_tests.rs"]
+mod webrtc_accounting;
+
+fn pf_30_realtime_start(
+    model_client: crate::client::ModelClient,
+    base_url: String,
+    sdp: Option<String>,
+) -> super::RealtimeStart {
+    let mut api_provider = model_client
+        .provider_info()
+        .to_api_provider(/*auth_mode*/ None)
+        .unwrap();
+    api_provider.base_url = base_url;
+    super::RealtimeStart {
+        accounting: None,
+        websocket_credential: super::RealtimeRecordKey::None,
+        api_provider,
+        realtime_sideband_base_url: None,
+        extra_headers: None,
+        client_managed_handoffs: false,
+        flush_transcript_tail_on_session_end: true,
+        codex_responses_as_items: false,
+        codex_response_item_prefix: None,
+        codex_response_handoff_mode: CodexResponseHandoffMode::default(),
+        codex_response_handoff_channel_prefixes: None,
+        realtime_call_api_provider: None,
+        session_config: codex_api::RealtimeSessionConfig {
+            instructions: "unadmitted-initial-instructions".into(),
+            initial_items: Vec::new(),
+            model: None,
+            session_id: None,
+            event_parser: RealtimeEventParser::V1,
+            session_mode: codex_api::RealtimeSessionMode::Conversational,
+            output_modality: codex_protocol::protocol::RealtimeOutputModality::Audio,
+            voice: codex_protocol::protocol::RealtimeVoice::Alloy,
+        },
+        model_client,
+        sdp,
+    }
+}
+
+#[tokio::test]
+async fn pf_30_s01_realtime_transports_deny_protected_start_before_network() {
+    use codex_security_policy::SecurityLevel;
+    let (session, _) = crate::session::tests::make_session_and_context().await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    for level in [SecurityLevel::Moderate, SecurityLevel::Aggressive] {
+        for sdp in [None, Some("unadmitted-sdp".into())] {
+            let model_client = session
+                .services
+                .model_client()
+                .as_ref()
+                .clone()
+                .with_ingress_level(level);
+            let manager = super::RealtimeConversationManager::new();
+            let result = manager
+                .start(pf_30_realtime_start(model_client, base_url.clone(), sdp))
+                .await;
+            let error = result.err().expect("protected realtime must fail closed");
+            assert!(error.to_string().contains("source admission"), "{error}");
+            assert!(manager.running_state().await.is_none());
+        }
+    }
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(100), listener.accept())
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn pf_30_s01_realtime_live_strengthening_stops_next_frame() {
+    use crate::security::EffectivePolicyInitialization;
+    use crate::security::EffectivePolicyView;
+    use crate::security::PersistedHumanSecurityState;
+    use crate::security::TrustedSecurityController;
+    use codex_protocol::protocol::ConversationTextParams;
+    use codex_protocol::protocol::ConversationTextRole;
+    use codex_security_policy::PolicyPrincipal;
+    use codex_security_policy::PrincipalKind;
+    use codex_security_policy::RevocationState;
+    use codex_security_policy::SecurityLevel;
+    use codex_security_policy::SecuritySettings;
+    use futures::StreamExt;
+    use std::time::Duration;
+
+    let (session, _) = crate::session::tests::make_session_and_context().await;
+    let view = EffectivePolicyView::default();
+    let controller = TrustedSecurityController::initialize(
+        &view,
+        PersistedHumanSecurityState::new(
+            SecuritySettings::new(SecurityLevel::Permissive),
+            PolicyPrincipal::new(PrincipalKind::Human, "fixture-human").unwrap(),
+            RevocationState::new(),
+        )
+        .unwrap(),
+        session.thread_id,
+        codex_protocol::SessionId::from(session.thread_id),
+        EffectivePolicyInitialization::Root,
+    )
+    .unwrap();
+    let model_client = session
+        .services
+        .model_client()
+        .as_ref()
+        .clone()
+        .with_ingress_policy(SecurityLevel::Permissive, view);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let (frames_tx, frames_rx) = async_channel::unbounded();
+    let server = tokio::spawn(async move {
+        let (socket, _) = listener.accept().await.unwrap();
+        let mut websocket = tokio_tungstenite::accept_async(socket).await.unwrap();
+        while let Some(Ok(message)) = websocket.next().await {
+            if let tokio_tungstenite::tungstenite::Message::Text(text) = message {
+                frames_tx.send(text.to_string()).await.unwrap();
+            }
+        }
+    });
+    let manager = super::RealtimeConversationManager::new();
+    let output = manager
+        .start(pf_30_realtime_start(
+            model_client,
+            base_url,
+            /*sdp*/ None,
+        ))
+        .await
+        .unwrap();
+    let initial = tokio::time::timeout(Duration::from_secs(5), frames_rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(initial.contains("unadmitted-initial-instructions"));
+    manager
+        .text_in(ConversationTextParams {
+            text: "permissive-text".into(),
+            role: ConversationTextRole::User,
+        })
+        .await
+        .unwrap();
+    let text = tokio::time::timeout(Duration::from_secs(5), frames_rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(text.contains("permissive-text"));
+    controller
+        .apply_confirmed_change(
+            controller
+                .confirm_level_change(SecurityLevel::Moderate, RevocationState::new())
+                .unwrap(),
+        )
+        .unwrap();
+    manager
+        .text_in(ConversationTextParams {
+            text: "protected-canary".into(),
+            role: ConversationTextRole::User,
+        })
+        .await
+        .unwrap();
+    let event = tokio::time::timeout(Duration::from_secs(5), output.events_rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(event, codex_api::RealtimeEvent::Error(error) if error.contains("source admission"))
+    );
+    // Await task completion before checking the recording, so absence is not a
+    // race with the sender. No transcript tail may re-enter Core after denial.
+    manager.shutdown().await.unwrap();
+    while let Ok(frame) = frames_rx.try_recv() {
+        assert!(!frame.contains("protected-canary"));
+    }
+    assert!(output.transcript_tail_rx.try_recv().is_err());
+    server.abort();
 }
 
 #[test]
@@ -781,7 +775,33 @@ fn realtime_headers_include_only_non_default_originator() {
     }
 }
 
-<<<<<<< HEAD
+#[test]
+fn realtime_headers_keep_realtime_and_voice_session_ids_distinct() {
+    let headers = realtime_request_headers(
+        Some("realtime_session_1"),
+        Some("voice_session_1"),
+        /*api_key*/ None,
+        RealtimeEventParser::RealtimeV2,
+        "codex_work_desktop",
+    )
+    .expect("headers")
+    .expect("headers");
+
+    assert!(!headers.contains_key(http::header::AUTHORIZATION));
+    assert!(!headers.contains_key("X-OpenAI-Fedramp"));
+    assert_eq!(
+        headers
+            .get("x-session-id")
+            .and_then(|value| value.to_str().ok()),
+        Some("realtime_session_1")
+    );
+    assert_eq!(
+        headers
+            .get("voice-session-id")
+            .and_then(|value| value.to_str().ok()),
+        Some("voice_session_1")
+    );
+}
 /// A realtime call is a model request the operator paid for, and it recorded
 /// nothing. The realtime protocol this client parses carries no usage anywhere,
 /// so the call is recorded with its tokens unknown - which is what the provider
@@ -886,7 +906,7 @@ async fn pf_60_s03_realtime_call_is_recorded() -> anyhow::Result<()> {
 
     let pool = db
         .sqlite()
-        .open_read_only_pool(&db.sqlite().state_db_path())
+        .open_read_only_pool(&db.sqlite().state_db_path(), /*busy_timeout*/ None)
         .await?;
     let rows: Vec<String> =
         sqlx::query_scalar("SELECT payload FROM draft_accounting_attempts ORDER BY rowid")
@@ -1200,7 +1220,7 @@ async fn realtime_ledger(
 ) -> anyhow::Result<(Vec<serde_json::Value>, Vec<serde_json::Value>)> {
     let pool = db
         .sqlite()
-        .open_read_only_pool(&db.sqlite().state_db_path())
+        .open_read_only_pool(&db.sqlite().state_db_path(), /*busy_timeout*/ None)
         .await?;
     let read = |sql: &'static str| {
         let pool = pool.clone();
@@ -1223,7 +1243,7 @@ async fn realtime_ledger(
 async fn realtime_ledger_exists(db: &codex_state::StateRuntime) -> anyhow::Result<bool> {
     let pool = db
         .sqlite()
-        .open_read_only_pool(&db.sqlite().state_db_path())
+        .open_read_only_pool(&db.sqlite().state_db_path(), /*busy_timeout*/ None)
         .await?;
     let exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name = 'draft_accounting_attempts')",
@@ -1777,33 +1797,4 @@ async fn pf_889_ambient_key_session_under_a_named_account_is_left_unrecorded() -
         }
     }
     Ok(())
-||||||| 413492cd6c
-=======
-#[test]
-fn realtime_headers_keep_realtime_and_voice_session_ids_distinct() {
-    let headers = realtime_request_headers(
-        Some("realtime_session_1"),
-        Some("voice_session_1"),
-        /*api_key*/ None,
-        RealtimeEventParser::RealtimeV2,
-        "codex_work_desktop",
-    )
-    .expect("headers")
-    .expect("headers");
-
-    assert!(!headers.contains_key(http::header::AUTHORIZATION));
-    assert!(!headers.contains_key("X-OpenAI-Fedramp"));
-    assert_eq!(
-        headers
-            .get("x-session-id")
-            .and_then(|value| value.to_str().ok()),
-        Some("realtime_session_1")
-    );
-    assert_eq!(
-        headers
-            .get("voice-session-id")
-            .and_then(|value| value.to_str().ok()),
-        Some("voice_session_1")
-    );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

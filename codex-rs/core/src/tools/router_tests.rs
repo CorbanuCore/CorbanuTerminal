@@ -55,7 +55,9 @@ fn use_openai_provider(turn: &mut TurnContext) {
     config.model_provider = provider_info.clone();
     turn.config = Arc::new(config);
     turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
-    turn.model_info = model_info::model_info_from_slug("gpt-5.4");
+    update_turn_settings_for_test(&mut turn, |settings| {
+        settings.model_info = Arc::new(model_info::model_info_from_slug("gpt-5.4"));
+    });
 }
 
 struct ExtensionEchoContributor;
@@ -134,6 +136,7 @@ fn cross_provider_collaboration_adapters_are_classified_as_plaintext() {
         "followup_task_plaintext",
     ] {
         let call = ToolCall {
+            native_call: None,
             tool_name: ToolName::plain(name),
             call_id: "call-1".to_string(),
             payload: ToolPayload::Function {
@@ -342,6 +345,8 @@ fn truncated_structured_write_returns_structured_diagnostic() {
     );
 
     let result = ToolRouter::build_tool_call(ResponseItem::FunctionCall {
+        encrypted_content: None,
+        status: None,
         id: None,
         name: "structured_write".to_string(),
         namespace: None,

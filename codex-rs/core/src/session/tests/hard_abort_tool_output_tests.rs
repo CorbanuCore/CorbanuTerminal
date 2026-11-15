@@ -30,6 +30,8 @@ impl SessionTask for SlowToRecordToolTask {
     ) -> SessionTaskResult {
         let session = session.clone_session();
         let item = ResponseItem::FunctionCall {
+            encrypted_content: None,
+            status: None,
             id: None,
             name: "test_sync_tool".to_string(),
             namespace: None,
@@ -69,7 +71,7 @@ impl SessionTask for SlowToRecordToolTask {
 /// text outputs in history.
 async fn interrupted_call_outputs(arguments: serde_json::Value) -> Vec<Option<String>> {
     let (sess, mut tc) = make_session_and_context().await;
-    tc.model_info
+    tc.model_info()
         .experimental_supported_tools
         .push("test_sync_tool".to_string());
     let sess = Arc::new(sess);

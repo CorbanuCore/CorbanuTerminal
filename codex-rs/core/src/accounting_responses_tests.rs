@@ -86,7 +86,10 @@ impl Fixture {
         let pool = self
             .db
             .sqlite()
-            .open_read_only_pool(&self.db.sqlite().state_db_path())
+            .open_read_only_pool(
+                &self.db.sqlite().state_db_path(),
+                /*busy_timeout*/ None,
+            )
             .await?;
         let values: Vec<String> = sqlx::query_scalar(query).fetch_all(&pool).await?;
         pool.close().await;
@@ -243,6 +246,7 @@ impl codex_api::AuthProvider for Denied {
 }
 fn request() -> Request {
     Request {
+        response_body_limit_bytes: None,
         method: http::Method::POST,
         url: format!("{ENDPOINT}/responses"),
         headers: Default::default(),

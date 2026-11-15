@@ -71,6 +71,7 @@ fn denied_reads_reject_file_system_changes_but_only_review_network_changes() {
     let mut file_system = FileSystemSandboxPolicy::read_only();
     file_system.entries.push(FileSystemSandboxEntry::new(
         FileSystemPath::GlobPattern {
+            scan: None,
             pattern: "**/.env".into(),
         },
         FileSystemAccessMode::Deny,

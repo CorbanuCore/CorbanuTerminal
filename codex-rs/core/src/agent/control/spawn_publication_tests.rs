@@ -143,6 +143,7 @@ async fn spawn_publication_child(
             harness.config.clone(),
             text_input("child task"),
             Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                agent_class: None,
                 parent_thread_id: parent,
                 depth: 1,
                 agent_path: None,
@@ -258,6 +259,7 @@ async fn failed_spawn_without_publication_does_not_close_graph(skipped: SkippedP
         SkippedPublication::Ephemeral => {
             harness.config.ephemeral = true;
             Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                agent_class: None,
                 parent_thread_id: parent,
                 depth: 1,
                 agent_path: None,

@@ -1,13 +1,9 @@
 #![cfg(test)]
 
 use super::*;
-<<<<<<< HEAD
 use crate::agent::AgentStatus;
-||||||| 413492cd6c
-=======
 use crate::agent::types::SpawnAgentOptions;
 use crate::config::RolloutBudgetConfig;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::config::test_config;
 use crate::init_state_db;
 use crate::installation_id::INSTALLATION_ID_FILENAME;
@@ -20,16 +16,12 @@ use crate::session::tests::build_world_state_from_turn_context;
 use crate::session::tests::make_session_and_context;
 use crate::tasks::InterruptedTurnHistoryMarker;
 use crate::tasks::interrupted_turn_history_marker;
-<<<<<<< HEAD
-use assert_matches::assert_matches;
-||||||| 413492cd6c
-=======
 use crate::windows_sandbox::WindowsSandboxLevelExt;
+use assert_matches::assert_matches;
 use codex_config::ConfigLayerStack;
 use codex_execpolicy::Decision;
 use codex_execpolicy::NetworkRuleProtocol;
 use codex_extension_api::SessionIsolation;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_extension_api::empty_extension_registry;
 use codex_history::InitialHistory;
 use codex_history::ResumedHistory;
@@ -39,17 +31,13 @@ use codex_protocol::ResponseItemId;
 use codex_protocol::approvals::ExecPolicyAmendment;
 use codex_protocol::capabilities::CapabilityRootLocation;
 use codex_protocol::capabilities::SelectedCapabilityRoot;
-<<<<<<< HEAD
 use codex_protocol::config_types::ForcedLoginMethod;
-use codex_protocol::error::CodexErrorDetails;
-||||||| 413492cd6c
-=======
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::error::CodexErrKind;
+use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::mcp::ClientMcpExtensions;
 use codex_protocol::mcp::MCP_APP_UI_EXTENSION_ID;
 use codex_protocol::mcp::OPENAI_FORM_EXTENSION_ID;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ContentItemKind;
 use codex_protocol::models::ContentItemMetadata;
@@ -58,14 +46,8 @@ use codex_protocol::models::ReasoningItemReasoningSummary;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::protocol::AgentMessageEvent;
-<<<<<<< HEAD
-use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::InterAgentCommunication;
-||||||| 413492cd6c
-use codex_protocol::protocol::InitialHistory;
-=======
 use codex_protocol::protocol::EnvironmentConfigState;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::InternalSessionSource;
 use codex_protocol::protocol::SessionMeta;
 use codex_protocol::protocol::SessionMetaLine;
@@ -601,6 +583,7 @@ async fn thread_id_generator_applies_to_roots_children_and_forks() {
                 text_elements: Vec::new(),
             }],
             SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                agent_class: None,
                 parent_thread_id: root.thread_id,
                 depth: 1,
                 agent_path: None,
@@ -1575,629 +1558,6 @@ async fn start_thread_keeps_internal_threads_hidden_from_normal_lookups() {
 }
 
 #[tokio::test]
-<<<<<<< HEAD
-async fn resumed_subagent_rejoins_loaded_parent_control_plane() {
-    let temp_dir = tempdir().expect("tempdir");
-    let mut config = test_config().await;
-    config.codex_home = temp_dir.path().join("codex-home").abs();
-    config.cwd = config.codex_home.abs();
-    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
-
-    let manager = ThreadManager::with_models_provider_and_home_for_tests(
-        CodexAuth::from_api_key("dummy"),
-        config.model_provider.clone(),
-        config.codex_home.to_path_buf(),
-        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
-    );
-    let parent = manager
-        .start_thread(config.clone())
-        .await
-        .expect("start parent thread");
-    let child_path = AgentPath::try_from("/root/troll_burzum").expect("child path");
-    let child_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-        parent_thread_id: parent.thread_id,
-        depth: 1,
-        agent_path: Some(child_path.clone()),
-        agent_nickname: Some("Burzum".to_string()),
-        agent_role: Some("troll".to_string()),
-        agent_class: None,
-    });
-    let child = manager
-        .start_thread_with_options(StartThreadOptions {
-            config: config.clone(),
-            allow_provider_model_fallback: false,
-            history_mode: None,
-            initial_history: InitialHistory::New,
-            session_source: Some(child_source.clone()),
-            thread_source: Some(ThreadSource::Subagent),
-            dynamic_tools: Vec::new(),
-            metrics_service_name: None,
-            parent_trace: None,
-            environments: Some(Vec::new()),
-            thread_extension_init: Default::default(),
-            supports_openai_form_elicitation: false,
-        })
-        .await
-        .expect("start child thread");
-
-    for (thread, message) in [
-        (&parent.thread, "persist parent"),
-        (&child.thread, "persist child"),
-    ] {
-        thread
-            .inject_user_message_without_turn(message.to_string())
-            .await;
-        thread.codex.session.ensure_rollout_materialized().await;
-        thread
-            .codex
-            .session
-            .flush_rollout()
-            .await
-            .expect("flush rollout");
-    }
-    let parent_rollout = parent.thread.rollout_path().expect("parent rollout path");
-    let child_rollout = child.thread.rollout_path().expect("child rollout path");
-    let parent_id = parent.thread_id;
-    let child_id = child.thread_id;
-
-    let shutdown = manager
-        .shutdown_all_threads_bounded(Duration::from_secs(10))
-        .await;
-    assert!(shutdown.submit_failed.is_empty());
-    assert!(shutdown.timed_out.is_empty());
-
-    let resumed_manager = ThreadManager::with_models_provider_and_home_for_tests(
-        CodexAuth::from_api_key("dummy"),
-        config.model_provider.clone(),
-        config.codex_home.to_path_buf(),
-        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
-    );
-    let auth_manager =
-        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
-    let resumed_parent = resumed_manager
-        .resume_thread_from_rollout(
-            config.clone(),
-            parent_rollout,
-            auth_manager.clone(),
-            /*parent_trace*/ None,
-            /*supports_openai_form_elicitation*/ false,
-        )
-        .await
-        .expect("resume parent first");
-    assert_eq!(resumed_parent.thread_id, parent_id);
-    let resumed_child = resumed_manager
-        .resume_thread_from_rollout(
-            config.clone(),
-            child_rollout,
-            auth_manager,
-            /*parent_trace*/ None,
-            /*supports_openai_form_elicitation*/ false,
-        )
-        .await
-        .expect("resume child after parent");
-    assert_eq!(resumed_child.thread_id, child_id);
-
-    let parent_control = resumed_parent
-        .thread
-        .codex
-        .session
-        .services
-        .agent_control
-        .clone();
-    let child_control = resumed_child
-        .thread
-        .codex
-        .session
-        .services
-        .agent_control
-        .clone();
-    assert_eq!(parent_control.session_id(), child_control.session_id());
-    assert_eq!(
-        parent_control
-            .get_agent_metadata_for_path(&child_path)
-            .and_then(|metadata| metadata.agent_id),
-        Some(child_id)
-    );
-    assert_eq!(
-        child_control
-            .get_agent_metadata_for_path(&child_path)
-            .and_then(|metadata| metadata.agent_id),
-        Some(child_id)
-    );
-
-    let duplicate = parent_control
-        .spawn_agent(
-            config,
-            vec![UserInput::Text {
-                text: "duplicate work".to_string(),
-                text_elements: Vec::new(),
-            }],
-            Some(child_source),
-        )
-        .await
-        .expect_err("a restored live path must not be replaced");
-    assert_matches!(
-        duplicate.details(),
-        CodexErrorDetails::UnsupportedOperation(message)
-            if message.contains("agent path `/root/troll_burzum` already exists")
-    );
-}
-
-#[tokio::test]
-async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime() {
-    let temp_dir = tempdir().expect("tempdir");
-    let mut config = test_config().await;
-    config.codex_home = temp_dir.path().join("codex-home").abs();
-    config.cwd = config.codex_home.abs();
-    config
-        .features
-        .enable(Feature::Sqlite)
-        .expect("sqlite should be available in tests");
-    config
-        .features
-        .enable(Feature::MultiAgentV2)
-        .expect("multi-agent v2 should be available in tests");
-    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
-    let state_db = init_state_db(&config).await;
-
-    let manager = ThreadManager::with_models_provider_home_and_state_for_tests(
-        CodexAuth::from_api_key("dummy"),
-        config.model_provider.clone(),
-        config.codex_home.to_path_buf(),
-        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
-        state_db.clone(),
-    );
-    let parent = manager
-        .start_thread(config.clone())
-        .await
-        .expect("start parent thread");
-    let child_path = AgentPath::try_from("/root/troll_burzum").expect("child path");
-    let child_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-        parent_thread_id: parent.thread_id,
-        depth: 1,
-        agent_path: Some(child_path.clone()),
-        agent_nickname: Some("Burzum".to_string()),
-        agent_role: Some("troll".to_string()),
-        agent_class: None,
-    });
-    let child = manager
-        .start_thread_with_options(StartThreadOptions {
-            config: config.clone(),
-            allow_provider_model_fallback: false,
-            history_mode: None,
-            initial_history: InitialHistory::New,
-            session_source: Some(child_source.clone()),
-            thread_source: Some(ThreadSource::Subagent),
-            dynamic_tools: Vec::new(),
-            metrics_service_name: None,
-            parent_trace: None,
-            environments: Some(Vec::new()),
-            thread_extension_init: Default::default(),
-            supports_openai_form_elicitation: false,
-        })
-        .await
-        .expect("start child thread");
-
-    let verifier_path = child_path
-        .join("verification_reassign")
-        .expect("verifier path");
-    let verifier_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-        parent_thread_id: child.thread_id,
-        depth: 2,
-        agent_path: Some(verifier_path.clone()),
-        agent_nickname: Some("Godel".to_string()),
-        // This fixture exercises persisted runtime restoration, not role lookup. Keep the role
-        // unset so reloading proves the exact stored provider/model without layering an unrelated
-        // role config over it.
-        agent_role: None,
-        agent_class: None,
-    });
-    let mut verifier_config = config.clone();
-    verifier_config.model_provider = verifier_config
-        .model_providers
-        .get("openrouter")
-        .cloned()
-        .expect("OpenRouter provider");
-    verifier_config.model_provider_id = "openrouter".to_string();
-    verifier_config.model = Some("x-ai/grok-4.5".to_string());
-    let verifier = manager
-        .start_thread_with_options(StartThreadOptions {
-            config: verifier_config,
-            allow_provider_model_fallback: false,
-            history_mode: None,
-            initial_history: InitialHistory::New,
-            session_source: Some(verifier_source),
-            thread_source: Some(ThreadSource::Subagent),
-            dynamic_tools: Vec::new(),
-            metrics_service_name: None,
-            parent_trace: None,
-            environments: Some(Vec::new()),
-            thread_extension_init: Default::default(),
-            supports_openai_form_elicitation: false,
-        })
-        .await
-        .expect("start verifier thread");
-
-    for (thread, message) in [
-        (&parent.thread, "persist parent"),
-        (&child.thread, "persist child"),
-        (&verifier.thread, "persist verifier"),
-    ] {
-        thread
-            .inject_user_message_without_turn(message.to_string())
-            .await;
-        thread.codex.session.ensure_rollout_materialized().await;
-        thread
-            .codex
-            .session
-            .flush_rollout()
-            .await
-            .expect("flush rollout");
-    }
-    let stored_verifier = manager
-        .update_thread_metadata(
-            verifier.thread_id,
-            ThreadMetadataPatch {
-                model_provider: Some("openrouter".to_string()),
-                model: Some("x-ai/grok-4.5".to_string()),
-                ..Default::default()
-            },
-            /*include_archived*/ true,
-        )
-        .await
-        .expect("persist verifier runtime metadata");
-    assert_eq!(stored_verifier.model_provider, "openrouter");
-    assert_eq!(stored_verifier.model.as_deref(), Some("x-ai/grok-4.5"));
-    let parent_rollout = parent.thread.rollout_path().expect("parent rollout path");
-    let parent_id = parent.thread_id;
-    let child_id = child.thread_id;
-    let verifier_id = verifier.thread_id;
-
-    let shutdown = manager
-        .shutdown_all_threads_bounded(Duration::from_secs(10))
-        .await;
-    assert!(shutdown.submit_failed.is_empty());
-    assert!(shutdown.timed_out.is_empty());
-
-    let resumed_manager = ThreadManager::with_models_provider_home_and_state_for_tests(
-        CodexAuth::from_api_key("dummy"),
-        config.model_provider.clone(),
-        config.codex_home.to_path_buf(),
-        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
-        state_db,
-    );
-    let auth_manager =
-        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
-    let resumed_parent = resumed_manager
-        .resume_thread_from_rollout(
-            config.clone(),
-            parent_rollout,
-            auth_manager,
-            /*parent_trace*/ None,
-            /*supports_openai_form_elicitation*/ false,
-        )
-        .await
-        .expect("resume only the root thread");
-    assert_eq!(resumed_parent.thread_id, parent_id);
-
-    let control = resumed_parent
-        .thread
-        .codex
-        .session
-        .services
-        .agent_control
-        .clone();
-    assert_eq!(
-        control
-            .get_agent_metadata_for_path(&child_path)
-            .and_then(|metadata| metadata.agent_id),
-        Some(child_id)
-    );
-    assert_eq!(
-        control
-            .get_agent_metadata_for_path(&verifier_path)
-            .and_then(|metadata| metadata.agent_id),
-        Some(verifier_id)
-    );
-    assert_eq!(control.get_status(child_id).await, AgentStatus::Unloaded);
-    assert_eq!(control.get_status(verifier_id).await, AgentStatus::Unloaded);
-    let child_err = resumed_manager
-        .get_thread(child_id)
-        .await
-        .err()
-        .expect("unloaded child must not have a live thread");
-    assert!(matches!(
-        child_err.details(),
-        CodexErrorDetails::ThreadNotFound(id) if *id == child_id
-    ));
-    let verifier_err = resumed_manager
-        .get_thread(verifier_id)
-        .await
-        .err()
-        .expect("unloaded verifier must not have a live thread");
-    assert!(matches!(
-        verifier_err.details(),
-        CodexErrorDetails::ThreadNotFound(id) if *id == verifier_id
-    ));
-
-    let listed = control
-        .list_agents(&SessionSource::Cli, /*path_prefix*/ None)
-        .await
-        .expect("list restored descendants");
-    assert!(listed.iter().any(|agent| {
-        agent.agent_name == child_path.as_str() && agent.agent_status == AgentStatus::Unloaded
-    }));
-    assert!(listed.iter().any(|agent| {
-        agent.agent_name == verifier_path.as_str()
-            && agent.agent_status == AgentStatus::Unloaded
-            && agent.agent_nickname.as_deref() == Some("Godel")
-    }));
-
-    control
-        .ensure_v2_agent_loaded(config.clone(), verifier_id)
-        .await
-        .expect("addressing the restored verifier should load it");
-    let verifier_snapshot = control
-        .get_agent_config_snapshot(verifier_id)
-        .await
-        .expect("loaded verifier config");
-    assert_eq!(verifier_snapshot.model_provider_id, "openrouter");
-    assert_eq!(verifier_snapshot.model, "x-ai/grok-4.5");
-
-    let duplicate = control
-        .spawn_agent(
-            config,
-            vec![UserInput::Text {
-                text: "duplicate work".to_string(),
-                text_elements: Vec::new(),
-            }],
-            Some(child_source),
-        )
-        .await
-        .expect_err("a restored unloaded path must remain reserved");
-    assert_matches!(
-        duplicate.details(),
-        CodexErrorDetails::UnsupportedOperation(message)
-            if message.contains("agent path `/root/troll_burzum` already exists")
-    );
-}
-
-#[tokio::test]
-async fn durable_thread_spawn_materializes_lazy_parent_child_and_core_graph_edge() {
-    let temp_dir = tempdir().expect("tempdir");
-    let mut config = test_config().await;
-    config.codex_home = temp_dir.path().join("codex-home").abs();
-    config.cwd = config.codex_home.abs();
-    config
-        .features
-        .enable(Feature::Sqlite)
-        .expect("sqlite should be available in tests");
-    config
-        .features
-        .enable(Feature::MultiAgentV2)
-        .expect("multi-agent v2 should be available in tests");
-    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
-    let state_db = init_state_db(&config).await;
-    let state_runtime = state_db
-        .clone()
-        .expect("sqlite state runtime should be available");
-    let manager = ThreadManager::with_models_provider_home_and_state_for_tests(
-        CodexAuth::from_api_key("dummy"),
-        config.model_provider.clone(),
-        config.codex_home.to_path_buf(),
-        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
-        state_db,
-    );
-
-    let root = manager
-        .start_thread(config.clone())
-        .await
-        .expect("start lazy root");
-    assert!(
-        state_runtime
-            .get_thread(root.thread_id)
-            .await
-            .expect("query lazy root")
-            .is_none(),
-        "a root with no turn should begin unmaterialized"
-    );
-
-    let child_path = AgentPath::try_from("/root/troll_burzum").expect("child path");
-    let child = manager
-        .start_thread_with_options(StartThreadOptions {
-            config: config.clone(),
-            allow_provider_model_fallback: false,
-            history_mode: None,
-            initial_history: InitialHistory::New,
-            session_source: Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-                parent_thread_id: root.thread_id,
-                depth: 1,
-                agent_path: Some(child_path),
-                agent_nickname: Some("Burzum".to_string()),
-                agent_role: Some("troll".to_string()),
-                agent_class: Some(codex_protocol::crew::AgentClass::CrewMember {
-                    crew_id: "cold-root-crew".to_string(),
-                    logical_member_id: "troll-1".to_string(),
-                    human_addressable: true,
-                }),
-            })),
-            thread_source: Some(ThreadSource::Subagent),
-            dynamic_tools: Vec::new(),
-            metrics_service_name: None,
-            parent_trace: None,
-            environments: Some(Vec::new()),
-            thread_extension_init: Default::default(),
-            supports_openai_form_elicitation: false,
-        })
-        .await
-        .expect("spawn durable child beneath lazy root");
-
-    let stored_root = state_runtime
-        .get_thread(root.thread_id)
-        .await
-        .expect("query materialized root")
-        .expect("durable spawn must materialize its parent");
-    let stored_child = state_runtime
-        .get_thread(child.thread_id)
-        .await
-        .expect("query materialized child")
-        .expect("durable spawn must materialize its child");
-    assert!(stored_root.rollout_path.exists());
-    assert!(stored_child.rollout_path.exists());
-    assert_eq!(
-        state_runtime
-            .list_thread_spawn_children(root.thread_id)
-            .await
-            .expect("list Core graph children"),
-        vec![child.thread_id]
-    );
-}
-
-#[tokio::test]
-async fn resumed_root_quarantines_provider_running_mail_without_replay() {
-    let temp_dir = tempdir().expect("tempdir");
-    let mut config = test_config().await;
-    config.codex_home = temp_dir.path().join("codex-home").abs();
-    config.cwd = config.codex_home.abs();
-    config
-        .features
-        .enable(Feature::Sqlite)
-        .expect("sqlite should be available in tests");
-    config
-        .features
-        .enable(Feature::MultiAgentV2)
-        .expect("multi-agent v2 should be available in tests");
-    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
-    let state_db = init_state_db(&config).await;
-    let state_runtime = state_db
-        .clone()
-        .expect("sqlite state runtime should be available");
-
-    let manager = ThreadManager::with_models_provider_home_and_state_for_tests(
-        CodexAuth::from_api_key("dummy"),
-        config.model_provider.clone(),
-        config.codex_home.to_path_buf(),
-        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
-        state_db.clone(),
-    );
-    let root = manager
-        .start_thread(config.clone())
-        .await
-        .expect("start root thread");
-    root.thread
-        .inject_user_message_without_turn("persist root".to_string())
-        .await;
-    root.thread
-        .codex
-        .session
-        .ensure_rollout_materialized()
-        .await;
-    root.thread
-        .codex
-        .session
-        .flush_rollout()
-        .await
-        .expect("flush root rollout");
-    let root_rollout = root.thread.rollout_path().expect("root rollout path");
-    let root_id = root.thread_id;
-
-    let ambiguous = InterAgentCommunication::new(
-        AgentPath::try_from("/root/worker").expect("worker path"),
-        AgentPath::root(),
-        Vec::new(),
-        "provider outcome is ambiguous".to_string(),
-        /*trigger_turn*/ true,
-    );
-    let message_id = ambiguous
-        .message_id
-        .as_deref()
-        .expect("stable message id")
-        .to_string();
-    let control = root.thread.codex.session.services.agent_control.clone();
-    control
-        .admit_inter_agent_communication(root_id, &ambiguous)
-        .await
-        .expect("admit root mailbox message");
-    assert!(
-        state_runtime
-            .begin_agent_message_submission(
-                &message_id,
-                codex_state::AgentMailboxPhase::Ready,
-                "root-provider-attempt",
-                /*now_ms*/ 1_000,
-            )
-            .await
-            .expect("begin root submission")
-    );
-    assert!(
-        state_runtime
-            .transition_agent_message(
-                &message_id,
-                codex_state::AgentMailboxPhase::Submitting,
-                codex_state::AgentMailboxPhase::Submitted,
-                /*now_ms*/ 1_001,
-            )
-            .await
-            .expect("mark root message submitted")
-    );
-    assert!(
-        state_runtime
-            .transition_agent_message(
-                &message_id,
-                codex_state::AgentMailboxPhase::Submitted,
-                codex_state::AgentMailboxPhase::ProviderRunning,
-                /*now_ms*/ 1_002,
-            )
-            .await
-            .expect("mark root provider running")
-    );
-
-    let shutdown = manager
-        .shutdown_all_threads_bounded(Duration::from_secs(10))
-        .await;
-    assert!(shutdown.submit_failed.is_empty());
-    assert!(shutdown.timed_out.is_empty());
-
-    let resumed_manager = ThreadManager::with_models_provider_home_and_state_for_tests(
-        CodexAuth::from_api_key("dummy"),
-        config.model_provider.clone(),
-        config.codex_home.to_path_buf(),
-        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
-        state_db.clone(),
-    );
-    let auth_manager =
-        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
-    let resumed_root = resumed_manager
-        .resume_thread_from_rollout(
-            config,
-            root_rollout,
-            auth_manager,
-            /*parent_trace*/ None,
-            /*supports_openai_form_elicitation*/ false,
-        )
-        .await
-        .expect("resume root thread");
-    assert_eq!(resumed_root.thread_id, root_id);
-    assert_eq!(
-        state_runtime
-            .get_agent_message(&message_id)
-            .await
-            .expect("mailbox lookup")
-            .expect("mailbox row")
-            .phase,
-        codex_state::AgentMailboxPhase::UnknownOutcome
-    );
-    assert!(
-        !resumed_root
-            .thread
-            .codex
-            .session
-            .has_applied_agent_message_id(&message_id)
-            .await,
-        "ambiguous root mail must not be replayed into local history"
-    );
-||||||| 413492cd6c
-=======
 async fn spawn_internal_guardian_session_preserves_windows_sandbox_proxy_settings() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;
@@ -2303,8 +1663,8 @@ async fn fork_internal_session_uses_only_the_selected_history() {
         Some(parent.thread_id)
     );
     assert!(Arc::ptr_eq(
-        &reviewer.thread.session.services.auth_manager,
-        &parent.thread.session.services.auth_manager,
+        &reviewer.thread.session.services.auth_manager(),
+        &parent.thread.session.services.auth_manager(),
     ));
     assert_eq!(manager.list_thread_ids().await, vec![parent.thread_id]);
     assert!(manager.get_thread(reviewer.thread_id).await.is_err());
@@ -2605,7 +1965,7 @@ async fn spawn_internal_session_preserves_parent_lineage_without_forking_history
         .start_thread(StartThreadOptions {
             internal_parent: Some(InternalSessionParent {
                 thread_id: parent.thread_id,
-                auth_manager: Arc::clone(&parent.thread.session.services.auth_manager),
+                auth_manager: Arc::clone(&parent.thread.session.services.auth_manager()),
                 agent_control: AgentControlInit::Provided {
                     control: Arc::clone(&parent.thread.session.services.agent_control),
                     runtime: parent.thread.session.services.local_agent_runtime.clone(),
@@ -2634,8 +1994,8 @@ async fn spawn_internal_session_preserves_parent_lineage_without_forking_history
         )
     );
     assert!(Arc::ptr_eq(
-        &child.thread.session.services.auth_manager,
-        &parent.thread.session.services.auth_manager
+        &child.thread.session.services.auth_manager(),
+        &parent.thread.session.services.auth_manager()
     ));
     assert!(manager.list_thread_ids().await.is_empty());
     parent
@@ -2646,7 +2006,637 @@ async fn spawn_internal_session_preserves_parent_lineage_without_forking_history
     manager
         .shutdown_all_threads_bounded(Duration::from_secs(10))
         .await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+}
+
+#[tokio::test]
+async fn resumed_subagent_rejoins_loaded_parent_control_plane() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+
+    let manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    );
+    let parent = manager
+        .start_thread(config.clone())
+        .await
+        .expect("start parent thread");
+    let child_path = AgentPath::try_from("/root/troll_burzum").expect("child path");
+    let child_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: parent.thread_id,
+        depth: 1,
+        agent_path: Some(child_path.clone()),
+        agent_nickname: Some("Burzum".to_string()),
+        agent_role: Some("troll".to_string()),
+        agent_class: None,
+    });
+    let child = manager
+        .start_thread_with_options(StartThreadOptions {
+            config: config.clone(),
+            allow_provider_model_fallback: false,
+            history_mode: None,
+            initial_history: InitialHistory::New,
+            session_source: Some(child_source.clone()),
+            thread_source: Some(ThreadSource::Subagent),
+            dynamic_tools: Vec::new(),
+            metrics_service_name: None,
+            parent_trace: None,
+            environments: Some(Vec::new()),
+            thread_extension_init: Default::default(),
+            supports_openai_form_elicitation: false,
+        })
+        .await
+        .expect("start child thread");
+
+    for (thread, message) in [
+        (&parent.thread, "persist parent"),
+        (&child.thread, "persist child"),
+    ] {
+        thread
+            .inject_user_message_without_turn(message.to_string())
+            .await;
+        thread
+            .codex
+            .session
+            .ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
+            .await;
+        thread
+            .codex
+            .session
+            .flush_rollout()
+            .await
+            .expect("flush rollout");
+    }
+    let parent_rollout = parent.thread.rollout_path().expect("parent rollout path");
+    let child_rollout = child.thread.rollout_path().expect("child rollout path");
+    let parent_id = parent.thread_id;
+    let child_id = child.thread_id;
+
+    let shutdown = manager
+        .shutdown_all_threads_bounded(Duration::from_secs(10))
+        .await;
+    assert!(shutdown.submit_failed.is_empty());
+    assert!(shutdown.timed_out.is_empty());
+
+    let resumed_manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    );
+    let auth_manager =
+        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let resumed_parent = resumed_manager
+        .resume_thread_from_rollout(
+            config.clone(),
+            parent_rollout,
+            auth_manager.clone(),
+            /*parent_trace*/ None,
+            /*supports_openai_form_elicitation*/ false,
+        )
+        .await
+        .expect("resume parent first");
+    assert_eq!(resumed_parent.thread_id, parent_id);
+    let resumed_child = resumed_manager
+        .resume_thread_from_rollout(
+            config.clone(),
+            child_rollout,
+            auth_manager,
+            /*parent_trace*/ None,
+            /*supports_openai_form_elicitation*/ false,
+        )
+        .await
+        .expect("resume child after parent");
+    assert_eq!(resumed_child.thread_id, child_id);
+
+    let parent_control = resumed_parent
+        .thread
+        .codex
+        .session
+        .services
+        .agent_control
+        .clone();
+    let child_control = resumed_child
+        .thread
+        .codex
+        .session
+        .services
+        .agent_control
+        .clone();
+    assert_eq!(parent_control.session_id(), child_control.session_id());
+    assert_eq!(
+        parent_control
+            .get_agent_metadata_for_path(&child_path)
+            .and_then(|metadata| metadata.agent_id),
+        Some(child_id)
+    );
+    assert_eq!(
+        child_control
+            .get_agent_metadata_for_path(&child_path)
+            .and_then(|metadata| metadata.agent_id),
+        Some(child_id)
+    );
+
+    let duplicate = parent_control
+        .spawn_agent(
+            config,
+            vec![UserInput::Text {
+                text: "duplicate work".to_string(),
+                text_elements: Vec::new(),
+            }],
+            Some(child_source),
+        )
+        .await
+        .expect_err("a restored live path must not be replaced");
+    assert_matches!(
+        duplicate.details(),
+        CodexErrorDetails::UnsupportedOperation(message)
+            if message.contains("agent path `/root/troll_burzum` already exists")
+    );
+}
+
+#[tokio::test]
+async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    config
+        .features
+        .enable(Feature::Sqlite)
+        .expect("sqlite should be available in tests");
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("multi-agent v2 should be available in tests");
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    let state_db = init_state_db(&config).await;
+
+    let manager = ThreadManager::with_models_provider_home_and_state_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        state_db.clone(),
+    );
+    let parent = manager
+        .start_thread(config.clone())
+        .await
+        .expect("start parent thread");
+    let child_path = AgentPath::try_from("/root/troll_burzum").expect("child path");
+    let child_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: parent.thread_id,
+        depth: 1,
+        agent_path: Some(child_path.clone()),
+        agent_nickname: Some("Burzum".to_string()),
+        agent_role: Some("troll".to_string()),
+        agent_class: None,
+    });
+    let child = manager
+        .start_thread_with_options(StartThreadOptions {
+            config: config.clone(),
+            allow_provider_model_fallback: false,
+            history_mode: None,
+            initial_history: InitialHistory::New,
+            session_source: Some(child_source.clone()),
+            thread_source: Some(ThreadSource::Subagent),
+            dynamic_tools: Vec::new(),
+            metrics_service_name: None,
+            parent_trace: None,
+            environments: Some(Vec::new()),
+            thread_extension_init: Default::default(),
+            supports_openai_form_elicitation: false,
+        })
+        .await
+        .expect("start child thread");
+
+    let verifier_path = child_path
+        .join("verification_reassign")
+        .expect("verifier path");
+    let verifier_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: child.thread_id,
+        depth: 2,
+        agent_path: Some(verifier_path.clone()),
+        agent_nickname: Some("Godel".to_string()),
+        // This fixture exercises persisted runtime restoration, not role lookup. Keep the role
+        // unset so reloading proves the exact stored provider/model without layering an unrelated
+        // role config over it.
+        agent_role: None,
+        agent_class: None,
+    });
+    let mut verifier_config = config.clone();
+    verifier_config.model_provider = verifier_config
+        .model_providers
+        .get("openrouter")
+        .cloned()
+        .expect("OpenRouter provider");
+    verifier_config.model_provider_id = "openrouter".to_string();
+    verifier_config.model = Some("x-ai/grok-4.5".to_string());
+    let verifier = manager
+        .start_thread_with_options(StartThreadOptions {
+            config: verifier_config,
+            allow_provider_model_fallback: false,
+            history_mode: None,
+            initial_history: InitialHistory::New,
+            session_source: Some(verifier_source),
+            thread_source: Some(ThreadSource::Subagent),
+            dynamic_tools: Vec::new(),
+            metrics_service_name: None,
+            parent_trace: None,
+            environments: Some(Vec::new()),
+            thread_extension_init: Default::default(),
+            supports_openai_form_elicitation: false,
+        })
+        .await
+        .expect("start verifier thread");
+
+    for (thread, message) in [
+        (&parent.thread, "persist parent"),
+        (&child.thread, "persist child"),
+        (&verifier.thread, "persist verifier"),
+    ] {
+        thread
+            .inject_user_message_without_turn(message.to_string())
+            .await;
+        thread
+            .codex
+            .session
+            .ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
+            .await;
+        thread
+            .codex
+            .session
+            .flush_rollout()
+            .await
+            .expect("flush rollout");
+    }
+    let stored_verifier = manager
+        .update_thread_metadata(
+            verifier.thread_id,
+            ThreadMetadataPatch {
+                model_provider: Some("openrouter".to_string()),
+                model: Some("x-ai/grok-4.5".to_string()),
+                ..Default::default()
+            },
+            /*include_archived*/ true,
+        )
+        .await
+        .expect("persist verifier runtime metadata");
+    assert_eq!(stored_verifier.model_provider, "openrouter");
+    assert_eq!(stored_verifier.model.as_deref(), Some("x-ai/grok-4.5"));
+    let parent_rollout = parent.thread.rollout_path().expect("parent rollout path");
+    let parent_id = parent.thread_id;
+    let child_id = child.thread_id;
+    let verifier_id = verifier.thread_id;
+
+    let shutdown = manager
+        .shutdown_all_threads_bounded(Duration::from_secs(10))
+        .await;
+    assert!(shutdown.submit_failed.is_empty());
+    assert!(shutdown.timed_out.is_empty());
+
+    let resumed_manager = ThreadManager::with_models_provider_home_and_state_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        state_db,
+    );
+    let auth_manager =
+        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let resumed_parent = resumed_manager
+        .resume_thread_from_rollout(
+            config.clone(),
+            parent_rollout,
+            auth_manager,
+            /*parent_trace*/ None,
+            /*supports_openai_form_elicitation*/ false,
+        )
+        .await
+        .expect("resume only the root thread");
+    assert_eq!(resumed_parent.thread_id, parent_id);
+
+    let control = resumed_parent
+        .thread
+        .codex
+        .session
+        .services
+        .agent_control
+        .clone();
+    assert_eq!(
+        control
+            .get_agent_metadata_for_path(&child_path)
+            .and_then(|metadata| metadata.agent_id),
+        Some(child_id)
+    );
+    assert_eq!(
+        control
+            .get_agent_metadata_for_path(&verifier_path)
+            .and_then(|metadata| metadata.agent_id),
+        Some(verifier_id)
+    );
+    assert_eq!(control.get_status(child_id).await, AgentStatus::Unloaded);
+    assert_eq!(control.get_status(verifier_id).await, AgentStatus::Unloaded);
+    let child_err = resumed_manager
+        .get_thread(child_id)
+        .await
+        .err()
+        .expect("unloaded child must not have a live thread");
+    assert!(matches!(
+        child_err.details(),
+        CodexErrorDetails::ThreadNotFound(id) if *id == child_id
+    ));
+    let verifier_err = resumed_manager
+        .get_thread(verifier_id)
+        .await
+        .err()
+        .expect("unloaded verifier must not have a live thread");
+    assert!(matches!(
+        verifier_err.details(),
+        CodexErrorDetails::ThreadNotFound(id) if *id == verifier_id
+    ));
+
+    let listed = control
+        .list_agents(&SessionSource::Cli, /*path_prefix*/ None)
+        .await
+        .expect("list restored descendants");
+    assert!(listed.iter().any(|agent| {
+        agent.agent_name == child_path.as_str() && agent.agent_status == AgentStatus::Unloaded
+    }));
+    assert!(listed.iter().any(|agent| {
+        agent.agent_name == verifier_path.as_str()
+            && agent.agent_status == AgentStatus::Unloaded
+            && agent.agent_nickname.as_deref() == Some("Godel")
+    }));
+
+    control
+        .ensure_v2_agent_loaded(config.clone(), verifier_id)
+        .await
+        .expect("addressing the restored verifier should load it");
+    let verifier_snapshot = control
+        .get_agent_config_snapshot(verifier_id)
+        .await
+        .expect("loaded verifier config");
+    assert_eq!(verifier_snapshot.model_provider_id, "openrouter");
+    assert_eq!(verifier_snapshot.model, "x-ai/grok-4.5");
+
+    let duplicate = control
+        .spawn_agent(
+            config,
+            vec![UserInput::Text {
+                text: "duplicate work".to_string(),
+                text_elements: Vec::new(),
+            }],
+            Some(child_source),
+        )
+        .await
+        .expect_err("a restored unloaded path must remain reserved");
+    assert_matches!(
+        duplicate.details(),
+        CodexErrorDetails::UnsupportedOperation(message)
+            if message.contains("agent path `/root/troll_burzum` already exists")
+    );
+}
+
+#[tokio::test]
+async fn durable_thread_spawn_materializes_lazy_parent_child_and_core_graph_edge() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    config
+        .features
+        .enable(Feature::Sqlite)
+        .expect("sqlite should be available in tests");
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("multi-agent v2 should be available in tests");
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    let state_db = init_state_db(&config).await;
+    let state_runtime = state_db
+        .clone()
+        .expect("sqlite state runtime should be available");
+    let manager = ThreadManager::with_models_provider_home_and_state_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        state_db,
+    );
+
+    let root = manager
+        .start_thread(config.clone())
+        .await
+        .expect("start lazy root");
+    assert!(
+        state_runtime
+            .get_thread(root.thread_id)
+            .await
+            .expect("query lazy root")
+            .is_none(),
+        "a root with no turn should begin unmaterialized"
+    );
+
+    let child_path = AgentPath::try_from("/root/troll_burzum").expect("child path");
+    let child = manager
+        .start_thread_with_options(StartThreadOptions {
+            config: config.clone(),
+            allow_provider_model_fallback: false,
+            history_mode: None,
+            initial_history: InitialHistory::New,
+            session_source: Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id: root.thread_id,
+                depth: 1,
+                agent_path: Some(child_path),
+                agent_nickname: Some("Burzum".to_string()),
+                agent_role: Some("troll".to_string()),
+                agent_class: Some(codex_protocol::crew::AgentClass::CrewMember {
+                    crew_id: "cold-root-crew".to_string(),
+                    logical_member_id: "troll-1".to_string(),
+                    human_addressable: true,
+                }),
+            })),
+            thread_source: Some(ThreadSource::Subagent),
+            dynamic_tools: Vec::new(),
+            metrics_service_name: None,
+            parent_trace: None,
+            environments: Some(Vec::new()),
+            thread_extension_init: Default::default(),
+            supports_openai_form_elicitation: false,
+        })
+        .await
+        .expect("spawn durable child beneath lazy root");
+
+    let stored_root = state_runtime
+        .get_thread(root.thread_id)
+        .await
+        .expect("query materialized root")
+        .expect("durable spawn must materialize its parent");
+    let stored_child = state_runtime
+        .get_thread(child.thread_id)
+        .await
+        .expect("query materialized child")
+        .expect("durable spawn must materialize its child");
+    assert!(stored_root.rollout_path.exists());
+    assert!(stored_child.rollout_path.exists());
+    assert_eq!(
+        state_runtime
+            .list_thread_spawn_children(root.thread_id)
+            .await
+            .expect("list Core graph children"),
+        vec![child.thread_id]
+    );
+}
+
+#[tokio::test]
+async fn resumed_root_quarantines_provider_running_mail_without_replay() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    config
+        .features
+        .enable(Feature::Sqlite)
+        .expect("sqlite should be available in tests");
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("multi-agent v2 should be available in tests");
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    let state_db = init_state_db(&config).await;
+    let state_runtime = state_db
+        .clone()
+        .expect("sqlite state runtime should be available");
+
+    let manager = ThreadManager::with_models_provider_home_and_state_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        state_db.clone(),
+    );
+    let root = manager
+        .start_thread(config.clone())
+        .await
+        .expect("start root thread");
+    root.thread
+        .inject_user_message_without_turn("persist root".to_string())
+        .await;
+    root.thread
+        .codex
+        .session
+        .ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
+        .await;
+    root.thread
+        .codex
+        .session
+        .flush_rollout()
+        .await
+        .expect("flush root rollout");
+    let root_rollout = root.thread.rollout_path().expect("root rollout path");
+    let root_id = root.thread_id;
+
+    let ambiguous = InterAgentCommunication::new(
+        AgentPath::try_from("/root/worker").expect("worker path"),
+        AgentPath::root(),
+        Vec::new(),
+        "provider outcome is ambiguous".to_string(),
+        /*trigger_turn*/ true,
+    );
+    let message_id = ambiguous
+        .message_id
+        .as_deref()
+        .expect("stable message id")
+        .to_string();
+    let control = root.thread.codex.session.services.agent_control.clone();
+    control
+        .admit_inter_agent_communication(root_id, &ambiguous)
+        .await
+        .expect("admit root mailbox message");
+    assert!(
+        state_runtime
+            .begin_agent_message_submission(
+                &message_id,
+                codex_state::AgentMailboxPhase::Ready,
+                "root-provider-attempt",
+                /*now_ms*/ 1_000,
+            )
+            .await
+            .expect("begin root submission")
+    );
+    assert!(
+        state_runtime
+            .transition_agent_message(
+                &message_id,
+                codex_state::AgentMailboxPhase::Submitting,
+                codex_state::AgentMailboxPhase::Submitted,
+                /*now_ms*/ 1_001,
+            )
+            .await
+            .expect("mark root message submitted")
+    );
+    assert!(
+        state_runtime
+            .transition_agent_message(
+                &message_id,
+                codex_state::AgentMailboxPhase::Submitted,
+                codex_state::AgentMailboxPhase::ProviderRunning,
+                /*now_ms*/ 1_002,
+            )
+            .await
+            .expect("mark root provider running")
+    );
+
+    let shutdown = manager
+        .shutdown_all_threads_bounded(Duration::from_secs(10))
+        .await;
+    assert!(shutdown.submit_failed.is_empty());
+    assert!(shutdown.timed_out.is_empty());
+
+    let resumed_manager = ThreadManager::with_models_provider_home_and_state_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        state_db.clone(),
+    );
+    let auth_manager =
+        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let resumed_root = resumed_manager
+        .resume_thread_from_rollout(
+            config,
+            root_rollout,
+            auth_manager,
+            /*parent_trace*/ None,
+            /*supports_openai_form_elicitation*/ false,
+        )
+        .await
+        .expect("resume root thread");
+    assert_eq!(resumed_root.thread_id, root_id);
+    assert_eq!(
+        state_runtime
+            .get_agent_message(&message_id)
+            .await
+            .expect("mailbox lookup")
+            .expect("mailbox row")
+            .phase,
+        codex_state::AgentMailboxPhase::UnknownOutcome
+    );
+    assert!(
+        !resumed_root
+            .thread
+            .codex
+            .session
+            .has_applied_agent_message_id(&message_id)
+            .await,
+        "ambiguous root mail must not be replayed into local history"
+    );
 }
 
 #[tokio::test]
@@ -4667,7 +4657,6 @@ async fn interrupted_fork_snapshot_uses_persisted_mid_turn_history_without_live_
         1,
     );
 }
-
 /// PF-84-S06 (#571): a session whose configured provider is Z.AI gets the
 /// API-key-only onboarding default (`forced_login_method` reads `api`), but
 /// a named OpenAI ChatGPT account selected for it (`--account openai:work`)

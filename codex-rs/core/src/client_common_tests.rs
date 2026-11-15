@@ -113,6 +113,8 @@ fn request_copies_project_image_details_for_receiving_model(
 fn non_openai_context_adapter_keeps_only_latest_dynamic_sections() {
     let mut items = vec![
         ResponseItem::Message {
+            encrypted_content: None,
+            status: None,
             id: None,
             role: "developer".to_string(),
             content: vec![
@@ -131,6 +133,8 @@ fn non_openai_context_adapter_keeps_only_latest_dynamic_sections() {
             internal_chat_message_metadata_passthrough: None,
         },
         ResponseItem::Message {
+            encrypted_content: None,
+            status: None,
             id: None,
             role: "user".to_string(),
             content: vec![ContentItem::InputText {
@@ -140,6 +144,8 @@ fn non_openai_context_adapter_keeps_only_latest_dynamic_sections() {
             internal_chat_message_metadata_passthrough: None,
         },
         ResponseItem::Message {
+            encrypted_content: None,
+            status: None,
             id: None,
             role: "developer".to_string(),
             content: vec![
@@ -185,6 +191,8 @@ fn developer_context(sections: Vec<(String, Option<&'static str>)>) -> ResponseI
 
 fn user_message(text: &str) -> ResponseItem {
     ResponseItem::Message {
+        encrypted_content: None,
+        status: None,
         id: None,
         role: "user".to_string(),
         content: vec![ContentItem::InputText {
@@ -293,6 +301,7 @@ fn context_fragment_sources_are_not_sent_to_providers() {
     let mut attributed = developer_context(vec![(skills("host"), Some("host_skills"))]);
     let unattributed = developer_context(vec![(skills("host"), None)]);
     let request = |input| ResponsesApiRequest {
+        access_programs: None,
         model: "gpt-5.4".to_string(),
         instructions: String::new(),
         previous_response_id: None,
@@ -487,10 +496,13 @@ fn omits_text_when_not_set() {
 #[test]
 fn ambient_fast_request_serializes_plain_string_input() {
     let req = ResponsesApiRequest {
+        access_programs: None,
         model: "z-ai/glm-5.2".to_string(),
         instructions: String::new(),
         previous_response_id: None,
         input: vec![ResponseItem::Message {
+            encrypted_content: None,
+            status: None,
             id: Some(codex_protocol::ResponseItemId::with_suffix("msg", "1")),
             role: "user".to_string(),
             content: vec![ContentItem::InputText {
