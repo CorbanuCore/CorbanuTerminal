@@ -1,5 +1,6 @@
 //! Windows sandbox configuration, managed requirements, and executor selection for the TUI.
 
+use crate::legacy_core::config::Config;
 use codex_app_server_client::AppServerRequestHandle;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::ConfigReadResponse;
@@ -7,6 +8,8 @@ use codex_app_server_protocol::ConfigRequirementsReadResponse;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::WindowsSandboxImplementation;
 use codex_app_server_protocol::WindowsSandboxSetupMode;
+use codex_config::types::WindowsSandboxModeToml;
+use codex_features::Feature;
 use codex_protocol::config_types::WindowsSandboxLevel;
 use uuid::Uuid;
 
@@ -142,14 +145,26 @@ impl WindowsSandboxConfig {
     }
 }
 
-<<<<<<< HEAD
+/// Corbanu: the Windows sandbox level this home's configuration selects, for the `/security`
+/// gate (#691/#783), the security inspector and the legacy-sandbox warning. The same mapping as
+/// core's `WindowsSandboxLevelExt::from_config`: MXC is none of these levels.
+pub(crate) fn level_from_config(config: &Config) -> WindowsSandboxLevel {
+    match config.permissions.windows_sandbox_mode {
+        Some(WindowsSandboxModeToml::Elevated) => WindowsSandboxLevel::Elevated,
+        Some(WindowsSandboxModeToml::Unelevated) => WindowsSandboxLevel::RestrictedToken,
+        Some(WindowsSandboxModeToml::Mxc) => WindowsSandboxLevel::Disabled,
+        None if config.features.enabled(Feature::WindowsSandboxElevated) => {
+            WindowsSandboxLevel::Elevated
+        }
+        None if config.features.enabled(Feature::WindowsSandbox) => {
+            WindowsSandboxLevel::RestrictedToken
+        }
+        None => WindowsSandboxLevel::Disabled,
+    }
+}
+
 #[cfg(target_os = "windows")]
 pub(crate) use codex_windows_sandbox::sandbox_setup_is_complete;
-
-#[cfg(not(target_os = "windows"))]
-pub(crate) fn sandbox_setup_is_complete(_codex_home: &Path) -> bool {
-    false
-}
 
 /// #691 (Travis, 2026-10-14): on Windows, `/security` offers Aggressive only
 /// once the default (elevated) Windows sandbox is set up. Without it,
@@ -169,6 +184,7 @@ pub(crate) fn protected_level_setup_steps(config: &Config) -> Option<&'static st
 
 /// `protected_level_setup_steps` for a Windows sandbox `level` whose elevated
 /// setup is (or is not) `setup_complete`.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 fn setup_steps(level: WindowsSandboxLevel, setup_complete: bool) -> Option<&'static str> {
     match level {
         WindowsSandboxLevel::Elevated if setup_complete => None,
@@ -189,104 +205,6 @@ fn setup_steps(level: WindowsSandboxLevel, setup_complete: bool) -> Option<&'sta
     }
 }
 
-#[cfg(target_os = "windows")]
-pub(crate) fn run_elevated_setup(
-    permission_profile: &PermissionProfile,
-    workspace_roots: &[AbsolutePathBuf],
-    command_cwd: &Path,
-    env_map: &HashMap<String, String>,
-    codex_home: &Path,
-) -> anyhow::Result<()> {
-    let permissions = codex_windows_sandbox::ResolvedWindowsSandboxPermissions::try_from_permission_profile_for_workspace_roots(
-        permission_profile,
-        workspace_roots,
-    )?;
-    codex_windows_sandbox::run_elevated_setup(
-        codex_windows_sandbox::SandboxSetupRequest {
-            permissions: &permissions,
-            command_cwd,
-            env_map,
-            codex_home,
-            proxy_enforced: false,
-        },
-        codex_windows_sandbox::SetupRootOverrides::default(),
-    )
-}
-
-#[cfg(target_os = "windows")]
-pub(crate) fn elevated_setup_failure_details(err: &anyhow::Error) -> Option<(String, String)> {
-    let failure = codex_windows_sandbox::extract_setup_failure(err)?;
-    Some((
-        failure.code.as_str().to_string(),
-        codex_windows_sandbox::sanitize_setup_metric_tag_value(&failure.message),
-    ))
-}
-
-#[cfg(target_os = "windows")]
-pub(crate) fn elevated_setup_failure_metric_name(err: &anyhow::Error) -> &'static str {
-    if codex_windows_sandbox::extract_setup_failure(err).is_some_and(|failure| {
-        matches!(
-            failure.code,
-            codex_windows_sandbox::SetupErrorCode::OrchestratorHelperLaunchCanceled
-        )
-    }) {
-        "codex.windows_sandbox.elevated_setup_canceled"
-    } else {
-        "codex.windows_sandbox.elevated_setup_failure"
-||||||| 413492cd6c
-#[cfg(target_os = "windows")]
-pub(crate) use codex_windows_sandbox::sandbox_setup_is_complete;
-
-#[cfg(not(target_os = "windows"))]
-pub(crate) fn sandbox_setup_is_complete(_codex_home: &Path) -> bool {
-    false
-}
-
-#[cfg(target_os = "windows")]
-pub(crate) fn run_elevated_setup(
-    permission_profile: &PermissionProfile,
-    workspace_roots: &[AbsolutePathBuf],
-    command_cwd: &Path,
-    env_map: &HashMap<String, String>,
-    codex_home: &Path,
-) -> anyhow::Result<()> {
-    let permissions = codex_windows_sandbox::ResolvedWindowsSandboxPermissions::try_from_permission_profile_for_workspace_roots(
-        permission_profile,
-        workspace_roots,
-    )?;
-    codex_windows_sandbox::run_elevated_setup(
-        codex_windows_sandbox::SandboxSetupRequest {
-            permissions: &permissions,
-            command_cwd,
-            env_map,
-            codex_home,
-            proxy_enforced: false,
-        },
-        codex_windows_sandbox::SetupRootOverrides::default(),
-    )
-}
-
-#[cfg(target_os = "windows")]
-pub(crate) fn elevated_setup_failure_details(err: &anyhow::Error) -> Option<(String, String)> {
-    let failure = codex_windows_sandbox::extract_setup_failure(err)?;
-    Some((
-        failure.code.as_str().to_string(),
-        codex_windows_sandbox::sanitize_setup_metric_tag_value(&failure.message),
-    ))
-}
-
-#[cfg(target_os = "windows")]
-pub(crate) fn elevated_setup_failure_metric_name(err: &anyhow::Error) -> &'static str {
-    if codex_windows_sandbox::extract_setup_failure(err).is_some_and(|failure| {
-        matches!(
-            failure.code,
-            codex_windows_sandbox::SetupErrorCode::OrchestratorHelperLaunchCanceled
-        )
-    }) {
-        "codex.windows_sandbox.elevated_setup_canceled"
-    } else {
-        "codex.windows_sandbox.elevated_setup_failure"
-=======
 /// A server-local connection can still select remote executors. Missing selections are unknown.
 pub(crate) fn host_from_environments(
     environments: Option<&[codex_app_server_protocol::ThreadEnvironment]>,
@@ -306,108 +224,9 @@ pub(crate) fn host_from_environments(
         (true, true) => WindowsSandboxHost::Mixed,
         (false, true) => WindowsSandboxHost::Remote,
         (false, false) => WindowsSandboxHost::Unknown,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
-<<<<<<< HEAD
-#[cfg(target_os = "windows")]
-pub(crate) fn grant_read_root_non_elevated(
-    permission_profile: &PermissionProfile,
-    workspace_roots: &[AbsolutePathBuf],
-    command_cwd: &Path,
-    env_map: &HashMap<String, String>,
-    codex_home: &Path,
-    read_root: &Path,
-) -> anyhow::Result<PathBuf> {
-    if !read_root.is_absolute() {
-        anyhow::bail!("path must be absolute: {}", read_root.display());
-    }
-    if !read_root.exists() {
-        anyhow::bail!("path does not exist: {}", read_root.display());
-    }
-    if !read_root.is_dir() {
-        anyhow::bail!("path must be a directory: {}", read_root.display());
-    }
-
-    let canonical_root = dunce::canonicalize(read_root)?;
-    codex_windows_sandbox::run_setup_refresh_with_extra_read_roots(
-        permission_profile,
-        workspace_roots,
-        command_cwd,
-        env_map,
-        codex_home,
-        vec![canonical_root.clone()],
-        /*proxy_enforced*/ false,
-    )?;
-    Ok(canonical_root)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use pretty_assertions::assert_eq;
-
-    #[test]
-    fn issue_691_783_protected_levels_need_the_elevated_sandbox_set_up() {
-        assert_eq!(
-            setup_steps(WindowsSandboxLevel::Elevated, /*setup_complete*/ true),
-            None
-        );
-        let not_set_up =
-            setup_steps(WindowsSandboxLevel::Disabled, /*setup_complete*/ true).unwrap();
-        assert!(not_set_up.contains("/permissions"), "{not_set_up}");
-        let non_admin = setup_steps(
-            WindowsSandboxLevel::RestrictedToken,
-            /*setup_complete*/ true,
-        )
-        .unwrap();
-        assert!(non_admin.contains("/setup-default-sandbox"), "{non_admin}");
-        let unfinished =
-            setup_steps(WindowsSandboxLevel::Elevated, /*setup_complete*/ false).unwrap();
-        assert!(
-            unfinished.contains("setup has not finished"),
-            "{unfinished}"
-        );
-        for steps in [not_set_up, non_admin, unfinished] {
-            assert!(!steps.ends_with('.'), "{steps}");
-        }
-    }
-}
-||||||| 413492cd6c
-#[cfg(target_os = "windows")]
-pub(crate) fn grant_read_root_non_elevated(
-    permission_profile: &PermissionProfile,
-    workspace_roots: &[AbsolutePathBuf],
-    command_cwd: &Path,
-    env_map: &HashMap<String, String>,
-    codex_home: &Path,
-    read_root: &Path,
-) -> anyhow::Result<PathBuf> {
-    if !read_root.is_absolute() {
-        anyhow::bail!("path must be absolute: {}", read_root.display());
-    }
-    if !read_root.exists() {
-        anyhow::bail!("path does not exist: {}", read_root.display());
-    }
-    if !read_root.is_dir() {
-        anyhow::bail!("path must be a directory: {}", read_root.display());
-    }
-
-    let canonical_root = dunce::canonicalize(read_root)?;
-    codex_windows_sandbox::run_setup_refresh_with_extra_read_roots(
-        permission_profile,
-        workspace_roots,
-        command_cwd,
-        env_map,
-        codex_home,
-        vec![canonical_root.clone()],
-        /*proxy_enforced*/ false,
-    )?;
-    Ok(canonical_root)
-}
-=======
 #[cfg(test)]
 #[path = "windows_sandbox_tests.rs"]
 mod tests;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
