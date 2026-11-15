@@ -71,6 +71,10 @@ const RESTART_RETRY_INTERVAL: Duration = Duration::from_millis(50);
 // envelope, and the worst-case six-byte JSON escape for every captured byte.
 const INSTALLER_STDERR_TAIL_BYTES: usize = 2 * 1024;
 const INSTALLER_STDERR_DRAIN_TIMEOUT: Duration = Duration::from_secs(1);
+/// D564 (provisional, pending Travis): `INSTALL_URL` is upstream's installer,
+/// not Corbanu Terminal's, so the daemon never downloads or runs it until it
+/// points at the Corbanu installer (#2197). Tests keep the mechanism covered.
+const SELF_UPDATE_ENABLED: bool = cfg!(test);
 #[cfg(unix)]
 const INSTALL_URL: &str = "https://chatgpt.com/codex/install.sh";
 #[cfg(windows)]
@@ -331,6 +335,24 @@ enum UpdateTrigger<'a> {
     RestoreProduction(&'a str),
 }
 
+/// D564: with self-update off, a scheduled check does nothing and the
+/// updater stays up (it keeps the daemon counted as bootstrapped and answers
+/// requests), and a requested update fails with the reason.
+fn self_update_gate(
+    enabled: bool,
+    trigger: UpdateTrigger<'_>,
+) -> Result<Option<UpdateLoopControl>> {
+    if enabled {
+        return Ok(None);
+    }
+    if trigger == UpdateTrigger::Scheduled {
+        return Ok(Some(UpdateLoopControl::Continue));
+    }
+    anyhow::bail!(
+        "the app-server daemon does not update itself in Corbanu Terminal yet; update Corbanu Terminal with its own installer"
+    )
+}
+
 async fn update_once(
     http: &impl InstallerHttp,
     daemon: &Daemon,
@@ -338,6 +360,9 @@ async fn update_once(
     terminate: &mut Signal,
     trigger: UpdateTrigger<'_>,
 ) -> Result<(UpdateLoopControl, Option<RestartIfRunningOutcome>)> {
+    if let Some(control) = self_update_gate(SELF_UPDATE_ENABLED, trigger)? {
+        return Ok((control, None));
+    }
     if trigger == UpdateTrigger::Scheduled
         && !UpdaterSettings::load(&daemon.settings_file)
             .await?
@@ -747,6 +772,9 @@ async fn cancel_installer(child: &mut tokio::process::Child, package_root: &Path
 }
 
 async fn fetch_installer_script(http: &impl InstallerHttp) -> Result<Vec<u8>> {
+    // D564: the one place the installer is downloaded (update, restore and
+    // migration all come here).
+    self_update_gate(SELF_UPDATE_ENABLED, UpdateTrigger::Manual)?;
     match http.get(INSTALL_URL).await? {
         InstallerResponse::Success(body) => Ok(body),
         InstallerResponse::Unsuccessful { status } => {

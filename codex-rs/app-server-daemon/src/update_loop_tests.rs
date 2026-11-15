@@ -1382,3 +1382,30 @@ printf '%s' '{release}' > '{marker}'
         );
     }
 }
+
+/// D564: with self-update off, a scheduled check is skipped (the updater
+/// stays up) and a requested update or restore is refused before anything is
+/// downloaded.
+#[test]
+fn d564_self_update_gate_skips_scheduled_and_refuses_requested_updates() {
+    assert!(matches!(
+        super::self_update_gate(/*enabled*/ false, super::UpdateTrigger::Scheduled),
+        Ok(Some(super::UpdateLoopControl::Continue))
+    ));
+    for trigger in [
+        super::UpdateTrigger::Manual,
+        super::UpdateTrigger::RestoreProduction("release"),
+    ] {
+        let error = super::self_update_gate(/*enabled*/ false, trigger)
+            .err()
+            .expect("a requested update is refused");
+        assert!(
+            error.to_string().contains("does not update itself"),
+            "{error}"
+        );
+    }
+    assert!(matches!(
+        super::self_update_gate(/*enabled*/ true, super::UpdateTrigger::Manual),
+        Ok(None)
+    ));
+}

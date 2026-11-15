@@ -38,7 +38,10 @@ const ACCOUNT_WORKSPACE_MESSAGES_FETCH_TIMEOUT: Duration =
     Duration::from_millis(/*millis*/ 1000);
 const OPENROUTER_PROVIDER_ID: &str = "openrouter";
 const OPENROUTER_API_KEY_ENV_VAR: &str = "OPENROUTER_API_KEY";
-// Packaged clients use this together with the OAuth client ID override for staging login.
+// D563 (provisional, pending Travis): upstream lets packaged clients point
+// login at another issuer with this variable; Corbanu keeps it debug-only, as
+// on main, so a release build always logs in at the configured issuer.
+#[cfg(debug_assertions)]
 const LOGIN_ISSUER_OVERRIDE_ENV_VAR: &str = "CODEX_APP_SERVER_LOGIN_ISSUER";
 // The development success-page redirect remains debug-only.
 #[cfg(debug_assertions)]
@@ -725,6 +728,7 @@ impl AccountRequestProcessor {
             ));
         }
 
+        #[cfg_attr(not(debug_assertions), allow(unused_mut))]
         let mut opts = LoginServerOptions {
             open_browser: false,
             codex_streamlined_login,
@@ -738,6 +742,7 @@ impl AccountRequestProcessor {
                 config.auth_route_config(),
             )
         };
+        #[cfg(debug_assertions)]
         if let Ok(issuer) = std::env::var(LOGIN_ISSUER_OVERRIDE_ENV_VAR)
             && !issuer.trim().is_empty()
         {
