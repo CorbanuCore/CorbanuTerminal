@@ -57,19 +57,16 @@ async fn reasoning_defaults_reach_responses() -> Result<()> {
         let server = responses::start_mock_server().await;
         let home = tempfile::tempdir()?;
         let base_url = server.uri();
+        // Corbanu refuses a custom provider named "OpenAI"; use the built-in
+        // OpenAI provider pointed at the mock server instead.
         std::fs::write(
             home.path().join("config.toml"),
             format!(
                 r#"
 model = "gpt-5.5"
-model_provider = "reasoning-test"
+model_provider = "openai"
+openai_base_url = "{base_url}/v1"
 {settings}
-[model_providers.reasoning-test]
-name = "OpenAI"
-base_url = "{base_url}/v1"
-wire_api = "responses"
-request_max_retries = 0
-stream_max_retries = 0
 "#
             ),
         )?;

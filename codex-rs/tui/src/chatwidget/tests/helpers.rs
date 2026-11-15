@@ -434,6 +434,9 @@ pub(crate) fn set_chatgpt_auth(chat: &mut ChatWidget) {
         codex_model_provider_info::ModelProviderInfo::create_openai_provider(
             /*base_url*/ None,
         );
+    // Upstream gates usage reads on the server's requirement, which the
+    // OpenAI provider selected above always has.
+    chat.requires_openai_auth = true;
     chat.model_catalog = test_model_catalog(&chat.config);
 }
 

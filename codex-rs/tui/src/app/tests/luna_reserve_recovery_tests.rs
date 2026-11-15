@@ -51,6 +51,8 @@ pub(super) fn configure_reserve_catalog(app: &mut App) {
     );
     init.has_chatgpt_account = true;
     init.has_codex_backend_auth = true;
+    // Corbanu's default test provider is not OpenAI; Reserve applies to OpenAI sign-ins.
+    init.requires_openai_auth = true;
     app.replace_chat_widget(ChatWidget::new_with_app_event(init));
     app.chat_widget
         .handle_thread_session(app.primary_session_configured.clone().unwrap());

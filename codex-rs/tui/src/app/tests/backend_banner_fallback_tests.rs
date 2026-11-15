@@ -26,6 +26,16 @@ pub(super) fn fallback_response() -> GetAccountRateLimitsResponse {
 fn configure_fallback_model(app: &mut App) {
     set_chatgpt_auth(&mut app.chat_widget);
     set_fast_mode_test_catalog_for_models(&mut app.chat_widget, "gpt-5.5", "gpt-5.6-terra");
+    // Corbanu's test models offer only xhigh; these tests expect upstream's,
+    // which offer and default to medium.
+    let mut models = app.chat_widget.model_catalog().try_list_models().unwrap();
+    for model in &mut models {
+        for effort in &mut model.supported_reasoning_efforts {
+            effort.effort = ReasoningEffortConfig::Medium;
+        }
+        model.default_reasoning_effort = ReasoningEffortConfig::Medium;
+    }
+    app.chat_widget.model_catalog().replace_models_for_test(models);
     app.model_catalog = app.chat_widget.model_catalog();
     app.chat_widget.set_model("gpt-5.5");
 }
