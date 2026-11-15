@@ -145,7 +145,7 @@ fn cancelled_during(step: usize) -> (Vec<(u32, u32)>, bool) {
         }
     });
     let was_running = job.as_ref().is_none_or(|_| {
-        // SAFETY: copies[1] is the test\'s duplicate process handle.
+        // SAFETY: copies[1] is the test's duplicate process handle.
         unsafe {
             windows_sys::Win32::System::Threading::WaitForSingleObject(copies[1], 0) == WAIT_TIMEOUT
         }

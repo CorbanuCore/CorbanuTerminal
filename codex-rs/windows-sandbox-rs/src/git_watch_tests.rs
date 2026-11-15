@@ -203,7 +203,7 @@ fn file_print_of_an_unserved_reparse_point_differs_every_time() {
 }
 
 /// Makes the file `path`, a reparse point tagged `tag`, a symbolic link to
-/// the NT path `target` in place (same file; needs the privilege), as a
+/// the NT path `target` in place (same file; the OS may require the privilege), as a
 /// process a command left running could.
 #[cfg(windows)]
 fn retag_as_link(path: &Path, tag: u32, target: &str) -> std::io::Result<()> {
