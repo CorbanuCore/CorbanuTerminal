@@ -107,6 +107,16 @@ fn supports_credential_snapshot(params: &ExecParams) -> bool {
         })
 }
 
+/// Optional managed-network policy hooks for one exec request: the policy
+/// decider, the observer told about blocked requests, and the audit observer
+/// for policy decisions.
+#[derive(Default)]
+pub(crate) struct NetworkPolicyHooks {
+    pub(crate) decider: Option<Arc<dyn NetworkPolicyDecider>>,
+    pub(crate) denial_reporter: Option<Arc<dyn BlockedRequestObserver>>,
+    pub(crate) audit_observer: Option<NetworkPolicyAuditObserver>,
+}
+
 #[tracing::instrument(
     name = "codex.exec_server.process_prepare_sandbox",
     skip_all,
@@ -116,9 +126,7 @@ pub(crate) async fn prepare_exec_request_with_telemetry(
     params: &ExecParams,
     env: HashMap<String, String>,
     runtime_paths: Option<&ExecServerRuntimeOptions>,
-    network_policy_decider: Option<Arc<dyn NetworkPolicyDecider>>,
-    network_denial_reporter: Option<Arc<dyn BlockedRequestObserver>>,
-    network_policy_audit_observer: Option<NetworkPolicyAuditObserver>,
+    network_policy_hooks: NetworkPolicyHooks,
     credential_brokers: &RemoteCredentialBrokerCache,
     telemetry: &ProcessTelemetry,
 ) -> Result<PreparedExecRequest, JSONRPCErrorError> {
@@ -168,9 +176,7 @@ pub(crate) async fn prepare_exec_request_with_telemetry(
             network_proxy,
             runtime_paths.is_some_and(|paths| paths.proxy_private_ips_via_upstream),
             env,
-            network_policy_decider,
-            network_denial_reporter,
-            network_policy_audit_observer,
+            network_policy_hooks,
             telemetry,
         )
         .await?;
@@ -391,9 +397,7 @@ async fn prepare_managed_network(
     network_proxy: Option<NetworkProxyState>,
     proxy_private_ips_via_upstream: bool,
     env: HashMap<String, String>,
-    network_policy_decider: Option<Arc<dyn NetworkPolicyDecider>>,
-    network_denial_reporter: Option<Arc<dyn BlockedRequestObserver>>,
-    network_policy_audit_observer: Option<NetworkPolicyAuditObserver>,
+    network_policy_hooks: NetworkPolicyHooks,
     telemetry: &ProcessTelemetry,
 ) -> Result<
     (
@@ -407,6 +411,11 @@ async fn prepare_managed_network(
     let Some(mut state) = network_proxy else {
         return Ok((env, params.managed_network.clone(), None, None));
     };
+    let NetworkPolicyHooks {
+        decider: network_policy_decider,
+        denial_reporter: network_denial_reporter,
+        audit_observer: network_policy_audit_observer,
+    } = network_policy_hooks;
     let credential_masking = state
         .current_cfg()
         .await

@@ -35,6 +35,7 @@ use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::time::timeout;
 
+use super::NetworkPolicyHooks;
 use super::PreparedExecRequest;
 use super::prepare_exec_request_with_telemetry;
 #[cfg(unix)]
@@ -58,9 +59,11 @@ async fn prepare_exec_request(
         params,
         env,
         runtime_paths,
-        network_policy_decider,
-        network_denial_reporter,
-        network_policy_audit_observer,
+        NetworkPolicyHooks {
+            decider: network_policy_decider,
+            denial_reporter: network_denial_reporter,
+            audit_observer: network_policy_audit_observer,
+        },
         &codex_network_proxy::RemoteCredentialBrokerCache::default(),
         &ProcessTelemetry::default(),
     )

@@ -76,7 +76,6 @@ rama-dns = { version = "=0.3.0-alpha.4" }
 security-framework = "3"
 
 [target.'cfg(windows)'.dependencies]
-schannel = "0.1"
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_NetworkManagement_IpHelper",
