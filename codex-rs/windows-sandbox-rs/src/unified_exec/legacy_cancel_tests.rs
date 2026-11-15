@@ -141,6 +141,7 @@ fn cancelled_during(step: usize) -> (Vec<(u32, u32)>, bool) {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
+            /*private_desktop_name*/ None,
         );
         tokio::select! {
             spawned = spawn => panic!("the spawn ended: {:?}", spawned.map(|_| ())),
