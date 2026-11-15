@@ -71,6 +71,46 @@ class DiagnosticTests(unittest.TestCase):
             self.assertIsNone(deny.parse_marker(deny.marker(value)))
         self.assertIsNone(deny.parse_marker("<!-- cargo-deny-report {bad} -->"))
 
+    def test_large_graphs_keep_every_advisory_in_the_report(self):
+        item = deny.advisories(FIXTURE.read_text())[0]
+        paths = [
+            f"root-{i} → " + "dependency → " * 20 + "rustls-webpki 0.103.15"
+            for i in range(600)
+        ]
+        complete = "root → rustls-webpki 0.103.15"
+        paths += [complete, "webpki (remaining parents shown elsewhere)"]
+        items = [
+            {**item, "id": f"RUSTSEC-2026-{i:04}", "paths": paths} for i in range(20)
+        ]
+        body = deny.render(RECORD, 1, items, "run")
+        self.assertLess(len(body), 60000)
+        for advisory in items:
+            self.assertIn(advisory["id"], body)
+        self.assertEqual(body.count(complete), len(items))
+        self.assertIn("Additional dependency paths", body)
+        self.assertEqual(deny.parse_marker(body), RECORD)
+
+    def test_missing_solution_note_fails_clearly(self):
+        diagnostic = json.loads(FIXTURE.read_text().splitlines()[1])
+        diagnostic["fields"]["notes"] = []
+        with self.assertRaisesRegex(ValueError, "Unknown cargo-deny solution"):
+            deny.advisories(json.dumps(diagnostic))
+
+    def test_feature_graph_nodes(self):
+        graph = {
+            "Krate": {"name": "dep", "version": "1.0.0"},
+            "parents": [
+                {
+                    "Feature": {"crate_name": "consumer", "name": "tls"},
+                    "parents": [{"Krate": {"name": "root", "version": "2.0.0"}}],
+                }
+            ],
+        }
+        self.assertEqual(
+            deny.dependency_paths(graph),
+            ["root 2.0.0 → consumer feature tls → dep 1.0.0"],
+        )
+
     def test_full_check_exit_status_is_preserved(self):
         with tempfile.TemporaryDirectory() as temp:
             for status in (0, 1, 2, 101):
@@ -220,13 +260,21 @@ class ReporterTests(unittest.TestCase):
         )
         self.assertFalse(any(call[:2] == ["issue", "create"] for call in self.calls))
 
-    def test_reuse_closed_tracker_and_publish_recovery(self):
+    def test_clean_run_updates_closed_tracker_without_reopening(self):
         self.issues = [self.issue(state="closed")]
         self.output.write_text("")
         self.output.with_suffix(".status").write_text("0")
         deny.report(self.output, self.gh)
         self.assertIn("passed.", self.body)
-        self.assertTrue(any(call[:2] == ["issue", "reopen"] for call in self.calls))
+        self.assertFalse(any(call[:2] == ["issue", "reopen"] for call in self.calls))
+
+    def test_advisory_recurrence_reopens_same_closed_tracker(self):
+        self.issues = [self.issue(state="closed")]
+        deny.report(self.output, self.gh)
+        self.assertTrue(
+            any(call[:3] == ["issue", "reopen", "100"] for call in self.calls)
+        )
+        self.assertFalse(any(call[:2] == ["issue", "create"] for call in self.calls))
 
     def test_clean_first_run_does_not_create_issue(self):
         self.output.write_text("")

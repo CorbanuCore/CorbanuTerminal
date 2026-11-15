@@ -94,7 +94,7 @@ def advisories(text: str) -> list[dict]:
         advisory = fields["advisory"]
         advisory_id = advisory["id"]
         solution = next(
-            note for note in fields["notes"] if note.startswith("Solution: ")
+            (note for note in fields["notes"] if note.startswith("Solution: ")), ""
         )
         if solution == "Solution: No safe upgrade is available!":
             patched = []
@@ -194,15 +194,29 @@ def render(data: dict, status: int, items: list[dict], url: str) -> str:
             )
         )
     for item in items:
+        # A workspace graph can have hundreds of repeated inclusion paths.
+        # Prefer complete paths and keep room for every advisory's key details.
+        paths = sorted(
+            item["paths"],
+            key=lambda path: (
+                path.endswith("(remaining parents shown elsewhere)"),
+                len(path),
+                path,
+            ),
+        )[:3]
         lines += [
             f"### {item['id']} — {item['crate']} {item['locked']}",
             f"- Locked version: `{item['locked']}`",
             "- Patched versions: "
             + (", ".join(item["patched"]) or "No safe upgrade available"),
             "- Dependency paths (dependent → dependency):",
-            *[f"  - `{path}`" for path in item["paths"]],
+            *[f"  - `{path}`" for path in paths],
             "",
         ]
+        if len(item["paths"]) > len(paths):
+            lines.append(
+                "Additional dependency paths are in the cargo-deny-report artifact."
+            )
     lines += [
         "",
         "This single tracking issue is updated by main and daily runs, including recovery.",
@@ -292,7 +306,7 @@ def report(output: Path, gh=None) -> str:
         if owned:
             number = str(owned[0]["number"])
             gh(["issue", "edit", number, "--repo", repo, "--body-file", str(body_file)])
-            if owned[0]["state"] == "closed":
+            if owned[0]["state"] == "closed" and (status != 0 or items):
                 gh(["issue", "reopen", number, "--repo", repo])
             return f"Updated #{number}"
         gh(
