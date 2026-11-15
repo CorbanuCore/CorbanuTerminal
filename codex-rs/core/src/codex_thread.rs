@@ -1132,7 +1132,7 @@ impl CodexThread {
             status: None,
             id: None,
             role: "user".to_string(),
-            content: vec![ContentItem::InputText { text: message }],
+            content: vec![codex_protocol::models::ContentItem::InputText { text: message }],
             phase: None,
             internal_chat_message_metadata_passthrough: None,
         };

@@ -720,8 +720,8 @@ fn accounting_websocket_pin_matches_the_client_route() -> anyhow::Result<()> {
     let mut provider =
         ModelProviderInfo::create_openai_provider(Some("https://example.invalid/v1".to_string()));
     provider.query_params = Some(std::collections::HashMap::from([
-        ("api-version".to_string(), "2025-04-01".to_string()),
-        ("deployment".to_string(), "fixture".to_string()),
+        ("api-version".to_string(), "2025-04-01".into()),
+        ("deployment".to_string(), "fixture".into()),
     ]));
     let api = provider.to_api_provider(/*auth_mode*/ None)?;
     let requested = api.websocket_url_for_path("responses")?.to_string();

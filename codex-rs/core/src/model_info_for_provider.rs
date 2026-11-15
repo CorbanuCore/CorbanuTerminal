@@ -48,8 +48,11 @@ mod tests {
             Arc::new(codex_models_manager::manager::StaticModelsManager::new(
                 /*auth_manager*/ None,
                 Default::default(),
+                ModelOrigin::Provider,
             ));
-        let model = codex_model_provider_info::AMAZON_BEDROCK_GPT_5_4_MODEL_ID;
+        // Upstream's Bedrock catalog no longer lists GPT-5.4; GPT-5.5 is its
+        // OpenAI model.
+        let model = codex_model_provider_info::AMAZON_BEDROCK_GPT_5_5_MODEL_ID;
         assert!(is_synthetic(
             &other
                 .get_model_info(model, &config.to_models_manager_config())
