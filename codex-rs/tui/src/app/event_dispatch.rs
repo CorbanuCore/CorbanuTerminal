@@ -5544,6 +5544,12 @@ impl App {
                     {
                             self.chat_widget.windows_sandbox_elevated_setup_complete =
                                 elevated_enabled;
+                            // #2062 (main #2177): readiness is reported only once the session
+                            // confirms the sandbox refresh.
+                            self.chat_widget.add_info_message(
+                                "Windows sandbox set up. Confirming its use by this session…".to_string(),
+                                /*hint*/ None,
+                            );
                             if let Some(selection) = profile_selection {
                                 let inline = self.chat_widget.complete_inline_permission_profile_selection();
                                 self.select_permission_profile(app_server, selection).await;
@@ -5574,14 +5580,6 @@ impl App {
                                     display_label: preset.active_permission_profile.id.clone(),
                                 }));
                             }
-                                self.chat_widget.add_plain_history_lines(vec![
-                                    Line::from(vec!["• ".dim(), "Sandbox ready".into()]),
-                                    Line::from(vec![
-                                        "  ".into(),
-                                        "Corbanu Terminal can now safely edit files and execute commands in your computer"
-                                            .dark_gray(),
-                                    ]),
-                                ]);
                             if let Some(message) = codex_sandboxing::legacy_windows_sandbox_warning(
                                 self.chat_widget.windows_sandbox_config.level(),
                                 &preset.permission_profile,
