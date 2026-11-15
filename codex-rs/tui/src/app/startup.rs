@@ -14,6 +14,7 @@ use crate::session_start::SessionStartConfig;
 use crate::session_start::SessionStartOutcome;
 use crate::session_start::cancel_session_start;
 use crate::session_start::complete_session_start;
+use crate::session_start::session_start_refusal_exit;
 use crate::unarchive_prompt::run_unarchive_prompt;
 
 fn spawn_startup_thread_start(
@@ -242,6 +243,7 @@ impl App {
         initial_prompt: Option<String>,
         initial_images: Vec<PathBuf>,
         session_selection: SessionSelection,
+        startup_resume_model_override: Option<ResumeModelOverride>,
         feedback: codex_feedback::CodexFeedback,
         is_first_run: bool,
         should_prompt_windows_sandbox_nux_at_startup: bool,
@@ -256,6 +258,8 @@ impl App {
         mut startup_draft: StartupDraftPump,
         managed_worktree: Option<crate::ManagedTuiWorktree>,
         daemon_cli_executable: Option<AbsolutePathBuf>,
+        deferred_provider_setup: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+        startup_provider_resolution: Option<crate::startup_provider::StartupProviderResolution>,
     ) -> Result<AppExitInfo> {
         use tokio_stream::StreamExt;
 
@@ -314,16 +318,48 @@ impl App {
         }
         let (app_event_tx, mut app_event_rx) = unbounded_channel();
         let app_event_tx = AppEventSender::new(app_event_tx);
+        crate::chatwidget::agent_control::start(&app_event_tx);
+        crate::chatwidget::campaign_tracker::start(&app_event_tx);
         if let Some(message) = project_config_warning(&config) {
             app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
                 history_cell::StartupWarningsCell::new(vec![message]),
             )));
         }
         emit_system_bwrap_warning(&app_event_tx, &config);
+        emit_legacy_windows_sandbox_warning(&app_event_tx, &config);
         tui.set_notification_settings(
             local_settings.tui.notification_settings.method,
             local_settings.tui.notification_settings.condition,
         );
+
+        // A resumed session keeps the model, provider and effort it was saved with.
+        let _startup_resume_model_override = match (
+            startup_resume_model_override,
+            &session_selection,
+            state_db.as_ref(),
+        ) {
+            (Some(explicit), _, _) => Some(explicit),
+            (None, SessionSelection::Resume(target), Some(state_db)) => {
+                match state_db.get_thread(target.thread_id).await {
+                    Ok(Some(metadata)) => apply_persisted_resume_runtime(
+                        &mut config,
+                        metadata.model.as_deref(),
+                        metadata.model_provider.as_str(),
+                        metadata.reasoning_effort.clone(),
+                    ),
+                    Ok(None) => None,
+                    Err(error) => {
+                        tracing::warn!(
+                            thread_id = %target.thread_id,
+                            %error,
+                            "failed to load persisted runtime for startup resume"
+                        );
+                        None
+                    }
+                }
+            }
+            (None, _, _) => None,
+        };
 
         let harness_overrides = startup_try!(normalize_harness_overrides_for_cwd(
             harness_overrides,
@@ -332,7 +368,9 @@ impl App {
         app_server.model_provider_override = harness_overrides.model_provider.clone();
         let fresh_start = matches!(
             &session_selection,
-            SessionSelection::StartFresh | SessionSelection::Exit
+            SessionSelection::StartFresh
+                | SessionSelection::ResumePanesOnly { .. }
+                | SessionSelection::Exit
         );
         let server_owned_fresh_bootstrap = uses_server_owned_fresh_bootstrap(
             &app_server_target,
@@ -442,7 +480,16 @@ impl App {
             );
         }
         let mut model = startup_model(&config, &bootstrap, startup_defaults.server_defaults_read);
-        let available_models = bootstrap.available_models;
+        let mut available_models = bootstrap.available_models;
+        let listed_models = available_models.clone();
+        if let Some(state_db) = state_db.as_ref() {
+            match state_db.list_gpu_runtime_providers().await {
+                Ok(providers) => {
+                    available_models.extend(providers.iter().filter_map(gpu_runtime_model_preset))
+                }
+                Err(error) => tracing::warn!(%error, "failed to load GPU rental model catalog"),
+            }
+        }
         let mut remote_connection =
             crate::status::remote_connection::remote_connection_status_value(
                 &app_server_target,
@@ -517,14 +564,37 @@ impl App {
         {
             tracing::warn!(%error, "TUI task delegation is unavailable without its MCP server");
         }
+        let provider_runtime =
+            crate::startup_provider::resolve_for_app(&config, startup_provider_resolution).await;
+        crate::model_catalog::include_runtime_model(
+            &mut available_models,
+            &model,
+            &config.model_provider_id,
+        );
+        let session_recovery_only = matches!(
+            provider_runtime.current,
+            codex_provider_auth::CurrentSelectionDecision::RequireExplicitRecovery { .. }
+        ) && matches!(&session_selection, SessionSelection::Resume(_));
+        let shared_provider_status_host = Some(provider_runtime.policy.host());
         let model_catalog = Arc::new(
             ModelCatalog::new(available_models.clone())
                 .with_collaboration_modes(bootstrap.collaboration_modes),
         );
+        model_catalog.mark_listed(&listed_models);
+        model_catalog.set_provider_policy(provider_runtime.policy);
+        // #572: Bedrock models for a session that may switch to a named Bedrock account.
+        provider_management_status::check_named_bedrock_account(
+            &model_catalog,
+            &config,
+            &app_event_tx,
+        );
+        // D86/#1193: which providers have named accounts, for `/status`.
+        crate::provider_named_accounts::check_named_account_providers(&model_catalog, &config);
+        model_catalog.set_session_recovery_only(session_recovery_only);
         let feedback_audience = bootstrap.feedback_audience;
         let auth_mode = bootstrap.auth_mode;
         let has_chatgpt_account = bootstrap.has_chatgpt_account;
-        let has_codex_backend_auth = matches!(auth_mode, Some(TelemetryAuthMode::Chatgpt));
+        let has_codex_backend_auth = bootstrap.has_codex_backend_auth;
         let requires_openai_auth = bootstrap.requires_openai_auth;
         let status_account_display = bootstrap.status_account_display.clone();
         let initial_plan_type = bootstrap.plan_type;
@@ -567,8 +637,18 @@ impl App {
         let thread_and_widget_started_at = Instant::now();
         let pending_startup_thread_start = matches!(
             &session_selection,
-            SessionSelection::StartFresh | SessionSelection::Exit
+            SessionSelection::StartFresh
+                | SessionSelection::ResumePanesOnly { .. }
+                | SessionSelection::Exit
         );
+        let restore_pane_layout_for_thread_id = match &session_selection {
+            SessionSelection::Resume(target_session) => Some(target_session.thread_id.to_string()),
+            SessionSelection::ResumePanesOnly { codex_thread_id } => Some(codex_thread_id.clone()),
+            SessionSelection::Fork(_)
+            | SessionSelection::StartFresh
+            | SessionSelection::Exit
+            | SessionSelection::AgentsOverview => None,
+        };
         let mut start_in_agents_overview =
             matches!(&session_selection, SessionSelection::AgentsOverview);
         let mut read_only_thread = false;
@@ -576,6 +656,7 @@ impl App {
         let mut history_notice = None;
         let (mut chat_widget, initial_started_thread) = match session_selection {
             SessionSelection::StartFresh
+            | SessionSelection::ResumePanesOnly { .. }
             | SessionSelection::Exit
             | SessionSelection::AgentsOverview => {
                 if !start_in_agents_overview {
@@ -753,6 +834,25 @@ impl App {
                         },
                     )
                     .await;
+                    // #656: a resume the server refused ends the launch with a plain message.
+                    let resumed = match resumed {
+                        Err(err) => match session_start_refusal_exit(
+                            "resume",
+                            target_session.thread_id,
+                            &err,
+                        ) {
+                            Some(exit_info) => {
+                                let _ = tui.terminal.clear();
+                                shutdown_startup_sessions(
+                                    std::iter::once(app_server).chain(other_backends.drain(..)),
+                                )
+                                .await;
+                                return Ok(exit_info);
+                            }
+                            None => Err(err),
+                        },
+                        resumed => resumed,
+                    };
                     match startup_try!(resumed) {
                         SessionStartOutcome::Started(started) => Some(*started),
                         SessionStartOutcome::CommandCenter => None,
@@ -763,6 +863,31 @@ impl App {
                         }
                     }
                 };
+                if let Some(resumed) = resumed.as_ref() {
+                    apply_persisted_resume_runtime(
+                        &mut config,
+                        Some(&resumed.session.model),
+                        &resumed.session.model_provider_id,
+                        resumed.session.reasoning_effort.clone(),
+                    );
+                    config.service_tier = resumed.session.service_tier.clone();
+                    if !read_only_thread
+                        && !resumed.blocks_direct_input
+                        && let Err(error) = resume_defaults::remember_resumed_model(
+                            &app_server,
+                            &config,
+                            model_settings,
+                            &resumed.session,
+                        )
+                        .await
+                    {
+                        app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+                            history_cell::new_error_event(format!(
+                                "Session restored, but failed to save its startup model: {error}"
+                            )),
+                        )));
+                    }
+                }
                 let init = crate::chatwidget::ChatWidgetInit {
                     local_settings: local_settings.clone(),
                     config: config.clone(),
@@ -857,6 +982,23 @@ impl App {
                     },
                 )
                 .await;
+                // #656: a fork the server refused ends the launch with a plain message.
+                let forked = match forked {
+                    Err(err) => {
+                        match session_start_refusal_exit("fork", target_session.thread_id, &err) {
+                            Some(exit_info) => {
+                                let _ = tui.terminal.clear();
+                                shutdown_startup_sessions(
+                                    std::iter::once(app_server).chain(other_backends.drain(..)),
+                                )
+                                .await;
+                                return Ok(exit_info);
+                            }
+                            None => Err(err),
+                        }
+                    }
+                    forked => forked,
+                };
                 let forked = match startup_try!(forked) {
                     SessionStartOutcome::Started(started) => Some(*started),
                     SessionStartOutcome::CommandCenter => None,
@@ -927,6 +1069,7 @@ impl App {
             environment_manager.as_ref(),
         ));
         let thread_and_widget_ms = thread_and_widget_started_at.elapsed().as_millis();
+        chat_widget.maybe_prompt_planted_project_metadata();
         chat_widget.windows_sandbox_local_server = !app_server_target.uses_remote_workspace()
             && app_server.app_server_platform_os() == Some("windows");
         chat_widget.windows_sandbox_host = if app_server_target.uses_remote_workspace() {
@@ -958,12 +1101,139 @@ impl App {
                 color_eyre::eyre::eyre!(
                     "Invalid `tui.keymap` configuration: {err}\n\
 Fix the config and retry.\n\
-See the Codex keymap documentation for supported actions and examples."
+See the Corbanu Terminal keymap documentation for supported actions and examples."
                 )
             });
         let runtime_keymap = startup_try!(runtime_keymap);
         #[cfg(not(debug_assertions))]
         let upgrade_version = crate::updates::get_upgrade_version(&config);
+
+        let restored_pane_layout =
+            restore_pane_layout_for_thread_id
+                .as_deref()
+                .and_then(|thread_id| {
+                    crate::claude_panes::load_pane_layout(
+                        config.codex_home.as_ref(),
+                        Some(thread_id),
+                    )
+                });
+        let restored_spawn_parent_by_node = restored_pane_layout
+            .as_ref()
+            .map(|layout| {
+                layout
+                    .spawn_parent_by_node
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let restored_claude_panes = crate::claude_panes::ClaudePaneRegistry::restore_from_disk(
+            config.codex_home.as_ref(),
+            restored_pane_layout.as_ref(),
+        );
+        let restored_codex_user_pane_ids = restored_pane_layout
+            .as_ref()
+            .map(|layout| {
+                layout
+                    .codex_user_pane_ids
+                    .iter()
+                    .filter_map(|thread_id| ThreadId::from_string(thread_id).ok())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let restored_spawn_nazgul_pane_id = restored_pane_layout
+            .as_ref()
+            .and_then(|layout| layout.spawn_nazgul_pane_id.clone())
+            .filter(|pane_id| {
+                // `codex-main`, any restored Claude pane, or a native Codex agent thread node id
+                // (`thread:<uuid>`) are all valid Nazgul root bindings.
+                if pane_id == crate::claude_panes::CODEX_MAIN_PANE_ID {
+                    return true;
+                }
+                if crate::spawn_orchestration::node_id_thread(pane_id).is_some() {
+                    return true;
+                }
+                restored_claude_panes
+                    .panes()
+                    .iter()
+                    .any(|pane| pane.id == *pane_id)
+            });
+        let restored_spawn_nazgul_rebind_required = restored_pane_layout
+            .as_ref()
+            .is_some_and(|layout| layout.spawn_nazgul_rebind_required);
+        let restored_spawn_legacy_read_only = restored_pane_layout
+            .as_ref()
+            .is_some_and(crate::spawn_orchestration::pane_layout_has_legacy_spawn_hierarchy);
+        let mut restored_orchestrate_whips: HashMap<_, _> = restored_pane_layout
+            .as_ref()
+            .map(|layout| {
+                layout
+                    .orchestrate_whips
+                    .iter()
+                    .filter(|(_, whip)| whip.state != crate::orchestrate::WhipState::Detached)
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        for whip in restored_orchestrate_whips.values_mut() {
+            if matches!(
+                whip.kind,
+                crate::orchestrate::WhipKind::Assignment {
+                    phase: crate::orchestrate::AssignmentPhase::Executing,
+                    ..
+                }
+            ) {
+                whip.last_fire_utc = Some(chrono::Utc::now());
+                // Generation zero represents the state restored from disk. Treat any saved
+                // Worker output as already observed so restart honors one full cadence; a fresh
+                // completion increments the generation and can still trigger immediately.
+                whip.last_idle_generation_fired = Some(0);
+            } else {
+                whip.last_idle_generation_fired = Some(0);
+            }
+        }
+        let restored_orchestrate_next_whip_seq = restored_pane_layout
+            .as_ref()
+            .map(|layout| layout.orchestrate_next_whip_seq)
+            .unwrap_or_else(|| {
+                restored_orchestrate_whips
+                    .keys()
+                    .filter_map(|id| {
+                        id.strip_prefix("whip-")
+                            .or_else(|| id.strip_prefix("assignment-"))?
+                            .parse::<u64>()
+                            .ok()
+                    })
+                    .max()
+                    .unwrap_or(0)
+            });
+        let restored_orchestrate_idle_generation_by_target = restored_orchestrate_whips
+            .values()
+            .map(|whip| (whip.target.clone(), 0))
+            .collect();
+        let restored_spawn_next_dispatch_seq = restored_pane_layout
+            .as_ref()
+            .map(|layout| layout.spawn_next_dispatch_seq.max(1))
+            .unwrap_or(1);
+        let restored_spawn_processed_dispatch_seq_ids = restored_pane_layout
+            .as_ref()
+            .map(|layout| {
+                crate::spawn_orchestration::bounded_spawn_processed_dispatch_seq_ids(
+                    layout.spawn_processed_dispatch_seq_ids.iter().copied(),
+                    restored_spawn_next_dispatch_seq,
+                )
+            })
+            .unwrap_or_default();
+        let restored_spawn_processed_dispatch_origins = restored_pane_layout
+            .as_ref()
+            .map(|layout| {
+                layout
+                    .spawn_processed_dispatch_origin_ids
+                    .iter()
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
 
         let agents_overview =
             agents_overview::AgentsOverviewState::new(local_settings.tui.agents_overview_grouping);
@@ -979,6 +1249,13 @@ See the Codex keymap documentation for supported actions and examples."
             workspace_command_runner: Some(workspace_command_runner),
             config,
             local_settings,
+            active_deferred_provider_setup: deferred_provider_setup.clone(),
+            shared_provider_setup_session: None,
+            shared_provider_status_host,
+            shared_provider_account_auth_host: None,
+            provider_management_host: None,
+            provider_management_generation: 0,
+            pending_wallet_create_deferred: None,
             launch_cwd,
             runtime_working_directory_override: None,
             state_db,
@@ -989,6 +1266,7 @@ See the Codex keymap documentation for supported actions and examples."
             runtime_approval_policy_override: None,
             runtime_approvals_reviewer_override: None,
             runtime_permission_profile_override: None,
+            pending_permission_confirmation: None,
             pending_server_profiles: HashMap::new(),
             file_search,
             enhanced_keys_supported,
@@ -996,6 +1274,7 @@ See the Codex keymap documentation for supported actions and examples."
             key_chord_matcher: KeyChordMatcher::default(),
             routed_key_activation: None,
             transcript_cells: Vec::new(),
+            claude_pane_transcript_cells: HashMap::new(),
             native_history: Default::default(),
             turn_tips: Default::default(),
             transcript_view: Default::default(),
@@ -1015,6 +1294,7 @@ See the Codex keymap documentation for supported actions and examples."
             status_line_invalid_items_warned: status_line_invalid_items_warned.clone(),
             terminal_title_invalid_items_warned: terminal_title_invalid_items_warned.clone(),
             skill_load_warnings: SkillLoadWarningState::default(),
+            skills_refresh_generation: Arc::new(AtomicU64::new(0)),
             backtrack: BacktrackState::default(),
             backtrack_render_pending: false,
             feedback: feedback.clone(),
@@ -1049,7 +1329,66 @@ See the Codex keymap documentation for supported actions and examples."
             thread_event_listener_tasks: HashMap::new(),
             agent_navigation: AgentNavigationState::default(),
             agents_overview,
+            spawn_parent_by_thread: HashMap::new(),
+            spawn_parent_by_node: restored_spawn_parent_by_node,
+            spawn_native_runtime_by_node: restored_pane_layout
+                .as_ref()
+                .map(|layout| {
+                    layout
+                        .spawn_native_runtime_by_node
+                        .clone()
+                        .into_iter()
+                        .collect()
+                })
+                .unwrap_or_default(),
+            spawn_native_endpoint_by_node: restored_pane_layout
+                .as_ref()
+                .map(|layout| {
+                    layout
+                        .spawn_native_endpoint_by_node
+                        .iter()
+                        .filter_map(|(node, endpoint)| {
+                            ThreadId::from_string(endpoint)
+                                .ok()
+                                .map(|endpoint| (node.clone(), endpoint))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            spawn_crew: restored_pane_layout
+                .as_ref()
+                .and_then(|layout| layout.spawn_crew.clone()),
+            spawn_legacy_read_only: restored_spawn_legacy_read_only,
+            spawn_status_by_thread: HashMap::new(),
+            spawn_waiting_for_agents_by_thread: HashMap::new(),
+            spawn_parent_reports_by_node: HashMap::new(),
+            spawn_dispatch_acks_by_target_task: HashMap::new(),
+            spawn_next_dispatch_seq: restored_spawn_next_dispatch_seq,
+            spawn_processed_dispatch_seq_ids: restored_spawn_processed_dispatch_seq_ids,
+            spawn_processed_dispatch_origins: restored_spawn_processed_dispatch_origins,
+            spawn_processed_terminal_turns: HashSet::new(),
+            spawn_auto_loop_state_by_node: HashMap::new(),
+            spawn_operator_input_seen: false,
+            kill_switch_held_claude_tasks: Vec::new(),
+            kill_switch_held_native_tasks: Vec::new(),
+            // Set from the home's watch at start (`watch_kill_switch_elsewhere`).
+            kill_switch_known_on: false,
+            spawn_quarantine_notified_by_node: HashSet::new(),
+            spawn_context_left_by_thread: HashMap::new(),
+            spawn_last_report_seq_by_node: HashMap::new(),
+            spawn_last_dispatch_seq_by_node: HashMap::new(),
+            spawn_last_event_at_by_node: HashMap::new(),
+            spawn_nazgul_pane_id: restored_spawn_nazgul_pane_id,
+            spawn_nazgul_rebind_required: restored_spawn_nazgul_rebind_required,
+            orchestrate_whips: Box::new(restored_orchestrate_whips),
+            orchestrate_next_whip_seq: restored_orchestrate_next_whip_seq,
+            #[cfg(test)]
+            orchestrate_now_override: None,
+            orchestrate_idle_generation_by_target: Box::new(
+                restored_orchestrate_idle_generation_by_target,
+            ),
             side_threads: HashMap::new(),
+            claude_panes: restored_claude_panes,
             abandoned_side_threads: HashSet::new(),
             active_thread_id: None,
             active_thread_rx: None,
@@ -1115,9 +1454,44 @@ See the Codex keymap documentation for supported actions and examples."
         } else {
             app.refresh_agents_overview_threads(&app_server);
         }
+        if let Some(deferred) = deferred_provider_setup {
+            app.app_event_tx
+                .send(AppEvent::BeginDeferredCorbanuPlan { deferred });
+        }
+        for thread_id in restored_codex_user_pane_ids {
+            app.upsert_agent_picker_thread(
+                thread_id, /*agent_nickname*/ None, /*agent_role*/ None,
+                /*is_closed*/ false,
+            );
+        }
+        app.refresh_gpu_spend_indicator().await;
+        // A rental outlives the TUI that created it. Reattach the independent reconciler on
+        // every startup; its process lock deduplicates concurrent Corbanu Terminal processes and it
+        // exits immediately when there is no potentially billable work.
+        app.start_gpu_controller();
+        app.watch_kill_switch_elsewhere();
+        app.watch_level_raised_elsewhere();
+        let telegram_home = app.config.codex_home.clone().to_path_buf();
+        tokio::spawn(async move {
+            let result = tokio::task::spawn_blocking(move || {
+                crate::chatwidget::telegram_setup::ensure_connector(&telegram_home)
+            })
+            .await;
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    tracing::warn!(%error, "configured Telegram connector did not start")
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "Telegram connector startup task failed")
+                }
+            }
+        });
         if let Some(entry) = startup_hooks_browser {
             app.chat_widget.open_hooks_browser(entry);
         }
+        app.seed_restored_claude_pane_transcripts();
+        app.show_restored_active_claude_pane();
         app.update_visible_history_rows(tui.terminal.last_known_screen_size);
         let initial_session_started_at = Instant::now();
         if let Some(started) = initial_started_thread {
@@ -1145,6 +1519,11 @@ See the Codex keymap documentation for supported actions and examples."
                     return shutdown_on_startup_error(app_server, &mut other_backends, err).await;
                 }
             }
+            app.restore_codex_user_panes_from_saved_state(&mut app_server)
+                .await;
+            app.restore_native_spawn_panes_from_saved_state(&mut app_server)
+                .await;
+            app.audit_restored_assignments();
             if let Some(error) = provider_error {
                 app.chat_widget
                     .show_provider_error(error, /*rejected_message_id*/ None);
@@ -1226,6 +1605,7 @@ See the Codex keymap documentation for supported actions and examples."
         }
         let tui_events = tui.event_stream();
         tokio::pin!(tui_events);
+        let _whip_sweep_tick = spawn_whip_sweep_tick(app.app_event_tx.clone());
         tracing::info!(
             duration_ms = %(startup_elapsed_before_app + startup_started_at.elapsed()).as_millis(),
             bootstrap_ms = %bootstrap_ms,
@@ -1258,6 +1638,8 @@ See the Codex keymap documentation for supported actions and examples."
         let mut settled_size_tags = crate::terminal_size_telemetry::tags(last_screen_size);
         let mut pending_resize: Option<(ratatui::layout::Size, Instant)> = None;
         let mut reconnect = None;
+        let mut gpu_runtime_overlay_tick = tokio::time::interval(Duration::from_secs(5));
+        gpu_runtime_overlay_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut waiting_for_initial_session_configured = wait_for_initial_session_configured;
         let mut waiting_for_initial_session_header = true;
 
@@ -1477,7 +1859,13 @@ See the Codex keymap documentation for supported actions and examples."
                             }
                             Ok(AppRunControl::Exit(reason)) => AppRunControl::Exit(reason),
                             Err(err) if app.recover_transport_error(&err) => AppRunControl::Continue,
-                            Err(err) => break Err(err),
+                            Err(err) => {
+                                tracing::error!(error = ?err, "contained app event handler failure");
+                                app.chat_widget.add_error_message(format!(
+                                    "A command failed but Corbanu Terminal is still running: {err:#}"
+                                ));
+                                AppRunControl::Continue
+                            }
                         }
                     }
                     active = async {
@@ -1492,7 +1880,10 @@ See the Codex keymap documentation for supported actions and examples."
                     ) && !has_pending_app_events && !app.reconnect.offline => {
                         if let Some(event) = active {
                             if let Err(err) = app.handle_active_thread_event(tui, backends.session_at_mut(displayed_session), event).await {
-                                break Err(err);
+                                tracing::error!(error = ?err, "contained active-thread event failure");
+                                app.chat_widget.add_error_message(format!(
+                                    "A pane event failed but Corbanu Terminal is still running: {err:#}"
+                                ));
                             }
                         } else {
                             app.clear_active_thread().await;
@@ -1525,12 +1916,50 @@ See the Codex keymap documentation for supported actions and examples."
                             match app.handle_tui_event(tui, backends.session_at_mut(displayed_session), event).await {
                                 Ok(control) => control,
                                 Err(err) if app.recover_transport_error(&err) => AppRunControl::Continue,
-                            Err(err) => break Err(err),
+                                Err(err) => {
+                                    tracing::error!(error = ?err, "contained terminal input handler failure");
+                                    app.chat_widget.add_error_message(format!(
+                                        "An input command failed but Corbanu Terminal is still running: {err:#}"
+                                    ));
+                                    AppRunControl::Continue
+                                }
                             }
                         } else {
                             tracing::warn!("terminal input stream closed; shutting down active thread");
                             app.handle_exit_mode(backends.session_at_mut(displayed_session), ExitMode::ShutdownFirst).await
                         }
+                    }
+                    signal = tokio::signal::ctrl_c() => {
+                        // SIGINT from outside the terminal (raw mode turns Ctrl+C into a key).
+                        if let Err(err) = signal {
+                            tracing::warn!(error = %err, "failed to listen for SIGINT");
+                            AppRunControl::Continue
+                        } else if app.active_thread_id.is_some() {
+                            match Box::pin(app.handle_event(
+                                tui,
+                                backends.session_at_mut(displayed_session),
+                                AppEvent::CodexOp(
+                                    AppCommand::interrupt_and_restore_prompt_if_no_output(),
+                                ),
+                            ))
+                            .await
+                            {
+                                Ok(control) => control,
+                                Err(err) => {
+                                    tracing::error!(error = ?err, "contained interrupt handler failure");
+                                    app.chat_widget.add_error_message(format!(
+                                        "Interrupt failed but Corbanu Terminal is still running: {err:#}"
+                                    ));
+                                    AppRunControl::Continue
+                                }
+                            }
+                        } else {
+                            app.handle_exit_mode(backends.session_at_mut(displayed_session), ExitMode::ShutdownFirst).await
+                        }
+                    }
+                    _ = gpu_runtime_overlay_tick.tick() => {
+                        app.refresh_gpu_runtime_overlay().await;
+                        AppRunControl::Continue
                     }
                     (owner, app_server_event) = backends.next_event(paused_backend) => {
                         match app_server_event {
@@ -1565,6 +1994,8 @@ See the Codex keymap documentation for supported actions and examples."
                                     break Err(err);
                                 }
                                 backends.resume_events(displayed_owner);
+                                app.restore_codex_user_panes_from_saved_state(backends.session_at_mut(displayed_session)).await;
+                                app.restore_native_spawn_panes_from_saved_state(backends.session_at_mut(displayed_session)).await;
                                 waiting_for_initial_session_configured = app.pending_startup_thread_start;
                                 if app.pending_startup_thread_start {
                                     spawn_startup_thread_start(
@@ -1702,8 +2133,23 @@ See the Codex keymap documentation for supported actions and examples."
         // Let the pending terminal poll unwind while the app server shuts down.
         tui.pause_events();
         app.chat_widget.mention_usage_mut().flush().await;
+        let shutdown_detail = match &exit_reason_result {
+            Ok(_) => "user or terminal exit",
+            Err(_) => "TUI event loop failure",
+        };
+        if let Err(error) = app
+            .show_backend_shutdown_control_events(tui, shutdown_detail)
+            .await
+        {
+            tracing::error!(
+                error = ?error,
+                error_chain = %format!("{error:#}"),
+                "failed to render backend shutdown control events"
+            );
+        }
+        app.abort_all_thread_event_listeners();
         if let Err(err) = backends.shutdown().await {
-            tracing::warn!(error = %err, "failed to shut down embedded app server");
+            tracing::error!(error = ?err, "failed to shut down embedded app server");
         }
         let clear_pet_result = tui.clear_ambient_pet_image();
         let clear_images = tui.terminal.clear_frame_images(&mut tui.retained_images);
@@ -1730,6 +2176,16 @@ See the Codex keymap documentation for supported actions and examples."
                 return Err(err);
             }
         };
+        // D243 (#1412): the conversation on screen at quit is the one `resume --last` reopens.
+        if matches!(exit_reason, ExitReason::UserRequested)
+            && let Some(thread) = app.exit_resumable_thread()
+        {
+            crate::quit_thread_record::record_quit_thread(
+                app.config.codex_home.as_ref(),
+                thread.thread_id,
+                chrono::Utc::now().timestamp(),
+            );
+        }
         Ok(app.exit_info(exit_reason))
     }
 }
