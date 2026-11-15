@@ -1,9 +1,9 @@
-//! D490 / #1992: cross a volume mount above already-discovered metadata.
-//! Ordinary junctions, symbolic links and ambiguous reparse data stay refused.
+//! D490 / #1992: cross a mount or junction to an entire local volume, by
+//! GUID, above already-discovered metadata. Other junctions, symbolic links
+//! and ambiguous reparse data stay refused.
 
 use crate::acl::walk::Handle;
 use crate::acl::walk::Kind;
-use std::path::Path;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::System::IO::DeviceIoControl;
 
@@ -13,14 +13,28 @@ const MOUNT_POINT: u32 = 0xA000_0003;
 #[path = "nested_metadata_mount_parse_tests.rs"]
 mod tests;
 
-/// Open only a mount to an entire local volume, never the path a junction
-/// could redirect. The reparse data is read from the entry itself relative
+#[cfg(test)]
+thread_local! {
+    pub(super) static BEFORE_MOUNT_READ: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
+    pub(super) static BEFORE_VOLUME_OPEN: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Open a mount or junction to an entire local volume by GUID, never its
+/// redirectable filesystem path. This does not require mount-manager registration. The reparse data is read from the entry itself relative
 /// to its held parent. The caller still verifies the metadata's volume and
 /// file ID on the handle it lists; a changed or unreadable target fails closed.
 ///
 /// # Safety
 /// `parent` must remain an open directory handle throughout this call.
 pub(super) unsafe fn open_volume(parent: HANDLE, name: &[u16]) -> Option<Handle> {
+    #[cfg(test)]
+    BEFORE_MOUNT_READ.with(|hook| {
+        if let Some(hook) = hook.borrow_mut().take() {
+            hook();
+        }
+    });
     let mount = crate::acl::walk::open_itself(parent, name, /*access*/ 0).ok()?;
     let attributes = mount.kind().ok()?;
     if !attributes.is_dir() || attributes.tag != MOUNT_POINT {
@@ -43,16 +57,16 @@ pub(super) unsafe fn open_volume(parent: HANDLE, name: &[u16]) -> Option<Handle>
         return None;
     }
     let volume = volume_root(buffer.get(..returned as usize)?)?;
-    const FILE_TRAVERSE: u32 = 0x20;
-    const FILE_READ_ATTRIBUTES: u32 = 0x80;
-    const SYNCHRONIZE: u32 = 0x0010_0000;
-    // GLOBAL?? bypasses per-logon DOS-device aliases. Only the mount
-    // manager's global volume name is resolved, never the mounted path.
-    let root = Handle::open(
-        Path::new(&volume),
-        FILE_TRAVERSE | SYNCHRONIZE | FILE_READ_ATTRIBUTES,
-    )
-    .ok()?;
+    #[cfg(test)]
+    BEFORE_VOLUME_OPEN.with(|hook| {
+        if let Some(hook) = hook.borrow_mut().take() {
+            hook();
+        }
+    });
+    // An absolute NT name avoids per-logon DOS-device aliases, including
+    // the Win32 GLOBALROOT alias. Only the global volume name is resolved.
+    let root =
+        crate::acl::walk::open_absolute_folder(&volume.encode_utf16().collect::<Vec<_>>()).ok()?;
     (root.kind().ok()?.kind() == Kind::Folder).then_some(root)
 }
 
@@ -100,5 +114,5 @@ fn volume_root(buffer: &[u8]) -> Option<String> {
     {
         return None;
     }
-    Some(format!(r"\\?\GLOBALROOT\GLOBAL??\Volume{{{guid}}}\"))
+    Some(format!(r"\GLOBAL??\Volume{{{guid}}}\"))
 }

@@ -290,7 +290,7 @@ fn open_by_path(path: &Path, access: u32) -> std::io::Result<crate::acl::walk::H
 
 /// #1909: the folder holding `path` (absolute), reached one folder at a time
 /// from the top of its volume, and the last name of `path`. D490 / #1992:
-/// a verified volume mount is opened by its global volume GUID; other links
+/// a mount or junction to an entire volume is opened by its global GUID; other links
 /// are never followed. Anything ambiguous still counts as changed every time.
 /// The caller must compare the final metadata's volume and file ID.
 fn open_parent_unfollowed(path: &Path) -> Option<(crate::acl::walk::Handle, Vec<u16>)> {
@@ -694,7 +694,7 @@ fn contents_within(folder: &Path, budget: &ContentBudget) -> crate::git_watch::P
 ///
 /// #1909: nothing is looked up by path below the top of the volume:
 /// `folder` is reached one folder at a time from there, refusing links
-/// except verified volume mounts ([`open_parent_unfollowed`]), and must
+/// except mounts/junctions to volume GUID roots ([`open_parent_unfollowed`]), and must
 /// still be the file `expected` on the recorded volume;
 /// each folder below it is opened through the folder it was listed in.
 /// Otherwise (a folder on the way swapped for a link, say) it differs

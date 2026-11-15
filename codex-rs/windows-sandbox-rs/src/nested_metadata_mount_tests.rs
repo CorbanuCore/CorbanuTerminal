@@ -62,8 +62,94 @@ impl Mounted {
 impl Drop for Mounted {
     fn drop(&mut self) {
         // Remove only the reparse point, before TempDir cleans the fixture.
-        std::fs::remove_dir(&self.link).expect("remove fixture mount");
+        let removed = std::fs::remove_dir(&self.link);
+        if !std::thread::panicking() {
+            removed.expect("remove fixture mount");
+        }
     }
+}
+
+struct ClearMountHooks;
+
+impl Drop for ClearMountHooks {
+    fn drop(&mut self) {
+        mount::BEFORE_MOUNT_READ.with(|hook| *hook.borrow_mut() = None);
+        mount::BEFORE_VOLUME_OPEN.with(|hook| *hook.borrow_mut() = None);
+    }
+}
+
+#[test]
+fn mount_retagged_before_inspection_is_refused() {
+    let fixture = Mounted::new();
+    let folder = fixture.payload.join("project\\.codex");
+    std::fs::create_dir_all(&folder).expect("metadata");
+    std::fs::write(folder.join("instructions.md"), "original").expect("write");
+    let path = fixture.root.join("project\\.codex");
+    let expected = identity(&path);
+    assert!(contents(&path).contains_key("instructions.md"));
+    let link = fixture.link.clone();
+    let drive = fixture
+        .temp
+        .path()
+        .ancestors()
+        .last()
+        .expect("drive")
+        .to_path_buf();
+    let _clear = ClearMountHooks;
+    mount::BEFORE_MOUNT_READ.with(|hook| {
+        *hook.borrow_mut() = Some(Box::new(move || {
+            std::fs::remove_dir(&link).expect("remove mount");
+            junction(&link, &drive);
+        }));
+    });
+    let prints = contents_of(&path, expected, &ContentBudget::default());
+    assert!(
+        mount::BEFORE_MOUNT_READ.with(|hook| hook.borrow().is_none()),
+        "hook ran"
+    );
+    assert_eq!(
+        identity(&path),
+        expected,
+        "junction reaches the same object"
+    );
+    assert!(prints.contains_key(""));
+    assert!(!prints.contains_key("instructions.md"));
+}
+
+#[test]
+fn mount_retagged_after_inspection_cannot_redirect_the_open() {
+    let fixture = Mounted::new();
+    let folder = fixture.payload.join("project\\.agents");
+    std::fs::create_dir_all(&folder).expect("metadata");
+    std::fs::write(folder.join("instructions.md"), "original").expect("write");
+    let path = fixture.root.join("project\\.agents");
+    let expected = identity(&path);
+    let before = contents(&path);
+    assert!(before.contains_key("instructions.md"));
+    let link = fixture.link.clone();
+    let outside = fixture.temp.path().join("outside");
+    std::fs::create_dir(&outside).expect("empty target");
+    let _clear = ClearMountHooks;
+    mount::BEFORE_VOLUME_OPEN.with(|hook| {
+        *hook.borrow_mut() = Some(Box::new(move || {
+            std::fs::remove_dir(&link).expect("remove mount");
+            junction(&link, &outside);
+        }));
+    });
+    let prints = contents_of(&path, expected, &ContentBudget::default());
+    assert!(
+        mount::BEFORE_VOLUME_OPEN.with(|hook| hook.borrow().is_none()),
+        "hook ran"
+    );
+    assert!(
+        !path.exists(),
+        "the replacement junction does not reach the original"
+    );
+    assert_eq!(
+        prints, before,
+        "the read volume target was held independently"
+    );
+    assert!(contents_of(&path, expected, &ContentBudget::default()).contains_key(""));
 }
 
 #[test]

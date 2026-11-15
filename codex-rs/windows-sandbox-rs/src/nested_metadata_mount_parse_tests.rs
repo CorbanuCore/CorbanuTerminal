@@ -18,7 +18,7 @@ fn only_an_exact_volume_guid_root_is_recognized() {
     let target = format!(r"\??\Volume{{{guid}}}\");
     assert_eq!(
         volume_root(&reparse(&target)),
-        Some(format!(r"\\?\GLOBALROOT\GLOBAL??\Volume{{{guid}}}\"))
+        Some(format!(r"\GLOBAL??\Volume{{{guid}}}\"))
     );
     for target in [
         r"\??\C:\",
