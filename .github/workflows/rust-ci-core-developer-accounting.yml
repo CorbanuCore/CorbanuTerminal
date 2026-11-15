@@ -79,6 +79,11 @@ jobs:
             sccache-core-devacct-${{ steps.sccache_config.outputs.lockhash }}-
             sccache-core-devacct-
 
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        uses: openai/codex/.github/actions/setup-rusty-v8@086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a # rust-v0.167.0
+        with:
+          target: x86_64-unknown-linux-gnu
+
       # Binaries the integration tests start: the CLI (`cli_stream`), the
       # Linux sandbox, the code-mode host and the MCP test servers. Built with
       # the same features, as a developer-accounting `corbanu` would be.

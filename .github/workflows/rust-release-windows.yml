@@ -75,6 +75,12 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        if: ${{ matrix.bundle != 'helpers' }}
+        uses: openai/codex/.github/actions/setup-rusty-v8@086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a # rust-v0.167.0
+        with:
+          target: ${{ matrix.target }}
+
       - name: Cargo build (Windows binaries)
         shell: bash
         run: |

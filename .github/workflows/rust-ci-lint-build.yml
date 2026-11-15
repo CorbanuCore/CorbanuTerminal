@@ -195,9 +195,8 @@ jobs:
           path: ${{ runner.temp }}/libcap-tarball
           key: libcap-tarball-v1-${{ hashFiles('.github/scripts/install-musl-build-tools.sh') }}
 
-      - if: ${{ !contains(inputs.target, 'windows') }}
-        name: Configure rusty_v8 artifact overrides and verify checksums
-        uses: ./.github/actions/setup-rusty-v8
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        uses: openai/codex/.github/actions/setup-rusty-v8@086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a # rust-v0.167.0
         with:
           target: ${{ inputs.target }}
 

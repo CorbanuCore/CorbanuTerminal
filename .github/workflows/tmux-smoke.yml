@@ -72,6 +72,11 @@ jobs:
             pkg-config \
             tmux
           tmux -V
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        uses: openai/codex/.github/actions/setup-rusty-v8@086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a # rust-v0.167.0
+        with:
+          target: x86_64-unknown-linux-gnu
+
       # Same package set as the helper build in scripts/isolated_rust_tests.py,
       # so `just test` reuses these artifacts instead of resolving different
       # features and rebuilding most of the workspace. Includes corbanu-walletd,

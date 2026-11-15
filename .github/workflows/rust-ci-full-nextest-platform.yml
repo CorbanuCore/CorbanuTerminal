@@ -87,6 +87,11 @@ jobs:
         with:
           targets: ${{ inputs.target }}
 
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        uses: openai/codex/.github/actions/setup-rusty-v8@086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a # rust-v0.167.0
+        with:
+          target: ${{ inputs.target }}
+
       - name: Expose MSVC SDK environment (Windows)
         if: ${{ runner.os == 'Windows' && inputs.target == 'aarch64-pc-windows-msvc' }}
         uses: ./.github/actions/setup-msvc-env

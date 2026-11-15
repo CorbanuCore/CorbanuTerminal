@@ -117,6 +117,11 @@ jobs:
             sccache-ubuntu-24.04-${{ env.TARGET }}-${{ env.PROFILE }}-${{ steps.sccache_config.outputs.lockhash }}-
             sccache-ubuntu-24.04-${{ env.TARGET }}-${{ env.PROFILE }}-
 
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        uses: openai/codex/.github/actions/setup-rusty-v8@086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a # rust-v0.167.0
+        with:
+          target: ${{ env.TARGET }}
+
       # Binaries from other crates that these tests start (found next to the
       # test binaries by `cargo_bin`).
       - name: Build the test helpers

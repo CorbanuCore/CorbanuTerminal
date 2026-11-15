@@ -120,6 +120,11 @@ jobs:
             sccache-core-security-${{ inputs.runner }}-${{ inputs.target }}-${{ steps.sccache_config.outputs.lockhash }}-
             sccache-core-security-${{ inputs.runner }}-${{ inputs.target }}-
 
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        uses: openai/codex/.github/actions/setup-rusty-v8@086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a # rust-v0.167.0
+        with:
+          target: ${{ inputs.target }}
+
       - name: Build the codex-core test binaries
         run: |
           cargo test --locked --target ${{ inputs.target }} -p codex-core --lib --no-run

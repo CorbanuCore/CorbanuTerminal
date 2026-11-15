@@ -144,6 +144,11 @@ jobs:
       - name: Install DotSlash
         uses: facebook/install-dotslash@1e4e7b3e07eaca387acb98f1d4720e0bee8dbb6a # v2
 
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        uses: openai/codex/.github/actions/setup-rusty-v8@086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a # rust-v0.167.0
+        with:
+          target: x86_64-unknown-linux-gnu
+
       # Same binaries the Bazel job stages: the CLI and its code-mode host,
       # side by side in one folder.
       - name: Build codex with Cargo
