@@ -250,10 +250,10 @@ impl App {
 
             match app_server
                 .resume_thread(
+                    &self.local_settings.reloaded(&self.config),
                     self.config.clone(),
                     thread_id,
                     crate::app_server_session::ResumeModelSettings::RestoreFromThread,
-                    crate::app_server_session::ResumePermissionSettings::RestoreFromThread,
                 )
                 .await
             {

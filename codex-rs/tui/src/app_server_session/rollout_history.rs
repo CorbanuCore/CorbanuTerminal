@@ -157,6 +157,10 @@ impl AppServerSession {
         model_settings: ResumeModelSettings,
         permission_overrides: crate::resume_permissions::ResumePermissions,
     ) -> Result<AppServerStartedThread> {
+        // PF-29-S01: every TUI resume passes here.
+        if let Some(message) = crate::security::preflight::resume_refusal(&thread_id) {
+            color_eyre::eyre::bail!(message);
+        }
         if self.thread_params_mode().settings_owner() == ThreadSettingsOwner::Client {
             self.thread_tool_transport().validate_config(&config)?;
         }
