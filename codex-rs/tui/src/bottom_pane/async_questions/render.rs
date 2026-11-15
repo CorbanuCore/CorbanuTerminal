@@ -167,9 +167,14 @@ impl AsyncQuestions {
         option_tip: Option<Span<'static>>,
     ) -> Vec<Line<'static>> {
         if self.shows_early_input_notice() {
-            // #787: as a request prompt says when it dropped keys.
+            // #787: as a request prompt says when it dropped keys; it waits for navigation.
+            let next_step = if self.has_options() {
+                " Choose an option with ↑/↓, then press enter."
+            } else {
+                " Press ↑/↓ first, then answer."
+            };
             return vec![Line::from(
-                "Keys pressed as this question appeared were ignored.".cyan(),
+                format!("Keys pressed as this question appeared were ignored.{next_step}").cyan(),
             )];
         }
         if !self.focus_is_notes()
