@@ -543,6 +543,32 @@ fn sec_win_d429_legacy_workloads_still_work() {
 /// #1842: Ctrl-C must reach a legacy command even when Core is elevated.
 #[test]
 fn sec_win_1842_legacy_conpty_receives_ctrl_c() {
+    const HOST: &str = "CODEX_TEST_1842_IGNORE_CTRL_C_HOST";
+    if std::env::var_os(HOST).is_none() {
+        // Change the process-wide inheritance flag only in an isolated host,
+        // never in this process alongside the other sandbox tests.
+        let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "unified_exec::tests::command_identity::elevated::d429::sec_win_1842_legacy_conpty_receives_ctrl_c",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(HOST, "1")
+            .output()
+            .expect("run isolated Ctrl-C host");
+        assert!(
+            output.status.success(),
+            "host failed: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("test result: ok. 1 passed"));
+        return;
+    }
+    // The elevated CI/SSH launcher can set this inheritable flag; force it
+    // here so the regression is independent of the test runner's own state.
+    assert!(unsafe { windows_sys::Win32::System::Console::SetConsoleCtrlHandler(None, 1) } != 0);
     let _guard = legacy_process_test_guard();
     let root = user_owned_test_root();
     let home = sandbox_home("1842-ctrl-c");
