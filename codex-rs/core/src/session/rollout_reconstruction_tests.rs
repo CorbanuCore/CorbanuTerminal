@@ -423,7 +423,9 @@ async fn record_initial_history_restores_world_state_baseline(input: BaselineTur
         ),
         (
             Some(PreviousTurnSettings {
-                model_provider: None,
+                // Corbanu (#1129): the turn context records its provider, as the tests above
+                // that resume from a context item expect.
+                model_provider: context_item.model_provider.clone(),
                 model: context_item.model.clone(),
                 comp_hash: context_item.comp_hash.clone(),
                 cyber_access_program: None,
@@ -1889,7 +1891,8 @@ async fn completed_turn_suffix_after_compaction_overrides_resume_metadata(
         root_turn_id: None,
     });
     let expected_settings = PreviousTurnSettings {
-        model_provider: None,
+        // Corbanu (#1129): the completed turn's context records its provider.
+        model_provider: newer_context.model_provider.clone(),
         model: newer_context.model.clone(),
         comp_hash: newer_context.comp_hash.clone(),
         cyber_access_program: None,
