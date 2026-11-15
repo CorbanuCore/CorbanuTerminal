@@ -205,12 +205,14 @@ fn setup_steps(
              from reading the vault and sign-in files. Run /setup-default-sandbox (it needs \
              Administrator permission)",
         ),
-        WindowsSandboxLevel::Disabled if selected_mode == Some(WindowsSandboxModeToml::Mxc) => Some(
-            "This session uses the MXC Windows sandbox, which Corbanu's security levels do not \
+        WindowsSandboxLevel::Disabled if selected_mode == Some(WindowsSandboxModeToml::Mxc) => {
+            Some(
+                "This session uses the MXC Windows sandbox, which Corbanu's security levels do not \
              support yet. To use Moderate or Aggressive, set sandbox = \"elevated\" in the \
              [windows] section of config.toml, restart Corbanu Terminal and run an agent command \
              to finish the default sandbox setup (it needs Administrator permission)",
-        ),
+            )
+        }
         WindowsSandboxLevel::Disabled => Some(
             "The Windows sandbox is not set up. Open /permissions, choose Default and pick \
              \"Set up default sandbox\" (it needs Administrator permission)",
