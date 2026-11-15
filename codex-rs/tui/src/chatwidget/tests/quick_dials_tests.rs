@@ -4,10 +4,20 @@ use super::*;
 use crate::chatwidget::quick_dials::QuickDialEditorTarget;
 use codex_config::types::QuickDial;
 
+/// The bundled catalog hides gpt-5.5; these presets recall it with `/model`.
+fn show_hidden_gpt_5_5(chat: &ChatWidget) {
+    chat.model_catalog.update_models(|models| {
+        for model in models.iter_mut().filter(|model| model.model == "gpt-5.5") {
+            model.show_in_picker = true;
+        }
+    });
+}
+
 #[tokio::test]
 async fn current_settings_offer_model_permissions_and_status_layouts() {
     let (mut chat, mut events, _ops) =
         make_chatwidget_manual(/*model_override*/ Some("gpt-5.5")).await;
+    show_hidden_gpt_5_5(&chat);
     chat.thread_id = Some(ThreadId::new());
     chat.local_settings.tui.terminal_title = Some(vec![
         "model-name".into(),
@@ -142,6 +152,7 @@ async fn saved_quick_dials_save_and_clear_picker_snapshots() {
     const DRAFT: &str = "Review the current changes\nfor safety  ";
     let (mut chat, mut events, _ops) =
         make_chatwidget_manual(/*model_override*/ Some("gpt-5.5")).await;
+    show_hidden_gpt_5_5(&chat);
     chat.thread_id = Some(ThreadId::new());
     chat.open_quick_dial_menu();
     assert_chatwidget_snapshot!(

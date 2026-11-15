@@ -69,23 +69,31 @@ async fn bedrock_astra_model_and_reasoning_pickers() {
                 render_bottom_popup(&chat, /*width*/ 100)
             );
         }
-        chat.handle_key_event(KeyEvent::from(KeyCode::Char('2')));
-        let selected =
-            std::iter::from_fn(|| events.try_recv().ok()).find_map(|event| match event {
-                AppEvent::AstraSelectedFromModelPicker {
-                    thread_id,
-                    model,
-                    action: AstraModelPickerAction::ApplyAdvancedReasoning { effort },
-                } => Some((thread_id, model, effort)),
-                _ => None,
-            });
+        // Corbanu's catalog offers Astra up to Max (no Ultra), so Max is the only advanced row.
+        while events.try_recv().is_ok() {}
+        chat.handle_key_event(KeyEvent::from(KeyCode::Char('1')));
+        let events = std::iter::from_fn(|| events.try_recv().ok()).collect::<Vec<_>>();
+        let selected = events.iter().find_map(|event| match event {
+            AppEvent::AstraSelectedFromModelPicker {
+                thread_id,
+                model,
+                action: AstraModelPickerAction::UpdateModelSelection { .. },
+            } => Some((*thread_id, model.clone())),
+            _ => None,
+        });
         assert_eq!(
             selected,
             Some((
                 chat.thread_id.expect("active thread"),
-                astra_model.to_string(),
-                ReasoningEffortConfig::Ultra,
+                astra_model.to_string()
             ))
+        );
+        assert!(
+            events.iter().any(|event| matches!(
+                event,
+                AppEvent::UpdateReasoningEffort(Some(ReasoningEffortConfig::Max))
+            )),
+            "{events:?}"
         );
     }
 }

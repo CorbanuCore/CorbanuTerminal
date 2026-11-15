@@ -3724,7 +3724,7 @@ async fn spawn_model_selection_popup_deepseek_provider_snapshot() {
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 110, /*height*/ 24);
     assert_chatwidget_snapshot!("spawn_model_selection_popup_deepseek_provider", popup);
     assert!(popup.contains("Corbanu Terminal Orc pane - DeepSeek API key"));
-    assert!(popup.contains("[DeepSeek]"));
+    assert_eq!(active_model_picker_tab(&chat), Some("deepseek"));
     assert!(popup.contains("DeepSeek V4.1 Flash (Direct) (current)"));
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
@@ -3761,7 +3761,7 @@ async fn model_selection_popup_kimi_code_provider_snapshot() {
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 24);
     assert_chatwidget_snapshot!("model_selection_popup_kimi_code_provider", popup);
-    assert!(popup.contains("[Kimi Code]"));
+    assert_eq!(active_model_picker_tab(&chat), Some("kimi-code"));
     assert!(popup.contains("Kimi Code K3 (current)"));
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
@@ -4228,7 +4228,7 @@ async fn model_picker_refreshes_startup_catalog() {
         insta::allow_duplicates! {
             assert_chatwidget_snapshot!(
                 if explicit_all_models {
-                    "model_selection_popup"
+                    "model_picker_refreshes_all_models"
                 } else {
                     "model_picker_refreshes_auto_models"
                 },
@@ -4243,7 +4243,9 @@ async fn model_picker_queued_all_models_uses_refreshed_catalog() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
     chat.thread_id = Some(ThreadId::new());
     let refreshed = chat.model_catalog.try_list_models().unwrap();
-    let preset = get_available_model(&chat, "gpt-5.5");
+    let mut preset = get_available_model(&chat, "gpt-5.5");
+    // The bundled catalog hides gpt-5.5; this picker needs its rows.
+    preset.show_in_picker = true;
     let mut auto = preset.clone();
     auto.model = "codex-auto-test".to_string();
     auto.id = auto.model.clone();
@@ -4257,7 +4259,7 @@ async fn model_picker_queued_all_models_uses_refreshed_catalog() {
     assert_matches!(rx.try_recv(), Ok(AppEvent::OpenAllModelsPopup));
     chat.open_all_models_popup();
     assert_chatwidget_snapshot!(
-        "model_selection_popup",
+        "model_picker_queued_all_models",
         render_bottom_popup(&chat, /*width*/ 80)
     );
 }
@@ -4282,6 +4284,8 @@ async fn model_picker_refresh_preserves_highlight() {
             preset.show_in_picker = true;
         }
         chat.model_catalog = Arc::new(ModelCatalog::new(presets.clone()));
+        // As at startup: these rows came from `model/list`, so a refresh may drop them.
+        chat.model_catalog.mark_listed(&presets);
         chat.open_model_popup();
         chat.handle_key_event(KeyEvent::from(KeyCode::Down));
         if reasoning_submenu {
@@ -4349,7 +4353,9 @@ async fn model_picker_refresh_preserves_dismissal_and_reasoning_submenu() {
     ] {
         let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
         chat.thread_id = Some(ThreadId::new());
-        let preset = get_available_model(&chat, "gpt-5.5");
+        let mut preset = get_available_model(&chat, "gpt-5.5");
+        // The bundled catalog hides gpt-5.5; this picker needs its row.
+        preset.show_in_picker = true;
         let refreshed = chat.model_catalog.try_list_models().unwrap();
         chat.model_catalog = Arc::new(ModelCatalog::new(vec![preset.clone()]));
         chat.open_model_popup();
@@ -4383,7 +4389,7 @@ async fn model_picker_refresh_preserves_dismissal_and_reasoning_submenu() {
         } else {
             insta::allow_duplicates! {
                 assert_chatwidget_snapshot!(
-                    "model_selection_popup",
+                    "model_picker_refresh_keeps_reasoning_parent",
                     render_bottom_popup(&chat, /*width*/ 80)
                 );
             }
@@ -4582,7 +4588,7 @@ async fn model_picker_claude_recovery_refresh_restores_full_subscription_catalog
         assert!(popup.contains(model), "{popup}");
     }
     assert_eq!(popup.matches("(current)").count(), 1, "{popup}");
-    assert!(!popup.contains("[Other]"), "{popup}");
+    assert_ne!(active_model_picker_tab(&chat), Some("other"), "{popup}");
     assert!(
         !chat
             .model_catalog
@@ -4610,7 +4616,11 @@ async fn model_picker_claude_recovery_refresh_restores_full_subscription_catalog
     chat.open_all_models_popup();
     chat.handle_key_event(KeyEvent::from(KeyCode::Right));
     let api_popup = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 30);
-    assert!(api_popup.contains("[Anthropic]"), "{api_popup}");
+    assert_eq!(
+        active_model_picker_tab(&chat),
+        Some("anthropic"),
+        "{api_popup}"
+    );
     for model in [
         ANTHROPIC_DEFAULT_MODEL,
         CLAUDE_FABLE_5_MODEL,
@@ -4649,7 +4659,9 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         "expected Ambient GLM slug in /model picker description:\n{popup}"
     );
     assert!(
-        popup.contains("[Ambient]") && popup.contains("OpenAI") && popup.contains("OpenRouter"),
+        active_model_picker_tab(&chat) == Some("ambient")
+            && popup.contains("OpenAI")
+            && popup.contains("OpenRouter"),
         "expected provider tabs in /model picker:\n{popup}"
     );
     assert!(
@@ -4679,7 +4691,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     let claude_plan_popup =
         render_bottom_popup_with_height(&claude_plan_chat, /*width*/ 140, /*height*/ 36);
     assert!(
-        claude_plan_popup.contains("[Claude Plan]")
+        active_model_picker_tab(&claude_plan_chat) == Some("claude-plan")
             && claude_plan_popup.contains(CLAUDE_PLAN_MODEL)
             && claude_plan_popup.contains(CLAUDE_FABLE_5_1_PLAN_MODEL)
             && claude_plan_popup.contains(CLAUDE_FABLE_5_PLAN_MODEL),
@@ -4707,7 +4719,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         render_bottom_popup_with_height(&anthropic_chat, /*width*/ 140, /*height*/ 36);
 
     assert!(
-        anthropic_popup.contains("[Anthropic]"),
+        active_model_picker_tab(&anthropic_chat) == Some("anthropic"),
         "expected Anthropic current model to open the Anthropic tab:\n{anthropic_popup}"
     );
     assert!(
@@ -4764,7 +4776,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         Some(KIMI_CODE_PROVIDER_ID)
     );
     assert!(
-        kimi_popup.contains("[Kimi Code]")
+        active_model_picker_tab(&kimi_chat) == Some("kimi-code")
             && kimi_popup.contains("Kimi Code K3")
             && kimi_popup.contains("up to 1M on Allegretto and above"),
         "expected Kimi Code K3 in its own provider tab:\n{kimi_popup}"
@@ -4880,7 +4892,8 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     let openai_popup =
         render_bottom_popup_with_height(&openai_chat, /*width*/ 140, /*height*/ 28);
     assert!(
-        openai_popup.contains("[OpenAI]") && openai_popup.contains("gpt-6-sol"),
+        active_model_picker_tab(&openai_chat) == Some("openai")
+            && openai_popup.contains("gpt-6-sol"),
         "expected GPT-6 Sol in the OpenAI tab:\n{openai_popup}"
     );
     assert!(
@@ -4938,7 +4951,11 @@ async fn corbanu_api_model_picker_preserves_ambient_and_shows_the_seven_public_r
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 40);
 
     assert_chatwidget_snapshot!("corbanu_api_model_picker", popup);
-    assert!(popup.contains("[Corbanu API]"), "{popup}");
+    assert_eq!(
+        active_model_picker_tab(&chat),
+        Some("pfterminal-plan"),
+        "{popup}"
+    );
     assert_eq!(popup.matches("DeepSeek V4.1 Flash").count(), 1);
     for model in [
         CORBANU_API_GLM_5_3_FLASH_MODEL,
@@ -5258,7 +5275,10 @@ async fn model_reasoning_selection_popup_applies_custom_effort() {
         .collect::<Vec<_>>();
     assert_eq!(
         selected_effort_events,
-        vec![(Some("gpt-5.5".to_string()), Some(custom_effort))]
+        vec![
+            (None, Some(custom_effort.clone())),
+            (Some("gpt-5.5".to_string()), Some(custom_effort))
+        ]
     );
 }
 
@@ -5949,11 +5969,15 @@ async fn model_picker_runtime_refresh_keeps_claude_out_of_openai_tab() {
     let presets = chat.model_catalog.try_list_models().unwrap();
     chat.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
     let claude = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 36);
-    assert!(claude.contains("[Claude Plan]"), "{claude}");
+    assert_eq!(
+        active_model_picker_tab(&chat),
+        Some("claude-plan"),
+        "{claude}"
+    );
     assert!(claude.contains(&format!("Model: {CLAUDE_FABLE_5_PLAN_MODEL}.")));
     for _ in 0..16 {
         let popup = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 36);
-        if popup.contains("[OpenAI]") {
+        if active_model_picker_tab(&chat) == Some("openai") {
             assert!(
                 !popup.contains(&format!("Model: {CLAUDE_FABLE_5_PLAN_MODEL}.")),
                 "{popup}"

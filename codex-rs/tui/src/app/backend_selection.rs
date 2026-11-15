@@ -94,9 +94,11 @@ impl App {
             self.file_search.on_user_query(String::new());
             self.bind_backend_workspace(destination, prepared.config.cwd.to_path_buf());
             self.model_catalog = Arc::new(
-                ModelCatalog::new(bootstrap.available_models)
+                ModelCatalog::new(bootstrap.available_models.clone())
                     .with_collaboration_modes(bootstrap.collaboration_modes),
             );
+            // As at startup: these came from `model/list`, so a later refresh may drop them.
+            self.model_catalog.mark_listed(&bootstrap.available_models);
             self.feedback_audience = bootstrap.feedback_audience;
             self.chat_widget.requires_openai_auth = bootstrap.requires_openai_auth;
             self.chat_widget.invalidate_security_setup();

@@ -378,7 +378,7 @@ async fn status_line_git_summary_items_render_values() {
 #[tokio::test]
 async fn gpu_spend_indicator_is_visible_when_status_line_has_no_configured_items() {
     let (mut chat, _rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
-    chat.config.tui_status_line = Some(Vec::new());
+    chat.local_settings.tui.status_line = Some(Vec::new());
     chat.refresh_status_line();
     assert_eq!(status_line_text(&chat), None);
 
@@ -2062,7 +2062,7 @@ async fn workspace_owner_limit_states_render_state_specific_messages() {
         (
             RateLimitReachedType::WorkspaceOwnerUsageLimitReached,
             RateLimitErrorKind::UsageLimit,
-            "Usage limit reached. You've reached your usage limit. Increase your limits to continue using codex.",
+            "Usage limit reached. You've reached your usage limit. Increase your limits to continue using Corbanu Terminal.",
         ),
     ];
 
@@ -3217,11 +3217,13 @@ async fn default_status_line_includes_product_brand() {
             "current-dir".to_string(),
             "brand".to_string(),
             "tps".to_string(),
+            "thread-name".to_string(),
         ]
     );
 
     chat.refresh_status_line();
 
+    // Upstream's thread name follows Corbanu's items and shows once the thread has one.
     let status_line = status_line_text(&chat).expect("default status line should render");
     assert!(status_line.contains("Corbanu Terminal"));
     assert!(status_line.ends_with("TPS: -- tok/s"));
@@ -4439,7 +4441,7 @@ async fn status_line_fast_mode_footer_snapshot() {
 #[tokio::test]
 async fn status_line_identifies_custom_provider_with_shared_model_slug() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("fixture-model")).await;
-    chat.config.tui_status_line = Some(vec!["model-with-reasoning".to_string()]);
+    chat.local_settings.tui.status_line = Some(vec!["model-with-reasoning".to_string()]);
     chat.set_reasoning_effort(Some(ReasoningEffortConfig::High));
     chat.config.model_provider_id = "custom-a".to_string();
     chat.refresh_status_line();
@@ -4492,7 +4494,7 @@ async fn status_line_model_with_reasoning_includes_fast_for_fast_capable_models(
 #[tokio::test]
 async fn status_line_model_uses_active_external_pane_model() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
-    chat.config.tui_status_line = Some(vec![
+    chat.local_settings.tui.status_line = Some(vec![
         "model-with-reasoning".to_string(),
         "reasoning".to_string(),
     ]);

@@ -2070,10 +2070,11 @@ impl ChatComposer {
         }
 
         // The slash popup can open on a typed `/` while the rest of the command is still held by
-        // the rapid-input detector. Enter and Tab act on the popup selection, so materialize that
-        // input first; otherwise they would accept a command chosen from a stale filter.
+        // the rapid-input detector. Enter acts on the popup selection, so materialize that input
+        // first; otherwise it would accept a command chosen from a stale filter. A Tab during the
+        // burst stays pasted text (upstream's `handle_paste_tab`), so it never runs a command.
         if matches!(self.popups.active, ActivePopup::Command(_))
-            && matches!(key_event.code, KeyCode::Enter | KeyCode::Tab)
+            && key_event.code == KeyCode::Enter
             && let Some(pasted) = self.draft.paste_burst.flush_before_modified_input()
         {
             self.apply_paste(pasted);

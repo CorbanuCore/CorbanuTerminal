@@ -77,7 +77,8 @@ fn write_test_config(codex_home: &Path, repo_root: &Path) -> Result<()> {
     let repo_root = repo_root.display();
     let config = format!(
         "model = \"gpt-5.6-terra\"\nmodel_provider = \"openai\"\n\
-         suppress_unstable_features_warning = true\n\n\
+         suppress_unstable_features_warning = true\n\
+         notice.model_migrations.\"gpt-5.6-terra\" = \"gpt-6-sol\"\n\n\
          [projects.\"{repo_root}\"]\ntrust_level = \"trusted\"\n"
     );
     std::fs::write(codex_home.join("config.toml"), config)

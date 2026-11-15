@@ -812,6 +812,12 @@ impl BottomPane {
         self.view_stack.last().map(std::convert::AsRef::as_ref)
     }
 
+    /// The top view's active tab id, whatever its view id (tests only).
+    #[cfg(test)]
+    pub(crate) fn active_view_tab_id(&self) -> Option<&str> {
+        self.active_view().and_then(|view| view.active_tab_id())
+    }
+
     pub(crate) fn current_patch_approval(&self) -> Option<&ApplyPatchApprovalRequest> {
         self.view_stack
             .iter()

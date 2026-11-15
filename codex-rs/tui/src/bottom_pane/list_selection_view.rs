@@ -1949,10 +1949,18 @@ impl Renderable for ListSelectionView {
         }
 
         // -- Position (#1288): rows exist beyond the visible window --
-        // Drawn right-aligned under the list, in the menu surface's bottom
-        // padding row, so the popup's height does not change.
+        // Drawn right-aligned under the list, so the popup's height does not
+        // change: on upstream's scroll-indicator row when the list has one,
+        // otherwise in the menu surface's bottom padding row.
         let len = self.visible_len();
-        if len > self.visible_rows(len) && content_area.bottom() < outer_content_area.bottom() {
+        let position_row = if below_area.height > 0 {
+            Some(below_area.y)
+        } else {
+            (content_area.bottom() < outer_content_area.bottom()).then_some(content_area.bottom())
+        };
+        if len > self.visible_rows(len)
+            && let Some(position_row) = position_row
+        {
             let label = list_position_label(self.state.selected_idx, len);
             let label_width = UnicodeWidthStr::width(label.as_str()) as u16;
             let right = list_area
@@ -1962,7 +1970,7 @@ impl Renderable for ListSelectionView {
                 .min(content_area.right());
             if label_width < right.saturating_sub(content_area.x) {
                 Line::from(label.dim()).render(
-                    Rect::new(right - label_width, content_area.bottom(), label_width, 1),
+                    Rect::new(right - label_width, position_row, label_width, 1),
                     buf,
                 );
             }
