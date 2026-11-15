@@ -1124,16 +1124,13 @@ async fn get_context_remaining_counts_the_calling_responses_usage() -> Result<()
     let test = builder.build_with_streaming_server(&server).await?;
 
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "check remaining context".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: ThreadSettingsOverrides::default(),
-        })
+            }])
+            .with_thread_settings(ThreadSettingsOverrides::default()),
+        )
         .await?;
     // The call has arrived and started; its response's usage comes later.
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -1203,16 +1200,13 @@ async fn get_context_remaining_does_not_wait_for_a_response_that_never_completes
     let test = builder.build_with_streaming_server(&server).await?;
 
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "check remaining context".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: ThreadSettingsOverrides::default(),
-        })
+            }])
+            .with_thread_settings(ThreadSettingsOverrides::default()),
+        )
         .await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnComplete(_))

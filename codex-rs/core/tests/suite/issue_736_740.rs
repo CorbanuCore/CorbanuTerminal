@@ -15,6 +15,7 @@
 //!   child agent's prompt.
 #![cfg(any(target_os = "macos", target_os = "linux"))]
 
+use codex_core::TurnInputRequest;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -160,16 +161,13 @@ async fn run_with(
     );
     let thread = test.session_configured.thread_id;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "run the command".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let EventMsg::ExecApprovalRequest(approval) = wait_for_event(&test.codex, |event| {
         matches!(
@@ -576,16 +574,13 @@ async fn issue_789_child_agent_prompt_offers_no_useless_grant() -> anyhow::Resul
     std::mem::forget(server);
     let parent = test.session_configured.thread_id;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: PARENT_PROMPT.into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let child = tokio::time::timeout(std::time::Duration::from_secs(20), async {
         loop {

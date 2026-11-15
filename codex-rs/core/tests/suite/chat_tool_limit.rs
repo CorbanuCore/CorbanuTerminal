@@ -3,6 +3,7 @@
 //! only in the log on every request.
 
 use codex_core::StartThreadOptions;
+use codex_core::TurnInputRequest;
 use codex_features::Feature;
 use codex_login::CodexAuth;
 use codex_model_provider_info::ModelProviderInfo;
@@ -97,16 +98,13 @@ async fn tools_over_the_chat_limit_are_reported_once_per_session() -> anyhow::Re
     for text in ["first", "second"] {
         thread
             .thread
-            .submit(Op::UserInput {
-                items: vec![UserInput::Text {
+            .start_or_steer_turn(
+                TurnInputRequest::user_input(vec![UserInput::Text {
                     text: text.into(),
                     text_elements: Vec::new(),
-                }],
-                final_output_json_schema: None,
-                responsesapi_client_metadata: None,
-                additional_context: Default::default(),
-                thread_settings: Default::default(),
-            })
+                }])
+                .with_thread_settings(Default::default()),
+            )
             .await?;
         loop {
             match wait_for_event(&thread.thread, |event| {

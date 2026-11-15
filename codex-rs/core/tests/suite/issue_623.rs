@@ -6,6 +6,7 @@
 //! absolute targets and a link made by an interpreter.
 #![cfg(any(target_os = "macos", target_os = "linux"))]
 
+use codex_core::TurnInputRequest;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -114,16 +115,13 @@ async fn run_calls(
     std::mem::forget(server);
     let thread = test.session_configured.thread_id;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "run the command".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let mut asked = false;
     let mut warnings = Vec::new();

@@ -19,6 +19,7 @@
 #![cfg(any(target_os = "macos", target_os = "linux"))]
 #![allow(clippy::expect_used)]
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 
 use codex_core::config::Constrained;
@@ -201,16 +202,13 @@ async fn run(level: SecurityLevel, route: Route) -> anyhow::Result<Run> {
     let captured = mount_sse_sequence(&server, responses).await;
     std::mem::forget(server);
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "write the notes".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let mut asked = 0;
     let mut warnings = Vec::new();

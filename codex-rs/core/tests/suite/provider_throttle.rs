@@ -1,6 +1,7 @@
 //! #476: a provider 429 holds later requests on the same key back locally for
 //! the cooldown the provider asked for, in every session on the home, even
 //! when the request held no lease (any human-driven session).
+use codex_core::TurnInputRequest;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
@@ -29,16 +30,13 @@ fn rate_limited() -> ResponseTemplate {
 /// Submits one turn and returns the message of the error it ended with.
 async fn turn_error(test: &TestCodex) -> anyhow::Result<String> {
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "hello".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let EventMsg::Error(error) =
         wait_for_event(&test.codex, |event| matches!(event, EventMsg::Error(_))).await

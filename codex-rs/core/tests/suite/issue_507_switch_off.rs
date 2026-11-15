@@ -5,6 +5,7 @@
 //! starts no turn when the switch goes off; the waiting work goes with the
 //! next turn someone starts.
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -116,16 +117,13 @@ async fn assert_no_turn_starts(codex: &CodexThread, what: &str) {
 /// A person types `text`; returns once the turn is complete.
 async fn person_types(codex: &CodexThread, text: &str) -> anyhow::Result<()> {
     codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: text.into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(codex, |event| matches!(event, EventMsg::TurnComplete(_))).await;
     Ok(())

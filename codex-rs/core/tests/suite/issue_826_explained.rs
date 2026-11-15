@@ -7,6 +7,7 @@
 //! unchanged, and the command still fails (nothing is lifted).
 #![cfg(target_os = "linux")]
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 
 use codex_core::config::Constrained;
@@ -139,16 +140,13 @@ async fn run(
         .build(&server)
         .await?;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "make a user namespace".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let mut warnings = Vec::new();
     let mut asked = Vec::new();

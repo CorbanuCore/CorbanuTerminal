@@ -4,6 +4,7 @@
 //! approval never runs, and background terminals end. The person is told why.
 #![cfg(unix)]
 
+use codex_core::TurnInputRequest;
 use std::path::Path;
 use std::time::Duration;
 
@@ -104,16 +105,13 @@ fn kill_switch_on_now(test: &TestCodex) -> anyhow::Result<()> {
 
 async fn submit(test: &TestCodex, text: &str) -> anyhow::Result<()> {
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: text.into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     Ok(())
 }

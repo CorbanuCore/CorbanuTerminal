@@ -4,6 +4,7 @@
 //! loads the Aggressive rules file.
 #![cfg(unix)]
 
+use codex_core::TurnInputRequest;
 use codex_core::config::Constrained;
 use codex_core::security_level_change::LevelBasis;
 use codex_core::security_level_change::LevelChangeKind;
@@ -129,16 +130,13 @@ async fn vault_commands_after(
         assert!(report.live, "Aggressive applies in this session now");
     }
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "run the vault commands".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnComplete(_))

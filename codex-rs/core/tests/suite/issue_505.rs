@@ -11,6 +11,7 @@ use codex_config::ConstrainedWithSource;
 use codex_config::RequirementSource;
 use codex_core::CodexThread;
 use codex_core::StartThreadOptions;
+use codex_core::TurnInputRequest;
 use codex_core::config::Config;
 use codex_core::config::Constrained;
 use codex_core::config::CurrentTimeReminderConfig;
@@ -34,6 +35,7 @@ use codex_protocol::protocol::RolloutItem;
 use codex_protocol::protocol::RolloutLine;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
+use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_protocol::user_input::UserInput;
 use codex_security_policy::SecurityLevel;
 use core_test_support::responses;
@@ -135,16 +137,13 @@ async fn confirm_aggressive_without_a_live_tree(
 
 async fn submit_text(codex: &CodexThread, text: &str) -> anyhow::Result<()> {
     codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: text.into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     Ok(())
 }

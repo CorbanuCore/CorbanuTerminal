@@ -1,6 +1,7 @@
 //! A busy or read-only state DB doesn't end a turn through the
 //! provider-request throttle (#351).
 use anyhow::Result;
+use codex_core::TurnInputRequest;
 use codex_core::config::AccountingMode;
 use codex_features::Feature;
 use codex_protocol::protocol::EventMsg;
@@ -60,16 +61,13 @@ fn three_requests() -> Vec<String> {
 /// Run one turn and return its events through `TurnComplete` (or an abort).
 async fn turn(test: &TestCodex) -> Result<Vec<EventMsg>> {
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "state DB fixture".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     tokio::time::timeout(Duration::from_secs(120), async {
         let mut events = Vec::new();

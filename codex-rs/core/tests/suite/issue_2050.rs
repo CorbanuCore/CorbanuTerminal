@@ -5,6 +5,7 @@
 //! for that machine; nothing reaches the executor. Permissive is unchanged,
 //! and so is a remote Linux machine.
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -189,16 +190,13 @@ async fn run(level: SecurityLevel, host: Host, call: Call) -> anyhow::Result<Out
     )
     .await;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "go".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let warnings = Mutex::new(Vec::new());
     wait_for_event(&test.codex, |event| {
@@ -387,16 +385,13 @@ async fn issue_2050_a_real_windows_executor_without_its_sandbox_refuses_protecte
         )
         .await;
         test.codex
-            .submit(Op::UserInput {
-                items: vec![UserInput::Text {
+            .start_or_steer_turn(
+                TurnInputRequest::user_input(vec![UserInput::Text {
                     text: "go".into(),
                     text_elements: Vec::new(),
-                }],
-                final_output_json_schema: None,
-                responsesapi_client_metadata: None,
-                additional_context: Default::default(),
-                thread_settings: Default::default(),
-            })
+                }])
+                .with_thread_settings(Default::default()),
+            )
             .await?;
         wait_for_event(&test.codex, |event| {
             matches!(event, EventMsg::TurnComplete(_))

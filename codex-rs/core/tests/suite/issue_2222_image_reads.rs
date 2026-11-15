@@ -1,5 +1,6 @@
 //! #2222: real image edits must pass protected-read admission before reading.
 use super::*;
+use codex_core::TurnInputRequest;
 use codex_protocol::request_user_input::RequestUserInputAnswer;
 use codex_protocol::request_user_input::RequestUserInputResponse;
 use codex_security_policy::SecurityLevel;
@@ -121,16 +122,13 @@ async fn issue_2222_reference_image_read(
     ]));
     let captured = responses::mount_sse_sequence(&server, steps).await;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "Read the image and then edit the references".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let event = wait_for_event(&test.codex, |event| {
         matches!(

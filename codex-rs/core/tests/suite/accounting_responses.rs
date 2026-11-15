@@ -1,8 +1,10 @@
 #[path = "accounting_responses_support.rs"]
 pub(super) mod support;
+use codex_core::TurnInputRequest;
 use codex_core::config::AccountingMode;
 use codex_core::config::PriceAuthority;
 use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_state::accounting::*;
 use core_test_support::responses;
 use pretty_assertions::assert_eq;
@@ -1148,21 +1150,18 @@ async fn accounting_guardian_review_is_recorded_under_the_reviewed_conversation(
     )
     .await;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "run a command the reviewer denies".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            }])
+            .with_thread_settings(ThreadSettingsOverrides {
                 approval_policy: Some(approval_policy),
                 approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
                 sandbox_policy: Some(sandbox_policy),
                 ..Default::default()
-            },
-        })
+            }),
+        )
         .await?;
     core_test_support::wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnComplete(_))
@@ -1224,16 +1223,13 @@ async fn accounting_side_conversation_is_recorded_under_its_conversation() -> an
         )
         .await?;
     side.thread
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "side question".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     core_test_support::wait_for_event(&side.thread, |event| {
         matches!(event, EventMsg::TurnComplete(_))

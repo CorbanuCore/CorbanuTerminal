@@ -12,6 +12,7 @@
 //!   or signed state reaches it.
 #![allow(clippy::unwrap_used)]
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -373,16 +374,13 @@ impl Session {
 
 async fn turn(test: &TestCodex, text: &str) -> anyhow::Result<Vec<String>> {
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: text.into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     finish(test).await
 }

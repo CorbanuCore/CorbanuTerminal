@@ -6,6 +6,7 @@
 //! a protected action: the person is asked afresh (PF-30-S03).
 #![cfg(target_os = "macos")]
 
+use codex_core::TurnInputRequest;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -112,16 +113,13 @@ async fn with_rule(
         .await?;
     std::mem::forget(server);
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "go on".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let mut asked = 0;
     while let EventMsg::ExecApprovalRequest(approval) = wait_for_event(&test.codex, |event| {

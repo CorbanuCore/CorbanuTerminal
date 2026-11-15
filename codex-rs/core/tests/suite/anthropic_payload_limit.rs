@@ -1,3 +1,4 @@
+use codex_core::TurnInputRequest;
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::ModelProviderInfo;
@@ -206,16 +207,13 @@ async fn anthropic_streamed_signed_thinking_rejection_repairs_and_retries_turn()
         "Continue after the history rejection.",
     ] {
         test.codex
-            .submit(Op::UserInput {
-                items: vec![UserInput::Text {
+            .start_or_steer_turn(
+                TurnInputRequest::user_input(vec![UserInput::Text {
                     text: prompt.to_string(),
                     text_elements: Vec::new(),
-                }],
-                final_output_json_schema: None,
-                responsesapi_client_metadata: None,
-                additional_context: Default::default(),
-                thread_settings: Default::default(),
-            })
+                }])
+                .with_thread_settings(Default::default()),
+            )
             .await?;
 
         loop {
@@ -301,16 +299,13 @@ async fn history_repair_cannot_be_replayed_by_outer_stream_retries() -> anyhow::
             .build_with_auto_env(&server)
             .await?;
         test.codex
-            .submit(Op::UserInput {
-                items: vec![UserInput::Text {
+            .start_or_steer_turn(
+                TurnInputRequest::user_input(vec![UserInput::Text {
                     text: "hello".to_owned(),
                     text_elements: vec![],
-                }],
-                final_output_json_schema: None,
-                responsesapi_client_metadata: None,
-                additional_context: Default::default(),
-                thread_settings: Default::default(),
-            })
+                }])
+                .with_thread_settings(Default::default()),
+            )
             .await?;
         let mut saw_error = false;
         loop {
@@ -359,16 +354,13 @@ async fn plan_fable_route_sends_scoped_max_tokens() -> anyhow::Result<()> {
         .await?;
 
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "Check the route limit.".to_string(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
 
     loop {
@@ -420,16 +412,13 @@ async fn anthropic_413_retries_once_instead_of_poisoning_turn() -> anyhow::Resul
         .await?;
 
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "Continue the visual repair.".to_string(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
 
     loop {
@@ -477,16 +466,13 @@ async fn anthropic_max_tokens_never_executes_tool_and_next_turn_repairs_history(
         .await?;
 
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "Write the file.".to_string(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
 
     let mut saw_length_error = false;
@@ -513,16 +499,13 @@ async fn anthropic_max_tokens_never_executes_tool_and_next_turn_repairs_history(
     );
 
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "Continue safely.".to_string(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     loop {
         let event = test.codex.next_event().await?;

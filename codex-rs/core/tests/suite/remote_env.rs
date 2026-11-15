@@ -258,22 +258,10 @@ async fn submit_turn_with_approval_and_environments(
                 environments: Some(turn_environment_selections.into_requests()),
                 approval_policy: Some(approval_policy),
                 approvals_reviewer: Some(ApprovalsReviewer::User),
-<<<<<<< HEAD
                 sandbox_policy: Some(sandbox_policy),
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
-||||||| 413492cd6c
-                sandbox_policy: Some(SandboxPolicy::new_read_only_policy()),
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
-=======
-                sandbox_policy: Some(SandboxPolicy::new_read_only_policy()),
                 collaboration_mode: Some(CollaborationMode {
                     mode: ModeKind::Default,
                     settings: Settings {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                         model: test.session_configured.model.clone(),
                         reasoning_effort: None,
                         developer_instructions: None,

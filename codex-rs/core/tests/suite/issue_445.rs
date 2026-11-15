@@ -4,6 +4,7 @@
 //! not kept for later; turning it off in `/security` lets the next turn
 //! through.
 
+use codex_core::TurnInputRequest;
 use codex_core::security_level_change::LevelBasis;
 use codex_core::security_revocation::HumanRevocation;
 use codex_core::security_revocation::commit_human_revocation;
@@ -47,16 +48,13 @@ fn switch(test: &TestCodex, choice: HumanRevocation) -> anyhow::Result<()> {
 /// Submit `text` and return the error shown for the turn, if any.
 async fn turn(test: &TestCodex, text: &str) -> anyhow::Result<Option<String>> {
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: text.into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let mut error = None;
     loop {

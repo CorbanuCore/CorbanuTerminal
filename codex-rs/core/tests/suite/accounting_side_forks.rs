@@ -5,6 +5,7 @@
 //! nested labels (`side:review:`, `side:agent:`) for a guardian review or a
 //! sub-agent working inside `/side`.
 use super::accounting_responses::support::*;
+use codex_core::TurnInputRequest;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::ThreadSettingsOverrides;
@@ -48,16 +49,13 @@ async fn turn(
     thread_settings: ThreadSettingsOverrides,
 ) -> anyhow::Result<()> {
     thread
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: text.into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings,
-        })
+            }])
+            .with_thread_settings(thread_settings),
+        )
         .await?;
     core_test_support::wait_for_event(thread, |event| matches!(event, EventMsg::TurnComplete(_)))
         .await;

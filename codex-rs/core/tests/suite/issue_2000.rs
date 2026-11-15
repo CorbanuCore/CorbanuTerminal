@@ -4,6 +4,7 @@
 //! "Set up default sandbox", the next turn's command is no longer refused for
 //! the missing sandbox, without a new session. Other platforms are unchanged.
 
+use codex_core::TurnInputRequest;
 use codex_core::config::Constrained;
 use codex_features::Feature;
 use codex_protocol::config_types::WindowsSandboxLevel;
@@ -52,16 +53,13 @@ fn command_turn(call_id: &str) -> Vec<String> {
 
 async fn turn(test: &TestCodex) -> anyhow::Result<()> {
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "go".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnComplete(_))

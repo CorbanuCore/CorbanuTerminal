@@ -11,6 +11,7 @@
 //! - #622: both denials are listed under the inspector's recent denials.
 #![cfg(any(target_os = "macos", target_os = "linux"))]
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 
 use codex_core::config::Constrained;
@@ -134,16 +135,13 @@ async fn run(
     std::mem::forget(server);
     let thread = test.session_configured.thread_id;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "run the command".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let EventMsg::ExecApprovalRequest(approval) = wait_for_event(&test.codex, |event| {
         matches!(

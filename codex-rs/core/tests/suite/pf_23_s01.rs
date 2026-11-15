@@ -3,6 +3,7 @@
 //! as shell commands: after untrusted content, a protected action needs a
 //! fresh human answer and is refused when approvals are off.
 
+use codex_core::TurnInputRequest;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -248,16 +249,13 @@ async fn start_turn_with(
     }
     before_turn(&test);
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "check the notes, then continue".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     Ok((test, captured))
 }

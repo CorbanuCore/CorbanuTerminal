@@ -9,6 +9,7 @@
 //! `.git` stays read-only.
 #![cfg(any(target_os = "macos", target_os = "linux"))]
 
+use codex_core::TurnInputRequest;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -173,19 +174,16 @@ async fn run_with(
         .await?;
     std::mem::forget(server);
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "tidy the repository".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: ThreadSettingsOverrides {
+            }])
+            .with_thread_settings(ThreadSettingsOverrides {
                 environments: project_of.map(|other| local_selections(other.config.cwd.clone())),
                 ..Default::default()
-            },
-        })
+            }),
+        )
         .await?;
     let mut warnings = Vec::new();
     let mut warned_before_asked = 0;
