@@ -4,6 +4,8 @@
 
 mod deny_write_path;
 mod firewall;
+#[cfg(test)]
+mod issue_2315_tests;
 mod service;
 pub use service::provision_sandbox_in_process;
 mod read_acl_mutex;
@@ -56,7 +58,6 @@ use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::ffi::c_void;
 use std::io::Write;
-use std::os::windows::io::AsRawHandle;
 use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::path::PathBuf;
@@ -74,7 +75,6 @@ use windows_sys::Win32::Security::Authorization::GRANT_ACCESS;
 use windows_sys::Win32::Security::Authorization::SE_FILE_OBJECT;
 use windows_sys::Win32::Security::Authorization::SetEntriesInAclW;
 use windows_sys::Win32::Security::Authorization::SetNamedSecurityInfoW;
-use windows_sys::Win32::Security::Authorization::SetSecurityInfo;
 use windows_sys::Win32::Security::Authorization::TRUSTEE_IS_SID;
 use windows_sys::Win32::Security::Authorization::TRUSTEE_W;
 use windows_sys::Win32::Security::CONTAINER_INHERIT_ACE;
@@ -86,7 +86,6 @@ use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_EXECUTE;
 use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_READ;
 use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_WRITE;
 use windows_sys::Win32::Storage::FileSystem::FILE_READ_ATTRIBUTES;
-use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_DELETE;
 use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
 use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_WRITE;
 use windows_sys::Win32::Storage::FileSystem::READ_CONTROL;
@@ -373,9 +372,9 @@ fn lock_sandbox_dir(
         }
         SetupMode::ProvisionOnly => Some(open_directory_no_reparse(
             dir,
-            // SetSecurityInfo can reject a WRITE_DAC-only directory handle.
-            READ_CONTROL | WRITE_DAC,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            // Read the existing descriptor and resolve children through this handle.
+            READ_CONTROL | WRITE_DAC | windows_sys::Win32::Storage::FileSystem::FILE_TRAVERSE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
             DirectoryOpenDisposition::OpenOrCreate,
         )?),
     };
@@ -446,18 +445,19 @@ fn lock_sandbox_dir(
             }
         };
         let (res, api) = match directory.as_ref() {
-            Some(directory) => (
-                SetSecurityInfo(
-                    directory.as_raw_handle() as _,
-                    SE_FILE_OBJECT,
-                    security_information,
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
+            Some(directory) => {
+                let result = crate::provisioning_files::set_directory_acl(
+                    directory,
+                    dir,
                     new_dacl,
-                    std::ptr::null_mut(),
-                ),
-                "SetSecurityInfo",
-            ),
+                    matches!(dacl_inheritance, DaclInheritance::Protected),
+                );
+                LocalFree(new_dacl as HLOCAL);
+                for sid in sids {
+                    LocalFree(sid as HLOCAL);
+                }
+                return result;
+            }
             None => {
                 let path_w = to_wide(dir.as_os_str());
                 (
@@ -616,7 +616,9 @@ fn run_payload(payload: &Payload) -> Result<()> {
             SetupMode::ProvisionOnly => serde_json::to_vec_pretty(&report)
                 .map_err(anyhow::Error::from)
                 .and_then(|json| {
-                    write_file_atomically(&setup_error_path(&payload.codex_home), &json)
+                    let path = setup_error_path(&payload.codex_home);
+                    crate::provisioning_files::check_output(&path)?;
+                    write_file_atomically(&path, &json)
                 }),
             SetupMode::Full | SetupMode::InteractiveProvision | SetupMode::ReadAclsOnly => {
                 write_setup_error_report(&payload.codex_home, &report)
