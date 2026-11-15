@@ -149,7 +149,8 @@ fn refusal(broker: &CoreModelKeyBroker, base_url: &str, source: BrokeredKeySourc
     match broker.auth(brokered_request(base_url, source)) {
         Ok(_) => panic!("no auth may be produced"),
         Err(error) => {
-            assert!(!error.is_retryable(), "{error:?}");
+            // Upstream's terminal errors have no retry delay (was `is_retryable`).
+            assert!(error.retry_delay(/*retry_count*/ 1).is_none(), "{error:?}");
             let message = error.to_string();
             assert!(message.starts_with("Fatal error: "), "{message}");
             message
@@ -770,7 +771,6 @@ async fn sec_391_project_config_cannot_turn_the_aggressive_default_off() {
                 config
                     .config_layer_stack
                     .layers_high_to_low()
-                    .iter()
                     .any(|layer| matches!(
                         layer.name,
                         codex_config::ConfigLayerSource::Project { .. }

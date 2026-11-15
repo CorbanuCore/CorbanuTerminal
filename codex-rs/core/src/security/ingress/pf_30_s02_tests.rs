@@ -1,8 +1,8 @@
 //! PF-30-S02: host-recorded origins persist in the rollout and survive resume.
 
 use super::*;
+use codex_history::RolloutItem;
 use codex_protocol::models::FunctionCallOutputPayload;
-use codex_protocol::protocol::RolloutItem;
 use pretty_assertions::assert_eq;
 
 fn message(role: &str, text: &str) -> ResponseItem {
@@ -70,7 +70,7 @@ fn signed(entries: Vec<SourceOriginEntry>) -> SourceOriginRecord {
 fn first_text(item: &ResponseItem) -> String {
     match item {
         ResponseItem::Message { content, .. } => match content.first() {
-            Some(ContentItem::InputText { text } | ContentItem::OutputText { text }) => {
+            Some(ContentItem::InputText { text } | ContentItem::OutputText { text, .. }) => {
                 text.clone()
             }
             _ => String::new(),

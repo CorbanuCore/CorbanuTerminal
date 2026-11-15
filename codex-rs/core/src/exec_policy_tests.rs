@@ -2854,7 +2854,9 @@ prefix_rule(pattern = ["rm"], decision = "forbidden")"#,
         match requirement {
             ExecApprovalRequirement::Skip { .. } => 0,
             ExecApprovalRequirement::NeedsApproval { .. } => 1,
-            ExecApprovalRequirement::Forbidden { .. } => 2,
+            // Upstream's human-only approval is stricter than any approval.
+            ExecApprovalRequirement::NeedsHumanApproval { .. } => 2,
+            ExecApprovalRequirement::Forbidden { .. } => 3,
         }
     }
     for script in agent_shaped.into_iter().chain([

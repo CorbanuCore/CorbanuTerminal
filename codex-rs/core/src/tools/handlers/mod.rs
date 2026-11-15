@@ -775,9 +775,48 @@ mod tests {
 
     /// #1057: grants read once are always carried, so whatever they shaped
     /// is noticed when a transition ends them before the run is decided.
+    /// A ready local environment (upstream's `with_granted_permissions` reads
+    /// the environment's sandbox context to resolve grant paths).
+    fn local_turn_environment(cwd: &PathUri) -> crate::session::turn_context::TurnEnvironment {
+        use codex_protocol::protocol::EnvironmentConfig;
+        use codex_protocol::protocol::EnvironmentConfigState;
+        use codex_protocol::protocol::TurnEnvironmentSelection;
+        crate::session::turn_context::TurnEnvironment::new(
+            TurnEnvironmentSelection {
+                selected_capability_roots: Default::default(),
+                environment_id: codex_exec_server::LOCAL_ENVIRONMENT_ID.to_string(),
+                cwd: cwd.clone(),
+                workspace_roots: Vec::new(),
+                config: EnvironmentConfigState::Ready(EnvironmentConfig {
+                    environment_hooks: Default::default(),
+                    allow_login_shell: true,
+                    workspace_roots: Vec::new(),
+                    windows_sandbox_level:
+                        codex_protocol::config_types::WindowsSandboxLevel::Disabled,
+                    windows_sandbox_type: codex_sandboxing::SandboxType::None,
+                    use_legacy_landlock: false,
+                    permission_profile: crate::config::PermissionProfileSnapshot::legacy(
+                        codex_protocol::models::PermissionProfile::read_only(),
+                    ),
+                    shell_environment_policy: Default::default(),
+                    exec_policy: None,
+                    mcp_policy: None,
+                    network_policy: None,
+                    selected_capability_roots: Vec::new(),
+                }),
+            },
+            crate::environment_selection::EnvironmentConfigOrigin::Thread,
+            std::sync::Arc::new(codex_exec_server::Environment::default_for_tests()),
+            /*shell*/ None,
+        )
+    }
+
     #[test]
     fn issue_1057_grants_are_carried() {
-        let cwd = std::env::temp_dir();
+        let cwd = PathUri::from_abs_path(
+            &AbsolutePathBuf::from_absolute_path(std::env::temp_dir()).expect("absolute temp dir"),
+        );
+        let environment = local_turn_environment(&cwd);
         let grant = AdditionalPermissionProfile {
             network: Some(NetworkPermissions {
                 enabled: Some(true),
@@ -788,8 +827,9 @@ mod tests {
             SandboxPermissions::UseDefault,
             SandboxPermissions::WithAdditionalPermissions,
         ] {
-            let effective = with_granted_permissions(
+            let effective = super::with_granted_permissions(
                 Some(grant.clone()),
+                &environment,
                 &cwd,
                 sandbox_permissions,
                 /*additional_permissions*/ None,

@@ -1325,7 +1325,7 @@ fn credential_authority_unique_canary_is_confined_to_one_outgoing_request() {
         HeaderValue::from_str(&format!("Bearer {dummy}")).expect("dummy header"),
     );
     state
-        .inject_request_credentials(
+        .inject_request_credentials_for_request(
             "https",
             "api.openai.com",
             /*port*/ 443,
@@ -1348,7 +1348,7 @@ fn credential_authority_unique_canary_is_confined_to_one_outgoing_request() {
         HeaderValue::from_str(&format!("Bearer {dummy}")).expect("dummy header"),
     );
     let replay_error = state
-        .inject_request_credentials(
+        .inject_request_credentials_for_request(
             "https",
             "api.openai.com",
             /*port*/ 443,
@@ -1490,7 +1490,7 @@ fn credential_authority_revocation_before_resolve_denies_without_vault_access() 
     );
     assert_eq!(
         state
-            .inject_request_credentials(
+            .inject_request_credentials_for_request(
                 "https",
                 "api.openai.com",
                 /*port*/ 443,

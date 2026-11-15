@@ -331,12 +331,9 @@ fn exec_end(call_id: &str, turn_id: &str) -> EventMsg {
         parsed_cmd: Vec::new(),
         source: codex_protocol::protocol::ExecCommandSource::Agent,
         interaction_input: None,
-        stdout: String::new(),
-        stderr: String::new(),
         aggregated_output: String::new(),
         exit_code: 0,
         duration: std::time::Duration::ZERO,
-        formatted_output: String::new(),
         status: codex_protocol::protocol::ExecCommandStatus::Completed,
     })
 }
