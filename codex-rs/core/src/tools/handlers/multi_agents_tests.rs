@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "multi_agents_media_tests.rs"]
+mod media_tests;
+
 #[path = "multi_agents_interrupt_mail_tests.rs"]
 mod interrupt_mail_tests;
 #[path = "multi_agents_source_identity_route_tests.rs"]

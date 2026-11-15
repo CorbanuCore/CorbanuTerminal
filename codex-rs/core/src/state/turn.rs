@@ -129,9 +129,23 @@ pub(crate) struct PendingApproval {
     // A yielded cell can emit a prompt for its original turn while a later turn services it.
     pub(crate) turn_id: String,
     pub(crate) shown_under: Option<(u64, u64)>,
+    available_decisions: Vec<ReviewDecision>,
 }
 
 impl PendingApproval {
+    /// #2213: validate before either executing or remembering an answer.
+    /// Compare the whole amendment, not just its kind: a client cannot
+    /// substitute a broader command prefix or another network host.
+    pub(crate) fn constrain_decision(&self, decision: ReviewDecision) -> ReviewDecision {
+        match decision {
+            ReviewDecision::Denied { .. } | ReviewDecision::TimedOut | ReviewDecision::Abort => {
+                decision
+            }
+            decision if self.available_decisions.contains(&decision) => decision,
+            _ => ReviewDecision::denied("approval answer was not offered by this prompt"),
+        }
+    }
+
     pub(crate) fn validate(&self, decision: ReviewDecision) -> ReviewDecision {
         if self.kind == codex_protocol::approvals::ExecApprovalKind::HumanCommand
             && !matches!(
@@ -254,6 +268,7 @@ impl TurnState {
         kind: codex_protocol::approvals::ExecApprovalKind,
         turn_id: String,
         shown_under: Option<(u64, u64)>,
+        available_decisions: Vec<ReviewDecision>,
     ) -> Option<PendingApproval> {
         self.pending_approvals
             .lock()
@@ -265,6 +280,7 @@ impl TurnState {
                     kind,
                     turn_id,
                     shown_under,
+                    available_decisions,
                 },
             )
     }
@@ -284,15 +300,6 @@ impl TurnState {
             return None;
         }
         approvals.remove(key)
-    }
-
-    /// #945: the policy marker the open prompt `key` was shown under.
-    pub(crate) fn pending_approval_shown_under(&self, key: &str) -> Option<Option<(u64, u64)>> {
-        self.pending_approvals
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(key)
-            .map(|pending| pending.shown_under)
     }
 
     pub(crate) fn clear_pending_waiters(&mut self) {

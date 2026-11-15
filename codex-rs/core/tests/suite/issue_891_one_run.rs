@@ -279,10 +279,9 @@ fn warned(call: &Call) -> bool {
 /// Approved when asked, through both shell tools: that run may create a
 /// user namespace (no deny marker; the namespace is made where the host
 /// allows a nested one), after the warning, behind the model's
-/// justification. The next request is asked afresh, also after "for the
-/// session" (declined here, so it doesn't run; it comes after the first
-/// command's output, untrusted content, so it couldn't be allowed anyway),
-/// and a command that stays in the sandbox keeps the rule.
+/// justification. An unoffered "for the session" answer is refused (#2213).
+/// The next request is asked afresh (declined here), and a command that
+/// stays in the sandbox keeps the rule.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn d27_moderate_one_approved_command_may_create_user_namespaces() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
@@ -307,8 +306,11 @@ async fn d27_moderate_one_approved_command_may_create_user_namespaces() -> anyho
         eprintln!("{kind:?} {first:?}: namespace made: {}", allowed.made);
         let ok = warned(allowed)
             && allowed.asked.len() == 1
-            && allowed.unmarked
-            && (allowed.made || allowed.refused)
+            && if first == ReviewDecision::ApprovedForSession {
+                !allowed.made && !allowed.refused && allowed.output.contains("not offered")
+            } else {
+                allowed.unmarked && (allowed.made || allowed.refused)
+            }
             // Asked again, and declined: nothing ran.
             && calls[1].asked.len() == 1
             && !calls[1].made
