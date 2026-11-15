@@ -286,17 +286,18 @@ async fn issue_2050_remote_windows_without_its_sandbox_refuses_commands_and_file
     Ok(())
 }
 
-/// End to end against a real Windows executor, which reports its own sandbox:
-/// the Wine-exec remote lane, or a Windows PC reached with
-/// `CODEX_TEST_ENVIRONMENT=wine-exec` and `CODEX_TEST_REMOTE_EXEC_SERVER_URL`
-/// (its Corbanu home without the default sandbox set up). Under Moderate and
-/// Aggressive nothing runs there; Permissive runs the command there.
+/// End to end against a real Windows executor: native Windows, the Wine-exec
+/// remote lane, or a Windows PC reached with `CODEX_TEST_ENVIRONMENT=wine-exec`
+/// and `CODEX_TEST_REMOTE_EXEC_SERVER_URL` (its Corbanu home without the default
+/// sandbox set up). Under Moderate and Aggressive nothing runs there;
+/// Permissive runs the command there.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn issue_2050_a_real_windows_executor_without_its_sandbox_refuses_protected_work()
 -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
-    if !core_test_support::is_wine_exec_test_environment() {
-        eprintln!("Skipping: needs a Windows executor (CODEX_TEST_ENVIRONMENT=wine-exec).");
+    let remote = core_test_support::is_wine_exec_test_environment();
+    if !remote && !cfg!(windows) {
+        eprintln!("Skipping: needs native Windows or CODEX_TEST_ENVIRONMENT=wine-exec.");
         return Ok(());
     }
     const RAN: &str = "issue2050-ran";
@@ -329,7 +330,14 @@ async fn issue_2050_a_real_windows_executor_without_its_sandbox_refuses_protecte
             })
             .build_with_auto_env(&server)
             .await?;
-        let arguments = json!({ "cmd": format!("echo {RAN}"), "yield_time_ms": 5000 });
+        // #2180: the pinned Wine/PowerShell runtime exits without evaluating
+        // non-TTY commands, even `exit 17`. A terminal runs the command and
+        // preserves its output; check both the marker and successful exit.
+        let arguments = json!({
+            "cmd": format!("echo {RAN}"),
+            "tty": true,
+            "yield_time_ms": 5000,
+        });
         let captured = mount_sse_sequence(
             &server,
             vec![
@@ -383,10 +391,12 @@ async fn issue_2050_a_real_windows_executor_without_its_sandbox_refuses_protecte
         eprintln!("issue_2050 real executor, {name}: command {output:?}; image {image:?}");
         let ok = if level == SecurityLevel::Permissive {
             // Ran there; the missing image was looked up there.
-            output.contains(RAN) && !image.contains("Security level")
+            output.contains(RAN)
+                && output.contains("Process exited with code 0")
+                && !image.contains("Security level")
         } else {
             output.contains(&format!("Security level {name} refused this command"))
-                && output.contains("on that machine")
+                && (!remote || output.contains("on that machine"))
                 && image.contains(&format!("Security level {name} refused this file access"))
         };
         if !ok {

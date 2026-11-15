@@ -26,16 +26,19 @@ fn fixture(path: &str) -> PathBuf {
 /// as the host runs it and as its argv names it.
 fn verdicts(line: &str) -> [Option<ProtectedActionKind>; 4] {
     let judge = |shell: &str, as_named: bool| {
-        let action = ApprovalAction::Shell {
+        let action = ApprovalAction::ExecCommand {
             id: "call".into(),
             environment_id: "local".into(),
             command: [shell, "-lc", line].map(str::to_string).to_vec(),
+            hook_command: String::new(),
             cwd: PathUri::from_abs_path(
                 &AbsolutePathBuf::from_absolute_path_checked(fixture("/work")).expect("absolute"),
             ),
             sandbox_permissions: SandboxPermissions::UseDefault,
             additional_permissions: None,
             justification: None,
+            tty: false,
+            proposed_execpolicy_amendment: None,
         };
         let (home, user_home) = (fixture(HOME), fixture(USER_HOME));
         if as_named {
