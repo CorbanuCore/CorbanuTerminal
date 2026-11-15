@@ -236,11 +236,18 @@ async fn issue_826_denied_user_namespaces_keep_hidden_files_hidden() {
     );
 }
 
-/// Every process in the sandbox is filtered, bubblewrap's own PID 1 included
-/// (it is no descendant of the command, which could otherwise take it over
-/// with `ptrace` or `/proc/1/mem` and make a namespace through it), and a
-/// raw `clone(CLONE_NEWUSER)` is refused like `unshare`. Without the entry
-/// PID 1 gets no filter, as before.
+/// Every process in the sandbox is filtered, PID 1 included (with
+/// bubblewrap's own init as PID 1, it is no descendant of the command, which
+/// could otherwise take it over with `ptrace` or `/proc/1/mem` and make a
+/// namespace through it), and a raw `clone(CLONE_NEWUSER)` is refused like
+/// `unshare`.
+///
+/// Upstream's sandbox now runs the inner stage (which then becomes the
+/// command) as PID 1 and adds its own filters there: a VM-socket filter on
+/// every restricted-filesystem run, and the inner stage's copy of the
+/// user-namespace programs. So PID 1 is checked for what #826 needs, the two
+/// user-namespace programs on top of whatever a run without the entry gets,
+/// rather than for an exact count.
 #[tokio::test]
 async fn issue_826_every_process_in_the_sandbox_is_filtered() {
     let Some(fixture) = Fixture::new().await else {
@@ -269,7 +276,13 @@ async fn issue_826_every_process_in_the_sandbox_is_filtered() {
             .await;
         seen.push((deny_user_namespaces, filters(&output.stdout.text)));
     }
-    assert_eq!(seen, vec![(true, Some(own + 2)), (false, Some(own))]);
+    let [(true, Some(denied)), (false, Some(allowed))] = seen[..] else {
+        panic!("PID 1 reported no Seccomp_filters: {seen:?}");
+    };
+    assert!(
+        allowed >= own && denied >= allowed + 2,
+        "PID 1 must carry the two user-namespace programs: own={own} {seen:?}"
+    );
     if !Path::new("/usr/bin/python3").exists() {
         eprintln!("skipped the raw clone check: no /usr/bin/python3");
         return;
