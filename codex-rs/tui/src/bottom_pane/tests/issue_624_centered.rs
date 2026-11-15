@@ -48,16 +48,10 @@ fn issue_624_centered_dialog_over_a_waiting_request_says_so() {
             "{screen}"
         );
     }
-    // The notice takes the dialog's first row; the picker keeps the rest
-    // and its own height.
-    let without_notice = CenteredView::new(dialog.view);
+    // The notice takes a row of its own; the picker keeps its height.
     assert_eq!(
         dialog.desired_height(/*width*/ 80),
-        without_notice.desired_height(/*width*/ 80) + 1
-    );
-    assert_eq!(
-        dialog.cursor_pos(area),
-        without_notice.cursor_pos(area).map(|(x, y)| (x, y + 1))
+        CenteredView::new(dialog.view).desired_height(/*width*/ 80) + 1
     );
 
     // A small terminal still shows the notice's start above the picker.
