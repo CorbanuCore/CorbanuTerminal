@@ -9,6 +9,8 @@ use std::os::windows::io::FromRawHandle as _;
 use std::path::Component;
 use std::path::Path;
 use windows_sys::Win32::Foundation::HANDLE;
+use windows_sys::Win32::Foundation::NTSTATUS;
+use windows_sys::Win32::Foundation::UNICODE_STRING;
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_DIRECTORY;
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_TAG_INFO;
 use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
@@ -19,6 +21,8 @@ use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_WRITE;
 use windows_sys::Win32::Storage::FileSystem::FileAttributeTagInfo;
 use windows_sys::Win32::Storage::FileSystem::GetFileInformationByHandleEx;
 use windows_sys::Win32::Storage::FileSystem::WRITE_DAC;
+use windows_sys::Win32::System::IO::IO_STATUS_BLOCK;
+use windows_sys::Win32::System::IO::IO_STATUS_BLOCK_0;
 
 /// #1953: open/create one component relative to its checked parent handle.
 /// Attribute-only handles can retag an open folder despite sharing flags;
@@ -102,25 +106,16 @@ fn attributes(file: &File) -> std::io::Result<FILE_ATTRIBUTE_TAG_INFO> {
     Ok(info)
 }
 
-#[repr(C)]
-struct UnicodeString {
-    length: u16,
-    maximum_length: u16,
-    buffer: *mut u16,
-}
+// Sync: windows-sys's UNICODE_STRING and IO_STATUS_BLOCK, so this declaration
+// matches upstream's NtCreateFile in no_reparse_dir.rs (clashing_extern_declarations).
 #[repr(C)]
 struct ObjectAttributes {
     length: u32,
     root_directory: HANDLE,
-    object_name: *const UnicodeString,
+    object_name: *const UNICODE_STRING,
     attributes: u32,
     security_descriptor: *const c_void,
     security_quality_of_service: *const c_void,
-}
-#[repr(C)]
-struct IoStatusBlock {
-    status: usize,
-    information: usize,
 }
 #[link(name = "ntdll")]
 unsafe extern "system" {
@@ -128,7 +123,7 @@ unsafe extern "system" {
         file_handle: *mut HANDLE,
         desired_access: u32,
         object_attributes: *const ObjectAttributes,
-        io_status: *mut IoStatusBlock,
+        io_status: *mut IO_STATUS_BLOCK,
         allocation_size: *const i64,
         file_attributes: u32,
         share_access: u32,
@@ -136,7 +131,7 @@ unsafe extern "system" {
         options: u32,
         ea_buffer: *const c_void,
         ea_length: u32,
-    ) -> i32;
+    ) -> NTSTATUS;
     fn RtlNtStatusToDosError(status: i32) -> u32;
 }
 enum Disposition {
@@ -154,10 +149,10 @@ fn child(
     }
     let bytes = u16::try_from(std::mem::size_of_val(name)).map_err(std::io::Error::other)?;
     let mut name = name.to_vec();
-    let unicode = UnicodeString {
-        length: bytes,
-        maximum_length: bytes,
-        buffer: name.as_mut_ptr(),
+    let unicode = UNICODE_STRING {
+        Length: bytes,
+        MaximumLength: bytes,
+        Buffer: name.as_mut_ptr(),
     };
     let attributes = ObjectAttributes {
         length: std::mem::size_of::<ObjectAttributes>() as u32,
@@ -172,9 +167,9 @@ fn child(
         Disposition::Open => (1, 0),            // FILE_OPEN
         Disposition::CreateDirectory => (3, 1), // FILE_OPEN_IF | FILE_DIRECTORY_FILE
     };
-    let mut io = IoStatusBlock {
-        status: 0,
-        information: 0,
+    let mut io = IO_STATUS_BLOCK {
+        Anonymous: IO_STATUS_BLOCK_0 { Status: 0 },
+        Information: 0,
     };
     // Upstream's windows-sys makes HANDLE a pointer (main's is an integer).
     let mut handle: HANDLE = std::ptr::null_mut();
