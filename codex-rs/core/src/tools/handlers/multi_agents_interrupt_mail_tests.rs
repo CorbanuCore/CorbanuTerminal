@@ -57,7 +57,8 @@ async fn spawn_unload_and_reload(interrupt: bool) -> Outcome {
         .start_thread(StartThreadOptions::new(config.clone()))
         .await
         .expect("root thread should start");
-    session.services.agent_control = manager.agent_control();
+    session.services.local_agent_runtime = manager.agent_control().runtime.clone();
+    session.services.agent_control = Arc::new(manager.agent_control());
     session.thread_id = root.thread_id;
     set_turn_config(&mut turn, config);
     let session = Arc::new(session);
@@ -73,7 +74,7 @@ async fn spawn_unload_and_reload(interrupt: bool) -> Outcome {
         .expect("spawn worker");
     let agent_id = session
         .services
-        .agent_control
+        .local_agent_runtime
         .resolve_agent_reference(session.thread_id, &turn.session_source, "worker")
         .await
         .expect("worker should resolve");

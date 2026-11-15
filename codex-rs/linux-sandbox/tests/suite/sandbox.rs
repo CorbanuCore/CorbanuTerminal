@@ -1593,7 +1593,9 @@ async fn pf_23_s02_full_write_profile_keeps_protected_files_read_only() {
     std::os::unix::fs::symlink(base.join("dotfiles/zshrc"), base.join(".zshrc")).expect("link");
     let entry = |path: &std::path::Path, access| FileSystemSandboxEntry {
         path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+            path: AbsolutePathBuf::from_absolute_path(path)
+                .expect("absolute")
+                .into(),
         },
         access,
         missing_path_behavior: None,
@@ -1669,7 +1671,9 @@ async fn issue_587_protected_home_and_its_folders_cannot_be_moved_aside() {
         let entry = |path: std::path::PathBuf, access| {
             FileSystemSandboxEntry::skip_missing_path(
                 FileSystemPath::Path {
-                    path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+                    path: AbsolutePathBuf::from_absolute_path(path)
+                        .expect("absolute")
+                        .into(),
                 },
                 access,
             )
@@ -1773,7 +1777,9 @@ async fn missing_denied_paths_below_read_only_or_missing_folders_run_and_stay_hi
     let entry = |path: &std::path::Path, access| {
         FileSystemSandboxEntry::skip_missing_path(
             FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+                path: AbsolutePathBuf::from_absolute_path(path)
+                    .expect("absolute")
+                    .into(),
             },
             access,
         )
@@ -1856,7 +1862,9 @@ async fn overlapping_runs_keep_shared_placeholders_until_the_last_ends() {
     let entry = |path: &std::path::Path, access| {
         FileSystemSandboxEntry::skip_missing_path(
             FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+                path: AbsolutePathBuf::from_absolute_path(path)
+                    .expect("absolute")
+                    .into(),
             },
             access,
         )
@@ -1966,7 +1974,8 @@ async fn a_file_where_a_denied_paths_folder_would_be_stays_in_place() {
         FileSystemSandboxEntry::skip_missing_path(
             FileSystemPath::Path {
                 path: AbsolutePathBuf::from_absolute_path(home.join("Library/Keychains"))
-                    .expect("absolute"),
+                    .expect("absolute")
+                    .into(),
             },
             FileSystemAccessMode::Deny,
         ),
@@ -2021,7 +2030,8 @@ async fn issue_582_a_placeholder_left_by_a_killed_run_is_removed_by_the_next() {
         FileSystemSandboxEntry::skip_missing_path(
             FileSystemPath::Path {
                 path: AbsolutePathBuf::from_absolute_path(home.join("Library/Keychains"))
-                    .expect("absolute"),
+                    .expect("absolute")
+                    .into(),
             },
             FileSystemAccessMode::Deny,
         ),
@@ -2103,7 +2113,8 @@ async fn issue_348_a_placeholder_left_by_a_killed_run_is_removed_after_its_regis
         FileSystemSandboxEntry::skip_missing_path(
             FileSystemPath::Path {
                 path: AbsolutePathBuf::from_absolute_path(home.join("Library/Keychains"))
-                    .expect("absolute"),
+                    .expect("absolute")
+                    .into(),
             },
             FileSystemAccessMode::Deny,
         ),
@@ -2177,7 +2188,9 @@ async fn full_write_profile_with_denial_keeps_dev_null_usable() {
         },
         FileSystemSandboxEntry {
             path: FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(&secret).expect("absolute secret"),
+                path: AbsolutePathBuf::from_absolute_path(&secret)
+                    .expect("absolute secret")
+                    .into(),
             },
             access: FileSystemAccessMode::Deny,
             missing_path_behavior: None,
@@ -2185,7 +2198,9 @@ async fn full_write_profile_with_denial_keeps_dev_null_usable() {
         // A denied device node stays denied on the fresh `/dev`.
         FileSystemSandboxEntry {
             path: FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path("/dev/full").expect("absolute /dev/full"),
+                path: AbsolutePathBuf::from_absolute_path("/dev/full")
+                    .expect("absolute /dev/full")
+                    .into(),
             },
             access: FileSystemAccessMode::Deny,
             missing_path_behavior: None,
@@ -2276,7 +2291,8 @@ async fn sandbox_denies_reads_through_a_nested_link_workspace() {
             FileSystemSandboxEntry {
                 path: FileSystemPath::Path {
                     path: AbsolutePathBuf::try_from(denied.join(".env").as_path())
-                        .expect("absolute .env"),
+                        .expect("absolute .env")
+                        .into(),
                 },
                 access: FileSystemAccessMode::Deny,
                 missing_path_behavior: None,
@@ -2336,7 +2352,9 @@ async fn restricted_reads_deny_through_a_read_only_linked_root() {
         .to_path_buf();
     let entry = |path: &Path, access| FileSystemSandboxEntry {
         path: FileSystemPath::Path {
-            path: AbsolutePathBuf::try_from(path).expect("absolute path"),
+            path: AbsolutePathBuf::try_from(path)
+                .expect("absolute path")
+                .into(),
         },
         access,
         missing_path_behavior: None,
@@ -2415,7 +2433,9 @@ async fn writable_symlink_to_root_keeps_shallower_root_protections() {
     std::os::unix::fs::symlink("/", &link).expect("symlink to /");
     let entry = |path: &std::path::Path, access| FileSystemSandboxEntry {
         path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute path"),
+            path: AbsolutePathBuf::from_absolute_path(path)
+                .expect("absolute path")
+                .into(),
         },
         access,
         missing_path_behavior: None,
@@ -2504,7 +2524,7 @@ async fn issue_506_unlistable_directory_under_bwrap() {
             },
             FileSystemSandboxEntry {
                 path: FileSystemPath::Path {
-                    path: home_path.join("secret.txt"),
+                    path: home_path.join("secret.txt").into(),
                 },
                 access: FileSystemAccessMode::Deny,
                 missing_path_behavior: None,
@@ -2577,14 +2597,16 @@ async fn issue_506_unlistable_dot_codex_home_in_a_writable_workspace_under_bwrap
         },
         FileSystemSandboxEntry {
             path: FileSystemPath::Path {
-                path: AbsolutePathBuf::try_from(workspace.as_path()).expect("absolute ws"),
+                path: AbsolutePathBuf::try_from(workspace.as_path())
+                    .expect("absolute ws")
+                    .into(),
             },
             access: FileSystemAccessMode::Write,
             missing_path_behavior: None,
         },
         FileSystemSandboxEntry {
             path: FileSystemPath::Path {
-                path: home_path.join("wallet"),
+                path: home_path.join("wallet").into(),
             },
             access: FileSystemAccessMode::Deny,
             missing_path_behavior: Some(
@@ -2900,7 +2922,7 @@ fn level_policies(
     };
     let denial = FileSystemSandboxEntry {
         path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(denied).unwrap(),
+            path: AbsolutePathBuf::from_absolute_path(denied).unwrap().into(),
         },
         access: FileSystemAccessMode::Deny,
         missing_path_behavior: None,
@@ -3158,7 +3180,7 @@ async fn the_helper_refuses_a_root_swapped_after_the_check() {
         },
         FileSystemSandboxEntry {
             path: FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(&target).unwrap(),
+                path: AbsolutePathBuf::from_absolute_path(&target).unwrap().into(),
             },
             access: FileSystemAccessMode::Write,
             missing_path_behavior: None,
@@ -3180,7 +3202,7 @@ async fn the_helper_refuses_a_root_swapped_after_the_check() {
             &profile,
             &workspace,
             /*use_legacy_landlock*/ false,
-            /*allow_network_for_proxy*/ false,
+            /*managed_network*/ None,
         );
     codex_sandboxing::landlock::insert_pinned_writable_roots_arg(&mut args, &pinned);
     // Swapped after the check, before the helper runs.

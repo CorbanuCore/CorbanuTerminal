@@ -32,8 +32,9 @@ use pretty_assertions::assert_eq;
 struct HeaderAuth(HeaderMap);
 
 impl AuthProvider for HeaderAuth {
-    fn add_auth_headers(&self, headers: &mut HeaderMap) {
+    fn add_auth_headers(&self, headers: &mut HeaderMap) -> Result<(), codex_api::AuthError> {
         headers.extend(self.0.clone());
+        Ok(())
     }
 }
 
@@ -440,7 +441,9 @@ async fn configured_header_rotation_reconnects_prewarmed_socket_and_keeps_same_v
 fn issue_1343_brokered_identities_never_match() {
     struct BrokeredAuth;
     impl AuthProvider for BrokeredAuth {
-        fn add_auth_headers(&self, _headers: &mut HeaderMap) {}
+        fn add_auth_headers(&self, _headers: &mut HeaderMap) -> Result<(), codex_api::AuthError> {
+            Ok(())
+        }
     }
     let placeholder = CodexAuth::from_api_key(codex_model_provider::BROKERED_KEY_PLACEHOLDER);
     let removed_account =

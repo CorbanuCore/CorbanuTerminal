@@ -36,7 +36,8 @@ async fn issue863_custom_native_spawn_send_followup_keep_source_and_ciphertext()
         .start_thread((*turn.config).clone())
         .await
         .expect("root");
-    session.services.agent_control = manager.agent_control();
+    session.services.local_agent_runtime = manager.agent_control().runtime.clone();
+    session.services.agent_control = Arc::new(manager.agent_control());
     session.thread_id = root.thread_id;
     let session = Arc::new(session);
     let turn = Arc::new(turn);
@@ -55,7 +56,7 @@ async fn issue863_custom_native_spawn_send_followup_keep_source_and_ciphertext()
     assert_eq!(result["task_name"], json!("/root/issue863_child"));
     let child = session
         .services
-        .agent_control
+        .local_agent_runtime
         .resolve_agent_reference(session.thread_id, &turn.session_source, "issue863_child")
         .await
         .expect("child reference");
@@ -121,7 +122,8 @@ async fn issue863_custom_native_send_followup_reject_builtin_before_mailbox_muta
         .start_thread((*turn.config).clone())
         .await
         .expect("root");
-    session.services.agent_control = manager.agent_control();
+    session.services.local_agent_runtime = manager.agent_control().runtime.clone();
+    session.services.agent_control = Arc::new(manager.agent_control());
     session.thread_id = root.thread_id;
     let builtin_path = AgentPath::try_from("/root/builtin").expect("path");
     let mut config = (*turn.config).clone();
@@ -130,6 +132,8 @@ async fn issue863_custom_native_send_followup_reject_builtin_before_mailbox_muta
     let builtin = session
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .spawn_agent_with_metadata(
             config,
             Vec::new(),
@@ -374,7 +378,8 @@ async fn issue1127_custom_native_send_followup_to_another_account_are_refused() 
         .start_thread((*turn.config).clone())
         .await
         .expect("root");
-    session.services.agent_control = manager.agent_control();
+    session.services.local_agent_runtime = manager.agent_control().runtime.clone();
+    session.services.agent_control = Arc::new(manager.agent_control());
     session.thread_id = root.thread_id;
     let work_path = AgentPath::try_from("/root/work_child").expect("path");
     let mut child_config = (*turn.config).clone();
@@ -383,6 +388,8 @@ async fn issue1127_custom_native_send_followup_to_another_account_are_refused() 
     let work_child = session
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .spawn_agent_with_metadata(
             child_config,
             Vec::new(),
@@ -477,7 +484,7 @@ async fn issue1016_custom_native_spawn_default_model_keeps_source_and_ciphertext
     );
     let child = session
         .services
-        .agent_control
+        .local_agent_runtime
         .resolve_agent_reference(
             session.thread_id,
             &turn.session_source,

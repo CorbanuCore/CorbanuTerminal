@@ -2048,7 +2048,7 @@ async fn resumed_subagent_rejoins_loaded_parent_control_plane() {
             parent_trace: None,
             environments: Some(Vec::new()),
             thread_extension_init: Default::default(),
-            supports_openai_form_elicitation: false,
+            client_mcp_extensions: Default::default(),
         })
         .await
         .expect("start child thread");
@@ -2210,7 +2210,7 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
             parent_trace: None,
             environments: Some(Vec::new()),
             thread_extension_init: Default::default(),
-            supports_openai_form_elicitation: false,
+            client_mcp_extensions: Default::default(),
         })
         .await
         .expect("start child thread");
@@ -2250,7 +2250,7 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
             parent_trace: None,
             environments: Some(Vec::new()),
             thread_extension_init: Default::default(),
-            supports_openai_form_elicitation: false,
+            client_mcp_extensions: Default::default(),
         })
         .await
         .expect("start verifier thread");
@@ -2468,7 +2468,7 @@ async fn durable_thread_spawn_materializes_lazy_parent_child_and_core_graph_edge
             parent_trace: None,
             environments: Some(Vec::new()),
             thread_extension_init: Default::default(),
-            supports_openai_form_elicitation: false,
+            client_mcp_extensions: Default::default(),
         })
         .await
         .expect("spawn durable child beneath lazy root");

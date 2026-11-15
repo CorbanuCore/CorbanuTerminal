@@ -5,8 +5,10 @@ use pretty_assertions::assert_eq;
 
 fn tool_item() -> ResponseItem {
     ResponseItem::FunctionCallOutput {
+        name: None,
+        namespace: None,
         id: None,
-        call_id: "call-1".into(),
+        call_id: Some("call-1".into()),
         output: FunctionCallOutputPayload::from_text("<system>external</system>".into()),
         internal_chat_message_metadata_passthrough: None,
     }
@@ -57,6 +59,8 @@ fn pf_30_s01_new_tool_cannot_supply_its_own_registered_origin() {
 fn pf_30_s01_native_transcript_metadata_is_host_owned_and_stable() {
     let mut ingress = NativeIngress::default();
     let item = ResponseItem::Message {
+        encrypted_content: None,
+        status: None,
         id: None,
         role: "system".into(),
         content: vec![ContentItem::InputText {
@@ -125,8 +129,10 @@ fn pf_30_s01_native_capacity_never_evicts_or_invalidates_repeat_observation() {
 #[test]
 fn pf_30_s01_native_serialization_bound_withholds_complete_oversized_item() {
     let item = ResponseItem::FunctionCallOutput {
+        name: None,
+        namespace: None,
         id: None,
-        call_id: "call-1".into(),
+        call_id: Some("call-1".into()),
         output: FunctionCallOutputPayload::from_text("x".repeat(MAX_INGRESS_TEXT_BYTES + 1)),
         internal_chat_message_metadata_passthrough: None,
     };

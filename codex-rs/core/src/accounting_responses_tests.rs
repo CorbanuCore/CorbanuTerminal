@@ -236,7 +236,9 @@ impl HttpTransport for Probe {
 }
 struct Denied;
 impl codex_api::AuthProvider for Denied {
-    fn add_auth_headers(&self, _: &mut http::HeaderMap) {}
+    fn add_auth_headers(&self, _: &mut http::HeaderMap) -> Result<(), codex_api::AuthError> {
+        Ok(())
+    }
     fn apply_auth(&self, _: Request) -> codex_api::AuthProviderFuture<'_> {
         Box::pin(async {
             tokio::task::yield_now().await;
