@@ -12,6 +12,8 @@ mod literals;
 mod render;
 #[path = "shell_snapshot_restore.rs"]
 mod restore;
+#[path = "shell_snapshot_values.rs"]
+mod values;
 
 pub use capture::CapturedSnapshot;
 pub use capture::CapturedStartupEnvironment;
