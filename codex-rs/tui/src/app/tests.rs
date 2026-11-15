@@ -6896,7 +6896,8 @@ async fn ctrl_l_preserves_the_transcript_and_draft_after_clearing_the_screen() -
     let compact = transcript_composer::buffer_text(
         crate::custom_terminal::test_support::last_rendered_buffer(&tui.terminal),
     );
-    assert!(compact.contains("OpenAI Codex"));
+    // Corbanu's session header names the product.
+    assert!(compact.contains("Corbanu Terminal"));
     assert!(compact.contains("New exchange"));
     assert!(!compact.contains("Earlier exchange"));
     let ctrl_t = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL);
