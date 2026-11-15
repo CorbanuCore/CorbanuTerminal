@@ -45,7 +45,7 @@ fn product_workspace_write(cwd: &AbsolutePathBuf) -> PermissionProfile {
 }
 
 /// Prepares `command` through the same tool path agent commands use.
-fn tool_launch(
+async fn tool_launch(
     profile: &PermissionProfile,
     cwd: &AbsolutePathBuf,
     command: Vec<String>,
@@ -53,6 +53,7 @@ fn tool_launch(
     let cwd_uri = PathUri::from_abs_path(cwd);
     let manager = SandboxManager::new();
     let attempt = SandboxAttempt {
+        sandbox_override: crate::tools::sandboxing::SandboxOverride::NoOverride,
         sandbox: SandboxType::WindowsRestrictedToken,
         sandbox_requested: true,
         permissions: profile,
@@ -61,10 +62,10 @@ fn tool_launch(
         manager: &manager,
         sandbox_cwd: &cwd_uri,
         workspace_roots: std::slice::from_ref(&cwd_uri),
-        codex_linux_sandbox_exe: None,
+        sandbox_exe: None,
         use_legacy_landlock: false,
+        windows_sandbox_type: SandboxType::WindowsRestrictedToken,
         windows_sandbox_level: WindowsSandboxLevel::Elevated,
-        windows_sandbox_private_desktop: false,
         network_denial_cancellation_token: None,
         network_proxy: None,
     };
@@ -89,11 +90,12 @@ fn tool_launch(
             None,
             None,
         )
+        .await
         .expect("tool launch request")
 }
 
-#[test]
-fn pf_27_s06_d2_tool_launch_carries_contract_denies_to_windows_sandbox() {
+#[tokio::test]
+async fn pf_27_s06_d2_tool_launch_carries_contract_denies_to_windows_sandbox() {
     let codex_home_dir = tempfile::tempdir().expect("codex home");
     let workspace_dir = tempfile::tempdir().expect("workspace");
     let codex_home = absolute(codex_home_dir.path());
@@ -106,7 +108,7 @@ fn pf_27_s06_d2_tool_launch_carries_contract_denies_to_windows_sandbox() {
     let protected = contract
         .protect_permissions(&product_workspace_write(&cwd), cwd.as_path())
         .expect("protected profile");
-    let request = tool_launch(&protected, &cwd, vec!["cmd.exe".into()]);
+    let request = tool_launch(&protected, &cwd, vec!["cmd.exe".into()]).await;
 
     let overrides = request
         .windows_sandbox_filesystem_overrides
@@ -180,7 +182,7 @@ async fn pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write
     // that first.
     let mut control = String::new();
     for _ in 0..120 {
-        control = run(tool_launch(&base, &cwd, command())).await;
+        control = run(tool_launch(&base, &cwd, command()).await).await;
         if control.contains("NOTES-READ") {
             break;
         }
@@ -203,7 +205,7 @@ async fn pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write
         .protect_new_codex_home_files()
         .expect("deny new CODEX_HOME files to the sandbox");
     assert!(!codex_home.join("wallet").exists());
-    let files = run(tool_launch(&protected, &cwd, command())).await;
+    let files = run(tool_launch(&protected, &cwd, command()).await).await;
     eprintln!("pf27s06 d2 workspace-write, contract: {files}");
     assert!(files.contains("NOTES-READ"), "unprotected file: {files}");
     for denied in ["VAULT", "AUTH"] {
@@ -229,7 +231,8 @@ async fn pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write
                 "/C".into(),
                 format!("ping -n 6 127.0.0.1 >NUL & {script}"),
             ],
-        );
+        )
+        .await;
         tokio::spawn(run(request))
     };
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -238,7 +241,7 @@ async fn pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write
         "pf27s06d2-seed",
     )
     .expect("wallet file");
-    let mut unprotected = tool_launch(&base, &cwd, command());
+    let mut unprotected = tool_launch(&base, &cwd, command()).await;
     crate::exec::attach_windows_sandbox_filesystem_overrides(
         &mut unprotected,
         &cwd,
@@ -348,7 +351,7 @@ fn above_medium_integrity() -> bool {
     use windows_sys::Win32::System::Threading::OpenProcessToken;
     /// `SECURITY_MANDATORY_MEDIUM_RID`.
     const MEDIUM: u32 = 0x2000;
-    let mut token = 0;
+    let mut token: windows_sys::Win32::Foundation::HANDLE = std::ptr::null_mut();
     // SAFETY: opens this process's token for query; closed below.
     if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
         return false;

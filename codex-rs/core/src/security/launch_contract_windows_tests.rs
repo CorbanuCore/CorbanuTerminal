@@ -111,7 +111,7 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
             ),
             FileSystemSandboxEntry::new(
                 FileSystemPath::Path {
-                    path: codex_home.clone(),
+                    path: codex_home.clone().into(),
                 },
                 FileSystemAccessMode::Read,
             ),
@@ -322,14 +322,14 @@ async fn run_sandboxed(
             network_environment_id: None,
             sandbox_permissions: SandboxPermissions::UseDefault,
             windows_sandbox_level: WindowsSandboxLevel::Elevated,
-            windows_sandbox_private_desktop: false,
             justification: None,
             arg0: None,
         },
         profile,
         cwd,
         std::slice::from_ref(cwd),
-        &None,
+        /*codex_linux_sandbox_exe*/ &None,
+        /*codex_self_exe*/ &None,
         /*use_legacy_landlock*/ false,
         /*stdout_stream*/ None,
     )
@@ -470,8 +470,8 @@ fn run_probe() {
         .and_then(|pid| pid.parse().ok())
         .unwrap_or_default();
     disable_all_privileges();
-    let classify = |handle: isize| {
-        if handle == 0 {
+    let classify = |handle: windows_sys::Win32::Foundation::HANDLE| {
+        if handle.is_null() {
             // SAFETY: reads the thread's last error.
             match unsafe { GetLastError() } {
                 ERROR_ACCESS_DENIED => "denied".to_string(),
@@ -531,7 +531,7 @@ fn disable_all_privileges() {
     use windows_sys::Win32::Security::TOKEN_ADJUST_PRIVILEGES;
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
     use windows_sys::Win32::System::Threading::OpenProcessToken;
-    let mut token = 0;
+    let mut token: windows_sys::Win32::Foundation::HANDLE = std::ptr::null_mut();
     // SAFETY: opens this process's token; closed below.
     if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &mut token) } != 0 {
         // SAFETY: DisableAllPrivileges ignores the new-state arguments.

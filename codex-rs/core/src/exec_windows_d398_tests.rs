@@ -314,7 +314,9 @@ fn profiles(workspace: &Path, real_docs: &Path) -> Vec<(&'static str, Permission
                 project_write,
                 FileSystemSandboxEntry::new(
                     FileSystemPath::Path {
-                        path: AbsolutePathBuf::from_absolute_path(real_docs).expect("absolute"),
+                        path: AbsolutePathBuf::from_absolute_path(real_docs)
+                            .expect("absolute")
+                            .into(),
                     },
                     FileSystemAccessMode::Read,
                 ),
