@@ -2554,7 +2554,8 @@ impl Classifier {
             // #1974: an assignment that may not run, or that runs only in
             // a subshell, does not resolve the variable in the parent shell
             // (`false && r=x`, `a || r=x`, `(r=x)`, an `if` body, a
-            // backgrounded group, a substitution). Such a variable is unseen
+            // backgrounded group, a substitution, #2192 a word the lexer
+            // split where the shell does not). Such a variable is unseen
             // from here on: a later use asks rather than trusting the value
             // this assignment would have set, and a value it already held
             // is dropped too, since the assignment may have replaced it.
@@ -2564,6 +2565,7 @@ impl Classifier {
                 && !simple.backgrounded
                 && !feeds_pipe
                 && simple.pipe_from.is_none()
+                && !simple.split_inside_word
                 && matches!(
                     simple.assignment_after,
                     certain_cd::Joint::Start | certain_cd::Joint::Seq
@@ -2576,6 +2578,12 @@ impl Classifier {
                         .chars()
                         .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
                 {
+                    // #1973: quote removal can invent an assignment.
+                    // Retain old values and stronger path findings, but ask
+                    // when such a word is about to resolve a variable.
+                    if simple.assignment_quoted {
+                        self.note(ProtectedActionKind::UnseenCode);
+                    }
                     if !reaches_parent && self.assignments != AssignmentReading::Possible {
                         self.assignments_read_newly = true;
                         variables.insert(name.to_string(), shell::UNSEEN_OUTPUT.to_string());
@@ -4179,6 +4187,10 @@ mod tainted_action_keyword_brace_tests;
 mod tainted_action_git_quoted_tests;
 
 #[cfg(test)]
+#[path = "tainted_action_quoted_assignment_tests.rs"]
+mod tainted_action_quoted_assignment_tests;
+
+#[cfg(test)]
 #[path = "tainted_action_post_taint_tests.rs"]
 mod tainted_action_post_taint_tests;
 
@@ -4189,6 +4201,10 @@ mod tainted_action_option_glob_tests;
 #[cfg(test)]
 #[path = "tainted_action_timing_probe_tests.rs"]
 mod tainted_action_timing_probe_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_assignment_boundary_tests.rs"]
+mod tainted_action_assignment_boundary_tests;
 
 #[cfg(test)]
 #[path = "tainted_action_zstyle_tests.rs"]

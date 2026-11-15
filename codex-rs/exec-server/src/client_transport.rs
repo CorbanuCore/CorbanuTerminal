@@ -429,13 +429,38 @@ fn is_rendezvous_harness_url(websocket_url: &str) -> bool {
 fn stdio_command_process(stdio_command: &StdioExecServerCommand) -> Command {
     let mut command = Command::new(&stdio_command.program);
     command.args(&stdio_command.args);
-    command.envs(&stdio_command.env);
+    if codex_protocol::secretless_launch::is_armed() {
+        // PF-27-S02: an executor started here gives everything it starts its own environment
+        // as their base, so it starts with only the launch allowlist (as Corbanu's own children
+        // get), plus its configured `env` without values that embed a URL password (as
+        // `shell_environment::create_env` treats names the user set explicitly).
+        command.env_clear();
+        command.envs(stdio_launch_env());
+        command.envs(stdio_command.env.iter().filter(|(_, value)| {
+            !codex_protocol::secretless_launch::value_has_url_password(value)
+        }));
+    } else {
+        command.envs(&stdio_command.env);
+    }
     if let Some(cwd) = &stdio_command.cwd {
         command.current_dir(cwd);
     }
     #[cfg(unix)]
     command.process_group(0);
     command
+}
+
+/// This process's environment reduced to the PF-27-S02 launch allowlist (non-Unicode
+/// variables are dropped), keeping debug builds' keyring isolation variable.
+fn stdio_launch_env() -> std::collections::HashMap<String, String> {
+    let mut env: std::collections::HashMap<String, String> = std::env::vars_os()
+        .filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?)))
+        .collect();
+    codex_protocol::secretless_launch::retain_launch_env(&mut env, |_| false);
+    if let Some((name, value)) = codex_protocol::shell_environment::keyring_isolation_env_var() {
+        env.insert(name.to_string(), value);
+    }
+    env
 }
 
 #[cfg(test)]
