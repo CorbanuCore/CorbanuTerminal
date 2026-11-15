@@ -243,10 +243,16 @@ impl Session {
                 self.mark_mcp_runtime_dirty();
             }
             let auth = self.services.auth_manager().auth_cached();
-            if !self
+            // #2337: the plugins follow the sign-in this session uses now
+            // (PF-84), before the pending check, as on main.
+            if self
                 .services
-                .mcp_runtime
-                .current_auth_matches(auth.as_ref())
+                .plugins_manager
+                .set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode))
+                || !self
+                    .services
+                    .mcp_runtime
+                    .current_auth_matches(auth.as_ref())
             {
                 self.mark_mcp_runtime_dirty();
             }
@@ -259,6 +265,9 @@ impl Session {
                 published: false,
             };
             let auth = self.services.auth_manager().auth().await;
+            self.services
+                .plugins_manager
+                .set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));
             let desired = self.latest_mcp_desired_state(auth, environments).await;
             let selected_capability_roots = self
                 .resolve_selected_capability_roots_for_step(&desired.environments)

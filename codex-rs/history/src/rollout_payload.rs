@@ -44,6 +44,9 @@ pub(super) enum RolloutItemWire<'a> {
     },
     InterAgentCommunication {
         payload: Cow<'a, InterAgentCommunication>,
+        /// Corbanu (#2339): the recipient's input order for this communication.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        user_input_order: Option<u64>,
     },
     InterAgentCommunicationMetadata {
         payload: InterAgentCommunicationMetadataPayload,
@@ -102,6 +105,7 @@ impl<'a> From<&'a RolloutItem> for RolloutItemWire<'a> {
             },
             RolloutItem::InterAgentCommunication(payload) => Self::InterAgentCommunication {
                 payload: Cow::Borrowed(payload),
+                user_input_order: payload.recorded_input_order,
             },
             RolloutItem::InterAgentCommunicationMetadata { trigger_turn } => {
                 Self::InterAgentCommunicationMetadata {
@@ -238,8 +242,13 @@ impl From<RolloutItemWire<'_>> for RolloutItem {
                     metadata: metadata.map(Cow::into_owned),
                 })
             }
-            RolloutItemWire::InterAgentCommunication { payload } => {
-                Self::InterAgentCommunication(payload.into_owned())
+            RolloutItemWire::InterAgentCommunication {
+                payload,
+                user_input_order,
+            } => {
+                let mut communication = payload.into_owned();
+                communication.recorded_input_order = user_input_order;
+                Self::InterAgentCommunication(communication)
             }
             RolloutItemWire::InterAgentCommunicationMetadata { payload } => {
                 Self::InterAgentCommunicationMetadata {

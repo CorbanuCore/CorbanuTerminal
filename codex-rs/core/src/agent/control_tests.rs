@@ -3512,8 +3512,33 @@ async fn cancelled_v2_send_finishes_reload_registration() {
             .evicted_environments(child_id)
             .is_none()
     );
+    // Corbanu (#1545): the detached registration keeps its residency pin until it has
+    // also requeued the child's durable mail, which can finish after `thread_created`;
+    // evicting before then is a transient `Busy` (#2340). Wait for that pin, bounded,
+    // so a pin the cancelled sender leaked still fails here.
+    let pin_was_held = Arc::clone(&reloaded.residency_gate)
+        .try_write_owned()
+        .is_err();
+    eprintln!("#2340-diag: registration pin still held after thread_created: {pin_was_held}");
+    drop(
+        timeout(
+            Duration::from_secs(5),
+            Arc::clone(&reloaded.residency_gate).write_owned(),
+        )
+        .await
+        .expect("the cancelled sender must not leak a residency pin"),
+    );
+    // The cancelled send never reached the durable mailbox, so recovery has nothing
+    // to hand the reloaded child.
+    assert!(
+        !reloaded
+            .session
+            .input_queue
+            .has_pending_mailbox_items()
+            .await
+    );
     // Evict and reload again with the single child slot. This also catches a leaked
-    // pin or pending residency reservation left behind by the cancelled sender.
+    // pending residency reservation left behind by the cancelled sender.
     assert_eq!(
         harness.manager.try_evict_v2_thread(reloaded).await.unwrap(),
         ThreadEvictionOutcome::Evicted,

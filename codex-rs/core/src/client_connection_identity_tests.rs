@@ -465,6 +465,73 @@ fn issue_1343_brokered_identities_never_match() {
 }
 
 /// #1504: the other half of the broker check. In a brokered process
+/// #2259: when the resolved auth headers are the sign-in but cannot be
+/// computed, the identity fails closed: it never matches another failed
+/// sign-in, the unauthenticated identity, or the headers written before the
+/// failure. A semantic sign-in does not consult the auth headers, so a
+/// failure there does not change its identity.
+#[test]
+fn issue_2259_auth_header_failure_identities_never_match() {
+    struct FailingAuth(HeaderMap);
+    impl AuthProvider for FailingAuth {
+        fn add_auth_headers(&self, headers: &mut HeaderMap) -> Result<(), codex_api::AuthError> {
+            headers.extend(self.0.clone());
+            Err(codex_api::AuthError::Build("synthetic failure".to_string()))
+        }
+    }
+    let mut partial = HeaderMap::new();
+    partial.insert("x-api-key", HeaderValue::from_static("synthetic-partial"));
+    let mut provider_headers = HeaderMap::new();
+    provider_headers.insert("x-tenant", HeaderValue::from_static("synthetic-tenant"));
+    for provider_headers in [HeaderMap::new(), provider_headers] {
+        for written in [HeaderMap::new(), partial.clone()] {
+            let failing = FailingAuth(written.clone());
+            let identity = || {
+                ConnectionIdentity::with_broker_required(
+                    /*broker_required*/ false,
+                    /*auth*/ None,
+                    &provider_headers,
+                    &failing,
+                )
+            };
+            let first = identity();
+            assert_ne!(first, identity());
+            assert_ne!(
+                first,
+                ConnectionIdentity::with_broker_required(
+                    /*broker_required*/ false,
+                    /*auth*/ None,
+                    &provider_headers,
+                    &HeaderAuth(written),
+                )
+            );
+            assert_ne!(
+                first,
+                ConnectionIdentity::with_broker_required(
+                    /*broker_required*/ false,
+                    /*auth*/ None,
+                    &provider_headers,
+                    &BearerAuthProvider::default(),
+                )
+            );
+        }
+    }
+
+    let api_key = CodexAuth::from_api_key("synthetic-api-key");
+    let failing = FailingAuth(HeaderMap::new());
+    let semantic = |api_auth: &dyn AuthProvider| {
+        ConnectionIdentity::with_broker_required(
+            /*broker_required*/ false,
+            Some(&api_key),
+            &HeaderMap::new(),
+            api_auth,
+        )
+    };
+    assert_eq!(semantic(&failing), semantic(&failing));
+    assert_eq!(semantic(&failing), semantic(&BearerAuthProvider::default()));
+}
+
+/// #1504: the other half of the broker check. In a brokered process
 /// (`model_key_broker_required()`) identities never match even without the
 /// placeholder key, whatever the sign-in; outside one the same inputs do.
 #[test]
