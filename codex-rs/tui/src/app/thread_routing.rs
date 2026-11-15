@@ -18,7 +18,6 @@ use std::fmt::Write as _;
 const REALTIME_STOP_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 1);
 
 impl App {
-<<<<<<< HEAD
     pub(super) async fn surface_turn_start_failure(
         &mut self,
         thread_id: ThreadId,
@@ -121,24 +120,6 @@ impl App {
         }
     }
 
-    pub(super) async fn shutdown_current_thread(&mut self, app_server: &mut AppServerSession) {
-        let side_thread_ids: Vec<ThreadId> = self.side_threads.keys().copied().collect();
-        for side_thread_id in side_thread_ids {
-            self.discard_side_thread(app_server, side_thread_id).await;
-        }
-        if let Some(thread_id) = self.chat_widget.thread_id() {
-            if let Err(err) = app_server.thread_unsubscribe(thread_id).await {
-                tracing::warn!("failed to unsubscribe thread {thread_id}: {err}");
-||||||| 413492cd6c
-    pub(super) async fn shutdown_current_thread(&mut self, app_server: &mut AppServerSession) {
-        let side_thread_ids: Vec<ThreadId> = self.side_threads.keys().copied().collect();
-        for side_thread_id in side_thread_ids {
-            self.discard_side_thread(app_server, side_thread_id).await;
-        }
-        if let Some(thread_id) = self.chat_widget.thread_id() {
-            if let Err(err) = app_server.thread_unsubscribe(thread_id).await {
-                tracing::warn!("failed to unsubscribe thread {thread_id}: {err}");
-=======
     pub(super) async fn stop_realtime_conversation(&mut self, app_server: &mut AppServerSession) {
         let thread_id = self
             .background_voice
@@ -161,7 +142,6 @@ impl App {
             }
             Err(_) => {
                 tracing::warn!(%thread_id, "timed out stopping voice conversation");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
         }
     }
@@ -290,14 +270,13 @@ impl App {
         }
     }
 
-<<<<<<< HEAD
     pub(crate) async fn detach_active_thread_for_external_pane(&mut self) {
         self.store_active_thread_receiver().await;
         self.active_thread_id = None;
         self.active_thread_rx = None;
         self.refresh_pending_thread_approvals().await;
-||||||| 413492cd6c
-=======
+    }
+
     pub(super) fn retain_subscriptions_for_fork(&mut self) {
         // Tasks can start while the fork RPC is pending.
         for id in self
@@ -312,7 +291,6 @@ impl App {
                 .entry(id)
                 .or_default();
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(super) async fn activate_thread_for_replay(
@@ -1000,298 +978,7 @@ impl App {
                 });
                 Ok(true)
             }
-<<<<<<< HEAD
-            AppCommand::UserTurn {
-                items,
-                cwd,
-                approval_policy,
-                approvals_reviewer,
-                active_permission_profile,
-                model,
-                effort,
-                summary,
-                service_tier,
-                final_output_json_schema,
-                collaboration_mode,
-                personality,
-            } => {
-                let mut should_start_turn = true;
-                if let Some(turn_id) = self.active_turn_id_for_submission(thread_id).await {
-                    let mut steer_turn_id = turn_id;
-                    let mut retried_after_turn_mismatch = false;
-                    loop {
-                        match app_server
-                            .turn_steer(
-                                thread_id,
-                                steer_turn_id.clone(),
-                                items.to_vec(),
-                                /*client_user_message_id*/ None,
-                            )
-                            .await
-                        {
-                            Ok(_) => return Ok(true),
-                            Err(error) => {
-                                if let Some(turn_error) =
-                                    active_turn_not_steerable_turn_error(&error)
-                                {
-                                    if !self.chat_widget.enqueue_rejected_steer() {
-                                        self.chat_widget.add_error_message(turn_error.message);
-                                    }
-                                    return Ok(true);
-                                }
-                                match active_turn_steer_race(&error) {
-                                    Some(ActiveTurnSteerRace::Missing) => {
-                                        if let Some(channel) =
-                                            self.thread_event_channels.get(&thread_id)
-                                        {
-                                            let mut store = channel.store.lock().await;
-                                            store.clear_active_turn_id();
-                                        }
-                                        should_start_turn = true;
-                                        break;
-                                    }
-                                    Some(ActiveTurnSteerRace::ExpectedTurnMismatch {
-                                        actual_turn_id,
-                                    }) if !retried_after_turn_mismatch
-                                        && actual_turn_id != steer_turn_id =>
-                                    {
-                                        // Review flows can swap the active turn before the TUI
-                                        // processes the corresponding notification. Retry once with
-                                        // the server-reported turn id so non-steerable review turns
-                                        // still fall through to the existing queueing behavior.
-                                        if let Some(channel) =
-                                            self.thread_event_channels.get(&thread_id)
-                                        {
-                                            let mut store = channel.store.lock().await;
-                                            store.active_turn_id = Some(actual_turn_id.clone());
-                                        }
-                                        steer_turn_id = actual_turn_id;
-                                        retried_after_turn_mismatch = true;
-                                    }
-                                    Some(ActiveTurnSteerRace::ExpectedTurnMismatch {
-                                        actual_turn_id,
-                                    }) => {
-                                        if let Some(channel) =
-                                            self.thread_event_channels.get(&thread_id)
-                                        {
-                                            let mut store = channel.store.lock().await;
-                                            store.active_turn_id = Some(actual_turn_id);
-                                        }
-                                        self.note_thread_steer_failure(thread_id, error);
-                                        return Ok(true);
-                                    }
-                                    None => {
-                                        self.note_thread_steer_failure(thread_id, error);
-                                        return Ok(true);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                if should_start_turn {
-                    if self
-                        .pending_permission_confirmation
-                        .as_ref()
-                        .is_some_and(|pending| pending.thread_id == thread_id)
-                    {
-                        self.chat_widget.defer_turn_for_permission_confirmation();
-                        return Ok(true);
-                    }
-                    let config = self.chat_widget.config_ref();
-                    let approvals_reviewer =
-                        approvals_reviewer.unwrap_or(config.approvals_reviewer);
-                    let permissions_override = Self::turn_permissions_override_from_config(
-                        config,
-                        active_permission_profile.as_ref(),
-                        self.runtime_permission_profile_override
-                            .as_ref()
-                            .map(|profile| &profile.permission_profile),
-                    );
-                    let response = app_server
-                        .turn_start(
-                            thread_id,
-                            items.to_vec(),
-                            cwd.clone(),
-                            *approval_policy,
-                            approvals_reviewer,
-                            permissions_override,
-                            config.permissions.user_visible_workspace_roots(),
-                            model.to_string(),
-                            effort.clone(),
-                            *summary,
-                            service_tier.clone(),
-                            collaboration_mode.clone(),
-                            *personality,
-                            final_output_json_schema.clone(),
-                            self.spawn_additional_context_for_thread(thread_id),
-                            /*client_user_message_id*/ None,
-                        )
-                        .await?;
-                    match response {
-                        crate::app_server_session::TurnStartOutcome::Started {
-                            turn_id,
-                            recovered_failures,
-                        } => {
-                            if !recovered_failures.is_empty() {
-                                self.surface_turn_start_failure(
-                                    thread_id,
-                                    recovered_failures.join("\n"),
-                                    /*will_retry*/ true,
-                                )
-                                .await;
-                            }
-                            if self.active_thread_id == Some(thread_id)
-                                && self.chat_widget.thread_id() == Some(thread_id)
-                            {
-                                self.chat_widget.record_safety_buffering_turn(turn_id, op);
-                            }
-                        }
-                        crate::app_server_session::TurnStartOutcome::CapacityUnavailable {
-                            max_threads,
-                        } => {
-                            self.chat_widget.add_error_message(format!(
-                                "Cannot start turn: all {max_threads} execution slots are in use."
-                            ));
-                        }
-                    }
-                }
-                Ok(true)
-            }
-||||||| 413492cd6c
-            AppCommand::UserTurn {
-                items,
-                cwd,
-                approval_policy,
-                approvals_reviewer,
-                active_permission_profile,
-                model,
-                effort,
-                summary,
-                service_tier,
-                final_output_json_schema,
-                collaboration_mode,
-                personality,
-            } => {
-                let mut should_start_turn = true;
-                if let Some(turn_id) = self.active_turn_id_for_thread(thread_id).await {
-                    let mut steer_turn_id = turn_id;
-                    let mut retried_after_turn_mismatch = false;
-                    loop {
-                        match app_server
-                            .turn_steer(thread_id, steer_turn_id.clone(), items.to_vec())
-                            .await
-                        {
-                            Ok(_) => return Ok(true),
-                            Err(error) => {
-                                if let Some(turn_error) =
-                                    active_turn_not_steerable_turn_error(&error)
-                                {
-                                    if !self.chat_widget.enqueue_rejected_steer() {
-                                        self.chat_widget.add_error_message(turn_error.message);
-                                    }
-                                    return Ok(true);
-                                }
-                                match active_turn_steer_race(&error) {
-                                    Some(ActiveTurnSteerRace::Missing) => {
-                                        if let Some(channel) =
-                                            self.thread_event_channels.get(&thread_id)
-                                        {
-                                            let mut store = channel.store.lock().await;
-                                            store.clear_active_turn_id();
-                                        }
-                                        should_start_turn = true;
-                                        break;
-                                    }
-                                    Some(ActiveTurnSteerRace::ExpectedTurnMismatch {
-                                        actual_turn_id,
-                                    }) if !retried_after_turn_mismatch
-                                        && actual_turn_id != steer_turn_id =>
-                                    {
-                                        // Review flows can swap the active turn before the TUI
-                                        // processes the corresponding notification. Retry once with
-                                        // the server-reported turn id so non-steerable review turns
-                                        // still fall through to the existing queueing behavior.
-                                        if let Some(channel) =
-                                            self.thread_event_channels.get(&thread_id)
-                                        {
-                                            let mut store = channel.store.lock().await;
-                                            store.active_turn_id = Some(actual_turn_id.clone());
-                                        }
-                                        steer_turn_id = actual_turn_id;
-                                        retried_after_turn_mismatch = true;
-                                    }
-                                    Some(ActiveTurnSteerRace::ExpectedTurnMismatch {
-                                        actual_turn_id,
-                                    }) => {
-                                        if let Some(channel) =
-                                            self.thread_event_channels.get(&thread_id)
-                                        {
-                                            let mut store = channel.store.lock().await;
-                                            store.active_turn_id = Some(actual_turn_id);
-                                        }
-                                        return Err(error.into());
-                                    }
-                                    None => return Err(error.into()),
-                                }
-                            }
-                        }
-                    }
-                }
-                if should_start_turn {
-                    let config = self.chat_widget.config_ref();
-                    let approvals_reviewer =
-                        approvals_reviewer.unwrap_or(config.approvals_reviewer);
-                    let permissions_override = Self::turn_permissions_override_from_config(
-                        config,
-                        active_permission_profile.as_ref(),
-                        self.runtime_permission_profile_override
-                            .as_ref()
-                            .map(|profile| &profile.permission_profile),
-                    );
-                    let response = app_server
-                        .turn_start(
-                            thread_id,
-                            items.to_vec(),
-                            cwd.clone(),
-                            *approval_policy,
-                            approvals_reviewer,
-                            permissions_override,
-                            config.permissions.user_visible_workspace_roots(),
-                            model.to_string(),
-                            effort.clone(),
-                            *summary,
-                            service_tier.clone(),
-                            collaboration_mode.clone(),
-                            *personality,
-                            final_output_json_schema.clone(),
-                        )
-                        .await?;
-                    if self.active_thread_id == Some(thread_id)
-                        && self.chat_widget.thread_id() == Some(thread_id)
-                    {
-                        self.chat_widget
-                            .record_safety_buffering_turn(response.turn.id, op);
-                    }
-                }
-                Ok(true)
-            }
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             AppCommand::ListSkills { cwds, force_reload } => {
-<<<<<<< HEAD
-                self.refresh_skills(app_server, cwds.clone(), *force_reload);
-||||||| 413492cd6c
-                self.handle_skills_list_result(
-                    app_server
-                        .skills_list(codex_app_server_protocol::SkillsListParams {
-                            cwds: cwds.clone(),
-                            force_reload: *force_reload,
-                        })
-                        .await,
-                    "failed to refresh skills",
-                );
-=======
                 // A queued refresh can outlive the workspace it was requested for.
                 if !cwds
                     .iter()
@@ -1299,16 +986,7 @@ impl App {
                 {
                     return Ok(true);
                 }
-                self.handle_skills_list_result(
-                    app_server
-                        .skills_list(codex_app_server_protocol::SkillsListParams {
-                            cwds: cwds.clone(),
-                            force_reload: *force_reload,
-                        })
-                        .await,
-                    "failed to refresh skills",
-                );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                self.refresh_skills(app_server, cwds.clone(), *force_reload);
                 Ok(true)
             }
             AppCommand::Compact => {
@@ -1620,17 +1298,8 @@ impl App {
                 });
             }
         }
-<<<<<<< HEAD
         self.cache_collab_receiver_threads_for_notification(&notification);
         self.update_spawn_status_for_thread_notification(&notification);
-        let inferred_session = self
-            .infer_session_for_thread_notification(thread_id, &notification)
-            .await;
-||||||| 413492cd6c
-        let inferred_session = self
-            .infer_session_for_thread_notification(thread_id, &notification)
-            .await;
-=======
         let inferred_session = if let ServerNotification::ThreadStarted(started) = &notification
             && self.primary_session_configured.is_some()
         {
@@ -1662,17 +1331,12 @@ impl App {
         } else {
             None
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let is_turn_started = matches!(notification, ServerNotification::TurnStarted(_));
-<<<<<<< HEAD
         let kill_switch_stopped = matches!(
             &notification,
             ServerNotification::Warning(warning)
                 if warning.message == crate::legacy_core::security_revocation::KILL_SWITCH_STOPPED
         );
-||||||| 413492cd6c
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let is_thread_closed = matches!(notification, ServerNotification::ThreadClosed(_));
         let notification_status_change = SideParentStatusChange::for_notification(&notification);
         let (sender, store) = {
@@ -1886,7 +1550,7 @@ impl App {
     }
 
     async fn infer_session_for_started_thread(
-        &self,
+        &mut self,
         thread_id: ThreadId,
         notification: &ThreadStartedNotification,
     ) -> Option<ThreadSessionState> {
@@ -1908,24 +1572,8 @@ impl App {
         }
         session.message_history = None;
         session.rollout_path = rollout_path;
-<<<<<<< HEAD
-        self.upsert_agent_picker_thread(
-            thread_id,
-            notification.thread.agent_nickname.clone(),
-            notification.thread.agent_role.clone(),
-            /*is_closed*/ false,
-        );
         self.agent_navigation
             .set_model(thread_id, Some(session.model.clone()));
-||||||| 413492cd6c
-        self.upsert_agent_picker_thread(
-            thread_id,
-            notification.thread.agent_nickname.clone(),
-            notification.thread.agent_role.clone(),
-            /*is_closed*/ false,
-        );
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         Some(session)
     }
 
@@ -2191,19 +1839,10 @@ impl App {
 
         match app_server
             .resume_thread(
-<<<<<<< HEAD
-                self.config.clone(),
-                thread_id,
-                self.resume_model_settings(),
-                self.resume_permission_settings(),
-||||||| 413492cd6c
-            .resume_thread(self.config.clone(), thread_id, self.resume_model_settings())
-=======
                 &self.local_settings,
                 self.config.clone(),
                 thread_id,
                 crate::app_server_session::ResumeModelSettings::PreserveExistingThread,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             )
             .await
         {
@@ -2605,15 +2244,12 @@ impl App {
                 let tip_ready = self.turn_tips.observe(&notification, Instant::now());
                 self.chat_widget
                     .handle_server_notification(*notification, /*replay_kind*/ None);
-<<<<<<< HEAD
                 if settings_updated {
                     self.observe_permission_confirmation();
-||||||| 413492cd6c
-=======
+                }
                 // History cells queued by completion must be applied before anchoring its tip.
                 if let Some(event) = tip_ready {
                     self.app_event_tx.send(event);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }
             }
             ThreadBufferedEvent::Request(request) => {

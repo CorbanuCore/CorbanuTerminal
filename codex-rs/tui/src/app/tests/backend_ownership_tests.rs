@@ -314,6 +314,9 @@ async fn prepared_resume_cannot_activate_through_another_backend() -> Result<()>
         read_only: false,
         history_notice: None,
         provider_error: None,
+        model_settings: crate::app_server_session::ResumeModelSettings::PreserveExistingThread,
+        recorded_account: None,
+        previous_provider_account: None,
     };
     requests.lock().unwrap().clear();
     while events.try_recv().is_ok() {}
