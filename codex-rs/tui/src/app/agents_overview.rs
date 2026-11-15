@@ -1095,12 +1095,15 @@ impl App {
         {
             // Bootstrap's fallback model may be seeded from the client. Resolve tiers
             // against the server catalog when config/read cleared the model.
-            config.model = self
-                .model_catalog
-                .models
+            // Corbanu's catalog keeps its models behind a lock; read a snapshot.
+            let models = match self.model_catalog.try_list_models() {
+                Ok(models) => models,
+                Err(never) => match never {},
+            };
+            config.model = models
                 .iter()
                 .find(|model| model.is_default)
-                .or_else(|| self.model_catalog.models.first())
+                .or_else(|| models.first())
                 .map(|model| model.model.clone());
         }
         Some((config, remote_cwd))
