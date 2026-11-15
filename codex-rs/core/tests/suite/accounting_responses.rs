@@ -490,6 +490,8 @@ async fn accounting_responses_native_sampling_and_auxiliary_scope() -> anyhow::R
     let after = wait_attempts(&db, /*count*/ 3).await?;
     assert_eq!(after[..2], records[..]);
     assert!(after[2].turn.starts_with("compact:"), "{}", after[2].turn);
+    // Its streamed usage is a third observation.
+    wait_observations(&db, /*count*/ 3).await?;
     stop(&test).await;
     Ok(())
 }

@@ -509,6 +509,66 @@ async fn approved_remote_shell_runs_in_remote_cwd() -> Result<()> {
     Ok(())
 }
 
+/// #721: a command aimed at a remote primary environment never runs on the
+/// Codex host. Main tested this on `shell_command`, which upstream removed;
+/// `exec_command` runs the command in the remote environment instead.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn remote_environment_command_does_not_run_on_the_host() -> Result<()> {
+    const CALL_ID: &str = "remote-command-not-on-host";
+
+    skip_if_no_remote_env!(Ok(()));
+    skip_if_target_windows!(Ok(()), "uses a POSIX shell command fixture");
+
+    let marker = std::env::temp_dir().join(format!(
+        "codex-remote-exec-command-{}-{}",
+        std::process::id(),
+        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+    ));
+    let arguments = serde_json::to_string(&json!({
+        "cmd": format!("touch {} && echo touched-remotely", marker.display()),
+        "workdir": "/tmp",
+        "yield_time_ms": 10_000,
+    }))?;
+    let server = start_mock_server().await;
+    let test = test_codex().build_with_auto_env(&server).await?;
+    let response_mock = mount_sse_sequence(
+        &server,
+        vec![
+            sse(vec![
+                ev_response_created("resp-1"),
+                ev_function_call(CALL_ID, "exec_command", &arguments),
+                ev_completed("resp-1"),
+            ]),
+            sse(vec![
+                ev_response_created("resp-2"),
+                ev_assistant_message("msg-1", "done"),
+                ev_completed("resp-2"),
+            ]),
+        ],
+    )
+    .await;
+
+    test.submit_turn_with_environments(
+        "run a command in the remote environment",
+        Some(vec![test.executor_environment().selection().clone()]),
+    )
+    .await?;
+    let output = response_mock
+        .last_request()
+        .context("model should receive the tool result")?
+        .function_call_output_text(CALL_ID)
+        .context("exec_command result should be present")?;
+    let ran_on_host = marker.exists();
+    if ran_on_host {
+        std::fs::remove_file(&marker)?;
+    }
+    assert!(!ran_on_host, "the command ran on the host: {output}");
+    // It ran, in the remote environment.
+    assert!(output.contains("touched-remotely"), "{output}");
+
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn environment_permissions_follow_configuration_ownership() -> Result<()> {
     const THREAD_CONFIG_CALL_ID: &str = "thread-config-permissions";

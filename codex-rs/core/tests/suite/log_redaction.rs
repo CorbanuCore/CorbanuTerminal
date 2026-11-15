@@ -531,7 +531,7 @@ async fn sandboxed_command_line_credentials_never_reach_trace_logs() -> anyhow::
     let command = format!(
         "echo SBX-398-RAN; : curl -H 'Authorization: Bearer {bearer}' -H 'X-Api-Key: {api_key}' --password={password} 'https://api.example/v1?api_key={query}' --password {password_arg}"
     );
-    let args = serde_json::json!({ "command": command, "timeout_ms": 10_000 });
+    let args = serde_json::json!({ "cmd": command, "yield_time_ms": 10_000 });
     mount_sse_once(
         &server,
         sse(vec![

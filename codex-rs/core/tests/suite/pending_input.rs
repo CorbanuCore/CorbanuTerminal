@@ -534,6 +534,50 @@ impl codex_extension_api::ThreadLifecycleContributor<codex_core::config::Config>
     }
 }
 
+/// Main's 4038e24b14 check, kept beside upstream's wake test below: the
+/// queue-only mail that woke the sleeping root reaches the model with the
+/// next human turn.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn queue_only_agent_mail_wakes_sleeping_root_and_persists_message() {
+    const CHILD_MESSAGE: &str = "worker completed";
+
+    let (server, _completions) = start_streaming_sse_server(vec![
+        response_completed_chunks("resp-1"),
+        response_completed_chunks("resp-2"),
+    ])
+    .await;
+    let mut extensions =
+        codex_extension_api::ExtensionRegistryBuilder::<codex_core::config::Config>::new();
+    extensions.thread_lifecycle_contributor(Arc::new(SleepingRootExtension));
+    let codex = test_codex()
+        .with_model("gpt-5.4")
+        .with_extensions(Arc::new(extensions.build()))
+        .build_with_streaming_server(&server)
+        .await
+        .expect("build Codex test session")
+        .codex;
+
+    enqueue_queue_only_agent_mail(&codex, CHILD_MESSAGE).await;
+    wait_for_turn_complete(&codex).await;
+
+    assert_eq!(server.requests().await.len(), 1);
+    submit_user_input(&codex, "acknowledge the worker update").await;
+    wait_for_turn_complete(&codex).await;
+    assert_eq!(server.requests().await.len(), 2);
+    let requests = server.requests().await;
+    let second: Value = from_slice(&requests[1]).expect("parse second request");
+    assert!(
+        second["input"]
+            .as_array()
+            .expect("request input")
+            .iter()
+            .any(|item| {
+                item.get("type").and_then(Value::as_str) == Some("agent_message")
+                    && item["content"] == json!([{"type": "input_text", "text": CHILD_MESSAGE}])
+            })
+    );
+}
+
 #[test_case(false, Some("automation"), None, false; "live_root")]
 #[test_case(true, Some("automation"), None, false; "reloaded_root")]
 #[test_case(true, Some("automation"), Some("original-parent"), false; "reloaded_delegated")]
