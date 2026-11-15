@@ -265,16 +265,18 @@ async fn apply_role_to_config_inner(
             .get("model_reasoning_effort")
             .and_then(TomlValue::as_str)
             .and_then(|value| ReasoningEffort::from_str(value).ok());
-        // The configured effort maps as config load mapped it, while the role keeps the
-        // provider and model it was loaded for.
-        let same_route = next_config.model == config.model
-            && next_config.model_provider_id == config.model_provider_id;
+        // The configured effort maps as config load mapped it, for the provider and model it
+        // was loaded for.
         next_config.model_reasoning_effort = match (
             configured,
             config.configured_reasoning_effort_mapping.as_ref(),
         ) {
-            (Some(configured), Some((loaded, mapped))) if same_route && configured == *loaded => {
-                Some(mapped.clone())
+            (Some(configured), Some(mapping))
+                if configured == mapping.configured
+                    && next_config.model_provider_id == mapping.model_provider_id
+                    && next_config.model == mapping.model =>
+            {
+                Some(mapping.mapped.clone())
             }
             (configured, _) => configured,
         };
