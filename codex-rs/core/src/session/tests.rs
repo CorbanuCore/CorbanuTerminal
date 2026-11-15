@@ -13716,10 +13716,6 @@ async fn task_finish_starts_follow_up_turn_for_leftover_pending_user_input() {
     let submission = submit_steer_only(&sess, pending_user_input.clone(), &tc.sub_id).await;
     assert!(matches!(submission, TurnInputSubmission::Steered { .. }));
 
-    let mut current = tc.initial_settings.as_ref().clone();
-    Arc::make_mut(&mut current.model_info).supports_image_detail_original = true;
-    tc.next_step_settings.store(Arc::new(current));
-
     sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
         .await;
 
