@@ -655,6 +655,11 @@ impl MessageProcessor {
         self.plugins_manager.cancel_curated_repo_sync();
     }
 
+    #[cfg(test)]
+    pub(crate) fn plugins_manager(&self) -> Arc<codex_core_plugins::PluginsManager> {
+        Arc::clone(&self.plugins_manager)
+    }
+
     pub(crate) fn clear_runtime_references(&self) {
         self.account_processor.clear_external_auth();
         self.apps_processor.shutdown();

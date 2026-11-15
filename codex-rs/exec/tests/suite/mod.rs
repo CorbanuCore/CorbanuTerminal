@@ -18,7 +18,6 @@ mod named_account_login_restrictions;
 mod nested_launch;
 mod originator;
 mod output_schema;
-mod plugin_sync_shutdown;
 mod prompt_stdin;
 mod provider_auth_failure_exit;
 mod provider_key_env;

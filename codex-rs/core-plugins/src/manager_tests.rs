@@ -184,7 +184,68 @@ fn curated_repo_sync_stays_deferred_for_remote_chatgpt_catalog() {
         &config, /*on_effective_plugins_changed*/ None,
     );
 
-    assert!(!CURATED_REPO_SYNC_STARTED.load(std::sync::atomic::Ordering::SeqCst));
+    // Check this manager's own slot: the process-wide flag also reflects
+    // other tests' syncs.
+    assert!(manager.curated_repo_sync.lock().unwrap().is_none());
+}
+
+/// #477/#494: what the app-server and `corbanu exec` call on every shutdown
+/// path (`cancel_curated_repo_sync`) stops the running curated repo sync:
+/// its `git` and the helper `git` started are killed and the staged clone is
+/// removed. The sync runs a fake `git` with loopback fallbacks, so this test
+/// never reaches the network (it replaces exec's end-to-end tests, whose fake
+/// `git` on `PATH` the sync no longer runs).
+#[cfg(unix)]
+#[test]
+fn cancelling_the_curated_repo_sync_stops_its_git_and_helpers() {
+    use crate::startup_sync::tests::SlowFetchGit;
+    use crate::startup_sync::tests::has_plugins_clone_dirs;
+    use crate::startup_sync::tests::read_pid;
+    use crate::startup_sync::tests::wait_until;
+    use crate::startup_sync::tests::wait_until_gone;
+    use crate::startup_sync::tests::write_slow_fetch_git;
+
+    let tmp = TempDir::new().unwrap();
+    let bin_dir = TempDir::new().unwrap();
+    let SlowFetchGit {
+        git_path,
+        git_pid,
+        helper_pid,
+    } = write_slow_fetch_git(bin_dir.path());
+    let config = PluginsConfigInput::new(
+        unrestricted_config_layer_stack(),
+        Default::default(),
+        "openai".to_string(),
+        /*plugins_enabled*/ true,
+        /*remote_plugin_enabled*/ false,
+        "https://chatgpt.com".to_string(),
+        test_http_client_factory(),
+        /*product_sku*/ None,
+    );
+    let manager = Arc::new(test_plugins_manager(tmp.path().to_path_buf()));
+    *manager.curated_repo_sync_test_git.lock().unwrap() = Some(git_path);
+    // Only one curated sync runs per process; wait out any other test's.
+    wait_until("no other curated sync is running", || {
+        !CURATED_REPO_SYNC_STARTED.load(std::sync::atomic::Ordering::SeqCst)
+    });
+
+    manager.maybe_start_curated_repo_sync_for_config(
+        &config, /*on_effective_plugins_changed*/ None,
+    );
+    wait_until("the fetch starts", || {
+        git_pid.exists() && helper_pid.exists()
+    });
+    let pids = [read_pid(&git_pid), read_pid(&helper_pid)];
+    manager.cancel_curated_repo_sync();
+    tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap()
+        .block_on(manager.shutdown_curated_repo_sync(std::time::Duration::from_secs(5)));
+
+    wait_until_gone(&pids);
+    assert!(!has_plugins_clone_dirs(tmp.path()));
+    assert!(manager.curated_repo_sync.lock().unwrap().is_none());
 }
 
 /// #477: after shutdown a manager starts no curated repo sync.

@@ -492,7 +492,7 @@ fn write_curated_plugin_sha(codex_home: &Path) {
     );
 }
 
-fn has_plugins_clone_dirs(codex_home: &Path) -> bool {
+pub(crate) fn has_plugins_clone_dirs(codex_home: &Path) -> bool {
     let Ok(entries) = std::fs::read_dir(codex_home.join(".tmp")) else {
         return false;
     };
@@ -1205,14 +1205,14 @@ fn cancelled_sync_kills_git_and_its_helpers_and_skips_fallback() {
 /// A fake `git` whose fetch starts a helper and never finishes, writing
 /// into the clone until it is killed. Pid files appear once the fetch runs.
 #[cfg(unix)]
-struct SlowFetchGit {
-    git_path: PathBuf,
-    git_pid: PathBuf,
-    helper_pid: PathBuf,
+pub(crate) struct SlowFetchGit {
+    pub(crate) git_path: PathBuf,
+    pub(crate) git_pid: PathBuf,
+    pub(crate) helper_pid: PathBuf,
 }
 
 #[cfg(unix)]
-fn write_slow_fetch_git(bin_dir: &Path) -> SlowFetchGit {
+pub(crate) fn write_slow_fetch_git(bin_dir: &Path) -> SlowFetchGit {
     let git_path = bin_dir.join("git");
     let git_pid = bin_dir.join("git.pid");
     let helper_pid = bin_dir.join("helper.pid");
@@ -1251,7 +1251,7 @@ exit 1
 }
 
 #[cfg(unix)]
-fn read_pid(pid_file: &Path) -> libc::pid_t {
+pub(crate) fn read_pid(pid_file: &Path) -> libc::pid_t {
     std::fs::read_to_string(pid_file)
         .expect("pid")
         .trim()
@@ -1262,7 +1262,7 @@ fn read_pid(pid_file: &Path) -> libc::pid_t {
 /// Waits until every pid has exited. If they don't, kills them so a failed
 /// run leaves nothing behind.
 #[cfg(unix)]
-fn wait_until_gone(pids: &[libc::pid_t]) {
+pub(crate) fn wait_until_gone(pids: &[libc::pid_t]) {
     struct KillOnPanic<'a>(&'a [libc::pid_t]);
     impl Drop for KillOnPanic<'_> {
         fn drop(&mut self) {
@@ -1377,7 +1377,7 @@ fn cancelled_sync_spawns_no_git() {
 }
 
 #[cfg(unix)]
-fn wait_until(what: &str, done: impl Fn() -> bool) {
+pub(crate) fn wait_until(what: &str, done: impl Fn() -> bool) {
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     while !done() {
         assert!(std::time::Instant::now() < deadline, "timed out: {what}");
