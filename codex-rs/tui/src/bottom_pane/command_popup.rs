@@ -558,7 +558,6 @@ mod tests {
                 SlashCommand::App,
                 cfg!(any(target_os = "macos", target_os = "windows")),
             ),
-            (SlashCommand::SandboxReadRoot, cfg!(target_os = "windows")),
             (SlashCommand::Rollout, cfg!(debug_assertions)),
             (SlashCommand::TestApproval, cfg!(debug_assertions)),
             (SlashCommand::Cost, cfg!(feature = "developer-accounting")),
