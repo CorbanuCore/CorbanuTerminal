@@ -256,8 +256,9 @@ impl App {
 
     /// Whether core applied the update before replying (`Confirmed`, only
     /// for `params.confirm` answered `Confirmed { Applied }`), accepted it
-    /// without that (`Accepted`: unconfirmed, uncertain, or a server without
-    /// the method), it failed, or nothing was sent (`NotSent`).
+    /// without that (`Accepted`: unconfirmed or uncertain), the server lacks the
+    /// method (`Unsupported`), it failed, or nothing was sent (`NotSent`, also
+    /// when the security level forbids a permission change).
     pub(super) async fn send_thread_settings_update(
         &mut self,
         app_server: &mut AppServerSession,

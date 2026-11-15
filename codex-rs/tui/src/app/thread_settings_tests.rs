@@ -95,7 +95,7 @@ async fn issue_2062_sandbox_replies_require_confirmation_and_never_retry() -> co
         (
             "unsupported",
             json!({"error": {"code": -32601, "message": "unknown method"}}),
-            SettingsUpdateOutcome::Accepted,
+            SettingsUpdateOutcome::Unsupported,
         ),
         (
             "transport failure",

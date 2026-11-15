@@ -477,9 +477,6 @@ pub(crate) enum PermissionConfirmationResult {
     Uncertain(String),
 }
 
-/// PF-84: only `Confirmed { Applied }` says core applied the update before
-/// replying; `Uncertain` (deadline passed, listener lost) and `Accepted` (a
-/// server that ignores `confirm`) do not.
 /// How a `thread/settings/update` request was answered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ThreadSettingsUpdateReply {
@@ -491,6 +488,9 @@ pub(crate) enum ThreadSettingsUpdateReply {
     Unsupported,
 }
 
+/// PF-84: only `Confirmed { Applied }` says core applied the update before
+/// replying; `Uncertain` (deadline passed, listener lost) and `Accepted` (a
+/// server that ignores `confirm`) do not.
 pub(crate) fn applied_before_reply(response: &ThreadSettingsUpdateResponse) -> bool {
     matches!(
         response,
@@ -2232,7 +2232,8 @@ impl AppServerSession {
         &mut self,
         params: ThreadSettingsUpdateParams,
     ) -> Result<bool> {
-        Ok(self.thread_settings_update_reply(params).await? != ThreadSettingsUpdateReply::Unsupported)
+        let reply = self.thread_settings_update_reply(params).await?;
+        Ok(reply != ThreadSettingsUpdateReply::Unsupported)
     }
 
     /// Corbanu (PF-84, #2062): whether core applied the update before replying (a `confirm`
