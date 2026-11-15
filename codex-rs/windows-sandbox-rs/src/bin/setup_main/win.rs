@@ -12,7 +12,7 @@ use codex_windows_sandbox::SETUP_VERSION;
 use codex_windows_sandbox::SetupErrorCode;
 use codex_windows_sandbox::SetupErrorReport;
 use codex_windows_sandbox::SetupFailure;
-use codex_windows_sandbox::add_deny_write_ace;
+use codex_windows_sandbox::add_deny_write_ace_to_handle;
 use codex_windows_sandbox::apply_deny_read_acls;
 use codex_windows_sandbox::convert_string_sid_to_sid;
 use codex_windows_sandbox::ensure_allow_mask_aces_with_inheritance;
@@ -39,6 +39,7 @@ use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::ffi::c_void;
 use std::io::Write;
+use std::os::windows::io::AsRawHandle as _;
 use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::path::PathBuf;
@@ -974,7 +975,8 @@ fn run_setup_full(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Res
         // bypass the carveout. Materialize missing carveouts as directories so the deny-write ACL
         // is present before the command starts. Legacy protected children are filtered before
         // payload creation, so this should not create sentinel directories in a workspace.
-        let _pinned = deny_write_path::pin(path)?;
+        let pinned = deny_write_path::pin(path)?;
+        let target = pinned.last().context("deny-write path has no target")?;
 
         let deny_sid_strs = workspace_write_cap_sids_for_path(
             &payload.codex_home,
@@ -988,7 +990,7 @@ fn run_setup_full(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Res
                     .ok_or_else(|| anyhow::anyhow!("convert deny capability SID failed"))?
             };
 
-            match unsafe { add_deny_write_ace(path, deny_psid) } {
+            match unsafe { add_deny_write_ace_to_handle(target.as_raw_handle() as _, deny_psid) } {
                 Ok(true) => {
                     log_line(
                         log,

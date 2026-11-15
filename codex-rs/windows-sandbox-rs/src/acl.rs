@@ -1,3 +1,7 @@
+#[path = "acl_deny_write.rs"]
+mod deny_write;
+pub use deny_write::add_deny_write_ace_to_handle;
+
 use crate::winutil::to_wide;
 use anyhow::Context;
 use anyhow::Result;

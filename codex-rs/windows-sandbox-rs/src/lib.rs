@@ -169,6 +169,8 @@ pub use acl::add_deny_read_ace_for_new_files;
 #[cfg(target_os = "windows")]
 pub use acl::add_deny_write_ace;
 #[cfg(target_os = "windows")]
+pub use acl::add_deny_write_ace_to_handle;
+#[cfg(target_os = "windows")]
 pub use acl::ensure_explicit_deny_read_ace;
 #[cfg(target_os = "windows")]
 pub use acl::file_link_count;

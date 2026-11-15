@@ -31,7 +31,7 @@ fn set_file_reparse_tag(path: &Path, set: bool) {
             buffer.as_ptr().cast(),
             length,
             std::ptr::null_mut(),
-            /*nOutBufferSize*/ 0,
+            /*noutbuffersize*/ 0,
             &mut returned,
             std::ptr::null_mut(),
         )

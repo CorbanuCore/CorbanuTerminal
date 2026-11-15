@@ -342,7 +342,8 @@ impl LocalAppDataGrants {
         let sids = (|| -> anyhow::Result<Vec<crate::token::LocalSid>> {
             let group = crate::winutil::string_from_sid_bytes(&crate::winutil::resolve_sid(
                 crate::token::SANDBOX_USERS_GROUP,
-            )?)?;
+            )?)
+            .map_err(anyhow::Error::msg)?;
             [group.as_str(), self.cap_sid.as_str()]
                 .into_iter()
                 .map(crate::token::LocalSid::from_string)
@@ -385,10 +386,7 @@ fn sec_win_1896_elevated_command_cannot_edit_the_records_folder() {
     let fixture = user_owned_test_root();
     let local_app_data = fixture.path().join("LocalAppData");
     fs::create_dir(&local_app_data).expect("private LocalAppData");
-    crate::integrity_leases::with_test_local_app_data(&local_app_data, check_records_folder);
-}
-
-fn check_records_folder() {
+    let _local_app_data = crate::integrity_leases::use_test_local_app_data(&local_app_data);
     let Some(codex_home) = elevated_home("sec-1896-records") else {
         return;
     };
@@ -422,11 +420,11 @@ fn check_records_folder() {
     let w = workload.display();
     let script = format!(
         "(type nul >> \"{r}\\d453-probe.txt\") 2>nul && echo D453-EDIT\r\n\
-         if exist \"{r}\\planted-metadata.json\" ((type nul >> \"{r}\\planted-metadata.json\") 2>nul && echo D453-RECORDS)\r\n\
-         (echo x> \"{r}\\d453-new.txt\") 2>nul && echo D453-CREATE\r\n\
-         (ren \"{r}\" CorbanuTerminalSandbox-d453) 2>nul && echo D453-MOVE\r\n\
-         (mkdir \"{w}\\sub\" && echo ok> \"{w}\\sub\\f.txt\" && del \"{w}\\sub\\f.txt\" && rmdir \"{w}\\sub\") && echo D453-WORKLOAD\r\n\
-         cd > done.txt\r\n"
+     if exist \"{r}\\planted-metadata.json\" ((type nul >> \"{r}\\planted-metadata.json\") 2>nul && echo D453-RECORDS)\r\n\
+     (echo x> \"{r}\\d453-new.txt\") 2>nul && echo D453-CREATE\r\n\
+     (ren \"{r}\" CorbanuTerminalSandbox-d453) 2>nul && echo D453-MOVE\r\n\
+     (mkdir \"{w}\\sub\" && echo ok> \"{w}\\sub\\f.txt\" && del \"{w}\\sub\\f.txt\" && rmdir \"{w}\\sub\") && echo D453-WORKLOAD\r\n\
+     cd > done.txt\r\n"
     );
     let script_path = workspace.join("d453.cmd");
     fs::write(&script_path, script).expect("script");

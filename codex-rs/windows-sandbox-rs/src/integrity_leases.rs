@@ -269,19 +269,22 @@ thread_local! {
     static TEST_LOCAL_APP_DATA: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
 }
 
-/// Test-only, thread-local known-folder replacement. The setup helper receives
-/// the resulting deny path in its payload; production known-folder lookup stays
-/// unchanged. Restore the previous value on panic as well as success.
+/// Test-only known-folder replacement, restored even on panic.
 #[cfg(test)]
-pub(crate) fn with_test_local_app_data<T>(path: &Path, test: impl FnOnce() -> T) -> T {
-    struct Restore(Option<PathBuf>);
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            TEST_LOCAL_APP_DATA.with(|slot| *slot.borrow_mut() = self.0.take());
-        }
+pub(crate) struct TestLocalAppData(Option<PathBuf>);
+
+#[cfg(test)]
+impl Drop for TestLocalAppData {
+    fn drop(&mut self) {
+        TEST_LOCAL_APP_DATA.with(|slot| *slot.borrow_mut() = self.0.take());
     }
-    let _restore = Restore(TEST_LOCAL_APP_DATA.with(|slot| slot.replace(Some(path.to_path_buf()))));
-    test()
+}
+
+/// The helper receives this thread's private deny path in its payload.
+/// Production known-folder lookup stays unchanged.
+#[cfg(test)]
+pub(crate) fn use_test_local_app_data(path: &Path) -> TestLocalAppData {
+    TestLocalAppData(TEST_LOCAL_APP_DATA.with(|slot| slot.replace(Some(path.to_path_buf()))))
 }
 
 fn local_app_data() -> Option<PathBuf> {

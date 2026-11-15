@@ -237,7 +237,7 @@ pub(crate) fn take_sandbox_leftovers(base: &Path, accounts: &[String]) -> Result
                 }
             }
             let is_reparse = attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0;
-            let is_link = is_reparse && is_name_surrogate(&look).unwrap_or(false);
+            let is_link = is_reparse && is_name_surrogate(&look).unwrap_or(true);
             let is_folder = attributes & FILE_ATTRIBUTE_DIRECTORY != 0;
             // D456: a link too, by its name only.
             if (is_folder || is_link) && code_cache(&entry.file_name(), dir == base) {
@@ -263,7 +263,7 @@ pub(crate) fn take_sandbox_leftovers(base: &Path, accounts: &[String]) -> Result
         let folder_or_link = look.metadata().is_ok_and(|meta| {
             meta.file_attributes() & FILE_ATTRIBUTE_DIRECTORY != 0
                 || (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-                    && is_name_surrogate(&look).unwrap_or(false))
+                    && is_name_surrogate(&look).unwrap_or(true))
         });
         if folder_or_link && set_aside(cache, &look, &base_key, CACHE_SET_ASIDE) {
             found.code_caches_set_aside += 1;
