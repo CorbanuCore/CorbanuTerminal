@@ -38,6 +38,28 @@ described below, because that sandbox can't block reads. With the default
 sandbox selected, nothing changes: if its setup hasn't run yet, the first
 sandboxed command runs it.
 
+### Full access at Moderate or Aggressive
+
+A full-access permission profile still uses the elevated sandbox at these
+security levels. This combination has a known limitation
+([#2021](https://github.com/CorbanuCore/CorbanuTerminal/issues/2021)):
+a command in a private user-profile folder can fail with Windows error 267,
+and setup or commands can be very slow. The sandbox account does not
+automatically have your account's access to every folder.
+
+Error 267 means the working directory is invalid or inaccessible to the
+sandbox account. Check that the directory exists. A verified workaround for
+project work is a directory outside private user-profile folders with
+`sandbox_mode = "workspace-write"` and `[windows] sandbox = "elevated"`,
+keeping your security level. This limits writable access to the workspace
+and configured writable roots; it does not repair full access. Moving the
+project alone, while keeping full access, does not resolve the reported delay.
+
+Workspace-write alone is not a verified workaround for a private folder:
+in testing, PowerShell launched there but started at `C:\`, and relative
+file writes failed. Check the command's actual working directory and output;
+a successful shell exit code alone does not prove that it used your project.
+
 ### Remote Windows machines
 
 The same rule applies where the commands actually run (#2050, D510). When
@@ -113,6 +135,17 @@ On Windows, Corbanu Terminal can sandbox commands in two ways. The **default
 sandbox** needs a one-time Administrator setup. The **non-admin sandbox**
 (also called the unelevated or legacy sandbox) needs no setup, but it protects
 less.
+
+Terminal commands in this sandbox receive Ctrl-C even when Corbanu starts
+from an elevated launcher that suppresses Ctrl-C. Programs may still handle
+Ctrl-C themselves or read it as raw input. The packaged console launcher runs
+with the command's existing restricted token and job; it changes no access
+controls. Custom Windows builds must also build `codex-conpty-launcher` and
+keep it beside the Corbanu executable or in its `codex-resources` directory.
+Bare executable names are resolved using the command's environment and working
+directory. Use an absolute executable path when that choice must be exact.
+If the launcher cannot start the requested program, the terminal reports the
+startup error and exits with code 1.
 
 **What the non-admin sandbox stops.** Sandboxed commands run at Low
 integrity. In both Read Only and workspace-write modes they can't create,

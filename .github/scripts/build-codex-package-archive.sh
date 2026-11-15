@@ -14,6 +14,7 @@ Usage: build-codex-package-archive.sh \
   [--zsh-bin <path>] \
   [--zsh-manifest <path>] \
   [--codex-command-runner-bin <path>] \
+  [--codex-conpty-launcher-bin <path>] \
   [--codex-windows-sandbox-setup-bin <path>] \
   [--target-suffixed-entrypoint]
 EOF
@@ -28,6 +29,7 @@ resource_args=()
 bwrap_bin_provided="false"
 code_mode_host_bin_provided="false"
 command_runner_bin_provided="false"
+conpty_launcher_bin_provided="false"
 sandbox_setup_bin_provided="false"
 
 while [[ $# -gt 0 ]]; do
@@ -76,6 +78,11 @@ while [[ $# -gt 0 ]]; do
         "${2:?--codex-command-runner-bin requires a value}"
       )
       command_runner_bin_provided="true"
+      shift 2
+      ;;
+    --codex-conpty-launcher-bin)
+      resource_args+=(--codex-conpty-launcher-bin "${2:?--codex-conpty-launcher-bin requires a value}")
+      conpty_launcher_bin_provided="true"
       shift 2
       ;;
     --codex-windows-sandbox-setup-bin)
@@ -153,6 +160,10 @@ case "$target" in
   *windows*)
     command_runner_bin="${entrypoint_dir%/}/codex-command-runner.exe"
     sandbox_setup_bin="${entrypoint_dir%/}/codex-windows-sandbox-setup.exe"
+    conpty_launcher_bin="${entrypoint_dir%/}/codex-conpty-launcher.exe"
+    if [[ "$conpty_launcher_bin_provided" == "false" && -f "$conpty_launcher_bin" ]]; then
+      resource_args+=(--codex-conpty-launcher-bin "$conpty_launcher_bin")
+    fi
     if [[ "$command_runner_bin_provided" == "false" && -f "$command_runner_bin" ]]; then
       resource_args+=(--codex-command-runner-bin "$command_runner_bin")
     fi

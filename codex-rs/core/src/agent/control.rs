@@ -1315,22 +1315,28 @@ impl LocalAgentControl {
         let Some(parent_thread_id) = session_source.parent_thread_id() else {
             return Ok(());
         };
-        let state = self.runtime.upgrade()?;
-        let parent_thread = state.get_thread(parent_thread_id).await?;
-        parent_thread
-            .session
-            .try_ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
-            .await
-            .map_err(|err| {
+        let prepared = async {
+            let state = self.runtime.upgrade()?;
+            let parent_thread = state.get_thread(parent_thread_id).await?;
+            parent_thread
+                .session
+                .try_ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
+                .await
+                .map_err(|err| {
+                    CodexErr::Fatal(format!(
+                        "failed to materialize native agent parent {parent_thread_id}: {err}"
+                    ))
+                })?;
+            parent_thread.flush_rollout().await.map_err(|err| {
                 CodexErr::Fatal(format!(
-                    "failed to materialize native agent parent {parent_thread_id}: {err}"
+                    "failed to flush native agent parent {parent_thread_id}: {err}"
                 ))
-            })?;
-        parent_thread.flush_rollout().await.map_err(|err| {
-            CodexErr::Fatal(format!(
-                "failed to flush native agent parent {parent_thread_id}: {err}"
-            ))
-        })
+            })
+        }
+        .await;
+        // Shutdown stops the parent's persistence too; report the shutdown, as upstream's
+        // child admission would, rather than the failure it caused.
+        prepared.map_err(|err| self.runtime.shutdown_error().unwrap_or(err))
     }
 
     /// Persists the child before publishing its durable Core graph edge.

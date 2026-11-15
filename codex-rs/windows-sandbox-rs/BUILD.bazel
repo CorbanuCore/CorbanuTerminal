@@ -54,6 +54,7 @@ codex_rust_crate(
     crate_name = "codex_windows_sandbox",
     test_data_extra = [
         ":codex-command-runner",
+        ":codex-conpty-launcher",
         ":codex-windows-sandbox-setup",
     ],
     # #1786: the legacy-session tests share one in-process lock (they must not
@@ -63,6 +64,7 @@ codex_rust_crate(
     # 11-06 and 11-07 the target needs more than the default 300 s on hosted
     # windows-2022 runners (about 190 s on the 11-04..11-06 nightlies, which
     # ran 10-29's code; over 300 s on 11-07).
+    unit_test_extra_binaries = [":codex-conpty-launcher"],
     unit_test_timeout = "long",
 )
 

@@ -1147,3 +1147,90 @@ async fn non_steerable_boundary_race_starts_fresh_turn_or_returns_input() {
     )
     .await;
 }
+
+/// Replaces the session's active-turn slot while the finishing turn's terminal hooks run.
+struct ReplaceActiveTurnOnStop {
+    session: Arc<std::sync::OnceLock<std::sync::Weak<Session>>>,
+    replaced: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl codex_extension_api::TurnLifecycleContributor for ReplaceActiveTurnOnStop {
+    fn on_turn_stop<'a>(
+        &'a self,
+        _input: codex_extension_api::TurnStopInput<'a>,
+    ) -> codex_extension_api::ExtensionFuture<'a, ()> {
+        Box::pin(async move {
+            if let Some(session) = self.session.get().and_then(std::sync::Weak::upgrade) {
+                *session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
+                self.replaced
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+        })
+    }
+}
+
+/// Main's `task_finish_submits_follow_up_when_active_turn_was_replaced`: main paused the finish
+/// on its guardian circuit-breaker lock to replace the active turn; upstream's finish has no such
+/// point, so a turn-stop lifecycle hook (which runs during the finish, before the terminal event)
+/// replaces the slot. The steered input the finished turn detached still starts its own turn.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn task_finish_submits_follow_up_when_active_turn_was_replaced() {
+    let session_slot = Arc::new(std::sync::OnceLock::new());
+    let replaced = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut builder = codex_extension_api::ExtensionRegistryBuilder::<crate::config::Config>::new();
+    builder.turn_lifecycle_contributor(Arc::new(ReplaceActiveTurnOnStop {
+        session: Arc::clone(&session_slot),
+        replaced: Arc::clone(&replaced),
+    }));
+    let codex_home = tempfile::tempdir().expect("create temp dir");
+    let test_cwd = kept_test_cwd();
+    let (sess, tc, rx) = make_session_and_context_with_extensions_and_rx(
+        CodexAuth::from_api_key("Test API Key"),
+        Vec::new(),
+        codex_home.path(),
+        &test_cwd,
+        |_config| {},
+        /*start_submission_loop*/ true,
+        Arc::new(builder.build()),
+    )
+    .await;
+    session_slot
+        .set(Arc::downgrade(&sess))
+        .expect("session slot set once");
+    sess.spawn_task(
+        Arc::clone(&tc),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: false,
+        },
+    )
+    .await;
+    while rx.try_recv().is_ok() {}
+    let pending_user_input = text_input("survives finish replacement");
+    assert!(matches!(
+        submit_start_or_steer(&sess, pending_user_input.clone()).await,
+        TurnInputSubmission::Steered { .. }
+    ));
+
+    sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
+        .await;
+    assert!(
+        replaced.load(std::sync::atomic::Ordering::SeqCst),
+        "the active-turn slot was replaced during the finish"
+    );
+
+    // The finished turn's terminal event, then the follow-up turn the detached input starts.
+    let first = recv_skipping_mcp_startup(&rx, "expected original turn complete event").await;
+    assert!(
+        matches!(
+            &first.msg,
+            EventMsg::TurnComplete(TurnCompleteEvent { turn_id, .. }) if *turn_id == tc.sub_id
+        ),
+        "expected the original turn's completion, got {:?}",
+        first.msg
+    );
+    next_turn_started(&rx, &tc.sub_id).await;
+    expect_user_message_item_started(&rx, &pending_user_input).await;
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}

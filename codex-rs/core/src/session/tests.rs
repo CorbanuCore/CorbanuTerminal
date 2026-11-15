@@ -2898,6 +2898,9 @@ async fn inter_agent_communication_waits_for_confirmed_delivery_persistence() {
                 item: ResponseItem::AgentMessage { .. },
                 metadata: Some(metadata),
             }) => Some(("communication", metadata.user_input_order)),
+            // Corbanu (#1545) persists the whole communication; resume replays it in
+            // physical order, between the deliveries around it.
+            RolloutItem::InterAgentCommunication(_) => Some(("communication", None)),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -2905,7 +2908,7 @@ async fn inter_agent_communication_waits_for_confirmed_delivery_persistence() {
         boundaries,
         vec![
             ("delivery", Some(0)),
-            ("communication", Some(1)),
+            ("communication", None),
             ("delivery", Some(2)),
         ]
     );
@@ -3002,6 +3005,15 @@ async fn record_inter_agent_communication_sets_turn_id_in_rollout_and_resume() {
         .expect("locally authored agent message should receive a creation timestamp");
     assert!(create_time.as_f64().is_some_and(|seconds| seconds > 0.0));
     expected_item.set_create_time_if_missing(create_time);
+    // Corbanu persists the whole communication (#1545) with the recorded item's metadata.
+    if let ResponseItem::AgentMessage {
+        internal_chat_message_metadata_passthrough,
+        ..
+    } = &expected_item
+    {
+        expected_communication.internal_chat_message_metadata_passthrough =
+            internal_chat_message_metadata_passthrough.clone();
+    }
 
     assert_eq!(
         strip_response_item_ids(&recorded_items),
@@ -3943,7 +3955,8 @@ async fn issue1577_context_window_fill_keeps_thread_usage_counters() {
                 ..TokenUsage::default()
             },
             model_context_window: Some(context_window),
-            last_usage_includes_reasoning: Some(true),
+            // Upstream: the fill's synthetic last usage carries no reasoning breakdown.
+            last_usage_includes_reasoning: None,
         }),
         "the fill keeps the provider's counters and still marks the window full"
     );
@@ -7985,13 +7998,20 @@ pub(crate) struct TestFolders {
 pub(crate) type ProviderAuthSessionContext = (Session, TurnContext, TestFolders);
 
 pub(crate) async fn make_session_and_context_with_provider_auth() -> ProviderAuthSessionContext {
+    make_session_and_context_with_provider_auth_and_model(AMBIENT_DEFAULT_MODEL).await
+}
+
+/// As [`make_session_and_context_with_provider_auth`], with another catalogued Ambient model.
+pub(crate) async fn make_session_and_context_with_provider_auth_and_model(
+    model: &str,
+) -> ProviderAuthSessionContext {
     let codex_home = tempfile::tempdir().expect("create temp dir");
     let test_cwd = tempfile::tempdir().expect("create test cwd");
     write_test_provider_auth(codex_home.path());
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
         .harness_overrides(ConfigOverrides {
-            model: Some(AMBIENT_DEFAULT_MODEL.to_string()),
+            model: Some(model.to_string()),
             model_provider: Some(AMBIENT_PROVIDER_ID.to_string()),
             cwd: Some(test_cwd.path().to_path_buf()),
             ..Default::default()
@@ -10038,6 +10058,35 @@ pub(crate) async fn make_session_and_context_with_auth_config_home_and_rx<F>(
 where
     F: FnOnce(&mut Config),
 {
+    make_session_and_context_with_extensions_and_rx(
+        auth,
+        dynamic_tools,
+        codex_home,
+        cwd,
+        configure_config,
+        start_submission_loop,
+        Arc::new(codex_extension_api::ExtensionRegistryBuilder::new().build()),
+    )
+    .await
+}
+
+/// As [`make_session_and_context_with_auth_config_home_and_rx`], with these extensions.
+pub(crate) async fn make_session_and_context_with_extensions_and_rx<F>(
+    auth: CodexAuth,
+    dynamic_tools: Vec<DynamicToolSpec>,
+    codex_home: &Path,
+    cwd: &Path,
+    configure_config: F,
+    start_submission_loop: bool,
+    extensions: Arc<codex_extension_api::ExtensionRegistry<Config>>,
+) -> (
+    Arc<Session>,
+    Arc<TurnContext>,
+    async_channel::Receiver<Event>,
+)
+where
+    F: FnOnce(&mut Config),
+{
     let (tx_sub, rx_sub) = async_channel::bounded(16);
     let (tx_event, rx_event) = async_channel::unbounded();
     let mut config = build_test_config(codex_home, cwd).await;
@@ -10209,7 +10258,7 @@ where
         agents_md_manager: Arc::new(AgentsMdManager::new(SessionInstructions::default())),
         plugins_manager,
         mcp_manager,
-        extensions: Arc::new(codex_extension_api::ExtensionRegistryBuilder::new().build()),
+        extensions,
         session_extension_data: codex_extension_api::ExtensionData::new(
             agent_control.session_id().to_string(),
         ),
@@ -10370,7 +10419,7 @@ where
     (session, turn_context, rx_event)
 }
 
-async fn make_session_and_context_with_submission_loop_and_rx() -> (
+pub(crate) async fn make_session_and_context_with_submission_loop_and_rx() -> (
     Arc<Session>,
     Arc<TurnContext>,
     async_channel::Receiver<Event>,
@@ -13656,7 +13705,7 @@ async fn recv_skipping_mcp_startup(rx: &async_channel::Receiver<Event>, expected
     }
 }
 
-async fn expect_user_message_item_started(
+pub(crate) async fn expect_user_message_item_started(
     rx: &async_channel::Receiver<Event>,
     expected_content: &[UserInput],
 ) {

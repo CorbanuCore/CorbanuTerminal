@@ -11,6 +11,9 @@ use pretty_assertions::assert_eq;
 fn started(model: &str) -> AppServerStartedThread {
     let mut session = test_thread_session(ThreadId::new(), test_path_buf("/tmp/project"));
     session.model = model.into();
+    // Main's provider-aware picker applies a pick only on a configured
+    // provider; the test app is configured for OpenAI.
+    session.model_provider_id = "openai".into();
     AppServerStartedThread {
         session,
         turns: Vec::new(),
@@ -53,6 +56,9 @@ async fn choose_model(
     preset.model = model.into();
     preset.display_name = model.into();
     preset.show_in_picker = true;
+    // Corbanu's bundled catalog lists a Z.AI model first; main's picker
+    // routes a pick to the preset's provider, so use the session's own.
+    preset.provider_id = Some(app.chat_widget.config_ref().model_provider_id.clone());
     preset.supported_reasoning_efforts.truncate(/*len*/ 1);
     preset.default_reasoning_effort = preset.supported_reasoning_efforts[0].effort.clone();
     app.chat_widget.open_model_popup_with_presets(vec![preset]);

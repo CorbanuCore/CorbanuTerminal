@@ -204,7 +204,12 @@ class DotSlashReleaseConfigTests(unittest.TestCase):
             (github_dir / "scripts/fixtures/codex-0.167.0-alpha.2-assets.txt")
             .read_text()
             .splitlines()
-        )
+        ) | {
+            # Corbanu main #2293 (#1842): rust-release-windows.yml also builds
+            # and publishes the ConPTY launcher, which upstream doesn't ship.
+            f"codex-conpty-launcher-{arch}-pc-windows-msvc.exe.zst"
+            for arch in ("x86_64", "aarch64")
+        }
 
     def missing_assets(self, assets):
         return sorted(
@@ -225,6 +230,7 @@ class DotSlashReleaseConfigTests(unittest.TestCase):
                     "codex-responses-api-proxy",
                     "bwrap",
                     "codex-command-runner",
+                    "codex-conpty-launcher",
                     "codex-windows-sandbox-setup",
                     "codex-windows-sandbox-service",
                 },

@@ -462,6 +462,24 @@ impl OutputGate {
         self.state().distinct_reps().len()
     }
 
+    /// Whether a snapshot value must be omitted. Unlike prose redaction,
+    /// snapshots also reject short managed values inside concatenations: a
+    /// shell variable must never retain a credential merely for readability.
+    /// Other sinks keep their existing whole-word treatment of short values.
+    pub fn contains_snapshot_secret(&self, input: &str) -> bool {
+        if !self.is_armed() {
+            return false;
+        }
+        if input.len() > MAX_SCAN_BYTES {
+            return true;
+        }
+        self.snapshot()
+            .whole_word
+            .as_ref()
+            .is_some_and(|regex| regex.is_match(input.as_bytes()))
+            || self.scrub(OutputSink::Snapshot, input).is_some()
+    }
+
     /// Gates one text payload. `None` means unchanged (the common case).
     pub fn scrub(&self, sink: OutputSink, input: &str) -> Option<(String, Provenance)> {
         let (bytes, provenance) = self.scrub_bytes(sink, input.as_bytes())?;

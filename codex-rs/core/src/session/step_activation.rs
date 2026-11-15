@@ -428,7 +428,7 @@ impl Session {
             let stack = &configuration.original_config_do_not_use.config_layer_stack;
             (
                 stack.requirements().clone(),
-                configuration.model_info_overrides.clone(),
+                configuration.effective_model_info_overrides(),
                 configuration.trusted_guardian_reviewer,
             )
         };

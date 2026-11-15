@@ -29,6 +29,30 @@ pub(crate) fn helper_bin_dir(codex_home: &Path) -> PathBuf {
     sandbox_bin_dir(codex_home)
 }
 
+/// Locate the console launcher without copying it or granting any access.
+/// If the existing sandbox cannot execute it, launching fails closed.
+pub(crate) fn conpty_launcher() -> Result<PathBuf> {
+    let exe = std::env::current_exe().context("resolve current executable")?;
+    #[cfg(test)]
+    {
+        // Unit-test executables live under deps; CI builds helpers separately.
+        if let Some(path) = std::env::var_os("CARGO_BIN_EXE_codex_conpty_launcher")
+            .or_else(|| std::env::var_os("CARGO_BIN_EXE_codex-conpty-launcher"))
+        {
+            return Ok(PathBuf::from(path));
+        }
+        if exe.parent().and_then(Path::file_name) == Some(OsStr::new("deps")) {
+            return Ok(exe
+                .parent()
+                .and_then(Path::parent)
+                .context("profile directory")?
+                .join("codex-conpty-launcher.exe"));
+        }
+    }
+    bundled_executable_path_for_exe(&exe, "codex-conpty-launcher.exe")
+        .ok_or_else(|| anyhow!("codex-conpty-launcher.exe is missing from the installation"))
+}
+
 fn legacy_lookup() -> PathBuf {
     if let Ok(exe) = std::env::current_exe()
         && let Some(candidate) = bundled_executable_path_for_exe(&exe, COMMAND_RUNNER_EXE)

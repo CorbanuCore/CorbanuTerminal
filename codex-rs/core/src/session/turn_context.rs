@@ -1747,7 +1747,7 @@ impl Session {
             .step_settings
             .resolve_model_info(
                 self.services.models_manager.as_ref(),
-                &session_configuration.model_info_overrides,
+                &session_configuration.effective_model_info_overrides(),
             )
             .await;
         // PF-84 (#572): Bedrock's own metadata after a switch to Bedrock.

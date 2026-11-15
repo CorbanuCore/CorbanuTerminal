@@ -2830,12 +2830,23 @@ mod tests {
             .collect()
     }
 
+    /// The resolution of a tool approval's Cancel row: upstream records that
+    /// the user cancelled it (`CANCELLATION_REASON_KEY`).
+    fn user_cancel() -> (McpServerElicitationAction, Option<Value>) {
+        (
+            McpServerElicitationAction::Cancel,
+            Some(serde_json::json!({
+                CANCELLATION_REASON_KEY: McpApprovalCancellationReason::User,
+            })),
+        )
+    }
+
     /// #192: a number key only highlights its option; Enter confirms it.
     #[test]
     fn issue_192_number_key_highlights_and_enter_confirms() {
         for (key, decision) in [
-            ('1', McpServerElicitationAction::Accept),
-            ('4', McpServerElicitationAction::Cancel),
+            ('1', (McpServerElicitationAction::Accept, None)),
+            ('4', user_cancel()),
         ] {
             let (mut overlay, mut rx) = persist_tool_approval_overlay();
 
@@ -2847,7 +2858,7 @@ mod tests {
             assert_eq!(overlay.selected_option_index(), Some(idx), "{key}");
 
             press(&mut overlay, KeyCode::Enter);
-            assert_eq!(resolved_decisions(&mut rx), vec![(decision, None)], "{key}");
+            assert_eq!(resolved_decisions(&mut rx), vec![decision], "{key}");
             assert!(overlay.is_complete(), "{key}");
         }
     }
@@ -2944,10 +2955,7 @@ mod tests {
         press(&mut overlay, KeyCode::Up);
         press(&mut overlay, KeyCode::Char('4'));
         press(&mut overlay, KeyCode::Enter);
-        assert_eq!(
-            resolved_decisions(&mut rx),
-            vec![(McpServerElicitationAction::Cancel, None)]
-        );
+        assert_eq!(resolved_decisions(&mut rx), vec![user_cancel()]);
         assert!(overlay.is_complete());
     }
 
@@ -3003,10 +3011,7 @@ mod tests {
         assert_eq!(overlay.selected_option_index(), Some(0));
         press(&mut overlay, KeyCode::PageDown);
         press(&mut overlay, KeyCode::Enter);
-        assert_eq!(
-            resolved_decisions(&mut rx),
-            vec![(McpServerElicitationAction::Cancel, None)]
-        );
+        assert_eq!(resolved_decisions(&mut rx), vec![user_cancel()]);
     }
 
     /// #192: a request resolved elsewhere while an option is highlighted

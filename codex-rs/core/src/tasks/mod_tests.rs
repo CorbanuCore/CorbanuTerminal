@@ -62,7 +62,10 @@ impl SessionTask for PendingTask {
 
 #[tokio::test]
 async fn task_finish_rejects_uploaded_audio_without_losing_other_pending_input() {
-    let (session, turn_context, receiver) = make_session_and_context_with_rx().await;
+    // Corbanu: user input left at a natural turn end starts a follow-up turn (upstream records
+    // it on the finishing turn), which needs the submission loop.
+    let (session, turn_context, receiver) =
+        crate::session::tests::make_session_and_context_with_submission_loop_and_rx().await;
     session
         .spawn_task(Arc::clone(&turn_context), Vec::new(), PendingTask)
         .await;
@@ -103,12 +106,24 @@ async fn task_finish_rejects_uploaded_audio_without_losing_other_pending_input()
         .on_task_finished(Arc::clone(&turn_context), /*task_result*/ Ok(None))
         .await;
 
-    let history = session.clone_history().await;
-    assert!(history.raw_items().any(|item| {
-        matches!(item, ResponseItem::Message { content, .. } if content.iter().any(|part| {
-            matches!(part, ContentItem::InputText { text } if text == "preserve pending text")
-        }))
-    }));
+    let has_pending_text = |history: &crate::context_manager::ContextManager| {
+        history.raw_items().any(|item| {
+            matches!(item, ResponseItem::Message { content, .. } if content.iter().any(|part| {
+                matches!(part, ContentItem::InputText { text } if text == "preserve pending text")
+            }))
+        })
+    };
+    let history = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let history = session.clone_history().await;
+            if has_pending_text(&history) {
+                break history;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the pending text is recorded, by the follow-up turn");
     assert!(history.raw_items().all(|item| {
         !matches!(item, ResponseItem::Message { content, .. } if content.iter().any(|part| {
             matches!(part, ContentItem::InputAudio {
@@ -117,7 +132,9 @@ async fn task_finish_rejects_uploaded_audio_without_losing_other_pending_input()
         }))
     }));
 
-    let (saw_error, completed) = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+    // The finishing turn completes first; the follow-up turn that took the input reports the
+    // rejected audio.
+    let (saw_error, completed) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
         let mut saw_error = false;
         loop {
             match receiver.recv().await.expect("event channel open").msg {
@@ -125,7 +142,9 @@ async fn task_finish_rejects_uploaded_audio_without_losing_other_pending_input()
                     saw_error = true;
                     assert_eq!(error.codex_error_info, Some(CodexErrorInfo::BadRequest));
                 }
-                EventMsg::TurnComplete(completed) => break (saw_error, completed),
+                EventMsg::TurnComplete(completed) if completed.error.is_some() => {
+                    break (saw_error, completed);
+                }
                 _ => {}
             }
         }

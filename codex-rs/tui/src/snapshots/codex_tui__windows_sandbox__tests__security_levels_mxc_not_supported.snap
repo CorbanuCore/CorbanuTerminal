@@ -1,0 +1,5 @@
+---
+source: tui/src/windows_sandbox_tests.rs
+expression: steps
+---
+This session uses the MXC Windows sandbox, which Corbanu's security levels do not support yet. To use Moderate or Aggressive, set sandbox = "elevated" in the [windows] section of config.toml, restart Corbanu Terminal and run an agent command to finish the default sandbox setup (it needs Administrator permission)

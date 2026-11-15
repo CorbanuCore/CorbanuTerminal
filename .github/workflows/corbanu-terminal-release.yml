@@ -527,6 +527,7 @@ jobs:
             --bin corbanu-walletd \
             --bin codex-code-mode-host \
             --bin codex-command-runner \
+            --bin codex-conpty-launcher \
             --bin codex-windows-sandbox-setup
 
       - name: Build wallet package client probe
@@ -549,6 +550,7 @@ jobs:
             --extra-bin "corbanu-walletd=codex-rs/target/${TARGET}/release/corbanu-walletd.exe" \
             --code-mode-host-bin "codex-rs/target/${TARGET}/release/codex-code-mode-host.exe" \
             --codex-command-runner-bin "codex-rs/target/${TARGET}/release/codex-command-runner.exe" \
+            --codex-conpty-launcher-bin "codex-rs/target/${TARGET}/release/codex-conpty-launcher.exe" \
             --codex-windows-sandbox-setup-bin "codex-rs/target/${TARGET}/release/codex-windows-sandbox-setup.exe" \
             --cargo-profile release \
             --package-dir "${RUNNER_TEMP}/corbanu-terminal-package-${TARGET}" \
@@ -603,6 +605,7 @@ jobs:
           if ($forbidden) { throw "package contains forbidden codex entrypoint: $($forbidden.FullName -join ', ')" }
           if (-not (Test-Path (Join-Path $packageDir "codex-path/rg.exe"))) { throw "missing rg.exe" }
           if (-not (Test-Path (Join-Path $packageDir "codex-resources/codex-command-runner.exe"))) { throw "missing command runner" }
+          if (-not (Test-Path (Join-Path $packageDir "codex-resources/codex-conpty-launcher.exe"))) { throw "missing ConPTY launcher" }
           if (-not (Test-Path (Join-Path $packageDir "codex-resources/codex-windows-sandbox-setup.exe"))) { throw "missing sandbox setup" }
           $telegramResources = Join-Path $packageDir "codex-resources/telegram"
           $telegramSetup = Join-Path $telegramResources "setup-telegram.sh"

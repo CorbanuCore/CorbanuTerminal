@@ -2,6 +2,7 @@
 //! Graph publication stays owned through cancellation and settles before cleanup closes its edge.
 
 use super::AgentTreeMembership;
+use crate::agent::registry::AgentRegistry;
 use crate::thread_manager::ThreadManagerState;
 use crate::thread_manager::thread_store_error_kind;
 use codex_agent_graph_store::AgentGraphStoreError;
@@ -25,6 +26,8 @@ pub(in crate::agent) struct PendingSpawn {
     edge_write: Option<JoinHandle<CodexResult<bool>>>,
     close_spawn_edge: bool,
     owner: SpawnOwner,
+    /// Corbanu: the local registry holding the child's metadata from thread startup.
+    registry: Option<Arc<AgentRegistry>>,
 }
 
 impl PendingSpawn {
@@ -40,7 +43,14 @@ impl PendingSpawn {
             edge_write: None,
             close_spawn_edge: false,
             owner,
+            registry: None,
         }
+    }
+
+    /// Corbanu: forget the child's registered metadata if the spawn is cancelled before it
+    /// commits, synchronously, so no caller can find an agent the spawn never returned.
+    pub(super) fn forget_registration_on_cancel(&mut self, registry: Arc<AgentRegistry>) {
+        self.registry = Some(registry);
     }
 
     pub(super) fn set_edge_write(&mut self, edge_write: JoinHandle<CodexResult<bool>>) {
@@ -73,6 +83,9 @@ impl Drop for PendingSpawn {
         let Some((child, membership)) = self.pending.take() else {
             return;
         };
+        if let Some(registry) = self.registry.take() {
+            registry.forget_uncommitted_spawned_thread(child);
+        }
         let state = Arc::clone(&self.state);
         let teardown = membership.into_teardown_guard("child_spawn_cleanup", Some(child));
         let edge_write = self.edge_write.take();

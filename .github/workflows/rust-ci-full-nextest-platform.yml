@@ -221,9 +221,11 @@ jobs:
               --profile ${{ inputs.profile }} \
               -p codex-windows-sandbox \
               --bin codex-windows-sandbox-setup \
-              --bin codex-command-runner
+              --bin codex-command-runner \
+              --bin codex-conpty-launcher
             cp "${CARGO_TARGET_DIR}/${{ inputs.target }}/${{ inputs.profile }}/codex-windows-sandbox-setup.exe" "${helper_dir}/"
             cp "${CARGO_TARGET_DIR}/${{ inputs.target }}/${{ inputs.profile }}/codex-command-runner.exe" "${helper_dir}/"
+            cp "${CARGO_TARGET_DIR}/${{ inputs.target }}/${{ inputs.profile }}/codex-conpty-launcher.exe" "${helper_dir}/"
           fi
 
       - name: Upload Cargo timings (nextest)
@@ -407,6 +409,7 @@ jobs:
             mkdir -p "${helper_target_dir}"
             cp "${helper_dir}/codex-windows-sandbox-setup.exe" "${helper_target_dir}/"
             cp "${helper_dir}/codex-command-runner.exe" "${helper_target_dir}/"
+            cp "${helper_dir}/codex-conpty-launcher.exe" "${helper_target_dir}/"
           fi
 
           nextest_args=(
@@ -439,6 +442,7 @@ jobs:
               env
               "CARGO_BIN_EXE_codex_windows_sandbox_setup=${setup_helper}"
               "CARGO_BIN_EXE_codex_command_runner=${command_runner}"
+              "CARGO_BIN_EXE_codex_conpty_launcher=$(cygpath -w "${helper_target_dir}/codex-conpty-launcher.exe")"
               cargo nextest "${nextest_args[@]}"
             )
           fi

@@ -957,6 +957,7 @@ impl LocalAgentControl {
             membership,
             SpawnOwner::Local,
         );
+        pending_spawn.forget_registration_on_cancel(Arc::clone(&self.runtime.registry));
         let edge_write_started_at = Instant::now();
         let control = self.clone();
         let source = notification_source.clone();
