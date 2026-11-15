@@ -230,12 +230,10 @@ impl CommandHistory {
         debug_assert!(completed, "new exec cell should contain {}", self.id);
         // Keep each job with its command through exploration grouping and page joins.
         // Activity details appear in expanded and raw transcripts without changing the preview.
-        cell.group
-            .push_detail(Arc::new(PrefixedWrappedHistoryCell::new(
-                vec![job_line],
-                "",
-                "",
-            )));
+        cell.group.details.set_metadata(
+            cell.group.calls.len(),
+            Arc::new(PrefixedWrappedHistoryCell::new(vec![job_line], "", "")),
+        );
         cell
     }
 }

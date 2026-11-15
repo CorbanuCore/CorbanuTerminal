@@ -81,6 +81,31 @@ async fn replayed_command_completion_preserves_tracking_without_duplicate_starts
 }
 
 #[tokio::test]
+async fn repeated_command_completion_updates_one_job_record() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.on_task_started();
+    let mut item = begin_exec(&mut chat, "repeat-job", "cat file.txt");
+    end_exec(
+        &mut chat,
+        item.clone(),
+        "contents\n",
+        "",
+        /*exit_code*/ 0,
+    );
+    if let AppServerThreadItemPayload::CommandExecution { process_id, .. } = &mut item {
+        *process_id = Some("updated-pid".to_owned());
+    }
+    end_exec(&mut chat, item, "contents\n", "", /*exit_code*/ 0);
+
+    let cell = chat.transcript.active_cell.as_ref().unwrap();
+    let raw = lines_to_single_string(&cell.raw_lines());
+    assert_eq!(raw.matches("call=repeat-job").count(), 1);
+    assert!(raw.contains("job: pid=updated-pid · call=repeat-job"));
+    let detailed = lines_to_single_string(&cell.transcript_lines(120));
+    assert_eq!(detailed.matches("call=repeat-job").count(), 1);
+}
+
+#[tokio::test]
 async fn replayed_completion_preserves_unrelated_running_command() {
     for active_mcp in [false, true] {
         let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;

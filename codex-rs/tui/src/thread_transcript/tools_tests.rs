@@ -314,6 +314,34 @@ fn command_jobs_survive_replay_with_recorded_and_missing_process_ids() {
 }
 
 #[test]
+fn job_metadata_does_not_add_short_command_disclosure() {
+    use crate::history_cell::ActivityDisclosure;
+    use crate::history_cell::HistoryCell;
+
+    let mut item = command_item(CommandExecutionStatus::Completed);
+    if let ThreadItemPayload::CommandExecution {
+        aggregated_output, ..
+    } = &mut item
+    {
+        *aggregated_output = Some("ok".to_owned());
+    }
+    let mut cell = CommandHistory::from_item(item).unwrap().into_cell();
+    assert_eq!(cell.activity_disclosure(80), None);
+    assert!(
+        cell.raw_lines()
+            .iter()
+            .any(|line| line.to_string().contains("job: pid=not reported"))
+    );
+    cell.group.push_detail(Arc::new(PlainHistoryCell::new(vec![
+        "Retained reasoning".into(),
+    ])));
+    assert_eq!(
+        cell.activity_disclosure(80),
+        Some(ActivityDisclosure::Generic)
+    );
+}
+
+#[test]
 fn grouped_commands_keep_each_job_in_order() {
     let cwd = test_path_buf("/workspace").abs();
     let items = [("read-first", "101"), ("read-second", "202")].map(|(call_id, pid)| {

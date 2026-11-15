@@ -446,13 +446,11 @@ impl ChatWidget {
                     debug_assert!(completed, "active exec cell should contain {id}");
                     if let Some(detail) = detail
                         && let Some(index) =
-                            cell.group.calls.iter().position(|call| call.call_id == id)
+                            cell.group.calls.iter().rposition(|call| call.call_id == id)
                     {
                         // A command may finish after reasoning was already attached to it.
                         // Keep its job before that reasoning, matching historical projection.
-                        let mut job = history_cell::ActivityDetails::default();
-                        job.push(index + 1, detail);
-                        cell.group.details.prepend(job, /*older_calls*/ 0);
+                        cell.group.details.set_metadata(index + 1, detail);
                     }
                     if cell.should_flush() {
                         self.flush_active_cell();
@@ -474,7 +472,10 @@ impl ChatWidget {
                 let completed = orphan.complete_call(&id, output, duration);
                 debug_assert!(completed, "new orphan exec cell should contain {id}");
                 if let Some(detail) = detail {
-                    orphan.group.push_detail(detail);
+                    orphan
+                        .group
+                        .details
+                        .set_metadata(orphan.group.calls.len(), detail);
                 }
                 self.app_event_tx
                     .send(AppEvent::InsertHistoryCell(Box::new(orphan)));
@@ -492,7 +493,9 @@ impl ChatWidget {
                 let completed = cell.complete_call(&id, output, duration);
                 debug_assert!(completed, "new exec cell should contain {id}");
                 if let Some(detail) = detail {
-                    cell.group.push_detail(detail);
+                    cell.group
+                        .details
+                        .set_metadata(cell.group.calls.len(), detail);
                 }
                 if let Some(active) = self
                     .transcript
