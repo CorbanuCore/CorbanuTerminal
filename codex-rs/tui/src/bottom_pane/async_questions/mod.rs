@@ -82,6 +82,9 @@ pub(crate) struct AsyncQuestions {
     /// #787: the bottom pane dropped the last input to this question (the
     /// generation it was shown with); its footer says so.
     early_input: Option<u64>,
+    /// #787: the bottom pane dropped the last key or paste sent here (the
+    /// notice above can outlast it while the question waits for navigation).
+    last_input_dropped: bool,
 }
 
 /// #787: a question on show and the generation it took.
@@ -126,6 +129,7 @@ impl AsyncQuestions {
             expand_epoch: 0,
             shown_question: std::cell::RefCell::new(None),
             early_input: None,
+            last_input_dropped: false,
         }
     }
 
@@ -159,7 +163,7 @@ impl AsyncQuestions {
     /// #787: whether the bottom pane dropped the last input to this
     /// question as it appeared.
     pub(crate) fn last_input_dropped(&self) -> bool {
-        self.early_input.is_some()
+        self.last_input_dropped
     }
 
     /// #787: input dropped as the question on show appeared; its footer

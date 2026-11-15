@@ -1,13 +1,14 @@
 ---
 source: tui/src/bottom_pane/mod.rs
+assertion_line: 3938
 expression: "render_snapshot(&pane, area)"
 ---
   ! A request is waiting; it shows when you close this.     
-                                                            
   Panes                                                     
+                                                            
                                                             
 › 1. Corbanu Terminal - Main                                
   2. Corbanu Terminal - B                                   
   3. + Corbanu Terminal Pane                                
                                                             
-  Press enter to confirm or esc to go back
+  enter select · esc back

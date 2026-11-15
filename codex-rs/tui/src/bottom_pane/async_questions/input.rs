@@ -9,6 +9,40 @@ impl AsyncQuestions {
         self.focus_is_notes() && self.composer.handles_key_as_editing(key)
     }
 
+    /// #787: deliberate navigation, as in the request prompts
+    /// (`McpServerElicitationOverlay::is_navigation`): the arrow, Page, Home and End keys, and
+    /// configured list keys that are neither a character nor a chord.
+    fn is_navigation(&self, key: KeyEvent) -> bool {
+        if crate::key_hint::is_plain_text_key_event(key)
+            || crate::key_hint::has_ctrl_or_alt(key.modifiers)
+        {
+            return false;
+        }
+        let keymap = &self.keymap.list;
+        matches!(
+            key.code,
+            KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::Left
+                | KeyCode::Right
+                | KeyCode::PageUp
+                | KeyCode::PageDown
+                | KeyCode::Home
+                | KeyCode::End
+        ) || [
+            &keymap.move_up,
+            &keymap.move_down,
+            &keymap.move_left,
+            &keymap.move_right,
+            &keymap.page_up,
+            &keymap.page_down,
+            &keymap.jump_top,
+            &keymap.jump_bottom,
+        ]
+        .iter()
+        .any(|bindings| bindings.is_pressed(key))
+    }
+
     pub(super) fn other_selected(&self) -> bool {
         self.has_options() && self.selected_option_index() == Some(self.options().len())
     }
@@ -160,8 +194,31 @@ impl BottomPaneView for AsyncQuestions {
         if key.kind == KeyEventKind::Release || self.is_complete() {
             return;
         }
-        self.early_input = None;
+        self.last_input_dropped = false;
         self.snooze_auto_resolution();
+        if self.shows_early_input_notice() {
+            // #787 (main's rule for request prompts, `TypingGuard::on_early_input`): keys were
+            // dropped as this question appeared, so they were meant for something else. Until
+            // the person navigates with the arrow, Page, Home or End keys, nothing answers,
+            // skips or edits it; an interrupt, moving to another question and collapsing the
+            // panel still act.
+            if self.is_navigation(key) {
+                self.early_input = None;
+                if !self.has_options() {
+                    // A freeform answer has nothing to move through: the key only arms it.
+                    return;
+                }
+            } else if !(self.keymap.chat.interrupt_turn.is_pressed(key)
+                || self.keymap.chat.edit_queued_message.is_pressed(key)
+                || self.keymap.chat.prompt_stack_back.is_pressed(key)
+                || (!self.focus_is_notes()
+                    && self.keymap.list.action_for(key) == Some(ListAction::Cancel)))
+            {
+                return;
+            }
+        } else {
+            self.early_input = None;
+        }
         if self.handles_key_as_editing(key) {
             self.edit(key);
             return;
@@ -268,6 +325,7 @@ impl BottomPaneView for AsyncQuestions {
 
     fn on_early_input(&mut self) {
         self.early_input = self.displayed_question_generation();
+        self.last_input_dropped = true;
     }
 
     fn terminal_title_requires_action(&self) -> bool {
@@ -292,8 +350,13 @@ impl BottomPaneView for AsyncQuestions {
         if self.is_complete() || text.is_empty() {
             return false;
         }
-        self.early_input = None;
+        self.last_input_dropped = false;
         self.snooze_auto_resolution();
+        if self.shows_early_input_notice() {
+            // #787: a paste is typed text; it waits for navigation like any key (above).
+            return true;
+        }
+        self.early_input = None;
         if !self.focus_is_notes() {
             self.focus_other();
         }

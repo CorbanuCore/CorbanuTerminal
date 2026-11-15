@@ -1,5 +1,6 @@
 ---
 source: tui/src/bottom_pane/tests/actionable_banner_tests.rs
+assertion_line: 295
 expression: visible
 ---
                                         
@@ -11,6 +12,6 @@ expression: visible
   esc to dismiss · type to continue     
                                         
                                         
-› Ask Codex to do anything              
+› Ask Corbanu Terminal to do anything   
                                         
   ? for shortcuts    100% context left
