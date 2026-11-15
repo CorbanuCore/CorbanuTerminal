@@ -772,8 +772,9 @@ impl CredentialBroker {
         environment_id: Option<&str>,
     ) {
         if self.hardened.armed() {
-            self.strip_unbrokered_configured_sources(env);
-            self.hardened.virtualize_child_env(env);
+            self.virtualize_withholding_configured_sources(env, |env| {
+                self.hardened.virtualize_child_env(env);
+            });
             return;
         }
         self.virtualize_env(env, environment_id, CredentialEnvironment::Child);
@@ -785,8 +786,9 @@ impl CredentialBroker {
         environment_id: Option<&str>,
     ) {
         if self.hardened.armed() {
-            self.strip_unbrokered_configured_sources(env);
-            self.hardened.virtualize_snapshot_env(env);
+            self.virtualize_withholding_configured_sources(env, |env| {
+                self.hardened.virtualize_snapshot_env(env);
+            });
             return;
         }
         self.virtualize_env(env, environment_id, CredentialEnvironment::Snapshot);
@@ -794,36 +796,52 @@ impl CredentialBroker {
 
     /// Corbanu's engine does not broker `network.credential_providers`
     /// (see `configure`), so their sources would reach the child unmasked.
-    /// Fail closed: drop each provider's environment variables and any
-    /// variable carrying one of their values. Keys a built-in provider owns
-    /// are left to the hardened engine.
-    fn strip_unbrokered_configured_sources(&self, env: &mut HashMap<String, String>) {
+    /// Fail closed around `virtualize`, the hardened engine's pass: drop each
+    /// provider's environment variables first (keys a built-in provider owns
+    /// stay with the hardened engine), then drop any variable still carrying
+    /// one of their values, from the child or from Core's own environment. A
+    /// built-in variable the hardened engine masked holds a placeholder by
+    /// then and is kept.
+    fn virtualize_withholding_configured_sources(
+        &self,
+        env: &mut HashMap<String, String>,
+        virtualize: impl FnOnce(&mut HashMap<String, String>),
+    ) {
         /// Shorter values are too common to match other variables on.
         const MIN_COPIED_VALUE_BYTES: usize = 8;
-        // Variables of built-in providers stay with the hardened engine.
-        let is_builtin =
-            |name: &str| providers::credential_env_keys().any(|key| env_key_matches(name, key));
-        let keys = self
-            .read_state()
-            .configured_provider_configs
-            .values()
-            .flat_map(|provider| provider.env.iter().cloned())
-            .filter(|key| !is_builtin(key))
-            .collect::<Vec<_>>();
+        let keys = {
+            let state = self.read_state();
+            if !state.enabled {
+                Vec::new()
+            } else {
+                state
+                    .configured_provider_configs
+                    .values()
+                    .flat_map(|provider| provider.env.iter().cloned())
+                    .filter(|key| {
+                        !providers::credential_env_keys()
+                            .any(|builtin| env_key_matches(key, builtin))
+                    })
+                    .collect::<Vec<_>>()
+            }
+        };
         if keys.is_empty() {
+            virtualize(env);
             return;
         }
         let is_source = |name: &str| keys.iter().any(|key| env_key_matches(name, key));
-        let values = env
+        let mut values = env
             .iter()
-            .filter(|(name, value)| is_source(name) && value.len() >= MIN_COPIED_VALUE_BYTES)
+            .filter(|(name, _)| is_source(name))
             .map(|(_, value)| value.clone())
+            .chain(keys.iter().filter_map(|key| std::env::var(key).ok()))
+            .filter(|value| value.len() >= MIN_COPIED_VALUE_BYTES)
             .collect::<Vec<_>>();
-        env.retain(|name, value| {
-            is_builtin(name)
-                || (!is_source(name)
-                    && !values.iter().any(|secret| value.contains(secret.as_str())))
-        });
+        values.sort_unstable();
+        values.dedup();
+        env.retain(|name, _| !is_source(name));
+        virtualize(env);
+        env.retain(|_, value| !values.iter().any(|secret| value.contains(secret.as_str())));
     }
 
     fn virtualize_env(

@@ -2506,3 +2506,43 @@ fn main_engine_withholds_unbrokered_configured_provider_sources() {
     let masked = child.get("GH_TOKEN").expect("GH_TOKEN stays brokered");
     assert_ne!(masked, PF28_S02_TOKEN);
 }
+
+#[test]
+fn main_engine_withholds_copies_of_configured_sources_from_core_env() {
+    // The source variable itself may be filtered out of the child by the
+    // shell environment policy while a copy survives: Core's own value counts.
+    let core_value = std::env::var("PATH").expect("PATH is set for tests");
+    assert!(core_value.len() >= 8, "PATH too short for this test");
+    let configure = |broker: &CredentialBroker, enabled: bool| {
+        broker.configure(&NetworkProxyConfig {
+            credential_broker: enabled,
+            credential_providers: BTreeMap::from([(
+                "core_env".to_string(),
+                CredentialProviderConfig {
+                    env: vec!["PATH".to_string()],
+                    url_prefixes: vec!["https://core-env.example".to_string()],
+                    ..CredentialProviderConfig::default()
+                },
+            )]),
+            ..NetworkProxyConfig::default()
+        });
+    };
+    let base = env_map([
+        ("COPIED", format!("url://{core_value}").as_str()),
+        ("SHORT", "path"),
+    ]);
+
+    let broker = CredentialBroker::new(/*enabled*/ true).with_main_engine();
+    configure(&broker, /*enabled*/ true);
+    let mut env = base.clone();
+    broker.virtualize_child_env(&mut env);
+    assert!(!env.contains_key("COPIED"), "{env:?}");
+    assert_eq!(env.get("SHORT").map(String::as_str), Some("path"));
+
+    // With brokering switched off nothing is brokered or withheld, as on main.
+    let broker = CredentialBroker::new(/*enabled*/ false).with_main_engine();
+    configure(&broker, /*enabled*/ false);
+    let mut env = base.clone();
+    broker.virtualize_child_env(&mut env);
+    assert_eq!(env, base);
+}
