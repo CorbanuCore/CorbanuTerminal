@@ -1,0 +1,23 @@
+I found blocking defects. This was static review only; no builds or tests were run.
+
+For the Git examples below, assume an inherited `r='xt::echo probe'` and Git’s `ext` transport enabled. Incorrectly resolving `r` to `origin` hides the actual `ext::` command from the approval check.
+
+1. **High — Known credential paths become invisible.** [tainted_action.rs:2526](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a05/codex-rs/core/src/security/tainted_action.rs:2526)  
+   Input: `(p=$HOME; cat "$p/.docker/config.json")`. The new branch replaces `p` with `UNSEEN_OUTPUT`, even for subsequent commands inside the same subshell. Previously, substitution produced the protected absolute path. Now the home-specific `.docker` rule cannot match, and `cat` does not trigger approval merely for an unseen operand. **Fix:** preserve known values within their execution scope and merge/invalidate them when leaving that scope. Add credential-read regression coverage.
+
+2. **High — Conditional context is lost across groups and newlines.** [tainted_action.rs:2517](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a05/codex-rs/core/src/security/tainted_action.rs:2517)  
+   Input: `false && { r=origin; }; git fetch e"$r"`. Opening the brace group resets `after` to `Joint::Other`; none of the new flags marks its assignments conditional. Consequently, the skipped assignment remains trusted. A newline after `&&` similarly changes the joint to `Other`. **Fix:** track conditional execution separately from the immediate separator and propagate it through compound commands and continuation newlines.
+
+3. **High — Pipeline assignments still incorrectly update parent state.** [tainted_action.rs:2513](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a05/codex-rs/core/src/security/tainted_action.rs:2513)  
+   Input: `r=origin | cat; git fetch e"$r"`. Bash executes the assignment in a pipeline subprocess, leaving the parent’s `r` unchanged. The new `reaches_parent` predicate checks neither pipeline membership nor the available `feeds_pipe` information, so it trusts `origin`. **Fix:** account for implicit pipeline subshells, including grouped pipeline stages, and add pipeline regression cases.
+
+4. **High — Backgrounding an AND/OR list marks only its final command.** [shell.rs:1330](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a05/codex-rs/core/src/security/tainted_action/shell.rs:1330)  
+   Input: `r=origin && true & git fetch e"$r"`. The entire AND-list runs asynchronously in a subshell, but the new handling marks only `true` as backgrounded. The earlier assignment therefore still overwrites the classifier’s parent-state value. **Fix:** track and mark the complete asynchronous list, rather than only `done.last_mut()`.
+
+5. **High — A redirection substitution defeats background-group tracking.** [shell.rs:947](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a05/codex-rs/core/src/security/tainted_action/shell.rs:947)  
+   Input: `{ r=origin; } >$(printf log) & git fetch e"$r"`. Opening and closing the substitution clear `just_closed_group`, losing the assignments that `&` must mark. Because `printf log` has recognized literal output, it supplies no independent unseen-value warning. **Fix:** preserve the pending group range across substitutions belonging to its redirections, and cover this combination in the tests.
+
+6. **Medium — Nested background groups introduce quadratic work.** [shell.rs:1323](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/a05/codex-rs/core/src/security/tainted_action/shell.rs:1323)  
+   Construct an input from `"{ r=origin; ".repeat(n) + "} & ".repeat(n)`. Each closing background group rescans its entire command range, producing `1 + 2 + … + n` iterations. The 1 MiB input limit still permits billions of iterations; `work::step()` imposes no production limit. **Fix:** collect background intervals and apply them once. Extend the linearity test to nested background groups; its current flat cases miss this loop.
+
+VERDICT: REQUEST_CHANGES

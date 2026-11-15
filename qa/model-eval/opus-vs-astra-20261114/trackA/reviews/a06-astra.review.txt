@@ -1,0 +1,12 @@
+1. **Medium — False write-denial attribution** — `codex-rs/core/src/security/protected_reads/moderate.rs:328`  
+   The fallback treats any permission-denial diagnostic mentioning `.git` as a blocked write. For example, `cat .git/config` failing because of ordinary file permissions now produces “Moderate blocked writing,” recommends Permissive, and records a nonexistent write denial. Require evidence of a write operation in the command or diagnostic; add a denied-read regression case.
+
+2. **Medium — Paths containing spaces lose the explanation** — `codex-rs/core/src/security/protected_reads/moderate.rs:362`  
+   In `/work/my repo`, `git add README` can report `fatal: Unable to create '/work/my repo/.git/index.lock': Permission denied`. Whitespace splitting breaks the absolute path, so the metadata check examines the wrong location and emits no explanation. Parse complete quoted paths, using the existing diagnostic-path parser where appropriate, and cover a workspace containing spaces.
+
+3. **Medium — New integration test is not Windows-compatible** — `codex-rs/core/tests/suite/issue_1139.rs:57`  
+   The test runs on Windows but invokes POSIX `printf` through the default PowerShell shell. On systems without GNU `printf`, it fails without the expected denial warning, breaking the assertions. Gate the test to macOS/Linux, as neighboring sandbox tests do, or provide a Windows-compatible command and fixture.
+
+Static review only; no builds or tests run.
+
+VERDICT: REQUEST_CHANGES

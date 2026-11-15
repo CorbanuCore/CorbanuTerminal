@@ -1,0 +1,18 @@
+Implemented and committed locally.
+
+- `shell.rs`: recognizes braces after reserved prefixes and `}` after `fi`/`done`/`esac`.
+- `tainted_action.rs`: preserves the prior literal-brace verdict floor, including stricter pipeline judgments.
+- `tainted_action_brace_reading_tests.rs`: adds bash/zsh regressions, literal-argument controls, pipeline coverage, and bounded linearity checks.
+- Added release notes and an [evidence record](/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114/wt/b4-astra/qa/release/unreleased/issue-2018-brace-groups.md).
+
+Verification:
+
+- **Before:** `just test -pcodex-core --lib -j8 --locked --offline -E 'test(issue_2018_)'` failed both `issue_2018_bash_reserved_group_boundaries` and `issue_2018_zsh_reserved_group_boundaries`.
+- **After:** `just test -pcodex-core --lib -j8 --locked --offline -E 'test(security::tainted_action)'` passed **420 tests**, including both regressions.
+- Differential comparison: **810 judgments unchanged; 0 quieter**.
+- `cargo clippy -p codex-core --all-targets -j8 --locked --offline -- -D warnings` passed on pinned Rust 1.99.1.
+- `just fmt` and release-note checks passed.
+
+Commits: `f8441066c1` (regressions), `9492f05d78` (fix and evidence).
+
+Nothing unfinished; working tree clean. Cargo still reports an existing dependency future-compatibility warning for `proc-macro-error2`.

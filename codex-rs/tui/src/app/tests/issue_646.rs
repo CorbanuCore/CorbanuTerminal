@@ -7,6 +7,77 @@ use crate::claude_panes::ClaudeProviderProfileKind;
 use codex_protocol::crew::CLAUDE_PLAN_PANE_PROVIDER_ID;
 use pretty_assertions::assert_eq;
 
+#[tokio::test]
+async fn issue_2150_empty_provider_startup_warning_snapshot() {
+    let home = tempfile::tempdir().expect("home");
+    let repo = tempfile::tempdir().expect("repo");
+    std::fs::create_dir(repo.path().join(".git")).expect("git directory");
+    std::fs::write(repo.path().join(".git/HEAD"), "ref: refs/heads/main\n").expect("HEAD");
+    std::fs::create_dir(repo.path().join(".codex")).expect("project config directory");
+    std::fs::write(
+        repo.path().join(".codex/config.toml"),
+        "[agents]\nprovider_allowlist = ['openai']\n",
+    )
+    .expect("project config");
+    let nested = repo.path().join("nested");
+    std::fs::create_dir_all(nested.join(".codex")).expect("nested project config directory");
+    std::fs::write(
+        nested.join(".codex/config.toml"),
+        "[agents]\nprovider_allowlist = ['anthropic']\n",
+    )
+    .expect("nested project config");
+    let project = repo.path().to_string_lossy().replace('\\', "\\\\");
+    std::fs::write(
+        home.path().join("config.toml"),
+        format!("[projects.\"{project}\"]\ntrust_level = 'trusted'\n"),
+    )
+    .expect("trust project");
+    let config = crate::legacy_core::config::ConfigBuilder::default()
+        .loader_overrides(codex_config::LoaderOverrides::without_managed_config_for_tests())
+        .codex_home(home.path().to_path_buf())
+        .harness_overrides(crate::legacy_core::config::ConfigOverrides {
+            cwd: Some(nested),
+            ..Default::default()
+        })
+        .build()
+        .await
+        .expect("config");
+    assert_eq!(config.agent_provider_allowlist, Some(Vec::new()));
+    let warning = config
+        .startup_warnings
+        .iter()
+        .find(|warning| warning.starts_with("No provider is allowed for spawned agents"))
+        .expect("empty policy warning");
+    let rendered = lines_to_single_string(
+        &history_cell::new_warning_event(warning.clone()).display_lines(/*width*/ 80),
+    );
+    insta::with_settings!({snapshot_path => "../../snapshots"}, {
+        insta::assert_snapshot!("issue_2150_empty_provider_startup_warning", rendered);
+    });
+}
+
+#[tokio::test]
+async fn issue_2150_empty_narrowed_policy_cannot_create_crew_records() {
+    let mut app = make_test_app().await;
+    app.config.agent_provider_allowlist = Some(Vec::new());
+    assert_eq!(app.authorized_spawn_providers(), Vec::<String>::new());
+    assert!(
+        app.ensure_native_spawn_provider_authorized(Some(OPENAI_PROVIDER_ID))
+            .is_err()
+    );
+
+    let result = app.prepare_custom_spawn_root(
+        "Restricted crew".to_string(),
+        crate::dispatch_queue::SavedNativeSpawnRuntime {
+            model: "gpt-6-sol".to_string(),
+            provider: OPENAI_PROVIDER_ID.to_string(),
+            reasoning_effort: None,
+        },
+    );
+    assert!(result.is_err(), "an empty policy must not create a crew");
+    assert!(app.spawn_crew.is_none());
+}
+
 /// The runtime a Claude Code pane records when it joins a crew, as
 /// `create_claude_spawn_pane` and `custom_spawn_crew_runtime_for_node` build it.
 fn claude_pane_runtime(provider: &str) -> crate::dispatch_queue::SavedNativeSpawnRuntime {

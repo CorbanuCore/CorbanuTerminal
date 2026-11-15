@@ -1,0 +1,58 @@
+I found two blocking defects. The change closes the four forms in the issue, but small variants of the same idiom still get the assigned remote trusted. I traced each scenario below through the lexer by reading the code; per your rules, nothing was built or run.
+
+**High — a conditional brace group, or a line break after `&&`/`||`, is still trusted**
+`codex-rs/core/src/security/tainted_action.rs:2513-2517`, with the cause in `codex-rs/core/src/security/tainted_action/shell.rs:777`, `:927` and `certain_cd.rs:48-53`.
+
+- **What's wrong:** `reaches_parent` checks only `simple.after`, which is the joint directly before the command's first word. That joint is lost in two common cases:
+  - `open_bracket` sets `joint = Other`, so the first command inside `{ ... }` has `after = Other` even when the group follows `&&` or `||`.
+  - `Joint::then(Some(And), Seq)` collapses to `Other`, so a newline after `&&` or `||` hides the condition.
+- **Example triggers.** Each of these ends with `r = "origin"` and no prompt, although at runtime `r` may still hold the tainted value:
+  - `[ -n "$r" ] || { r=origin; }; git fetch e"$r"` (the issue's first example, with braces)
+  - `false && { r=origin; }; git fetch e"$r"`
+  - `[ -n "$r" ] ||\n  r=origin\ngit fetch e"$r"`
+  - `false &&\nr=origin; git fetch e"$r"`
+- **Suggested fix:**
+  - Track an "after And/Or" flag in the lexer: set it when `operator` returns `And` or `Or`, keep it through newlines, and clear it at the next word.
+  - When a group opens while that flag is set, record it on the group-stack entry and keep a `conditional_depth` counter, like `subshell_depth`.
+  - Set `finished.conditional = conditional_depth > 0 || flag`, and use that field instead of matching `after`.
+  - Add the four lines above to `issue_1974_conditional_and_subshell_assignments_ask`.
+
+**Medium — assignments in a pipeline still count as reaching the parent shell**
+`codex-rs/core/src/security/tainted_action.rs:2513-2517`
+
+- **What's wrong:** Bash runs every part of a pipeline in a subshell (`lastpipe` is off in `bash -lc`). `reaches_parent` ignores `feeds_pipe` and `simple.pipe_from`, and commands in a piped brace group get no subshell mark either.
+- **Example triggers:** `r=origin | :; git fetch e"$r"`, `: | r=origin; git fetch e"$r"` and `: | { r=origin; }; git fetch e"$r"` all keep `r = origin` and stay quiet.
+- **Suggested fix:**
+  - Add `!feeds_pipe && simple.pipe_from.is_none()` to `reaches_parent`.
+  - In the lexer, mark a group opened with a pipe as a subshell; its inherited pipe is already stored on the group-stack entry.
+
+**Medium — an assignment inside a function body counts as run**
+`codex-rs/core/src/security/tainted_action/shell.rs:1287-1299` (the `(`/`)` handling) together with `open_bracket(Group::Brace)`.
+
+- **What's wrong:** `f() { r=origin; }` lexes as `f`, an empty `()` subshell, then an unconditional brace group. The body never runs unless `f` is called, but `r=origin` is treated as reaching the parent.
+- **Example triggers:** `f() { r=origin; }; git fetch e"$r"` and `function f { r=origin; }; git fetch e"$r"` both stay quiet.
+- **Suggested fix:** Treat a brace group that directly follows a closed empty `()` group, or follows a `function NAME` command, as conditional, the same way as an `if` body.
+
+**Low — marking a backgrounded group can take quadratic time**
+`codex-rs/core/src/security/tainted_action/shell.rs:1320-1328`
+
+- **What's wrong:** Each `&` after a group walks every command in it, including commands in nested groups that are already marked.
+- **Example trigger:** `{ a; { a; { a; … } & } & } &`, nested N deep, does O(N²) work. In production `work::step` only counts in tests, so nothing caps this. The new linearity test doesn't cover nested groups, although the change elsewhere counts depth to avoid exactly this ("a line may open thousands").
+- **Suggested fix:** Store backgrounded ranges and merge or check them lazily, or keep a per-command index to jump past an inner range that is already marked.
+
+**Low — a stuck keyword group now hides every later assignment**
+`codex-rs/core/src/security/tainted_action/shell.rs:885-893`
+
+- **What's wrong:** `keyword_depth` now feeds `in_keyword`. If here-document text gets lexed as commands, a line starting with `for`, `if`, `while` and so on can open a keyword group that never closes, so every later assignment becomes unseen.
+- **Example trigger:**
+  ```
+  cat >n <<'EOF'
+  for now
+  EOF
+  r=origin; git fetch "$r"
+  ```
+  This would ask where it didn't before. It errs on the safe side (it asks), so it's only a usability cost; worth a test either way.
+
+The test file covers only the exact forms in the issue plus a few controls. The high and medium findings above are not covered.
+
+VERDICT: REQUEST_CHANGES

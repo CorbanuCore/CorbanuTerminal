@@ -1,0 +1,6 @@
+## [opus] clippy -p codex-tui --all-targets -- -D warnings (rustc 1.99.1 pinned)
+exit=0
+   1 warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+## [astra] clippy -p codex-tui --all-targets -- -D warnings (rustc 1.99.1 pinned)
+exit=0
+   1 warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1

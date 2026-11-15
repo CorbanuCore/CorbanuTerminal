@@ -1,0 +1,17 @@
+#!/bin/bash
+# own_tests.sh <task> <arm> <crate> <filter> [<test-only commit>]
+# Runs the arm's own tests at HEAD (pass-after) and, if given, at its test-only commit (fail-before).
+B=/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114
+t=$1; arm=$2; crate=$3; filter=$4; tc=$5
+wt=$B/wt/$t-$arm; out=$B/trackB/out/$t-own-$arm.txt
+cd $wt || exit 2
+[ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "tracked files dirty; abort"; git status --short; exit 2; }
+head=$(git rev-parse HEAD)
+unset CORBANU_HOME CODEX_HOME
+export CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/bench1114-$t-$arm RUST_MIN_STACK=8388608
+run() { (cd codex-rs && cargo test -j8 -p $crate $LIBFLAG $filter 2>&1 | grep -E "^test |test result|error(\[|:)|panicked" | head -40); }
+{ echo "## own tests ($filter) at HEAD $(git rev-parse --short HEAD) [$arm]"; run
+  if [ -n "$tc" ]; then git checkout -q --detach $tc && echo "## own tests at test-only commit $(git rev-parse --short HEAD) (expect FAIL)" && run; git checkout -q work-$t; fi
+} > $out
+[ "$(git rev-parse HEAD)" = "$head" ] || echo "WARNING: HEAD not restored"
+cat $out

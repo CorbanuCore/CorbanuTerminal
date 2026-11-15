@@ -71,6 +71,38 @@ and macOS machines use their own sandbox and are unchanged. A Windows
 computer without its own sandbox still refuses commands for every
 environment, remote Linux ones included (#2049).
 
+## Windows: git with network access off
+
+Sandboxed commands with network access off get `GIT_ALLOW_PROTOCOL=file`
+(D475, #1921, #1944). Git refuses `https`, `ssh`, `git://` and `ext::`
+transports before connecting. The allow-list permits direct clone, fetch and
+push using a local folder or `file://` URL, subject to the sandbox's file
+permissions and the other tool limitations below.
+
+**Known limit: local-file submodules.** The same allow-list lets a recursive
+clone or `git submodule update --init --recursive` follow local paths or
+`file://` URLs in `.gitmodules`, which git normally refuses for submodules.
+This was confirmed with Git **2.54.0.windows.1** in native Windows Git
+subprocess tests using the sandbox's no-network environment (#2155); those
+tests were not full Moderate or Aggressive sandbox sessions.
+
+Adding `protocol.file.allow=user` through `GIT_CONFIG_*` does not restore
+that refusal: git consults `GIT_ALLOW_PROTOCOL` before its configuration.
+Replacing the allow-list with configuration alone is weaker: a command-line
+setting such as `-c protocol.https.allow=always` can override it and attempt
+a connection.
+
+The residual risk is that an untrusted repository can cause git to copy
+local repository objects through a submodule, limited to local files the
+sandbox can already read. It does not grant access past the sandbox's file
+permissions. Travis accepted this limit on November 14, 2026
+([D550 (b)](https://github.com/CorbanuCore/CorbanuTerminal/pull/2156#issuecomment-6881239767)):
+keep D475's local-file transport. An empty allow-list would also refuse
+direct local clone, fetch and push, which D475 deliberately preserves.
+See [#2155](https://github.com/CorbanuCore/CorbanuTerminal/issues/2155) for the
+reproduction and [#2156](https://github.com/CorbanuCore/CorbanuTerminal/pull/2156)
+for the unmerged all-transports-refused alternative.
+
 ## Windows non-admin sandbox
 
 On Windows, Corbanu Terminal can sandbox commands in two ways. The **default

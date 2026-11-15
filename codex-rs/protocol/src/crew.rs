@@ -122,6 +122,7 @@ pub enum DelegationMode {
 pub struct CrewPolicy {
     pub delegation_mode: DelegationMode,
     pub allow_ephemeral_descendants: bool,
+    /// Effective authorized providers. An empty list authorizes no runtime.
     pub provider_allowlist: Vec<String>,
     pub maximum_spend_usd: Option<f64>,
 }
@@ -178,6 +179,10 @@ impl CrewSpec {
             return Err(CrewSpecError::EmptyCrew);
         }
 
+        if self.policy.provider_allowlist.is_empty() {
+            return Err(CrewSpecError::EmptyProviderAllowlist);
+        }
+
         let allowlist = self
             .policy
             .provider_allowlist
@@ -209,8 +214,7 @@ impl CrewSpec {
                 root_count += 1;
             }
             member.runtime_request.validate(member_id)?;
-            if !allowlist.is_empty()
-                && let Some((provider_id, _, _)) = member.runtime_request.exact_parts()
+            if let Some((provider_id, _, _)) = member.runtime_request.exact_parts()
                 && !provider_allowlist_permits(&allowlist, provider_id)
             {
                 return Err(CrewSpecError::ProviderNotAllowed {
@@ -264,6 +268,8 @@ pub enum CrewSpecError {
     EmptyCrewId,
     #[error("crew must contain at least one member")]
     EmptyCrew,
+    #[error("crew provider_allowlist is empty; no provider is allowed")]
+    EmptyProviderAllowlist,
     #[error("logical_member_id must not be empty")]
     EmptyMemberId,
     #[error("crew member {member_id} is duplicated")]

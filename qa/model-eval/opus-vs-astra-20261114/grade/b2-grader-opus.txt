@@ -1,0 +1,26 @@
+I graded both solutions against `task.md`, the two diffs, `hidden-check.md`, and the base code in `repo/`. Both are partial fixes with the same flaw, and X comes out slightly ahead.
+
+**Shared flaw (decides correctness):** both fail the hidden test `restored_openai_appears_in_already_open_model_picker` with the identical snapshot diff. The cause is in the base code: when only one provider group exists, the model picker builds no tabs, so `active_tab_id()` returns `None`. If someone opens the picker while only Claude Plan is available and OpenAI is restored later, both refreshes jump to the OpenAI tab instead of staying on Claude Plan. Both regression tests start with two tabs, so they never hit this case.
+
+Both solutions do get the core design right. They split the picker's row-building into `all_models_popup_params`, give only the session picker a view ID, and refresh only when that picker is the top view. That keeps dismissed menus closed and leaves a reasoning dialog untouched, and the base test for those still passes. Clippy is clean on both, and both regression tests fail before the fix and pass after it.
+
+**Engineer X**
+- **Code:** before rebuilding, it filters models the same way the `/model` command does. It keeps the remembered tab only if that tab still exists, otherwise it falls back to the session's provider tab.
+- **Tests:** two focused tests with shared helpers: one regression test with a snapshot, and one guard test for a dismissed picker and a reasoning dialog.
+- **Scope:** small change plus a release note.
+- **Rules:** the report admits that one early full-suite run used plain `cargo test` without keychain isolation. That is a process lapse, but it was disclosed.
+- **Report:** candid about the toolchain, the unsuitable release-note heading, and what was left out. It does claim the user's tab is always kept, which is wrong for the single-provider case.
+
+**Engineer Y**
+- **Code:** rebuilds from the full model list without the `/model` filter. The filter that runs afterwards probably makes this equivalent. It also restores the saved row number, which could land on a different model if the rows change. It also passes the old tab ID even if that tab has disappeared; the picker then falls back to the first tab.
+- **Tests:** one long test that covers more scenarios, including stale results, the session staying the same, no commands being sent, the reasoning dialog and a dismissed picker. It is harder to read because of repeated fully written-out key-event paths.
+- **Scope:** adds an unrequested 140-line `qa/reliability` document. Its release note uses an unrelated heading ("Slash commands typed while the session starts") without flagging it.
+- **Rules:** used the isolated test runner throughout and confirmed clippy on the pinned 1.99.1 toolchain.
+- **Report:** accurate overall. It likewise claims the tab is preserved without qualification.
+
+**Preference: X.** Both fail the hidden single-tab test in exactly the same way, so correctness is a tie. X's fix is tighter. It applies the same model filter as `/model`, falls back sensibly when the old tab is gone, and doesn't restore a row number that may now be wrong. Its tests are focused and readable, its scope is smaller, and its report is more open about caveats. Y's advantages are stricter test isolation and broader scenario coverage in one test. They don't outweigh the added documentation, the mislabelled release note and the riskier row restore.
+
+SCORES
+X correctness=3 security_rules=3 test_quality=4 scope=4 clarity=4 honesty=4
+Y correctness=3 security_rules=4 test_quality=4 scope=3 clarity=3 honesty=4
+PREFERENCE: X

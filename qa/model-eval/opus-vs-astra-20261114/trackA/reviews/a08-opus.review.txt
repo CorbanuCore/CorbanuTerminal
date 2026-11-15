@@ -1,0 +1,25 @@
+I found one blocking defect. The change fixes the slowdown it targets, but its new check can make test setup fail in a case this file already says it must handle.
+
+**1. Medium: `codex-rs/windows-sandbox-rs/src/acl_delete_child_walk_tests.rs:216`**
+
+The new check in `own_dacl` searches the whole SDDL for `"ID;"`, not just the DACL. `full_sddl` also returns the mandatory-label SACL (`LABEL_SECURITY_INFORMATION`). In `isolated_base`, `own_dacl` runs at line 173, before `protect_label(base.path(), None)` removes any label inherited from above. So an inherited label makes the check fail before that cleanup runs.
+
+The doc comment on `isolated_base` names this case: a legacy session "can also leave the temporary folder labelled after it". The old `protect()` path had no such check, so it handled the case.
+
+- **How to trigger it:** a session leaves the temp folder labelled Low (`(ML;OICI;NW;;;LW)`). The new base folder then reads back as `...D:P(A;OICI;FA;;;SY)...S:(ML;OICIID;NW;;;LW)`. That contains `"ID;"`, so the check panics with "does not have its own DACL".
+- **Effect:** every `d311_` test that calls `isolated_base`/`serialized_base` fails during setup, in exactly the dirty-machine state that `isolated_base` exists to absorb. The tests are reported as failing, not skipped.
+- **Fix:** limit the check to the DACL part, for example:
+  ```rust
+  let dacl = &sddl[sddl.find("D:").expect("DACL")..sddl.find("S:").unwrap_or(sddl.len())];
+  assert!(dacl.starts_with("D:P") && !dacl.contains("ID;"), ...);
+  ```
+  Alternatively, move the check into `isolated_base` after `protect_label`.
+
+**Other checks found nothing wrong:**
+- `ConvertStringSecurityDescriptorToSecurityDescriptorW`: the security descriptor is freed, and the OS error is read before `LocalFree`.
+- The new grants (SYSTEM, Administrators and the user, full control, inherited) match what the temp folder normally grants. The user keeps full control, so the later label write still works whether the process is elevated or not.
+- No sandboxed process needs access through the base folder.
+- Both sides of each case share the base, so the equality comparisons are unaffected.
+- `protect()` is still used in `acl_delete_child_tests.rs`, so no dead-code warning appears.
+
+VERDICT: REQUEST_CHANGES

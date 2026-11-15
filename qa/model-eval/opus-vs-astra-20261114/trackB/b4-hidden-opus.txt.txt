@@ -1,0 +1,4 @@
+## [opus] HEAD 3c7187492c
+codex-core lib security:: test suite (classifier never-quieter guard; all must pass):
+test result: ok. 905 passed; 0 failed; 7 ignored; 0 measured; 2980 filtered out; finished in 62.36s
+cargo clippy -p codex-core --all-targets -- -D warnings (1.99.1): exit=0

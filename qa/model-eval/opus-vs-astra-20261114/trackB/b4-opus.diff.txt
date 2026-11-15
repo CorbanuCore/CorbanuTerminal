@@ -1,0 +1,389 @@
+diff --git a/codex-rs/core/src/security/tainted_action/shell.rs b/codex-rs/core/src/security/tainted_action/shell.rs
+index b1148e7f91..17794e6f27 100644
+--- a/codex-rs/core/src/security/tainted_action/shell.rs
++++ b/codex-rs/core/src/security/tainted_action/shell.rs
+@@ -119,6 +119,40 @@ pub(super) struct SimpleCommand {
+     /// is checked once.
+     pub(super) shells_checked: usize,
+     pub(super) shell_seen: bool,
++    /// #2018: how many of its first words are unquoted reserved words
++    /// ([`GROUP_KEYWORDS`]), for a brace after them.
++    pub(super) keywords: usize,
++}
++
++/// #2018: reserved words after which a command, so a `{` group, may start.
++const GROUP_OPENERS: &[&str] = &[
++    "!", "time", "if", "then", "elif", "else", "while", "until", "do",
++];
++/// #2018: compound command terminators a `}` may follow without a `;`.
++const GROUP_CLOSERS: &[&str] = &["fi", "done", "esac"];
++const GROUP_KEYWORDS: [&[&str]; 2] = [GROUP_OPENERS, GROUP_CLOSERS];
++
++impl SimpleCommand {
++    /// #2018: whether a `{` here opens a group in bash and zsh: no word
++    /// yet, or only unquoted reserved words that start a command (`then {`,
++    /// `! time {`).
++    fn opens_group(&self) -> bool {
++        self.keywords == self.words.len()
++            && self
++                .words
++                .iter()
++                .all(|word| GROUP_OPENERS.contains(&word.as_str()))
++    }
++
++    /// #2018: whether a `}` here closes a group: no word yet, or only an
++    /// unquoted compound command terminator (`fi }`, `done }`, `esac }`).
++    fn closes_group(&self) -> bool {
++        match self.words.as_slice() {
++            [] => true,
++            [word] => self.keywords == 1 && GROUP_CLOSERS.contains(&word.as_str()),
++            _ => false,
++        }
++    }
+ }
+ 
+ /// Lexed simple commands, in the order they finish (a substitution comes
+@@ -703,6 +737,9 @@ struct Lexer {
+     hidden: bool,
+     /// #989: the word being built holds a parameter operator.
+     operated: bool,
++    /// #2018: the word being built lost a quote, escape or brace, or holds
++    /// a substitution's output: it is no reserved word.
++    quoted: bool,
+     open: Vec<Open>,
+     /// Open groups, the pipe that feeds every command inside them, and the
+     /// number of finished commands when each opened.
+@@ -764,9 +801,24 @@ impl Lexer {
+     }
+ 
+     fn flush(&mut self) {
++        let quoted = std::mem::take(&mut self.quoted);
+         if !self.word.is_empty() {
+             let index = Some(self.current.words.len());
+             let redirect_word = std::mem::take(&mut self.redirect_word_next);
++            // #2018: a redirection's word or a quoted one is no reserved word.
++            let keyword = !quoted
++                && !redirect_word
++                && self.redirect == Redirect::None
++                && !self.looked_up
++                && !self.hidden
++                && !self.operated
++                && self.current.keywords == self.current.words.len()
++                && GROUP_KEYWORDS
++                    .iter()
++                    .any(|words| words.contains(&self.word.as_str()));
++            if keyword {
++                self.current.keywords += 1;
++            }
+             if redirect_word {
+                 self.current.redirect_words.extend(index);
+             }
+@@ -1077,6 +1129,7 @@ impl Lexer {
+             // unseen.
+             self.current = open.outer;
+             self.word = open.outer_word;
++            self.quoted = true;
+             self.looked_up = open.outer_looked_up;
+             self.hidden = open.outer_hidden;
+             self.operated = open.outer_operated;
+@@ -1126,6 +1179,7 @@ impl Lexer {
+             self.current.fed_by.extend(inner);
+         }
+         self.word = open.outer_word;
++        self.quoted = true;
+         self.looked_up = open.outer_looked_up;
+         self.hidden = open.outer_hidden || spliced.is_some();
+         self.operated = open.outer_operated;
+@@ -1231,6 +1285,7 @@ impl Lexer {
+                     self.word.push(literal_char(ch));
+                 }
+                 '$' if next == Some('\'') => {
++                    self.quoted = true;
+                     index = ansi_c(&chars, index + 2, &mut self.word);
+                     continue;
+                 }
+@@ -1261,6 +1316,7 @@ impl Lexer {
+                 {
+                     self.redirections_read_newly = true;
+                     self.current.escaped = true;
++                    self.quoted = true;
+                     self.word.extend(next);
+                     index += 2;
+                     continue;
+@@ -1276,6 +1332,7 @@ impl Lexer {
+                         && !unclosed[usize::from(ch == '"')]
+                         && read_as_before.is_none_or(|end| index > end) =>
+                 {
++                    self.quoted = true;
+                     let end = match quoted_target(&chars, index, &mut unclosed) {
+                         Ok(end) => end,
+                         Err(close) => {
+@@ -1315,16 +1372,16 @@ impl Lexer {
+                 // #1975: in bash a brace argument cannot delimit a group.
+                 // Closing one at `git fetch -o '}' -- "$r"` splits off the
+                 // remote. Keep the main reading for its separate judgment.
++                // #2018: one after reserved words delimits a group
++                // (`then {`, `! {`, `fi }`).
+                 '{' if self.word.is_empty()
+                     && next.is_none_or(char::is_whitespace)
+-                    && (self.reading != Reading::LiteralBraces
+-                        || self.current.words.is_empty()) =>
++                    && (self.reading != Reading::LiteralBraces || self.current.opens_group()) =>
+                 {
+                     self.open_bracket(Group::Brace);
+                 }
+                 '}' if self.word.is_empty()
+-                    && (self.reading != Reading::LiteralBraces
+-                        || self.current.words.is_empty()) =>
++                    && (self.reading != Reading::LiteralBraces || self.current.closes_group()) =>
+                 {
+                     self.close_bracket(Group::Brace);
+                 }
+@@ -1335,9 +1392,12 @@ impl Lexer {
+                     self.braces_read_newly = true;
+                     self.word.push(ch);
+                 }
+-                '\\' => self.current.escaped = true,
++                '\\' => {
++                    self.current.escaped = true;
++                    self.quoted = true;
++                }
+                 HIDDEN => self.hidden = true,
+-                '\'' | '"' | '{' | '}' => {}
++                '\'' | '"' | '{' | '}' => self.quoted = true,
+                 '<' if next == Some('<') && chars.get(index + 2) == Some(&'<') => {
+                     self.redirect_prefix(previous);
+                     self.flush();
+@@ -1722,6 +1782,10 @@ fn fact_output(command: &SimpleCommand) -> bool {
+ #[path = "shell_substitution_tests.rs"]
+ mod substitution_tests;
+ 
++#[cfg(test)]
++#[path = "shell_brace_group_tests.rs"]
++pub(super) mod brace_group_tests;
++
+ /// What `echo`/`printf` with these words prints, if that is all they are.
+ pub(super) fn literal_output(words: &[String]) -> Option<String> {
+     let (first, rest) = words.split_first()?;
+diff --git a/codex-rs/core/src/security/tainted_action/shell_brace_group_tests.rs b/codex-rs/core/src/security/tainted_action/shell_brace_group_tests.rs
+new file mode 100644
+index 0000000000..6b99af797b
+--- /dev/null
++++ b/codex-rs/core/src/security/tainted_action/shell_brace_group_tests.rs
+@@ -0,0 +1,102 @@
++//! #2018: in #1975's literal-brace reading, a brace after a reserved word
++//! that starts a command (`then {`, `do {`, `! {`, `time {`) opens a group,
++//! and one after a compound command's terminator (`fi }`, `done }`,
++//! `esac }`) closes one, as in bash and zsh. Such lines read exactly as the
++//! pre-#1975 reading does, so they need no second judgment.
++
++use super::Reading;
++use super::simple_commands_read;
++use pretty_assertions::assert_eq;
++
++/// Lines whose every brace delimits a group in bash and zsh.
++pub(in super::super) const GROUPS: &[&str] = &[
++    "if true; then { echo g; }; fi",
++    "for x in a; do { echo d; }; done",
++    "while true; do { echo w; }; break; done",
++    "until false; do { echo u; }; break; done",
++    "if false; then :; else { echo e; }; fi",
++    "if false; then :; elif true; then { echo l; }; fi",
++    "if false; then :; elif { true; }; then :; fi",
++    "if { true; }; then :; fi",
++    "while { false; }; do :; done",
++    "until { true; }; do :; done",
++    "! { echo n; }",
++    "time { echo t; }",
++    "! time { echo b; }",
++    "time ! { echo c; }",
++    "if true; then ! { echo m; }; fi",
++    "for x in a; do time { echo p; }; done",
++    "{ if true; then echo in; fi }",
++    "{ for x in a; do echo in; done }",
++    "{ while false; do :; done }",
++    "{ case x in x) echo in;; esac }",
++    "{ { if true; then echo in; fi } }",
++    "if true; then { if true; then echo in; fi }; fi",
++];
++
++/// Lines holding a brace bash and zsh read as an argument: a quoted or
++/// escaped reserved word is an ordinary command name, and a reserved word
++/// after a command name is an argument.
++pub(in super::super) const LITERALS: &[&str] = &[
++    "echo then { echo g; }",
++    "'then' { echo g; }",
++    "\"!\" { echo n; }",
++    r"\time { echo t; }",
++    "Then { echo g; }",
++    "echo fi }",
++    "{ echo in; 'fi' }",
++    "{ echo in; f\\i }",
++    ">then { echo g; }",
++    "{ echo in; >fi }",
++    "$(echo then) { echo g; }",
++];
++
++/// The words of each command a reading lexes.
++fn words(line: &str, reading: Reading) -> Vec<Vec<String>> {
++    simple_commands_read(&[line.to_string()], reading)
++        .commands
++        .into_iter()
++        .map(|command| command.words)
++        .collect()
++}
++
++#[test]
++fn issue_2018_braces_after_reserved_words_delimit_groups() {
++    let mut literal = Vec::new();
++    for line in GROUPS {
++        let lexed = simple_commands_read(&[line.to_string()], Reading::LiteralBraces);
++        if lexed.braces_read_newly {
++            literal.push(*line);
++        }
++        assert_eq!(
++            words(line, Reading::LiteralBraces),
++            words(line, Reading::Redirections),
++            "{line}: read otherwise than the pre-#1975 reading"
++        );
++        assert!(
++            lexed
++                .commands
++                .iter()
++                .flat_map(|command| &command.words)
++                .all(|word| word != "{" && word != "}"),
++            "{line}: a group brace was read as a word"
++        );
++    }
++    assert_eq!(literal, Vec::<&str>::new(), "group braces read as literal");
++}
++
++#[test]
++fn issue_2018_brace_arguments_stay_literal() {
++    let grouped: Vec<&str> = LITERALS
++        .iter()
++        .copied()
++        .filter(|line| {
++            !simple_commands_read(&[line.to_string()], Reading::LiteralBraces).braces_read_newly
++        })
++        .collect();
++    assert_eq!(
++        grouped,
++        Vec::<&str>::new(),
++        "brace arguments read as groups"
++    );
++}
+diff --git a/codex-rs/core/src/security/tainted_action_brace_reading_tests.rs b/codex-rs/core/src/security/tainted_action_brace_reading_tests.rs
+index a876d377d0..2f22e94661 100644
+--- a/codex-rs/core/src/security/tainted_action_brace_reading_tests.rs
++++ b/codex-rs/core/src/security/tainted_action_brace_reading_tests.rs
+@@ -81,3 +81,109 @@ fn issue_1975_measuring_harness_keeps_full_main_verdict() {
+         );
+     }
+ }
++
++/// #2018: groups opened after a reserved word or closed after a compound
++/// command's terminator, holding #1975's redirected `cd`.
++const ISSUE_2018_LINES: &[&str] = &[
++    "if true; then { >log cd sub; ./run.sh; }; fi",
++    "for x in a; do { >log cd sub; ./run.sh; }; done",
++    "if false; then :; else { >log cd sub; ./run.sh; }; fi",
++    "if false; then :; elif { >log cd sub; }; then ./run.sh; fi",
++    "if { >log cd sub; }; then ./run.sh; fi",
++    "! { >log cd sub; ./run.sh; }",
++    "time { >log cd sub; ./run.sh; }",
++    "! time { >log cd sub; ./run.sh; }",
++    "{ if true; then >log cd sub; fi }; ./run.sh",
++    "{ for x in a; do >log cd sub; done }; ./run.sh",
++    "{ case x in x) >log cd sub;; esac }; ./run.sh",
++];
++
++/// One judgment of `shell -lc line` in a `SUB_EVIL` workspace.
++fn judged_line(
++    shell: &str,
++    line: &str,
++    reading: shell::Reading,
++    assignments: AssignmentReading,
++) -> Classifier {
++    let root = workspace(SUB_EVIL);
++    let action = action_in(root.path(), &[shell, "-lc", line]);
++    judged(
++        &action,
++        Homes::new(Path::new(HOME), Some(root.path())),
++        /*as_named*/ false,
++        reading,
++        assignments,
++    )
++}
++
++/// #2018: the new reading reads these groups as bash and zsh do, so they
++/// need no second judgment; brace arguments still get one.
++#[test]
++fn issue_2018_group_braces_need_no_second_judgment() {
++    use super::shell::brace_group_tests::GROUPS;
++    use super::shell::brace_group_tests::LITERALS;
++    let mut wrong = Vec::new();
++    for shell in ["bash", "zsh"] {
++        for line in GROUPS.iter().chain(ISSUE_2018_LINES) {
++            let reading = judged_line(
++                shell,
++                line,
++                shell::Reading::LiteralBraces,
++                AssignmentReading::Reaching,
++            );
++            if reading.braces_read_newly {
++                wrong.push(format!("{shell}: {line}: read newly"));
++            }
++        }
++        for line in LITERALS {
++            let reading = judged_line(
++                shell,
++                line,
++                shell::Reading::LiteralBraces,
++                AssignmentReading::Reaching,
++            );
++            if !reading.braces_read_newly {
++                wrong.push(format!("{shell}: {line}: not read newly"));
++            }
++        }
++    }
++    assert_eq!(wrong, Vec::<String>::new());
++}
++
++/// #2018: the new reading alone sees the group's redirected `cd`, and the
++/// full verdict is never quieter than main's (its `Redirections` and
++/// `Legacy` readings), in bash and zsh.
++#[test]
++fn issue_2018_group_verdicts_never_quieter_than_main() {
++    let root = workspace(SUB_EVIL);
++    let mut wrong = Vec::new();
++    for shell in ["bash", "zsh"] {
++        for line in ISSUE_2018_LINES {
++            for cd in [">log cd sub", "cd sub >log", "cd sub"] {
++                let line = line.replace(">log cd sub", cd);
++                let new = judged_line(
++                    shell,
++                    &line,
++                    shell::Reading::LiteralBraces,
++                    AssignmentReading::Reaching,
++                )
++                .found;
++                if new != Some(ProtectedActionKind::Persistence) {
++                    wrong.push(format!("{shell}: {line}: new reading -> {new:?}"));
++                }
++                let action = action_in(root.path(), &[shell, "-lc", &line]);
++                let full = classify_with(&action, Path::new(HOME), Some(root.path()));
++                for (reading, assignments) in [
++                    (shell::Reading::Redirections, AssignmentReading::Reaching),
++                    (shell::Reading::Legacy, AssignmentReading::Possible),
++                ] {
++                    let main = judged_line(shell, &line, reading, assignments).found;
++                    if main.is_some_and(|main| full.is_none_or(|full| rank(full) < rank(main))) {
++                        wrong.push(format!("{shell}: {line}: {full:?} quieter than {main:?}"));
++                    }
++                }
++            }
++        }
++    }
++    assert_eq!(wrong, Vec::<String>::new());
++}

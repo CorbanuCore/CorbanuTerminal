@@ -1,0 +1,554 @@
+diff --git a/codex-rs/core/src/session/input_queue.rs b/codex-rs/core/src/session/input_queue.rs
+index 8cb601da04..0d38b5d994 100644
+--- a/codex-rs/core/src/session/input_queue.rs
++++ b/codex-rs/core/src/session/input_queue.rs
+@@ -398,31 +398,44 @@ impl InputQueue {
+         &self,
+         active_turn: &Mutex<Option<ActiveTurn>>,
+     ) -> (Vec<TurnInput>, Option<String>) {
+-        self.get_pending_input_inner(active_turn, /*allow_untracked_mailbox*/ true)
++        self.get_pending_input_inner(active_turn, /*running_turn_id*/ None)
+             .await
+     }
+ 
+-    /// Takes input for an already-running task. A task detached by any stop path must not drain
+-    /// mailbox mail: it no longer has a turn state that can record its outcome.
++    /// Takes input only for the identified running task. A detached task must not consume
++    /// another turn's input or mailbox mail, even if a replacement has already been installed.
+     pub(crate) async fn get_pending_input_for_running_task(
+         &self,
+         active_turn: &Mutex<Option<ActiveTurn>>,
++        sub_id: &str,
+     ) -> (Vec<TurnInput>, Option<String>) {
+-        self.get_pending_input_inner(active_turn, /*allow_untracked_mailbox*/ false)
++        self.get_pending_input_inner(active_turn, Some(sub_id))
+             .await
+     }
+ 
+     #[allow(
+         clippy::await_holding_invalid_type,
+-        reason = "taking mail off the queue and noting it in the turn state must remain atomic"
++        reason = "turn ownership, input draining, and mailbox tracking must remain atomic"
+     )]
+     async fn get_pending_input_inner(
+         &self,
+         active_turn: &Mutex<Option<ActiveTurn>>,
+-        allow_untracked_mailbox: bool,
++        running_turn_id: Option<&str>,
+     ) -> (Vec<TurnInput>, Option<String>) {
++        // Keep the slot locked through mailbox tracking so a stop cannot detach the owner and
++        // finalize its mail between the identity check and recording which messages it took.
++        let active = active_turn.lock().await;
++        if let Some(sub_id) = running_turn_id
++            && active
++                .as_ref()
++                .and_then(|turn| turn.task.as_ref())
++                .map(|task| task.turn_context.sub_id.as_str())
++                != Some(sub_id)
++        {
++            return (Vec::new(), None);
++        }
+         let (pending_input, accepts_mailbox_delivery, turn_id, turn_state) =
+-            Self::take_turn_pending_input(active_turn).await;
++            Self::take_turn_pending_input(active.as_ref()).await;
+         if !accepts_mailbox_delivery {
+             return (pending_input, None);
+         }
+@@ -438,7 +451,7 @@ impl InputQueue {
+             }
+             // Test-only: older tests poll an empty slot to inspect queued mail. Executing tasks
+             // use the fail-closed path above.
+-            None if allow_untracked_mailbox => {
++            None if running_turn_id.is_none() => {
+                 self.drain_mailbox_input_for_turn(turn_id.as_deref()).await
+             }
+             None => (Vec::new(), None),
+@@ -458,12 +471,18 @@ impl InputQueue {
+     /// collaboration mail must remain session-pending until it has crossed a completed turn
+     /// boundary. Draining the entire mailbox here converts that mail into a same-turn follow-up
+     /// and can create a mail-only model turn before the next human prompt.
++    #[expect(
++        clippy::await_holding_invalid_type,
++        reason = "active-turn and turn-state inspection must remain atomic"
++    )]
+     pub(crate) async fn get_pending_input_for_task_start(
+         &self,
+         active_turn: &Mutex<Option<ActiveTurn>>,
+     ) -> (Vec<TurnInput>, Option<String>) {
+-        let (pending_input, accepts_mailbox_delivery, turn_id, _turn_state) =
+-            Self::take_turn_pending_input(active_turn).await;
++        let (pending_input, accepts_mailbox_delivery, turn_id, _turn_state) = {
++            let active = active_turn.lock().await;
++            Self::take_turn_pending_input(active.as_ref()).await
++        };
+         if !accepts_mailbox_delivery {
+             return (pending_input, None);
+         }
+@@ -481,45 +500,37 @@ impl InputQueue {
+         }
+     }
+ 
+-    #[allow(
+-        clippy::await_holding_invalid_type,
+-        reason = "active-turn and turn-state inspection must remain atomic"
+-    )]
+     async fn take_turn_pending_input(
+-        active_turn: &Mutex<Option<ActiveTurn>>,
++        active_turn: Option<&ActiveTurn>,
+     ) -> (
+         Vec<TurnInput>,
+         bool,
+         Option<String>,
+         Option<Arc<Mutex<TurnState>>>,
+     ) {
+-        {
+-            let mut active = active_turn.lock().await;
+-            match active.as_mut() {
+-                Some(active_turn) => {
+-                    let mut turn_state = active_turn.turn_state.lock().await;
+-                    let accepts_mailbox_delivery =
+-                        turn_state.accepts_mailbox_delivery_for_current_turn();
+-                    let pending_input = if accepts_mailbox_delivery {
+-                        turn_state.pending_input.items.split_off(0)
+-                    } else {
+-                        Vec::new()
+-                    };
+-                    (
+-                        pending_input,
+-                        accepts_mailbox_delivery,
+-                        active_turn
+-                            .task
+-                            .as_ref()
+-                            .map(|task| task.turn_context.sub_id.clone()),
+-                        Some(Arc::clone(&active_turn.turn_state)),
+-                    )
+-                }
+-                // `get_pending_input_for_task_start` also uses this helper. It may legitimately
+-                // start from an idle slot and must still inspect ready mailbox work; the running
+-                // task path separately refuses to drain without a TurnState (#2010).
+-                None => (Vec::new(), true, None, None),
++        match active_turn {
++            Some(active_turn) => {
++                let mut turn_state = active_turn.turn_state.lock().await;
++                let accepts_mailbox_delivery =
++                    turn_state.accepts_mailbox_delivery_for_current_turn();
++                let pending_input = if accepts_mailbox_delivery {
++                    turn_state.pending_input.items.split_off(0)
++                } else {
++                    Vec::new()
++                };
++                (
++                    pending_input,
++                    accepts_mailbox_delivery,
++                    active_turn
++                        .task
++                        .as_ref()
++                        .map(|task| task.turn_context.sub_id.clone()),
++                    Some(Arc::clone(&active_turn.turn_state)),
++                )
+             }
++            // Task admission may start from an idle slot and must still inspect ready mail.
++            // Running tasks validate their identity before calling this helper.
++            None => (Vec::new(), true, None, None),
+         }
+     }
+ 
+@@ -884,31 +895,32 @@ mod tests {
+ 
+     #[tokio::test]
+     async fn stopped_turn_keeps_mailbox_items_for_the_next_turn() {
+-        let input_queue = InputQueue::new();
+-        let stopped_turn = Mutex::new(None);
+-        let (mail, _) = mail_with_id("arrived while stopping");
+-        input_queue
+-            .enqueue_mailbox_communication(mail.clone(), /*parent_turn_id*/ None)
+-            .await;
+-
+-        // The active slot is removed before shutdown waits for the running task. A stale task
+-        // reaching its next input poll must leave mail queued rather than silently taking it.
+-        assert_eq!(
++        // Neither an idle slot nor a reserved slot without an installed task belongs to the
++        // stopped task. Only task admission may drain ready mail from those states.
++        for active in [None, Some(ActiveTurn::default())] {
++            let input_queue = InputQueue::new();
++            let stopped_turn = Mutex::new(active);
++            let (mail, _) = mail_with_id("arrived while stopping");
+             input_queue
+-                .get_pending_input_for_running_task(&stopped_turn)
+-                .await
+-                .0,
+-            Vec::new()
+-        );
+-        assert!(input_queue.has_pending_mailbox_items().await);
++                .enqueue_mailbox_communication(mail.clone(), /*parent_turn_id*/ None)
++                .await;
+ 
+-        // A subsequently admitted turn receives the preserved item normally.
+-        let next_turn = Mutex::new(Some(ActiveTurn::default()));
+-        assert_eq!(
+-            input_queue.get_pending_input(&next_turn).await.0,
+-            vec![TurnInput::InterAgentCommunication(mail)]
+-        );
+-        assert!(!input_queue.has_pending_mailbox_items().await);
++            assert_eq!(
++                input_queue
++                    .get_pending_input_for_running_task(&stopped_turn, "stopped-turn")
++                    .await,
++                (Vec::new(), None)
++            );
++            assert!(input_queue.has_pending_mailbox_items().await);
++
++            assert_eq!(
++                input_queue
++                    .get_pending_input_for_task_start(&stopped_turn)
++                    .await,
++                (vec![TurnInput::InterAgentCommunication(mail)], None)
++            );
++            assert!(!input_queue.has_pending_mailbox_items().await);
++        }
+     }
+ 
+     #[tokio::test]
+diff --git a/codex-rs/core/src/session/stale_poll_mail_tests.rs b/codex-rs/core/src/session/stale_poll_mail_tests.rs
+index 3c84d836b0..8ea3ef196d 100644
+--- a/codex-rs/core/src/session/stale_poll_mail_tests.rs
++++ b/codex-rs/core/src/session/stale_poll_mail_tests.rs
+@@ -20,6 +20,8 @@ type Polled = Arc<std::sync::Mutex<Option<Vec<TurnInput>>>>;
+ /// Waits for cancellation, then polls for input once, like `run_turn`'s next loop iteration.
+ struct StalePollTask {
+     polled: Polled,
++    poll_gate: Option<Arc<tokio::sync::Notify>>,
++    poll_done: Arc<tokio::sync::Notify>,
+ }
+ 
+ impl SessionTask for StalePollTask {
+@@ -34,17 +36,21 @@ impl SessionTask for StalePollTask {
+     async fn run(
+         self: Arc<Self>,
+         session: Arc<SessionTaskContext>,
+-        _ctx: Arc<TurnContext>,
++        ctx: Arc<TurnContext>,
+         _input: Vec<TurnInput>,
+         cancellation_token: CancellationToken,
+     ) -> SessionTaskResult {
+         cancellation_token.cancelled().await;
++        if let Some(gate) = &self.poll_gate {
++            gate.notified().await;
++        }
+         let session = session.clone_session();
+         let (input, _) = session
+             .input_queue
+-            .get_pending_input_for_running_task(&session.active_turn)
++            .get_pending_input_for_running_task(&session.active_turn, &ctx.sub_id)
+             .await;
+         *self.polled.lock().expect("polled lock") = Some(input);
++        self.poll_done.notify_one();
+         Ok(None)
+     }
+ }
+@@ -67,6 +73,8 @@ async fn stale_poll_after(stop: StopPath) -> (Option<Vec<TurnInput>>, Vec<TurnIn
+         Vec::new(),
+         StalePollTask {
+             polled: Arc::clone(&polled),
++            poll_gate: None,
++            poll_done: Arc::new(tokio::sync::Notify::new()),
+         },
+     )
+     .await;
+@@ -99,6 +107,135 @@ async fn stale_poll_after(stop: StopPath) -> (Option<Vec<TurnInput>>, Vec<TurnIn
+     (stale, still_queued)
+ }
+ 
++/// #2046: hold guardian's stop in its graceful-wait phase while a new turn is installed.
++/// Polling the stop future explicitly freezes this interleaving without racing a 100 ms sleep.
++#[tokio::test]
++async fn guardian_stopped_turn_cannot_take_replacement_turn_input() {
++    let (sess, old_turn, _rx) = make_session_and_context_with_rx().await;
++    let next_turn = sess.new_default_turn().await;
++    assert_ne!(old_turn.sub_id, next_turn.sub_id);
++    let polled = Polled::default();
++    let poll_gate = Arc::new(tokio::sync::Notify::new());
++    let poll_done = Arc::new(tokio::sync::Notify::new());
++    sess.spawn_task(
++        Arc::clone(&old_turn),
++        Vec::new(),
++        StalePollTask {
++            polled: Arc::clone(&polled),
++            poll_gate: Some(Arc::clone(&poll_gate)),
++            poll_done: Arc::clone(&poll_done),
++        },
++    )
++    .await;
++    let cancelled = sess
++        .active_turn
++        .lock()
++        .await
++        .as_ref()
++        .expect("old active turn")
++        .task
++        .as_ref()
++        .expect("old task")
++        .cancellation_token
++        .clone();
++
++    let mut stop =
++        Box::pin(sess.abort_turn_if_active(&old_turn.sub_id, TurnAbortReason::Interrupted));
++    assert!(futures::poll!(&mut stop).is_pending());
++    assert!(cancelled.is_cancelled());
++    assert!(sess.active_turn.lock().await.is_none());
++
++    sess.spawn_task(
++        Arc::clone(&next_turn),
++        Vec::new(),
++        StalePollTask {
++            polled: Polled::default(),
++            poll_gate: None,
++            poll_done: Arc::new(tokio::sync::Notify::new()),
++        },
++    )
++    .await;
++    let user_input = vec![codex_protocol::user_input::UserInput::Text {
++        text: "input for the replacement turn".to_string(),
++        text_elements: Vec::new(),
++    }];
++    sess.steer_input(
++        user_input.clone(),
++        Default::default(),
++        Some(&next_turn.sub_id),
++        Some("replacement-message".to_string()),
++        /*responsesapi_client_metadata*/ None,
++    )
++    .await
++    .expect("steer replacement turn");
++    let mut mail = InterAgentCommunication::new(
++        AgentPath::root(),
++        AgentPath::try_from("/root/worker").expect("agent path"),
++        Vec::new(),
++        "mail for the replacement turn".to_string(),
++        /*trigger_turn*/ false,
++    );
++    let message_id = mail.ensure_message_identity().to_string();
++    sess.input_queue
++        .enqueue_mailbox_communication_for_session(
++            &sess,
++            mail.clone(),
++            /*parent_turn_id*/ None,
++        )
++        .await;
++
++    poll_gate.notify_one();
++    tokio::time::timeout(std::time::Duration::from_secs(2), poll_done.notified())
++        .await
++        .expect("old task must poll once");
++    assert!(stop.await);
++
++    let stale = polled.lock().expect("polled lock").take();
++    let next_state = Arc::clone(
++        &sess
++            .active_turn
++            .lock()
++            .await
++            .as_ref()
++            .expect("replacement active")
++            .turn_state,
++    );
++    let wrongly_attributed = next_state
++        .lock()
++        .await
++        .take_unrecorded_mailbox_message_ids(&[]);
++    let received = sess
++        .input_queue
++        .get_pending_input_for_running_task(&sess.active_turn, &next_turn.sub_id)
++        .await;
++    let tracked = next_state
++        .lock()
++        .await
++        .take_unrecorded_mailbox_message_ids(&[]);
++    sess.abort_all_tasks(TurnAbortReason::Replaced).await;
++
++    assert_eq!(
++        stale,
++        Some(Vec::new()),
++        "stopped task stole replacement input"
++    );
++    assert_eq!(wrongly_attributed, Vec::<String>::new());
++    assert_eq!(
++        received,
++        (
++            vec![
++                TurnInput::UserInput {
++                    content: user_input,
++                    client_id: Some("replacement-message".to_string()),
++                },
++                TurnInput::InterAgentCommunication(mail),
++            ],
++            None,
++        ),
++    );
++    assert_eq!(tracked, vec![message_id]);
++}
++
+ #[tokio::test]
+ async fn stopped_turn_poll_leaves_mail_queued_on_every_stop_path() {
+     for stop in [StopPath::Interrupt, StopPath::Replaced, StopPath::Guardian] {
+diff --git a/codex-rs/core/src/session/turn.rs b/codex-rs/core/src/session/turn.rs
+index 372d9c813c..5e23f01915 100644
+--- a/codex-rs/core/src/session/turn.rs
++++ b/codex-rs/core/src/session/turn.rs
+@@ -395,7 +395,7 @@ pub(crate) async fn run_turn(
+         // may support this, the model might not.
+         let pending_input = if can_drain_pending_input {
+             sess.input_queue
+-                .get_pending_input_for_running_task(&sess.active_turn)
++                .get_pending_input_for_running_task(&sess.active_turn, &turn_context.sub_id)
+                 .await
+                 .0
+         } else {
+diff --git a/qa/release/unreleased/notes/2046-guardian-stop-replacement-input.md b/qa/release/unreleased/notes/2046-guardian-stop-replacement-input.md
+new file mode 100644
+index 0000000000..85775b930d
+--- /dev/null
++++ b/qa/release/unreleased/notes/2046-guardian-stop-replacement-input.md
+@@ -0,0 +1,4 @@
++## Moderate: waiting on and starting agents after untrusted content
++
++- Starting a new turn while guardian stops the previous one no longer lets the
++  stopping task consume the new turn's queued input or agent messages (#2046).
+diff --git a/qa/reliability/2046-guardian-stop-message-gap.md b/qa/reliability/2046-guardian-stop-message-gap.md
+new file mode 100644
+index 0000000000..eb3436f151
+--- /dev/null
++++ b/qa/reliability/2046-guardian-stop-message-gap.md
+@@ -0,0 +1,132 @@
++# #2046: guardian stop and replacement-turn input
++
++Classification: bounded fix. Product authority: `docs/corbanu-product-spec.md`,
++exact heading **Shipping MVP — LIVE**, Agent orchestration requirement excerpt:
++“durable mailboxes, supervision, resume, and recovery.” This restores input
++ownership during an existing stop path; it does not change authorization,
++mailbox persistence, or the interaction contract.
++
++Base: `aeed8c39ab`. Work is local to branch `work-b1r` in the supplied checkout.
++No remote operations, external services, or contributor contact are part of this
++change.
++
++## Reproduction
++
++Test-only commit: `6366d8d52a`.
++
++`session::stale_poll_mail_tests::guardian_stopped_turn_cannot_take_replacement_turn_input`
++uses the existing #2010/#2033 session fixture. It starts a real session task,
++polls guardian's targeted stop until cancellation has detached the old task,
++then holds that stop future while installing a replacement task. It steers one
++user input into the new turn and enqueues one mailbox message. A notification
++releases the old task to poll exactly once before the stop finishes. Assertions
++check that the old task takes nothing, that it does not attribute mail to the
++replacement, and that the replacement receives both complete inputs and tracks
++the mailbox identity. There are no model calls or timing-dependent sleeps;
++the poll notification has a two-second timeout.
++
++Commands are run from the supplied checkout (`just` selects `codex-rs`):
++
++```sh
++unset CORBANU_HOME CODEX_HOME
++export CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/bench1114-b1r-astra
++export CARGO_BUILD_JOBS=8
++export RUST_MIN_STACK=8388608
++just test -pcodex-core --lib -j8 --locked --offline --no-tests=fail --retries 0 -E 'test(guardian_stopped_turn_cannot_take_replacement_turn_input)'
++```
++
++The attached package spelling scopes the library-only run without asking the
++isolation wrapper to build unrelated integration helper executables. The normal
++disposable-profile/native-keyring denial wrapper remains in use.
++
++Before-fix outcome: **FAIL**, exit 100 (nextest run
++`f0004170-a157-492f-bbb8-0abaacf63644`), 0 passed / 1 failed. The assertion
++`stopped task stole replacement input` showed both the complete `UserInput`
++(`replacement-message`) and `InterAgentCommunication` in the stale poll, where
++an empty vector was expected.
++After-fix outcome: **PASS** in focused run
++`71329676-e65f-4ad1-904f-243106061681`, 28 passed / 0 failed, including the
++regression and the existing all-stop-path reproduction. Both before/after runs
++used the shell-selected Rust 1.95.0. The regression took 0.151 seconds after the
++fix. Build/test process RSS monitoring observed maxima below 6.4 GiB.
++
++## Implementation and checks
++
++`InputQueue::get_pending_input_for_running_task` now requires the polling task's
++turn ID. Under the active-turn lock it rejects an absent task, a reserved slot
++without a task, and a replacement with another ID. It retains the lock through
++input draining and mailbox tracking so abort cleanup cannot run between checking
++ownership and recording the mail taken. `run_turn` supplies its own turn ID.
++Task-start admission retains its separate eligibility rules.
++
++The regression's positive control uses the production running-task poll for the
++replacement. The existing stopped-slot test also covers reserved slots and checks
++that normal task admission can still take ready mail in both states.
++
++Formatting: `cargo fmt -p codex-core -- --config imports_granularity=Item`
++completed successfully. Stable rustfmt warned that the nightly-only
++`imports_granularity` option was ignored. Formatting has no `-j` option;
++`CARGO_BUILD_JOBS=8` was set.
++
++Final Clippy command (from the checkout root, retaining its configured Cargo
++cache and selecting the complete installed repository-pinned toolchain):
++
++```sh
++export CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/bench1114-b1r-astra
++export CARGO_BUILD_JOBS=8
++export PATH="$RUSTUP_HOME/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH"
++cd codex-rs
++cargo clippy -p codex-core --all-targets -j8 --locked --offline -- -D warnings
++```
++
++An initial Clippy invocation with the tool's working-directory override omitted
++the checkout's configured Cargo home and failed offline dependency resolution
++(`notify 8.2.1`). The command above keeps the checkout environment and uses the
++same available cache as the successful reproduction build. No dependency or
++lockfile edits or network fetches were used.
++
++Focused command (same test environment as above):
++
++```sh
++just test -pcodex-core --lib -j8 --locked --offline --no-tests=fail --retries 0 -E 'test(session::input_queue::tests::) | test(session::stale_poll_mail_tests::) | test(session::tests::steer_input_) | test(mailbox_delivery) | test(abort_does_not_advance)'
++```
++
++A first focused invocation also supplied `--test-threads 8`; nextest rejected it
++because `-j8` already sets that value. Removing the duplicate produced the passing
++run above. `CARGO_BUILD_JOBS=8` also limits the underlying compiler jobs.
++
++Rust 1.95 Clippy reached core and reported ten `nonminimal_bool` diagnostics in
++unchanged files: `security/tainted_action/grammar.rs`,
++`security/tainted_action/unknown_folder.rs`,
++`security/tainted_action/windows_shell.rs`, and `tools/sandboxing.rs`. The base
++contains those expressions. The repository pins 1.99.1, which is already installed,
++so qualification was repeated with that toolchain's `bin` directory first
++on `PATH`. An intermediate `rustup run 1.99.1 cargo clippy ...` still selected the
++1.95 `cargo-clippy` executable from the inherited `PATH` and repeated the same
++ten diagnostics; it is not counted as a 1.99 Clippy result. Explicitly selecting
++the complete toolchain reports rustc 1.99.1, Clippy 0.1.99, and rustfmt 1.10.0.
++Formatting with that toolchain made no further changes.
++
++Final pinned-toolchain Clippy outcome: **PASS**, exit 0, all codex-core targets,
++`-D warnings`, in 3m 47s. Cargo printed a future-compatibility advisory about the
++existing dependency `proc-macro-error2 2.0.1`; there were no Clippy diagnostics.
++Pinned `cargo fmt -p codex-core -- --check` also passed (exit 0), with the same
++nightly-only formatting-option warning. Release-note `check` (63 fragments) and
++`preview`, plus `git diff --check`, passed.
++
++Final focused run with the complete pinned toolchain selected: **PASS**, exit 0,
++28 passed / 0 failed, nextest run `3f00f72a-4de6-4339-87bc-40991e84d9ee`.
++This used the same focused command and isolation settings after the last formatting
++run, with the 1.99.1 toolchain directory prepended to `PATH` as above. The regression
++passed in 0.154 seconds; the selected tests completed in 0.464 seconds after a
++4m 20s build. The macOS linker emitted a non-fatal large `__eh_frame` compact-unwind
++warning for the core test binary, and Cargo repeated the dependency future-compatibility
++advisory. Neither prevented successful execution.
++
++## Qualification scope
++
++This is local core regression verification, not a release or human-test handoff.
++True-TUI execution, independent code-blind functional qualification, live-repository
++qualification, and named-human acceptance are not claimed. Those remain required
++at the applicable product handoff; the user's checkout-only, offline scope does
++not provide that qualification environment.

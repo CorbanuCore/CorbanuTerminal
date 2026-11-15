@@ -1,0 +1,20 @@
+I found no blocking defects. The new cache gives the same result as the old calculation in every parse, and I found no new security, compatibility or performance risk. I only read the code; I did not build it or run the tests.
+
+**Why the results match:** `feeds_finished[i]` is set when a finished command's `fed_by` contains `i`. Every `fed_by` entry comes from `close_substitution`, `shell.rs:985`. Those entries are always the indices of the closing substitution's commands. Each one is already in `done` and is smaller than the index of the command that later receives it.
+
+So when a substitution closes, any `true` flag at an index from `open.first` onward was set by a command at an index from `open.first` onward. That matches the old `HashSet` built from `done[open.first..]`. Other sources of `fed_by` entries:
+- `indirect.rs` only reads `fed_by`.
+- Skipped (too-deep) substitutions add no `fed_by` entries.
+- `finish()` closes substitutions through the same path.
+
+There is only one `Lexer` construction, at `shell.rs:174`, and every push to `done` goes through `finish_current`. That keeps `feeds_finished` the same length as `done`, so `self.feeds_finished[index]` cannot go out of bounds.
+
+**Low and nit findings, none blocking:**
+
+1. **Low (test quality), `shell_substitution_tests.rs:28–63`:** The only check that the cache matches the old calculation is the `#[cfg(test)]` hook at `shell.rs:960–961`. It runs only inside test builds and only on unskipped closes. The new test asserts that every `fed_by` index is smaller than its command's index and checks the `too_deep` limit, but it never compares the commands it produces with a known answer. If someone later removes or weakens the hook, this test still passes and stops proving anything. **Suggested fix:** in the test, add direct `assert_eq!` checks on the `fed_by` sets and spliced words for one or two cases, such as `echo $(printf $(echo two))`, so the test protects behaviour on its own.
+
+2. **Nit (performance), `shell.rs:953–958`:** The change only removes the `HashSet`. `close_substitution` still builds an `inner` `Vec`, and `fed_by.extend(inner)` still copies every nested index into each enclosing command. Marking those indices in `finish_current` therefore still costs O(commands × depth), the same as before. This is not a regression, but the gain is a constant factor. The commit message and benchmark comment should not imply a better complexity class.
+
+3. **Nit (docs), `shell.rs:662–663`:** The doc comment on `feeds_finished` says why the cache is safe but not what it holds. **Suggested wording:** `feeds_finished[i]: some finished command's fed_by contains i (its output was already consumed by a command substitution).`
+
+VERDICT: APPROVE

@@ -1,0 +1,39 @@
+I found no blocking security or crash defect: the change only adds explanation text and never changes what runs or what is denied. But the new warning gives wrong advice in a setup the change's own integration test uses, and the line parsing can misreport non-write failures as blocked writes.
+
+**1. Medium — the "switch to Permissive" advice is wrong when approvals are off**
+- **Where:** `core/src/security/protected_reads/moderate.rs:378-388` (`git_write_explanation`); the advice is asserted at `core/tests/suite/issue_1139.rs:83` and `:180`.
+- **Problem:** Writing into `.git` is blocked by the person's own workspace-write sandbox, not by Moderate's protected-path rules. Switching to Permissive only helps if an approved command can then run outside the sandbox, which also depends on the approval policy:
+  - With `AskForApproval::Never`, a request to run outside the sandbox is refused (`orchestrator.rs:533`, `refused_approvals_off`).
+  - The same happens with Granular approvals when sandbox approval is disabled.
+- **Why it's different from before:** For the existing write warnings this advice holds, because Permissive drops Moderate's protected-path rules entirely. For a `.git` write it doesn't.
+- **Scenario:** The integration test itself: approvals set to `Never`, workspace-write, Moderate, then `git config user.name x`. The warning tells the person to switch to Permissive. After a restart into Permissive the same command fails the same way, and the person gets no explanation at all (the test asserts that).
+- **Fix:** Offer Permissive only when the approval policy lets a person approve a run outside the sandbox. Add that to the explanation inputs, or fall back to "run it in your own terminal" only. Add a test for the `Never` case.
+
+**2. Low — any denial line that mentions a `.git` path counts as a blocked write**
+- **Where:** `moderate.rs:355-372` (`git_path_in_lines`) together with `git_folder_write` at `:338`.
+- **Problem:** A token passes if it has a `.git` component and the sandbox doesn't allow writing it. That is true for every path under the protected `.git`, whether the failed operation was a write or not.
+- **Scenario:** `git log` in a repo where some files under `.git` are root-owned (after a `sudo git …`):
+  - git prints `fatal: could not open '.git/objects/pack/x.idx' for reading: Permission denied`.
+  - The person is told "Security level Moderate blocked writing `.git/objects/pack/x.idx`".
+  - A false Moderate refusal is recorded in the security inspector (`record_refusal`).
+- The same happens with `error: cannot exec '.git/hooks/pre-commit': Permission denied`.
+- **Fix:** Require a write signal in the line (`could not lock`, `Unable to create`, `for writing`, `cannot create`, or a redirect target such as `bash: …`). Or only accept lines whose marker is `Operation not permitted` or `Read-only file system` and that don't contain `for reading` or `exec`.
+
+**3. Low — hand-rolled line parsing misses denials the existing helper catches**
+- **Where:** `moderate.rs:362-368`.
+- **Problem:** It splits on whitespace, trims a fixed set of characters, and resolves paths only against `cwd`. The module already has `path_in_lines` and `paths_in_denial_line`, which handle quoted paths containing spaces and also resolve against folders the command names.
+- **Missed cases:**
+  - `fatal: Unable to create '/Users/me/My Project/.git/index.lock': Operation not permitted` breaks into `Project/.git/index.lock`, which is rejected.
+  - `git -C sub config …` reporting `.git/config` relative to `sub` is resolved against `cwd` and missed.
+- **Fix:** Reuse `path_in_lines(command, cwd, user_home, codex_home, lines, &git_write)`.
+
+**4. Nit — the `.git` check uses the outermost `.git` folder**
+- **Where:** `moderate.rs:340-345`.
+- **Problem:** The loop keeps the last `.git` it meets, which is the one nearest the filesystem root. If a writable folder itself sits under a directory named `.git`, it looks at the wrong parent and misses the denial.
+- **Fix:** Accept the path if any `.git` ancestor's parent is writable.
+
+**5. Nit — the TUI test duplicates core's wording**
+- **Where:** `tui/src/chatwidget/tests/app_server.rs:821`.
+- **Problem:** The full warning text is hard-coded, so it will silently drift from `git_write_explanation`. The test only proves that a warning cell renders.
+
+VERDICT: REQUEST_CHANGES

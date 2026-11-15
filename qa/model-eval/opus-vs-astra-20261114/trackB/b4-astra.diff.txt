@@ -1,0 +1,476 @@
+diff --git a/codex-rs/core/src/security/tainted_action.rs b/codex-rs/core/src/security/tainted_action.rs
+index 1dcdd94d29..9b80681e83 100644
+--- a/codex-rs/core/src/security/tainted_action.rs
++++ b/codex-rs/core/src/security/tainted_action.rs
+@@ -649,6 +649,18 @@ fn judged_readings(read: impl Fn(shell::Reading, AssignmentReading) -> Classifie
+ fn judged_syntax_readings(read: impl Fn(shell::Reading) -> Classifier) -> Classifier {
+     let mut classifier = read(shell::Reading::LiteralBraces);
+     let mut redirections_read_newly = classifier.redirections_read_newly;
++    if classifier.reserved_braces_read_newly {
++        // #2018: even the prior literal reading can be louder, e.g.
++        // `! { echo ok; } | bash` treated its feeder as unseen code.
++        let previous = read(shell::Reading::LiteralBracesBeforeKeywords);
++        classifier.assignments_read_newly |= previous.assignments_read_newly;
++        if let Some(kind) = previous.found {
++            classifier.note(kind);
++        }
++    }
++    // With no retained literal braces, the new reading already equals
++    // Redirections, so the previous literal reading needs no separate copy
++    // of that baseline. Otherwise keep the full pre-#1975 floor as before.
+     if classifier.braces_read_newly {
+         let baseline = read(shell::Reading::Redirections);
+         redirections_read_newly = baseline.redirections_read_newly;
+@@ -792,6 +804,7 @@ impl Classifier {
+             assignments_read_newly: false,
+             redirections_read_newly: false,
+             braces_read_newly: false,
++            reserved_braces_read_newly: false,
+             scripts_read: 0,
+             rebuilt: 0,
+             not_shell: 0,
+@@ -1549,6 +1562,8 @@ struct Classifier {
+     redirections_read_newly: bool,
+     /// #1975: literal braces changed this reading.
+     braces_read_newly: bool,
++    /// #2018: reserved-word groups changed the prior literal-brace reading.
++    reserved_braces_read_newly: bool,
+     scripts_read: usize,
+     /// #1261: under Windows path rules, whether the first judgment lexed
+     /// text holding a backslash. Its POSIX lexer drops every backslash
+@@ -1998,6 +2013,7 @@ impl Classifier {
+         self.assignments_read_newly |= lexed.comments_read_newly;
+         self.redirections_read_newly |= lexed.redirections_read_newly;
+         self.braces_read_newly |= lexed.braces_read_newly;
++        self.reserved_braces_read_newly |= lexed.reserved_braces_read_newly;
+         if !self.stat_builtin {
+             self.stat_builtin = code_tables::may_load_stat(command, &lexed.commands);
+         }
+diff --git a/codex-rs/core/src/security/tainted_action/shell.rs b/codex-rs/core/src/security/tainted_action/shell.rs
+index b1148e7f91..971820bd3d 100644
+--- a/codex-rs/core/src/security/tainted_action/shell.rs
++++ b/codex-rs/core/src/security/tainted_action/shell.rs
+@@ -138,6 +138,8 @@ pub(super) struct Lexed {
+     pub(super) redirections_read_newly: bool,
+     /// #1975: literal braces retained instead of discarded or read as groups.
+     pub(super) braces_read_newly: bool,
++    /// #2018: a reserved-word brace boundary differs from the prior literal reading.
++    pub(super) reserved_braces_read_newly: bool,
+     /// Assignment flow skipped possible comments; retain the literal reading too.
+     pub(super) comments_read_newly: bool,
+ }
+@@ -173,15 +175,17 @@ pub(super) enum Reading {
+     Legacy,
+     /// #1772 redirections, with the original brace handling.
+     Redirections,
+-    /// #1772 redirections and #1975 literal brace arguments.
++    /// #1975 literal braces before #2018 recognized reserved-word boundaries.
++    LiteralBracesBeforeKeywords,
++    /// #1772 redirections and literal brace arguments, with reserved-word groups.
+     #[default]
+     LiteralBraces,
+ }
+ 
+ /// [`simple_commands`] under one reading. The classifier combines the
+ /// strongest finding from the changed reading and both pre-#1975 readings.
+-/// Redirection changes are enabled except in `Legacy`; literal brace
+-/// handling is enabled only in `LiteralBraces`. Helper lexers stay `Legacy`.
++/// Redirection changes are enabled except in `Legacy`; the two literal-brace
++/// readings differ only at reserved-word groups. Helper lexers stay `Legacy`.
+ /// Each flag records whether its change affected the lexed text, so an
+ /// equivalent reading need not be judged again.
+ pub(super) fn simple_commands_read(command: &[String], reading: Reading) -> Lexed {
+@@ -230,6 +234,7 @@ pub(super) fn simple_commands_assignments(
+     }
+     let too_deep = lexer.too_deep;
+     let comments_read_newly = lexer.comments_read_newly;
++    let reserved_braces_read_newly = lexer.reserved_braces_read_newly;
+     // #1772 review 2: after `finish`, which reorders the last command.
+     let (commands, redirections_read_newly, braces_read_newly) = lexer.finish();
+     Lexed {
+@@ -237,6 +242,7 @@ pub(super) fn simple_commands_assignments(
+         incomplete,
+         too_deep,
+         comments_read_newly,
++        reserved_braces_read_newly,
+         redirections_read_newly,
+         braces_read_newly,
+     }
+@@ -744,6 +750,8 @@ struct Lexer {
+     redirections_read_newly: bool,
+     /// #1975: see `Lexed::braces_read_newly`.
+     braces_read_newly: bool,
++    /// #2018: see `Lexed::reserved_braces_read_newly`.
++    reserved_braces_read_newly: bool,
+ }
+ 
+ impl Lexer {
+@@ -1315,22 +1323,51 @@ impl Lexer {
+                 // #1975: in bash a brace argument cannot delimit a group.
+                 // Closing one at `git fetch -o '}' -- "$r"` splits off the
+                 // remote. Keep the main reading for its separate judgment.
++                // #2018: reserved prefixes still expect a command. Scan back
++                // so a retained literal brace stops later checks immediately;
++                // a successful check finishes the prefix at open_bracket.
+                 '{' if self.word.is_empty()
+                     && next.is_none_or(char::is_whitespace)
+-                    && (self.reading != Reading::LiteralBraces
+-                        || self.current.words.is_empty()) =>
++                    && (matches!(self.reading, Reading::Legacy | Reading::Redirections)
++                        || self.current.words.is_empty()
++                        || (self.reading == Reading::LiteralBraces
++                            && self.current.words.iter().rev().all(|word| {
++                                work::step();
++                                matches!(
++                                    word.as_str(),
++                                    "if" | "then"
++                                        | "elif"
++                                        | "else"
++                                        | "while"
++                                        | "until"
++                                        | "do"
++                                        | "!"
++                                        | "time"
++                                )
++                            }))) =>
+                 {
++                    self.reserved_braces_read_newly |=
++                        self.reading == Reading::LiteralBraces && !self.current.words.is_empty();
+                     self.open_bracket(Group::Brace);
+                 }
++                // A compound terminator can end the group without a semicolon.
++                // An ordinary command's argument named fi/done/esac cannot.
+                 '}' if self.word.is_empty()
+-                    && (self.reading != Reading::LiteralBraces
+-                        || self.current.words.is_empty()) =>
++                    && (matches!(self.reading, Reading::Legacy | Reading::Redirections)
++                        || self.current.words.is_empty()
++                        || (self.reading == Reading::LiteralBraces
++                            && matches!(self.current.words.as_slice(), [word]
++                                if matches!(word.as_str(), "fi" | "done" | "esac")))) =>
+                 {
++                    self.reserved_braces_read_newly |=
++                        self.reading == Reading::LiteralBraces && !self.current.words.is_empty();
+                     self.close_bracket(Group::Brace);
+                 }
+                 '{' | '}'
+-                    if self.reading == Reading::LiteralBraces
+-                        && (!parameter_brace || self.word.is_empty()) =>
++                    if matches!(
++                        self.reading,
++                        Reading::LiteralBraces | Reading::LiteralBracesBeforeKeywords
++                    ) && (!parameter_brace || self.word.is_empty()) =>
+                 {
+                     self.braces_read_newly = true;
+                     self.word.push(ch);
+diff --git a/codex-rs/core/src/security/tainted_action_brace_reading_tests.rs b/codex-rs/core/src/security/tainted_action_brace_reading_tests.rs
+index a876d377d0..09520bc9cf 100644
+--- a/codex-rs/core/src/security/tainted_action_brace_reading_tests.rs
++++ b/codex-rs/core/src/security/tainted_action_brace_reading_tests.rs
+@@ -10,6 +10,160 @@ use super::tainted_action_redirect_tests::workspace;
+ use super::*;
+ use pretty_assertions::assert_eq;
+ 
++// #2018: each of these must use group boundaries in the newest reading,
++// without mistaking those boundaries for literal brace arguments.
++const RESERVED_GROUPS: &[&str] = &[
++    "if true; then { echo g; }; fi",
++    "for x in a; do { echo d; }; done",
++    "if false; then :; else { echo e; }; fi",
++    "! { echo n; }",
++    "time { echo t; }",
++    "{ if true; then echo in; fi }",
++    "{ for x in a; do echo in; done }",
++    "{ case x in x) echo in;; esac }",
++    "if { true; }; then :; fi",
++    "while { false; }; do :; done",
++    "until { true; }; do :; done",
++    "if false; then :; elif { true; }; then :; fi",
++    "if true; then time ! { echo nested; }; fi",
++];
++
++fn reserved_group_readings(shell_name: &str) {
++    let mut actual = Vec::new();
++    let mut expected = Vec::new();
++    for line in RESERVED_GROUPS {
++        let argv = [
++            shell_name.to_string(),
++            "-c".to_string(),
++            (*line).to_string(),
++        ];
++        let new = shell::simple_commands_read(&argv, shell::Reading::LiteralBraces);
++        let baseline = shell::simple_commands_read(&argv, shell::Reading::Redirections);
++        let words = |lexed: shell::Lexed| {
++            lexed
++                .commands
++                .into_iter()
++                .map(|command| command.words)
++                .collect::<Vec<_>>()
++        };
++        actual.push((*line, new.braces_read_newly, words(new)));
++        expected.push((*line, false, words(baseline)));
++    }
++    assert_eq!(actual, expected, "{shell_name}");
++}
++
++#[test]
++fn issue_2018_bash_reserved_group_boundaries() {
++    reserved_group_readings("bash");
++}
++
++#[test]
++fn issue_2018_zsh_reserved_group_boundaries() {
++    reserved_group_readings("zsh");
++}
++
++#[test]
++fn issue_2018_keyword_arguments_keep_literal_braces() {
++    for shell_name in ["bash", "zsh"] {
++        for line in [
++            "echo then { echo g; }",
++            "time echo { echo t; }",
++            "echo fi }",
++            "echo done }",
++            "echo esac }",
++            "echo then do else elif ! time {",
++        ] {
++            let argv = [shell_name.to_string(), "-c".to_string(), line.to_string()];
++            let read = shell::simple_commands_read(&argv, shell::Reading::LiteralBraces);
++            assert!(read.braces_read_newly, "{shell_name}: {line}");
++            assert!(
++                read.commands.iter().any(|command| command
++                    .words
++                    .iter()
++                    .any(|word| matches!(word.as_str(), "{" | "}"))),
++                "{shell_name}: {line}"
++            );
++        }
++    }
++}
++
++#[test]
++fn issue_2018_reserved_prefix_scans_are_linear() {
++    for prefix in ["", "echo "] {
++        work::assert_linear("reserved words before literal braces", |scale| {
++            // At most 1,601 words: a long prefix followed by many braces,
++            // either retained as literals or consumed as group boundaries.
++            let words = "then ".repeat(200 * scale);
++            let braces = "{ ".repeat(200 * scale);
++            let line = format!("{prefix}{words}{braces}");
++            let _ = shell::simple_commands_read(&[line], shell::Reading::LiteralBraces);
++        });
++    }
++}
++
++#[test]
++fn issue_2018_reserved_groups_keep_older_verdict_floor() {
++    let root = workspace(SUB_EVIL);
++    for shell_name in ["bash", "zsh"] {
++        for line in LINES {
++            let action = action_in(root.path(), &[shell_name, "-lc", line]);
++            for as_named in [false, true] {
++                let current = if as_named {
++                    classify_as_named_with(&action, Path::new(HOME), Some(root.path()))
++                } else {
++                    classify_with(&action, Path::new(HOME), Some(root.path()))
++                };
++                assert_eq!(current, Some(ProtectedActionKind::Persistence));
++                for reading in [
++                    shell::Reading::LiteralBracesBeforeKeywords,
++                    shell::Reading::Redirections,
++                    shell::Reading::Legacy,
++                ] {
++                    let baseline = judged(
++                        &action,
++                        Homes::new(Path::new(HOME), Some(root.path())),
++                        as_named,
++                        reading,
++                        AssignmentReading::Reaching,
++                    )
++                    .found;
++                    assert!(
++                        current.map(rank) >= baseline.map(rank),
++                        "{shell_name}: named={as_named}: {line}: {current:?} < {baseline:?}"
++                    );
++                }
++            }
++        }
++    }
++}
++
++#[test]
++fn issue_2018_piped_groups_keep_prior_literal_verdict() {
++    let root = workspace(&[]);
++    for shell_name in ["bash", "zsh"] {
++        for line in ["! { echo ok; } | bash", "time { echo ok; } | bash"] {
++            let action = action_in(root.path(), &[shell_name, "-lc", line]);
++            for as_named in [false, true] {
++                let previous = judged(
++                    &action,
++                    Homes::new(Path::new(HOME), Some(root.path())),
++                    as_named,
++                    shell::Reading::LiteralBracesBeforeKeywords,
++                    AssignmentReading::Reaching,
++                )
++                .found;
++                assert_eq!(previous, Some(ProtectedActionKind::UnseenCode));
++                let current = if as_named {
++                    classify_as_named_with(&action, Path::new(HOME), Some(root.path()))
++                } else {
++                    classify_with(&action, Path::new(HOME), Some(root.path()))
++                };
++                assert_eq!(current, previous, "{shell_name}: {line}");
++            }
++        }
++    }
++}
++
+ const LINES: &[&str] = &[
+     ">log cd sub; ./run.sh",
+     "{ >log cd sub; ./run.sh; }",
+diff --git a/qa/release/unreleased/issue-2018-brace-groups.md b/qa/release/unreleased/issue-2018-brace-groups.md
+new file mode 100644
+index 0000000000..5b493ca2a0
+--- /dev/null
++++ b/qa/release/unreleased/issue-2018-brace-groups.md
+@@ -0,0 +1,128 @@
++# Issue #2018: reserved-word brace groups
++
++- Class: bounded fix to the post-taint shell reader; no authorization, financial,
++  disclosure, persistence, or compatibility boundary changes.
++- Product authority: `docs/corbanu-product-spec.md`, exact heading
++  **Non-negotiable controls**, requirement: “Classify instruction intent and
++  provenance before external content can influence tools or financial actions.”
++- Scope: recognize brace groups after reserved command prefixes and closing
++  braces after `fi`, `done`, and `esac`. Preserve independent older readings and
++  their verdict floor. Keep the existing lexer module because this fixes its
++  delimiter guards rather than introducing a new subsystem.
++- Interactive/code-blind/live-repository qualification: not applicable to this
++  internal parsing precision change. No interactive path or user workflow is
++  added or changed; no human-test or release-readiness claim is made. All probes
++  classify strings and synthetic files without executing their shell payloads.
++
++## Implementation and safety floor
++
++`shell.rs` recognizes opening braces after reserved command prefixes and closing
++braces after a lone compound terminator. Prefix checks scan backward and count
++work, so a retained literal brace stops repeated scans of a rejected prefix.
++
++The first implementation exposed a previously untested compatibility detail:
++`! { echo ok; } | bash` and `time { echo ok; } | bash` were classified as
++`UnseenCode` by the previous literal-brace reading, in both shells. The corrected
++implementation preserves that exact reading as `LiteralBracesBeforeKeywords`
++and combines its verdict in `tainted_action.rs` whenever a reserved-word brace
++boundary changed. It also retains the complete Redirections/Legacy floor.
++When the new reading has no literal-brace differences, it already supplies the
++Redirections result, avoiding a duplicate of that pass. No speedup is claimed.
++
++## Validation commands
++
++All commands ran locally and offline. Compilation used `-j8` and exactly:
++
++```sh
++export CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/bench1114-b4-astra
++export CARGO_BUILD_JOBS=8 CARGO_NET_OFFLINE=true
++unset CORBANU_HOME CODEX_HOME
++export RUST_MIN_STACK=8388608
++```
++
++Tests use the repository's isolated `just test` wrapper. The attached
++`-pcodex-core --lib` selects unit tests without building unrelated integration
++helper binaries. Final checks use the locally installed pinned Rust 1.99.1
++(toolchain bin directory prepended to `PATH`); initial baseline checks used the
++ambient Rust 1.95.0. No toolchain or dependency downloads were performed.
++
++- Regression-only commit: `f8441066c1`, based on `6cf404cf18`.
++  `just test -pcodex-core --lib -j8 --locked --offline -E 'test(issue_2018_)'`:
++  **2 failed**, 0 passed. Both `issue_2018_bash_reserved_group_boundaries` and
++  `issue_2018_zsh_reserved_group_boundaries` report every listed spelling, plus
++  `if`/`while`/`until`/`elif` and stacked prefixes. Raw log:
++  `issue-2018-before.log` at the checkout root.
++- Existing-suite baseline:
++  `just test -pcodex-core --lib -j8 --locked --offline -E 'test(security::tainted_action) & !test(issue_2018_)'`:
++  **414 passed**. Raw log: `issue-2018-baseline-suite.log`.
++- Final suite:
++  `just test -pcodex-core --lib -j8 --locked --offline -E 'test(security::tainted_action)'`:
++  **420 passed**, including all six #2018 tests. The reduced floor test passed
++  in 19.607 seconds; the suite completed in 105.611 seconds. Raw log:
++  `issue-2018-final-suite.log`. The final source was formatted before its
++  compilation and test execution.
++- Final Clippy, from `codex-rs/`:
++  `cargo clippy -p codex-core --all-targets -j8 --locked --offline -- -D warnings`:
++  **passed**, exit 0, using Rust 1.99.1. Raw log:
++  `issue-2018-clippy-final.log`. Cargo separately reports an existing dependency
++  future-compatibility warning for `proc-macro-error2 2.0.1`.
++- Formatting:
++  `sandbox-exec -p '(version 1)(allow default)(deny network*)' just fmt`,
++  with Rust 1.99.1 and `UV_OFFLINE=true`: **passed**, exit 0. The OS network
++  denial prevents formatter tools from downloading anything. Raw log:
++  `issue-2018-fmt-complete.log`.
++- Release fragments: `python3 scripts/release/release_notes.py check` and
++  `python3 scripts/release/release_notes.py preview`: **passed**, 77 valid
++  fragments. `git diff --check`: **passed**.
++
++## Direct comparison with the pre-fix classifier
++
++The bounded corpus has 15 group/literal-control templates × 9 payloads × 3
++suffixes = **405 lines**. Payloads cover harmless output, protected writes,
++credential/vault reads, outbound data, literal-brace Git options, redirected
++directory changes and variable assignments. Suffixes include piping to bash.
++Nothing in the corpus is executed.
++
++On both the regression-only baseline and final implementation, run the existing
++measuring harness with `CORBANU_CLASSIFIER_CORPUS` set to the checkout's
++`issue-2018-corpus.log`, `CORBANU_CLASSIFIER_EVENTS` set to a distinct output
++file, and `CORBANU_CLASSIFIER_THREADS=2`:
++
++```sh
++just test -pcodex-core --lib -j8 --locked --offline --run-ignored all \
++  -E 'test(dump_classifier_events)'
++```
++
++Both runs passed. The harness judges each input as both `/bin/bash` and
++`/bin/zsh`. Comparison checks identical (line index, shell) keys, rejects
++panics/unknown findings, and orders findings using the classifier's `rank`
++order, with `None` below every finding.
++
++**Final result: 810 judgments, 0 quieter, 0 louder, 810 unchanged; no panics.**
++This is the measured corpus, not a claim to have rerun the issue's 193,500-line
++external review corpus.
++
++Local raw artifacts (checkout root, intentionally uncommitted):
++`issue-2018-baseline-events.log`, `issue-2018-complete-events.log`,
++`issue-2018-baseline-corpus.log`, `issue-2018-complete-corpus.log`, and
++`issue-2018-comparison-final.log`. The final harness run took 50.355 seconds.
++No required task checks remain unfinished; full-workspace tests and packaged
++interactive/release qualification are outside this internal-parser task.
++
++## Preserved intermediate attempts
++
++- An initial Clippy command launched with an explicit subdirectory lacked the
++  configured Cargo cache and failed offline resolution for `notify 8.2.1`.
++  Re-running from the checkout environment resolved dependencies offline.
++- Ambient Rust 1.95.0 Clippy reported ten existing `nonminimal_bool` diagnostics
++  outside the changed files. The repository-pinned 1.99.1 run passed on the
++  intermediate implementation; final validation uses that pinned toolchain.
++- The first after-fix suite passed 418 tests but timed out the new redundant
++  verdict-floor matrix at 60 seconds on both runner attempts. The test now
++  covers the affected spellings and both public entry paths; the existing
++  suites retain the redirection and assignment cross-products. No timeout or
++  runner limits were increased. Raw log: `issue-2018-after-suite.log`.
++- The first differential run found **4 quieter / 806 unchanged** judgments.
++  This led to the prior-literal-reading fallback and a dedicated piped-group
++  regression. Raw intermediate artifacts remain at the checkout root:
++  `issue-2018-fixed-events.log` and `issue-2018-comparison.log`.
+diff --git a/qa/release/unreleased/notes/2018-reserved-word-brace-groups.md b/qa/release/unreleased/notes/2018-reserved-word-brace-groups.md
+new file mode 100644
+index 0000000000..47f4ed77c4
+--- /dev/null
++++ b/qa/release/unreleased/notes/2018-reserved-word-brace-groups.md
+@@ -0,0 +1,6 @@
++## Security
++
++- The post-taint shell classifier recognizes brace groups after shell control
++  words such as `then`, `do`, `else`, `!`, and `time`, and closing braces after
++  `fi`, `done`, and `esac`. Earlier readings, including the prior literal-brace
++  reading, remain a conservative verdict floor (#2018).

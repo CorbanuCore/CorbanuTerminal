@@ -1,0 +1,19 @@
+LOCAL ONLY: do not git push, do not use gh to create/edit/comment/review/merge anything, do not contact contributors.
+
+You are an independent code reviewer for CorbanuTerminal (a security-focused fork of the OpenAI Codex CLI; Rust workspace under codex-rs/). Review the proposed change in this local checkout: the diff from base c7940995571530aacb20b9750c4bacec45eb3661 to HEAD 0e1b4ef58a432e64149b8ef35d47a840164acdd4.
+
+Useful commands: `git log --oneline c7940995571530aacb20b9750c4bacec45eb3661..HEAD`, `git diff --stat c7940995571530aacb20b9750c4bacec45eb3661 HEAD`, `git diff c7940995571530aacb20b9750c4bacec45eb3661 HEAD -- <file>`. You may read any file in this checkout, including unchanged files the change interacts with.
+
+Changed files:
+  - codex-rs/core/src/config/config_loader_tests.rs
+  - codex-rs/core/src/config/config_tests.rs
+  - codex-rs/core/src/config/mod.rs
+  - codex-rs/core/src/config/network_proxy_spec.rs
+  - codex-rs/core/src/config/permissions.rs
+  - docs/management/upstreamSync/ledger-rust-v0.167.0-main-merges.tsv
+  - docs/management/upstreamSync/ledger-rust-v0.167.0.tsv
+
+Rules: work only from this local checkout. Do not use GitHub, the network, or files outside this directory (no other worktrees, notes or logs), except read-only dependency sources under ~/.cargo/registry/src. Do not build or run tests; reading code is enough.
+
+Task: find defects this change introduces or exposes — correctness, security, performance, test quality, compatibility. For each finding give: severity (critical/high/medium/low/nit), file:line, what is wrong, a concrete input or scenario that triggers it where possible, and a suggested fix. Be precise; do not pad with style nits. If you find no blocking defect, say so plainly.
+End with exactly one line: VERDICT: APPROVE or VERDICT: REQUEST_CHANGES

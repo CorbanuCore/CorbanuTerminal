@@ -1,0 +1,358 @@
+diff --git a/codex-rs/agent-roles/src/agent_role_config.rs b/codex-rs/agent-roles/src/agent_role_config.rs
+index 0e53a71957..a8bea212e3 100644
+--- a/codex-rs/agent-roles/src/agent_role_config.rs
++++ b/codex-rs/agent-roles/src/agent_role_config.rs
+@@ -64,9 +64,10 @@ pub fn parse_agent_role_file_contents(
+         &format!("agent role file {}.description", role_file_label.display()),
+         parsed.description.as_deref(),
+     )?;
+-    validate_agent_role_file_developer_instructions(
++    validate_agent_role_file_instructions(
+         role_file_label,
+         parsed.config.developer_instructions.as_deref(),
++        parsed.config.instructions.as_deref(),
+         role_name_hint.is_none(),
+     )?;
+ 
+@@ -131,11 +132,21 @@ pub(crate) fn normalize_agent_role_description(
+     }
+ }
+ 
+-fn validate_agent_role_file_developer_instructions(
++fn validate_agent_role_file_instructions(
+     role_file_label: &Path,
+     developer_instructions: Option<&str>,
++    base_instructions: Option<&str>,
+     require_present: bool,
+ ) -> std::io::Result<()> {
++    if matches!(base_instructions.map(str::trim), Some("")) {
++        return Err(std::io::Error::new(
++            std::io::ErrorKind::InvalidInput,
++            format!(
++                "agent role file at {}.base_instructions cannot be blank",
++                role_file_label.display()
++            ),
++        ));
++    }
+     match developer_instructions.map(str::trim) {
+         Some("") => Err(std::io::Error::new(
+             std::io::ErrorKind::InvalidInput,
+@@ -145,10 +156,11 @@ fn validate_agent_role_file_developer_instructions(
+             ),
+         )),
+         Some(_) => Ok(()),
++        None if base_instructions.is_some() => Ok(()),
+         None if require_present => Err(std::io::Error::new(
+             std::io::ErrorKind::InvalidInput,
+             format!(
+-                "agent role file at {} must define `developer_instructions`",
++                "agent role file at {} must define `developer_instructions` or `base_instructions`",
+                 role_file_label.display()
+             ),
+         )),
+diff --git a/codex-rs/agent-roles/src/loader.rs b/codex-rs/agent-roles/src/loader.rs
+index 8912a18053..a82649b8e1 100644
+--- a/codex-rs/agent-roles/src/loader.rs
++++ b/codex-rs/agent-roles/src/loader.rs
+@@ -216,211 +216,6 @@ async fn agent_role_config_from_toml(
+     })
+ }
+ 
+-<<<<<<< HEAD:codex-rs/core/src/config/agent_roles.rs
+-#[derive(Deserialize, Debug, Clone, Default, PartialEq)]
+-#[serde(deny_unknown_fields)]
+-struct RawAgentRoleFileToml {
+-    name: Option<String>,
+-    description: Option<String>,
+-    nickname_candidates: Option<Vec<String>>,
+-    #[serde(flatten)]
+-    config: ConfigToml,
+-}
+-
+-#[derive(Debug, Clone, PartialEq)]
+-pub(crate) struct ResolvedAgentRoleFile {
+-    pub(crate) role_name: String,
+-    pub(crate) description: Option<String>,
+-    pub(crate) nickname_candidates: Option<Vec<String>>,
+-    pub(crate) config: TomlValue,
+-}
+-
+-pub(crate) fn parse_agent_role_file_contents(
+-    contents: &str,
+-    role_file_label: &Path,
+-    config_base_dir: &Path,
+-    role_name_hint: Option<&str>,
+-) -> std::io::Result<ResolvedAgentRoleFile> {
+-    let role_file_toml: TomlValue = toml::from_str(contents).map_err(|err| {
+-        std::io::Error::new(
+-            std::io::ErrorKind::InvalidData,
+-            format!(
+-                "failed to parse agent role file at {}: {err}",
+-                role_file_label.display()
+-            ),
+-        )
+-    })?;
+-    let _guard = AbsolutePathBufGuard::new(config_base_dir);
+-    let parsed: RawAgentRoleFileToml = role_file_toml.clone().try_into().map_err(|err| {
+-        std::io::Error::new(
+-            std::io::ErrorKind::InvalidData,
+-            format!(
+-                "failed to deserialize agent role file at {}: {err}",
+-                role_file_label.display()
+-            ),
+-        )
+-    })?;
+-    let description = normalize_agent_role_description(
+-        &format!("agent role file {}.description", role_file_label.display()),
+-        parsed.description.as_deref(),
+-    )?;
+-    validate_agent_role_file_instructions(
+-        role_file_label,
+-        parsed.config.developer_instructions.as_deref(),
+-        parsed.config.instructions.as_deref(),
+-        role_name_hint.is_none(),
+-    )?;
+-
+-    let role_name = parsed
+-        .name
+-        .as_deref()
+-        .map(str::trim)
+-        .filter(|name| !name.is_empty())
+-        .map(ToOwned::to_owned)
+-        .or_else(|| role_name_hint.map(ToOwned::to_owned))
+-        .ok_or_else(|| {
+-            std::io::Error::new(
+-                std::io::ErrorKind::InvalidInput,
+-                format!(
+-                    "agent role file at {} must define a non-empty `name`",
+-                    role_file_label.display()
+-                ),
+-            )
+-        })?;
+-
+-    let nickname_candidates = normalize_agent_role_nickname_candidates(
+-        &format!(
+-            "agent role file {}.nickname_candidates",
+-            role_file_label.display()
+-        ),
+-        parsed.nickname_candidates.as_deref(),
+-    )?;
+-
+-    let mut config = role_file_toml;
+-    let Some(config_table) = config.as_table_mut() else {
+-        return Err(std::io::Error::new(
+-            std::io::ErrorKind::InvalidData,
+-            format!(
+-                "agent role file at {} must contain a TOML table",
+-                role_file_label.display()
+-            ),
+-        ));
+-    };
+-    config_table.remove("name");
+-    config_table.remove("description");
+-    config_table.remove("nickname_candidates");
+-
+-    Ok(ResolvedAgentRoleFile {
+-        role_name,
+-        description,
+-        nickname_candidates,
+-        config,
+-    })
+-}
+-
+-||||||| 413492cd6c:codex-rs/core/src/config/agent_roles.rs
+-#[derive(Deserialize, Debug, Clone, Default, PartialEq)]
+-#[serde(deny_unknown_fields)]
+-struct RawAgentRoleFileToml {
+-    name: Option<String>,
+-    description: Option<String>,
+-    nickname_candidates: Option<Vec<String>>,
+-    #[serde(flatten)]
+-    config: ConfigToml,
+-}
+-
+-#[derive(Debug, Clone, PartialEq)]
+-pub(crate) struct ResolvedAgentRoleFile {
+-    pub(crate) role_name: String,
+-    pub(crate) description: Option<String>,
+-    pub(crate) nickname_candidates: Option<Vec<String>>,
+-    pub(crate) config: TomlValue,
+-}
+-
+-pub(crate) fn parse_agent_role_file_contents(
+-    contents: &str,
+-    role_file_label: &Path,
+-    config_base_dir: &Path,
+-    role_name_hint: Option<&str>,
+-) -> std::io::Result<ResolvedAgentRoleFile> {
+-    let role_file_toml: TomlValue = toml::from_str(contents).map_err(|err| {
+-        std::io::Error::new(
+-            std::io::ErrorKind::InvalidData,
+-            format!(
+-                "failed to parse agent role file at {}: {err}",
+-                role_file_label.display()
+-            ),
+-        )
+-    })?;
+-    let _guard = AbsolutePathBufGuard::new(config_base_dir);
+-    let parsed: RawAgentRoleFileToml = role_file_toml.clone().try_into().map_err(|err| {
+-        std::io::Error::new(
+-            std::io::ErrorKind::InvalidData,
+-            format!(
+-                "failed to deserialize agent role file at {}: {err}",
+-                role_file_label.display()
+-            ),
+-        )
+-    })?;
+-    let description = normalize_agent_role_description(
+-        &format!("agent role file {}.description", role_file_label.display()),
+-        parsed.description.as_deref(),
+-    )?;
+-    validate_agent_role_file_developer_instructions(
+-        role_file_label,
+-        parsed.config.developer_instructions.as_deref(),
+-        role_name_hint.is_none(),
+-    )?;
+-
+-    let role_name = parsed
+-        .name
+-        .as_deref()
+-        .map(str::trim)
+-        .filter(|name| !name.is_empty())
+-        .map(ToOwned::to_owned)
+-        .or_else(|| role_name_hint.map(ToOwned::to_owned))
+-        .ok_or_else(|| {
+-            std::io::Error::new(
+-                std::io::ErrorKind::InvalidInput,
+-                format!(
+-                    "agent role file at {} must define a non-empty `name`",
+-                    role_file_label.display()
+-                ),
+-            )
+-        })?;
+-
+-    let nickname_candidates = normalize_agent_role_nickname_candidates(
+-        &format!(
+-            "agent role file {}.nickname_candidates",
+-            role_file_label.display()
+-        ),
+-        parsed.nickname_candidates.as_deref(),
+-    )?;
+-
+-    let mut config = role_file_toml;
+-    let Some(config_table) = config.as_table_mut() else {
+-        return Err(std::io::Error::new(
+-            std::io::ErrorKind::InvalidData,
+-            format!(
+-                "agent role file at {} must contain a TOML table",
+-                role_file_label.display()
+-            ),
+-        ));
+-    };
+-    config_table.remove("name");
+-    config_table.remove("description");
+-    config_table.remove("nickname_candidates");
+-
+-    Ok(ResolvedAgentRoleFile {
+-        role_name,
+-        description,
+-        nickname_candidates,
+-        config,
+-    })
+-}
+-
+-=======
+->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/agent-roles/src/loader.rs
+ async fn read_resolved_agent_role_file(
+     fs: &dyn ExecutorFileSystem,
+     path: &AbsolutePathBuf,
+@@ -453,71 +248,6 @@ fn validate_required_agent_role_description(
+     }
+ }
+ 
+-<<<<<<< HEAD:codex-rs/core/src/config/agent_roles.rs
+-fn validate_agent_role_file_instructions(
+-    role_file_label: &Path,
+-    developer_instructions: Option<&str>,
+-    base_instructions: Option<&str>,
+-    require_present: bool,
+-) -> std::io::Result<()> {
+-    if matches!(base_instructions.map(str::trim), Some("")) {
+-        return Err(std::io::Error::new(
+-            std::io::ErrorKind::InvalidInput,
+-            format!(
+-                "agent role file at {}.base_instructions cannot be blank",
+-                role_file_label.display()
+-            ),
+-        ));
+-    }
+-    match developer_instructions.map(str::trim) {
+-        Some("") => Err(std::io::Error::new(
+-            std::io::ErrorKind::InvalidInput,
+-            format!(
+-                "agent role file at {}.developer_instructions cannot be blank",
+-                role_file_label.display()
+-            ),
+-        )),
+-        Some(_) => Ok(()),
+-        None if base_instructions.is_some() => Ok(()),
+-        None if require_present => Err(std::io::Error::new(
+-            std::io::ErrorKind::InvalidInput,
+-            format!(
+-                "agent role file at {} must define `developer_instructions` or `base_instructions`",
+-                role_file_label.display()
+-            ),
+-        )),
+-        None => Ok(()),
+-    }
+-}
+-
+-||||||| 413492cd6c:codex-rs/core/src/config/agent_roles.rs
+-fn validate_agent_role_file_developer_instructions(
+-    role_file_label: &Path,
+-    developer_instructions: Option<&str>,
+-    require_present: bool,
+-) -> std::io::Result<()> {
+-    match developer_instructions.map(str::trim) {
+-        Some("") => Err(std::io::Error::new(
+-            std::io::ErrorKind::InvalidInput,
+-            format!(
+-                "agent role file at {}.developer_instructions cannot be blank",
+-                role_file_label.display()
+-            ),
+-        )),
+-        Some(_) => Ok(()),
+-        None if require_present => Err(std::io::Error::new(
+-            std::io::ErrorKind::InvalidInput,
+-            format!(
+-                "agent role file at {} must define `developer_instructions`",
+-                role_file_label.display()
+-            ),
+-        )),
+-        None => Ok(()),
+-    }
+-}
+-
+-=======
+->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/agent-roles/src/loader.rs
+ async fn validate_agent_role_config_file(
+     fs: &dyn ExecutorFileSystem,
+     role_name: &str,
+diff --git a/docs/management/upstreamSync/ledger-rust-v0.167.0.tsv b/docs/management/upstreamSync/ledger-rust-v0.167.0.tsv
+index b946e2abc3..7a459e7d19 100644
+--- a/docs/management/upstreamSync/ledger-rust-v0.167.0.tsv
++++ b/docs/management/upstreamSync/ledger-rust-v0.167.0.tsv
+@@ -38,7 +38,7 @@ codex-rs/.config/nextest.toml	content	UU	other	S0 manifests/locks/CI	0	integrato
+ codex-rs/.gitignore	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	19	false	false	false	false	
+ codex-rs/Cargo.lock	content	UU	schemas/locks	S0 manifests/locks/CI	0	integrator	no	resolved	merged	77	755	false	false	false	false	regenerated from main's lock; S3a (sync-s3a) edit: codex-network-proxy gains codex-log-guard (workspace crate; no third-party change); ci-1940 (#1940): rmcp/rmcp-macros 3.9.0 from crates.io (was the rust-sdk git rev); cargo's re-resolution also moved in-range edges: windows-sys 0.52/0.59/0.60 -> 0.61.2 for 17 crates, socket2 0.5.10 -> 0.6.3 for hyper-util/quinn/quinn-udp, base64 0.21.7 -> 0.22.1 for oauth2 (same as main after #1948; no package added or removed). Follow-ups for the rmcp-client slice (#1951): discovery failures are AuthError::DiscoveryRequestFailed (auth_status.rs tests; tests/mcp_2026_oauth_discovery.rs lines 116/245/408, and 409 also needs 'OAuth request exceeded' instead of 'OAuth discovery exceeded'); port #1948's readable-error fixes; ema_resource.rs trusts WWWAuthenticateParams::parse, which since rmcp 3.7 also accepts cross-origin public resource_metadata URLs (security review: restore same-origin or accept and test); rmcp now sends notifications/cancelled for dropped tools/call, prompts/get, resources/read (mock .expect counts); IPv4-embedding IPv6 and Teredo hosts are disallowed in OAuth discovery; ci-1982 (#1982): openssl 0.10.75 -> 0.10.78 (RUSTSEC-2026-0463; cargo update -p openssl --precise 0.10.78, nothing else moved, openssl-sys stays 0.9.118)
+ codex-rs/Cargo.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	19	179	false	false	false	false	union of workspaces; v8 patch points at CorbanuCore/rusty_v8 (D317); voice-host excluded (D316); ci-1940 (#1940): rmcp moves from upstream's git rev 98a54789 (3.5.1 plus 13 commits, an ancestor of 3.9.0) to crates.io =3.9.0, matching main; clears RUSTSEC-2026-0457/-0461/-0462
+-codex-rs/agent-roles/src/loader.rs	content	UU	other	S2c core agents	2	unassigned	no	open		2	137	false	false	false	false	
++codex-rs/agent-roles/src/loader.rs	content	UU	other	S2c core agents	2	unassigned	no	resolved	merged	2	137	false	false	false	false	Local sync repair: removed two moved-code conflict blocks; loader is byte-identical to upstream 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a. Corbanu main 1855c92ae188bbdd07fb816d1154ecb683f539de instruction validation is ported into agent_role_config.rs. Routine internal merge repair; product spec Accountable sequencing, Upstream Codex parity: "adopted without regressions to Corbanu-specific behavior". No new interactive behavior; TUI/code-blind qualification N/A for this repair (full sync qualification remains separate). Before: rustfmt --check failed on loader.rs:219 conflict marker; after: scoped rustfmt applied and check passed. Cargo check before/after and Clippy with -D warnings are BLOCKED offline by uncached crossterm ed1cdab335221515706178d68495bba2aed1924f; compile fail-before/pass-after gate remains unverified. just test -p codex-agent-roles --offline -j8 found zero tests/binaries (exit 4; crate disables unit tests/doctests), not a test pass.
+ codex-rs/analytics/src/analytics_client_tests.rs	modify/delete	UD	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	deleted	0	0	true	false	false	false	followed upstream's split of these tests into src/tests/suite (#46488); main's edits here were only compile fixes for new fields, re-applied in the suite files (follow-up rows)
+ codex-rs/analytics/src/client.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	7	148	false	false	false	false	SECURITY (#658): a fact still carries the sign-in resolved when it was recorded and is sent only with it (nothing while sessions run on different accounts); upstream's reducer now buffers pending tool events, so the worker remembers the sign-in they were recorded under: a fact with another sign-in first sends the pending events with the old one, and upstream's flush and thread-product updates send with that recorded sign-in, never one resolved later (e.g. after shutdown); upstream's auth_with_http_client_factory is used for the request
+ codex-rs/analytics/src/client_tests.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	2	152	true	false	false	false	both: our #658 sign-in test (queue gains product_generation) and upstream's account-switch batch test; upstream tests match Fact(_, sign_in)
+@@ -1801,3 +1801,4 @@ codex-rs/core/src/context_manager/provider_items.rs	follow-up	--	core	S2a core s
+ codex-rs/core/src/context/unsupported_media.rs	follow-up	--	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	resolved	ported	0	0	false	false	false	false	placeholder texts come from context_manager's consts so the security ingress registry and the model-visible text cannot drift
+ codex-rs/core/src/context_manager/provider_items_tests.rs	follow-up	--	core	S2a core session/client/turn	2	sync-s2a (maintainer)	no	open		0	0	false	false	false	false	OPEN (from #2042 review): #578 tests still build Message/OutputText without upstream's status/encrypted_content/annotations/logprobs fields; port at tier-exit compile
+ codex-rs/core/src/security/ingress/structural_tests.rs	follow-up	--	core	S3b security review	2	security owner	no	open		0	0	false	false	false	false	OPEN, security owner (from #2042 review): the test builds InputImage { image_url } (pre-upstream shape); core/src/security stays identical to main until the security owner ports it (S2a's strip_images_when_unsupported wrapper only fixes the call)
++codex-rs/agent-roles/src/agent_role_config.rs	follow-up	--	other	S2c core agents	2	unassigned	no	resolved	ported	0	0	false	false	false	false	Ported main 1855c92ae188bbdd07fb816d1154ecb683f539de core/src/config/agent_roles.rs into upstream's parser module: accept base_instructions (ConfigToml.instructions), reject blank base/developer instructions even when the other is present, and require either instruction field for discovered roles. Exact source parity verified for parse_agent_role_file_contents, validate_agent_role_file_instructions, normalize_agent_role_description and normalize_agent_role_nickname_candidates; loader/discovery/lib remain byte-identical to upstream. Formatting passes; Cargo compilation/Clippy remain blocked by the offline dependency prerequisite recorded on loader.rs.

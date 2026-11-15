@@ -1,0 +1,16 @@
+## [opus] clippy -p codex-core --all-targets -- -D warnings (toolchain: rustc 1.95.0 (59807616e 2026-04-14))
+exit=101
+   1 error: could not compile `codex-core` (lib) due to 10 previous errors
+  10 error: this boolean expression can be simplified
+   5    --> core/src/security/tainted_action/grammar.rs
+   1    --> core/src/security/tainted_action/unknown_folder.rs
+   3    --> core/src/security/tainted_action/windows_shell.rs
+   1    --> core/src/tools/sandboxing.rs
+## [astra] clippy -p codex-core --all-targets -- -D warnings (toolchain: rustc 1.95.0 (59807616e 2026-04-14))
+exit=101
+   1 error: could not compile `codex-core` (lib) due to 10 previous errors
+  10 error: this boolean expression can be simplified
+   5    --> core/src/security/tainted_action/grammar.rs
+   1    --> core/src/security/tainted_action/unknown_folder.rs
+   3    --> core/src/security/tainted_action/windows_shell.rs
+   1    --> core/src/tools/sandboxing.rs

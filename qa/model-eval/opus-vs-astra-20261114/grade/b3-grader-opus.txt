@@ -1,0 +1,27 @@
+Both engineers made the same source fix, but X proved it with tests and Y did not, so I prefer X.
+
+**Correctness.** Both solutions make the same changes to `agent-roles/src`, and the hidden check found that code byte-identical to the maintainers' merged resolution. Both remove the conflict blocks from `loader.rs`, leaving it as upstream's file. Both move main's `base_instructions` rule into `agent_role_config.rs`: a role file may set it alone, a blank value is rejected, and the error names both fields. The hidden check confirms for both that compile and clippy pass and that all 3 hidden behaviour tests pass. Both missed the 8 builtin-asset ledger rows that the merged resolution also marked resolved.
+
+**X.**
+- **Tests:** X committed a new 4-test file first (`ce397d45d2`), then the fix (`908bff476a`).
+  - Before the fix, the build failed on the conflict marker.
+  - X also ran an upstream-only resolution without the Corbanu rule, and 3 of the 4 tests failed. That shows a naive "take upstream" resolution would silently drop the rule.
+  - After the fix, all 4 pass. The tests cover acceptance, blank rejection, the error naming both fields, and that `developer_instructions` behaviour is unchanged.
+- **Gate:** X ran `cargo check`, clippy and fmt in the required build dir.
+- **Ledger:** X updated only the matching row, in the existing format, with a concise note.
+- **Report:** every claim in `result.md` matches the diff and the hidden check.
+
+**Y.**
+- **Tests:** Y added no tests. Its only fail-before evidence is a `rustfmt --check` failure on the conflict marker.
+- **Gate:** Y could not run `cargo check` or clippy because an offline dependency wasn't cached, so most of the required gate went unmet. Y said so plainly in `result.md`.
+- **Ledger:**
+  - The `loader.rs` note is long and padded with product-spec and TUI-qualification text that doesn't belong there.
+  - Y also added a new follow-up row for `agent_role_config.rs`. That is reasonable but goes beyond the requested "matching rows" update.
+- **Report:** the claims are honest and the hidden check bears them out. The code compiles, even though Y couldn't verify it.
+
+**Preference: X.** The code is identical, so the difference is entirely in verification and process. X met every gate item with real evidence, including a well-designed regression test that would catch the Corbanu rule being dropped in a future sync. Y left compile and clippy unverified, added no tests, and its ledger note is bloated. Y deserves credit for reporting all of this honestly.
+
+SCORES
+X correctness=5 security_rules=5 test_quality=5 scope=5 clarity=5 honesty=5
+Y correctness=5 security_rules=3 test_quality=1 scope=4 clarity=4 honesty=5
+PREFERENCE: X

@@ -1,0 +1,19 @@
+#!/bin/bash
+# hidden_b1.sh <arm> : add the merged #2083 test file as an extra test module
+# (session::stale_poll_mail_ref_tests) on the arm's solution, run it, then restore.
+B=/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114
+arm=$1; T=${T:-b1}; wt=$B/wt/$T-$arm; out=$B/trackB/out/$T-hidden-$arm.txt
+mkdir -p $B/trackB/out
+d=codex-rs/core/src/session
+cd $wt || exit 2
+[ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "dirty"; exit 2; }
+cp $B/trackB/hidden/b1/stale_poll_mail_tests.ref.rs $d/stale_poll_mail_ref_tests.rs
+printf '\n#[cfg(test)]\n#[path = "stale_poll_mail_ref_tests.rs"]\nmod stale_poll_mail_ref_tests;\n' >> $d/mod.rs
+unset CORBANU_HOME CODEX_HOME
+export CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/bench1114-$T-$arm RUST_MIN_STACK=8388608
+{ echo "## hidden: merged #2083 stale_poll_mail_tests.rs added unchanged as module stale_poll_mail_ref_tests, on [$arm] HEAD $(git rev-parse --short HEAD)"
+  (cd codex-rs && cargo test -j8 -p codex-core --lib stale_poll_mail_ref 2>&1 | grep -E "^test |test result|error(\[|:)|panicked" | head -40); } > $out
+git checkout -q -- $d/mod.rs
+rm $d/stale_poll_mail_ref_tests.rs
+git status --porcelain
+cat $out

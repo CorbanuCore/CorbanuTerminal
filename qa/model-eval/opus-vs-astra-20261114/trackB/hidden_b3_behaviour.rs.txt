@@ -1,0 +1,25 @@
+// Hidden check for bench task B3 (not shown to the arms): main's role-file
+// instruction validation must survive the sync resolution.
+use codex_agent_roles::parse_agent_role_file_contents;
+use std::path::Path;
+
+fn parse(s: &str) -> std::io::Result<codex_agent_roles::ResolvedAgentRoleFile> {
+    parse_agent_role_file_contents(s, Path::new("/tmp/roles/r.toml"), Path::new("/tmp/roles"), Some("r"))
+}
+
+#[test]
+fn hidden_b3_base_instructions_alone_is_accepted() {
+    parse("name = \"r\"\ndescription = \"d\"\nbase_instructions = \"be brief\"\n").expect("base_instructions only");
+    parse("name = \"r\"\ndescription = \"d\"\ninstructions = \"be brief\"\n").expect("instructions only");
+}
+
+#[test]
+fn hidden_b3_blank_base_instructions_is_rejected() {
+    let err = parse("name = \"r\"\ndescription = \"d\"\nbase_instructions = \"  \"\n").expect_err("blank");
+    assert!(err.to_string().contains("cannot be blank"), "{err}");
+}
+
+#[test]
+fn hidden_b3_developer_instructions_still_accepted() {
+    parse("name = \"r\"\ndescription = \"d\"\ndeveloper_instructions = \"x\"\n").expect("developer_instructions only");
+}

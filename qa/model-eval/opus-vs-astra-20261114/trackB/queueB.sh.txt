@@ -1,0 +1,17 @@
+#!/bin/bash
+# usage: queueB.sh <arm> — waits for this arm's Track A queue, then runs B tasks sequentially
+B=/Volumes/CorbanuDrive/Corbanu/.codex-work/bench-astra-20261114
+arm=$1
+until grep -q QUEUE-DONE $B/runs/trackA/queue-$arm.out 2>/dev/null; do sleep 30; done
+mkdir -p $B/runs/trackB
+for t in ${TASKS:-b1 b2 b3 b4}; do
+  o=$B/runs/trackB/$t-$arm
+  [ -s $o.meta ] && continue
+  wt=$B/wt/$t-$arm
+  base=$(git -C $wt rev-list --max-parents=0 HEAD >/dev/null; awk -v t=${t%r} '$1==t{print $2}' $B/trackB/bases.tsv)
+  $B/run_arm.sh $arm danger-full-access $wt $B/trackB/brief-$t-$arm.md $o
+  git -C $wt log --oneline $base..HEAD > $o.commits
+  git -C $wt diff $base HEAD > $o.diff
+  git -C $wt status --porcelain > $o.status
+done
+echo QUEUEB-DONE $arm $(date -u +%FT%TZ)

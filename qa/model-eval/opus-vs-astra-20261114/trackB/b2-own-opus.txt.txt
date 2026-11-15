@@ -1,0 +1,12 @@
+## own tests (provider_picker_refresh) at HEAD 8e1cb654c6 [opus]
+test app::tests::provider_picker_refresh::provider_manager_late_refresh_updates_picker_without_reopening_dismissed_menu ... ok
+test app::tests::provider_picker_refresh::late_provider_recovery_refreshes_open_model_picker_and_keeps_tab ... ok
+test app::tests::provider_picker_refresh::late_provider_recovery_leaves_dismissed_picker_and_reasoning_dialog ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 4777 filtered out; finished in 1.80s
+## own tests at test-only commit 300de03efe (expect FAIL)
+test app::tests::provider_picker_refresh::provider_manager_late_refresh_updates_picker_without_reopening_dismissed_menu ... ok
+test app::tests::provider_picker_refresh::late_provider_recovery_leaves_dismissed_picker_and_reasoning_dialog ... ok
+test app::tests::provider_picker_refresh::late_provider_recovery_refreshes_open_model_picker_and_keeps_tab ... FAILED
+thread 'app::tests::provider_picker_refresh::late_provider_recovery_refreshes_open_model_picker_and_keeps_tab' (66260444) panicked at tui/src/app/tests/provider_picker_refresh.rs:159:5:
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 4777 filtered out; finished in 1.86s
+error: test failed, to rerun pass `-p codex-tui --lib`

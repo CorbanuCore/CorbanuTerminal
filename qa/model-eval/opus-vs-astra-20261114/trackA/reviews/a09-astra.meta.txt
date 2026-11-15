@@ -1,0 +1,1 @@
+arm=astra model=gpt-6-astra start=2026-11-14T11:36:08Z end=2026-11-14T11:37:45Z wall_s=97 exit=0 tokens=65,753 gh_write_cmds_in_log=1

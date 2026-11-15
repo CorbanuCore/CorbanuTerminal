@@ -1,22 +1,23 @@
 use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::Context;
 use futures::Stream;
-use futures::StreamExt;
 use teloxide::ApiError;
 use teloxide::Bot;
 use teloxide::RequestError;
-use teloxide::backoff::exponential_backoff_strategy;
 use teloxide::error_handlers::ErrorHandler;
+use teloxide::errors::AsResponseParameters;
+use teloxide::payloads::GetUpdatesSetters;
+use teloxide::requests::Requester;
+use teloxide::stop::StopFlag;
 use teloxide::stop::StopToken;
+use teloxide::stop::mk_stop_token;
 use teloxide::types::AllowedUpdate;
 use teloxide::types::Update;
 use teloxide::update_listeners::AsUpdateStream;
-use teloxide::update_listeners::Polling;
 use teloxide::update_listeners::UpdateListener;
 use tracing::error;
 use tracing::warn;
@@ -28,62 +29,19 @@ use crate::error::is_http_409_conflict;
 type GuardedStream<'a> =
     std::pin::Pin<Box<dyn Stream<Item = Result<Update, RequestError>> + Send + 'a>>;
 
-#[derive(Debug)]
-struct PollingState {
-    failures: PollingBackoff,
-}
-
-impl PollingState {
-    fn new(max_consecutive_failures: u32) -> Self {
-        Self {
-            failures: PollingBackoff::new(
-                Duration::from_secs(1),
-                Duration::from_secs(64),
-                max_consecutive_failures,
-            ),
-        }
-    }
-
-    fn record_success(&mut self) {
-        self.failures.record_success();
-    }
-
-    fn record_failure(&mut self, error: &RequestError) -> bool {
-        if is_polling_conflict(error) {
-            error!("Telegram polling conflict: another poller is already using this bot token");
-            return true;
-        }
-
-        match self.failures.record_failure() {
-            Ok(delay) => {
-                warn!(
-                    retry_after_secs = delay.as_secs(),
-                    "Telegram polling failed; teloxide will retry with backoff"
-                );
-                false
-            }
-            Err(TelegramError::PollingFailureCapExceeded) => {
-                error!("Telegram polling exceeded configured consecutive failure cap");
-                true
-            }
-            Err(err) => {
-                error!("Telegram polling failed: {err}");
-                true
-            }
-        }
-    }
-}
-
 pub struct GuardedPolling {
-    inner: Polling<Bot>,
+    bot: Bot,
     replay: Vec<Update>,
-    state: Arc<Mutex<PollingState>>,
+    failures: PollingBackoff,
     fatal: FatalPollingFlag,
+    stop_token: StopToken,
+    stop_flag: StopFlag,
+    allowed_updates: Option<Vec<AllowedUpdate>>,
 }
 
 impl GuardedPolling {
     pub fn stop_token(&mut self) -> StopToken {
-        self.inner.stop_token()
+        self.stop_token.clone()
     }
 
     pub fn fatal_flag(&self) -> FatalPollingFlag {
@@ -93,16 +51,26 @@ impl GuardedPolling {
 
 #[derive(Debug, Clone, Default)]
 pub struct FatalPollingFlag {
-    fatal: Arc<AtomicBool>,
+    // 0 = running, 1 = conflict, 2 = failure cap.
+    fatal: Arc<AtomicU8>,
 }
 
 impl FatalPollingFlag {
-    fn mark_fatal(&self) {
-        self.fatal.store(true, Ordering::SeqCst);
+    fn mark_conflict(&self) {
+        self.fatal.store(1, Ordering::SeqCst);
     }
 
+    pub fn error(&self) -> Option<TelegramError> {
+        match self.fatal.load(Ordering::SeqCst) {
+            1 => Some(TelegramError::PollingConflict),
+            2 => Some(TelegramError::PollingFailureCapExceeded),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
     pub fn is_fatal(&self) -> bool {
-        self.fatal.load(Ordering::SeqCst)
+        self.error().is_some()
     }
 }
 
@@ -134,17 +102,28 @@ pub async fn guarded_polling(
         POLLING_CLIENT_TIMEOUT > Duration::from_secs(10),
         "polling client timeout must exceed the long-poll timeout"
     );
-    let inner = Polling::builder(bot)
-        .timeout(Duration::from_secs(10))
-        .backoff_strategy(exponential_backoff_strategy)
-        .delete_webhook()
-        .await
-        .build();
+    match bot.get_webhook_info().await {
+        Ok(info) if info.url.is_some() => {
+            if let Err(err) = bot.delete_webhook().await {
+                warn!("failed to delete Telegram webhook: {err}");
+            }
+        }
+        Ok(_) => {}
+        Err(err) => warn!("failed to get Telegram webhook info: {err}"),
+    }
+    let (stop_token, stop_flag) = mk_stop_token();
     GuardedPolling {
-        inner,
+        bot,
         replay,
-        state: Arc::new(Mutex::new(PollingState::new(max_consecutive_failures))),
+        failures: PollingBackoff::new(
+            Duration::from_secs(1),
+            Duration::from_secs(64),
+            max_consecutive_failures,
+        ),
         fatal: FatalPollingFlag::default(),
+        stop_token,
+        stop_flag,
+        allowed_updates: None,
     }
 }
 
@@ -158,7 +137,7 @@ pub fn listener_error_handler(
         async move {
             if is_polling_conflict(&error) {
                 error!("Telegram polling stopped because another poller is using this bot token");
-                fatal.mark_fatal();
+                fatal.mark_conflict();
                 stop_token.stop();
             } else {
                 warn!("Telegram polling listener error: {error}");
@@ -172,35 +151,80 @@ impl<'a> AsUpdateStream<'a> for GuardedPolling {
     type Stream = GuardedStream<'a>;
 
     fn as_stream(&'a mut self) -> Self::Stream {
-        let state = Arc::clone(&self.state);
-        let stop_token = self.inner.stop_token();
-        let fatal = self.fatal.clone();
-        let replay = std::mem::take(&mut self.replay).into_iter().map(Ok);
-        Box::pin(
-            futures::stream::iter(replay).chain(self.inner.as_stream().map(move |result| {
-                let should_stop = {
-                    let mut state = match state.lock() {
-                        Ok(state) => state,
-                        Err(poisoned) => {
-                            warn!("Telegram polling state mutex was poisoned; continuing");
-                            poisoned.into_inner()
-                        }
-                    };
-                    match &result {
-                        Ok(_) => {
-                            state.record_success();
-                            false
-                        }
-                        Err(error) => state.record_failure(error),
+        // Observe whole responses: teloxide's update-only stream hides empty
+        // successful polls, which must reset the consecutive-failure counter.
+        let replay = std::mem::take(&mut self.replay).into_iter();
+        Box::pin(futures::stream::unfold(
+            (self, replay, 0, Duration::ZERO),
+            |(polling, mut buffered, mut offset, mut delay)| async move {
+                loop {
+                    if let Some(update) = buffered.next() {
+                        return Some((Ok(update), (polling, buffered, offset, delay)));
                     }
-                };
-                if should_stop {
-                    fatal.mark_fatal();
-                    stop_token.stop();
+                    if polling.stop_flag.is_stopped() {
+                        // Acknowledge only the fetched batch, never replay ids.
+                        // Failure here must not replace the original stop reason.
+                        if let Err(err) = polling
+                            .bot
+                            .get_updates()
+                            .offset(offset)
+                            .timeout(0)
+                            .limit(1)
+                            .await
+                        {
+                            warn!("failed to acknowledge Telegram polling shutdown: {err}");
+                            if polling.fatal.error().is_none() && is_polling_conflict(&err) {
+                                polling.fatal.mark_conflict();
+                            }
+                        }
+                        return None;
+                    }
+                    if !delay.is_zero() {
+                        tokio::select! {
+                            _ = polling.stop_flag.clone() => continue,
+                            _ = tokio::time::sleep(delay) => {}
+                        }
+                        delay = Duration::ZERO;
+                    }
+                    let mut request = polling.bot.get_updates().offset(offset).timeout(10);
+                    if let Some(allowed) = polling.allowed_updates.take() {
+                        request = request.allowed_updates(allowed);
+                    }
+                    let result = tokio::select! {
+                        _ = polling.stop_flag.clone() => continue,
+                        result = request => result,
+                    };
+                    match result {
+                        Ok(updates) => {
+                            polling.failures.record_success();
+                            if let Some(update) = updates.last() {
+                                offset = update.id.as_offset();
+                            }
+                            buffered = updates.into_iter();
+                        }
+                        Err(err) => {
+                            if is_polling_conflict(&err) {
+                                polling.fatal.mark_conflict();
+                                polling.stop_token.stop();
+                            } else {
+                                match polling.failures.record_failure() {
+                                    Ok(backoff) => {
+                                        delay = err
+                                            .retry_after()
+                                            .map_or(backoff, teloxide::types::Seconds::duration);
+                                    }
+                                    Err(_) => {
+                                        polling.fatal.fatal.store(2, Ordering::SeqCst);
+                                        polling.stop_token.stop();
+                                    }
+                                }
+                            }
+                            return Some((Err(err), (polling, buffered, offset, delay)));
+                        }
+                    }
                 }
-                result
-            })),
-        )
+            },
+        ))
     }
 }
 
@@ -208,11 +232,11 @@ impl UpdateListener for GuardedPolling {
     type Err = RequestError;
 
     fn stop_token(&mut self) -> StopToken {
-        self.inner.stop_token()
+        self.stop_token.clone()
     }
 
     fn hint_allowed_updates(&mut self, hint: &mut dyn Iterator<Item = AllowedUpdate>) {
-        self.inner.hint_allowed_updates(hint);
+        self.allowed_updates = Some(hint.collect());
     }
 }
 
@@ -222,3 +246,7 @@ fn is_polling_conflict(error: &RequestError) -> bool {
         RequestError::Api(ApiError::TerminatedByOtherGetUpdates)
     ) || is_http_409_conflict(error)
 }
+
+#[cfg(test)]
+#[path = "polling_tests.rs"]
+mod tests;

@@ -1,0 +1,14 @@
+**X is stronger overall.** Both solutions pass both hidden reference tests, and both new regressions were independently confirmed to fail before their fixes and pass afterward.
+
+- **Correctness:** X retains the active-turn lock from ownership validation through input removal and mailbox tracking. Y validates ownership under that lock but releases it before draining mail. Code inspection reveals a remaining interleaving: the old poll validates, guardian detaches it, a replacement starts and receives mail, then the old poll drains that mail using its saved turn state. The supplied hidden tests do not establish coverage of this interleaving.
+- **Security and rules:** Both changes preserve authorization behavior, include valid release fragments, and record local commits. X documents isolated testing and a passing strict Clippy run. Y explicitly leaves the mandatory strict Clippy gate failing; allowing the offending lint does not satisfy it. Y also reports direct `cargo test` commands despite the repository’s required isolation wrapper. There is no evidence of actual credential access.
+- **Test quality:** X uses a deterministic stop interleaving, a ten-second timeout, and full assertions covering steering content, client ID, mail identity, parent provenance, and mailbox tracking. Y reproduces the reported bug and exercises `steer_input`, but its detached poller can outlive the original stopping task, its waits lack an overall timeout, and its assertions cover less metadata.
+- **Scope and clarity:** Both stay focused on the issue. X’s additional evidence document is relevant. X expresses ownership and atomicity directly; Y retains overlapping optional-ID and boolean controls and adds more test synchronization machinery.
+- **Honesty:** Both reports agree with the independently verified regression outcomes. Y candidly discloses Clippy failures and test failures that passed individually. X discloses its qualification limits. Clippy and formatting were not independently rerun in `hidden-check.md`, so X’s clean results remain reported evidence.
+
+I prefer **X** because its lock covers the entire ownership-sensitive operation, its regression checks preservation more thoroughly, and its reported validation satisfies the required gate. Y fixes the demonstrated stale-poll case with a focused change and an honest report, but leaves a narrower mailbox race and an explicitly unmet Clippy requirement.
+
+SCORES
+X correctness=5 security_rules=5 test_quality=5 scope=5 clarity=5 honesty=5
+Y correctness=4 security_rules=3 test_quality=4 scope=5 clarity=4 honesty=5
+PREFERENCE: X

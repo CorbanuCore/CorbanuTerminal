@@ -1,0 +1,62 @@
+[
+ {
+  "task": "B1",
+  "desc": "#2046 guardian stop gap (core, re-implement from issue)",
+  "opus": {
+   "pass": true,
+   "text": "PASS: merged fix's tests 2/2 (1 new, 1 adapted from an existing test); own test fails before, passes after; clippy clean (pinned toolchain)"
+  },
+  "astra": {
+   "pass": true,
+   "text": "PASS: merged fix's tests 2/2 (1 new, 1 adapted from an existing test); own test fails before, passes after; clippy clean (pinned toolchain)"
+  }
+ },
+ {
+  "task": "B2",
+  "desc": "#2102 provider picker refresh (TUI, re-implement from issue)",
+  "opus": {
+   "pass": false,
+   "text": "PARTIAL: merged fix's new test 0/1 (the other already existed and passes) (open picker jumps to the OpenAI tab instead of keeping the person's tab); own tests fail before, pass after; clippy clean"
+  },
+  "astra": {
+   "pass": false,
+   "text": "PARTIAL: merged fix's new test 0/1 (same tab jump); own tests fail before, pass after; clippy clean"
+  }
+ },
+ {
+  "task": "B3",
+  "desc": "sync conflict: codex-agent-roles (as #2059)",
+  "opus": {
+   "pass": true,
+   "text": "PASS: compiles, clippy clean, hidden behaviour test 3/3; source identical to the maintainers' resolution; added 97 lines of tests"
+  },
+  "astra": {
+   "pass": true,
+   "text": "PASS: compiles, clippy clean, hidden behaviour test 3/3; source identical to the maintainers' resolution; no tests added"
+  }
+ },
+ {
+  "task": "B4",
+  "desc": "#2018 classifier brace groups (fresh open issue, no reference)",
+  "opus": {
+   "pass": false,
+   "text": "FAIL (task rule): 905 classifier tests pass and 3 new tests fail before / pass after, but a probe after grading shows 2 command lines (each in bash and zsh) judged quieter than the base, against the never-quieter rule; clippy clean"
+  },
+  "astra": {
+   "pass": true,
+   "text": "PASS: 907 classifier tests pass, 0 fail; 2 new tests fail before, pass after; clippy clean"
+  }
+ },
+ {
+  "task": "B1 rerun",
+  "desc": "#2046 again, fresh clone (variance check)",
+  "opus": {
+   "pass": true,
+   "text": "PASS: merged fix's tests 2/2; own test fails before, passes after (38 min, 116k tokens)"
+  },
+  "astra": {
+   "pass": true,
+   "text": "PASS: merged fix's tests 2/2; own test fails before, passes after (27 min, 205k tokens)"
+  }
+ }
+]

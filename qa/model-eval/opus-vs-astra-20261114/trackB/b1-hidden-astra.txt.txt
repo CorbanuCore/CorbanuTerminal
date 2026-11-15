@@ -1,0 +1,4 @@
+## hidden: merged #2083 stale_poll_mail_tests.rs added unchanged as module stale_poll_mail_ref_tests, on [astra] HEAD e073a3e107
+test session::stale_poll_mail_ref_tests::guardian_stopped_turn_leaves_a_new_turns_input_and_mail_alone ... ok
+test session::stale_poll_mail_ref_tests::stopped_turn_poll_leaves_mail_queued_on_every_stop_path ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 3850 filtered out; finished in 0.20s

@@ -1,0 +1,28 @@
+I've fixed #2046 and committed it locally in two commits. The bug was real: a turn being stopped in guardian's background wait took the new turn's input.
+
+**What was wrong:** When guardian stops a turn after too many denials, it does it in the background. It first clears the active-turn slot, then waits up to 100 ms for the old task to finish. If the user starts a new turn in that window, the new turn takes the slot. The old turn's next input check (in `run_turn`) then read whatever turn was in the slot. So it took the new turn's steered message and its agent messages.
+
+**Fix (`codex-rs/core/src/session/`):**
+- **`input_queue.rs`:** `get_pending_input_for_running_task` now also takes the polling turn's `sub_id`. It only takes input when the active slot's task belongs to that same turn; otherwise it returns nothing and leaves the input where it is. Guardian's targeted stop and `turn_state_for_sub_id` already identify turns by `sub_id`. The task-start path and the test-only `get_pending_input` behave as before.
+- **`turn.rs`:** `run_turn` passes `&turn_context.sub_id` when it checks for input.
+- **`stale_poll_mail_tests.rs`:** new regression test `guardian_stopping_turn_does_not_take_the_next_turns_input`. It runs guardian's stop in a detached task, as guardian does. While the old turn is still stopping, it starts a new user turn, steers a message into it and queues an agent message. Then the old turn checks for input. The test expects the old turn to get nothing and the new turn to still hold both items. The old turn's check runs in a detached helper task, so the result doesn't depend on beating the 100 ms timer.
+- **Release note:** `qa/release/unreleased/notes/2046-stopping-turn-leaves-next-turn-input.md`, under the existing `## Agents and reviews` heading. `release_notes.py check` passes.
+
+**Fail before, pass after:**
+- **Before (commit `4782ffd3f0`):** `cargo test -j8 -p codex-core --lib stale_poll_mail_tests` failed with "the stopping turn took the new turn's input" — the old turn took 2 items where 0 were expected (the steered message and the agent message). The existing #2010 test still passed.
+- **After (commit `a3d2532e77`):** the same command passed 2 of 2.
+- The fix changed the function's signature, so the fix commit also adds the turn's `sub_id` argument to the test calls. Nothing else in the tests changed.
+
+**Other tests:**
+- **Focused run** (`input_queue`, `session::`, `guardian`, `tasks::`, `multi_agents`): 667 passed, 1 failed. The failure was `shell_tool_cancellation_waits_for_runtime_cleanup`, which hit a "No such file or directory" error under parallel load. It passed 3 of 3 on its own.
+- **Full codex-core lib:** 3843 passed, 1 failed, 6 ignored. The failure was the timing test `exit_watcher_waits_for_late_network_denial_before_classifying_end`, which passed on its own. Neither failure is in code this change touches.
+- **Setup:** the default open-file limit here is 256, which made 165 tests fail with "Too many open files". I ran with `ulimit -n 65536` and `--test-threads=8`.
+
+**Clippy and fmt:**
+- `cargo fmt` is applied and `--check` is clean.
+- `cargo clippy -p codex-core --all-targets -- -D warnings` fails on 10 existing `nonminimal_bool` errors, with both the PATH toolchain (1.95.0) and the pinned 1.99.1. They are all in files this change doesn't touch: `security/tainted_action/{grammar,unknown_folder,windows_shell}.rs` and `tools/sandboxing.rs`. With only that one lint allowed (`-A clippy::nonminimal_bool`), the whole crate, tests included, is clean. That run used 1.95.0.
+
+**Not done or unsure:**
+- **Old turn still sees a pending-input flag:** in that window the stopping turn can still see the new turn's "has pending input" flag. It can only loop once more and find nothing to take before it notices it was cancelled, so I left it alone to keep the change small.
+- **Relies on unique turn ids:** the fix assumes each turn has its own `sub_id`, which guardian's stop already assumes.
+- **No live TUI test:** I didn't run the interactive TUI or a code-blind functional test for this change.

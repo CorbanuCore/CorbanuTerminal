@@ -1,0 +1,8 @@
+## own tests (guardian_replacement_input) at HEAD e073a3e107 [astra]
+test session::guardian_replacement_input_tests::guardian_stopping_turn_cannot_take_replacement_input ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3849 filtered out; finished in 0.10s
+## own tests at test-only commit d503ffc7b7 (expect FAIL)
+test session::guardian_replacement_input_tests::guardian_stopping_turn_cannot_take_replacement_input ... FAILED
+thread 'session::guardian_replacement_input_tests::guardian_stopping_turn_cannot_take_replacement_input' (65415164) panicked at core/src/session/guardian_replacement_input_tests.rs:110:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3849 filtered out; finished in 0.18s
+error: test failed, to rerun pass `-p codex-core --lib`

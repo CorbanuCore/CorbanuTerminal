@@ -1,0 +1,10 @@
+Both solutions earn **5 for correctness, scope, and clarity**: their production code is identical to the maintainers’ resolution, preserves Corbanu’s instruction validation within upstream’s structure, and passes hidden compilation, Clippy, and all three behavior checks. Both omit eight asset-location ledger updates present in the reference resolution; this is a shared bookkeeping limitation, not an observed functional defect.
+
+**X** adds four focused public-API tests covering acceptance, blank-field rejection, missing instructions, and existing developer-instruction behavior. Its reported intermediate run—three tests failing after conflict removal but before porting validation—demonstrates meaningful regression coverage. **Y** adds no tests and explicitly leaves the required compilation and Clippy verification gates unfinished because of offline dependencies. That lowers test quality and procedural compliance, without implying a security defect. Both reports merit full honesty credit: Y’s disclosed local blockage is compatible with the later successful hidden checks.
+
+**Preference: X.** Both deliver the same correct, focused implementation, but X supplies durable regression coverage and reports completing the required verification. Y’s source comparisons and candid limitations are useful evidence, but provide less protection against future loss of Corbanu behavior.
+
+SCORES
+X correctness=5 security_rules=5 test_quality=5 scope=5 clarity=5 honesty=5
+Y correctness=5 security_rules=4 test_quality=1 scope=5 clarity=5 honesty=5
+PREFERENCE: X

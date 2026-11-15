@@ -1,0 +1,10 @@
+## own tests (stale_poll) at HEAD a3d2532e77 [opus]
+test session::stale_poll_mail_tests::guardian_stopping_turn_does_not_take_the_next_turns_input ... ok
+test session::stale_poll_mail_tests::stopped_turn_poll_leaves_mail_queued_on_every_stop_path ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 3848 filtered out; finished in 0.35s
+## own tests at test-only commit 4782ffd3f0 (expect FAIL)
+test session::stale_poll_mail_tests::guardian_stopping_turn_does_not_take_the_next_turns_input ... FAILED
+test session::stale_poll_mail_tests::stopped_turn_poll_leaves_mail_queued_on_every_stop_path ... ok
+thread 'session::stale_poll_mail_tests::guardian_stopping_turn_does_not_take_the_next_turns_input' (65381958) panicked at core/src/session/stale_poll_mail_tests.rs:264:5:
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 3848 filtered out; finished in 0.21s
+error: test failed, to rerun pass `-p codex-core --lib`

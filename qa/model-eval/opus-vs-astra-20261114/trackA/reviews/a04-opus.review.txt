@@ -1,0 +1,62 @@
+I found two defects that block this change: one security regression, and one problem that stops the core test crate from compiling. I only read the code; nothing was built or run.
+
+### 1. High (security): a mid-session permission-profile switch drops Corbanu's network protections
+**Where:** `codex-rs/core/src/config/mod.rs:6242-6286` (`network_proxy_spec_for_active_permission_profile`)
+
+**What is wrong:** When the conflict was resolved, the Corbanu block that came after the proxy config was set up was deleted. That block called `apply_security_network_features` and `apply_secretless_launch_network_config`. Now only startup (`mod.rs:4859-4870`) calls them. The code's own comment on `apply_security_network_features` (`mod.rs:3916-3918`) says the function must be shared with permission-profile changes "so a mid-session profile switch keeps them (PF-33-S01, PF-28-S02, PF-27-S04)". The ledger row also says these settings are applied in the "permission-profile rebuild", which is no longer true.
+
+**How to trigger it:**
+1. Set `[features] network_proxy = true, url_destination_policy = true, secret_output_gate = true, isolated_credential_broker = true, secretless_agent_launch = true`.
+2. Start a session. The startup proxy has the URL destination guard, the response gate, the isolated broker and the secretless key list.
+3. Switch profiles with `/permissions`. `session.rs:689` replaces `config.permissions.network` with a spec that has none of these.
+
+After the switch, the SSRF/destination guard and the credential-response gate are off. The isolated broker runtime directory and the secretless brokered-key list are gone too. The Windows `allow_local_binding` guard (`network_proxy_spec.rs:137`) also stops working, because `url_destination_policy` is now false. The existing test `session/tests.rs:7991` ("url_destination_policy must survive a profile change") should fail.
+
+**Fix:** After `PreparedNetworkConfig::from_inputs(...)` at about line 6272, re-apply the settings under the same gate:
+```rust
+let mut prepared_network = ...;
+if profile_allows_network_proxy && self.features.enabled(Feature::NetworkProxy)
+    && permission_profile.network_sandbox_policy().is_enabled()
+{
+    apply_security_network_features(&mut prepared_network.configured_proxy, &self.features);
+    apply_secretless_launch_network_config(
+        &mut prepared_network.configured_proxy,
+        self.features.enabled(Feature::SecretlessAgentLaunch),
+        &self.permissions.shell_environment_policy,
+        &self.model_providers.values().filter_map(|p| p.env_key.clone()).collect::<Vec<_>>(),
+        &self.codex_home,
+    );
+}
+```
+
+### 2. High (build/test): `config_tests.rs` does not compile, so the whole `codex-core` unit-test target fails
+- **`config_tests.rs:1616`: `assert!(err.to_string().contains());`.** `contains` needs an argument, so this is a compile error (E0061). The resolution deleted all three versions of the expected message. Restore the current text from `model-provider-info/src/lib.rs:1272`, prefixed with `model_providers.amazon-bedrock ` (as in the old expected strings and `model_provider_info_tests.rs:1677`): "model_providers.amazon-bedrock only supports changing `base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, `aws.credential_export`, `aws.auth_refresh`, and `billing`; other non-default provider fields are not supported".
+- **`config_tests.rs:~1677` and `~5033`: the two `Tui { ... }` struct literals are missing fields.** They lack `screen_reader_detection_done`, `effects`, `rendering`, `show_tooltips`, `show_server_version_notice`, `auto_recap` and `disable_paste_burst`. All seven still exist on `Tui` (`config/src/types.rs:884-913`), so this is a compile error (E0063). The resolution dropped both sides of the conflict instead of merging them.
+  - **Fix:** use upstream's field list with Corbanu's `show_tooltips: false`. That also restores the only test checking Corbanu's `show_tooltips=false` default, which the ledger says was "kept".
+
+The ledger rows for `config_tests.rs` and `config_loader_tests.rs` say "checked at tier-exit compile". Given the errors above, that claim is wrong and should be corrected.
+
+### 3. Medium (compatibility): a managed provider requirement can now block startup on an inherited model
+**Where:** `mod.rs:5002-5014` together with `5091-5123`
+
+**What is wrong:** `required_model_provider` now sets `requested_provider_was_explicit`, which feeds Corbanu's fail-closed check on model/provider pairs. The mixed-provenance fallback only fires when `provider_came_from_override` is true, and a required provider does not count as an override.
+
+**Scenario (inferred, not run):** an admin requirement forces `model_provider = "anthropic"`, and the user's `config.toml` has `model = "gpt-5.5"` with no provider. I expect startup to fail with "explicit model/provider pair … is incompatible" instead of falling back with a warning. The provider came from requirements and the model from the file, which is exactly the mixed provenance the comment says should fall back.
+
+**Fix:** treat a required provider like a runtime override for the fallback:
+```rust
+|| ((provider_came_from_override || required_model_provider.is_some()) && !model_came_from_override && cfg.model.is_some())
+```
+(Capture `is_some()` before the value is moved.) Add a test for this case.
+
+### Checked and fine
+- The remaining `forced_login_method` impl.
+- Dropping the multi-agent hint constants and `apply_managed_filesystem_constraints`; deny-read is now covered by `managed_deny_read_policy`.
+- `GlobPattern { scan: None, ... }` in `permissions.rs`.
+- The `allow_local_binding` guard in `network_proxy_spec.rs`.
+- The `managed_auth_policy` field.
+- The restored #2003 Windows startup notice.
+- The `rebuild_preserving_session_layers` rewrite.
+- `explicit_feature_setting` collecting its iterator.
+
+VERDICT: REQUEST_CHANGES

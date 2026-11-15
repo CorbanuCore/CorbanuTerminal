@@ -1,0 +1,36 @@
+Fixed: when provider discovery finishes while the session model picker is open, the picker now rebuilds in place and stays on the user's tab. The regression test fails on the base and passes after the fix. Clippy is clean for `codex-tui`.
+
+**Cause:** when discovery finished, `provider_manager_statuses_resolved` updated the cached availability policy but never touched the picker already on screen, so a restored OpenAI stayed missing until the picker was reopened.
+
+## Changes
+- **`codex-rs/tui/src/chatwidget/model_popups.rs`**
+  - Split the picker's row-building into a new `all_models_popup_params(...)` function. Opening the picker behaves as before, including the "No additional models are available right now." message.
+  - Only the session picker gets an ID (`"session-model-picker"`), so the spawn-agent and codex-pane pickers are not refreshed.
+  - New `refresh_open_session_model_picker()` does nothing unless the session picker is the top view. It rebuilds the rows from the current catalog, using the same filter as `/model`, and keeps the user's tab if that tab still exists.
+  - Because it only acts on the top view, it never reopens a dismissed picker and never replaces a reasoning dialog stacked above it. It also doesn't rebuild the picker underneath that dialog, because doing so would lose the setting that closes the picker after the dialog is accepted.
+- **`codex-rs/tui/src/app/provider_management_status.rs`**: calls the refresh right after `update_provider_statuses` when discovery finishes.
+- **`codex-rs/tui/src/app/tests/provider_picker_refresh.rs`**: two new tests. Both save synthetic Z.AI and DeepSeek keys in File credential mode, then open `/providers` and dismiss it.
+  - `late_provider_recovery_refreshes_open_model_picker_and_keeps_tab` (the regression test): opens the picker and moves to the DeepSeek tab. After OpenAI is restored and the late result arrives, it checks that OpenAI appears, DeepSeek is still the selected tab, and `/providers` didn't reopen. It includes a snapshot.
+  - `late_provider_recovery_leaves_dismissed_picker_and_reasoning_dialog` (guard test): checks that a late result doesn't reopen a dismissed picker or change an open reasoning dialog. It also passes on the base, as expected for a guard.
+- **New snapshot:** `codex-rs/tui/src/app/tests/snapshots/codex_tui__app__tests__provider_picker_refresh__open_model_picker_after_openai_recovery.snap`, showing the tabs as `OpenAI  Z.AI  [DeepSeek]`.
+- **Release note:** `qa/release/unreleased/notes/2102-open-model-picker-provider-recovery.md`. `release_notes.py check` reports "65 release-note fragment(s) OK".
+
+## Evidence
+- **Fails before:** at commit `300de03efe` (test only), I ran `cargo test -j8 -p codex-tui --lib late_provider_recovery`. `…refreshes_open_model_picker_and_keeps_tab` FAILED at `assert!(after.contains("OpenAI"))`; the output still showed only `Z.AI  [DeepSeek]`. The guard test passed.
+- **Passes after:** with the fix, the same command passed both tests once the new snapshot was accepted. A filtered run (`provider_picker_refresh model_picker model_popup reasoning_popup provider_manager`) passed 48 tests with 0 failures.
+- **Full `codex-tui` lib suite** (`just test -p codex-tui --lib --build-jobs 8 -j 8`): 4,763 passed, 11 failed, 6 skipped. All three `provider_picker_refresh` tests pass. The 11 failures are in code I didn't touch, and I did not run them on the base:
+  - Ten `ide_context::ipc` and `wallet_menu` socket tests fail with "path must be shorter than SUN_LEN", which comes from the long temp path on this machine.
+  - One snapshot, `request_user_input_halfwidth_sound_marks_truncation`, doesn't match.
+- **Clippy:** `cargo clippy -j8 -p codex-tui --all-targets --no-deps -- -D warnings` is clean. Without `--no-deps` it fails with 10 `nonminimal_bool` errors in `codex-core` files this change doesn't touch.
+- **Formatting:** `cargo fmt -p codex-tui` applied; `--check` is clean.
+
+## Commits (local only, nothing pushed)
+- `300de03efe` — regression test
+- `8e1cb654c6` — fix, plus formatting of the test file, the snapshot and the release note
+
+## Things you should know
+- **Toolchain:** the `cargo` on PATH is 1.95, not the pinned 1.99.1, and even `rustup run 1.99.1 cargo clippy` reported 1.95 lints. All results above are from 1.95.
+- **Keychain isolation:** an early full-suite run used plain `cargo test`, without the isolation settings `just test` adds (`CORBANU_TEST_NO_NATIVE_KEYRING=1`, a disposable home). My own tests force File credential storage. I can't rule out that other tests in that run reached the native credential store, so you may want to treat that run as invalid under the test-isolation policy. Every run after it used `just test`.
+- **Release-note heading:** none of the existing headings fits this fix. To follow the rule of copying an existing one, I used `## Custom providers on OpenAI's regional API hosts` with a `### /model after /providers` subsection. The release owner may want to retitle it.
+- **Scope:** only the "Select Model and Effort" session picker refreshes. The quick auto-mode picker, the spawn-agent and codex-pane pickers, and other late-arriving checks (such as the named Bedrock account check) don't trigger a refresh.
+- **Not done:** no true-TUI PTY run and no code-blind functional review, both of which project policy expects for interactive fixes.

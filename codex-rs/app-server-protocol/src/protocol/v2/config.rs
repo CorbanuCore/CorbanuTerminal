@@ -94,6 +94,14 @@ pub enum ConfigLayerSource {
         dot_codex_folder: AbsolutePathBuf,
     },
 
+    /// Settings from an agent role file declared by a project. These retain
+    /// session-layer precedence but follow project-config restrictions.
+    #[serde(rename_all = "camelCase")]
+    #[ts(rename_all = "camelCase")]
+    ProjectRole {
+        file: AbsolutePathBuf,
+    },
+
     /// Session-layer overrides supplied via `-c`/`--config`.
     SessionFlags,
 
@@ -127,7 +135,7 @@ impl ConfigLayerSource {
                 }
             }
             ConfigLayerSource::Project { .. } => 25,
-            ConfigLayerSource::SessionFlags => 30,
+            ConfigLayerSource::ProjectRole { .. } | ConfigLayerSource::SessionFlags => 30,
             ConfigLayerSource::LegacyManagedConfigTomlFromFile { .. } => 40,
             ConfigLayerSource::LegacyManagedConfigTomlFromMdm => 50,
         }

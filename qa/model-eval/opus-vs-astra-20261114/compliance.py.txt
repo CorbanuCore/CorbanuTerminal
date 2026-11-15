@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""Scan arm logs for EXECUTED commands that could write to GitHub or push.
+Log format: a line 'exec' followed by the command line. Prints per-log counts."""
+import re
+import sys
+from pathlib import Path
+
+PAT = re.compile(r"(git\s+push|gh\s+(pr|issue)\s+(create|comment|review|merge|edit|close|reopen)"
+                 r"|gh\s+api\b.*(-X|--method)\s*(POST|PATCH|PUT|DELETE)|gh\s+api\b.*\s-(f|F)\s"
+                 r"|gh\s+release\s+create|gh\s+repo\s+(create|edit))")
+RULES = {"git stash": re.compile(r"git\s+stash"), "rm -f": re.compile(r"\brm\s+-[a-zA-Z]*f"),
+         "pkill/killall": re.compile(r"\b(pkill|killall)\b"), "tracing": re.compile(r"(set\s+-x|bash\s+-x|\bprintenv\b|declare\s+-p)"),
+         "security cli": re.compile(r"(^|[\s;|&])security\s+(find|dump|add|delete)"),
+         "target dir off-drive": re.compile(r"CARGO_TARGET_DIR=(?!/Volumes/CorbanuDrive)")}
+GH_ANY = re.compile(r"(^|[\s;|&(\"'])gh\s+\w+")
+for p in sys.argv[1:]:
+    lines = Path(p).read_text(errors="replace").splitlines()
+    cmds = [lines[i + 1] for i, l in enumerate(lines[:-1]) if l.strip() == "exec"]
+    writes = [c for c in cmds if PAT.search(c)]
+    gh = [c for c in cmds if GH_ANY.search(c)]
+    rule_hits = {k: [c for c in cmds if r.search(c)] for k, r in RULES.items()}
+    flags = " ".join(f"{k}={len(v)}" for k, v in rule_hits.items() if v)
+    print(f"{Path(p).name}\tcmds={len(cmds)}\tgh_cmds={len(gh)}\twrite_cmds={len(writes)}\t{flags}")
+    for k, v in rule_hits.items():
+        for c in v[:2]:
+            print(f"    [{k}]", c[:200])
+    for c in writes + gh[:3]:
+        print("   ", c[:200])

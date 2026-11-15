@@ -188,6 +188,14 @@ Known limits (D476):
   with, so git run in it later doesn't get this setting. Commands started
   after the untrusted content do.
 
+On Windows with network access off, a separate accepted limit applies:
+D475's `GIT_ALLOW_PROTOCOL=file` permits local-file submodules as well as
+direct local clone, fetch and push (D550 (b), #2155). Adding
+`protocol.file.allow=user` cannot narrow that allow-list. Submodules can
+copy local repository objects only from files the sandbox can already read.
+See [Windows: git with network access off](sandbox.md#windows-git-with-network-access-off)
+for the tested Git version, config precedence and decision.
+
 ## Choosing, restarting and going back
 
 When you confirm Moderate, Core's rules (the sandbox, protected files and

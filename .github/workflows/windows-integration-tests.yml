@@ -161,10 +161,11 @@ jobs:
               --no-fail-fast --final-status-level fail -E "$filter"
 
       - name: Upload nextest JUnit report
-        if: always() && !cancelled()
-        continue-on-error: true
+        if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: nextest-junit-windows-integration-${{ matrix.package }}
-          path: ${{ env.CARGO_TARGET_DIR }}/nextest/default/junit.xml
-          if-no-files-found: ignore
+          # Nextest's store is relative to the workspace root, independent of
+          # CARGO_TARGET_DIR (which setup-ci moves to D:/cargo-target).
+          path: codex-rs/target/nextest/default/junit.xml
+          if-no-files-found: error

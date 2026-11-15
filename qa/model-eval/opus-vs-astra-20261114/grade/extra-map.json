@@ -1,0 +1,67 @@
+[
+{
+"F": 1,
+"case": "A06",
+"model": "astra"
+},
+{
+"F": 2,
+"case": "A04",
+"model": "opus"
+},
+{
+"F": 3,
+"case": "A01",
+"model": "astra"
+},
+{
+"F": 4,
+"case": "A10",
+"model": "astra"
+},
+{
+"F": 5,
+"case": "A05",
+"model": "opus"
+},
+{
+"F": 6,
+"case": "A01",
+"model": "opus"
+},
+{
+"F": 7,
+"case": "A09",
+"model": "opus"
+},
+{
+"F": 8,
+"case": "A01",
+"model": "astra"
+},
+{
+"F": 9,
+"case": "A05",
+"model": "astra"
+},
+{
+"F": 10,
+"case": "A06",
+"model": "opus"
+},
+{
+"F": 11,
+"case": "A06",
+"model": "opus"
+},
+{
+"F": 12,
+"case": "A01",
+"model": "astra"
+},
+{
+"F": 13,
+"case": "A01",
+"model": "opus"
+}
+]

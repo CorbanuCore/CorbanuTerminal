@@ -1,0 +1,331 @@
+diff --git a/codex-rs/core/src/session/input_queue.rs b/codex-rs/core/src/session/input_queue.rs
+index 8cb601da04..965647aac0 100644
+--- a/codex-rs/core/src/session/input_queue.rs
++++ b/codex-rs/core/src/session/input_queue.rs
+@@ -398,18 +398,29 @@ impl InputQueue {
+         &self,
+         active_turn: &Mutex<Option<ActiveTurn>>,
+     ) -> (Vec<TurnInput>, Option<String>) {
+-        self.get_pending_input_inner(active_turn, /*allow_untracked_mailbox*/ true)
+-            .await
++        self.get_pending_input_inner(
++            active_turn,
++            /*running_sub_id*/ None,
++            /*allow_untracked_mailbox*/ true,
++        )
++        .await
+     }
+ 
+-    /// Takes input for an already-running task. A task detached by any stop path must not drain
+-    /// mailbox mail: it no longer has a turn state that can record its outcome.
++    /// Takes input for the already-running task of turn `sub_id`. A task detached by any stop
++    /// path must not drain mailbox mail: it no longer has a turn state that can record its
++    /// outcome (#2010). Nor may it take input from a newer turn that started while it was still
++    /// stopping, as after guardian's background stop (#2046).
+     pub(crate) async fn get_pending_input_for_running_task(
+         &self,
+         active_turn: &Mutex<Option<ActiveTurn>>,
++        sub_id: &str,
+     ) -> (Vec<TurnInput>, Option<String>) {
+-        self.get_pending_input_inner(active_turn, /*allow_untracked_mailbox*/ false)
+-            .await
++        self.get_pending_input_inner(
++            active_turn,
++            Some(sub_id),
++            /*allow_untracked_mailbox*/ false,
++        )
++        .await
+     }
+ 
+     #[allow(
+@@ -419,10 +430,11 @@ impl InputQueue {
+     async fn get_pending_input_inner(
+         &self,
+         active_turn: &Mutex<Option<ActiveTurn>>,
++        running_sub_id: Option<&str>,
+         allow_untracked_mailbox: bool,
+     ) -> (Vec<TurnInput>, Option<String>) {
+         let (pending_input, accepts_mailbox_delivery, turn_id, turn_state) =
+-            Self::take_turn_pending_input(active_turn).await;
++            Self::take_turn_pending_input(active_turn, running_sub_id).await;
+         if !accepts_mailbox_delivery {
+             return (pending_input, None);
+         }
+@@ -463,7 +475,7 @@ impl InputQueue {
+         active_turn: &Mutex<Option<ActiveTurn>>,
+     ) -> (Vec<TurnInput>, Option<String>) {
+         let (pending_input, accepts_mailbox_delivery, turn_id, _turn_state) =
+-            Self::take_turn_pending_input(active_turn).await;
++            Self::take_turn_pending_input(active_turn, /*running_sub_id*/ None).await;
+         if !accepts_mailbox_delivery {
+             return (pending_input, None);
+         }
+@@ -487,6 +499,7 @@ impl InputQueue {
+     )]
+     async fn take_turn_pending_input(
+         active_turn: &Mutex<Option<ActiveTurn>>,
++        running_sub_id: Option<&str>,
+     ) -> (
+         Vec<TurnInput>,
+         bool,
+@@ -495,7 +508,16 @@ impl InputQueue {
+     ) {
+         {
+             let mut active = active_turn.lock().await;
+-            match active.as_mut() {
++            // A running task polls only its own turn's slot (#2046).
++            let owned = active.as_mut().filter(|active_turn| {
++                running_sub_id.is_none_or(|sub_id| {
++                    active_turn
++                        .task
++                        .as_ref()
++                        .is_some_and(|task| task.turn_context.sub_id == sub_id)
++                })
++            });
++            match owned {
+                 Some(active_turn) => {
+                     let mut turn_state = active_turn.turn_state.lock().await;
+                     let accepts_mailbox_delivery =
+@@ -517,7 +539,7 @@ impl InputQueue {
+                 }
+                 // `get_pending_input_for_task_start` also uses this helper. It may legitimately
+                 // start from an idle slot and must still inspect ready mailbox work; the running
+-                // task path separately refuses to drain without a TurnState (#2010).
++                // task path separately refuses to drain without its own TurnState (#2010).
+                 None => (Vec::new(), true, None, None),
+             }
+         }
+@@ -895,7 +917,7 @@ mod tests {
+         // reaching its next input poll must leave mail queued rather than silently taking it.
+         assert_eq!(
+             input_queue
+-                .get_pending_input_for_running_task(&stopped_turn)
++                .get_pending_input_for_running_task(&stopped_turn, "stopped-turn")
+                 .await
+                 .0,
+             Vec::new()
+diff --git a/codex-rs/core/src/session/stale_poll_mail_tests.rs b/codex-rs/core/src/session/stale_poll_mail_tests.rs
+index 3c84d836b0..fa7362f4db 100644
+--- a/codex-rs/core/src/session/stale_poll_mail_tests.rs
++++ b/codex-rs/core/src/session/stale_poll_mail_tests.rs
+@@ -34,7 +34,7 @@ impl SessionTask for StalePollTask {
+     async fn run(
+         self: Arc<Self>,
+         session: Arc<SessionTaskContext>,
+-        _ctx: Arc<TurnContext>,
++        ctx: Arc<TurnContext>,
+         _input: Vec<TurnInput>,
+         cancellation_token: CancellationToken,
+     ) -> SessionTaskResult {
+@@ -42,7 +42,7 @@ impl SessionTask for StalePollTask {
+         let session = session.clone_session();
+         let (input, _) = session
+             .input_queue
+-            .get_pending_input_for_running_task(&session.active_turn)
++            .get_pending_input_for_running_task(&session.active_turn, &ctx.sub_id)
+             .await;
+         *self.polled.lock().expect("polled lock") = Some(input);
+         Ok(None)
+@@ -111,3 +111,175 @@ async fn stopped_turn_poll_leaves_mail_queued_on_every_stop_path() {
+         assert_eq!(still_queued.len(), 1, "{stop:?}: the mail was lost");
+     }
+ }
++
++/// Signals that it was cancelled, then hands its next input poll to a detached poller and stays
++/// running until released, like a turn still inside guardian's graceful-stop wait. The poller is
++/// detached so the reproduction does not race the 100 ms hard-abort timer.
++struct StoppingTurnTask {
++    cancelled: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
++    poll: std::sync::Mutex<Option<tokio::sync::oneshot::Receiver<()>>>,
++    polled: Polled,
++    polled_tx: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
++    release: Arc<tokio::sync::Notify>,
++}
++
++impl SessionTask for StoppingTurnTask {
++    fn kind(&self) -> TaskKind {
++        TaskKind::Regular
++    }
++
++    fn span_name(&self) -> &'static str {
++        "session_task.stopping_turn"
++    }
++
++    async fn run(
++        self: Arc<Self>,
++        session: Arc<SessionTaskContext>,
++        ctx: Arc<TurnContext>,
++        _input: Vec<TurnInput>,
++        cancellation_token: CancellationToken,
++    ) -> SessionTaskResult {
++        cancellation_token.cancelled().await;
++        let session = session.clone_session();
++        let sub_id = ctx.sub_id.clone();
++        let poll = self.poll.lock().expect("poll lock").take().expect("poll");
++        let polled = Arc::clone(&self.polled);
++        let polled_tx = self
++            .polled_tx
++            .lock()
++            .expect("polled_tx lock")
++            .take()
++            .expect("polled_tx");
++        tokio::spawn(async move {
++            let _ = poll.await;
++            let (input, _) = session
++                .input_queue
++                .get_pending_input_for_running_task(&session.active_turn, &sub_id)
++                .await;
++            *polled.lock().expect("polled lock") = Some(input);
++            let _ = polled_tx.send(());
++        });
++        if let Some(cancelled) = self.cancelled.lock().expect("cancelled lock").take() {
++            let _ = cancelled.send(());
++        }
++        self.release.notified().await;
++        Ok(None)
++    }
++}
++
++/// Runs until cancelled; stands in for the user's new turn.
++struct NewTurnTask;
++
++impl SessionTask for NewTurnTask {
++    fn kind(&self) -> TaskKind {
++        TaskKind::Regular
++    }
++
++    fn span_name(&self) -> &'static str {
++        "session_task.new_turn"
++    }
++
++    async fn run(
++        self: Arc<Self>,
++        _session: Arc<SessionTaskContext>,
++        _ctx: Arc<TurnContext>,
++        _input: Vec<TurnInput>,
++        cancellation_token: CancellationToken,
++    ) -> SessionTaskResult {
++        cancellation_token.cancelled().await;
++        Ok(None)
++    }
++}
++
++/// #2046: guardian stops a turn in the background and waits for it (up to 100 ms) after removing
++/// the active slot. A user turn started in that window installs a new slot; the stopping turn's
++/// next input poll must not take the new turn's steered input or its mailbox mail.
++#[tokio::test]
++async fn guardian_stopping_turn_does_not_take_the_next_turns_input() {
++    let (sess, old_turn, _rx) = make_session_and_context_with_rx().await;
++    let (cancelled_tx, cancelled_rx) = tokio::sync::oneshot::channel();
++    let (poll_tx, poll_rx) = tokio::sync::oneshot::channel();
++    let (polled_tx, polled_rx) = tokio::sync::oneshot::channel();
++    let polled = Polled::default();
++    let release = Arc::new(tokio::sync::Notify::new());
++    let stopping = StoppingTurnTask {
++        cancelled: std::sync::Mutex::new(Some(cancelled_tx)),
++        poll: std::sync::Mutex::new(Some(poll_rx)),
++        polled: Arc::clone(&polled),
++        polled_tx: std::sync::Mutex::new(Some(polled_tx)),
++        release: Arc::clone(&release),
++    };
++    sess.spawn_task(Arc::clone(&old_turn), Vec::new(), stopping)
++        .await;
++
++    // Guardian's denial breaker stops the turn from a detached task.
++    let guardian_stop = tokio::spawn({
++        let sess = Arc::clone(&sess);
++        let turn_id = old_turn.sub_id.clone();
++        async move {
++            sess.abort_turn_if_active(&turn_id, TurnAbortReason::Interrupted)
++                .await
++        }
++    });
++    cancelled_rx
++        .await
++        .expect("the old turn observes cancellation");
++
++    // The user starts a new turn while the old one is still stopping, steers it, and mail
++    // arrives for it.
++    let new_turn = sess
++        .new_default_turn_with_sub_id("new-user-turn".to_string())
++        .await;
++    sess.spawn_task(Arc::clone(&new_turn), Vec::new(), NewTurnTask)
++        .await;
++    sess.steer_input(
++        vec![codex_protocol::user_input::UserInput::Text {
++            text: "steered into the new turn".into(),
++            text_elements: Vec::new(),
++        }],
++        /*additional_context*/ Default::default(),
++        Some(&new_turn.sub_id),
++        /*client_user_message_id*/ None,
++        /*responsesapi_client_metadata*/ None,
++    )
++    .await
++    .expect("steer the new turn");
++    let mail = InterAgentCommunication::new(
++        AgentPath::root(),
++        AgentPath::try_from("/root/worker").expect("agent path"),
++        Vec::new(),
++        "mail for the new turn".to_string(),
++        /*trigger_turn*/ false,
++    );
++    sess.input_queue
++        .enqueue_mailbox_communication(mail.clone(), /*parent_turn_id*/ None)
++        .await;
++
++    // The old turn reaches its next input poll.
++    poll_tx.send(()).expect("poller waiting");
++    polled_rx.await.expect("the stale poll completes");
++    release.notify_one();
++    assert!(guardian_stop.await.expect("guardian stop task"));
++
++    let stale = polled.lock().expect("polled lock").take();
++    assert_eq!(
++        stale.map(|input| input.len()),
++        Some(0),
++        "the stopping turn took the new turn's input"
++    );
++    let new_turn_input = sess
++        .input_queue
++        .get_pending_input_for_running_task(&sess.active_turn, &new_turn.sub_id)
++        .await
++        .0;
++    assert!(
++        matches!(
++            new_turn_input.as_slice(),
++            [TurnInput::UserInput { .. }, TurnInput::InterAgentCommunication(received)]
++                if *received == mail
++        ),
++        "the new turn lost its input: {new_turn_input:?}"
++    );
++
++    sess.abort_all_tasks(TurnAbortReason::Replaced).await;
++}
+diff --git a/codex-rs/core/src/session/turn.rs b/codex-rs/core/src/session/turn.rs
+index 372d9c813c..5e23f01915 100644
+--- a/codex-rs/core/src/session/turn.rs
++++ b/codex-rs/core/src/session/turn.rs
+@@ -395,7 +395,7 @@ pub(crate) async fn run_turn(
+         // may support this, the model might not.
+         let pending_input = if can_drain_pending_input {
+             sess.input_queue
+-                .get_pending_input_for_running_task(&sess.active_turn)
++                .get_pending_input_for_running_task(&sess.active_turn, &turn_context.sub_id)
+                 .await
+                 .0
+         } else {
+diff --git a/qa/release/unreleased/notes/2046-stopping-turn-leaves-next-turn-input.md b/qa/release/unreleased/notes/2046-stopping-turn-leaves-next-turn-input.md
+new file mode 100644
+index 0000000000..bca865720c
+--- /dev/null
++++ b/qa/release/unreleased/notes/2046-stopping-turn-leaves-next-turn-input.md
+@@ -0,0 +1,8 @@
++## Agents and reviews
++
++- **A turn you start while guardian is stopping the previous one keeps its
++  input** (#2046). When automatic approval review stopped a turn after too many
++  denials, the old turn kept running briefly in the background. A turn you
++  started in that moment could lose the message you steered into it, and agent
++  messages meant for it, to the turn being stopped. The stopping turn now only
++  takes input that belongs to it.

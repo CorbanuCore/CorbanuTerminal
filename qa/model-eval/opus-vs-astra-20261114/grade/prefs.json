@@ -1,0 +1,22 @@
+{
+ "b1": {
+  "opus": "astra",
+  "astra": "astra"
+ },
+ "b2": {
+  "opus": "opus",
+  "astra": "astra"
+ },
+ "b3": {
+  "opus": "opus",
+  "astra": "opus"
+ },
+ "b4": {
+  "opus": "astra",
+  "astra": "astra"
+ },
+ "b1r": {
+  "opus": "astra",
+  "astra": "astra"
+ }
+}

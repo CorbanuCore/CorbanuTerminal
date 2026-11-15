@@ -6632,9 +6632,9 @@ fn explicit_feature_setting(
 }
 
 /// Shown when a project's narrowing leaves `agents.provider_allowlist` empty.
-const NO_PROVIDER_LEFT_WARNING: &str = "No provider is allowed for spawned agents: a project's \
-config or agent role sets `agents.provider_allowlist` to providers your own list doesn't allow. \
-A project can only remove providers from your list.";
+const NO_PROVIDER_LEFT_WARNING: &str = "No provider is allowed for spawned agents: project \
+config or agent role restrictions leave `agents.provider_allowlist` empty. \
+Project lists can only narrow the providers allowed by higher-trust settings or other project lists.";
 
 /// D525 (#2052): `agents.provider_allowlist` is operator spend policy. A
 /// project's config or a project-declared agent role can narrow it but not
