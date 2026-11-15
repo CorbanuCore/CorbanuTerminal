@@ -3283,7 +3283,9 @@ impl App {
                                 Some(SWITCH_LIST_NOT_REFRESHED.to_string())
                             }
                         }
-                        SettingsUpdateOutcome::Accepted => Some(SWITCH_NOT_CONFIRMED.to_string()),
+                        SettingsUpdateOutcome::Accepted | SettingsUpdateOutcome::Unsupported => {
+                            Some(SWITCH_NOT_CONFIRMED.to_string())
+                        }
                         // A failure already says so; nothing was sent otherwise.
                         SettingsUpdateOutcome::Failed | SettingsUpdateOutcome::NotSent => None,
                     };

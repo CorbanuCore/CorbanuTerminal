@@ -38,7 +38,7 @@ impl App {
         if self
             .send_thread_settings_update(app_server, params)
             .await
-            .is_confirmed()
+            .is_accepted()
         {
             self.chat_widget.set_reasoning_effort(effort.clone());
             if mode.mode == ModeKind::Plan {
@@ -102,7 +102,7 @@ impl App {
         if self
             .send_thread_settings_update(app_server, params)
             .await
-            .is_confirmed()
+            .is_accepted()
         {
             self.chat_widget.finish_backend_banner_fallback(mode);
             self.sync_active_thread_service_tier_to_cached_session()

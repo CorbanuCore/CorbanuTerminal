@@ -9,6 +9,7 @@ use crate::app_command::AppCommand;
 use crate::app_event::AppEvent;
 use crate::app_event::PermissionProfileSelection;
 use crate::app_server_session::AppServerSession;
+use crate::app_server_session::ThreadSettingsUpdateReply;
 use crate::chatwidget::cyber_model_approval_reviewer;
 use crate::session_state::ThreadSessionState;
 use codex_app_server_protocol::ApprovalsReviewer as AppServerApprovalsReviewer;
@@ -67,7 +68,7 @@ impl App {
         let settings_updated = self
             .send_thread_settings_update(app_server, params)
             .await
-            .is_confirmed();
+            .is_accepted();
         if settings_updated
             && let (Some(thread_id), Some(selection)) =
                 (self.active_thread_id, pending_cyber_profile)
@@ -276,8 +277,18 @@ impl App {
         {
             return SettingsUpdateOutcome::NotSent;
         }
+        // Corbanu: the security level can forbid permission changes (PF-24); this covers every
+        // settings update, including the cyber-model permission bundle.
+        if changes_permissions
+            && let Some(reason) = crate::security::level::permission_change_block_reason()
+        {
+            self.chat_widget.add_error_message(reason);
+            return SettingsUpdateOutcome::NotSent;
+        }
         let mut params = params;
-        let mut result = app_server.thread_settings_update(params.clone()).await;
+        let mut result = app_server
+            .thread_settings_update_reply(params.clone())
+            .await;
         let mut sent_unconfirmed = false;
         // PF-84: confirmation needs a live listener; the update itself must still apply, as it
         // did before it was confirmed. A rejected Windows sandbox refresh (#2062) is reported,
@@ -291,11 +302,12 @@ impl App {
             );
             params.confirm = false;
             sent_unconfirmed = true;
-            result = app_server.thread_settings_update(params).await;
+            result = app_server.thread_settings_update_reply(params).await;
         }
         match result {
-            Ok(settings_updated) => {
-                if settings_updated
+            Ok(reply) => {
+                let accepted = reply != ThreadSettingsUpdateReply::Unsupported;
+                if accepted
                     && changes_permissions
                     && let Some(thread_id) = thread_id
                 {
@@ -303,10 +315,14 @@ impl App {
                         .requested_permission_profiles
                         .remove(&thread_id);
                 }
-                if settings_updated && !sent_unconfirmed {
-                    SettingsUpdateOutcome::Confirmed
-                } else {
-                    SettingsUpdateOutcome::Accepted
+                match reply {
+                    ThreadSettingsUpdateReply::Applied if !sent_unconfirmed => {
+                        SettingsUpdateOutcome::Confirmed
+                    }
+                    ThreadSettingsUpdateReply::Applied | ThreadSettingsUpdateReply::Accepted => {
+                        SettingsUpdateOutcome::Accepted
+                    }
+                    ThreadSettingsUpdateReply::Unsupported => SettingsUpdateOutcome::Unsupported,
                 }
             }
             Err(err) => {
@@ -329,13 +345,15 @@ pub(super) enum SettingsUpdateOutcome {
     Confirmed,
     /// Accepted for core to apply later (not confirmed).
     Accepted,
+    /// The server does not support thread settings updates.
+    Unsupported,
     Failed,
 }
 
 impl SettingsUpdateOutcome {
-    /// Upstream's `bool` result: the server applied the update before replying.
-    pub(super) fn is_confirmed(self) -> bool {
-        self == Self::Confirmed
+    /// Upstream's `bool` result: a server that supports the method accepted the update.
+    pub(super) fn is_accepted(self) -> bool {
+        matches!(self, Self::Confirmed | Self::Accepted)
     }
 }
 
@@ -423,6 +441,10 @@ impl App {
         use ratatui::text::Line;
 
         let Some(thread_id) = self.active_thread_id else {
+            self.chat_widget.add_info_message(
+                "Windows sandbox set up. New sessions use it.".to_string(),
+                /*hint*/ None,
+            );
             return;
         };
         let params = ThreadSettingsUpdateParams {
