@@ -127,7 +127,11 @@ class PackageLayoutTest(unittest.TestCase):
                     ),
                     extra_bins={},
                     rg_bin=touch_executable(root / "rg.exe"),
-                    zsh_bin=None,
+                    exec_server_bin=(
+                        touch_executable(root / "codex-exec-server.exe")
+                        if variant.ships_exec_server
+                        else None
+                    ),
                     bwrap_bin=None,
                     codex_command_runner_bin=touch_executable(
                         root / "codex-command-runner.exe"
@@ -138,12 +142,12 @@ class PackageLayoutTest(unittest.TestCase):
                     ),
                 )
                 build_package_dir(package_dir, "1.2.3", variant, spec, inputs)
-                validate_package_dir(package_dir, variant, spec, include_zsh=False)
+                validate_package_dir(package_dir, variant, spec)
                 packaged = package_dir / "codex-resources" / launcher.name
                 self.assertEqual(packaged.read_bytes(), b"signed console launcher")
                 packaged.unlink()
                 with self.assertRaisesRegex(RuntimeError, "codex-conpty-launcher.exe"):
-                    validate_package_dir(package_dir, variant, spec, include_zsh=False)
+                    validate_package_dir(package_dir, variant, spec)
 
     def test_macos_package_preserves_prebuilt_resource_binaries(self) -> None:
         for variant_name in ("corbanu", "pfterminal", "codex", "codex-app-server"):

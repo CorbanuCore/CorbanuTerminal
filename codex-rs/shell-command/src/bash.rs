@@ -445,7 +445,10 @@ fn parse_literal_shell_word(node: Node<'_>, src: &str, mode: LiteralWordMode) ->
             "ansi_c_string" => return ansi_c::decode(node.utf8_text(src.as_bytes()).ok()?),
             "string" => {
                 // Reject substitutions before removing shell quote/escape syntax.
-                parse_double_quoted_string(node, src)?;
+                // (Sync: `double_quoted_contents` is main's substitution check;
+                // the sync side's `parse_double_quoted_string` also refuses
+                // escapes, which this decoder must remove instead.)
+                double_quoted_contents(node, src)?;
                 return shlex::split(node.utf8_text(src.as_bytes()).ok()?)
                     .filter(|words| words.len() == 1)
                     .and_then(|words| words.into_iter().next());
@@ -454,7 +457,7 @@ fn parse_literal_shell_word(node: Node<'_>, src: &str, mode: LiteralWordMode) ->
                 // Inspect the literal source message; never load locale catalogs.
                 return parse_literal_shell_word(node.named_child(0)?, src, mode);
             }
-            "word" | "number" if is_literal_word_or_number(node) => {
+            "word" | "number" if has_no_named_children(node) => {
                 // Tree-sitter has already identified this as a word, including
                 // a literal '#' joined to a quoted segment. Do not lex it
                 // again as standalone shell source (where '#' is a comment).

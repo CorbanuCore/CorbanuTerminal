@@ -203,12 +203,7 @@ fn dangerous_command_match_for_env(
         }
         break;
     }
-    dangerous_command_match_with_depth(
-        &command[command_index..],
-        wrapper_depth + 1,
-        platform,
-        mode,
-    )
+    dangerous_command_match_with_depth(&command[command_index..], wrapper_depth + 1, platform, mode)
 }
 
 fn dangerous_command_match_for_trap(

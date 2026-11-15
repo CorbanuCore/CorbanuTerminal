@@ -213,7 +213,9 @@ class AffectedPackagesTest(unittest.TestCase):
         packages = tested_packages(ROOT)
         self.assertEqual(packages["codex-rs/core/tests/common"], "core_test_support")
         self.assertEqual(packages["codex-rs/app-server/tests/common"], "app_test_support")
-        self.assertEqual(packages["codex-rs/mcp-server/tests/common"], "mcp_test_support")
+        # Sync: upstream removed the codex-mcp-server crate (and its
+        # mcp_test_support); main's third assertion doesn't apply here.
+        self.assertNotIn("codex-rs/mcp-server/tests/common", packages)
 
 
 class ChangedCrateTestsWorkflowTest(unittest.TestCase):

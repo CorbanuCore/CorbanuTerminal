@@ -1290,6 +1290,7 @@ mod tests {
         policy.r#set = ExecutorStdioServerLauncher::remote_env_policy(
             &["REMOTE_TOKEN".to_string()],
             &overrides,
+            McpInheritedEnv::Configured,
         )
         .r#set;
         let mut child_env =
