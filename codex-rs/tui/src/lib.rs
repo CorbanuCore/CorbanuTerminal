@@ -307,6 +307,21 @@ mod wrapping;
 mod credential_panic_tests;
 mod table_detect;
 
+/// Installs color-eyre and `install_panic_hook` once per process, before `tui::init` adds its
+/// hook on top. The CLI may call `run_main` again (state-database recovery), and color-eyre
+/// refuses a second install.
+fn install_panic_hooks_once() -> std::io::Result<()> {
+    static INSTALLED: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+    INSTALLED
+        .get_or_init(|| {
+            color_eyre::install().map_err(|err| format!("{err:?}"))?;
+            install_panic_hook();
+            Ok(())
+        })
+        .clone()
+        .map_err(std::io::Error::other)
+}
+
 fn install_panic_hook() {
     // Keep ordinary rich panic reports, including the previous color-eyre hook.
     let previous = std::panic::take_hook();

@@ -353,8 +353,7 @@ pub(super) async fn run_main_inner(
     // check (`install_panic_hook`), then `tui::init`'s hook on top, which records diagnostics and
     // restores the terminal only for a panic on the thread that owns it. color-eyre replaces any
     // earlier hook, so it must be installed first.
-    color_eyre::install().map_err(|err| std::io::Error::other(format!("{err:?}")))?;
-    install_panic_hook();
+    install_panic_hooks_once()?;
     // PF-24-S02: erase the "restarting" banner before the startup draft draws.
     security::restart::clear_restart_banner();
     // Keep normal terminal signals available until local configuration is ready. Once raw
@@ -687,7 +686,7 @@ pub(super) async fn run_main_inner(
             codex_login::leave_default_login_unenforced();
             // #658: such a launch neither reuses nor starts the shared daemon.
             if daemon_exclusion.is_none() {
-                daemon_exclusion = Some("a named sign-in account or a resumed/forked session");
+                daemon_exclusion = Some(NAMED_ACCOUNT_DAEMON_EXCLUSION);
             }
         }
         config.startup_warnings.extend(daemon_not_reused);
@@ -794,7 +793,9 @@ pub(super) async fn run_main_inner(
         .or(compatibility_warning)
         .or_else(|| {
             daemon_exclusion
-            .filter(|_| auto_start_daemon)
+            // A named-account or resumed launch already explains a skipped daemon
+            // (`DAEMON_NOT_REUSED`) when one was running; otherwise embedded mode is expected.
+            .filter(|reason| auto_start_daemon && *reason != NAMED_ACCOUNT_DAEMON_EXCLUSION)
             .map(|reason| {
                 format!(
                     "Running without the shared background server: {reason} requires embedded mode."
@@ -956,7 +957,7 @@ pub(super) async fn run_main_inner(
                 Some("this Windows launcher") => "windows_detach_restricted",
                 Some("daemon feature settings") => "daemon_compatibility",
                 Some("the Corbanu security level") => "security_level",
-                Some("a named sign-in account or a resumed/forked session") => "named_account",
+                Some(NAMED_ACCOUNT_DAEMON_EXCLUSION) => "named_account",
                 None if selection_reason == "auto_start_disabled" => {
                     "auto_start_disabled_no_daemon"
                 }
@@ -1194,6 +1195,9 @@ pub(super) async fn run_main_inner(
 
     app_result
 }
+
+/// PF-84-S06 (#658): why a named-account or resumed/forked launch runs embedded.
+const NAMED_ACCOUNT_DAEMON_EXCLUSION: &str = "a named sign-in account or a resumed/forked session";
 
 /// A security refusal after `--worktree` created its worktree reports the failed startup first,
 /// as the other fatal exits there do.
