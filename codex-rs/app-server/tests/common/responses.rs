@@ -11,12 +11,27 @@ pub fn create_shell_command_sse_response(
     // The `arguments` for the `shell_command` tool is a serialized JSON object.
     let command_str = if cfg!(windows) {
         // PowerShell does not understand POSIX single-quote escaping.
-        let args = command
-            .iter()
-            .map(|arg| format!("'{}'", arg.replace('\'', "''")))
+        let (program, args) = command
+            .split_first()
+            .ok_or_else(|| anyhow::anyhow!("shell command fixture requires a program"))?;
+        // Keep ordinary executable names bare: the safety parser rejects the
+        // call operator, which is only necessary for a quoted program path.
+        let program = if program.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+            && program
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        {
+            program.clone()
+        } else {
+            format!("& '{}'", program.replace('\'', "''"))
+        };
+        std::iter::once(program)
+            .chain(
+                args.iter()
+                    .map(|arg| format!("'{}'", arg.replace('\'', "''"))),
+            )
             .collect::<Vec<_>>()
-            .join(" ");
-        format!("& {args}")
+            .join(" ")
     } else {
         shlex::try_join(command.iter().map(String::as_str))?
     };

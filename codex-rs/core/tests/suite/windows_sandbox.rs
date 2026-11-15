@@ -107,7 +107,10 @@ fn stage_windows_sandbox_helpers() -> anyhow::Result<()> {
             if (err.kind() == std::io::ErrorKind::PermissionDenied
                 || err.raw_os_error() == Some(32))
                 && destination.is_file()
-                && std::fs::read(&helper)? == std::fs::read(&destination)?
+                && matches!(
+                    (std::fs::read(&helper), std::fs::read(&destination)),
+                    (Ok(source), Ok(staged)) if source == staged
+                )
             {
                 continue;
             }

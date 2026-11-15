@@ -2517,7 +2517,7 @@ async fn turn_start_explicit_local_environment_updates_legacy_cwd_between_turns(
     };
     assert_eq!(cwd.as_str(), second_cwd.to_string_lossy().as_ref());
     let expected_command = format_with_current_shell_display(if cfg!(windows) {
-        "& 'echo' 'second' 'turn'"
+        "echo 'second' 'turn'"
     } else {
         "echo second turn"
     });
