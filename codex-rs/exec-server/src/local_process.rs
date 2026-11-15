@@ -47,6 +47,7 @@ use crate::StartedExecProcess;
 use crate::network_policy_decisions::network_policy_decider;
 use crate::process::ExecProcessEventLog;
 use crate::process::sandbox_type_from_protocol;
+use crate::process_sandbox::NetworkPolicyHooks;
 use crate::process_sandbox::prepare_exec_request_with_telemetry;
 use crate::protocol::ByteChunk;
 use crate::protocol::EXEC_CLOSED_METHOD;
@@ -378,9 +379,11 @@ impl LocalProcess {
             &params,
             child_env(&params),
             self.runtime_paths.as_ref(),
-            network_policy_decider,
-            network_denial_reporter,
-            network_policy_audit_observer,
+            NetworkPolicyHooks {
+                decider: network_policy_decider,
+                denial_reporter: network_denial_reporter,
+                audit_observer: network_policy_audit_observer,
+            },
             &self.inner.credential_brokers,
             &telemetry,
         )
@@ -860,9 +863,7 @@ impl ExecBackend for LocalProcess {
                 &params,
                 child_env(&params),
                 self.runtime_paths.as_ref(),
-                /*network_policy_decider*/ None,
-                /*network_denial_reporter*/ None,
-                /*network_policy_audit_observer*/ None,
+                NetworkPolicyHooks::default(),
                 &self.inner.credential_brokers,
                 &ProcessTelemetry::default(),
             )

@@ -158,9 +158,11 @@ impl ServerHandler for MessageBoardMcpServer {
                 result.is_error = Some(!output.success_for_logging());
                 result
             }
-            Err(FunctionCallError::RespondToModel(message)) => {
-                CallToolResult::error(vec![ContentBlock::text(message)])
-            }
+            // A malformed call is reported to the caller like any other tool error.
+            Err(
+                FunctionCallError::RespondToModel(message)
+                | FunctionCallError::MalformedToolCall { message, .. },
+            ) => CallToolResult::error(vec![ContentBlock::text(message)]),
             Err(FunctionCallError::Fatal(_)) => {
                 return Err(ErrorData::internal_error(
                     "Message-board tool failed",
