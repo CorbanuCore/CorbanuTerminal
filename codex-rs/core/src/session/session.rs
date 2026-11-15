@@ -195,6 +195,21 @@ pub(crate) struct SessionConfiguration {
 }
 
 impl SessionConfiguration {
+    /// Corbanu: model metadata overrides with a runtime GPU endpoint's context cap applied,
+    /// so the endpoint's limit (with the model's usual safety margin) wins over broader
+    /// model-card metadata.
+    pub(crate) fn effective_model_info_overrides(&self) -> ModelInfoOverrides {
+        let mut overrides = self.model_info_overrides.clone();
+        if let Some(runtime_limit) = self.runtime_model_context_window {
+            overrides.context_window = Some(
+                overrides
+                    .context_window
+                    .map_or(runtime_limit, |configured| configured.min(runtime_limit)),
+            );
+        }
+        overrides
+    }
+
     pub(super) fn cwd(&self) -> &AbsolutePathBuf {
         &self.legacy_fallback_cwd
     }
@@ -835,7 +850,7 @@ impl Session {
         let mut snapshot = configuration.thread_config_snapshot(environments);
         let model_info = Box::pin(configuration.step_settings.resolve_model_info(
             self.services.models_manager.as_ref(),
-            &configuration.model_info_overrides,
+            &configuration.effective_model_info_overrides(),
         ))
         .await;
         snapshot.service_tier = get_service_tier(

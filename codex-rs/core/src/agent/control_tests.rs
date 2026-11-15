@@ -1612,22 +1612,38 @@ async fn spawn_failure_context_preserves_shutdown_during_child_startup() {
         .wait()
         .await
         .expect("spawn releases its membership");
-    let closed_children = harness
+    let state_db = harness
         .state_db
         .as_ref()
-        .expect("manager should retain state db")
+        .expect("manager should retain state db");
+    // Corbanu: the parent's durable flush runs before any edge is published, and shutdown
+    // stops the parent's persistence too. Whichever of that flush or child admission sees
+    // the shutdown first, no edge stays open and a published one is closed.
+    assert_eq!(
+        state_db
+            .list_thread_spawn_children_with_status(
+                parent_id,
+                codex_state::DirectionalThreadSpawnEdgeStatus::Open,
+            )
+            .await
+            .expect("open child edges should load"),
+        Vec::new(),
+        "failed startup leaves no open edge"
+    );
+    let closed_children = state_db
         .list_thread_spawn_children_with_status(
             parent_id,
             codex_state::DirectionalThreadSpawnEdgeStatus::Closed,
         )
         .await
         .expect("closed child edges should load");
-    assert_eq!(
-        closed_children.len(),
-        1,
-        "failed startup closes its published edge"
+    assert!(
+        closed_children.len() <= 1,
+        "failed startup closes its published edge: {closed_children:?}"
     );
-    assert_thread_not_loaded(&harness.manager, closed_children[0]).await;
+    for child in closed_children {
+        assert_thread_not_loaded(&harness.manager, child).await;
+    }
 }
 
 #[tokio::test]
@@ -3518,15 +3534,21 @@ async fn cancelled_v2_send_finishes_reload_registration() {
             _ => None,
         })
         .collect();
+    // Corbanu's durable mailbox stamps each message with its own id and time.
+    let without_stamps = |mut communication: InterAgentCommunication| {
+        communication.message_id = None;
+        communication.created_at_ms = None;
+        communication
+    };
     assert_eq!(
-        messages,
-        vec![InterAgentCommunication::new(
+        messages.into_iter().map(without_stamps).collect::<Vec<_>>(),
+        vec![without_stamps(InterAgentCommunication::new(
             AgentPath::root(),
             child.metadata.agent_path.unwrap(),
             Vec::new(),
             "Message Type: NEW_TASK\nTask name: /root/worker\nSender: /root\nPayload:\nfollow-up after cancellation".to_string(),
             /*trigger_turn*/ true,
-        )],
+        ))],
     );
 }
 

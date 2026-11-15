@@ -323,6 +323,14 @@ impl LocalAgentRuntime {
         Ok(membership)
     }
 
+    /// Corbanu: the error a start gets once shutdown has been requested, if it has.
+    pub(crate) fn shutdown_error(&self) -> Option<CodexErr> {
+        self.shutdown_state.members.is_closed().then(|| {
+            CodexErr::InvalidRequest("agent runtime is shutting down".to_owned())
+                .with_agent_context(AgentErrorContext::RuntimeShutdown)
+        })
+    }
+
     pub(crate) fn request_shutdown(&self) -> Arc<AgentTreeShutdownState> {
         self.shutdown_state.members.close();
         self.shutdown.cancel();

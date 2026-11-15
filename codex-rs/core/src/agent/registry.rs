@@ -314,6 +314,26 @@ impl AgentRegistry {
         }
     }
 
+    /// Corbanu: a local child's metadata is registered when its thread starts, before its
+    /// spawn commits the reservation. A spawn cancelled before that commit forgets the entry
+    /// (and frees its path); the uncommitted reservation still owns the agent count.
+    pub(crate) fn forget_uncommitted_spawned_thread(&self, thread_id: ThreadId) {
+        let mut active_agents = self
+            .active_agents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(agent) = active_agents.thread_paths.remove(&thread_id) else {
+            return;
+        };
+        if active_agents
+            .agent_tree
+            .get(agent.path.as_str())
+            .is_some_and(|metadata| metadata.agent_id == Some(thread_id))
+        {
+            active_agents.agent_tree.remove(agent.path.as_str());
+        }
+    }
+
     pub(crate) fn register_spawned_thread(&self, agent_metadata: AgentMetadata) {
         let Some(thread_id) = agent_metadata.agent_id else {
             return;

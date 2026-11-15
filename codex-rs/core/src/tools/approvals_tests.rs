@@ -469,16 +469,59 @@ fn exec_approval(
 /// Issue #513 and PF-30-S03 on upstream's approval flow: a "don't ask again"
 /// answer is remembered, and a later approval it answers is
 /// `Remembered`, not a person asked now. With fresh human authority the
-/// person is asked again (no cache, no "don't ask again" rule offered), the
-/// automatic reviewer is skipped, and "for session" counts for this call
-/// only.
+/// person is asked again (no cache, no "don't ask again" rule offered) and
+/// the automatic reviewer is skipped. A command prompt offers no "for
+/// session" answer, so one sent anyway is refused (#2213) and remembers
+/// nothing; the cache is primed as an offered "for session" answer would.
 #[tokio::test]
 async fn sec_513_fresh_human_authority_and_remembered_answers() -> anyhow::Result<()> {
     use anyhow::Context;
     let (session, turn, events) = make_session_and_context_with_rx().await;
     *session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
 
-    // A person answers "for session": asked now.
+    // An unoffered "for session" answer is refused (#2213): nothing runs and
+    // nothing is remembered.
+    let (action, context) = exec_approval(&turn, "sec-513-unoffered", ApprovalsReviewer::User);
+    let prompt = session.request_user_approval(&action, &context);
+    let approval =
+        session.request_reviewer_approval(&action, &context, prompt, /*human_only*/ false);
+    tokio::pin!(approval);
+    tokio::select! {
+        resolution = &mut approval => panic!("expected a prompt, got {resolution:?}"),
+        event = events.recv() => {
+            let codex_protocol::protocol::EventMsg::ExecApprovalRequest(request) =
+                event.context("receive prompt")?.msg
+            else {
+                panic!("expected a command approval prompt");
+            };
+            assert!(
+                !request
+                    .effective_available_decisions()
+                    .contains(&ReviewDecision::ApprovedForSession),
+                "a command prompt offers no \"for session\" answer"
+            );
+            session
+                .notify_approval(&request.call_id, ReviewDecision::ApprovedForSession)
+                .await;
+        }
+    }
+    let unoffered = approval.await;
+    assert_eq!(unoffered.source, ApprovalResolutionSource::User);
+    assert_eq!(
+        unoffered.decision,
+        ReviewDecision::denied("approval answer was not offered by this prompt")
+    );
+    {
+        let cache = session.services.approval_cache().await;
+        assert!(
+            exec_command_cache_keys(&action, context.review_context.environments())
+                .iter()
+                .all(|key| cache.get(key).is_none()),
+            "a refused answer remembers nothing"
+        );
+    }
+
+    // A person answers: asked now.
     let (action, context) = exec_approval(&turn, "sec-513-first", ApprovalsReviewer::User);
     let prompt = session.request_user_approval(&action, &context);
     let approval =
@@ -494,13 +537,23 @@ async fn sec_513_fresh_human_authority_and_remembered_answers() -> anyhow::Resul
             };
             assert!(request.proposed_execpolicy_amendment.is_some());
             session
-                .notify_approval(&request.call_id, ReviewDecision::ApprovedForSession)
+                .notify_approval(&request.call_id, ReviewDecision::Approved)
                 .await;
         }
     }
     let first = approval.await;
     assert_eq!(first.source, ApprovalResolutionSource::User);
-    assert_eq!(first.decision, ReviewDecision::ApprovedForSession);
+    assert_eq!(first.decision, ReviewDecision::Approved);
+
+    // Remember the command as an offered "for session" answer would.
+    let decided_under = session.services.approval_cache().await.policy();
+    session
+        .services
+        .remember_approvals(
+            exec_command_cache_keys(&action, context.review_context.environments()),
+            decided_under,
+        )
+        .await;
 
     // The same command again: answered from the cache, nobody asked.
     let (action, context) = exec_approval(&turn, "sec-513-again", ApprovalsReviewer::User);
@@ -516,8 +569,7 @@ async fn sec_513_fresh_human_authority_and_remembered_answers() -> anyhow::Resul
     );
 
     // Fresh human authority, with the automatic reviewer configured: the
-    // person is asked anyway, without the rule offer, and "for session"
-    // becomes this call only.
+    // person is asked anyway (the cache is skipped), without the rule offer.
     let (action, context) = exec_approval(&turn, "sec-513-fresh", ApprovalsReviewer::AutoReview);
     let approval = session.request_approval_with_authority(
         &action,
@@ -538,7 +590,7 @@ async fn sec_513_fresh_human_authority_and_remembered_answers() -> anyhow::Resul
             };
             assert_eq!(request.proposed_execpolicy_amendment, None);
             session
-                .notify_approval(&request.call_id, ReviewDecision::ApprovedForSession)
+                .notify_approval(&request.call_id, ReviewDecision::Approved)
                 .await;
         }
     }
