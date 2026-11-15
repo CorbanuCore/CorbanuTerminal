@@ -263,44 +263,12 @@ fn unified_exec_logon_1056_retries_original_request_and_runs_command_once() {
     );
 }
 
-/// A request for tests that don't look at it.
-fn plain_request() -> RunnerTransportRequest {
-    runner_transport_request()
-}
-
 /// Stands in for the planted-folder watch: records the thread it ends on.
 struct Watch(std::sync::Arc<std::sync::Mutex<Option<std::thread::ThreadId>>>);
 
 impl Drop for Watch {
     fn drop(&mut self) {
         *self.0.lock().expect("lock") = Some(std::thread::current().id());
-    }
-}
-
-fn runner_cannot_start(
-    _codex_home: &Path,
-    _cwd: &Path,
-    _sandbox_creds: &SandboxCreds,
-    _log_dir: Option<&Path>,
-    _spawn_request: SpawnRequest,
-) -> anyhow::Result<()> {
-    anyhow::bail!("the runner can't start")
-}
-
-fn runner_starts(
-    _codex_home: &Path,
-    _cwd: &Path,
-    _sandbox_creds: &SandboxCreds,
-    _log_dir: Option<&Path>,
-    _spawn_request: SpawnRequest,
-) -> anyhow::Result<()> {
-    Ok(())
-}
-
-fn creds() -> SandboxCreds {
-    SandboxCreds {
-        username: "sandbox".to_string(),
-        password: "secret".to_string(),
     }
 }
 
@@ -314,24 +282,17 @@ async fn planted_watch_ends_off_the_async_thread_when_the_runner_cannot_start() 
     let ended = std::sync::Arc::new(std::sync::Mutex::new(None));
 
     let failed = start_runner_off_async_thread(
-        creds(),
-        plain_request(),
         Watch(std::sync::Arc::clone(&ended)),
-        runner_cannot_start,
+        || -> anyhow::Result<()> { anyhow::bail!("the runner can't start") },
     )
     .await
     .map(|_| ())
     .map_err(|err| err.to_string());
     let ended_on = ended.lock().expect("lock").take();
 
-    let started = start_runner_off_async_thread(
-        creds(),
-        plain_request(),
-        Watch(std::sync::Arc::clone(&ended)),
-        runner_starts,
-    )
-    .await
-    .expect("runner starts");
+    let started = start_runner_off_async_thread(Watch(std::sync::Arc::clone(&ended)), || Ok(()))
+        .await
+        .expect("runner starts");
     let still_running = ended.lock().expect("lock").is_none();
     drop(started);
 

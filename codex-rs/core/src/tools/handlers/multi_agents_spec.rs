@@ -344,7 +344,7 @@ pub fn create_list_agents_tool() -> ToolSpec {
     let properties = BTreeMap::from([(
         "path_prefix".to_string(),
         JsonSchema::string(Some(
-            "Task-path prefix filter without a trailing slash. Omit to list all live agents."
+            "Task-path prefix filter without a trailing slash. Omit to list all visible agents."
                 .to_string(),
         )),
     )]);
@@ -352,7 +352,7 @@ pub fn create_list_agents_tool() -> ToolSpec {
     ToolSpec::Function(ResponsesApiTool {
         name: "list_agents".to_string(),
         description:
-            "List live agents in the current root thread tree. Optionally filter by task-path prefix."
+            "List this agent and its spawn descendants, including unloaded agents. Optionally filter by task-path prefix."
                 .to_string(),
         strict: false,
         defer_loading: None,
@@ -733,7 +733,7 @@ fn list_agents_output_schema() -> Value {
                     "required": ["agent_name", "agent_status"],
                     "additionalProperties": false
                 },
-                "description": "Live agents visible in the current root thread tree."
+                "description": "This agent and its spawn descendants, including unloaded agents."
             }
         },
         "required": ["agents"],
@@ -762,7 +762,7 @@ fn openai_list_agents_output_schema() -> Value {
                     "required": ["agent_name", "agent_status"],
                     "additionalProperties": false
                 },
-                "description": "Live agents visible in the current root thread tree."
+                "description": "This agent and its spawn descendants, including unloaded agents."
             }
         },
         "required": ["agents"],
@@ -855,7 +855,7 @@ fn wait_output_schema_v2() -> Value {
                     "required": ["agent_name", "agent_nickname", "agent_role", "agent_status", "last_task_message", "last_result_message"],
                     "additionalProperties": false
                 },
-                "description": "Live agents visible in the current root thread tree after the wait."
+                "description": "The caller's spawn descendants after the wait, including unloaded agents."
             }
         },
         "required": ["message", "timed_out", "waiting_for", "wake_conditions", "consecutive_empty_waits", "watchdog_escalated", "agents"],
