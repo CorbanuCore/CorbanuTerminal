@@ -623,7 +623,7 @@ impl AnalyticsEventsClient {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, debug_assertions))]
 async fn send_track_events(
     auth_manager: &Arc<AuthManager>,
     destination: &AnalyticsEventsDestination,

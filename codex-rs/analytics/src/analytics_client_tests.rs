@@ -1,3 +1,4 @@
+#[cfg(debug_assertions)]
 use crate::client::AnalyticsEventsClient;
 use crate::client::AnalyticsEventsQueue;
 use crate::events::AppServerRpcTransport;
@@ -176,6 +177,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
+#[cfg(debug_assertions)]
 use std::time::SystemTime;
 use tokio::sync::mpsc;
 
