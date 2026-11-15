@@ -138,7 +138,19 @@ impl ExecCell {
                 });
                 lines.push(clipped_line(line, width));
             }
-            if lines.len() == 1 && !call.is_unified_exec_interaction() {
+            // #873: as in the full view, these states name themselves instead of "(no output)".
+            if lines.len() == 1 && call.is_declined() {
+                lines.push(clipped_line(
+                    Line::from("  └ Approval declined".dim()),
+                    width,
+                ));
+            } else if lines.len() == 1 && call.is_unknown() {
+                lines.push(clipped_line(
+                    Line::from("  └ No exit status received".dim()),
+                    width,
+                ));
+            } else if lines.len() == 1 && !call.is_unified_exec_interaction() && !call.is_refused()
+            {
                 lines.push(clipped_line(Line::from("  └ (no output)".dim()), width));
             }
         }

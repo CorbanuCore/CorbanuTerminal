@@ -198,10 +198,22 @@ fn dimmed_output_line(raw: &str) -> Line<'static> {
     line
 }
 
-fn output_preview_lines(output: &CommandOutput, width: usize) -> Vec<HyperlinkLine> {
+/// `label` prefixes the first output line before wrapping, so it never widens a row (#873).
+fn output_preview_lines(
+    output: &CommandOutput,
+    width: usize,
+    label: Option<&'static str>,
+) -> Vec<HyperlinkLine> {
     let (total, _) = output.line_counts();
+    let mut label = label;
     tool_output_hyperlink_preview(
-        output.lines().map(|raw| dimmed_output_line(raw.as_ref())),
+        output.lines().map(|raw| {
+            let mut line = dimmed_output_line(raw.as_ref());
+            if let Some(label) = label.take() {
+                line.spans.insert(/*index*/ 0, label.dim());
+            }
+            line
+        }),
         width,
         total,
     )
@@ -621,17 +633,14 @@ impl ExecCell {
 
         if let Some(output) = call.output.as_ref() {
             if !call.is_user_shell_command() {
-                let mut preview =
-                    output_preview_lines(output, layout.output_block.wrap_width(width));
                 // #873: one detail line, "└ Refused: <reason>".
-                if call.is_refused() {
-                    if preview.is_empty() {
-                        preview.push(Line::from("Refused".dim()).into());
-                    } else {
-                        let rest = preview.split_off(/*at*/ 1);
-                        preview = prefix_hyperlink_lines(preview, "Refused: ".dim(), "".into());
-                        preview.extend(rest);
-                    }
+                let mut preview = output_preview_lines(
+                    output,
+                    layout.output_block.wrap_width(width),
+                    call.is_refused().then_some("Refused: "),
+                );
+                if call.is_refused() && preview.is_empty() {
+                    preview.push(Line::from("Refused".dim()).into());
                 }
                 let preview = if preview.is_empty()
                     && !call.is_unified_exec_interaction()
@@ -971,6 +980,14 @@ mod tests {
             let preview = cell.display_lines(/*width*/ 80);
             assert_eq!(preview[0].spans[0].style.fg, Some(Color::Red));
             let transcript = cell.transcript_lines(/*width*/ 80);
+            // The owned transcript's compact row names the outcome too, never "(no output)".
+            let compact = crate::terminal_hyperlinks::visible_lines(
+                cell.compact_hyperlink_lines(/*width*/ 80),
+            );
+            assert_eq!(
+                compact.iter().map(render_line_text).collect::<Vec<_>>(),
+                vec!["✗ Did not run echo refused", "  └ Approval declined"]
+            );
             insta::allow_duplicates! {
                 insta::assert_snapshot!(
                     preview.iter().map(render_line_text).chain(

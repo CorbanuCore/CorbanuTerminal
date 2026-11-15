@@ -4988,6 +4988,7 @@ mod tests {
     fn empty_cwd_filter_points_to_all_folders() {
         let loader = page_only_loader(|_| {});
         let mut state = PickerState::new(
+            crate::backend_id::BackendId::new(),
             FrameRequester::test_dummy(),
             loader,
             ProviderFilter::Any,
@@ -8207,6 +8208,7 @@ session_picker_view = "dense"
     async fn esc_before_onboarding_quits() {
         let loader = page_only_loader(|_| {});
         let mut state = PickerState::new(
+            crate::backend_id::BackendId::new(),
             FrameRequester::test_dummy(),
             loader,
             ProviderFilter::MatchDefault(String::from("openai")),
