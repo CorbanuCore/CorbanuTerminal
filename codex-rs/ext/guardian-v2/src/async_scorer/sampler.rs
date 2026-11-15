@@ -229,13 +229,20 @@ impl LunaSampler {
     ) -> execution::SamplingExecution {
         let api_request = ResponsesApiRequest {
             model: MODEL.to_owned(),
+            // Corbanu's request fields (empty instructions and `None` are not
+            // serialized), left unset as upstream's guardian request does.
+            instructions: String::new(),
+            previous_response_id: None,
             input,
             tools: None,
             tool_choice: "none".to_owned(),
             parallel_tool_calls: false,
             reasoning: Some(Reasoning {
+                enabled: None,
                 effort: Some(request.reasoning_effort.clone()),
+                max_tokens: None,
                 summary: None,
+                exclude: None,
                 context: Some(ReasoningContext::AllTurns),
             }),
             store: false,
@@ -246,6 +253,11 @@ impl LunaSampler {
             prompt_cache_key: Some(format!("guardian-v2:{}", self.config.thread_id)),
             text: None,
             client_metadata: None,
+            thinking_budget: None,
+            emit_usage: None,
+            enable_thinking: None,
+            reasoning_effort: None,
+            provider_options: None,
             access_programs: None,
         };
         execution::SamplingExecution {

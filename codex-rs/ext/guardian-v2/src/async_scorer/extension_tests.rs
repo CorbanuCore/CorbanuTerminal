@@ -1488,6 +1488,7 @@ max_recent_non_user_entries = 8
             }],
             content: None,
             encrypted_content: None,
+            anthropic_content_block: None,
             internal_chat_message_metadata_passthrough: None,
         },
         ResponseItem::FunctionCall {
@@ -1943,6 +1944,7 @@ async fn contributor_uses_model_defaults_and_preserves_local_overrides() -> Resu
             }],
             content: None,
             encrypted_content: None,
+            anthropic_content_block: None,
             internal_chat_message_metadata_passthrough: None,
         },
         ResponseItem::FunctionCall {
@@ -2082,6 +2084,7 @@ async fn contributor_samples_tool_calls_with_the_existing_luna_pool() -> Result<
             }],
             content: None,
             encrypted_content: None,
+            anthropic_content_block: None,
             internal_chat_message_metadata_passthrough: None,
         },
         ResponseItem::FunctionCall {

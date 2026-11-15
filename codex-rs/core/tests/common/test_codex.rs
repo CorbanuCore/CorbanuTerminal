@@ -445,21 +445,15 @@ pub struct TestCodexBuilder {
     external_time_provider: Option<Arc<dyn TimeProvider>>,
     code_mode_host_program: Option<PathBuf>,
     history_mode: Option<ThreadHistoryMode>,
-<<<<<<< HEAD
-    auth_in_home: bool,
-    config_folder: Option<PathBuf>,
-    session_cwd_is_workspace_root: bool,
-||||||| 413492cd6c
-=======
     models_manager: Option<SharedModelsManager>,
     thread_store: Option<Arc<dyn ThreadStore>>,
     agent_graph_store: Option<Arc<dyn AgentGraphStore>>,
     image_store: Arc<dyn AttachmentStore>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    config_folder: Option<PathBuf>,
+    session_cwd_is_workspace_root: bool,
 }
 
 impl TestCodexBuilder {
-<<<<<<< HEAD
     /// Build the config for `folder`, which becomes its workspace root, as
     /// for a session started there. The session itself still runs in its own
     /// folder, which is then outside its workspace roots unless `folder`
@@ -481,8 +475,9 @@ impl TestCodexBuilder {
     /// temporary folder instead.
     pub fn with_session_cwd_as_workspace_root(mut self) -> Self {
         self.session_cwd_is_workspace_root = true;
-||||||| 413492cd6c
-=======
+        self
+    }
+
     pub fn with_apps_tools_cache(mut self, cache: codex_core::CodexAppsToolsCache) -> Self {
         self.apps_tools_cache = cache;
         self
@@ -503,7 +498,6 @@ impl TestCodexBuilder {
         configure: impl FnOnce(ThreadManager) -> ThreadManager + Send + 'static,
     ) -> Self {
         self.thread_manager_configurer = Some(Box::new(configure));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self
     }
 
@@ -556,8 +550,9 @@ impl TestCodexBuilder {
 
     /// Gives the session's auth manager the test home, so credentials kept in
     /// that home's vault (such as named provider accounts) are readable.
-    pub fn with_auth_in_home(mut self) -> Self {
-        self.auth_in_home = true;
+    /// Upstream's builder now always does this (`TestAuth::manager_for_home`),
+    /// so this only documents the test's dependency on it.
+    pub fn with_auth_in_home(self) -> Self {
         self
     }
 
@@ -941,56 +936,11 @@ impl TestCodexBuilder {
                     config.codex_home.clone(),
                 ))
             });
-<<<<<<< HEAD
-        let auth_manager = if self.auth_in_home {
-            codex_core::test_support::auth_manager_from_auth_with_home(
-                auth.clone(),
-                config.codex_home.to_path_buf(),
-            )
-        } else {
-            codex_core::test_support::auth_manager_from_auth(auth.clone())
-        };
-        let thread_manager = ThreadManager::new(
-            &config,
-            auth_manager.clone(),
-            codex_core::build_models_manager(&config, auth_manager),
-            codex_core::CodexAppsToolsCache::default(),
-            SessionSource::Exec,
-            Arc::clone(&environment_manager),
-            Arc::clone(&self.extensions),
-            user_instructions_provider,
-            /*analytics_events_client*/ None,
-            thread_store,
-            codex_core::local_agent_graph_store_from_state_db(state_db.as_ref()),
-            installation_id,
-            /*attestation_provider*/ None,
-            /*external_time_provider*/ self.external_time_provider.clone(),
-        );
-||||||| 413492cd6c
-        let auth_manager = codex_core::test_support::auth_manager_from_auth(auth.clone());
-        let thread_manager = ThreadManager::new(
-            &config,
-            auth_manager.clone(),
-            codex_core::build_models_manager(&config, auth_manager),
-            codex_core::CodexAppsToolsCache::default(),
-            SessionSource::Exec,
-            Arc::clone(&environment_manager),
-            Arc::clone(&self.extensions),
-            user_instructions_provider,
-            /*analytics_events_client*/ None,
-            thread_store,
-            codex_core::local_agent_graph_store_from_state_db(state_db.as_ref()),
-            installation_id,
-            /*attestation_provider*/ None,
-            /*external_time_provider*/ self.external_time_provider.clone(),
-        );
-=======
         let auth_manager = self.auth.manager_for_home(config.codex_home.as_path());
         let models_manager = self
             .models_manager
             .clone()
             .unwrap_or_else(|| codex_core::build_models_manager(&config, auth_manager.clone()));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let code_mode_host_program = self
             .code_mode_host_program
             .take()
@@ -1727,21 +1677,14 @@ pub fn test_codex() -> TestCodexBuilder {
         supports_openai_form_elicitation: false,
         external_time_provider: None,
         code_mode_host_program: None,
-<<<<<<< HEAD
-        history_mode: None,
-        auth_in_home: false,
-        config_folder: None,
-        session_cwd_is_workspace_root: false,
-||||||| 413492cd6c
-        history_mode: None,
-=======
         // These fixtures exercise legacy-only resume/fork helpers; store-default tests opt out.
         history_mode: Some(ThreadHistoryMode::Legacy),
         models_manager: None,
         thread_store: None,
         agent_graph_store: None,
         image_store: codex_core::passthrough_image_store(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        config_folder: None,
+        session_cwd_is_workspace_root: false,
     }
 }
 

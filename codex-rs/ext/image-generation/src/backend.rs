@@ -4,16 +4,12 @@ use codex_api::ImageRequestError;
 use codex_api::ImageResponse;
 use codex_api::ImagesClient;
 use codex_api::ReqwestTransport;
-<<<<<<< HEAD
-use codex_core::accounting_extensions::Accounted;
-use codex_core::accounting_extensions::ExtensionAccounting;
-||||||| 413492cd6c
-=======
 use codex_api::map_api_error;
 use codex_core::X_CODEX_TURN_METADATA_HEADER;
+use codex_core::accounting_extensions::Accounted;
+use codex_core::accounting_extensions::ExtensionAccounting;
 use codex_http_client::ClientRouteClass;
 use codex_http_client::HttpClientFactory;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_login::default_client::add_originator_header;
 use codex_login::default_client::create_transport_for_routes_async;
 use codex_model_provider::SharedModelProvider;
@@ -77,15 +73,9 @@ impl CodexImagesBackend {
     /// Creates a backend that sends image requests through the active model provider.
     pub(crate) fn new(
         provider: SharedModelProvider,
-<<<<<<< HEAD
-        originator: Option<String>,
-        accounting: Option<std::sync::Arc<ExtensionAccounting>>,
-||||||| 413492cd6c
-    pub(crate) fn new(provider: SharedModelProvider, originator: Option<String>) -> Self {
-=======
         http_client_factory: HttpClientFactory,
         originator: Option<String>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        accounting: Option<std::sync::Arc<ExtensionAccounting>>,
     ) -> Self {
         Self {
             provider,
@@ -95,34 +85,23 @@ impl CodexImagesBackend {
         }
     }
 
-<<<<<<< HEAD
     /// Resolves the provider, auth and collection for the current image request.
     async fn client(
         &self,
         model: &str,
         path: &str,
-    ) -> Result<ImagesClient<Accounted<ReqwestTransport>>, String> {
-        let provider = self
-||||||| 413492cd6c
-    /// Resolves the provider and auth required for the current image API request.
-    async fn client(&self) -> Result<ImagesClient<ReqwestTransport>, String> {
-        let provider = self
-=======
-    /// Resolves the provider and auth required for the current image API request.
-    async fn client(&self) -> Result<ImagesClient<ReqwestTransport>, ImageBackendError> {
+    ) -> Result<ImagesClient<Accounted<ReqwestTransport>>, ImageBackendError> {
         let (provider, auth) = self
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             .provider
             .api_provider_and_auth()
             .await
-<<<<<<< HEAD
-            .map_err(|err| err.to_string())?;
-        let auth = self
-            .provider
-            .api_auth()
-            .await
-            .map_err(|err| err.to_string())?;
-        let transport = ReqwestTransport::from_http_client(create_client());
+            .map_err(|err| ImageBackendError::from_message(err.to_string()))?;
+        let transport = create_transport_for_routes_async(
+            self.http_client_factory.clone(),
+            ClientRouteClass::Api,
+        )
+        .await
+        .map_err(|err| ImageBackendError::from_message(err.to_string()))?;
         let transport = match &self.accounting {
             Some(accounting) => {
                 accounting
@@ -138,27 +117,6 @@ impl CodexImagesBackend {
             }
             None => ExtensionAccounting::unrecorded(transport, model),
         };
-||||||| 413492cd6c
-            .map_err(|err| err.to_string())?;
-        let auth = self
-            .provider
-            .api_auth()
-            .await
-            .map_err(|err| err.to_string())?;
-        Ok(ImagesClient::new(
-            ReqwestTransport::from_http_client(create_client()),
-            provider,
-            auth,
-        ))
-=======
-            .map_err(|err| ImageBackendError::from_message(err.to_string()))?;
-        let transport = create_transport_for_routes_async(
-            self.http_client_factory.clone(),
-            ClientRouteClass::Api,
-        )
-        .await
-        .map_err(|err| ImageBackendError::from_message(err.to_string()))?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         Ok(ImagesClient::new(transport, provider, auth))
     }
 
@@ -167,17 +125,9 @@ impl CodexImagesBackend {
         &self,
         request: ImageGenerationRequest,
         turn_id: &str,
-<<<<<<< HEAD
-    ) -> Result<ImageResponse, String> {
-        self.client(&request.model, "images/generations")
-||||||| 413492cd6c
-    ) -> Result<ImageResponse, String> {
-        self.client()
-=======
         codex_turn_metadata: Option<&str>,
     ) -> Result<(ImageResponse, Option<String>), ImageBackendError> {
-        self.client()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        self.client(&request.model, "images/generations")
             .await?
             .generate(
                 &request,
@@ -192,17 +142,9 @@ impl CodexImagesBackend {
         &self,
         request: ImageEditRequest,
         turn_id: &str,
-<<<<<<< HEAD
-    ) -> Result<ImageResponse, String> {
-        self.client(&request.model, "images/edits")
-||||||| 413492cd6c
-    ) -> Result<ImageResponse, String> {
-        self.client()
-=======
         codex_turn_metadata: Option<&str>,
     ) -> Result<(ImageResponse, Option<String>), ImageBackendError> {
-        self.client()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        self.client(&request.model, "images/edits")
             .await?
             .edit(
                 &request,
