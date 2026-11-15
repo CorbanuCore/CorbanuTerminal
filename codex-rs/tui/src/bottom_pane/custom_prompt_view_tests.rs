@@ -116,7 +116,6 @@ fn delayed_enter_after_typing_submits() {
 }
 
 #[test]
-<<<<<<< HEAD
 fn ctrl_d_submit_mode_uses_enter_for_newline() {
     let (mut view, submitted_rx) = custom_prompt_view_ctrl_d();
     let now = Instant::now();
@@ -285,8 +284,9 @@ fn render_view(view: &CustomPromptView) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
-||||||| 413492cd6c
-=======
+}
+
+#[test]
 fn vim_insert_escape_clears_paste_burst_before_enter() {
     let (mut view, submitted_rx) = custom_prompt_view();
     let now = Instant::now();
@@ -524,7 +524,6 @@ fn background_prefill_preserves_replace_backspace_recovery() {
         (view.textarea.text(), view.textarea.vim_mode_label()),
         ("abc", Some("Replace"))
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn custom_prompt_view() -> (CustomPromptView, Receiver<String>) {

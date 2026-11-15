@@ -1,13 +1,9 @@
-<<<<<<< HEAD
-use codex_model_provider_info::canonical_catalog_provider;
-use codex_model_provider_info::corrected_catalog_provider;
-use codex_protocol::openai_models::InputModality;
-||||||| 413492cd6c
-=======
 //! TUI model and collaboration inventories; refreshing models preserves the server mode catalog.
 
+use codex_model_provider_info::canonical_catalog_provider;
+use codex_model_provider_info::corrected_catalog_provider;
 use codex_protocol::config_types::CollaborationModeMask;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort;
 use std::convert::Infallible;
@@ -15,7 +11,6 @@ use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
-<<<<<<< HEAD
 pub(crate) fn include_runtime_model(
     models: &mut Vec<ModelPreset>,
     model: &str,
@@ -62,16 +57,14 @@ pub(crate) fn include_runtime_model(
             availability_nux: None,
             supported_in_api: true,
             input_modalities: vec![InputModality::Text],
+            model_specialty: None,
+            available_access_programs: None,
         });
     preset.id = format!("{runtime_provider_id}:{model}");
     preset.provider_id = Some(runtime_provider_id.to_string());
     models.push(preset);
 }
 
-#[derive(Debug)]
-||||||| 413492cd6c
-#[derive(Debug, Clone)]
-=======
 pub(crate) const LUNA_RESERVE_MODEL: &str = "gpt-reserve";
 pub(crate) const LUNA_MODEL: &str = "gpt-6-luna";
 
@@ -83,10 +76,8 @@ pub(crate) fn model_display_name(model: &str) -> &str {
     }
 }
 
-#[derive(Debug, Clone)]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+#[derive(Debug)]
 pub(crate) struct ModelCatalog {
-<<<<<<< HEAD
     models: RwLock<Vec<ModelPreset>>,
     /// Ids [`ModelCatalog::set_provider_models`] added, per provider.
     provider_model_ids: RwLock<std::collections::HashMap<String, Vec<String>>>,
@@ -114,18 +105,14 @@ pub(crate) struct ModelCatalog {
             (u64, crate::provider_named_accounts::NamedSignInState),
         >,
     >,
-||||||| 413492cd6c
-    models: Vec<ModelPreset>,
-=======
-    pub(crate) models: Vec<ModelPreset>,
+    /// The server's collaboration-mode catalog; set once when the catalog is built and kept
+    /// when models refresh (upstream).
     pub(crate) collaboration_modes: Vec<CollaborationModeMask>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl ModelCatalog {
     pub(crate) fn new(models: Vec<ModelPreset>) -> Self {
         Self {
-<<<<<<< HEAD
             models: RwLock::new(models),
             provider_model_ids: RwLock::new(std::collections::HashMap::new()),
             provider_models_check: std::sync::atomic::AtomicU64::new(0),
@@ -135,7 +122,24 @@ impl ModelCatalog {
             named_account_providers: RwLock::new((0, None)),
             named_account_check: std::sync::atomic::AtomicU64::new(0),
             named_sign_ins: RwLock::new(std::collections::BTreeMap::new()),
+            collaboration_modes: Vec::new(),
         }
+    }
+
+    pub(crate) fn with_collaboration_modes(mut self, modes: Vec<CollaborationModeMask>) -> Self {
+        self.collaboration_modes = modes;
+        self
+    }
+
+    /// Edits every model in place (for example clearing account-scoped fields) without
+    /// replacing the shared catalog.
+    pub(crate) fn update_models(&self, update: impl FnOnce(&mut [ModelPreset])) {
+        update(
+            &mut self
+                .models
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
     }
 
     /// Records which of the models came from `model/list`.
@@ -431,18 +435,6 @@ impl ModelCatalog {
                 codex_provider_auth::CurrentSelectionDecision::RequireExplicitRecovery { .. }
             )
         })
-||||||| 413492cd6c
-        Self { models }
-=======
-            models,
-            collaboration_modes: Vec::new(),
-        }
-    }
-
-    pub(crate) fn with_collaboration_modes(mut self, modes: Vec<CollaborationModeMask>) -> Self {
-        self.collaboration_modes = modes;
-        self
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) fn try_list_models(&self) -> Result<Vec<ModelPreset>, Infallible> {
@@ -476,12 +468,15 @@ impl ModelCatalog {
         models.extend(runtime_models);
     }
 
-    pub(crate) fn display_name<'a>(&'a self, model: &'a str) -> &'a str {
+    /// Owned because the models sit behind a lock (main's refreshable catalog).
+    pub(crate) fn display_name(&self, model: &str) -> String {
         self.models
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
             .find(|preset| preset.model == model)
-            .map(|preset| preset.display_name.as_str())
-            .unwrap_or_else(|| model_display_name(model))
+            .map(|preset| preset.display_name.clone())
+            .unwrap_or_else(|| model_display_name(model).to_string())
     }
 }
 

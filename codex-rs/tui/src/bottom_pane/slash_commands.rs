@@ -300,26 +300,20 @@ mod tests {
         assert_eq!(find_builtin_command("goal", flags), None);
     }
 
-    /// Cost has to be reachable on the provider the operator is actually
-    /// using. `/usage` used to disappear from the list without a ChatGPT
-    /// sign-in, which hid the recorded-request view - the only way to see what
-    /// a turn cost on Anthropic, a gateway, or a rented endpoint - and hid it
-    /// so completely that it looked unbuilt.
     #[test]
-<<<<<<< HEAD
-    fn usage_command_is_listed_without_account_token_activity() {
-||||||| 413492cd6c
-    fn usage_command_is_hidden_from_input_when_account_token_activity_is_disabled() {
-=======
     fn voice_command_is_hidden_when_disabled() {
         let mut flags = all_enabled_flags();
         flags.voice_command_enabled = false;
         assert_eq!(find_builtin_command("voice", flags), None);
     }
 
+    /// Cost has to be reachable on the provider the operator is actually
+    /// using. `/usage` used to disappear from the list without a ChatGPT
+    /// sign-in, which hid the recorded-request view - the only way to see what
+    /// a turn cost on Anthropic, a gateway, or a rented endpoint - and hid it
+    /// so completely that it looked unbuilt.
     #[test]
-    fn usage_command_is_hidden_from_input_when_account_token_activity_is_disabled() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    fn usage_command_is_listed_without_account_token_activity() {
         let mut flags = all_enabled_flags();
         flags.token_activity_command_enabled = false;
         assert_eq!(
@@ -357,13 +351,9 @@ mod tests {
             vec![
                 SlashCommand::Gpu,
                 SlashCommand::Ide,
-<<<<<<< HEAD
+                SlashCommand::Agents,
                 SlashCommand::Orchestrate,
                 SlashCommand::Tasknode,
-||||||| 413492cd6c
-=======
-                SlashCommand::Agents,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 SlashCommand::Copy,
                 SlashCommand::Export,
                 SlashCommand::Raw,

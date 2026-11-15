@@ -662,6 +662,15 @@ fn judged_syntax_readings(read: impl Fn(shell::Reading) -> Classifier) -> Classi
             classifier.note(kind);
         }
     }
+    // #2018: keep the full main verdict, including the literal-brace
+    // judgment. The extra reading can only add a finding.
+    if classifier.keyword_braces {
+        let groups = read(shell::Reading::KeywordBraces);
+        classifier.assignments_read_newly |= groups.assignments_read_newly;
+        if let Some(kind) = groups.found {
+            classifier.note(kind);
+        }
+    }
     classifier
 }
 
@@ -798,6 +807,7 @@ impl Classifier {
             assignments_read_newly: false,
             redirections_read_newly: false,
             braces_read_newly: false,
+            keyword_braces: false,
             scripts_read: 0,
             rebuilt: 0,
             not_shell: 0,
@@ -1555,6 +1565,7 @@ struct Classifier {
     redirections_read_newly: bool,
     /// #1975: literal braces changed this reading.
     braces_read_newly: bool,
+    keyword_braces: bool,
     scripts_read: usize,
     /// #1261: under Windows path rules, whether the first judgment lexed
     /// text holding a backslash. Its POSIX lexer drops every backslash
@@ -2004,6 +2015,7 @@ impl Classifier {
         self.assignments_read_newly |= lexed.comments_read_newly;
         self.redirections_read_newly |= lexed.redirections_read_newly;
         self.braces_read_newly |= lexed.braces_read_newly;
+        self.keyword_braces |= lexed.keyword_braces;
         if !self.stat_builtin {
             self.stat_builtin = code_tables::may_load_stat(command, &lexed.commands);
         }
@@ -2548,7 +2560,8 @@ impl Classifier {
             // #1974: an assignment that may not run, or that runs only in
             // a subshell, does not resolve the variable in the parent shell
             // (`false && r=x`, `a || r=x`, `(r=x)`, an `if` body, a
-            // backgrounded group, a substitution). Such a variable is unseen
+            // backgrounded group, a substitution, #2192 a word the lexer
+            // split where the shell does not). Such a variable is unseen
             // from here on: a later use asks rather than trusting the value
             // this assignment would have set, and a value it already held
             // is dropped too, since the assignment may have replaced it.
@@ -2558,6 +2571,7 @@ impl Classifier {
                 && !simple.backgrounded
                 && !feeds_pipe
                 && simple.pipe_from.is_none()
+                && !simple.split_inside_word
                 && matches!(
                     simple.assignment_after,
                     certain_cd::Joint::Start | certain_cd::Joint::Seq
@@ -2570,6 +2584,12 @@ impl Classifier {
                         .chars()
                         .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
                 {
+                    // #1973: quote removal can invent an assignment.
+                    // Retain old values and stronger path findings, but ask
+                    // when such a word is about to resolve a variable.
+                    if simple.assignment_quoted {
+                        self.note(ProtectedActionKind::UnseenCode);
+                    }
                     if !reaches_parent && self.assignments != AssignmentReading::Possible {
                         self.assignments_read_newly = true;
                         variables.insert(name.to_string(), shell::UNSEEN_OUTPUT.to_string());
@@ -4160,13 +4180,21 @@ mod tainted_action_git_ext_tests;
 #[cfg(test)]
 #[path = "tainted_action_brace_reading_tests.rs"]
 mod tainted_action_brace_reading_tests;
+
 #[cfg(test)]
 #[path = "tainted_action_git_option_value_tests.rs"]
 mod tainted_action_git_option_value_tests;
+#[cfg(all(test, unix))]
+#[path = "tainted_action_keyword_brace_tests.rs"]
+mod tainted_action_keyword_brace_tests;
 
 #[cfg(test)]
 #[path = "tainted_action_git_quoted_tests.rs"]
 mod tainted_action_git_quoted_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_quoted_assignment_tests.rs"]
+mod tainted_action_quoted_assignment_tests;
 
 #[cfg(test)]
 #[path = "tainted_action_post_taint_tests.rs"]
@@ -4179,3 +4207,7 @@ mod tainted_action_option_glob_tests;
 #[cfg(test)]
 #[path = "tainted_action_timing_probe_tests.rs"]
 mod tainted_action_timing_probe_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_assignment_boundary_tests.rs"]
+mod tainted_action_assignment_boundary_tests;
