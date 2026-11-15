@@ -325,7 +325,9 @@ async fn issue1144_aggressive_native_spawn_on_another_account_is_refused_before_
                 let mut config = (*turn.config).clone();
                 config.security_level = codex_security_policy::SecurityLevel::Aggressive;
                 set_turn_config(turn, config);
-                turn.approval_policy()
+                Arc::make_mut(&mut turn.config)
+                    .permissions
+                    .approval_policy
                     .set(approval)
                     .expect("approval policy should be set");
             },
