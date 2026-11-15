@@ -491,7 +491,7 @@ pub(super) async fn start_recording_app_server_with_realtime_speech(
     let mut embedded = crate::start_embedded_app_server(
         codex_arg0::Arg0DispatchPaths::default(),
         config.clone(),
-        Vec::new(),
+        crate::test_provider_session_flags(config),
         loader_overrides,
         /*strict_config*/ false,
         codex_config::CloudConfigBundleLoader::default(),

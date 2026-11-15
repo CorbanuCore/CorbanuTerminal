@@ -212,7 +212,7 @@ fn issue_594_moderate_startup_warning_snapshot() {
     let (real, links) = sample();
     let cell = crate::history_cell::new_warning_event(moderate_warning(&real, &links));
     let rendered = cell
-        .display_lines(/*width*/ 80)
+        .transcript_lines(/*width*/ 80)
         .iter()
         .map(|line| {
             line.spans

@@ -589,7 +589,7 @@ fn legacy_windows_sandbox_startup_warning_snapshot() {
         &history_cell::new_warning_event(
             codex_sandboxing::LEGACY_WINDOWS_SANDBOX_WARNING.to_string(),
         )
-        .display_lines(/*width*/ 80),
+        .transcript_lines(/*width*/ 80),
     );
 
     assert_app_snapshot!("legacy_windows_sandbox_startup_warning", rendered);
@@ -3234,7 +3234,8 @@ fn selected_and_resumed_threads_use_server_capability_for_v1_and_v2_children() -
             );
             assert_app_snapshot!(
                 format!("selected_unloaded_subagent_{multi_agent_version:?}"),
-                normalize_snapshot_paths(render_bottom_popup(&app.chat_widget, /*width*/ 80))
+                // Wide enough for Corbanu's longer footer to keep the agent label.
+                normalize_snapshot_paths(render_bottom_popup(&app.chat_widget, /*width*/ 140))
             );
             let saved_message = format!("Saved work from child-{index}");
             while let Ok(event) = app_event_rx.try_recv() {
@@ -3698,7 +3699,7 @@ async fn open_agent_picker_prompts_when_subagents_disabled() -> Result<()> {
           Enable subagents?
     › As  Subagents are disabled in this TUI session.
 
-      gp
+      gp                                                                        : -…
         › 1. Yes, enable  Save on the server for new threads without changing
                           this thread
           2. Not now      Keep subagents disabled
@@ -6992,6 +6993,15 @@ async fn model_change_refreshes_committed_session_header_snapshot() -> Result<()
         .collect::<Vec<_>>()
         .join("\n");
     assert!(!rendered.contains("gpt-before"));
+    // Upstream's header no longer draws the model; its raw text still carries it.
+    let raw = app.transcript_cells[0]
+        .raw_lines()
+        .into_iter()
+        .map(|line| line.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(raw.contains("model: gpt-after high"), "{raw}");
+    assert!(!raw.contains("gpt-before"), "{raw}");
     assert_app_snapshot!("model_change_refreshes_committed_session_header", rendered);
     Ok(())
 }

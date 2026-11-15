@@ -1133,7 +1133,7 @@ impl App {
             AppEvent::ConfirmDaemonUpdate(source) => self.confirm_daemon_update(source),
             AppEvent::RunDaemonUpdate(source) => {
                 self.pending_update_action = Some(UpdateAction::Daemon(source));
-                return Ok(self.handle_exit_mode(app_server, ExitMode::Immediate).await);
+                return Ok(crate::boxed_future!(self.handle_exit_mode(app_server, ExitMode::Immediate)).await);
             }
             AppEvent::UserVerificationApproved { thread_id, server_name, request_id } => {
                 Box::pin(self.start_user_verification(app_server, thread_id, server_name, request_id)).await?;
@@ -1146,7 +1146,7 @@ impl App {
                 self.open_misalignment_review(tui, review);
             }
             AppEvent::ContinueMisalignment(review) => {
-                self.continue_misalignment(app_server, review).await;
+                crate::boxed_future!(self.continue_misalignment(app_server, review)).await;
             }
             AppEvent::CloseMisalignmentReview => self.chat_widget.show_misalignment_policy_precaution(),
             AppEvent::SkillsListLoaded { ref cwd, .. }
@@ -1157,10 +1157,10 @@ impl App {
             AppEvent::PluginMentionsLoaded { ref cwd, .. }
                 if cwds_differ(cwd, self.config.cwd.as_path()) => {}
             AppEvent::NewSession { name } => {
-                self.start_fresh_session(
+                crate::boxed_future!(self.start_fresh_session(
                     tui, app_server, /*session_start_source*/ None,
                     /*initial_user_message*/ None, name,
-                )
+                ))
                 .await;
                 if self.chat_widget.has_misalignment_policy_violation() {
                     self.chat_widget.show_misalignment_policy_precaution();
@@ -1184,13 +1184,13 @@ impl App {
                         "Read {name} and let’s continue where we left off.\n\nSaved conversation: {}",
                         path.display(),
                     );
-                    self.start_fresh_session(
+                    crate::boxed_future!(self.start_fresh_session(
                         tui,
                         app_server,
                         /*session_start_source*/ None,
                         /*initial_user_message*/ None,
                         /*new_thread_name*/ None,
-                    )
+                    ))
                     .await;
                     if self
                         .chat_widget
@@ -1244,11 +1244,11 @@ impl App {
                     let codex_home = self.config.codex_home.to_path_buf();
                     let tx = self.app_event_tx.clone();
                     tokio::spawn(async move {
-                        let result = crate::worktree_browser::remove(
+                        let result = crate::boxed_future!(crate::worktree_browser::remove(
                             codex_home,
                             request.cwd,
                             root.clone(),
-                        )
+                        ))
                         .await
                         .map_err(|error| error.to_string());
                         tx.send(AppEvent::ManagedWorktreeRemoved { root, result });
@@ -1310,7 +1310,7 @@ impl App {
                 }
             }
             AppEvent::StartupThreadStarted { result, .. } => {
-                self.handle_startup_thread_started(app_server, result)
+                crate::boxed_future!(self.handle_startup_thread_started(app_server, result))
                     .await?;
             }
             AppEvent::DynamicToolThreadStarted {
@@ -1374,8 +1374,8 @@ impl App {
                 cursor,
                 result,
             } => {
-                if let Err(err) = self
-                    .handle_older_history_page(tui, app_server, thread_id, &cursor, result)
+                if let Err(err) = crate::boxed_future!(self
+                    .handle_older_history_page(tui, app_server, thread_id, &cursor, result))
                     .await
                 {
                     app_server.cancel_older_history_page(thread_id, &cursor);
@@ -1412,7 +1412,7 @@ impl App {
                 self.chat_widget.show_transcript_export_file_prompt();
             }
             AppEvent::ExportTranscript { destination } => {
-                if let Err(error) = self.export_transcript(tui, app_server, destination).await {
+                if let Err(error) = crate::boxed_future!(self.export_transcript(tui, app_server, destination)).await {
                     self.chat_widget
                         .add_error_message(format!("Export failed: {error}"));
                 }
@@ -1443,13 +1443,13 @@ impl App {
                 self.clear_terminal_ui(tui, /*redraw_header*/ false)?;
                 self.reset_app_ui_state_after_clear();
 
-                self.start_fresh_session(
+                crate::boxed_future!(self.start_fresh_session(
                     tui,
                     app_server,
                     Some(ThreadStartSource::Clear),
                     /*initial_user_message*/ None,
                     name,
-                )
+                ))
                 .await;
             }
             AppEvent::RawOutputModeChanged { enabled } => {
@@ -1463,7 +1463,7 @@ impl App {
                 self.clear_terminal_ui(tui, /*redraw_header*/ false)?;
                 self.reset_app_ui_state_after_clear();
 
-                self.start_fresh_session(
+                crate::boxed_future!(self.start_fresh_session(
                     tui,
                     app_server,
                     Some(ThreadStartSource::Clear),
@@ -1473,7 +1473,7 @@ impl App {
                         Vec::new(),
                     ),
                     /*new_thread_name*/ None,
-                )
+                ))
                 .await;
             }
             AppEvent::OpenResumePicker => {
@@ -1487,11 +1487,11 @@ impl App {
                 } else {
                     app_server.remote_cwd_override().map(Path::to_path_buf)
                 };
-                match crate::external_agent_config_migration::flow::handle_external_agent_config_migration_prompt(
+                match crate::boxed_future!(crate::external_agent_config_migration::flow::handle_external_agent_config_migration_prompt(
                     tui,
                     app_server,
                     cwd.as_deref(),
-                )
+                ))
                 .await
                 {
                     Ok(ExternalAgentConfigMigrationFlowOutcome::Started(lines)) => {
@@ -1515,17 +1515,17 @@ impl App {
                 tui.frame_requester().schedule_frame();
             }
             AppEvent::ResumeSessionByIdOrName(id_or_name) => {
-                match crate::lookup_session_target_with_app_server(
+                match crate::boxed_future!(crate::lookup_session_target_with_app_server(
                     crate::resume_picker::SessionPickerAction::Resume,
                     app_server,
                     &self.config,
                     &id_or_name,
-                )
+                ))
                 .await
                 {
                     Ok(Some(target_session)) => {
-                        return self
-                            .resume_target_session(tui, app_server, target_session)
+                        return crate::boxed_future!(self
+                            .resume_target_session(tui, app_server, target_session))
                             .await;
                     }
                     Ok(None) => {
@@ -1547,10 +1547,10 @@ impl App {
                 unreachable!("backend selection is handled by the session manager")
             }
             AppEvent::ArchiveCurrentThread => {
-                return self.archive_current_thread(tui, app_server).await;
+                return crate::boxed_future!(self.archive_current_thread(tui, app_server)).await;
             }
             AppEvent::DeleteCurrentThread => {
-                return self.delete_current_thread(tui, app_server).await;
+                return crate::boxed_future!(self.delete_current_thread(tui, app_server)).await;
             }
             AppEvent::ForkCurrentSession { name } => {
                 let from_locked_thread = self.chat_widget.is_external_writer_view();
@@ -1581,7 +1581,7 @@ impl App {
                     self.handle_draw_pre_render(tui, screen_size)?;
                     self.chat_widget.pre_draw_tick();
                     self.render_chat_widget_frame(tui, screen_size)?;
-                    self.refresh_in_memory_config_from_disk_best_effort("forking the thread")
+                    crate::boxed_future!(self.refresh_in_memory_config_from_disk_best_effort("forking the thread"))
                         .await;
                     // The active thread can use a different provider, cwd, permissions, or
                     // service tier from the freshly reloaded app defaults. Fork from the
@@ -1594,7 +1594,7 @@ impl App {
                     fork_config.model_reasoning_effort = fork_reasoning_effort.clone();
                     fork_config.service_tier = self.chat_widget.configured_service_tier();
                     let selected_profile = self.selected_server_profile(thread_id);
-                    match app_server.fork_thread_at(
+                    match crate::boxed_future!(app_server.fork_thread_at(
                         &self.local_settings,
                         fork_config,
                         thread_id,
@@ -1602,7 +1602,7 @@ impl App {
                         /*before_turn_id*/ None,
                         ForkGoalContinuation::StartIfIdle,
                         selected_profile.as_ref(),
-                    ).await {
+                    )).await {
                         Ok(mut forked) => {
                             // Ultra is a Corbanu Terminal UI/runtime mode. The app server may project it
                             // onto the nearest provider-facing effort, but a fork must retain the
@@ -1612,8 +1612,8 @@ impl App {
                                 .then(|| self.chat_widget.capture_thread_input_state())
                                 .flatten();
                             let name_error = if let Some(name) = name {
-                                match app_server
-                                    .thread_set_name(forked.session.thread_id, name.clone())
+                                match crate::boxed_future!(app_server
+                                    .thread_set_name(forked.session.thread_id, name.clone()))
                                     .await
                                 {
                                     Ok(()) => {
@@ -1628,13 +1628,13 @@ impl App {
                                 None
                             };
                             self.retain_subscriptions_for_fork();
-                            match self
+                            match crate::boxed_future!(self
                                 .replace_chat_widget_with_app_server_thread(
                                     tui,
                                     forked,
                                     ThreadAttachPresentation::SessionLineage,
                                     /*initial_user_message*/ None,
-                                )
+                                ))
                                 .await
                             {
                                 Ok(()) => {
@@ -1728,8 +1728,8 @@ impl App {
                             store.latest_turn_id.clone(),
                         )
                     };
-                    let mut thread = app_server.thread_read(thread_id, /*include_turns*/ false).await?;
-                    app_server.hydrate_initial_thread_history(
+                    let mut thread = crate::boxed_future!(app_server.thread_read(thread_id, /*include_turns*/ false)).await?;
+                    crate::boxed_future!(app_server.hydrate_initial_thread_history(
                         &mut thread,
                         /*turn_cursor*/ None,
                         /*item_cursor*/ None,
@@ -1739,7 +1739,7 @@ impl App {
                             crate::app_server_session::HistoryHydrationScope::Complete,
                             |turn_id| crate::app_server_session::HistoryHydrationScope::ThroughTurn(turn_id),
                         ),
-                    ).await?;
+                    )).await?;
                     if thread.turns.last().map(|turn| &turn.id) != latest_turn_id.as_ref() {
                         color_eyre::eyre::bail!("thread history changed; reload the session before editing this prompt");
                     }
@@ -1781,7 +1781,7 @@ impl App {
                         return Ok(AppRunControl::Continue);
                     }
                 };
-                let reverted = match app_server.revert_thread(thread_id, before_turn_id, &retained_turns).await {
+                let reverted = match crate::boxed_future!(app_server.revert_thread(thread_id, before_turn_id, &retained_turns)).await {
                     Ok(reverted) => reverted,
                     Err(err) => {
                     // Validation and unsupported-method errors leave history unchanged. Other
@@ -1807,7 +1807,7 @@ impl App {
                                 if matches!(notification.as_ref(), ServerNotification::ThreadReverted(notification)
                                     if notification.thread_id == thread_id.to_string())
                         );
-                        self.handle_backend_event(app_server, event).await;
+                        crate::boxed_future!(self.handle_backend_event(app_server, event)).await;
                         if is_reverted {
                             return Ok(());
                         }
@@ -2018,11 +2018,11 @@ impl App {
                 if matches!(mode, ExitMode::ShutdownFirst | ExitMode::ShutdownAfterInterrupt) {
                     self.show_shutdown_feedback(tui)?;
                 }
-                return Ok(self.handle_exit_mode(app_server, mode).await);
+                return Ok(crate::boxed_future!(self.handle_exit_mode(app_server, mode)).await);
             }
             AppEvent::RunningTaskExit { action, thread_id } => match action {
                 RunningTaskExitAction::RunInBackground => {
-                    return Ok(self.handle_exit_mode(app_server, ExitMode::Immediate).await);
+                    return Ok(crate::boxed_future!(self.handle_exit_mode(app_server, ExitMode::Immediate)).await);
                 }
                 RunningTaskExitAction::CancelTask => {
                     if self.chat_widget.thread_id() == Some(thread_id)
@@ -2046,13 +2046,13 @@ impl App {
                 RunningTaskExitAction::Exit => {
                     if self.chat_widget.thread_id() == Some(thread_id)
                         && self.chat_widget.is_active_goal_turn_running()
-                        && let Err(error) = app_server
+                        && let Err(error) = crate::boxed_future!(app_server
                             .thread_goal_set(
                                 thread_id,
                                 /*objective*/ None,
                                 Some(codex_app_server_protocol::ThreadGoalStatus::Paused),
                                 /*token_budget*/ None,
-                            )
+                            ))
                             .await
                     {
                         self.chat_widget
@@ -2063,7 +2063,7 @@ impl App {
                         .active_turn_id_for_thread(thread_id)
                         .await
                         .unwrap_or_default();
-                    match app_server.turn_interrupt(thread_id, turn_id).await {
+                    match crate::boxed_future!(app_server.turn_interrupt(thread_id, turn_id)).await {
                         Ok(()) => {
                             self.app_event_tx
                                 .send(AppEvent::Exit(ExitMode::ShutdownAfterInterrupt));
@@ -2075,11 +2075,11 @@ impl App {
                     }
                 }
             },
-            AppEvent::Logout => match app_server.logout_account().await {
+            AppEvent::Logout => match crate::boxed_future!(app_server.logout_account()).await {
                 Ok(()) => {
                     self.show_shutdown_feedback(tui)?;
-                    return Ok(self
-                        .handle_exit_mode(app_server, ExitMode::ShutdownFirst)
+                    return Ok(crate::boxed_future!(self
+                        .handle_exit_mode(app_server, ExitMode::ShutdownFirst))
                         .await);
                 }
                 Err(err) => {
@@ -2095,8 +2095,8 @@ impl App {
                     return Ok(AppRunControl::Continue);
                 }
                 self.show_shutdown_feedback(tui)?;
-                let _ = self
-                    .handle_exit_mode(app_server, ExitMode::ShutdownFirst)
+                let _ = crate::boxed_future!(self
+                    .handle_exit_mode(app_server, ExitMode::ShutdownFirst))
                     .await;
                 return Ok(AppRunControl::Exit(ExitReason::Restart));
             }
@@ -2195,7 +2195,7 @@ impl App {
                     self.active_thread_id = self.chat_widget.thread_id();
                 }
                 self.chat_widget.prepare_local_op_submission(&op);
-                let result = self.submit_active_thread_op(app_server, op).await;
+                let result = crate::boxed_future!(self.submit_active_thread_op(app_server, op)).await;
                 if result.is_err()
                     && let Some(delivery_id) = realtime_speech_delivery_id
                 {
@@ -2279,7 +2279,7 @@ impl App {
                 turn,
                 prompt,
             } => {
-                self.retry_safety_buffered_turn(
+                crate::boxed_future!(self.retry_safety_buffered_turn(
                     tui,
                     app_server,
                     super::safety_buffering::SafetyBufferedRetry {
@@ -2289,7 +2289,7 @@ impl App {
                         turn,
                         prompt,
                     },
-                )
+                ))
                 .await;
             }
             AppEvent::ContinueSafetyRecourse {
@@ -2297,9 +2297,9 @@ impl App {
                 turn_id,
                 prompt,
             } => {
-                super::safety_recourse::continue_with_rewrite(
+                crate::boxed_future!(super::safety_recourse::continue_with_rewrite(
                     self, tui, app_server, thread_id, turn_id, prompt,
-                )
+                ))
                 .await;
             }
             AppEvent::AppendMessageHistoryEntry { thread_id, text } => {
@@ -2310,8 +2310,8 @@ impl App {
                 branch,
                 cwd: _cwd,
             } => {
-                if let Err(err) = app_server
-                    .thread_metadata_update_branch(thread_id, branch)
+                if let Err(err) = crate::boxed_future!(app_server
+                    .thread_metadata_update_branch(thread_id, branch))
                     .await
                 {
                     tracing::warn!("failed to sync thread git branch from directive: {err}");
@@ -2338,7 +2338,7 @@ impl App {
                     .approve_recent_auto_review_denial(thread_id, id);
             }
             AppEvent::SubmitThreadOp { thread_id, op } => {
-                self.submit_thread_op(app_server, thread_id, op).await?;
+                crate::boxed_future!(self.submit_thread_op(app_server, thread_id, op)).await?;
             }
             AppEvent::ThreadHistoryEntryResponse { thread_id, event } => {
                 self.enqueue_thread_history_entry_response(thread_id, event)
@@ -2754,7 +2754,7 @@ impl App {
                             }
                         }
                         Err(error) => {
-                            self.enqueue_thread_notification(
+                            crate::boxed_future!(self.enqueue_thread_notification(
                                 pending.thread_id,
                                 ServerNotification::McpServerOauthLoginCompleted(
                                     codex_app_server_protocol::McpServerOauthLoginCompletedNotification {
@@ -2765,7 +2765,7 @@ impl App {
                                         error: Some(error),
                                     },
                                 ),
-                            ).await?;
+                            )).await?;
                         }
                     }
                     // A rejected start leaves the old attempt current. A successful replacement
@@ -2782,10 +2782,10 @@ impl App {
                         if let Some(thread_id) = completion.thread_id.as_deref()
                             .and_then(|id| ThreadId::from_string(id).ok())
                         {
-                            self.enqueue_thread_notification(
+                            crate::boxed_future!(self.enqueue_thread_notification(
                                 thread_id,
                                 ServerNotification::McpServerOauthLoginCompleted(completion),
-                            ).await?;
+                            )).await?;
                         }
                     }
                 }
@@ -2857,7 +2857,7 @@ impl App {
                 if self.active_thread_id == Some(thread_id)
                     && self.chat_widget.thread_id() == Some(thread_id)
                 {
-                    self.apply_backend_banner_fallback(app_server).await;
+                    crate::boxed_future!(self.apply_backend_banner_fallback(app_server)).await;
                     if !self.rate_limit_refresh_state.has_pending_recovery() {
                         self.chat_widget.finish_rate_limit_recovery();
                     }
@@ -2874,25 +2874,25 @@ impl App {
                 self.refresh_status_line_workspace_headline(app_server, request_id);
             }
             AppEvent::OpenThreadGoalMenu { thread_id } => {
-                self.open_thread_goal_menu(app_server, thread_id).await;
+                crate::boxed_future!(self.open_thread_goal_menu(app_server, thread_id)).await;
             }
             AppEvent::OpenThreadGoalEditor { thread_id } => {
-                self.open_thread_goal_editor(app_server, thread_id).await;
+                crate::boxed_future!(self.open_thread_goal_editor(app_server, thread_id)).await;
             }
             AppEvent::SetThreadGoalDraft {
                 thread_id,
                 draft,
                 mode,
             } => {
-                self.set_thread_goal_draft(app_server, thread_id, draft, mode)
+                crate::boxed_future!(self.set_thread_goal_draft(app_server, thread_id, draft, mode))
                     .await;
             }
             AppEvent::SetThreadGoalStatus { thread_id, status } => {
-                self.set_thread_goal_status(app_server, thread_id, status)
+                crate::boxed_future!(self.set_thread_goal_status(app_server, thread_id, status))
                     .await;
             }
             AppEvent::ClearThreadGoal { thread_id } => {
-                self.clear_thread_goal(app_server, thread_id).await;
+                crate::boxed_future!(self.clear_thread_goal(app_server, thread_id)).await;
             }
             AppEvent::SendAddCreditsNudgeEmail { credit_type } => {
                 if let Some(request_id) = self
@@ -2937,7 +2937,7 @@ impl App {
                     {
                         self.chat_widget.apply_usage_notice_read(request_id);
                         self.chat_widget.update_backend_banner(&response);
-                        self.apply_backend_banner_fallback(app_server).await;
+                        crate::boxed_future!(self.apply_backend_banner_fallback(app_server)).await;
                         app_server_rate_limit_snapshots(response)
                     } else {
                         Vec::new()
@@ -3187,11 +3187,11 @@ impl App {
             AppEvent::UpdateReasoningEffort(effort) => {
                 self.on_update_reasoning_effort(effort.clone());
                 self.refresh_session_header(tui)?;
-                self.sync_active_thread_reasoning_setting(app_server, effort)
+                crate::boxed_future!(self.sync_active_thread_reasoning_setting(app_server, effort))
                     .await;
             }
             AppEvent::UpdateLunaReserveReasoning { thread_id, effort } => {
-                self.update_luna_reserve_reasoning(app_server, thread_id, effort)
+                crate::boxed_future!(self.update_luna_reserve_reasoning(app_server, thread_id, effort))
                     .await;
             }
             AppEvent::UpdateModel(model) => {
@@ -3207,7 +3207,7 @@ impl App {
                 if model_changed {
                     self.chat_widget.set_model(&model);
                     self.refresh_session_header(tui)?;
-                    self.sync_active_thread_model_setting(app_server, model, /*effort*/ None)
+                    crate::boxed_future!(self.sync_active_thread_model_setting(app_server, model, /*effort*/ None))
                         .await;
                     self.sync_active_thread_service_tier_to_cached_session()
                         .await;
@@ -3259,13 +3259,13 @@ impl App {
                 }
                 self.chat_widget.set_model(&model);
                 self.refresh_session_header(tui)?;
-                let outcome = self
+                let outcome = crate::boxed_future!(self
                     .sync_active_thread_model_selection(
                         app_server,
                         model,
                         provider,
                         account_switch.is_some(),
-                    )
+                    ))
                     .await;
                 // Only once core has moved: otherwise the list (and the
                 // message) could still be the old account's.
@@ -3274,7 +3274,7 @@ impl App {
                     self.check_named_accounts();
                     let message = match outcome {
                         SettingsUpdateOutcome::Confirmed => {
-                            if self.refresh_model_list(app_server).await {
+                            if crate::boxed_future!(self.refresh_model_list(app_server)).await {
                                 Some(account_switch_message(
                                     account.as_ref(),
                                     &self.config,
@@ -3300,15 +3300,15 @@ impl App {
                 if app_server.thread_params_mode().settings_owner()
                     == ThreadSettingsOwner::Server
                 {
-                    self.select_session_model(
+                    crate::boxed_future!(self.select_session_model(
                         app_server,
                         model,
                         effort,
                         /*service_tier*/ None,
-                    )
+                    ))
                     .await;
                 } else {
-                    self.apply_default_model_selection(app_server, model, effort)
+                    crate::boxed_future!(self.apply_default_model_selection(app_server, model, effort))
                         .await;
                 }
             }
@@ -3493,12 +3493,12 @@ impl App {
                 if app_server.thread_params_mode().settings_owner()
                     == ThreadSettingsOwner::Server
                 {
-                    self.select_session_model(
+                    crate::boxed_future!(self.select_session_model(
                         app_server,
                         model,
                         Some(effort),
                         /*service_tier*/ None,
-                    )
+                    ))
                     .await;
                     if let Some(model) = sparkle_model.as_ref() {
                         self.chat_widget
@@ -3519,24 +3519,24 @@ impl App {
                     self.on_apply_advanced_reasoning(model.as_str(), effort.clone());
                 self.refresh_session_header(tui)?;
                 if model_changed {
-                    self.sync_active_thread_model_setting(
+                    crate::boxed_future!(self.sync_active_thread_model_setting(
                         app_server,
                         model.clone(),
                         Some(effort.clone()),
-                    )
+                    ))
                     .await;
                 } else if let Some(mut params) =
                     self.active_thread_reasoning_setting_update_params(Some(effort.clone()))
                 {
                     params.collaboration_mode =
                         Some(self.chat_widget.effective_collaboration_mode());
-                    self.send_thread_settings_update(app_server, params).await;
+                    crate::boxed_future!(self.send_thread_settings_update(app_server, params)).await;
                 }
                 self.sync_active_thread_service_tier_to_cached_session()
                     .await;
 
                 if let Some(default_effort) = default_effort.as_ref()
-                    && let Err(err) = self.persist_model_defaults(
+                    && let Err(err) = crate::boxed_future!(self.persist_model_defaults(
                         app_server.request_handle(),
                         crate::config_update::build_model_selection_edits(
                             model.as_str(),
@@ -3544,7 +3544,7 @@ impl App {
                             Some(default_effort),
                         ),
                         "default model and reasoning effort",
-                    )
+                    ))
                     .await
                 {
                     let error = format_config_error(&err);
@@ -3961,7 +3961,7 @@ impl App {
                 let tx = self.app_event_tx.clone();
                 tokio::spawn(async move {
                     let metadata =
-                        crate::provider_status_host::ProviderAccountMetadata::discover(&config)
+                        crate::boxed_future!(crate::provider_status_host::ProviderAccountMetadata::discover(&config))
                             .await;
                     tx.send(AppEvent::ProviderAccountMetadataResolved { metadata });
                 });
@@ -4182,7 +4182,7 @@ impl App {
                 app_server,
             ),
             AppEvent::ProviderAccount(event) => {
-                self.handle_provider_account_event(tui, app_server, event)
+                crate::boxed_future!(self.handle_provider_account_event(tui, app_server, event))
                     .await;
             }
             AppEvent::NamedBedrockAccountChecked {
@@ -5429,7 +5429,7 @@ impl App {
                 );
             }
             AppEvent::ApplyPermissionShortcut { thread_id, selection } => {
-                self.apply_permission_shortcut(app_server, thread_id, selection).await;
+                crate::boxed_future!(self.apply_permission_shortcut(app_server, thread_id, selection)).await;
             }
             AppEvent::OpenFeedbackNote {
                 category,
@@ -5464,7 +5464,7 @@ impl App {
             }
             AppEvent::RefreshWindowsSandbox { thread_id } => {
                 #[cfg(any(target_os = "windows", test))]
-                self.refresh_windows_sandbox_for_thread(app_server, thread_id).await;
+                crate::boxed_future!(self.refresh_windows_sandbox_for_thread(app_server, thread_id)).await;
                 #[cfg(not(any(target_os = "windows", test)))]
                 let _ = thread_id;
             }
@@ -5569,7 +5569,7 @@ impl App {
                             );
                             if let Some(selection) = profile_selection {
                                 let inline = self.chat_widget.complete_inline_permission_profile_selection();
-                                self.select_permission_profile(app_server, selection).await;
+                                crate::boxed_future!(self.select_permission_profile(app_server, selection)).await;
                                 if inline {
                                     self.app_event_tx.send(AppEvent::SettingsSelectionClosed);
                                 }
@@ -5591,7 +5591,7 @@ impl App {
                                     .add_to_history(history_cell::new_warning_event(message));
                             }
                             // #2000/#2062: the session switches to the set-up sandbox, confirmed.
-                            self.refresh_session_windows_sandbox(app_server).await;
+                            crate::boxed_future!(self.refresh_session_windows_sandbox(app_server)).await;
                     } else if self
                         .chat_widget
                         .recover_inline_permission_profile_selection()
@@ -5612,20 +5612,20 @@ impl App {
                 provider,
                 effort,
             } => {
-                self.persist_default_model_selection(
+                crate::boxed_future!(self.persist_default_model_selection(
                     app_server.request_handle(),
                     model,
                     provider,
                     effort,
-                )
+                ))
                 .await;
             }
             AppEvent::PersistDaybreakSelection { thread_id, enabled } => {
-                self.persist_daybreak_selection(app_server, thread_id, enabled).await;
+                crate::boxed_future!(self.persist_daybreak_selection(app_server, thread_id, enabled)).await;
             }
             AppEvent::SelectSessionModel { model, effort, service_tier } => {
                 self.app_event_tx.send(AppEvent::FollowTranscript);
-                self.select_session_model(app_server, model, effort, service_tier).await;
+                crate::boxed_future!(self.select_session_model(app_server, model, effort, service_tier)).await;
             }
             AppEvent::OpenQuickDialEditor { target, dial } => {
                 self.chat_widget.open_quick_dial_editor(target, dial);
@@ -5680,7 +5680,7 @@ impl App {
             }
             AppEvent::OpenRealtimeSettings => self.chat_widget.open_realtime_settings(),
             AppEvent::OpenRealtimeSoundDevices => self.chat_widget.open_realtime_sound_devices(),
-            AppEvent::OpenRealtimeVoices => self.open_realtime_voices(app_server).await,
+            AppEvent::OpenRealtimeVoices => crate::boxed_future!(self.open_realtime_voices(app_server)).await,
             AppEvent::OpenRealtimeDevicePicker { kind } => self.list_realtime_devices(kind),
             AppEvent::OpenRealtimeInputChannels { device } => self.chat_widget.open_realtime_input_channels(device),
             AppEvent::RealtimeDevicesListed { origin, kind, result } => {
@@ -5692,13 +5692,13 @@ impl App {
                 }
             }
             AppEvent::PersistRealtimeDevice { kind, name } => {
-                self.persist_realtime_device(kind, name).await;
+                crate::boxed_future!(self.persist_realtime_device(kind, name)).await;
             }
             AppEvent::PersistRealtimeInputChannel { channel } => {
-                self.persist_realtime_input_channel(channel).await;
+                crate::boxed_future!(self.persist_realtime_input_channel(channel)).await;
             }
             AppEvent::PersistRealtimeVoiceSelection { voice } => {
-                self.persist_realtime_voice(app_server, voice).await;
+                crate::boxed_future!(self.persist_realtime_voice(app_server, voice)).await;
             }
             AppEvent::PersistServiceTierSelection { service_tier } => {
                 self.refresh_status_line();
@@ -5709,7 +5709,7 @@ impl App {
                 let edits = crate::config_update::build_service_tier_selection_edits(
                     service_tier.as_deref(),
                 );
-                match self.persist_model_defaults(app_server.request_handle(), edits, "default service tier")
+                match crate::boxed_future!(self.persist_model_defaults(app_server.request_handle(), edits, "default service tier"))
                     .await
                 {
                     Ok(()) => {
@@ -5795,7 +5795,7 @@ impl App {
                 let inline_selection = self
                     .chat_widget
                     .complete_inline_permission_profile_selection();
-                self.select_permission_profile(app_server, selection).await;
+                crate::boxed_future!(self.select_permission_profile(app_server, selection)).await;
                 if inline_selection {
                     self.app_event_tx.send(AppEvent::SettingsSelectionClosed);
                 }
@@ -5804,10 +5804,10 @@ impl App {
                 // Completion also carries confirmed settings into fresh sessions and
                 // submits or restores held initial input after checking correlation.
                 if let Some(reviewer) = self.finish_permission_confirmation(selection_id, result)
-                    && let Err(error) = crate::config_update::write_config_batch(
+                    && let Err(error) = crate::boxed_future!(crate::config_update::write_config_batch(
                         app_server.request_handle(),
                         vec![crate::config_update::replace_config_value("approvals_reviewer", serde_json::json!(reviewer.to_string()))],
-                    ).await
+                    )).await
                 {
                     self.chat_widget.add_error_message(format!("Permissions applied, but the default reviewer could not be saved: {error}"));
                 }
@@ -5824,7 +5824,7 @@ impl App {
                     }, selection.display_label, reviewer);
                 } else {
                     // Without a connected task, the server-owned selection reports that it waits.
-                    self.select_permission_profile(app_server, selection).await;
+                    crate::boxed_future!(self.select_permission_profile(app_server, selection)).await;
                 }
             }
             AppEvent::UpdateApprovalsReviewer(policy) => {
@@ -5836,13 +5836,13 @@ impl App {
                 self.chat_widget.set_approvals_reviewer(policy);
                 self.sync_active_thread_permission_settings_to_cached_session()
                     .await;
-                if let Err(err) = crate::config_update::write_config_batch(
+                if let Err(err) = crate::boxed_future!(crate::config_update::write_config_batch(
                     app_server.request_handle(),
                     vec![crate::config_update::replace_config_value(
                         "approvals_reviewer",
                         serde_json::json!(policy.to_string()),
                     )],
-                )
+                ))
                 .await
                 {
                     tracing::error!(
@@ -5862,32 +5862,32 @@ impl App {
                 self.save_experimental_features(app_server, thread_id, updates, response_tx);
             }
             AppEvent::EnableFeatureForNewThreads(feature) => {
-                self.enable_feature_for_new_threads(tui, app_server, feature)
+                crate::boxed_future!(self.enable_feature_for_new_threads(tui, app_server, feature))
                     .await;
             }
             AppEvent::UpdateFeatureFlags { updates } => {
-                self.update_feature_flags(app_server, updates).await;
+                crate::boxed_future!(self.update_feature_flags(app_server, updates)).await;
             }
             AppEvent::UpdateMemorySettings {
                 use_memories,
                 generate_memories,
             } => {
-                self.update_memory_settings_with_app_server(
+                crate::boxed_future!(self.update_memory_settings_with_app_server(
                     app_server,
                     use_memories,
                     generate_memories,
-                )
+                ))
                 .await;
             }
             AppEvent::ResetMemories => {
-                self.reset_memories_with_app_server(app_server).await;
+                crate::boxed_future!(self.reset_memories_with_app_server(app_server)).await;
             }
             AppEvent::UpdateRateLimitSwitchPromptHidden(hidden) => {
                 self.chat_widget.set_rate_limit_switch_prompt_hidden(hidden);
             }
             AppEvent::UpdatePlanModeReasoningEffort(effort) => {
                 self.on_update_plan_mode_reasoning_effort(effort);
-                self.sync_active_thread_plan_mode_reasoning_setting(app_server)
+                crate::boxed_future!(self.sync_active_thread_plan_mode_reasoning_setting(app_server))
                     .await;
             }
             AppEvent::PersistRateLimitSwitchPromptHidden => {
@@ -5917,11 +5917,11 @@ impl App {
                 } else {
                     crate::config_update::clear_config_value(key_path)
                 };
-                if let Err(err) = self.persist_model_defaults(
+                if let Err(err) = crate::boxed_future!(self.persist_model_defaults(
                     app_server.request_handle(),
                     vec![edit],
                     "Plan mode reasoning effort",
-                )
+                ))
                 .await
                 {
                     tracing::error!(
@@ -6027,7 +6027,7 @@ impl App {
                 }
             }
             AppEvent::RenameAgentsOverviewThread { thread_id, name } => {
-                match app_server.thread_set_name(thread_id, name.clone()).await {
+                match crate::boxed_future!(app_server.thread_set_name(thread_id, name.clone())).await {
                     Ok(()) => {
                         self.chat_widget.expect_manual_thread_name(thread_id, name);
                         self.cancel_thread_title_generation(thread_id);
@@ -6098,12 +6098,12 @@ impl App {
                     ThreadTitleDestination::Automatic => {
                         if let Ok(response) = result
                             && let Some(title) = super::thread_title::parse_thread_title(&response)
-                            && let Ok(thread) = app_server
-                                .thread_read(thread_id, /*include_turns*/ false)
+                            && let Ok(thread) = crate::boxed_future!(app_server
+                                .thread_read(thread_id, /*include_turns*/ false))
                                 .await
                             && thread.name.is_none()
                         {
-                            match app_server.thread_set_name(thread_id, title.clone()).await {
+                            match crate::boxed_future!(app_server.thread_set_name(thread_id, title.clone())).await {
                                 Ok(()) => self
                                     .chat_widget
                                     .on_thread_name_updated(thread_id, Some(title)),
@@ -6135,14 +6135,14 @@ impl App {
                 self.confirm_agents_overview_action(thread_id, action);
             }
             AppEvent::RunAgentsOverviewAction { thread_id, action } => {
-                self.run_agents_overview_action(tui, app_server, thread_id, action).await?;
+                crate::boxed_future!(self.run_agents_overview_action(tui, app_server, thread_id, action)).await?;
             }
             AppEvent::StopAgentsOverviewThread { thread_id } => {
-                self.stop_agents_overview_thread(app_server, thread_id)
+                crate::boxed_future!(self.stop_agents_overview_thread(app_server, thread_id))
                     .await;
             }
             AppEvent::OpenAgentPicker => {
-                self.open_agent_picker(app_server).await;
+                crate::boxed_future!(self.open_agent_picker(app_server)).await;
             }
             AppEvent::AgentPickerThreadsLoaded {
                 primary_thread_id,
@@ -6161,11 +6161,11 @@ impl App {
                 let _ = self
                     .claude_panes
                     .set_active_user_pane(crate::claude_panes::CODEX_MAIN_PANE_ID);
-                self.select_agent_thread(tui, app_server, thread_id)
+                crate::boxed_future!(self.select_agent_thread(tui, app_server, thread_id))
                     .await?;
             }
             AppEvent::OpenPanePicker => {
-                self.open_pane_picker(app_server).await;
+                crate::boxed_future!(self.open_pane_picker(app_server)).await;
             }
             AppEvent::OpenCodexPaneModelPicker => {
                 self.open_codex_pane_model_picker();
@@ -6297,7 +6297,7 @@ impl App {
                         }
                     }
                 };
-                match app_server
+                match crate::boxed_future!(app_server
                     .spawn_agent_thread_with_class(
                         &spawn_config,
                         parent_thread_id,
@@ -6308,12 +6308,12 @@ impl App {
                         provider.clone(),
                         effort.clone(),
                         /*base_instructions*/ None,
-                    )
+                    ))
                     .await
                 {
                     Ok(started) => {
                         let thread_id = started.session.thread_id;
-                        self.register_spawn_agent_pane(
+                        crate::boxed_future!(self.register_spawn_agent_pane(
                             thread_id,
                             parent_thread_id,
                             logical_parent_node_id.clone(),
@@ -6321,7 +6321,7 @@ impl App {
                             agent_type,
                             started,
                             /*persist_layout*/ true,
-                        )
+                        ))
                         .await;
                         // When spawning a Nazgul pane, bind it as the visible root so subsequent
                         // Troll spawns and "Nazgul" dispatches route to this pane.
@@ -6366,7 +6366,7 @@ impl App {
                         }
                         self.persist_pane_state();
                         if self.active_thread_id.is_none() {
-                            self.select_agent_thread_and_discard_side(tui, app_server, thread_id)
+                            crate::boxed_future!(self.select_agent_thread_and_discard_side(tui, app_server, thread_id))
                                 .await?;
                         }
                         let binding_suffix = if bound_as_nazgul {
@@ -6407,7 +6407,7 @@ impl App {
                 }
             }
             AppEvent::CreateSpawnStandardCrew => {
-                match self.create_spawn_standard_crew(app_server).await {
+                match crate::boxed_future!(self.create_spawn_standard_crew(app_server)).await {
                     Ok((nazgul_thread_id, troll_thread_id)) => {
                         self.open_spawn_status();
                         self.chat_widget.add_info_message(
@@ -6429,7 +6429,7 @@ impl App {
                 }
             }
             AppEvent::CreateSpawnCorbanuApiCrew => {
-                match self.create_spawn_corbanu_api_crew(app_server).await {
+                match crate::boxed_future!(self.create_spawn_corbanu_api_crew(app_server)).await {
                     Ok((nazgul_thread_id, troll_thread_id)) => {
                         self.open_spawn_status();
                         self.chat_widget.add_info_message(
@@ -6556,7 +6556,7 @@ impl App {
                     content: task.clone(),
                     trigger_turn: !hold,
                 };
-                match app_server.send_agent_message(params).await {
+                match crate::boxed_future!(app_server.send_agent_message(params)).await {
                     Ok(_) => {
                         self.spawn_processed_dispatch_origins.insert(origin_id);
                         self.spawn_processed_dispatch_seq_ids
@@ -6606,8 +6606,8 @@ impl App {
                                 &error, thread_id,
                             ) =>
                     {
-                        match self
-                            .materialize_saved_native_spawn_thread_for_task(app_server, thread_id)
+                        match crate::boxed_future!(self
+                            .materialize_saved_native_spawn_thread_for_task(app_server, thread_id))
                             .await
                         {
                             Ok(materialized_thread_id) => {
@@ -6627,7 +6627,7 @@ impl App {
                                     content: task.clone(),
                                     trigger_turn: !hold,
                                 };
-                                match app_server.send_agent_message(retry_params).await {
+                                match crate::boxed_future!(app_server.send_agent_message(retry_params)).await {
                                     Ok(_) => {
                                         self.spawn_processed_dispatch_origins.insert(origin_id);
                                         self.spawn_processed_dispatch_seq_ids
@@ -6773,8 +6773,8 @@ impl App {
                         .add_error_message(person_task_kill_switch_message(&label));
                     return Ok(AppRunControl::Continue);
                 }
-                let thread_id = match self
-                    .materialize_saved_native_spawn_thread_for_task(app_server, thread_id)
+                let thread_id = match crate::boxed_future!(self
+                    .materialize_saved_native_spawn_thread_for_task(app_server, thread_id))
                     .await
                 {
                     Ok(thread_id) => thread_id,
@@ -6809,8 +6809,8 @@ impl App {
                     text_elements: Vec::new(),
                 }];
                 let sent = match self.active_turn_id_for_submission(thread_id).await {
-                    Some(turn_id) => app_server
-                        .turn_steer(thread_id, turn_id, Uuid::now_v7().to_string(), items)
+                    Some(turn_id) => crate::boxed_future!(app_server
+                        .turn_steer(thread_id, turn_id, Uuid::now_v7().to_string(), items))
                         .await
                         .map(|_| ())
                         .map_err(|error| {
@@ -6850,7 +6850,7 @@ impl App {
                 }
             }
             AppEvent::SendSpawnAgentMailboxMessage { params } => {
-                if let Err(err) = app_server.send_agent_message(params).await {
+                if let Err(err) = crate::boxed_future!(app_server.send_agent_message(params)).await {
                     tracing::error!(
                         error = ?err,
                         error_chain = %format!("{err:#}"),
@@ -6921,7 +6921,7 @@ impl App {
                 self.open_remove_spawn_crew_confirmation();
             }
             AppEvent::RemoveSpawnCrew => {
-                match self.remove_spawn_crew(tui, app_server).await {
+                match crate::boxed_future!(self.remove_spawn_crew(tui, app_server)).await {
                     Ok(message) => self.chat_widget.add_info_message(message, /*hint*/ None),
                     Err(err) => self.chat_widget.add_error_message(err.to_string()),
                 }
@@ -7057,7 +7057,7 @@ impl App {
                         return Ok(AppRunControl::Continue);
                     }
                 };
-                match app_server
+                match crate::boxed_future!(app_server
                     .spawn_agent_thread(
                         &spawn_config,
                         parent_thread_id,
@@ -7067,17 +7067,17 @@ impl App {
                         provider,
                         /*reasoning_effort*/ None,
                         /*base_instructions*/ None,
-                    )
+                    ))
                     .await
                 {
                     Ok(started) => {
                         let thread_id = started.session.thread_id;
-                        self.register_codex_user_pane(
+                        crate::boxed_future!(self.register_codex_user_pane(
                             app_server,
                             thread_id,
                             Some(nickname.clone()),
                             started,
-                        )
+                        ))
                         .await;
                         let manager_node_id = crate::spawn_orchestration::thread_node_id(thread_id);
                         let args = crate::orchestrate::orchestrate_guided_attach_args(
@@ -7120,7 +7120,7 @@ impl App {
                 let is_codex_main = pane_id == crate::claude_panes::CODEX_MAIN_PANE_ID;
                 self.select_user_pane(tui, pane_id).await;
                 if is_codex_main && let Some(primary_thread_id) = self.primary_thread_id {
-                    self.select_agent_thread_and_discard_side(tui, app_server, primary_thread_id)
+                    crate::boxed_future!(self.select_agent_thread_and_discard_side(tui, app_server, primary_thread_id))
                         .await?;
                 }
             }
@@ -7155,30 +7155,30 @@ impl App {
                         return Ok(AppRunControl::Continue);
                     }
                 };
-                match app_server
+                match crate::boxed_future!(app_server
                     .start_user_pane_thread(
                         &pane_config,
                         model.clone(),
                         provider.clone(),
                         effort.clone(),
-                    )
+                    ))
                     .await
                 {
                     Ok(started) => {
                         let thread_id = started.session.thread_id;
-                        self.register_codex_user_pane(
+                        crate::boxed_future!(self.register_codex_user_pane(
                             app_server,
                             thread_id,
                             Some(nickname.clone()),
                             started,
-                        )
+                        ))
                         .await;
                         self.persist_pane_state();
                         self.save_active_claude_pane_transcript();
                         let _ = self
                             .claude_panes
                             .set_active_user_pane(crate::claude_panes::CODEX_MAIN_PANE_ID);
-                        self.select_agent_thread_and_discard_side(tui, app_server, thread_id)
+                        crate::boxed_future!(self.select_agent_thread_and_discard_side(tui, app_server, thread_id))
                             .await?;
                         self.chat_widget.add_info_message(
                             format!("Created and switched to Corbanu Terminal pane {nickname}."),
@@ -7223,7 +7223,7 @@ impl App {
                 self.create_claude_pane(tui, profile, display_name).await;
             }
             AppEvent::RenameCurrentPane { name } => {
-                self.rename_current_pane_display_name(app_server, name)
+                crate::boxed_future!(self.rename_current_pane_display_name(app_server, name))
                     .await;
             }
             AppEvent::OpenRenameCodexPanePrompt { thread_id } => {
@@ -7233,7 +7233,7 @@ impl App {
                 self.open_rename_claude_pane_prompt(pane_id);
             }
             AppEvent::RenameCodexPane { thread_id, name } => {
-                self.rename_codex_pane_display_name(app_server, thread_id, name)
+                crate::boxed_future!(self.rename_codex_pane_display_name(app_server, thread_id, name))
                     .await;
             }
             AppEvent::RenameClaudePane { pane_id, name } => {
@@ -7282,8 +7282,8 @@ impl App {
                 parent_thread_id,
                 user_message,
             } => {
-                return self
-                    .handle_start_side(tui, app_server, parent_thread_id, user_message)
+                return crate::boxed_future!(self
+                    .handle_start_side(tui, app_server, parent_thread_id, user_message))
                     .await;
             }
             AppEvent::OpenSkillsList => {
@@ -7293,11 +7293,11 @@ impl App {
                 self.chat_widget.open_manage_skills_popup();
             }
             AppEvent::SetSkillEnabled { path, enabled } => {
-                match crate::config_update::write_skill_enabled(
+                match crate::boxed_future!(crate::config_update::write_skill_enabled(
                     app_server.request_handle(),
                     path.clone(),
                     enabled,
-                )
+                ))
                 .await
                 {
                     Ok(()) => {
@@ -7333,7 +7333,7 @@ impl App {
                         ),
                     ]
                 };
-                match crate::config_update::write_config_batch(app_server.request_handle(), edits)
+                match crate::boxed_future!(crate::config_update::write_config_batch(app_server.request_handle(), edits))
                     .await
                 {
                     Ok(_) => {
@@ -7395,7 +7395,7 @@ impl App {
                 if self.chat_widget.windows_sandbox_local_server
                     && self.windows_sandbox_host() != WindowsSandboxHost::Remote
                     && self.chat_widget.windows_sandbox_config.requirements.is_none()
-                    && !self.refresh_windows_sandbox_config(app_server).await
+                    && !crate::boxed_future!(self.refresh_windows_sandbox_config(app_server)).await
                 {
                     self.app_event_tx.send(AppEvent::SettingsSelectionClosed);
                     return Ok(AppRunControl::Continue);
@@ -7413,7 +7413,7 @@ impl App {
                 if self.chat_widget.windows_sandbox_local_server
                     && self.windows_sandbox_host() != WindowsSandboxHost::Remote
                     && self.chat_widget.windows_sandbox_config.requirements.is_none()
-                    && !self.refresh_windows_sandbox_config(app_server).await
+                    && !crate::boxed_future!(self.refresh_windows_sandbox_config(app_server)).await
                 {
                     self.app_event_tx.send(AppEvent::SettingsSelectionClosed);
                     return Ok(AppRunControl::Continue);
@@ -7626,7 +7626,7 @@ impl App {
                 self.send_config_notification_test(tui, generation)
             }
             AppEvent::SaveConfigPreference(preference) => {
-                self.save_config_preference(tui, preference).await;
+                crate::boxed_future!(self.save_config_preference(tui, preference)).await;
             }
             AppEvent::PersistAgentsOverviewGrouping(grouping) => {
                 self.persist_agents_overview_grouping(grouping).await;
@@ -7699,12 +7699,12 @@ impl App {
                 key,
                 intent,
             } => {
-                self.apply_keymap_capture(app_server, context, action, key, intent)
+                crate::boxed_future!(self.apply_keymap_capture(app_server, context, action, key, intent))
                     .await;
                 self.merge_startup_warnings(tui, &history_cell::StartupWarningsCell::default());
             }
             AppEvent::KeymapCleared { context, action } => {
-                self.apply_keymap_clear(context, action).await;
+                crate::boxed_future!(self.apply_keymap_clear(context, action)).await;
                 self.merge_startup_warnings(tui, &history_cell::StartupWarningsCell::default());
             }
             AppEvent::GenerateRecap { thread_id } => {

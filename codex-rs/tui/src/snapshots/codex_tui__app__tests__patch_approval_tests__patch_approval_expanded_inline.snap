@@ -1,5 +1,6 @@
 ---
 source: tui/src/app/tests/patch_approval_tests.rs
+assertion_line: 213
 expression: normalize_snapshot_paths(expanded)
 ---
 • Edited 3 files (+5 -2)
@@ -9,8 +10,6 @@ expression: normalize_snapshot_paths(expanded)
     3 +gamma
     4 +delta
 
-  └ m-updated.txt (+1 -1)
-    1 -old
 
 
   Would you like to make the following edits?
@@ -22,7 +21,9 @@ expression: normalize_snapshot_paths(expanded)
 
 
 › 1. Yes, proceed (y)
-  2. Yes, and don't ask again for these files (a)
-  3. No, and tell Codex what to do differently (esc)
+  2. Yes, and don't ask again for these files
+  3. No, and tell Corbanu Terminal what to do differently (esc)
 
+  A letter in brackets only highlights its option; enter confirms it. Options
+  that last beyond this request: choose with ↑/↓, then enter.
   Press enter to confirm or esc to cancel

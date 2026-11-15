@@ -1,6 +1,6 @@
 ---
 source: tui/src/onboarding/auth.rs
-assertion_line: 2994
+assertion_line: 3519
 expression: visible
 ---
   Choose a provider account for Corbanu Terminal
@@ -24,14 +24,14 @@ login
   6. Provider: LM Studio
      Local (not checked)
 
-  7. Done
+  7. Provider: Amazon Bedrock Runtime
+     Use this provider without an enrollment step
+
+  8. Provider: Google Cloud Vertex AI
+     Configured · unavailable
+
+  9. Done
      Configure a usable provider or queue Corbanu API first
-
-
-
-
-
-
 
 
   Use ↑/↓ to choose · Press enter to continue

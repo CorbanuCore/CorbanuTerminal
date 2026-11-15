@@ -1,9 +1,10 @@
 ---
 source: tui/src/chatwidget/tests/approval_requests.rs
+assertion_line: 40
 expression: "format!(\"{buf:?}\")"
 ---
 Buffer {
-    area: Rect { x: 0, y: 0, width: 80, height: 16 },
+    area: Rect { x: 0, y: 0, width: 80, height: 17 },
     content: [
         "                                                                                ",
         "                                                                                ",
@@ -38,12 +39,14 @@ Buffer {
         x: 20, y: 9, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 0, y: 12, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD | REVERSED,
         x: 0, y: 13, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
-        x: 48, y: 13, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
-        x: 51, y: 13, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        x: 59, y: 13, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
+        x: 62, y: 13, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 2, y: 15, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
-        x: 8, y: 15, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
-        x: 13, y: 15, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
-        x: 28, y: 15, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
-        x: 31, y: 15, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+        x: 0, y: 16, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        x: 2, y: 16, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+        x: 8, y: 16, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
+        x: 13, y: 16, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+        x: 28, y: 16, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
+        x: 31, y: 16, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
     ]
 }

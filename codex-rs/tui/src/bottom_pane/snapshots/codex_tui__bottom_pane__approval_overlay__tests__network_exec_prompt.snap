@@ -1,5 +1,6 @@
 ---
 source: tui/src/bottom_pane/approval_overlay.rs
+assertion_line: 3638
 expression: "format!(\"{buf:?}\")"
 ---
 Buffer {
@@ -27,14 +28,18 @@ Buffer {
         x: 57, y: 1, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 10, y: 3, fg: Reset, bg: Reset, underline: Reset, modifier: ITALIC,
         x: 33, y: 3, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
-        x: 0, y: 6, fg: Cyan, bg: Reset, underline: Reset, modifier: BOLD,
-        x: 28, y: 6, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
-        x: 59, y: 9, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
-        x: 62, y: 9, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
-        x: 2, y: 11, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
-        x: 0, y: 12, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        x: 0, y: 7, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD | REVERSED,
+        x: 0, y: 8, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        x: 59, y: 10, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
+        x: 62, y: 10, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 2, y: 12, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
         x: 0, y: 13, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 2, y: 13, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+        x: 0, y: 14, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        x: 2, y: 14, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+        x: 8, y: 14, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
+        x: 13, y: 14, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+        x: 28, y: 14, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
+        x: 31, y: 14, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
     ]
 }

@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/permissions.rs
+assertion_line: 2158
 expression: "render_bottom_popup(&chat, 100)"
 ---
   Possibly planted project folders
@@ -13,7 +14,8 @@ expression: "render_bottom_popup(&chat, 100)"
     project/.git
   Check their contents (for a .git, its hooks and config) before you load or confirm them.
 
+
 › 1. Keep ignoring them  Ask again next time
   2. Load them           I checked them; load them from the next start
 
-  Press enter to confirm or esc to go back
+  enter select · esc back
