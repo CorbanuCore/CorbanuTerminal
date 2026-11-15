@@ -1398,13 +1398,17 @@ async fn pf_30_s04_protected_worker_denies_canary_and_consumes_finite_retry() ->
         for item in [
             ResponseItem::FunctionCallOutput {
                 id: None,
-                call_id: "unregistered-source".into(),
+                call_id: Some("unregistered-source".into()),
+                name: None,
+                namespace: None,
                 output: codex_protocol::models::FunctionCallOutputPayload::from_text(
                     "SYNTHETIC_TOOL_CANARY".into(),
                 ),
                 internal_chat_message_metadata_passthrough: None,
             },
             ResponseItem::Message {
+                encrypted_content: None,
+                status: None,
                 id: None,
                 role: "system".into(),
                 content: vec![ContentItem::InputText {
@@ -1419,7 +1423,7 @@ async fn pf_30_s04_protected_worker_denies_canary_and_consumes_finite_retry() ->
             rollout.push_str(&serde_json::to_string(&RolloutLine {
                 timestamp: watermark.to_rfc3339(),
                 ordinal: None,
-                item: RolloutItem::ResponseItem(item),
+                item: RolloutItem::ResponseItem(item.into()),
             })?);
             rollout.push('\n');
         }
@@ -1494,7 +1498,7 @@ async fn pf_23_s01_moderate_worker_sends_only_labelled_rollout() -> anyhow::Resu
         } else {
             ThreadId::new()
         };
-        let mut rollout = line(RolloutItem::SessionMeta(
+        let mut rollout = line(RolloutItem::SessionMeta(Box::new(
             codex_protocol::protocol::SessionMetaLine {
                 meta: codex_protocol::protocol::SessionMeta {
                     id: opener,
@@ -1502,18 +1506,22 @@ async fn pf_23_s01_moderate_worker_sends_only_labelled_rollout() -> anyhow::Resu
                 },
                 git: None,
             },
-        ))?;
+        )))?;
         rollout.push_str(&tokio::fs::read_to_string(&rollout_path).await?);
         for item in [
             ResponseItem::FunctionCallOutput {
                 id: None,
-                call_id: "unregistered-source".into(),
+                call_id: Some("unregistered-source".into()),
+                name: None,
+                namespace: None,
                 output: codex_protocol::models::FunctionCallOutputPayload::from_text(
                     "SYNTHETIC_TOOL_CANARY".into(),
                 ),
                 internal_chat_message_metadata_passthrough: None,
             },
             ResponseItem::Message {
+                encrypted_content: None,
+                status: None,
                 id: None,
                 role: "system".into(),
                 content: vec![ContentItem::InputText {
@@ -1523,7 +1531,7 @@ async fn pf_23_s01_moderate_worker_sends_only_labelled_rollout() -> anyhow::Resu
                 internal_chat_message_metadata_passthrough: None,
             },
         ] {
-            rollout.push_str(&line(RolloutItem::ResponseItem(item))?);
+            rollout.push_str(&line(RolloutItem::ResponseItem(item.into()))?);
         }
         tokio::fs::write(rollout_path, rollout).await?;
         let response = mount_sse_once(
@@ -1688,7 +1696,7 @@ async fn pf_30_s04_live_provider_refresh_preserves_consolidation_pair() -> anyho
     .await?;
     trigger_memories_startup(&test).await;
     wait_for_single_request(&original_requests).await;
-    wait_for_phase2_workspace_reset(db.as_ref(), &home.path().join("memories")).await?;
+    wait_for_phase2_workspace_reset(db.memories(), &home.path().join("memories")).await?;
     assert!(replacement_requests.requests().is_empty());
     shutdown_test_codex(&test).await?;
     Ok(())

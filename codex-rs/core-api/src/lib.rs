@@ -28,15 +28,11 @@ pub use codex_config::types::TuiKeymap;
 pub use codex_config::types::TuiNotificationSettings;
 pub use codex_config::types::TuiPetAnchor;
 pub use codex_config::types::UriBasedFileOpener;
-<<<<<<< HEAD
-pub use codex_core::BrokerModelAuthOrigin;
-||||||| 413492cd6c
-=======
 pub use codex_core::AgentTreeShutdown;
 pub use codex_core::AgentTreeShutdownFailure;
 pub use codex_core::AgentTreeShutdownFailureReason;
 pub use codex_core::AgentTreeShutdownReport;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub use codex_core::BrokerModelAuthOrigin;
 pub use codex_core::CodexAppsToolsCache;
 pub use codex_core::CodexThread;
 pub use codex_core::CodexThreadSettingsOverrides;

@@ -70,21 +70,9 @@ pub(crate) async fn chatgpt_get_request_with_timeout<T: DeserializeOwned>(
         .for_current_account();
     let client = chatgpt_client(config.http_client_factory().with_network_policy(policy));
     let chatgpt_base_url = &config.chatgpt_base_url;
-<<<<<<< HEAD
     let auth = AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false)
-        .await
+        .await?
         .session_auth()
-||||||| 413492cd6c
-    let auth_manager =
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await;
-    let auth = auth_manager
-        .auth()
-=======
-    let auth_manager =
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await?;
-    let auth = auth_manager
-        .auth()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .await
         .ok_or_else(|| anyhow::anyhow!("ChatGPT auth not available"))?;
     anyhow::ensure!(
