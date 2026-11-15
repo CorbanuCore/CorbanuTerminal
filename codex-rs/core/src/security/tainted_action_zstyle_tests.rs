@@ -11,16 +11,19 @@ fn verdicts(line: &str) -> Vec<Option<ProtectedActionKind>> {
     ["bash", "zsh"]
         .into_iter()
         .flat_map(|shell| {
-            let action = ApprovalAction::Shell {
+            let action = ApprovalAction::ExecCommand {
                 id: "call".into(),
                 environment_id: "local".into(),
                 command: [shell, "-lc", line].map(str::to_string).to_vec(),
+                hook_command: String::new(),
                 cwd: PathUri::from_abs_path(
                     &AbsolutePathBuf::from_absolute_path_checked(root).expect("absolute"),
                 ),
                 sandbox_permissions: SandboxPermissions::UseDefault,
                 additional_permissions: None,
                 justification: None,
+                tty: false,
+                proposed_execpolicy_amendment: None,
             };
             [
                 classify_with(&action, &home, Some(&user_home)),
