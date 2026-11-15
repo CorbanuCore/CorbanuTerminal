@@ -9,7 +9,17 @@ pub fn create_shell_command_sse_response(
     call_id: &str,
 ) -> anyhow::Result<String> {
     // The `arguments` for the `shell_command` tool is a serialized JSON object.
-    let command_str = shlex::try_join(command.iter().map(String::as_str))?;
+    let command_str = if cfg!(windows) {
+        // PowerShell does not understand POSIX single-quote escaping.
+        let args = command
+            .iter()
+            .map(|arg| format!("'{}'", arg.replace('\'', "''")))
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!("& {args}")
+    } else {
+        shlex::try_join(command.iter().map(String::as_str))?
+    };
     let tool_call_arguments = serde_json::to_string(&json!({
         "command": command_str,
         "workdir": workdir.map(|w| w.to_string_lossy()),

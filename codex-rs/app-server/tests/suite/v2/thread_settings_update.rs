@@ -70,7 +70,7 @@ async fn confirm_permission(
 fn write_probe(path: &std::path::Path, call_id: &str) -> Result<String> {
     app_test_support::create_shell_command_sse_response(
         vec![
-            "python3".into(),
+            if cfg!(windows) { "python" } else { "python3" }.into(),
             "-c".into(),
             "import pathlib,sys; pathlib.Path(sys.argv[1]).write_text('executed')".into(),
             path.to_string_lossy().into_owned(),
@@ -115,9 +115,9 @@ async fn finish_probe(mcp: &mut TestAppServer, call_id: &str) -> Result<usize> {
 fn counted_permission_probe(path: &std::path::Path, call_id: &str) -> Result<String> {
     app_test_support::create_shell_command_sse_response(
         vec![
-            "python3".into(),
+            if cfg!(windows) { "python" } else { "python3" }.into(),
             "-c".into(),
-            "import pathlib,sys; p=pathlib.Path(sys.argv[1]); p.open('a').write('executed\\n')"
+            "import pathlib,sys; p=pathlib.Path(sys.argv[1]); p.open('ab').write(b'executed\\n')"
                 .into(),
             path.to_string_lossy().into_owned(),
         ],
@@ -248,14 +248,14 @@ async fn pending_selection_case(decision: &str, expected_old_effects: usize) -> 
 fn permission_barrier(fixture: &std::path::Path) -> Result<String> {
     app_test_support::create_shell_command_sse_response(
         vec![
-            "python3".into(),
+            if cfg!(windows) { "python" } else { "python3" }.into(),
             "-c".into(),
             concat!(
                 "import pathlib,sys,time; p=pathlib.Path(sys.argv[1]); ",
-                "(p/'started').open('a').write('executed\\n'); deadline=time.monotonic()+50\n",
+                "(p/'started').open('ab').write(b'executed\\n'); deadline=time.monotonic()+50\n",
                 "while not (p/'release').exists() and time.monotonic()<deadline: time.sleep(.01)\n",
                 "assert (p/'release').exists(), 'fixture barrier expired'\n",
-                "(p/'finished').open('a').write('executed\\n')"
+                "(p/'finished').open('ab').write(b'executed\\n')"
             )
             .into(),
             fixture.to_string_lossy().into_owned(),
@@ -654,7 +654,7 @@ async fn thread_settings_confirmation_f04_restricts_work_steered_after_applied()
     let barrier_deadline = barrier_timeout - DEFAULT_TIMEOUT;
     let barrier = app_test_support::create_shell_command_sse_response(
         vec![
-            "python3".into(),
+            if cfg!(windows) { "python" } else { "python3" }.into(),
             "-c".into(),
             "import pathlib,sys,time; pathlib.Path(sys.argv[1]).touch(); deadline=time.monotonic()+float(sys.argv[3])\nwhile not pathlib.Path(sys.argv[2]).exists() and time.monotonic()<deadline: time.sleep(.01)".into(),
             ready.to_string_lossy().into_owned(),
@@ -1089,7 +1089,7 @@ async fn preserve_running_authority_after_confirmation(
     let probe = fixture.path().join("probe");
     let barrier = app_test_support::create_shell_command_sse_response(
         vec![
-            "python3".into(),
+            if cfg!(windows) { "python" } else { "python3" }.into(),
             "-c".into(),
             "import pathlib,sys,time; pathlib.Path(sys.argv[1]).touch(); deadline=time.monotonic()+50\nwhile not pathlib.Path(sys.argv[2]).exists() and time.monotonic()<deadline: time.sleep(.01)\nassert pathlib.Path(sys.argv[2]).exists(); pathlib.Path(sys.argv[3]).write_text('approved work completed')".into(),
             ready.to_string_lossy().into_owned(),

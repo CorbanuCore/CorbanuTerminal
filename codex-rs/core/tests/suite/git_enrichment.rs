@@ -97,17 +97,30 @@ async fn startup_prewarm_skips_git_enrichment_and_user_turn_observes_fresh_state
     let (repo, head) = create_git_repo()?;
     let server = start_websocket_server(vec![vec![
         vec![ev_response_created("warm-1"), ev_completed("warm-1")],
+        // Enrichment runs in the background; the initial request need not
+        // contain Git metadata. Keep this turn alive for a follow-up request.
         vec![
             ev_response_created("resp-1"),
-            ev_assistant_message("msg-1", "done"),
+            ev_function_call(
+                "wait-for-git",
+                "test_sync_tool",
+                r#"{"sleep_after_ms":1000}"#,
+            ),
             ev_completed("resp-1"),
+        ],
+        vec![
+            ev_response_created("resp-2"),
+            ev_assistant_message("msg-2", "done"),
+            ev_completed("resp-2"),
         ],
     ]])
     .await;
     let cwd = repo.path().to_path_buf();
-    let mut builder = test_codex().with_config(move |config| {
-        config.cwd = cwd.abs();
-    });
+    let mut builder = test_codex()
+        .with_model("test-gpt-5.1-codex")
+        .with_config(move |config| {
+            config.cwd = cwd.abs();
+        });
     let test = builder.build_with_websocket_server(&server).await?;
 
     let prewarm = tokio::time::timeout(
@@ -122,8 +135,8 @@ async fn startup_prewarm_skips_git_enrichment_and_user_turn_observes_fresh_state
     test.submit_turn("inspect the workspace").await?;
     let turn = server
         .single_connection()
-        .get(1)
-        .context("turn request")?
+        .get(2)
+        .context("turn follow-up request")?
         .body_json();
     assert_eq!(
         turn_metadata(&turn)?["workspaces"],
@@ -342,32 +355,41 @@ async fn concurrent_turns_keep_distinct_worktree_and_repository_metadata() -> Re
     let worktree_head = run_git(&worktree, &["rev-parse", "HEAD"])?;
     let (other_repo, other_head) = create_git_repo()?;
 
-    let server = start_websocket_server(vec![
+    let mut connections = vec![
         vec![vec![ev_response_created("warm-1"), ev_completed("warm-1")]],
         vec![vec![ev_response_created("warm-2"), ev_completed("warm-2")]],
         vec![vec![ev_response_created("warm-3"), ev_completed("warm-3")]],
-        vec![vec![
-            ev_response_created("resp-1"),
-            ev_assistant_message("msg-1", "done"),
-            ev_completed("resp-1"),
-        ]],
-        vec![vec![
-            ev_response_created("resp-2"),
-            ev_assistant_message("msg-2", "done"),
-            ev_completed("resp-2"),
-        ]],
-        vec![vec![
-            ev_response_created("resp-3"),
-            ev_assistant_message("msg-3", "done"),
-            ev_completed("resp-3"),
-        ]],
-    ])
-    .await;
+    ];
+    // Each concurrent turn needs a follow-up request after its background Git
+    // enrichment has had time to complete, just like the system-thread test.
+    for index in 1..=3 {
+        let response_id = format!("resp-{index}");
+        let followup_id = format!("followup-{index}");
+        connections.push(vec![
+            vec![
+                ev_response_created(&response_id),
+                ev_function_call(
+                    &format!("wait-for-git-{index}"),
+                    "test_sync_tool",
+                    r#"{"sleep_after_ms":1000}"#,
+                ),
+                ev_completed(&response_id),
+            ],
+            vec![
+                ev_response_created(&followup_id),
+                ev_assistant_message(&format!("msg-{index}"), "done"),
+                ev_completed(&followup_id),
+            ],
+        ]);
+    }
+    let server = start_websocket_server(connections).await;
 
     let repo_cwd = repo.path().to_path_buf();
-    let mut builder = test_codex().with_config(move |config| {
-        config.cwd = repo_cwd.abs();
-    });
+    let mut builder = test_codex()
+        .with_model("test-gpt-5.1-codex")
+        .with_config(move |config| {
+            config.cwd = repo_cwd.abs();
+        });
     let test = builder.build_with_websocket_server(&server).await?;
 
     let mut worktree_config = test.config.clone();
@@ -440,7 +462,10 @@ async fn concurrent_turns_keep_distinct_worktree_and_repository_metadata() -> Re
         .into_iter()
         .skip(3)
         .map(|connection| {
-            let request = connection.first().context("turn request")?.body_json();
+            let request = connection
+                .get(1)
+                .context("turn follow-up request")?
+                .body_json();
             Ok(turn_metadata(&request)?["workspaces"].clone())
         })
         .collect::<Result<Vec<_>>>()?;

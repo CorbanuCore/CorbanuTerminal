@@ -2516,7 +2516,11 @@ async fn turn_start_explicit_local_environment_updates_legacy_cwd_between_turns(
         unreachable!("loop ensures we break on command execution items");
     };
     assert_eq!(cwd.as_str(), second_cwd.to_string_lossy().as_ref());
-    let expected_command = format_with_current_shell_display("echo second turn");
+    let expected_command = format_with_current_shell_display(if cfg!(windows) {
+        "& 'echo' 'second' 'turn'"
+    } else {
+        "echo second turn"
+    });
     assert_eq!(command, expected_command);
     assert_eq!(status, CommandExecutionStatus::InProgress);
 
