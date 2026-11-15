@@ -617,9 +617,11 @@ impl App {
                 .refresh_agent_picker_thread_liveness(app_server, thread_id)
                 .await)
         {
-            self.add_agents_overview_error(format!(
-                "Agent thread {thread_id} is no longer available."
-            ));
+            // Corbanu: say why a thread is unavailable when it is known.
+            let message = self
+                .unloaded_agent_thread_reason(thread_id)
+                .unwrap_or_else(|| format!("Agent thread {thread_id} is no longer available."));
+            self.add_agents_overview_error(message);
             return Ok(());
         }
         let mut is_replay_only = self
@@ -697,9 +699,11 @@ impl App {
         // Refreshing can merge restored turns into the store, so recap progress must be read only
         // after the refresh while the activated thread channel is still retained.
         let Some(channel) = self.thread_event_channels.get(&thread_id) else {
-            self.add_agents_overview_error(format!(
-                "Agent thread {thread_id} is no longer available."
-            ));
+            // Corbanu: say why a thread is unavailable when it is known.
+            let message = self
+                .unloaded_agent_thread_reason(thread_id)
+                .unwrap_or_else(|| format!("Agent thread {thread_id} is no longer available."));
+            self.add_agents_overview_error(message);
             return Ok(());
         };
         let recap_progress = {
@@ -1092,7 +1096,7 @@ impl App {
                 self.chat_widget
                     .add_error_message(format!("Failed to read new session defaults: {err}"));
                 tui.frame_requester().schedule_frame();
-                return;
+                return false;
             }
         };
         apply_managed_new_thread_defaults(
@@ -1112,6 +1116,7 @@ impl App {
             .await
         {
             Ok(started) => {
+                let thread_id = started.session.thread_id;
                 self.adopt_fresh_session(
                     tui,
                     app_server,
@@ -1611,7 +1616,7 @@ impl App {
 
     /// PF-84 (#545): the named account `target` ran on (see
     /// `crate::resume_launch::resume_recorded_provider_account`).
-    async fn resume_target_recorded_account(
+    pub(super) async fn resume_target_recorded_account(
         &self,
         target: &SessionTarget,
     ) -> Option<RecordedProviderAccount> {

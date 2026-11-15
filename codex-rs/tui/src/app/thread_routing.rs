@@ -1550,7 +1550,7 @@ impl App {
     }
 
     async fn infer_session_for_started_thread(
-        &self,
+        &mut self,
         thread_id: ThreadId,
         notification: &ThreadStartedNotification,
     ) -> Option<ThreadSessionState> {
