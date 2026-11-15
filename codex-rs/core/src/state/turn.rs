@@ -117,9 +117,25 @@ pub(crate) struct TurnState {
 /// An open approval prompt. #945: it remembers the policy marker (epoch
 /// and revocation generation) it was shown under, so an answer that comes
 /// after a security transition can be told apart.
-struct PendingApproval {
-    tx: oneshot::Sender<ReviewDecision>,
-    shown_under: Option<(u64, u64)>,
+pub(crate) struct PendingApproval {
+    pub(crate) tx: oneshot::Sender<ReviewDecision>,
+    pub(crate) shown_under: Option<(u64, u64)>,
+    available_decisions: Vec<ReviewDecision>,
+}
+
+impl PendingApproval {
+    /// #2213: validate before either executing or remembering an answer.
+    /// Compare the whole amendment, not just its kind: a client cannot
+    /// substitute a broader command prefix or another network host.
+    pub(crate) fn constrain_decision(&self, decision: ReviewDecision) -> ReviewDecision {
+        match decision {
+            ReviewDecision::Denied { .. } | ReviewDecision::TimedOut | ReviewDecision::Abort => {
+                decision
+            }
+            decision if self.available_decisions.contains(&decision) => decision,
+            _ => ReviewDecision::denied("approval answer was not offered by this prompt"),
+        }
+    }
 }
 
 pub(crate) struct PendingRequestPermissions {
@@ -175,24 +191,22 @@ impl TurnState {
         key: String,
         tx: oneshot::Sender<ReviewDecision>,
         shown_under: Option<(u64, u64)>,
+        available_decisions: Vec<ReviewDecision>,
     ) -> Option<oneshot::Sender<ReviewDecision>> {
         self.pending_approvals
-            .insert(key, PendingApproval { tx, shown_under })
+            .insert(
+                key,
+                PendingApproval {
+                    tx,
+                    shown_under,
+                    available_decisions,
+                },
+            )
             .map(|previous| previous.tx)
     }
 
-    pub(crate) fn remove_pending_approval(
-        &mut self,
-        key: &str,
-    ) -> Option<oneshot::Sender<ReviewDecision>> {
-        self.pending_approvals.remove(key).map(|pending| pending.tx)
-    }
-
-    /// #945: the policy marker the open prompt `key` was shown under.
-    pub(crate) fn pending_approval_shown_under(&self, key: &str) -> Option<Option<(u64, u64)>> {
-        self.pending_approvals
-            .get(key)
-            .map(|pending| pending.shown_under)
+    pub(crate) fn remove_pending_approval(&mut self, key: &str) -> Option<PendingApproval> {
+        self.pending_approvals.remove(key)
     }
 
     pub(crate) fn clear_pending_waiters(&mut self) {

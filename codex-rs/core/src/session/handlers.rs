@@ -513,32 +513,31 @@ pub async fn exec_approval(
     turn_id: Option<String>,
     decision: ReviewDecision,
 ) {
+    if decision == ReviewDecision::Abort {
+        sess.interrupt_task().await;
+        return;
+    }
+    let Some(pending) = sess.take_pending_approval(&approval_id).await else {
+        tracing::warn!("No pending approval found for call_id: {approval_id}");
+        return;
+    };
+    let decision = pending.constrain_decision(decision);
     let event_turn_id = turn_id.unwrap_or_else(|| approval_id.clone());
     let mut stale_amendment = false;
     if let ReviewDecision::ApprovedExecpolicyAmendment {
         proposed_execpolicy_amendment,
     } = &decision
     {
-        // #945: only an answer to an open prompt may save a rule. One with no
-        // open prompt (its turn ended) is dropped by `notify_approval` anyway.
-        let persisted = match sess.pending_approval_shown_under(&approval_id).await {
-            Some(shown_under) => Some(
-                sess.persist_execpolicy_amendment(proposed_execpolicy_amendment, shown_under)
-                    .await,
-            ),
-            None => {
-                tracing::warn!(
-                    "not saving a \"don't ask again\" rule for {approval_id}: no prompt is open"
-                );
-                None
-            }
-        };
+        // #2213/#945: only the exact amendment offered by this open prompt
+        // may be saved, under the policy in force when it was shown.
+        let persisted = sess
+            .persist_execpolicy_amendment(proposed_execpolicy_amendment, pending.shown_under)
+            .await;
         match persisted {
-            None => {}
             // #945: the prompt was shown before a security transition. The
             // rule is not saved; D50 (#1001): nor does the answer approve the
             // command, which is asked about again under the new level.
-            Some(Ok(None)) => {
+            Ok(None) => {
                 let message = "The security level changed while this approval was open, so \
                                \"don't ask again\" was not saved and the answer was not used."
                     .to_string();
@@ -549,14 +548,14 @@ pub async fn exec_approval(
                 .await;
                 stale_amendment = true;
             }
-            Some(Ok(Some(crate::exec_policy::AmendmentScope::Saved))) => {
+            Ok(Some(crate::exec_policy::AmendmentScope::Saved)) => {
                 sess.record_execpolicy_amendment_message(
                     &event_turn_id,
                     proposed_execpolicy_amendment,
                 )
                 .await;
             }
-            Some(Ok(Some(crate::exec_policy::AmendmentScope::Session))) => {
+            Ok(Some(crate::exec_policy::AmendmentScope::Session)) => {
                 let message = "This command contains a credential, so the approval applies to \
                                this session only and was not saved to your rules."
                     .to_string();
@@ -567,7 +566,7 @@ pub async fn exec_approval(
                 })
                 .await;
             }
-            Some(Err(err)) => {
+            Err(err) => {
                 let message = format!("Failed to apply execpolicy amendment: {err}");
                 tracing::warn!("{message}");
                 let warning = EventMsg::Warning(WarningEvent { message });
@@ -584,12 +583,7 @@ pub async fn exec_approval(
     } else {
         decision
     };
-    match decision {
-        ReviewDecision::Abort => {
-            sess.interrupt_task().await;
-        }
-        other => sess.notify_approval(&approval_id, other).await,
-    }
+    pending.tx.send(decision).ok();
 }
 
 pub async fn patch_approval(sess: &Arc<Session>, id: String, decision: ReviewDecision) {

@@ -805,7 +805,7 @@ async fn allowing_network_policy_amendment_persists_context_and_bypasses_prompt(
     not(target_os = "linux"),
     ignore = "requires the trusted Linux proxy bridge"
 )]
-async fn failed_network_policy_amendment_denies_request_and_does_not_approve_host() -> Result<()> {
+async fn issue_2213_unoffered_network_host_is_denied_and_does_not_approve_host() -> Result<()> {
     skip_if_target_windows!(Ok(()), "uses the POSIX/Python network fixture");
     skip_if_host_windows!(Ok(()));
     skip_if_no_network!(Ok(()));
@@ -849,7 +849,10 @@ async fn failed_network_policy_amendment_denies_request_and_does_not_approve_hos
         .iter()
         .find_map(|request| request.function_call_output_text("network-failed-amendment-1"))
         .context("expected the failed policy amendment to reject the network request")?;
-    assert!(denied_output.contains("blocked by policy"));
+    assert!(
+        denied_output.contains("approval answer was not offered by this prompt"),
+        "{denied_output}"
+    );
 
     mount_exec_network_turn(
         &server,
