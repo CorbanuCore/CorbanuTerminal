@@ -5,7 +5,8 @@ name: rust-ci changed crate tests
 # (rust-ci-full.yml) and the Linux Bazel tests only nightly, so a PR that broke
 # its own crate's tests (#1963 broke two codex-rmcp-client tests) went green.
 # `.github/scripts/changed_crate_test_packages.py` picks the crates (any file
-# under the crate; not the crates depending on it, which postmerge covers)
+# under the crate, plus reverse dependents and affected test-support crates;
+# more than 32 affected packages or workspace-wide inputs select all members)
 # and the helper binaries their tests start. It builds with postmerge's
 # `ci-test` profile (no debug info): with the dev profile, a PR changing most
 # crates filled the runner's disk in the #1972 trials. Restore-only: it reuses
