@@ -1,6 +1,6 @@
 use pretty_assertions::assert_eq;
 
-use super::RouteAwareHttpClient;
+use super::RouteAwareHttpRequestRunner;
 use super::armed_header_env_var_error;
 use crate::protocol::HttpHeader;
 
@@ -13,7 +13,7 @@ fn env_header(env_var: &str) -> HttpHeader {
 }
 
 fn build_error(env_var: &str) -> String {
-    RouteAwareHttpClient::build_headers(vec![env_header(env_var)])
+    RouteAwareHttpRequestRunner::build_headers(vec![env_header(env_var)])
         .expect_err("header should be refused")
         .message
 }
@@ -145,7 +145,7 @@ fn pf_27_s02_armed_runner_refuses_header_env_vars_outside_the_allowlist() {
         return;
     }
     let header_value = |env_var: &str| {
-        RouteAwareHttpClient::build_headers(vec![env_header(env_var)])
+        RouteAwareHttpRequestRunner::build_headers(vec![env_header(env_var)])
             .map(|headers| headers["authorization"].to_str().unwrap().to_string())
             .map_err(|error| error.message)
     };
@@ -162,7 +162,7 @@ fn pf_27_s02_armed_runner_refuses_header_env_vars_outside_the_allowlist() {
         header_value("PF27_HEADER_HOME"),
         Ok("Bearer host-plain".to_string())
     );
-    let literal = RouteAwareHttpClient::build_headers(vec![HttpHeader {
+    let literal = RouteAwareHttpRequestRunner::build_headers(vec![HttpHeader {
         name: "authorization".to_string(),
         value: "Bearer configured".to_string(),
         value_env_var: None,
