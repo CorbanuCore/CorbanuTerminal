@@ -35,7 +35,9 @@ fn configure_fallback_model(app: &mut App) {
         }
         model.default_reasoning_effort = ReasoningEffortConfig::Medium;
     }
-    app.chat_widget.model_catalog().replace_models_for_test(models);
+    app.chat_widget
+        .model_catalog()
+        .replace_models_for_test(models);
     app.model_catalog = app.chat_widget.model_catalog();
     app.chat_widget.set_model("gpt-5.5");
 }

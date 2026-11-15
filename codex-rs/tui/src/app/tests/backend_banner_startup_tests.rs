@@ -11,8 +11,9 @@ async fn backend_banner_fallback_applies_before_initial_and_queued_startup_promp
     config.model = Some("gpt-5.5".into());
     // The banner applies to OpenAI sign-ins; Corbanu's default test provider is not OpenAI.
     config.model_provider_id = codex_model_provider_info::OPENAI_PROVIDER_ID.to_string();
-    config.model_provider =
-        codex_model_provider_info::ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+    config.model_provider = codex_model_provider_info::ModelProviderInfo::create_openai_provider(
+        /*base_url*/ None,
+    );
     let mut tui = crate::tui::test_support::make_test_tui()?;
     let init = app.chatwidget_init_for_forked_or_resumed_thread(
         &mut tui,
