@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::bottom_pane::SelectionTab;
+use crate::model_catalog::LUNA_RESERVE_MODEL;
 use crate::spawn_orchestration::SpawnRole;
 use crate::spawn_orchestration::spawn_reasoning_effort_for_role;
 #[cfg(test)]
@@ -289,7 +290,6 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 14] = [
         subtitle: "Configured custom providers",
     },
 ];
-use crate::model_catalog::LUNA_RESERVE_MODEL;
 
 const ULTRA_REASONING_CONCURRENCY_WARNING_THRESHOLD: usize = 8;
 pub(super) const MODEL_SELECTION_VIEW_ID: &str = "model-selection";
@@ -556,7 +556,9 @@ impl ChatWidget {
         provider: Option<&str>,
         effort: Option<ReasoningEffortConfig>,
     ) -> Option<crate::bottom_pane::SelectionSecondaryAction> {
-        if provider.unwrap_or(OPENAI_PROVIDER_ID) != self.config.model_provider_id {
+        // As in main's UpdateModelSelection, a route without a provider runs
+        // on the session's own provider.
+        if provider.is_some_and(|provider| provider != self.config.model_provider_id) {
             return None;
         }
         self.session_model_selection_action(model, effort)
@@ -807,6 +809,26 @@ impl ChatWidget {
             .or_else(|| Self::model_provider_for_selection(&preset.model));
         let is_current = preset.model == selected_model && preset_provider == selected_provider;
         let direct_select = preset.supported_reasoning_efforts.len() <= 1;
+        // Upstream's session-only `s` on a row that applies directly (one
+        // ordinary effort); never for pane or spawn choices (#468).
+        let secondary_action = if direct_select && matches!(purpose, ModelSelectionPurpose::Session)
+        {
+            let effort = preset.supported_reasoning_efforts.first().map_or_else(
+                || preset.default_reasoning_effort.clone(),
+                |option| option.effort.clone(),
+            );
+            if Self::is_advanced_reasoning_effort(&effort) {
+                None
+            } else {
+                self.session_model_selection_action_for_route(
+                    preset.model.clone(),
+                    preset_provider.as_deref(),
+                    Some(effort),
+                )
+            }
+        } else {
+            None
+        };
         let preset_for_action = preset.clone();
         let mut display_name = Self::model_display_label_for_preset(&preset);
         // The Other tab can contain identical model IDs from distinct routes.
@@ -834,6 +856,7 @@ impl ChatWidget {
             description,
             is_current,
             search_value: Some(format!("{display_name} {model}")),
+            secondary_action,
             actions,
             dismiss_on_select: direct_select,
             dismiss_parent_on_child_accept: !direct_select,
@@ -1313,50 +1336,50 @@ impl ChatWidget {
                     model_slug.as_str(),
                     choice_effort.clone(),
                 );
-            let purpose_for_action = purpose.clone();
-            let provider_for_action = provider.clone();
-            let model_for_action = model_slug.clone();
-            let actions: Vec<SelectionAction> =
-                vec![Box::new(move |tx| match &purpose_for_action {
-                    ModelSelectionPurpose::Session => {
-                        if should_prompt_plan_mode_scope {
-                            tx.send(AppEvent::OpenPlanReasoningScopePrompt {
-                                model: model_for_action.clone(),
-                                provider: provider_for_action.clone(),
-                                effort: choice_effort.clone(),
-                            });
-                        } else {
-                            tx.send(AppEvent::UpdateModelSelection {
-                                model: model_for_action.clone(),
-                                provider: provider_for_action.clone(),
-                            });
-                            tx.send(AppEvent::UpdateReasoningEffort(choice_effort.clone()));
-                            if Self::should_persist_model_provider(provider_for_action.as_deref()) {
-                                tx.send(AppEvent::PersistModelSelection {
-                                    model: model_for_action.clone(),
-                                    provider: provider_for_action.clone(),
-                                    effort: choice_effort.clone(),
-                                });
-                            }
-                        }
-                    }
-                    purpose @ (ModelSelectionPurpose::CodexPane { .. }
-                    | ModelSelectionPurpose::SpawnAgent { .. }) => Self::send_pane_selection(
-                        tx,
-                        purpose,
-                        provider_for_action.clone(),
-                        model_for_action.clone(),
-                        choice_effort.clone(),
-                    ),
-                })];
+            // Session choices go through the same actions as a picker row
+            // (upstream: Luna Reserve stays temporary), with main's provider
+            // and persistence policy; pane and spawn choices never touch the
+            // session (#468).
+            let actions: Vec<SelectionAction> = match &purpose {
+                ModelSelectionPurpose::Session => self.model_selection_actions(
+                    model_slug.clone(),
+                    provider.clone(),
+                    choice_effort.clone(),
+                    should_prompt_plan_mode_scope,
+                ),
+                ModelSelectionPurpose::CodexPane { .. }
+                | ModelSelectionPurpose::SpawnAgent { .. } => {
+                    let purpose_for_action = purpose.clone();
+                    let provider_for_action = provider.clone();
+                    let model_for_action = model_slug.clone();
+                    let effort_for_action = choice_effort.clone();
+                    vec![Box::new(move |tx| {
+                        Self::send_pane_selection(
+                            tx,
+                            &purpose_for_action,
+                            provider_for_action.clone(),
+                            model_for_action.clone(),
+                            effort_for_action.clone(),
+                        )
+                    })]
+                }
+            };
+            let secondary_action = if matches!(purpose, ModelSelectionPurpose::Session) {
+                self.session_model_selection_action_for_route(
+                    model_slug.clone(),
+                    provider.as_deref(),
+                    choice_effort.clone(),
+                )
+            } else {
+                None
+            };
 
             items.push(SelectionItem {
                 name: effort_label,
                 description,
                 selected_description,
                 is_current: is_current_model && Some(choice) == highlight_choice.as_ref(),
-                secondary_action: self
-                    .session_model_selection_action(model_slug.clone(), choice_effort),
+                secondary_action,
                 actions,
                 dismiss_on_select: true,
                 ..Default::default()
@@ -1543,11 +1566,16 @@ impl ChatWidget {
                 is_current: is_current_model
                     && is_current_route
                     && Some(&effort) == highlight_choice.as_ref(),
-                secondary_action: self.session_model_selection_action_for_route(
-                    model_slug.clone(),
-                    provider.as_deref(),
-                    Some(effort.clone()),
-                ),
+                // #468: a pane or spawn choice never changes the session.
+                secondary_action: if matches!(purpose, ModelSelectionPurpose::Session) {
+                    self.session_model_selection_action_for_route(
+                        model_slug.clone(),
+                        provider.as_deref(),
+                        Some(effort.clone()),
+                    )
+                } else {
+                    None
+                },
                 actions,
                 dismiss_on_select: true,
                 ..Default::default()
