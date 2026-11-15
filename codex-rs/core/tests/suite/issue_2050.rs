@@ -127,6 +127,7 @@ async fn fake_executor(host: Host) -> anyhow::Result<(String, Arc<Mutex<Vec<Stri
 
 struct Outcome {
     output: String,
+    warnings: Vec<String>,
     /// The requests other than `initialize` and `environment/info` the
     /// executor got during the turn (the session's own unsandboxed lookups,
     /// such as for `AGENTS.md`, included).
@@ -199,7 +200,14 @@ async fn run(level: SecurityLevel, host: Host, call: Call) -> anyhow::Result<Out
             thread_settings: Default::default(),
         })
         .await?;
+    let warnings = Mutex::new(Vec::new());
     wait_for_event(&test.codex, |event| {
+        if let EventMsg::Warning(warning) = event {
+            warnings
+                .lock()
+                .expect("warnings")
+                .push(warning.message.clone());
+        }
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -208,6 +216,7 @@ async fn run(level: SecurityLevel, host: Host, call: Call) -> anyhow::Result<Out
         .ok_or_else(|| anyhow::anyhow!("no request after the tool call"))?;
     let reached = methods.lock().expect("methods").clone();
     Ok(Outcome {
+        warnings: warnings.into_inner().expect("warnings"),
         output: request
             .function_call_output_text(CALL_ID)
             .unwrap_or_default(),
@@ -232,6 +241,17 @@ async fn issue_2050_remote_windows_without_its_sandbox_refuses_commands_and_file
             // (#2049); not this test's concern.
             let client_refuses = cfg!(windows) && level != SecurityLevel::Permissive;
             let command = run(level, host, Call::Command).await?;
+            let startup_notice = command.warnings.iter().any(|warning| {
+                warning.contains("agent commands and file tools are refused")
+                    && warning.contains("environment `remote`")
+                    && warning.contains(name)
+                    && warning.contains("Set up default sandbox")
+            });
+            assert_eq!(
+                startup_notice, refused,
+                "{level:?} {host:?}: {:?}",
+                command.warnings
+            );
             let expected = format!("Security level {name} refused this command");
             let ok = if refused {
                 command.output.contains(&expected)

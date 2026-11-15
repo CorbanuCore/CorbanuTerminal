@@ -236,6 +236,20 @@ pub(crate) fn remote_command_refusal(
     )
 }
 
+/// Shown at startup for a ready remote environment without its sandbox.
+pub(crate) fn remote_startup_notice(
+    level: SecurityLevel,
+    environment_id: &str,
+    gap: RemoteGap,
+) -> String {
+    let level = name(level);
+    let (reason, steps) = remote_reason(environment_id, gap);
+    format!(
+        "Security level {level} needs {reason}, so agent commands and file tools are refused \
+         there until it is available. {steps} {REMOTE_PERMISSIVE}"
+    )
+}
+
 /// The refusal of typing into a running command of a remote environment.
 pub(crate) fn remote_typing_refusal(
     level: SecurityLevel,

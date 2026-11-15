@@ -1139,6 +1139,30 @@ impl Session {
             ));
             turn_environments.update_selections(session_configuration.environment_selections());
             let resolved_environments = turn_environments.snapshot().await;
+            let live_level = crate::client::live_level_of(
+                config.security_level,
+                Some(&ingress_policy),
+                thread_id,
+            );
+            if live_level != codex_security_policy::SecurityLevel::Permissive {
+                for environment in resolved_environments.turn_environments() {
+                    if let Some(gap) = crate::security::windows_unsandboxed::remote_gap(
+                        &environment.environment,
+                        session_configuration.windows_sandbox_level,
+                    ).await {
+                        post_session_configured_events.push(Event {
+                            id: INITIAL_SUBMIT_ID.to_owned(),
+                            msg: EventMsg::Warning(WarningEvent {
+                                message: crate::security::windows_unsandboxed::remote_startup_notice(
+                                    live_level,
+                                    &environment.environment_id,
+                                    gap,
+                                ),
+                            }),
+                        });
+                    }
+                }
+            }
             let agents_md_manager = Arc::new(AgentsMdManager::new(user_instructions));
             let plugin_skill_warmup = warm_plugins_and_skills_for_session_init(
                 Arc::clone(&config),

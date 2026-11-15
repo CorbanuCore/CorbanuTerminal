@@ -162,6 +162,99 @@ fn turn_environment(url: Option<String>) -> crate::session::turn_context::TurnEn
     )
 }
 
+#[tokio::test]
+async fn issue_2088_discovery_and_skill_reads_keep_the_refusal_with_full_disk_access() {
+    use crate::environment_selection::TurnEnvironmentSnapshot;
+    use crate::environment_selection::TurnEnvironmentState;
+    use crate::session::tests::build_test_config;
+    use crate::session::tests::make_session_and_context_for_config;
+    use codex_features::Feature;
+    use codex_protocol::models::PermissionProfile;
+
+    for level in [
+        SecurityLevel::Permissive,
+        SecurityLevel::Moderate,
+        SecurityLevel::Aggressive,
+    ] {
+        for discovery_enabled in [false, true] {
+            let home = tempfile::tempdir().expect("home");
+            let cwd = tempfile::tempdir().expect("cwd");
+            let mut config = build_test_config(home.path(), cwd.path()).await;
+            config.security_level = level;
+            config
+                .permissions
+                .set_permission_profile(PermissionProfile::Disabled)
+                .expect("profile");
+            if discovery_enabled {
+                config
+                    .features
+                    .enable(Feature::ExecutorCapabilityDiscovery)
+                    .expect("feature");
+            } else {
+                config
+                    .features
+                    .disable(Feature::ExecutorCapabilityDiscovery)
+                    .expect("feature");
+            }
+            let (session, turn) = make_session_and_context_for_config(config).await;
+            session.services.replace_model_client(
+                (*session.services.model_client())
+                    .clone()
+                    .with_ingress_level(level),
+            );
+            // No root is scanned: inspect the exact context forwarded to discovery and skills.read.
+            let environments = TurnEnvironmentSnapshot {
+                environments: vec![
+                    TurnEnvironmentState::Ready(turn_environment(Some(
+                        "ws://127.0.0.1:1".to_string(),
+                    ))),
+                    TurnEnvironmentState::Ready(
+                        turn.environments.primary().expect("local").clone(),
+                    ),
+                ],
+            };
+            let snapshot = session
+                .executor_capability_discovery_for_step(
+                    &turn.config,
+                    &[],
+                    &environments,
+                    WindowsSandboxLevel::Disabled,
+                )
+                .await;
+            if level == SecurityLevel::Permissive {
+                assert_eq!(snapshot.is_some(), discovery_enabled);
+                if let Some(snapshot) = snapshot {
+                    assert!(snapshot.sandbox_contexts().is_empty());
+                }
+            } else {
+                let snapshot =
+                    snapshot.expect("protected levels must not use unsandboxed discovery");
+                let context = snapshot
+                    .sandbox_contexts()
+                    .get("far")
+                    .expect("skill resource context");
+                assert_eq!(
+                    context.unsandboxed_refusal,
+                    Some(if cfg!(windows) {
+                        file_refusal(level)
+                    } else {
+                        remote_file_refusal(level, "far")
+                    })
+                );
+                assert_eq!(context.windows_sandbox_level, WindowsSandboxLevel::Disabled);
+                let local = snapshot
+                    .sandbox_contexts()
+                    .get("local")
+                    .expect("local context");
+                assert_eq!(
+                    local.unsandboxed_refusal,
+                    cfg!(windows).then(|| file_refusal(level))
+                );
+            }
+        }
+    }
+}
+
 fn windows_info(set_up: bool) -> serde_json::Value {
     serde_json::json!({
         "shell": { "name": "powershell", "path": "powershell.exe" },

@@ -45,6 +45,11 @@ async fn fake_executor(info: Value) -> (String, Arc<StdMutex<Vec<String>>>) {
             let result = match method.as_str() {
                 "initialize" => json!({ "sessionId": "fake" }),
                 "environment/info" => info.clone(),
+                "capabilityRoots/discoverV1" => json!({"roots": request["params"]["roots"]
+                    .as_array().expect("roots").iter().map(|root| json!({
+                        "id": root["id"], "path": root["path"], "plugin": null,
+                        "skills": [], "namespaceManifests": [], "warnings": [], "error": null,
+                    })).collect::<Vec<_>>()}),
                 _ => json!({ "dataBase64": "" }),
             };
             let reply = json!({ "id": id, "result": result }).to_string();
@@ -104,6 +109,70 @@ fn assert_refused(result: io::Result<()>, requests: Vec<String>) {
             Vec::new()
         )
     );
+}
+
+#[tokio::test]
+async fn issue_2088_discovery_refuses_before_sending_roots_to_an_unconfined_executor() {
+    for level in [WindowsSandboxLevel::Disabled, WindowsSandboxLevel::Elevated] {
+        let (url, methods) = fake_executor(windows(/*set_up*/ false)).await;
+        let environment = Environment::create_for_tests(Some(url)).expect("environment");
+        let mut context =
+            FileSystemSandboxContext::from_permission_profile(PermissionProfile::Disabled);
+        context.windows_sandbox_level = level;
+        context.unsandboxed_refusal = Some(REFUSAL.to_string());
+        let error = environment
+            .discover_capability_roots(crate::CapabilityRootsDiscoverParams {
+                roots: vec![crate::CapabilityRootDiscoverRequest {
+                    id: "skill-root".to_string(),
+                    path: PathUri::parse("file:///C:/skills").expect("uri"),
+                    sandbox: Some(context),
+                }],
+            })
+            .await
+            .expect_err("discovery must fail closed");
+        assert!(error.to_string().contains(REFUSAL), "{error}");
+        assert_eq!(
+            methods.lock().expect("methods").clone(),
+            vec!["initialize".to_string(), "environment/info".to_string()]
+        );
+    }
+}
+
+#[tokio::test]
+async fn issue_2088_discovery_keeps_confined_and_unmarked_requests_working() {
+    for (info, refusal) in [
+        (windows(/*set_up*/ true), Some(REFUSAL.to_string())),
+        (
+            json!({"shell": {"name": "bash", "path": "/bin/bash"}, "cwd": "file:///work",
+            "hostSandbox": {"os": "linux"}}),
+            Some(REFUSAL.to_string()),
+        ),
+        (windows(/*set_up*/ false), None),
+    ] {
+        let (url, methods) = fake_executor(info).await;
+        let environment = Environment::create_for_tests(Some(url)).expect("environment");
+        let mut context =
+            FileSystemSandboxContext::from_permission_profile(PermissionProfile::Disabled);
+        context.windows_sandbox_level = WindowsSandboxLevel::Elevated;
+        context.unsandboxed_refusal = refusal;
+        let path = PathUri::parse("file:///skills").expect("uri");
+        let response = environment
+            .discover_capability_roots(crate::CapabilityRootsDiscoverParams {
+                roots: vec![crate::CapabilityRootDiscoverRequest {
+                    id: "skills".to_string(),
+                    path: path.clone(),
+                    sandbox: Some(context),
+                }],
+            })
+            .await
+            .expect("discovery allowed");
+        assert_eq!(response.roots.len(), 1);
+        assert_eq!(response.roots[0].path, path);
+        assert_eq!(
+            methods.lock().expect("methods").last().map(String::as_str),
+            Some("capabilityRoots/discoverV1")
+        );
+    }
 }
 
 #[tokio::test]

@@ -716,11 +716,16 @@ async fn executor_skill_tools_reuse_the_thread_catalog_across_steps() -> TestRes
     let list_calls = Arc::new(AtomicUsize::new(0));
     let executor_provider = Arc::new(StaticSkillProvider {
         catalog: SkillCatalog {
-            entries: vec![test_entry(
-                SkillSourceKind::Executor,
+            entries: vec![SkillCatalogEntry::new(
+                SkillPackageId("executor/lint-fix".to_string()),
+                SkillAuthority::new(SkillSourceKind::Executor, "lint-fix"),
                 "lint-fix",
-                "executor/lint-fix",
-                "lint-fix/SKILL.md",
+                "Fix lint errors.",
+                SkillResourceId::environment(
+                    "lint-fix/SKILL.md",
+                    LOCAL_ENVIRONMENT_ID,
+                    PathUri::parse("file:///skills/lint-fix/SKILL.md").expect("skill URI"),
+                ),
             )],
             warnings: Vec::new(),
         },
@@ -773,6 +778,10 @@ async fn executor_skill_tools_reuse_the_thread_catalog_across_steps() -> TestRes
     assert_eq!(1, list_calls.load(Ordering::Relaxed));
 
     let environment_manager = EnvironmentManager::default_for_tests();
+    let mut live_sandbox = codex_exec_server::FileSystemSandboxContext::from_permission_profile(
+        codex_protocol::models::PermissionProfile::Disabled,
+    );
+    live_sandbox.unsandboxed_refusal = Some("issue-2088-live-refusal".to_string());
     for step_id in ["step-1", "step-2"] {
         let step_store = ExtensionData::new(step_id);
         step_store.insert(
@@ -817,7 +826,12 @@ async fn executor_skill_tools_reuse_the_thread_catalog_across_steps() -> TestRes
                     truncation_policy: TruncationPolicy::Bytes(1_024),
                     conversation_history: ConversationHistory::default(),
                     turn_item_emitter: Arc::new(NoopTurnItemEmitter),
-                    environments: Vec::new(),
+                    environments: vec![codex_extension_api::ToolEnvironment {
+                        environment_id: LOCAL_ENVIRONMENT_ID.to_string(),
+                        cwd: AbsolutePathBuf::from_absolute_path(std::env::temp_dir())?,
+                        file_system: Arc::clone(&LOCAL_FS),
+                        file_system_sandbox_context: live_sandbox.clone(),
+                    }],
                     payload: payload.clone(),
                 })
                 .await?;
@@ -832,6 +846,15 @@ async fn executor_skill_tools_reuse_the_thread_catalog_across_steps() -> TestRes
         }
     }
 
+    // #2088: even a catalog captured without contexts must carry the live
+    // refusal to resource reads. The cache optimization must not erase it.
+    assert!(
+        read_requests
+            .lock()
+            .expect("reads")
+            .iter()
+            .all(|request| { request.sandbox.as_ref() == Some(&live_sandbox) })
+    );
     // World State and every later skills.list/skills.read step share one executor scan.
     assert_eq!(1, list_calls.load(Ordering::Relaxed));
     assert_eq!(
