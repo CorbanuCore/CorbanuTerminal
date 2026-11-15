@@ -3513,6 +3513,9 @@ mod launch_paths;
 #[path = "command_identity_tests.rs"]
 mod command_identity;
 
+#[path = "ctrl_c_tests.rs"]
+mod ctrl_c;
+
 /// #1770: a command's own token keeps it out of folders any user may write to.
 #[path = "token_boundary_tests.rs"]
 mod token_boundary;

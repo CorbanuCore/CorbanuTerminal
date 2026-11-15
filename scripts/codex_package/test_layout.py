@@ -41,6 +41,41 @@ class PackageLayoutTest(unittest.TestCase):
                 r"^\s*\[string\]\$[A-Za-z_][A-Za-z0-9_]*\s*=",
             )
 
+    def test_windows_package_preserves_and_requires_conpty_launcher(self) -> None:
+        for target in ("x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                package_dir = root / "package"
+                package_dir.mkdir()
+                spec = TARGET_SPECS[target]
+                variant = PACKAGE_VARIANTS["codex-app-server"]
+                launcher = touch_executable(root / "codex-conpty-launcher.exe")
+                launcher.write_bytes(b"signed console launcher")
+                inputs = PackageInputs(
+                    entrypoint_bin=touch_executable(root / "codex-app-server.exe"),
+                    code_mode_host_bin=touch_executable(
+                        root / "codex-code-mode-host.exe"
+                    ),
+                    extra_bins={},
+                    rg_bin=touch_executable(root / "rg.exe"),
+                    zsh_bin=None,
+                    bwrap_bin=None,
+                    codex_command_runner_bin=touch_executable(
+                        root / "codex-command-runner.exe"
+                    ),
+                    codex_conpty_launcher_bin=launcher,
+                    codex_windows_sandbox_setup_bin=touch_executable(
+                        root / "codex-windows-sandbox-setup.exe"
+                    ),
+                )
+                build_package_dir(package_dir, "1.2.3", variant, spec, inputs)
+                validate_package_dir(package_dir, variant, spec, include_zsh=False)
+                packaged = package_dir / "codex-resources" / launcher.name
+                self.assertEqual(packaged.read_bytes(), b"signed console launcher")
+                packaged.unlink()
+                with self.assertRaisesRegex(RuntimeError, "codex-conpty-launcher.exe"):
+                    validate_package_dir(package_dir, variant, spec, include_zsh=False)
+
     def test_macos_package_preserves_prebuilt_resource_binaries(self) -> None:
         for variant_name in ("corbanu", "pfterminal", "codex", "codex-app-server"):
             for target in ("aarch64-apple-darwin", "x86_64-apple-darwin"):
@@ -72,6 +107,7 @@ class PackageLayoutTest(unittest.TestCase):
                             zsh_bin=zsh_bin,
                             bwrap_bin=None,
                             codex_command_runner_bin=None,
+                            codex_conpty_launcher_bin=None,
                             codex_windows_sandbox_setup_bin=None,
                         )
 
@@ -121,6 +157,7 @@ class PackageLayoutTest(unittest.TestCase):
                         zsh_bin=None,
                         bwrap_bin=touch_executable(root / "bwrap"),
                         codex_command_runner_bin=None,
+                        codex_conpty_launcher_bin=None,
                         codex_windows_sandbox_setup_bin=None,
                     )
 
@@ -149,6 +186,7 @@ class PackageLayoutTest(unittest.TestCase):
                 zsh_bin=None,
                 bwrap_bin=touch_executable(root / "bwrap"),
                 codex_command_runner_bin=None,
+                codex_conpty_launcher_bin=None,
                 codex_windows_sandbox_setup_bin=None,
             )
 
@@ -186,6 +224,7 @@ class PackageLayoutTest(unittest.TestCase):
                 zsh_bin=None,
                 bwrap_bin=touch_executable(root / "bwrap"),
                 codex_command_runner_bin=None,
+                codex_conpty_launcher_bin=None,
                 codex_windows_sandbox_setup_bin=None,
             )
             package = root / "package"
@@ -230,6 +269,7 @@ class PackageLayoutTest(unittest.TestCase):
                 zsh_bin=None,
                 bwrap_bin=touch_executable(root / "bwrap"),
                 codex_command_runner_bin=None,
+                codex_conpty_launcher_bin=None,
                 codex_windows_sandbox_setup_bin=None,
             )
 
@@ -307,6 +347,7 @@ class PackageLayoutTest(unittest.TestCase):
                 zsh_bin=None,
                 bwrap_bin=touch_executable(root / "bwrap"),
                 codex_command_runner_bin=None,
+                codex_conpty_launcher_bin=None,
                 codex_windows_sandbox_setup_bin=None,
             )
 

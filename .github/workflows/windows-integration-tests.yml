@@ -131,7 +131,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --profile ci-test \
-            -p codex-windows-sandbox --bin codex-windows-sandbox-setup --bin codex-command-runner \
+            -p codex-windows-sandbox --bin codex-windows-sandbox-setup --bin codex-command-runner --bin codex-conpty-launcher \
             -p codex-cli --bin codex \
             -p codex-code-mode-host --bin codex-code-mode-host \
             -p codex-exec --bin codex-exec \
@@ -156,6 +156,7 @@ jobs:
           env \
             "CARGO_BIN_EXE_codex_windows_sandbox_setup=$(cygpath -w "${helpers}/codex-windows-sandbox-setup.exe")" \
             "CARGO_BIN_EXE_codex_command_runner=$(cygpath -w "${helpers}/codex-command-runner.exe")" \
+            "CARGO_BIN_EXE_codex_conpty_launcher=$(cygpath -w "${helpers}/codex-conpty-launcher.exe")" \
             cargo nextest run --cargo-profile ci-test -p "$PACKAGE" --test '*' \
               --no-fail-fast --final-status-level fail -E "$filter"
 

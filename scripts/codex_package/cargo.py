@@ -22,6 +22,7 @@ class SourceBuildOutputs:
     bwrap_bin: Path | None
     codex_command_runner_bin: Path | None
     codex_windows_sandbox_setup_bin: Path | None
+    codex_conpty_launcher_bin: Path | None = None
 
 
 def build_source_binaries(
@@ -35,12 +36,14 @@ def build_source_binaries(
     bwrap_bin: Path | None,
     codex_command_runner_bin: Path | None,
     codex_windows_sandbox_setup_bin: Path | None,
+    codex_conpty_launcher_bin: Path | None = None,
     extra_bins: dict[str, Path] | None = None,
 ) -> SourceBuildOutputs:
     validate_prebuilt_resource_inputs(
         spec,
         bwrap_bin=bwrap_bin,
         codex_command_runner_bin=codex_command_runner_bin,
+        codex_conpty_launcher_bin=codex_conpty_launcher_bin,
         codex_windows_sandbox_setup_bin=codex_windows_sandbox_setup_bin,
     )
     explicit_extra_bins = extra_bins or {}
@@ -58,6 +61,8 @@ def build_source_binaries(
         build_code_mode_host=code_mode_host_bin is None,
         build_bwrap=spec.is_linux and bwrap_bin is None,
         build_codex_command_runner=spec.is_windows and codex_command_runner_bin is None,
+        build_codex_conpty_launcher=spec.is_windows
+        and codex_conpty_launcher_bin is None,
         build_codex_windows_sandbox_setup=spec.is_windows
         and codex_windows_sandbox_setup_bin is None,
     )
@@ -124,6 +129,10 @@ def build_source_binaries(
             codex_command_runner_bin,
             output_dir / "codex-command-runner.exe" if spec.is_windows else None,
         ),
+        codex_conpty_launcher_bin=resolve_output_path(
+            codex_conpty_launcher_bin,
+            output_dir / "codex-conpty-launcher.exe" if spec.is_windows else None,
+        ),
         codex_windows_sandbox_setup_bin=resolve_output_path(
             codex_windows_sandbox_setup_bin,
             output_dir / "codex-windows-sandbox-setup.exe" if spec.is_windows else None,
@@ -142,6 +151,7 @@ def source_binaries_for_target(
     build_bwrap: bool,
     build_codex_command_runner: bool,
     build_codex_windows_sandbox_setup: bool,
+    build_codex_conpty_launcher: bool = False,
     extra_cargo_bins: list[str] | tuple[str, ...] = (),
 ) -> list[str]:
     binaries = []
@@ -154,6 +164,8 @@ def source_binaries_for_target(
         binaries.append("bwrap")
     if build_codex_command_runner:
         binaries.append("codex-command-runner")
+    if build_codex_conpty_launcher:
+        binaries.append("codex-conpty-launcher")
     if build_codex_windows_sandbox_setup:
         binaries.append("codex-windows-sandbox-setup")
     return binaries
@@ -162,6 +174,7 @@ def source_binaries_for_target(
 RESOURCE_BINARY_NAMES = {
     "bwrap",
     "codex-command-runner",
+    "codex-conpty-launcher",
     "codex-windows-sandbox-setup",
 }
 
@@ -182,12 +195,17 @@ def validate_prebuilt_resource_inputs(
     bwrap_bin: Path | None,
     codex_command_runner_bin: Path | None,
     codex_windows_sandbox_setup_bin: Path | None,
+    codex_conpty_launcher_bin: Path | None = None,
 ) -> None:
     if bwrap_bin is not None and not spec.is_linux:
         raise RuntimeError("--bwrap-bin is only supported for Linux targets.")
     if codex_command_runner_bin is not None and not spec.is_windows:
         raise RuntimeError(
             "--codex-command-runner-bin is only supported for Windows targets."
+        )
+    if codex_conpty_launcher_bin is not None and not spec.is_windows:
+        raise RuntimeError(
+            "--codex-conpty-launcher-bin is only supported for Windows targets."
         )
     if codex_windows_sandbox_setup_bin is not None and not spec.is_windows:
         raise RuntimeError(
@@ -236,6 +254,7 @@ def validate_source_outputs(outputs: SourceBuildOutputs) -> None:
         *outputs.extra_bins.values(),
         outputs.bwrap_bin,
         outputs.codex_command_runner_bin,
+        outputs.codex_conpty_launcher_bin,
         outputs.codex_windows_sandbox_setup_bin,
     ]:
         if path is not None and not path.is_file():

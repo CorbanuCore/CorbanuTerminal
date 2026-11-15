@@ -28,6 +28,7 @@ codex_rust_crate(
         "//codex-rs/rmcp-client:test_streamable_http_server",
         "//codex-rs/cli:codex",
         "//codex-rs/windows-sandbox-rs:codex-command-runner",
+        "//codex-rs/windows-sandbox-rs:codex-conpty-launcher",
         "//codex-rs/windows-sandbox-rs:codex-windows-sandbox-setup",
     ],
     integration_test_timeout = "long",
@@ -63,6 +64,7 @@ codex_rust_crate(
     unit_test_extra_binaries = [
         "//codex-rs/bwrap:bwrap",
         "//codex-rs/windows-sandbox-rs:codex-command-runner",
+        "//codex-rs/windows-sandbox-rs:codex-conpty-launcher",
         "//codex-rs/windows-sandbox-rs:codex-windows-sandbox-setup",
     ],
     unit_test_timeout = "long",
