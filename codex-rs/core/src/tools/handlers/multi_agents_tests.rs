@@ -8808,9 +8808,10 @@ async fn settle_agent_waits_for_the_spawn_turn_after_an_error() {
     );
 }
 
-/// #2000: a child agent whose role sets permissions (so its config is rebuilt
-/// from the session's starting layers, without the Windows sandbox set up
-/// since) still gets the session's raised Windows sandbox.
+/// #2000: a child agent whose role changes its config still gets the session's
+/// raised Windows sandbox. On main the role rebuilt the config from the session's
+/// starting layers, which dropped it; upstream's role application keeps it, and
+/// the spawn override restores it to a config that lost it anyway.
 #[tokio::test]
 async fn issue_2000_a_role_rebuilt_child_keeps_the_raised_windows_sandbox() {
     use crate::windows_sandbox::WindowsSandboxLevelExt;
@@ -8820,10 +8821,16 @@ async fn issue_2000_a_role_rebuilt_child_keeps_the_raised_windows_sandbox() {
         .await
         .expect("codex home should be created");
     let role_config_path = turn.config.codex_home.as_path().join("sandbox-role.toml");
-    tokio::fs::write(&role_config_path, "sandbox_mode = \"workspace-write\"\n")
-        .await
-        .expect("role config should be written");
     let mut config = (*turn.config).clone();
+    // A model as well, so the role takes upstream's copy-and-apply path, not its
+    // no-override early return.
+    let model = config.model.clone().expect("test config sets a model");
+    tokio::fs::write(
+        &role_config_path,
+        format!("model = \"{model}\"\nsandbox_mode = \"workspace-write\"\n"),
+    )
+    .await
+    .expect("role config should be written");
     config.agent_roles.insert(
         "sandbox-role".to_string(),
         AgentRoleConfig {
