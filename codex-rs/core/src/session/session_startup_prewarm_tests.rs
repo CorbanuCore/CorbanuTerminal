@@ -1,8 +1,8 @@
 use super::is_reopen;
+use codex_history::InitialHistory;
+use codex_history::ResumedHistory;
 use codex_protocol::ThreadId;
-use codex_protocol::protocol::InitialHistory;
 use codex_protocol::protocol::InternalSessionSource;
-use codex_protocol::protocol::ResumedHistory;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use pretty_assertions::assert_eq;
@@ -17,6 +17,7 @@ fn only_the_users_resume_or_fork_is_a_reopen() {
         InitialHistory::Resumed(ResumedHistory {
             conversation_id: ThreadId::new(),
             history: Arc::new(Vec::new()),
+            history_revision: None,
             rollout_path: None,
         })
     };
