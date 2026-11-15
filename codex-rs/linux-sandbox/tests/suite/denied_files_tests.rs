@@ -148,6 +148,7 @@ printf '%s\000' "$CODEX_TEST_DENIED_PATH_0" "$CODEX_TEST_DENIED_PATH_1" "$CODEX_
                 entries.push(FileSystemSandboxEntry::new(
                     FileSystemPath::GlobPattern {
                         pattern: format!("{}/{suffix}", workspace.display()),
+                        scan: None,
                     },
                     FileSystemAccessMode::Deny,
                 ));

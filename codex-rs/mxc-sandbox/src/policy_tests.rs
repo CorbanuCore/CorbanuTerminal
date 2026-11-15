@@ -528,6 +528,7 @@ fn deny_globs_expand_files_and_directories_before_launch() -> Result<()> {
         FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
                 pattern: "**/*.secret".to_owned(),
+                scan: None,
             },
             FileSystemAccessMode::Deny,
         ),
