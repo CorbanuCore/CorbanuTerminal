@@ -334,7 +334,9 @@ fn use_openai_provider(turn: &mut TurnContext) {
         config.model_provider = provider_info.clone();
     });
     turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
-    turn.model_info = model_info::model_info_from_slug("gpt-5.4");
+    update_turn_settings_for_test(&mut turn, |settings| {
+        settings.model_info = Arc::new(model_info::model_info_from_slug("gpt-5.4"));
+    });
 }
 
 fn use_bedrock_provider(turn: &mut TurnContext) {
@@ -371,7 +373,9 @@ fn use_claude_plan_provider(turn: &mut TurnContext) {
         config.model_provider = provider_info.clone();
     });
     turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
-    turn.model_info = model_info::model_info_from_slug("claude-fable-5-plan");
+    update_turn_settings_for_test(&mut turn, |settings| {
+        settings.model_info = Arc::new(model_info::model_info_from_slug("claude-fable-5-plan"));
+    });
 }
 
 struct TestNamespaceExtensionTool {
@@ -3281,6 +3285,7 @@ async fn v1_multi_agent_tools_defer_when_tool_search_available() {
 
 fn flat_call(name: &str) -> crate::tools::router::ToolCall {
     crate::tools::router::ToolCall {
+        native_call: None,
         tool_name: ToolName::plain(name),
         call_id: "call-1".to_string(),
         payload: crate::tools::context::ToolPayload::Function {
@@ -3791,6 +3796,7 @@ async fn multi_agent_v2_bedrock_workers_only_delegate_when_model_supports_v2() {
                     model_multi_agent_version;
             });
             turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                agent_class: None,
                 parent_thread_id: ThreadId::new(),
                 depth: 1,
                 agent_path: Some(AgentPath::try_from("/root/worker").expect("valid agent path")),
@@ -3910,7 +3916,10 @@ async fn standalone_image_generation_is_offered_on_an_openai_api_key() {
     let api_key = probe_with(
         |turn| {
             use_api_key_auth(turn);
-            turn.model_info.input_modalities = vec![InputModality::Image];
+            update_turn_settings_for_test(&mut turn, |settings| {
+                Arc::make_mut(&mut settings.model_info).input_modalities =
+                    vec![InputModality::Image];
+            });
         },
         ToolPlanInputs {
             extension_tool_executors: vec![image_generation_tool.clone()],
@@ -3935,7 +3944,10 @@ async fn standalone_image_generation_is_offered_on_an_openai_api_key() {
                 config.model_provider = provider_info.clone();
             });
             turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
-            turn.model_info.input_modalities = vec![InputModality::Image];
+            update_turn_settings_for_test(&mut turn, |settings| {
+                Arc::make_mut(&mut settings.model_info).input_modalities =
+                    vec![InputModality::Image];
+            });
         },
         ToolPlanInputs {
             extension_tool_executors: vec![image_generation_tool.clone()],
@@ -3957,7 +3969,10 @@ async fn standalone_image_generation_is_offered_on_an_openai_api_key() {
                 config.model_provider = provider_info.clone();
             });
             turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
-            turn.model_info.input_modalities = vec![InputModality::Image];
+            update_turn_settings_for_test(&mut turn, |settings| {
+                Arc::make_mut(&mut settings.model_info).input_modalities =
+                    vec![InputModality::Image];
+            });
         },
         ToolPlanInputs {
             extension_tool_executors: vec![image_generation_tool],
@@ -4062,7 +4077,9 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
     let zai_native_web_search = probe(|turn| {
         use_zai_provider(turn);
         set_web_search_mode(turn, WebSearchMode::Live);
-        turn.model_info.supports_search_tool = false;
+        update_turn_settings_for_test(&mut turn, |settings| {
+            Arc::make_mut(&mut settings.model_info).supports_search_tool = false;
+        });
     })
     .await;
     zai_native_web_search.assert_visible_contains(&["web_search"]);
@@ -4070,8 +4087,12 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
     let zai_native_web_search_for_responses_lite = probe(|turn| {
         use_zai_provider(turn);
         set_web_search_mode(turn, WebSearchMode::Live);
-        turn.model_info.supports_search_tool = false;
-        turn.model_info.use_responses_lite = true;
+        update_turn_settings_for_test(&mut turn, |settings| {
+            Arc::make_mut(&mut settings.model_info).supports_search_tool = false;
+        });
+        update_turn_settings_for_test(&mut turn, |settings| {
+            Arc::make_mut(&mut settings.model_info).use_responses_lite = true;
+        });
     })
     .await;
     zai_native_web_search_for_responses_lite.assert_visible_lacks(&["web_search"]);
@@ -4079,8 +4100,12 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
     let openrouter_server_web_search_for_chat = probe(|turn| {
         use_openrouter_provider(turn);
         set_web_search_mode(turn, WebSearchMode::Live);
-        turn.model_info.supports_search_tool = false;
-        turn.model_info.use_responses_lite = true;
+        update_turn_settings_for_test(&mut turn, |settings| {
+            Arc::make_mut(&mut settings.model_info).supports_search_tool = false;
+        });
+        update_turn_settings_for_test(&mut turn, |settings| {
+            Arc::make_mut(&mut settings.model_info).use_responses_lite = true;
+        });
     })
     .await;
     openrouter_server_web_search_for_chat.assert_visible_lacks(&["web_search"]);

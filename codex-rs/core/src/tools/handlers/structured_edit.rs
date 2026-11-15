@@ -939,13 +939,17 @@ mod tests {
         );
         turn.provider =
             codex_model_provider::create_model_provider(openai_provider, turn.auth_manager.clone());
-        turn.model_info.slug = "gpt-5.2".to_string();
+        update_turn_settings_for_test(&mut turn, |settings| {
+            Arc::make_mut(&mut settings.model_info).slug = "gpt-5.2".to_string();
+        });
         assert!(
             reject_source_write_heredoc_when_structured_edit_enabled(&turn, command).is_ok(),
             "default Codex-native profile should not block Python heredocs"
         );
 
-        turn.model_info.slug = "glm-5.2".to_string();
+        update_turn_settings_for_test(&mut turn, |settings| {
+            Arc::make_mut(&mut settings.model_info).slug = "glm-5.2".to_string();
+        });
         assert_model_error(
             reject_source_write_heredoc_when_structured_edit_enabled(&turn, command),
             "Do not retry the shell heredoc",
@@ -960,7 +964,9 @@ mod tests {
         );
         turn.provider =
             codex_model_provider::create_model_provider(openai_provider, turn.auth_manager.clone());
-        turn.model_info.slug = "gpt-5.2".to_string();
+        update_turn_settings_for_test(&mut turn, |settings| {
+            Arc::make_mut(&mut settings.model_info).slug = "gpt-5.2".to_string();
+        });
 
         assert!(!structured_edit_protocol_enabled(&turn));
         assert_eq!(
@@ -993,14 +999,20 @@ mod tests {
         turn.provider =
             codex_model_provider::create_model_provider(openai_provider, turn.auth_manager.clone());
 
-        turn.model_info.slug = "glm-5.2".to_string();
+        update_turn_settings_for_test(&mut turn, |settings| {
+            Arc::make_mut(&mut settings.model_info).slug = "glm-5.2".to_string();
+        });
         assert_eq!(model_edit_profile_tag(&turn), "glm");
 
-        turn.model_info.slug = "zai-org/glm-5.2".to_string();
+        update_turn_settings_for_test(&mut turn, |settings| {
+            Arc::make_mut(&mut settings.model_info).slug = "zai-org/glm-5.2".to_string();
+        });
         assert_eq!(model_edit_profile_tag(&turn), "glm");
 
-        turn.model_info.slug = "gpt-5.2".to_string();
-        if turn.model_info.apply_patch_tool_type.is_some() {
+        update_turn_settings_for_test(&mut turn, |settings| {
+            Arc::make_mut(&mut settings.model_info).slug = "gpt-5.2".to_string();
+        });
+        if turn.model_info().apply_patch_tool_type.is_some() {
             assert_eq!(model_edit_profile_tag(&turn), "codex_patch");
         }
     }

@@ -208,24 +208,11 @@ async fn run_codex_thread_interactive_respects_pre_cancelled_spawn() {
         cancel_token.cancel();
         let parent_environments = parent_ctx.initial_environments.clone();
 
-<<<<<<< HEAD
-    let result = timeout(
-        Duration::from_secs(/*secs*/ 1),
-        run_codex_thread_interactive(
-            parent_ctx.config.as_ref().clone(),
-            parent_session.services.auth_manager(),
-||||||| 413492cd6c
-    let result = timeout(
-        Duration::from_secs(/*secs*/ 1),
-        run_codex_thread_interactive(
-            parent_ctx.config.as_ref().clone(),
-            Arc::clone(&parent_session.services.auth_manager),
-=======
         let result = timeout(
             Duration::from_secs(/*secs*/ 1),
             run_codex_thread_interactive(
                 config,
-                Arc::clone(&parent_session.services.auth_manager),
+                Arc::clone(&parent_session.services.auth_manager()),
                 Arc::clone(&parent_session.services.models_manager),
                 parent_session,
                 parent_ctx,
@@ -290,8 +277,7 @@ async fn delegate_start_analytics_honors_child_opt_out_with_enabled_parent() {
         config.analytics_enabled = Some(analytics_enabled);
         let (session, io) = run_codex_thread_interactive(
             config,
-            Arc::clone(&parent_session.services.auth_manager),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            Arc::clone(&parent_session.services.auth_manager()),
             Arc::clone(&parent_session.services.models_manager),
             Arc::clone(&parent_session),
             Arc::clone(&parent_ctx),
@@ -392,7 +378,7 @@ async fn delegate_isolation_does_not_depend_on_attribution() {
         config.permissions.approval_policy = Constrained::allow_only(AskForApproval::Never);
         let (session, io) = run_codex_thread_interactive(
             config,
-            Arc::clone(&parent_session.services.auth_manager),
+            Arc::clone(&parent_session.services.auth_manager()),
             Arc::clone(&parent_session.services.models_manager),
             Arc::clone(&parent_session),
             Arc::clone(&parent_ctx),
@@ -458,7 +444,7 @@ async fn run_codex_thread_interactive_rejects_approval_policy_that_can_prompt() 
 
     let result = run_codex_thread_interactive(
         config,
-        Arc::clone(&parent_session.services.auth_manager),
+        Arc::clone(&parent_session.services.auth_manager()),
         Arc::clone(&parent_session.services.models_manager),
         parent_session,
         parent_ctx,
@@ -472,20 +458,6 @@ async fn run_codex_thread_interactive_rejects_approval_policy_that_can_prompt() 
     )
     .await;
 
-<<<<<<< HEAD
-    match result {
-        Err(err) => assert!(
-            matches!(err.details(), CodexErrorDetails::TurnAborted),
-            "pre-cancelled delegate spawn returned a different error: {err:?}"
-        ),
-        Ok(_) => panic!("pre-cancelled delegate spawn unexpectedly started a session"),
-    }
-||||||| 413492cd6c
-    assert!(matches!(
-        result,
-        Err(err) if matches!(err.details(), CodexErrorDetails::TurnAborted)
-    ));
-=======
     assert!(matches!(
         result,
         Err(err)
@@ -495,7 +467,6 @@ async fn run_codex_thread_interactive_rejects_approval_policy_that_can_prompt() 
                     if message == "Codex delegates require approval policy `never`"
             )
     ));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 /// Private delegates participate in tree shutdown even though they are not manager-visible.
@@ -507,7 +478,7 @@ async fn tree_shutdown_waits_for_private_delegate() {
     config.permissions.approval_policy = Constrained::allow_only(AskForApproval::Never);
     let (_, io) = run_codex_thread_interactive(
         config,
-        Arc::clone(&parent.services.auth_manager),
+        Arc::clone(&parent.services.auth_manager()),
         Arc::clone(&parent.services.models_manager),
         Arc::clone(&parent),
         Arc::clone(&context),
@@ -529,7 +500,6 @@ async fn tree_shutdown_waits_for_private_delegate() {
         .expect("private delegate should shut down cleanly");
     assert!(io.session_loop_termination.now_or_never().is_some());
 }
-
 /// PF-84: a delegate (guardian or `/review`) reports its usage per account as
 /// a running total; each increase counts toward the parent conversation once,
 /// and the delegate's token counts never reach the consumer.

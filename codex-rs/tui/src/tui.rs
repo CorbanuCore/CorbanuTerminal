@@ -70,15 +70,12 @@ mod input_boundary;
 #[cfg(unix)]
 mod job_control;
 mod keyboard_modes;
-mod panic_diagnostics;
-#[cfg(all(test, unix))]
-#[path = "tui/terminal_ownership_tests.rs"]
-mod terminal_ownership_tests;
 mod link_pointer;
 mod notification_preview;
 #[cfg(test)]
 #[path = "tui/owned_screen_tests.rs"]
 mod owned_screen_tests;
+mod panic_diagnostics;
 #[cfg(all(test, unix))]
 #[path = "tui_panic_tests.rs"]
 mod panic_tests;
@@ -89,6 +86,9 @@ mod size_monitor;
 #[cfg(all(test, unix))]
 #[path = "tui_startup_tests.rs"]
 mod startup_tests;
+#[cfg(all(test, unix))]
+#[path = "tui/terminal_ownership_tests.rs"]
+mod terminal_ownership_tests;
 mod terminal_stderr;
 #[cfg(test)]
 pub(crate) mod test_support;

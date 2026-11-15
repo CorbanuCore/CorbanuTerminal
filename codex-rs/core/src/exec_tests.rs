@@ -1301,6 +1301,7 @@ fn command_runs_after_integrity_check_failure(time_out: bool) -> anyhow::Result<
     let mut policy = FileSystemSandboxPolicy::read_only();
     policy.entries.push(FileSystemSandboxEntry::new(
         FileSystemPath::GlobPattern {
+            scan: None,
             pattern: format!("{}/[z-a]", cwd.display()),
         },
         FileSystemAccessMode::Deny,

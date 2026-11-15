@@ -94,7 +94,10 @@ impl Fixture {
         let pool = self
             .db
             .sqlite()
-            .open_read_only_pool(&self.db.sqlite().state_db_path())
+            .open_read_only_pool(
+                &self.db.sqlite().state_db_path(),
+                /*busy_timeout*/ None,
+            )
             .await?;
         let values = sqlx::query_scalar::<_, String>(query)
             .fetch_all(&pool)
@@ -228,6 +231,7 @@ impl codex_api::AuthProvider for Denied {
 }
 fn request() -> Request {
     Request {
+        response_body_limit_bytes: None,
         method: http::Method::POST,
         url: format!("{ENDPOINT}/chat/completions"),
         headers: Default::default(),
@@ -567,7 +571,10 @@ async fn accounting_chat_response_local_attempt_identity() -> anyhow::Result<()>
     let pool = fixture
         .db
         .sqlite()
-        .open_read_only_pool(&fixture.db.sqlite().state_db_path())
+        .open_read_only_pool(
+            &fixture.db.sqlite().state_db_path(),
+            /*busy_timeout*/ None,
+        )
         .await?;
     let bound: Vec<String> =
         sqlx::query_scalar("SELECT attempt_id FROM draft_accounting_observations ORDER BY rowid")

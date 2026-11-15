@@ -536,7 +536,10 @@ impl Fixture {
         let pool = self
             .db
             .sqlite()
-            .open_read_only_pool(&self.db.sqlite().state_db_path())
+            .open_read_only_pool(
+                &self.db.sqlite().state_db_path(),
+                /*busy_timeout*/ None,
+            )
             .await?;
         let mut connection = pool.acquire().await?.detach();
         pool.close().await;
@@ -576,6 +579,7 @@ impl HttpTransport for Probe {
 
 fn request() -> Request {
     Request {
+        response_body_limit_bytes: None,
         method: http::Method::POST,
         url: format!("{ENDPOINT}/messages"),
         headers: Default::default(),

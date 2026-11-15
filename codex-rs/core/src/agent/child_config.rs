@@ -233,7 +233,7 @@ fn reject_full_fork_agent_type_override(agent_type: Option<&str>) -> Result<(), 
 ///
 /// These values are chosen by the live turn rather than persisted config, so leaving them stale can
 /// make a child agent disagree with its parent about approval policy, cwd, or sandboxing.
-fn apply_spawn_agent_runtime_overrides(
+pub(crate) fn apply_spawn_agent_runtime_overrides(
     config: &mut Config,
     turn: &TurnContext,
 ) -> Result<(), String> {
@@ -338,7 +338,7 @@ pub(crate) async fn ensure_spawn_runtime_eligible(
 
 /// Corbanu: an explicit `model_provider` selects an exact configured runtime; without one the
 /// requested model (or the configured subagent default) applies on the parent's provider.
-async fn apply_requested_spawn_agent_runtime_overrides(
+pub(crate) async fn apply_requested_spawn_agent_runtime_overrides(
     session: &Session,
     step_context: &StepContext,
     config: &mut Config,
@@ -405,7 +405,7 @@ async fn apply_requested_spawn_agent_runtime_overrides(
     Ok(())
 }
 
-async fn apply_requested_spawn_agent_model_overrides(
+pub(crate) async fn apply_requested_spawn_agent_model_overrides(
     session: &Session,
     step_context: &StepContext,
     config: &mut Config,

@@ -197,3 +197,90 @@ fn session_start_error_surfaces_archived_guidance_without_rollout_path() {
         );
     }
 }
+
+fn assert_fatal_exit(exit: Option<AppExitInfo>, expected: &str) {
+    match exit.expect("a refusal ends the launch with a plain message") {
+        AppExitInfo {
+            exit_reason: ExitReason::Fatal(message),
+            thread_id: None,
+            resume_hint: None,
+            ..
+        } => assert_eq!(message, expected),
+        other => panic!("expected a fatal exit, got {other:?}"),
+    }
+}
+
+#[test]
+fn session_start_refusal_surfaces_archived_guidance_for_any_server_binary() {
+    let thread_id =
+        ThreadId::from_string("019e72f4-e09a-70f2-b2c2-a153a57b8cc0").expect("thread id");
+    let expected = format!(
+        "session {thread_id} is archived. Run `corbanu unarchive {thread_id}` to unarchive it first."
+    );
+
+    for (action, server_binary) in [("resume", "codex"), ("fork", "pfterminal")] {
+        let server_message = expected.replace(
+            "Run `corbanu unarchive ",
+            &format!("Run `{server_binary} unarchive "),
+        );
+        let err = color_eyre::eyre::eyre!(
+            "thread/{action} failed during TUI bootstrap: thread/{action} failed: {server_message} (code -32600)"
+        );
+
+        assert_fatal_exit(
+            session_start_refusal_exit(action, thread_id, &err),
+            &expected,
+        );
+    }
+}
+
+#[test]
+fn session_start_refusal_turns_a_server_refusal_into_a_plain_message() {
+    let thread_id =
+        ThreadId::from_string("019e72f4-e09a-70f2-b2c2-a153a57b8cc0").expect("thread id");
+    let refusal = "failed to load configuration: the thread's recorded account zai:work: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account zai:default` (on a resume or fork) uses the default credentials instead";
+
+    for action in ["resume", "fork"] {
+        for suffix in ["", r#", data: {"reason":"cloudRequirements"}"#] {
+            let odd = "a message mentioning (code 7) itself";
+            let err = color_eyre::eyre::eyre!(
+                "thread/{action} failed during TUI bootstrap: thread/{action} failed: {odd} (code -32600){suffix}"
+            );
+            assert_fatal_exit(
+                session_start_refusal_exit(action, thread_id, &err),
+                &format!("Could not {action} session {thread_id}: {odd}"),
+            );
+            let err = color_eyre::eyre::eyre!(
+                "thread/{action} failed during TUI bootstrap: thread/{action} failed: {refusal} (code -32600){suffix}"
+            );
+            assert_fatal_exit(
+                session_start_refusal_exit(action, thread_id, &err),
+                &format!("Could not {action} session {thread_id}: {refusal}"),
+            );
+        }
+    }
+}
+
+#[test]
+fn session_start_refusal_keeps_a_report_for_transport_errors() {
+    let thread_id =
+        ThreadId::from_string("019e72f4-e09a-70f2-b2c2-a153a57b8cc0").expect("thread id");
+    let err = color_eyre::eyre::eyre!(
+        "thread/resume failed during TUI bootstrap: thread/resume transport error: broken pipe"
+    );
+
+    assert!(session_start_refusal_exit("resume", thread_id, &err).is_none());
+    let target_session = SessionTarget {
+        backend_id: crate::backend_id::BackendId::new(),
+        path: None,
+        thread_id,
+        cwd: None,
+        history_mode: None,
+    };
+    assert_eq!(
+        session_start_error("resume", &target_session, err).to_string(),
+        format!(
+            "Failed to resume session from thread {thread_id}: thread/resume failed during TUI bootstrap: thread/resume transport error: broken pipe"
+        )
+    );
+}

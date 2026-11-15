@@ -12,6 +12,8 @@ async fn prefetch(
 async fn cancelled_prefetch_calls_lifecycle_handler_once() {
     let (sender, rx_event) = mpsc::channel(1);
     let mut stream = ResponseStream {
+        interrupt: None,
+        routing_affinity: None,
         rx_event,
         upstream_request_id: Some("synthetic-cancelled-request".to_owned()),
     };
@@ -67,6 +69,8 @@ fn stream(events: Vec<Result<ResponseEvent, ApiError>>) -> ResponseStream {
         sender.try_send(event).expect("fixture capacity");
     }
     ResponseStream {
+        interrupt: None,
+        routing_affinity: None,
         rx_event,
         upstream_request_id: Some("synthetic-request".to_owned()),
     }
@@ -169,6 +173,7 @@ async fn empty_and_completed_streams_do_not_trigger_recovery() {
     let mut empty = stream(vec![]);
     assert!(prefetch(&mut empty).await.expect("empty stream").is_empty());
     let mut completed = stream(vec![Ok(ResponseEvent::Completed {
+        usage_metadata: None,
         response_id: "complete".to_owned(),
         token_usage: None,
         end_turn: Some(true),

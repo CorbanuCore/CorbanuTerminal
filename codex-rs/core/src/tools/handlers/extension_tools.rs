@@ -849,6 +849,8 @@ mod tests {
         let controller = initialize_policy(&session);
         let outside = tempfile::TempDir::new().expect("tempdir");
         let invocation = ToolInvocation {
+            environments: Default::default(),
+            native_call: None,
             session: Arc::clone(&session),
             step_context: StepContext::for_test(Arc::clone(&turn)),
             turn,

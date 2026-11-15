@@ -63,7 +63,7 @@ fn native_auto_turn_classification_requires_terminal_result_only_input() {
     assert!(turn_inputs_are_terminal_result_only(
         [
             collaboration_turn_input(AgentMessageKind::TerminalResult),
-            TurnInput::ResponseItem(assistant_output_text("retained context")),
+            TurnInput::ResponseItem(assistant_output_text("retained context").into()),
         ]
         .iter()
     ));
@@ -78,6 +78,7 @@ fn native_auto_turn_classification_requires_terminal_result_only_input() {
         [
             collaboration_turn_input(AgentMessageKind::TerminalResult),
             TurnInput::UserInput {
+                metadata: Default::default(),
                 content: vec![UserInput::Text {
                     text: "operator steering".to_string(),
                     text_elements: Vec::new(),
@@ -99,7 +100,7 @@ fn parent_completion_requires_triggering_collaboration_without_operator_input() 
     assert!(turn_inputs_expect_parent_completion(
         [
             triggering_collaboration.clone(),
-            TurnInput::ResponseItem(assistant_output_text("retained context")),
+            TurnInput::ResponseItem(assistant_output_text("retained context").into()),
         ]
         .iter()
     ));
@@ -107,6 +108,7 @@ fn parent_completion_requires_triggering_collaboration_without_operator_input() 
         [
             triggering_collaboration,
             TurnInput::UserInput {
+                metadata: Default::default(),
                 content: vec![UserInput::Text {
                     text: "operator owns this turn".to_string(),
                     text_elements: Vec::new(),
@@ -174,32 +176,7 @@ fn post_sampling_token_estimate_is_disabled_by_always_on_sinks() {
         .with(tracing_subscriber::fmt::layer().with_filter(codex_state::log_db::default_filter()));
     let dispatch = tracing::Dispatch::new(subscriber);
 
-<<<<<<< HEAD
     assert!(dispatch.register_callsite(&METADATA).is_never());
-||||||| 413492cd6c
-    tracing::subscriber::with_default(subscriber, || {
-        assert!(!tracing::event_enabled!(
-            target: POST_SAMPLING_TOKEN_ESTIMATE_TARGET,
-            tracing::Level::TRACE,
-            turn_id,
-            estimated_token_count,
-            message
-        ));
-    });
-=======
-    static METADATA: tracing::Metadata<'static> = tracing::metadata! {
-        name: "post sampling token estimate filter probe",
-        target: POST_SAMPLING_TOKEN_ESTIMATE_TARGET,
-        level: tracing::Level::TRACE,
-        fields: &["turn_id", "estimated_token_count", "message"],
-        callsite: &CALLSITE,
-        kind: tracing::metadata::Kind::EVENT.hint(),
-    };
-    static CALLSITE: tracing::callsite::DefaultCallsite =
-        tracing::callsite::DefaultCallsite::new(&METADATA);
-
-    assert!(tracing::Subscriber::register_callsite(&subscriber, &METADATA).is_never());
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]
@@ -232,7 +209,27 @@ async fn plan_mode_uses_contributed_turn_item_for_last_agent_message() {
     );
 }
 
-<<<<<<< HEAD
+#[test]
+fn realtime_user_verification_notice_excludes_request_payload() {
+    let event = EventMsg::ElicitationRequest(codex_protocol::approvals::ElicitationRequestEvent {
+        turn_id: None,
+        server_name: "private-server-name".to_string(),
+        id: codex_protocol::mcp::RequestId::String("private-request-id".to_string()),
+        request: codex_protocol::approvals::ElicitationRequest::UserVerification {
+            meta: None,
+            title: "private-title".to_string(),
+            description: "private-description".to_string(),
+            challenge: "private-challenge".to_string(),
+        },
+    });
+    assert_eq!(
+        realtime_text_for_event(&event),
+        Some(RealtimeEventText::Handoff(
+            "<user_verification_notice>User verification is required. Please respond in the app.</user_verification_notice>".to_string(),
+            None,
+        )),
+    );
+}
 /// #509: the turn-completion check respects the key's cooldown and records its
 /// own 429.
 #[tokio::test]
@@ -283,27 +280,4 @@ fn omitted_tools_notice_names_the_left_out_tools() {
     );
     assert!(notice.contains("`mcp__bulk__t9` and 2 more."), "{notice}");
     assert!(!notice.contains("mcp__bulk__t10"), "{notice}");
-||||||| 413492cd6c
-=======
-#[test]
-fn realtime_user_verification_notice_excludes_request_payload() {
-    let event = EventMsg::ElicitationRequest(codex_protocol::approvals::ElicitationRequestEvent {
-        turn_id: None,
-        server_name: "private-server-name".to_string(),
-        id: codex_protocol::mcp::RequestId::String("private-request-id".to_string()),
-        request: codex_protocol::approvals::ElicitationRequest::UserVerification {
-            meta: None,
-            title: "private-title".to_string(),
-            description: "private-description".to_string(),
-            challenge: "private-challenge".to_string(),
-        },
-    });
-    assert_eq!(
-        realtime_text_for_event(&event),
-        Some(RealtimeEventText::Handoff(
-            "<user_verification_notice>User verification is required. Please respond in the app.</user_verification_notice>".to_string(),
-            None,
-        )),
-    );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

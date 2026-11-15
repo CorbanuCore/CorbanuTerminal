@@ -839,7 +839,7 @@ impl Fixture {
             AccountingStore::open(&db, now()).await?;
             let pool = db
                 .sqlite()
-                .open_read_only_pool(&db.sqlite().state_db_path())
+                .open_read_only_pool(&db.sqlite().state_db_path(), /*busy_timeout*/ None)
                 .await?;
             let rows = sqlx::query_scalar::<_, String>(
                 "SELECT payload FROM draft_accounting_attempts ORDER BY rowid",
