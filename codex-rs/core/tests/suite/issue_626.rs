@@ -7,8 +7,10 @@
 //!   approval was not applied, and the rule is kept;
 //! - under Permissive and Moderate the same rule still runs the command
 //!   unasked;
-//! - a rule the person saves while Aggressive is active applies there;
-//! - with zsh-fork on, a prompt for a program a script starts says so too.
+//! - a rule the person saves while Aggressive is active applies there.
+//!
+//! The zsh-fork cases were removed with upstream's patched zsh backend
+//! (openai/codex#52160); the Aggressive assertions run on `exec_command`.
 #![cfg(any(target_os = "macos", target_os = "linux"))]
 
 use codex_core::TurnInputRequest;
@@ -36,8 +38,6 @@ use core_test_support::skip_if_sandbox;
 use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
-use core_test_support::zsh_fork::zsh_fork_runtime;
-use core_test_support::zsh_fork::zsh_fork_test_builder;
 use serde_json::json;
 use tempfile::TempDir;
 
@@ -91,7 +91,6 @@ async fn session(level: SecurityLevel, rules: &str, calls: usize) -> anyhow::Res
                 .features
                 .enable(Feature::SourceEnvelopes)
                 .expect("enable source envelopes");
-            config.use_experimental_unified_exec_tool = true;
             config
                 .features
                 .enable(Feature::UnifiedExec)
@@ -229,124 +228,4 @@ async fn issue_626_rule_remembered_under_aggressive_applies_there() -> anyhow::R
     assert!(turn(&test).await?.is_none(), "asked again");
     assert!(test.workspace_path(FILE).exists());
     Ok(())
-}
-
-/// #626 follow-up (Travis, 2026-10-13): with zsh-fork on, a program a
-/// command's script starts is checked when it starts. When a remembered
-/// approval suspended under Aggressive would have run it unasked, its prompt
-/// carries the same note as a shell command's prompt. Here the script names
-/// the file through a variable, so only the started `touch` matches the rule.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn issue_626_zsh_fork_prompt_names_the_suspended_approval() -> anyhow::Result<()> {
-    zsh_fork_prompt_names_the_suspended_approval(/*unified_exec*/ false).await
-}
-
-/// The same through unified exec's zsh-fork backend.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn issue_626_unified_exec_zsh_fork_prompt_names_the_suspended_approval() -> anyhow::Result<()>
-{
-    zsh_fork_prompt_names_the_suspended_approval(/*unified_exec*/ true).await
-}
-
-async fn zsh_fork_prompt_names_the_suspended_approval(unified_exec: bool) -> anyhow::Result<()> {
-    skip_if_no_network!(Ok(()));
-    skip_if_sandbox!(Ok(()));
-    let Some(runtime) = zsh_fork_runtime("issue_626 zsh-fork note")? else {
-        return Ok(());
-    };
-    let script = format!("f={FILE}; touch \"$f\"");
-    let (tool, arguments) = if unified_exec {
-        ("exec_command", json!({ "cmd": script }))
-    } else {
-        (
-            "shell_command",
-            json!({ "command": script, "timeout_ms": 30_000 }),
-        )
-    };
-    let home = Arc::new(TempDir::new()?);
-    std::fs::create_dir_all(home.path().join("rules"))?;
-    std::fs::write(
-        home.path().join("rules").join("default.rules"),
-        PERMISSIVE_RULE,
-    )?;
-    let server = start_mock_server().await;
-    mount_sse_sequence(
-        &server,
-        vec![
-            sse(vec![
-                ev_response_created("call-zsh"),
-                ev_function_call("call-zsh", tool, &arguments.to_string()),
-                ev_completed("call-zsh"),
-            ]),
-            sse(vec![
-                ev_response_created("done-zsh"),
-                ev_assistant_message("msg-zsh", "done"),
-                ev_completed("done-zsh"),
-            ]),
-        ],
-    )
-    .await;
-    let test = zsh_fork_test_builder(runtime, AskForApproval::UnlessTrusted)
-        .with_home(home)
-        .with_config(move |config| {
-            config.security_level = SecurityLevel::Aggressive;
-            if unified_exec {
-                config.use_experimental_unified_exec_tool = true;
-                for feature in [Feature::UnifiedExec, Feature::UnifiedExecZshFork] {
-                    config
-                        .features
-                        .enable(feature)
-                        .expect("enable unified exec zsh-fork");
-                }
-            }
-            config
-                .permissions
-                .set_permission_profile(PermissionProfile::workspace_write())
-                .expect("workspace write");
-            config
-                .features
-                .enable(Feature::SourceEnvelopes)
-                .expect("enable source envelopes");
-        })
-        .build(&server)
-        .await?;
-    std::mem::forget(server);
-
-    let mut approval = turn(&test).await?;
-    let mut prompts = Vec::new();
-    while let Some(request) = approval {
-        let started_touch = request.command.iter().any(|arg| arg.ends_with("/touch"));
-        prompts.push((request.command.clone(), request.reason.clone()));
-        if started_touch {
-            let reason = request.reason.clone().unwrap_or_default();
-            assert!(reason.contains(NOTE), "{reason}");
-            answer(&test, &request, ReviewDecision::denied("no")).await?;
-            assert!(!test.workspace_path(FILE).exists());
-            // Kept, unchanged: it applies again under Permissive.
-            assert_eq!(rules(&test), PERMISSIVE_RULE);
-            return Ok(());
-        }
-        test.codex
-            .submit(Op::ExecApproval {
-                id: request.effective_approval_id(),
-                turn_id: None,
-                decision: ReviewDecision::Approved,
-            })
-            .await?;
-        approval = match wait_for_event(&test.codex, |event| {
-            matches!(
-                event,
-                EventMsg::ExecApprovalRequest(_) | EventMsg::TurnComplete(_)
-            )
-        })
-        .await
-        {
-            EventMsg::ExecApprovalRequest(next) => Some(next),
-            _ => None,
-        };
-    }
-    anyhow::bail!(
-        "no prompt for the started touch (created: {}); prompts: {prompts:?}",
-        test.workspace_path(FILE).exists()
-    )
 }

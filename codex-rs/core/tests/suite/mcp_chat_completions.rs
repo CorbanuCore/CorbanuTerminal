@@ -63,6 +63,9 @@ fn rmcp_server(approval: AppToolApproval) -> anyhow::Result<McpServerConfig> {
         oauth: None,
         oauth_resource: None,
         tools: HashMap::new(),
+        startup_readiness: Default::default(),
+        tool_input_schema_max_bytes: None,
+        omit_tools_from: None,
     })
 }
 

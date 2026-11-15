@@ -396,6 +396,7 @@ pub(super) async fn apps_requests_during_peer_discovery(
                     agent_path: None,
                     agent_nickname: None,
                     agent_role: None,
+                    agent_class: None,
                 })),
                 ..StartThreadOptions::new(test.config.clone())
             })
@@ -568,6 +569,7 @@ async fn cached_http_mcp_starts_lazily_for_subagents(
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             ..StartThreadOptions::new(subagent_config)
         })
@@ -765,6 +767,7 @@ async fn cached_mcp_startup_is_eager_for_root_and_lazy_for_subagents() -> anyhow
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             ..StartThreadOptions::new(subagent_config)
         })

@@ -50,9 +50,9 @@ use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
-use core_test_support::skip_if_wine_exec;
 #[cfg(unix)]
 use core_test_support::skip_if_remote;
+use core_test_support::skip_if_wine_exec;
 #[cfg(unix)]
 use core_test_support::test_codex::TestCodexBuilder;
 use core_test_support::test_codex::TestCodexHarness;

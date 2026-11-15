@@ -35,7 +35,6 @@ async fn issue_443_a_command_the_sandbox_stops_at_start_is_shown() -> anyhow::Re
         .with_model("test-gpt-5.1-codex")
         .with_config(|config| {
             config.security_level = SecurityLevel::Aggressive;
-            config.use_experimental_unified_exec_tool = true;
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::Never);
             for feature in [Feature::SourceEnvelopes, Feature::UnifiedExec] {
                 config

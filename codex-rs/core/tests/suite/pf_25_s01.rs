@@ -49,10 +49,10 @@ const CANARY: &str = "pf25-canary-notes";
 type Step = Vec<Value>;
 
 fn shell_step(call_id: &str, command: &str) -> Step {
-    let arguments = json!({ "command": command }).to_string();
+    let arguments = json!({ "cmd": command }).to_string();
     vec![
         ev_response_created(call_id),
-        ev_function_call(call_id, "shell_command", &arguments),
+        ev_function_call(call_id, "exec_command", &arguments),
         ev_completed(call_id),
     ]
 }

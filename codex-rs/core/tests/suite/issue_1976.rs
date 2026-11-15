@@ -11,7 +11,6 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use codex_security_policy::SecurityLevel;
 use core_test_support::responses::ev_assistant_message;
@@ -83,7 +82,6 @@ async fn run(level: SecurityLevel, call: Call) -> anyhow::Result<Outcome> {
                 ))
                 .expect("profile");
             if matches!(call, Call::TypeIntoCommand) {
-                config.use_experimental_unified_exec_tool = true;
                 config
                     .features
                     .enable(Feature::UnifiedExec)
@@ -93,7 +91,10 @@ async fn run(level: SecurityLevel, call: Call) -> anyhow::Result<Outcome> {
         .build(&server)
         .await?;
     let (tool, arguments): (&str, Value) = match call {
-        Call::ReadOnlyCommand => ("shell_command", json!({ "command": format!("echo {RAN}") })),
+        Call::ReadOnlyCommand => (
+            "exec_command",
+            json!({ "cmd": format!("echo {RAN}"), "yield_time_ms": 5_000 }),
+        ),
         Call::ViewImage => {
             let image = test.workspace_path("picture.png");
             std::fs::write(&image, png()?)?;

@@ -19,7 +19,7 @@ async fn assignment_turn(
         policy,
         vec![
             injected_step(),
-            call("call-fetch", "shell_command", json!({"command": command})),
+            call("call-fetch", "exec_command", json!({"cmd": command})),
             done_step(),
         ],
         |config| {

@@ -4,33 +4,6 @@ expression: snapshot
 ---
 Scenario: /responses POST bodies with pending input
 
-<<<<<<< HEAD
-## First request
-00:message/developer:<PERMISSIONS_INSTRUCTIONS>
-01:message/user:<ENVIRONMENT_CONTEXT:cwd=<CWD>>
-02:message/user:first prompt
-
-## Second request
-00:message/developer:<PERMISSIONS_INSTRUCTIONS>
-01:message/user:<ENVIRONMENT_CONTEXT:cwd=<CWD>>
-02:message/user:first prompt
-03:reasoning:summary=thinking:encrypted=true
-04:message/assistant:first answer
-05:agent_message
-06:message/user:Continue.
-||||||| 413492cd6c
-## First request
-00:message/developer:<PERMISSIONS_INSTRUCTIONS>
-01:message/user:<ENVIRONMENT_CONTEXT:cwd=<CWD>>
-02:message/user:first prompt
-
-## Second request
-00:message/developer:<PERMISSIONS_INSTRUCTIONS>
-01:message/user:<ENVIRONMENT_CONTEXT:cwd=<CWD>>
-02:message/user:first prompt
-03:reasoning:summary=thinking:encrypted=true
-04:agent_message
-=======
 ## Window 1
 -- request 1 (request; First request) --
 00:message/developer:
@@ -44,4 +17,3 @@ Scenario: /responses POST bodies with pending input
 -- request 2 (request; Second request) --
 04:reasoning:summary=thinking:encrypted=true
 05:agent_message
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

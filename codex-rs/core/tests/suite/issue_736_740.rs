@@ -143,7 +143,6 @@ async fn run_with(
                 .features
                 .enable(Feature::SourceEnvelopes)
                 .expect("enable source envelopes");
-            config.use_experimental_unified_exec_tool = true;
             config
                 .features
                 .enable(Feature::UnifiedExec)
@@ -566,7 +565,6 @@ async fn issue_789_child_agent_prompt_offers_no_useless_grant() -> anyhow::Resul
             ] {
                 config.features.enable(feature).expect("enable feature");
             }
-            config.use_experimental_unified_exec_tool = true;
         })
         // Host-sandbox security test: local executor on purpose (#708).
         .build(&server)

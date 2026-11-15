@@ -13,7 +13,6 @@ use codex_core::security_level_change::commit_human_level_change;
 use codex_features::Feature;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use codex_security_policy::SecurityLevel;
 use core_test_support::responses::ev_assistant_message;
@@ -48,12 +47,9 @@ fn fake_bin() -> anyhow::Result<tempfile::TempDir> {
 /// A Permissive session (approvals off, so nothing waits for a person); with
 /// `confirm`, the person confirms Aggressive before the turn, as `/security`
 /// does. Each vault command and the output the model got back for it.
-/// With `unified`, the model uses `exec_command` (unified exec) instead of
-/// `shell_command`.
-async fn vault_commands_after(
-    confirm: bool,
-    unified: bool,
-) -> anyhow::Result<Vec<(String, String)>> {
+/// The model runs them through `exec_command` (upstream has no separate
+/// `shell_command` tool).
+async fn vault_commands_after(confirm: bool) -> anyhow::Result<Vec<(String, String)>> {
     let bin = fake_bin()?;
     let bin = bin.path().display();
     let commands = [
@@ -67,15 +63,7 @@ async fn vault_commands_after(
         let id = format!("call-{index}");
         steps.push(sse(vec![
             ev_response_created(&id),
-            if unified {
-                ev_function_call(&id, "exec_command", &json!({ "cmd": command }).to_string())
-            } else {
-                ev_function_call(
-                    &id,
-                    "shell_command",
-                    &json!({ "command": command }).to_string(),
-                )
-            },
+            ev_function_call(&id, "exec_command", &json!({ "cmd": command }).to_string()),
             ev_completed(&id),
         ]));
     }
@@ -94,13 +82,10 @@ async fn vault_commands_after(
                 .features
                 .enable(Feature::SourceEnvelopes)
                 .expect("enable source envelopes");
-            if unified {
-                config.use_experimental_unified_exec_tool = true;
-                config
-                    .features
-                    .enable(Feature::UnifiedExec)
-                    .expect("enable unified exec");
-            }
+            config
+                .features
+                .enable(Feature::UnifiedExec)
+                .expect("enable unified exec");
         })
         // Host-sandbox security test: local executor on purpose, also in the
         // remote lane (#708).
@@ -164,17 +149,9 @@ async fn issue_443_vault_commands_are_refused_as_soon_as_aggressive_is_confirmed
         Ok(()),
         "this security test runs host shell commands; Wine-exec routes them to a Windows executor with a non-native cwd"
     );
-    for unified in [false, true] {
-        for (command, output) in vault_commands_after(/*confirm*/ true, unified).await? {
-            assert!(
-                output.contains(REFUSAL),
-                "unified={unified} {command}: {output}"
-            );
-            assert!(
-                !output.contains(RAN),
-                "unified={unified} {command}: {output}"
-            );
-        }
+    for (command, output) in vault_commands_after(/*confirm*/ true).await? {
+        assert!(output.contains(REFUSAL), "{command}: {output}");
+        assert!(!output.contains(RAN), "{command}: {output}");
     }
     Ok(())
 }
@@ -186,17 +163,9 @@ async fn issue_443_permissive_sessions_keep_their_vault_commands() -> anyhow::Re
         Ok(()),
         "this security test runs host shell commands; Wine-exec routes them to a Windows executor with a non-native cwd"
     );
-    for unified in [false, true] {
-        for (command, output) in vault_commands_after(/*confirm*/ false, unified).await? {
-            assert!(
-                !output.contains(REFUSAL),
-                "unified={unified} {command}: {output}"
-            );
-            assert!(
-                output.contains(RAN),
-                "unified={unified} {command}: {output}"
-            );
-        }
+    for (command, output) in vault_commands_after(/*confirm*/ false).await? {
+        assert!(!output.contains(REFUSAL), "{command}: {output}");
+        assert!(output.contains(RAN), "{command}: {output}");
     }
     Ok(())
 }

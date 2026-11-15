@@ -81,7 +81,6 @@ async fn run_calls(
                 .features
                 .enable(Feature::SourceEnvelopes)
                 .expect("enable source envelopes");
-            config.use_experimental_unified_exec_tool = true;
             config
                 .features
                 .enable(Feature::UnifiedExec)

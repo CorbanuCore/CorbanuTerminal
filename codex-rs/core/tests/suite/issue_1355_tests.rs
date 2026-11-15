@@ -121,6 +121,7 @@ async fn held_child_mail_warns_the_parent_and_survives_account_recovery() -> any
                 MAIL.to_string(),
                 /*trigger_turn*/ true,
             ),
+            start_options: Default::default(),
         })
         .await?;
     // Consume only the parent's stream: the person does not have to open the

@@ -14,7 +14,6 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use codex_security_policy::SecurityLevel;
 use core_test_support::responses::ev_assistant_message;
@@ -36,14 +35,14 @@ const CALL_ID: &str = "call-1139";
 
 #[cfg(not(windows))]
 const HOOK_WRITE: &str = "printf 'echo hi\\n' > .git/hooks/pre-commit";
-/// PowerShell, which runs `shell_command` on Windows, has no `printf` (#1967).
+/// PowerShell, which runs `exec_command` on Windows, has no `printf` (#1967).
 #[cfg(windows)]
 const HOOK_WRITE: &str = "echo 'echo hi' > .git/hooks/pre-commit";
 
 /// MOD-11's first two items.
 #[derive(Clone, Copy, Debug)]
 enum Command {
-    /// A hook written through `shell_command`.
+    /// A hook written through `exec_command`.
     Hook,
     /// `git config` through `exec_command`.
     Config,
@@ -62,7 +61,10 @@ struct Outcome {
 
 async fn run_1139(level: SecurityLevel, command: Command) -> anyhow::Result<Outcome> {
     let (name, arguments) = match command {
-        Command::Hook => ("shell_command", json!({ "command": HOOK_WRITE })),
+        Command::Hook => (
+            "exec_command",
+            json!({ "cmd": HOOK_WRITE, "yield_time_ms": 5_000 }),
+        ),
         Command::Config => (
             "exec_command",
             json!({ "cmd": "git config user.name injected1139", "yield_time_ms": 5_000 }),

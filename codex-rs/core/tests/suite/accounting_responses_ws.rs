@@ -119,7 +119,7 @@ async fn accounting_responses_ws_native_incremental_sampling_and_turn_identity()
     first
         .send(vec![
             core_test_support::responses::ev_response_created("tool"),
-            core_test_support::responses::ev_shell_command_call("fixture-call", "echo fixture"),
+            core_test_support::responses::ev_exec_command_call("fixture-call", "echo fixture"),
             event("response.completed", usage(Some(0))),
         ])
         .await?;

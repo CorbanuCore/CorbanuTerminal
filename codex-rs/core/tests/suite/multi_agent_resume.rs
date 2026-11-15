@@ -6,6 +6,7 @@ use codex_features::Feature;
 use codex_login::CodexAuth;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ReasoningEffort;
+use codex_protocol::protocol::AgentStatus;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::ThreadSettingsOverrides;
@@ -21,7 +22,6 @@ use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::mount_sse_once_match;
 use core_test_support::responses::sse;
-use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
@@ -137,6 +137,17 @@ fn ends_with_grandchild_final_answer(request: &wiremock::Request) -> bool {
         .is_some_and(|item| {
             item.contains(GRANDCHILD_FINAL_ANSWER_SENDER)
                 && item.contains("Message Type: FINAL_ANSWER")
+        })
+}
+
+fn request_has_input_type(request: &wiremock::Request, input_type: &str) -> bool {
+    decoded_body(request)
+        .and_then(|body| serde_json::from_slice::<Value>(&body).ok())
+        .and_then(|body| body.get("input").and_then(Value::as_array).cloned())
+        .is_some_and(|items| {
+            items
+                .iter()
+                .any(|item| item.get("type").and_then(Value::as_str) == Some(input_type))
         })
 }
 
@@ -270,7 +281,6 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
         sse(vec![ev_completed("resp-parent-turn-assistant")]),
     )
     .await;
-<<<<<<< HEAD
     for (text, is_subagent) in [(NESTED_CALL_ID, true), (QUEUE_CALL_ID, false)] {
         mount_sse_once_match(
             &server,
@@ -280,41 +290,7 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
             },
             sse(vec![ev_completed("resp-parent-turn-assistant")]),
         )
-||||||| 413492cd6c
-    for (text, is_subagent) in [(NESTED_CALL_ID, true), (QUEUE_CALL_ID, false)] {
-        mount_sse_once_match(
-            &server,
-            move |request: &wiremock::Request| {
-                body_contains(request, text)
-                    && request_has_input_type(request, "agent_message") == is_subagent
-            },
-            sse(vec![ev_completed("resp-parent-turn-assistant")]),
-        )
-=======
-    // The grandchild's completion can arrive during the worker's completion response,
-    // causing one more sampling request to drain that message before the turn ends.
-    let worker_completion = wiremock::Mock::given(wiremock::matchers::method("POST"))
-        .and(wiremock::matchers::path("/v1/responses"))
-        .and(|request: &wiremock::Request| {
-            decoded_body(request)
-                .and_then(|body| serde_json::from_slice::<Value>(&body).ok())
-                .is_some_and(|body| {
-                    body["input"].as_array().is_some_and(|items| {
-                        items.iter().any(|item| {
-                            item["type"] == "function_call_output"
-                                && item["call_id"] == NESTED_CALL_ID
-                        })
-                    })
-                })
-        })
-        .respond_with(sse_response(sse(vec![ev_completed(
-            "resp-worker-complete",
-        )])))
-        .expect(1..=2)
-        .mount_as_scoped(&server)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .await;
-<<<<<<< HEAD
     }
     // If the grandchild's final answer is queued after the worker's
     // continuation request was built but while that turn still accepts queued
@@ -331,17 +307,6 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
                 && !body_contains(request, FOLLOWUP_TASK)
         },
         sse(vec![ev_completed("resp-worker-grandchild-answer")]),
-||||||| 413492cd6c
-    }
-=======
-    mount_sse_once_match(
-        &server,
-        |request: &wiremock::Request| {
-            body_contains(request, QUEUE_CALL_ID)
-                && !request_has_input_type(request, "agent_message")
-        },
-        sse(vec![ev_completed("resp-parent-turn-assistant")]),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     )
     .await;
     mount_sse_once_match(
@@ -405,7 +370,6 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
         sleep(Duration::from_millis(10)).await;
     };
     let worker_thread = initial.thread_manager.get_thread(worker_thread_id).await?;
-<<<<<<< HEAD
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         let status = worker_thread.agent_status().await;
@@ -420,26 +384,6 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
         }
         sleep(Duration::from_millis(10)).await;
     }
-||||||| 413492cd6c
-    let deadline = Instant::now() + Duration::from_secs(2);
-    loop {
-        if matches!(
-            worker_thread.agent_status().await,
-            AgentStatus::Completed(_)
-        ) {
-            break;
-        }
-        if Instant::now() >= deadline {
-            anyhow::bail!("timed out waiting for worker completion");
-        }
-        sleep(Duration::from_millis(10)).await;
-    }
-=======
-    wait_for_event(worker_thread.as_ref(), |event| {
-        matches!(event, EventMsg::TurnComplete(_))
-    })
-    .await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     assert!(initial_child_request.requests().iter().any(|request| {
         request.body_contains_text(INITIAL_TASK)
             && request.body_contains_text(ROLE_DEVELOPER_INSTRUCTIONS)
@@ -538,7 +482,6 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
     worker_thread.shutdown_and_wait().await?;
     drop(sibling_thread);
     drop(worker_thread);
-    drop(worker_completion);
 
     let followup_args = serde_json::to_string(&json!({
         "target": "worker",
@@ -684,23 +627,6 @@ openai_base_url = "{redirected_base_url}"
         .get_thread(worker_thread_id)
         .await
         .expect("queued message should lazily reload the original worker");
-<<<<<<< HEAD
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        if matches!(
-            reloaded_worker.agent_status().await,
-            AgentStatus::Completed(_)
-        ) {
-            break;
-||||||| 413492cd6c
-    let deadline = Instant::now() + Duration::from_secs(2);
-    loop {
-        if matches!(
-            reloaded_worker.agent_status().await,
-            AgentStatus::Completed(_)
-        ) {
-            break;
-=======
     assert_eq!(
         reloaded_worker.config().await.model_provider,
         resumed.codex.config().await.model_provider,
@@ -716,7 +642,6 @@ openai_base_url = "{redirected_base_url}"
     for request in server.received_requests().await.unwrap_or_default() {
         if request.url.path() != "/codex/analytics-events/events" {
             continue;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         let payload: Value = serde_json::from_slice(&request.body)?;
         worker_initializations.extend(

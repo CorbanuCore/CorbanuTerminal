@@ -539,12 +539,10 @@ async fn accounting_chat_native_spawned_role_children_and_fork() -> anyhow::Resu
     wait_observations(&db, /*count*/ 5).await?;
     let before = attempts(&db).await?;
     test.thread_manager
-        .fork_thread(
+        .fork_legacy_thread(
             codex_core::ForkSnapshot::Interrupted,
-            test.config.clone(),
+            codex_core::StartThreadOptions::new(test.config.clone()),
             test.codex.rollout_path().unwrap(),
-            /*thread_source*/ None,
-            /*parent_trace*/ None,
         )
         .await?;
     assert_eq!(attempts(&db).await?, before);

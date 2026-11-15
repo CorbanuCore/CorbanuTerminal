@@ -40,7 +40,6 @@ async fn run_approved(
     let test: TestCodex = test_codex()
         .with_model("test-gpt-5.1-codex")
         .with_config(|config| {
-            config.use_experimental_unified_exec_tool = true;
             config.permissions.approval_policy =
                 Constrained::allow_any(AskForApproval::UnlessTrusted);
             config

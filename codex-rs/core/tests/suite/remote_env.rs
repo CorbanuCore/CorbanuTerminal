@@ -465,6 +465,7 @@ async fn approved_remote_shell_runs_in_remote_cwd() -> Result<()> {
         "run the remote shell in the remote cwd",
         vec![selection.clone()],
         AskForApproval::OnRequest,
+        SandboxPolicy::new_read_only_policy(),
     )
     .await?;
 
@@ -503,67 +504,6 @@ async fn approved_remote_shell_runs_in_remote_cwd() -> Result<()> {
     assert!(
         output.is_some_and(|output| output.contains("Process exited with code 0")),
         "remote shell command should exit successfully",
-    );
-
-    Ok(())
-}
-
-/// `shell_command` only runs commands on the Codex host. With a remote primary
-/// environment it must refuse instead of running the command on the host.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn shell_command_does_not_run_on_the_host_for_a_remote_environment() -> Result<()> {
-    const CALL_ID: &str = "remote-shell-command";
-
-    skip_if_no_remote_env!(Ok(()));
-    skip_if_target_windows!(Ok(()), "uses a POSIX shell command fixture");
-
-    let marker = std::env::temp_dir().join(format!(
-        "codex-remote-shell-command-{}-{}",
-        std::process::id(),
-        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
-    ));
-    let arguments = serde_json::to_string(&json!({
-        "command": format!("touch {}", marker.display()),
-        "workdir": "/tmp",
-        "timeout_ms": 10_000,
-    }))?;
-    let server = start_mock_server().await;
-    let test = test_codex().build_with_auto_env(&server).await?;
-    let response_mock = mount_sse_sequence(
-        &server,
-        vec![
-            sse(vec![
-                ev_response_created("resp-1"),
-                ev_function_call(CALL_ID, "shell_command", &arguments),
-                ev_completed("resp-1"),
-            ]),
-            sse(vec![
-                ev_response_created("resp-2"),
-                ev_assistant_message("msg-1", "done"),
-                ev_completed("resp-2"),
-            ]),
-        ],
-    )
-    .await;
-
-    test.submit_turn_with_environments(
-        "run a command in the remote environment",
-        Some(vec![test.executor_environment().selection().clone()]),
-    )
-    .await?;
-    let output = response_mock
-        .last_request()
-        .context("model should receive the tool result")?
-        .function_call_output_text(CALL_ID)
-        .context("shell_command result should be present")?;
-    let ran_on_host = marker.exists();
-    if ran_on_host {
-        std::fs::remove_file(&marker)?;
-    }
-    assert!(!ran_on_host, "shell_command ran on the host: {output}");
-    assert!(
-        output.contains("can't run in the remote environment"),
-        "{output}"
     );
 
     Ok(())

@@ -820,6 +820,7 @@ async fn token_budget_context_injects_plain_thread_hint_text(cached_subagent: bo
                     agent_path: None,
                     agent_nickname: None,
                     agent_role: None,
+                    agent_class: None,
                 })),
                 ..test.start_thread_options().await
             })

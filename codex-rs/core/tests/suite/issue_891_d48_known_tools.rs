@@ -64,21 +64,21 @@ const PROTECTED_ACTION: &str = "after untrusted content entered the session";
 /// How a call runs its command.
 #[derive(Clone, Copy, Debug)]
 enum Kind {
-    /// `shell_command` asking to run outside the sandbox, with a
-    /// justification.
+    /// `exec_command` asking to run outside the sandbox, with a
+    /// justification (formerly `shell_command`, which upstream removed).
     Escalated,
-    /// The same through `exec_command`.
+    /// The same with `exec_command`'s own arguments.
     EscalatedExec,
     /// The same through `exec_command` with a shell the model chose: a
     /// copy of bash outside the system folders.
     EscalatedExecOwnShell,
-    /// `shell_command` in the sandbox.
+    /// `exec_command` in the sandbox.
     Sandboxed,
 }
 
 fn step(call_id: &str, command: &str, kind: Kind, own_shell: &str) -> Vec<Value> {
     let (tool, mut arguments) = match kind {
-        Kind::Escalated | Kind::Sandboxed => ("shell_command", json!({ "command": command })),
+        Kind::Escalated | Kind::Sandboxed => ("exec_command", json!({ "cmd": command })),
         Kind::EscalatedExec => (
             "exec_command",
             json!({ "cmd": command, "yield_time_ms": 5_000 }),
@@ -173,8 +173,8 @@ async fn run(
         ev_response_created("call-first"),
         ev_function_call(
             "call-first",
-            "shell_command",
-            &json!({ "command": "echo first" }).to_string(),
+            "exec_command",
+            &json!({ "cmd": "echo first" }).to_string(),
         ),
         ev_completed("call-first"),
     ]];

@@ -264,7 +264,7 @@ async fn issue_584_a_command_writing_only_agent_settings_is_offered_no_grant() -
     let (test, captured) = start(
         &cwd,
         vec![
-            tool_step("call-write", "shell_command", json!({ "command": write })),
+            tool_step("call-write", "exec_command", json!({ "cmd": write })),
             done_step(),
         ],
     )

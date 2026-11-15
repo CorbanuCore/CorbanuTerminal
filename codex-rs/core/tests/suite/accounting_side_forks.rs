@@ -7,7 +7,6 @@
 use super::accounting_responses::support::*;
 use codex_core::TurnInputRequest;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_protocol::protocol::ThreadSource;
 use codex_protocol::user_input::UserInput;
@@ -33,12 +32,13 @@ async fn fork(
     config.ephemeral = true;
     Ok(test
         .thread_manager
-        .fork_thread(
+        .fork_legacy_thread(
             codex_core::ForkSnapshot::Interrupted,
-            config,
+            codex_core::StartThreadOptions {
+                thread_source: source,
+                ..codex_core::StartThreadOptions::new(config)
+            },
             test.codex.rollout_path().expect("saved conversation"),
-            source,
-            /*parent_trace*/ None,
         )
         .await?)
 }

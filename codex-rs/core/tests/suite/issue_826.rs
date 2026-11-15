@@ -14,7 +14,6 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use codex_security_policy::SecurityLevel;
 use core_test_support::responses::ev_assistant_message;
@@ -80,8 +79,8 @@ async fn run(
             ev_response_created(FIRST_CALL),
             ev_function_call(
                 FIRST_CALL,
-                "shell_command",
-                &json!({ "command": "echo first" }).to_string(),
+                "exec_command",
+                &json!({ "cmd": "echo first" }).to_string(),
             ),
             ev_completed(FIRST_CALL),
         ]));
@@ -90,8 +89,8 @@ async fn run(
         ev_response_created(CALL_ID),
         ev_function_call(
             CALL_ID,
-            "shell_command",
-            &json!({ "command": script }).to_string(),
+            "exec_command",
+            &json!({ "cmd": script }).to_string(),
         ),
         ev_completed(CALL_ID),
     ]));

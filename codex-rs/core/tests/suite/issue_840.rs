@@ -37,14 +37,14 @@ use tempfile::TempDir;
 const CANARY: &str = "ISSUE_840_CANARY";
 
 fn step(call_id: &str, command: &str, escalate: bool) -> Vec<Value> {
-    let mut arguments = json!({ "command": command });
+    let mut arguments = json!({ "cmd": command });
     if escalate {
         arguments["sandbox_permissions"] = json!("require_escalated");
         arguments["justification"] = json!("read the notes");
     }
     vec![
         ev_response_created(call_id),
-        ev_function_call(call_id, "shell_command", &arguments.to_string()),
+        ev_function_call(call_id, "exec_command", &arguments.to_string()),
         ev_completed(call_id),
     ]
 }

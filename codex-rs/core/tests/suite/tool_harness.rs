@@ -579,7 +579,7 @@ async fn structured_edit_tool_executes_via_apply_patch_events_inner() -> anyhow:
                 text_elements: Vec::new(),
             }])
             .with_thread_settings(ThreadSettingsOverrides {
-                environments: Some(local_selections(cwd_path)),
+                environments: Some(local_requests(cwd_path)),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
@@ -726,7 +726,7 @@ async fn structured_write_tool_creates_file_via_apply_patch_events_inner() -> an
                 text_elements: Vec::new(),
             }])
             .with_thread_settings(ThreadSettingsOverrides {
-                environments: Some(local_selections(cwd_path)),
+                environments: Some(local_requests(cwd_path)),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
@@ -1025,12 +1025,12 @@ async fn identical_call_loop_across_model_requests_is_refused_then_stopped() -> 
     let mut builder = test_codex().with_model("test-gpt-5-codex");
     let test = builder.build(&server).await?;
 
-    let command_args = json!({ "command": "echo same check", "login": false }).to_string();
+    let command_args = json!({ "cmd": "echo same check", "login": false }).to_string();
     let looping_responses = (1..=11)
         .map(|idx| {
             sse(vec![
                 ev_response_created(&format!("resp-{idx}")),
-                ev_function_call(&format!("call-{idx}"), "shell_command", &command_args),
+                ev_function_call(&format!("call-{idx}"), "exec_command", &command_args),
                 ev_completed(&format!("resp-{idx}")),
             ])
         })
@@ -1073,7 +1073,7 @@ async fn identical_call_loop_across_model_requests_is_refused_then_stopped() -> 
     for (idx, request) in requests.iter().enumerate().take(11).skip(4) {
         let (output, success) = call_output(request, &format!("call-{idx}"));
         assert!(
-            output.starts_with("Not run: this exact `shell_command` call"),
+            output.starts_with("Not run: this exact `exec_command` call"),
             "{output}"
         );
         assert_ne!(success, Some(true));

@@ -156,6 +156,7 @@ async fn issue_445_agent_messages_wait_while_the_kill_switch_is_on() -> anyhow::
                 "worker finished: pf445-mail".to_string(),
                 /*trigger_turn*/ true,
             ),
+            start_options: Default::default(),
         })
         .await?;
     // Long enough for a refusal loop to show; nothing may start or be sent.

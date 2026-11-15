@@ -920,6 +920,7 @@ async fn subagent_install_request_returns_root_only_error(
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             ..StartThreadOptions::new(test.config.clone())
         })

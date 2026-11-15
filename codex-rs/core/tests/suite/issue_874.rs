@@ -35,7 +35,7 @@ use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_sandbox;
 use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local_selections;
+use core_test_support::test_codex::local_requests;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use pretty_assertions::assert_eq;
@@ -60,7 +60,7 @@ struct Run {
 fn step(call_id: &str, arguments: Value) -> Vec<Value> {
     vec![
         ev_response_created(call_id),
-        ev_function_call(call_id, "shell_command", &arguments.to_string()),
+        ev_function_call(call_id, "exec_command", &arguments.to_string()),
         ev_completed(call_id),
     ]
 }
@@ -180,7 +180,7 @@ async fn run_with(
                 text_elements: Vec::new(),
             }])
             .with_thread_settings(ThreadSettingsOverrides {
-                environments: project_of.map(|other| local_selections(other.config.cwd.clone())),
+                environments: project_of.map(|other| local_requests(other.config.cwd.clone())),
                 ..Default::default()
             }),
         )
@@ -268,10 +268,7 @@ async fn issue_874_planted_git_links_and_rebase_steps_are_reported() -> anyhow::
             level,
             setting,
             Arc::new(TempDir::new()?),
-            vec![step(
-                "call-plant",
-                json!({ "command": plant(&outside_path) }),
-            )],
+            vec![step("call-plant", json!({ "cmd": plant(&outside_path) }))],
         )
         .await?;
         let git = test.cwd_path().canonicalize()?.join(".git");
@@ -331,11 +328,11 @@ async fn issue_874_approval_does_not_lift_the_rules_while_a_finding_stands() -> 
             Setting::FullAccess,
             home,
             vec![
-                step("call-first", json!({ "command": first })),
+                step("call-first", json!({ "cmd": first })),
                 step(
                     "call-read",
                     json!({
-                        "command": format!("cat '{}'", auth.display()),
+                        "cmd": format!("cat '{}'", auth.display()),
                         "sandbox_permissions": "require_escalated",
                         "justification": "check the sign-in",
                     }),
@@ -383,7 +380,7 @@ async fn issue_874_a_standing_finding_keeps_user_namespaces_denied() -> anyhow::
             SecurityLevel::Moderate,
             Setting::FullAccess,
             Arc::new(TempDir::new()?),
-            vec![step("call-first", json!({ "command": first }))],
+            vec![step("call-first", json!({ "cmd": first }))],
         ))
         .await?;
         // Another, in the workspace sandbox in the same project and before
@@ -396,7 +393,7 @@ async fn issue_874_a_standing_finding_keeps_user_namespaces_denied() -> anyhow::
             vec![step(
                 "call-userns",
                 json!({
-                    "command": SCRIPT,
+                    "cmd": SCRIPT,
                     "sandbox_permissions": "require_escalated",
                     "justification": "rootless podman needs a user namespace",
                 }),
@@ -457,7 +454,7 @@ async fn issue_874_a_standing_finding_keeps_d48_known_tools_denied() -> anyhow::
             SecurityLevel::Moderate,
             Setting::FullAccess,
             Arc::new(TempDir::new()?),
-            vec![step("call-first", json!({ "command": first }))],
+            vec![step("call-first", json!({ "cmd": first }))],
         ))
         .await?;
         // Another session in the project: a first command's output is
@@ -467,11 +464,11 @@ async fn issue_874_a_standing_finding_keeps_d48_known_tools_denied() -> anyhow::
             Setting::Workspace,
             Arc::new(TempDir::new()?),
             vec![
-                step("call-echo", json!({ "command": "echo first" })),
+                step("call-echo", json!({ "cmd": "echo first" })),
                 step(
                     "call-d48",
                     json!({
-                        "command": PLAIN,
+                        "cmd": PLAIN,
                         "sandbox_permissions": "require_escalated",
                         "justification": "rootless podman needs a user namespace",
                     }),
@@ -539,14 +536,11 @@ async fn issue_943_a_command_in_another_repository_is_checked() -> anyhow::Resul
             Setting::FullAccess,
             home,
             vec![
-                step(
-                    "call-first",
-                    json!({ "command": first, "workdir": workdir }),
-                ),
+                step("call-first", json!({ "cmd": first, "workdir": workdir })),
                 step(
                     "call-read",
                     json!({
-                        "command": format!("cat '{}'", auth.display()),
+                        "cmd": format!("cat '{}'", auth.display()),
                         "workdir": workdir,
                         "sandbox_permissions": "require_escalated",
                         "justification": "check the sign-in",
@@ -657,7 +651,7 @@ async fn issue_943_left_before_the_session_holds_its_first_approval() -> anyhow:
         let auth = home.path().canonicalize()?.join("auth.json");
         std::fs::write(&auth, CANARY)?;
         let mut read = json!({
-            "command": format!("cat '{}'", auth.display()),
+            "cmd": format!("cat '{}'", auth.display()),
             "sandbox_permissions": "require_escalated",
             "justification": "check the sign-in",
         });
@@ -732,7 +726,7 @@ async fn issue_943_a_standing_finding_refuses_additional_writes() -> anyhow::Res
             SecurityLevel::Moderate,
             Setting::FullAccess,
             Arc::new(TempDir::new()?),
-            vec![step("call-first", json!({ "command": first }))],
+            vec![step("call-first", json!({ "cmd": first }))],
         ))
         .await?;
         let (second, _) = Box::pin(run_with(
@@ -742,7 +736,7 @@ async fn issue_943_a_standing_finding_refuses_additional_writes() -> anyhow::Res
             vec![step(
                 "call-write",
                 json!({
-                    "command": "mkdir -p .agents && printf x >> .agents/issue943.md && echo wrote-943",
+                    "cmd": "mkdir -p .agents && printf x >> .agents/issue943.md && echo wrote-943",
                     "sandbox_permissions": "with_additional_permissions",
                     "additional_permissions": { "file_system": { "write": [".agents"] } },
                     "justification": "update the agent notes",

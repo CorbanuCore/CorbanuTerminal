@@ -349,6 +349,7 @@ impl Session {
                     model_provider: Some(provider.into()),
                     ..Default::default()
                 },
+                reply: None,
             })
             .await?;
         tokio::time::timeout(Duration::from_secs(5), async {

@@ -4,7 +4,6 @@ use codex_core::config::AccountingMode;
 use codex_features::Feature;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use codex_state::StateRuntime;
 use codex_state::accounting::Attempt;

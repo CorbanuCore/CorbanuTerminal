@@ -3,7 +3,6 @@
 //! when the request held no lease (any human-driven session).
 use codex_core::TurnInputRequest;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;

@@ -3,10 +3,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use codex_core::CodexThread;
-<<<<<<< HEAD
-use codex_core::StartThreadOptions;
-||||||| 413492cd6c
-=======
 use codex_core::InputWaitOutcome;
 use codex_core::StartIfIdleSubmission;
 use codex_core::StartThreadOptions;
@@ -14,23 +10,14 @@ use codex_core::TurnInput;
 use codex_core::TurnInputRequest;
 use codex_core::TurnInputSubmission;
 use codex_core::TurnStartOptions;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_core::config::CurrentTimeReminderConfig;
 use codex_extension_items::ExtensionItem;
 use codex_extension_items::sleep::SleepItem;
 use codex_features::Feature;
-<<<<<<< HEAD
-use codex_models_manager::bundled_models_response;
-||||||| 413492cd6c
-=======
 use codex_history::RolloutItem;
 use codex_login::CodexAuth;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_models_manager::bundled_models_response;
 use codex_protocol::AgentPath;
-<<<<<<< HEAD
-use codex_protocol::items::CollabAgentTool;
-||||||| 413492cd6c
-=======
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::Settings;
@@ -38,36 +25,24 @@ use codex_protocol::dynamic_tools::DynamicToolCallOutputContentItem;
 use codex_protocol::dynamic_tools::DynamicToolFunctionSpec;
 use codex_protocol::dynamic_tools::DynamicToolResponse;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_protocol::items::CollabAgentTool;
 use codex_protocol::items::TurnItem;
 use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::PermissionProfile;
-<<<<<<< HEAD
-use codex_protocol::openai_models::ToolMode;
-||||||| 413492cd6c
-=======
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_protocol::openai_models::ToolMode;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::CodexErrorInfo;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::Op;
-<<<<<<< HEAD
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
-||||||| 413492cd6c
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-=======
 use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_protocol::turn_input::CyberAccessProgram;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::user_input::UserInput;
 use core_test_support::context_snapshot;
 use core_test_support::context_snapshot::ContextSnapshotOptions;
@@ -573,15 +548,6 @@ async fn queue_only_agent_mail_wakes_sleeping_root_with_previous_turn_context(
 ) -> anyhow::Result<()> {
     const CHILD_MESSAGE: &str = "worker completed";
 
-<<<<<<< HEAD
-    let (server, _completions) = start_streaming_sse_server(vec![
-        response_completed_chunks("resp-1"),
-        response_completed_chunks("resp-2"),
-    ])
-||||||| 413492cd6c
-    let (server, _completions) =
-        start_streaming_sse_server(vec![response_completed_chunks("resp-1")]).await;
-=======
     let server = responses::start_mock_server().await;
     let requests = responses::mount_sse_sequence(
         &server,
@@ -591,7 +557,6 @@ async fn queue_only_agent_mail_wakes_sleeping_root_with_previous_turn_context(
             responses::sse_completed("resp-wake"),
         ],
     )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     .await;
     let mut extensions =
         codex_extension_api::ExtensionRegistryBuilder::<codex_core::config::Config>::new();
@@ -651,43 +616,6 @@ async fn queue_only_agent_mail_wakes_sleeping_root_with_previous_turn_context(
     enqueue_queue_only_agent_mail(&test.codex, CHILD_MESSAGE).await;
     wait_for_turn_complete(&test.codex).await;
 
-<<<<<<< HEAD
-    assert_eq!(server.requests().await.len(), 1);
-    submit_user_input(&codex, "acknowledge the worker update").await;
-    wait_for_turn_complete(&codex).await;
-    assert_eq!(server.requests().await.len(), 2);
-    let requests = server.requests().await;
-    let second: Value = from_slice(&requests[1]).expect("parse second request");
-    assert!(
-        second["input"]
-            .as_array()
-            .expect("request input")
-            .iter()
-            .any(|item| {
-                item.get("type").and_then(Value::as_str) == Some("agent_message")
-                    && item["content"] == json!([{"type": "input_text", "text": CHILD_MESSAGE}])
-            })
-    );
-||||||| 413492cd6c
-    assert_eq!(server.requests().await.len(), 1);
-    let history = codex
-        .load_history(/*include_archived*/ true)
-        .await
-        .expect("load persisted thread history");
-    assert!(history.items.iter().any(|item| {
-        matches!(
-            item,
-            RolloutItem::ResponseItem(codex_protocol::models::ResponseItem::AgentMessage {
-                content,
-                ..
-            }) if content.iter().any(|content| matches!(
-                content,
-                codex_protocol::models::AgentMessageInputContent::InputText { text }
-                    if text == CHILD_MESSAGE
-            ))
-        )
-    }));
-=======
     let captured = requests.requests();
     let metadata = captured
         .iter()
@@ -782,7 +710,6 @@ async fn queue_only_agent_mail_wakes_sleeping_root_with_previous_turn_context(
         (Some("composer"), Some("new-parent"), Some("new-root")),
     );
     Ok(())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[derive(Clone, Copy)]
@@ -1280,17 +1207,10 @@ async fn any_new_input_interrupts_sleep(input: WaitInput) {
     wait_for_sleep_item_completed(&codex, FIRST_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
     wait_for_sleep_item_started(&codex, SECOND_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
 
-<<<<<<< HEAD
     // Not `submit_agent_mail`: its barrier wait discards other events, and the mail can end
     // the sleep before the barrier's response arrives, which lost this completion (#349).
     // The sleep's completion already shows the mail was handled.
     enqueue_agent_mail(&codex, "new mailbox input", AgentMailDelivery::QueueOnly).await;
-||||||| 413492cd6c
-    submit_queue_only_agent_mail(&codex, "new mailbox input").await;
-=======
-    // The list-voices barrier can consume the sleep completion that we need to observe next.
-    enqueue_queue_only_agent_mail(&codex, "new mailbox input").await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     wait_for_sleep_item_completed(&codex, SECOND_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
     wait_for_turn_complete(&codex).await;
 

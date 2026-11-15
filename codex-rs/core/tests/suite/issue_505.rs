@@ -22,6 +22,7 @@ use codex_core::security_level_change::Probes;
 use codex_core::security_level_change::commit_human_level_change;
 use codex_extension_items::ExtensionItem;
 use codex_features::Feature;
+use codex_history::RolloutItem;
 use codex_protocol::AgentPath;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::items::TurnItem;
@@ -31,11 +32,8 @@ use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::ReviewDecision;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
-use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_protocol::user_input::UserInput;
 use codex_security_policy::SecurityLevel;
 use core_test_support::responses;
@@ -185,8 +183,8 @@ async fn run(confirm: Confirm) -> anyhow::Result<Run> {
                 ev_response_created("call-0"),
                 ev_function_call(
                     "call-0",
-                    "shell_command",
-                    &json!({ "command": command }).to_string(),
+                    "exec_command",
+                    &json!({ "cmd": command }).to_string(),
                 ),
                 ev_completed("call-0"),
             ]),
@@ -198,10 +196,9 @@ async fn run(confirm: Confirm) -> anyhow::Result<Run> {
         ],
     )
     .await;
-    // A local environment: `shell_command` runs commands on the Codex host
-    // only and refuses a remote one (#721), so under a remote test
-    // environment the write would be refused regardless and neither run's
-    // write check would test anything.
+    // A local environment: the write checks below look at the host's
+    // workspace, so under a remote test environment neither run's write
+    // check would test anything.
     let test = test_codex()
         .with_model("test-gpt-5.1-codex")
         .with_config(permissive_without_approvals)
@@ -351,19 +348,18 @@ async fn new_input_reaches_a_later_turn(input: NewInput) -> anyhow::Result<()> {
     match input {
         NewInput::Steer => {
             let steered = codex
-                .steer_input(
-                    vec![UserInput::Text {
+                .start_or_steer_turn(codex_core::TurnInputRequest::user_input(vec![
+                    UserInput::Text {
                         text: NEW_INPUT.into(),
                         text_elements: Vec::new(),
-                    }],
-                    /*additional_context*/ Default::default(),
-                    /*expected_turn_id*/ None,
-                    /*client_user_message_id*/ None,
-                    /*responsesapi_client_metadata*/ None,
-                )
+                    },
+                ]))
                 .await;
             assert!(
-                steered.is_ok(),
+                matches!(
+                    steered,
+                    Ok(codex_protocol::turn_input::TurnInputSubmission::Steered { .. })
+                ),
                 "steering is accepted in a turn started after the confirmation: {steered:?}"
             );
         }
@@ -377,6 +373,7 @@ async fn new_input_reaches_a_later_turn(input: NewInput) -> anyhow::Result<()> {
                         NEW_INPUT.into(),
                         /*trigger_turn*/ false,
                     ),
+                    start_options: Default::default(),
                 })
                 .await?;
         }
@@ -459,6 +456,7 @@ async fn issue_505_running_children_and_later_threads_are_covered() -> anyhow::R
                 approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
                 ..Default::default()
             },
+            reply: None,
         })
         .await?;
     wait_for_event(&later.thread, |event| {
@@ -491,11 +489,7 @@ async fn issue_505_a_managed_reviewer_requirement_is_not_overridden() -> anyhow:
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
             let layers = config
                 .config_layer_stack
-                .get_layers(
-                    codex_config::ConfigLayerStackOrdering::LowestPrecedenceFirst,
-                    /*include_disabled*/ true,
-                )
-                .into_iter()
+                .all_layers_low_to_high()
                 .cloned()
                 .collect();
             let mut requirements = config.config_layer_stack.requirements().clone();
@@ -543,7 +537,7 @@ async fn issue_505_a_managed_reviewer_requirement_is_not_overridden() -> anyhow:
     let rollout = std::fs::read_to_string(test.codex.rollout_path().expect("rollout path"))?;
     let turns: Vec<_> = rollout
         .lines()
-        .filter_map(|line| serde_json::from_str::<RolloutLine>(line).ok())
+        .filter_map(|line| codex_rollout::parse_rollout_line(line).ok())
         .filter_map(|line| match line.item {
             RolloutItem::TurnContext(turn) => Some((turn.approval_policy, turn.approvals_reviewer)),
             _ => None,

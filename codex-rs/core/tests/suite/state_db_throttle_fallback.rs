@@ -5,7 +5,6 @@ use codex_core::TurnInputRequest;
 use codex_core::config::AccountingMode;
 use codex_features::Feature;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ResponseMock;
 use core_test_support::responses::ev_assistant_message;

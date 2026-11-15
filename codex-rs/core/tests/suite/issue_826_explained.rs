@@ -50,9 +50,11 @@ const INSPECTED: &str = "creating a user namespace";
 
 #[derive(Clone, Copy, Debug)]
 enum Tool {
+    /// Formerly `shell_command` (removed upstream): its arguments, sent to
+    /// `exec_command`.
     ShellCommand,
     ExecCommand,
-    /// `shell_command` with the model's justification.
+    /// The same with the model's justification.
     Justified,
 }
 
@@ -78,14 +80,14 @@ async fn run(
     let home = Arc::new(TempDir::new()?);
     let origin = home.path().canonicalize()?.to_string_lossy().into_owned();
     let (name, arguments) = match tool {
-        Tool::ShellCommand => ("shell_command", json!({ "command": SCRIPT })),
+        Tool::ShellCommand => ("exec_command", json!({ "cmd": SCRIPT })),
         Tool::ExecCommand => (
             "exec_command",
             json!({ "cmd": SCRIPT, "yield_time_ms": 5_000 }),
         ),
         Tool::Justified => (
-            "shell_command",
-            json!({ "command": SCRIPT, "justification": JUSTIFICATION }),
+            "exec_command",
+            json!({ "cmd": SCRIPT, "justification": JUSTIFICATION }),
         ),
     };
     let server = start_mock_server().await;

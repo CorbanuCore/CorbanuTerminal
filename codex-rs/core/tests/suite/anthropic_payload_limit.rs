@@ -5,7 +5,6 @@ use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_FABLE_MAX_OUTPUT_TOKENS;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::test_codex;
