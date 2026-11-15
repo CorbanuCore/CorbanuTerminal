@@ -24,7 +24,8 @@ doesn't change (through a dependency) shows up on `main`.
   the shared sccache/cargo-home caches (typically 6-10 minutes) and has a
   20-minute timeout. The job is `rust-ci-lint-build.yml`, shared with
   postmerge `rust-ci-full`, which also runs the musl dev and musl release legs.
-  The full Linux test suite stays postmerge only.
+  The dedicated full Linux test workflow stays postmerge; the changed-crate
+  job below also runs every workspace member for broad changes.
 - Windows clippy (`rust-ci / Lint/Build — windows-2022 - x86_64-pc-windows-msvc`):
   the same `cargo clippy --tests -D warnings` for the Windows msvc dev target
   (#717), so `cfg(unix)`-gated imports, helpers and `mut`s that are unused on
@@ -101,15 +102,21 @@ doesn't change (through a dependency) shows up on `main`.
   `codex-rs` crate under which the PR changes any file
   (`.github/scripts/changed_crate_test_packages.py`), including crates Cargo
   makes members only because a member depends on them by path, such as
-  `codex-windows-sandbox` (#2027). It does not add the
-  crates that depend on them, and a `Cargo.lock`-only change runs nothing. It
+  `codex-windows-sandbox` (#2027). Cargo metadata supplies transitive reverse
+  dependencies, including optional, dev, build and target-specific path edges
+  (#1989). Affected `core_test_support`, `app_test_support` and
+  `mcp_test_support` are selected too; Cargo already makes them implicit
+  members. (`mcp_test_support` currently declares no unit-test target.)
+  At more than 32 affected packages, it selects every member instead of
+  truncating coverage. Workspace manifest, lockfile, toolchain, Cargo/nextest
+  configuration and removed crate manifests also select every member. It
   runs codex-core's remote-aware tests locally, without postmerge's Docker
   remote environment. It first builds the helper binaries some suites
   start from other crates (`codex`, the code-mode host, the Linux sandbox, the
   rmcp-client test servers, the wallet daemon) and installs the packaged
-  ripgrep. A change to the job itself, `rust-ci.yml`, the workspace
-  `Cargo.toml`, the toolchain or nextest config runs `codex-rmcp-client`'s
-  tests. It uses postmerge's
+  ripgrep. A change to the job itself or `rust-ci.yml` selects
+  `codex-rmcp-client` and its reverse dependents, currently exceeding the cap
+  and running every member. It uses postmerge's
   `ci-test` profile and restores its sccache (saves nothing). Before this no
   Linux or macOS PR job ran most crates' tests: #1963 went green while
   breaking two rmcp-client tests. Part of `CI results (required)` whenever it
@@ -123,9 +130,9 @@ doesn't change (through a dependency) shows up on `main`.
   macOS: `codex-sandboxing` (Seatbelt), `codex-exec-server` (macOS process and
   file-system sandboxes), `codex-keyring-store` (Keychain),
   `codex-process-hardening` and `codex-network-proxy` (native certificates,
-  the credential broker's memory scan). It selects them as the Linux job does
+  the credential broker's memory scan). It selects directly changed crates
   (`.github/scripts/macos_changed_crate_tests.py`, using the shared
-  `cargo_packages` list); a change to the job, its scripts or actions, the
+  `cargo_packages` list), without Linux's reverse-dependency expansion; a change to the job, its scripts or actions, the
   workspace `Cargo.toml`, the toolchain or nextest config runs all five.
   Known macOS failures are listed with their issues in
   `.github/macos-changed-crate-known-failures.txt`, excluded, and named in the
@@ -137,8 +144,9 @@ doesn't change (through a dependency) shows up on `main`.
 - Core security tests (`rust-ci / Core security tests — ubuntu-24.04` and
   `— macos-15`, #512, #553, #902): codex-core's `security::` unit tests and
   selected integration suites on Linux and macOS, on every `codex-rs` change.
-- Full Rust nextest suite on Linux x64: postmerge only (`postmerge-ci` →
-  `rust-ci-full`), not on PRs.
+- Full Rust nextest workflow on Linux x64 (`postmerge-ci` → `rust-ci-full`):
+  postmerge, including remote-mode coverage. Broad PR changes run all members
+  in the required changed-crate job above, in local mode.
 - SDK checks on hosted Linux x64.
 - V8 canary coverage on hosted Linux x64 only.
 
