@@ -206,7 +206,7 @@ fn file_print_of_an_unserved_reparse_point_differs_every_time() {
 /// the NT path `target` in place (same file; needs the privilege), as a
 /// process a command left running could.
 #[cfg(windows)]
-fn retag_as_link(path: &Path, tag: u32, target: &str) {
+fn retag_as_link(path: &Path, tag: u32, target: &str) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStrExt as _;
     use std::os::windows::fs::OpenOptionsExt as _;
     use std::os::windows::io::AsRawHandle as _;
@@ -237,11 +237,15 @@ fn retag_as_link(path: &Path, tag: u32, target: &str) {
                 std::ptr::null_mut(),
             )
         };
-        assert!(ok != 0, "{code:#x}: {}", std::io::Error::last_os_error());
+        if ok == 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
     };
     let mut header = [0_u8; 8];
     header[0..4].copy_from_slice(&tag.to_le_bytes());
-    control(FSCTL_DELETE_REPARSE_POINT, &header);
+    control(FSCTL_DELETE_REPARSE_POINT, &header)?;
     // `REPARSE_DATA_BUFFER` for an absolute symbolic link: the substitute
     // and print names are both `target`.
     let name: Vec<u8> = std::ffi::OsStr::new(target)
@@ -259,7 +263,7 @@ fn retag_as_link(path: &Path, tag: u32, target: &str) {
     buffer.extend(0_u32.to_le_bytes());
     buffer.extend(&name);
     buffer.extend(&name);
-    control(FSCTL_SET_REPARSE_POINT, &buffer);
+    control(FSCTL_SET_REPARSE_POINT, &buffer)
 }
 
 /// #1909 (#1913 review): a reparse point other than a link that becomes a
@@ -269,6 +273,11 @@ fn retag_as_link(path: &Path, tag: u32, target: &str) {
 #[cfg(windows)]
 #[test]
 fn file_print_does_not_follow_a_link_tagged_before_the_reopen() {
+    check_retagged_reopen(|| ());
+}
+
+#[cfg(windows)]
+fn check_retagged_reopen<G>(privilege_guard: impl FnOnce() -> G + 'static) -> Option<bool> {
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::Foundation::GetLastError;
     use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
@@ -278,16 +287,21 @@ fn file_print_does_not_follow_a_link_tagged_before_the_reopen() {
     const PIPE_ACCESS_DUPLEX: u32 = 3;
     const PIPE_NOWAIT: u32 = 1;
     const ERROR_PIPE_LISTENING: u32 = 536;
+    const FILE_FLAG_FIRST_PIPE_INSTANCE: u32 = 0x0008_0000;
     let dir = tempfile::tempdir().expect("tempdir");
-    if !symlinks_allowed(dir.path()) {
-        return;
-    }
     let file = dir.path().join("config");
     fs::write(&file, "x\n").expect("write");
     if !set_reparse_tag(&file, TAG_HSM) {
-        return;
+        return None;
     }
-    let pipe_name = format!("corbanu-1909-reopen-{}", std::process::id());
+    let pipe_name = format!(
+        "corbanu-1909-reopen-{}-{}",
+        std::process::id(),
+        dir.path()
+            .file_name()
+            .expect("tempdir name")
+            .to_string_lossy()
+    );
     let wide: Vec<u16> = format!(r"\\.\pipe\{pipe_name}")
         .encode_utf16()
         .chain([0])
@@ -296,7 +310,7 @@ fn file_print_does_not_follow_a_link_tagged_before_the_reopen() {
     let pipe = unsafe {
         CreateNamedPipeW(
             wide.as_ptr(),
-            PIPE_ACCESS_DUPLEX,
+            PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
             PIPE_NOWAIT,
             1,
             512,
@@ -307,14 +321,27 @@ fn file_print_does_not_follow_a_link_tagged_before_the_reopen() {
     };
     assert_ne!(pipe, INVALID_HANDLE_VALUE, "pipe");
     let target = format!(r"\??\pipe\{pipe_name}");
-    let retagged = std::rc::Rc::new(std::cell::Cell::new(false));
+    let retagged = std::rc::Rc::new(std::cell::Cell::new(None));
     let print = {
         let retagged = std::rc::Rc::clone(&retagged);
         let path = file.clone();
+        let privilege_guard = RefCell::new(Some(privilege_guard));
         BEFORE_REOPEN.with(|slot| {
             *slot.borrow_mut() = Some(Box::new(move || {
-                retag_as_link(&path, TAG_HSM, &target);
-                retagged.set(true);
+                let guard = privilege_guard
+                    .borrow_mut()
+                    .take()
+                    .expect("hook called once");
+                let _guard = guard();
+                match retag_as_link(&path, TAG_HSM, &target) {
+                    Ok(()) => retagged.set(Some(true)),
+                    Err(err) if err.raw_os_error() == Some(1314) => {
+                        // Developer Mode permits CreateSymbolicLink with its
+                        // unprivileged flag, but not this direct FSCTL retag.
+                        retagged.set(Some(false));
+                    }
+                    Err(err) => panic!("retag failed: {err}"),
+                }
             }))
         });
         let print = file_print(&file);
@@ -330,17 +357,20 @@ fn file_print_does_not_follow_a_link_tagged_before_the_reopen() {
         !connected && err == ERROR_PIPE_LISTENING
     };
     let is_link = fs::symlink_metadata(&file).is_ok_and(|metadata| metadata.is_symlink());
-    assert_eq!(
-        (
-            retagged.get(),
-            is_link,
-            never_opened,
-            print.starts_with("truncated at")
-        ),
-        (true, true, true, true),
-        "{print}"
-    );
+    assert!(never_opened, "the pipe target was opened");
+    match retagged.get().expect("the reopen hook ran") {
+        true => assert!(is_link && print.starts_with("truncated at"), "{print}"),
+        false => {
+            assert!(!is_link, "the OS refused the symlink privilege");
+            eprintln!("retag refused with ERROR_PRIVILEGE_NOT_HELD; no link target opened");
+        }
+    }
+    retagged.get()
 }
+
+#[cfg(windows)]
+#[path = "git_watch_privilege_tests.rs"]
+mod privilege_tests;
 
 /// #1909: a file swapped for a link after it was looked at is not read
 /// through; reading through the link now would give the target's content.

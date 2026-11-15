@@ -11,6 +11,7 @@ use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::DUPLICATE_SAME_ACCESS;
 use windows_sys::Win32::Foundation::DuplicateHandle;
 use windows_sys::Win32::Foundation::HANDLE;
+use windows_sys::Win32::Foundation::WAIT_TIMEOUT;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 
 /// `PUBLIC_OBJECT_BASIC_INFORMATION`.
@@ -96,6 +97,15 @@ fn cancelled_during(step: usize) -> (Vec<(u32, u32)>, bool) {
                 {
                     return;
                 }
+                if job.is_some() {
+                    // Hold the child alive independently of its environment or
+                    // shell startup. TerminateJobObject must end it while suspended.
+                    // SAFETY: the start hook owns a live primary-thread handle.
+                    assert_ne!(
+                        unsafe { windows_sys::Win32::System::Threading::SuspendThread(handles[2]) },
+                        u32::MAX,
+                    );
+                }
                 let copies: Vec<HANDLE> = handles.iter().map(|handle| duplicate(*handle)).collect();
                 // Keep the job observable after cancellation, so the test proves
                 // explicit termination and waiting, not kill-on-last-close.
@@ -114,10 +124,11 @@ fn cancelled_during(step: usize) -> (Vec<(u32, u32)>, bool) {
             roots.as_slice(),
             codex_home.path(),
             vec![
-                "C:\\Windows\\System32\\cmd.exe".to_string(),
-                "/d".to_string(),
-                "/c".to_string(),
-                format!("{marker} & C:\\Windows\\System32\\ping.exe -n 30 127.0.0.1 >nul"),
+                "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe".to_string(),
+                "-NoProfile".to_string(),
+                "-NonInteractive".to_string(),
+                "-Command".to_string(),
+                format!("Start-Sleep -Seconds 30 # {marker}"),
             ],
             &workspace,
             with_session_temp(codex_home.path(), HashMap::new()),
@@ -131,6 +142,12 @@ fn cancelled_during(step: usize) -> (Vec<(u32, u32)>, bool) {
         tokio::select! {
             spawned = spawn => panic!("the spawn ended: {:?}", spawned.map(|_| ())),
             copies = reached_rx.recv() => copies.expect("the step was reached"),
+        }
+    });
+    let was_running = job.as_ref().is_none_or(|_| {
+        // SAFETY: copies[1] is the test\'s duplicate process handle.
+        unsafe {
+            windows_sys::Win32::System::Threading::WaitForSingleObject(copies[1], 0) == WAIT_TIMEOUT
         }
     });
     let waiting: Vec<u32> = copies.iter().map(|copy| handle_count(*copy)).collect();
@@ -168,6 +185,7 @@ fn cancelled_during(step: usize) -> (Vec<(u32, u32)>, bool) {
             CloseHandle(copy);
         }
     }
+    assert!(was_running, "test command ended before cancellation");
     (
         waiting.iter().copied().zip(after).collect(),
         ended_before_release,

@@ -100,34 +100,26 @@ async fn spawn_runner_transport_task(
     request: RunnerTransportRequest,
     planted_watch: Option<IntegrityLease>,
 ) -> Result<(RunnerTransport, Option<IntegrityLease>)> {
-    start_runner_off_async_thread(
-        sandbox_creds,
-        request,
-        planted_watch,
-        spawn_runner_transport,
-    )
+    start_runner_off_async_thread(planted_watch, move || {
+        spawn_runner_transport_with_retry(
+            sandbox_creds,
+            &request,
+            spawn_runner_transport,
+            refresh_logon_sandbox_creds,
+        )
+    })
     .await
 }
 
 /// [`spawn_runner_transport_task`] with the runner started by `spawn` and
 /// any `planted_watch` (#1909 item 6: tests).
 async fn start_runner_off_async_thread<T: Send + 'static, W: Send + 'static>(
-    sandbox_creds: SandboxCreds,
-    request: RunnerTransportRequest,
     planted_watch: W,
-    spawn: fn(&Path, &Path, &SandboxCreds, Option<&Path>, SpawnRequest) -> Result<T>,
+    spawn: impl FnOnce() -> Result<T> + Send + 'static,
 ) -> Result<(T, W)> {
-    tokio::task::spawn_blocking(move || -> Result<_> {
-        let transport = spawn_runner_transport_with_retry(
-            sandbox_creds,
-            &request,
-            spawn,
-            refresh_logon_sandbox_creds,
-        )?;
-        Ok((transport, planted_watch))
-    })
-    .await
-    .map_err(|err| anyhow::anyhow!("runner handshake task failed: {err}"))?
+    tokio::task::spawn_blocking(move || -> Result<_> { Ok((spawn()?, planted_watch)) })
+        .await
+        .map_err(|err| anyhow::anyhow!("runner handshake task failed: {err}"))?
 }
 
 #[allow(clippy::too_many_arguments)]
