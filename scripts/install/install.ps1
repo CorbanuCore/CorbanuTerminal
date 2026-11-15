@@ -632,6 +632,7 @@ function Test-OldStandaloneBinLayout {
         "codex.exe",
         "rg.exe",
         "codex-command-runner.exe",
+        "codex-conpty-launcher.exe",
         "codex-windows-sandbox.exe",
         "codex-windows-sandbox-setup.exe"
     )

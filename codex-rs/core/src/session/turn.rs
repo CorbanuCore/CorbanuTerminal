@@ -5006,7 +5006,7 @@ pub(crate) fn get_last_assistant_message_from_turn<'a>(
     None
 }
 
-#[cfg(test)]
+#[cfg(all(test, debug_assertions))]
 impl Session {
     pub(crate) async fn lock_state_for_accounting_fixture(&self) -> impl Drop + '_ {
         self.state.lock().await

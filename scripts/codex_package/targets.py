@@ -62,6 +62,7 @@ class PackageInputs:
     bwrap_bin: Path | None
     codex_command_runner_bin: Path | None
     codex_windows_sandbox_setup_bin: Path | None
+    codex_conpty_launcher_bin: Path | None = None
 
 
 PACKAGE_VARIANTS: dict[str, PackageVariant] = {

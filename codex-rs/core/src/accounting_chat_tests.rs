@@ -16,6 +16,7 @@ use codex_state::ThreadMetadataBuilder;
 use codex_state::accounting::Attempt;
 use codex_state::accounting::Observation;
 use codex_utils_absolute_path::AbsolutePathBuf;
+#[cfg(debug_assertions)]
 use futures::FutureExt;
 use futures::StreamExt;
 use pretty_assertions::assert_eq;
@@ -219,7 +220,9 @@ impl HttpTransport for Probe {
         })
     }
 }
+#[cfg(debug_assertions)]
 struct Denied;
+#[cfg(debug_assertions)]
 impl codex_api::AuthProvider for Denied {
     fn add_auth_headers(&self, _: &mut http::HeaderMap) -> Result<(), codex_api::AuthError> {
         Ok(())

@@ -108,6 +108,18 @@
         }
       }
     },
+    "codex-conpty-launcher": {
+      "platforms": {
+        "windows-x86_64": {
+          "regex": "^codex-conpty-launcher-x86_64-pc-windows-msvc\\.exe\\.zst$",
+          "path": "codex-conpty-launcher.exe"
+        },
+        "windows-aarch64": {
+          "regex": "^codex-conpty-launcher-aarch64-pc-windows-msvc\\.exe\\.zst$",
+          "path": "codex-conpty-launcher.exe"
+        }
+      }
+    },
     "codex-windows-sandbox-setup": {
       "platforms": {
         "windows-x86_64": {
