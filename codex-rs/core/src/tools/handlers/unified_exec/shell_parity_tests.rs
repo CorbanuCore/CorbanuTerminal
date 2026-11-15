@@ -228,7 +228,10 @@ async fn tasknode_profile_scope_survives_exec_command_overrides() {
                 output_line_after(&text, "profile="),
                 output_line_after(&text, "home=")
             ),
-            (Some(expected_profile.as_str()), Some(expected_home.as_str())),
+            (
+                Some(expected_profile.as_str()),
+                Some(expected_home.as_str())
+            ),
             "{profile:?}: {text}"
         );
     }
