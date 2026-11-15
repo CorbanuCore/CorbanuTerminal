@@ -118,51 +118,6 @@ impl WebSearchTool {
     ) -> Result<Box<dyn ToolOutput>, FunctionCallError> {
         let commands = parse_commands(call.function_arguments()?, self.supports_literature_search)?;
         let command_action = command_action(&commands);
-<<<<<<< HEAD
-        let provider = self
-            .provider
-            .api_provider()
-            .await
-            .map_err(|err| FunctionCallError::Fatal(err.to_string()))?;
-        let auth = self
-            .provider
-            .api_auth()
-            .await
-            .map_err(|err| FunctionCallError::Fatal(err.to_string()))?;
-        let transport = ReqwestTransport::from_http_client(create_client());
-        let transport = match &self.accounting {
-            Some(accounting) => {
-                accounting
-                    .transport(
-                        transport,
-                        self.provider.info(),
-                        &provider.base_url,
-                        &call.model,
-                        "alpha/search",
-                        "search",
-                    )
-                    .await
-            }
-            None => ExtensionAccounting::unrecorded(transport, &call.model),
-        };
-        let client = SearchClient::new(transport, provider, auth);
-||||||| 413492cd6c
-        let provider = self
-            .provider
-            .api_provider()
-            .await
-            .map_err(|err| FunctionCallError::Fatal(err.to_string()))?;
-        let auth = self
-            .provider
-            .api_auth()
-            .await
-            .map_err(|err| FunctionCallError::Fatal(err.to_string()))?;
-        let client = SearchClient::new(
-            ReqwestTransport::from_http_client(create_client()),
-            provider,
-            auth,
-        );
-=======
         let provider = self.provider.as_ref();
         let first_party = provider_uses_first_party_auth_path(provider.info());
         let client = prepare_provider_request(provider, first_party, |_| async {
@@ -198,11 +153,27 @@ impl WebSearchTool {
                 )
                 .await
             }?;
+            // Corbanu accounting: record the search against the route this
+            // request actually uses.
+            let transport = match &self.accounting {
+                Some(accounting) => {
+                    accounting
+                        .transport(
+                            transport,
+                            provider.info(),
+                            &endpoint.base_url,
+                            &call.model,
+                            "alpha/search",
+                            "search",
+                        )
+                        .await
+                }
+                None => ExtensionAccounting::unrecorded(transport, &call.model),
+            };
             Ok(SearchClient::new(transport, endpoint, api_auth))
         })
         .await
         .map_err(|err| FunctionCallError::RespondToModel(search_error_message(err)))?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let request = SearchRequest {
             id: self.session_id.clone(),
             model: call.model.clone(),

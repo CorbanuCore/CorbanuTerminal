@@ -113,6 +113,7 @@ fn transcript_keeps_conversation_and_configured_sources() {
                 text: "Plaintext reasoning.".to_string(),
             }]),
             encrypted_content: Some("encrypted-reasoning-blob".to_string()),
+            anthropic_content_block: None,
             internal_chat_message_metadata_passthrough: None,
         },
         ResponseItem::Message {
@@ -1145,6 +1146,7 @@ fn configured_reasoning_counts_against_message_budget() {
             }],
             content: None,
             encrypted_content: None,
+            anthropic_content_block: None,
             internal_chat_message_metadata_passthrough: None,
         });
         if include_reasoning {

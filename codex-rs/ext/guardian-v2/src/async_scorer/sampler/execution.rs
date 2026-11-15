@@ -342,7 +342,7 @@ impl SamplingExecution {
                     }
                 };
                 match event {
-                    ResponseEvent::OutputTextDelta(delta) => {
+                    ResponseEvent::OutputTextDelta { delta, .. } => {
                         if completion.ready.is_none() {
                             continue;
                         }

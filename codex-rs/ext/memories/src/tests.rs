@@ -200,27 +200,13 @@ async fn prompt_contribution_uses_memory_summary_when_enabled() {
 
     assert_eq!(fragments.len(), 1);
     assert_eq!(fragments[0].slot(), PromptSlot::DeveloperPolicy);
-<<<<<<< HEAD
     // PF-30-S02: model-written memories never carry host standing.
     assert!(fragments[0].is_stored_data());
-    assert!(
-        fragments[0]
-            .text()
-            .contains("Remember repository-specific implementation preferences.")
-    );
-||||||| 413492cd6c
-    assert!(
-        fragments[0]
-            .text()
-            .contains("Remember repository-specific implementation preferences.")
-    );
-=======
     assert!(matches!(
         fragments[0].content(),
         ContentItem::InputText { text }
             if text.contains("Remember repository-specific implementation preferences.")
     ));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]

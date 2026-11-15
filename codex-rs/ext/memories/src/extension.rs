@@ -67,17 +67,6 @@ impl ContextContributor for MemoriesExtension {
                 return Vec::new();
             }
 
-<<<<<<< HEAD
-            // The summary is model-written from earlier sessions, including
-            // tool output, so it never carries host standing.
-            build_memory_tool_developer_instructions(&config.codex_home)
-                .await
-                .map(|text| PromptFragment::developer_policy(text).with_stored_data())
-||||||| 413492cd6c
-            build_memory_tool_developer_instructions(&config.codex_home)
-                .await
-                .map(PromptFragment::developer_policy)
-=======
             let Some(instructions) =
                 build_memory_tool_developer_instructions(&config.codex_home, config.version).await
             else {
@@ -103,13 +92,16 @@ impl ContextContributor for MemoriesExtension {
                 }
             };
             instructions
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 .into_iter()
                 .map(|instructions| {
+                    // PF-30-S02: the summary is model-written from earlier
+                    // sessions, including tool output, so it never carries
+                    // host standing.
                     PromptFragment::developer_policy(
                         instructions,
                         ContentItemKind(MemoryContextFragment::READ_INSTRUCTIONS_KIND.to_string()),
                     )
+                    .with_stored_data()
                 })
                 .collect()
         })
