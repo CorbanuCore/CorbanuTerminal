@@ -132,8 +132,10 @@ async fn issue_2222_agent_attachments_are_read_before_delivery(
         linux_sandbox,
     )
     .expect("runtime paths");
-    let environments =
-        codex_exec_server::EnvironmentManager::create_for_tests_with_local(None, runtime).await;
+    let environments = codex_exec_server::EnvironmentManager::create_for_tests_with_local(
+        /*exec_server_url*/ None, runtime,
+    )
+    .await;
     let current = turn
         .environments
         .turn_environments()
