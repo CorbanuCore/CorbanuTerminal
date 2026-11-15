@@ -96,9 +96,35 @@ fn snapshot_drops_values_of_secret_and_provider_names() -> Result<()> {
 #[test]
 fn snapshot_refuses_credentials_left_in_functions_or_aliases() {
     let raw = "# Snapshot file\ngh () { GH_TOKEN=exported-secret-2314 command gh \"$@\"; }\n\0alias ghx='GH_TOKEN=exported-secret-2314 gh'\n\0#values\0GH_TOKEN\0exported-secret-2314\0SAFE_EXPORT\0ordinary\0\0SAFE_EXPORT\0export SAFE_EXPORT=ordinary\n\0\0";
-    let error = filter_with_gate(raw, &[], &OutputGate::new()).unwrap_err();
+    let Err(error) = filter_with_gate(raw, &[], &OutputGate::new()) else {
+        panic!("snapshot with a credential alias was written");
+    };
     assert_eq!(
         error.to_string(),
         "Snapshot contains protected credential values"
     );
+}
+
+#[test]
+fn broker_marker_is_not_a_credential_but_short_secret_values_fail_closed() -> Result<()> {
+    // The credential broker's marker lists brokered names ("[]" when none).
+    let marker = format!(
+        "# Snapshot file\n\0\0#values\0{BROKERED_CREDENTIALS_ENV_KEY}\0[]\0SAFE_EXPORT\0ordinary\0\0SAFE_EXPORT\0export SAFE_EXPORT=ordinary\n\0\0"
+    );
+    let snapshot = filter_with_gate(&marker, &[], &OutputGate::new())?;
+    assert_eq!(
+        snapshot,
+        "# Snapshot file\n# exports (native declarations)\nexport SAFE_EXPORT=ordinary\n"
+    );
+    // As on main, a secret-named value too short to register fails the
+    // snapshot rather than being written unprotected.
+    let short = "# Snapshot file\n\0\0#values\0SHORT_TOKEN\0ab\0SAFE_EXPORT\0ordinary\0\0SAFE_EXPORT\0export SAFE_EXPORT=ordinary\n\0\0";
+    let Err(error) = filter_with_gate(short, &[], &OutputGate::new()) else {
+        panic!("short secret value was not refused");
+    };
+    assert_eq!(
+        error.to_string(),
+        "Cannot protect snapshot credential values"
+    );
+    Ok(())
 }

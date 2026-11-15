@@ -201,8 +201,11 @@ fn snapshots_refuse_startup_aliases_that_embed_credentials(
             assert!(!snapshot.contains("snapshot-exported-Canary-2314"));
             continue;
         }
+        let Err(error) = result else {
+            panic!("{kind:?} {render:?}: snapshot with a credential alias was written");
+        };
         assert_eq!(
-            result.unwrap_err().to_string(),
+            error.to_string(),
             "Snapshot contains protected credential values",
             "{kind:?} {render:?}"
         );

@@ -67,6 +67,7 @@ pub use config::StaticNetworkProxyConfig;
 pub use config::host_and_port_from_network_addr;
 pub use config::managed_proxy_ports;
 #[cfg(any(unix, windows))]
+pub use credential_broker::BROKERED_CREDENTIALS_ENV_KEY;
 pub use credential_broker::CODEX_CREDENTIAL_BROKER_ARG1;
 pub use credential_broker::CREDENTIAL_BROKER_ACTIVE_ENV_KEY;
 pub use credential_broker::CredentialAuthMethod;

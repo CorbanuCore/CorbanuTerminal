@@ -8,6 +8,7 @@ use std::ffi::OsString;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
+use codex_network_proxy::BROKERED_CREDENTIALS_ENV_KEY;
 use codex_secret_broker::output_gate;
 use codex_secret_broker::output_gate::OutputGate;
 use codex_secret_broker::output_gate::SecretClass;
@@ -85,7 +86,12 @@ fn retain_with_gate<'g>(
                 .map(|(name, value)| (*name, value.as_ref())),
         )
     {
-        if is_secret_name(name) && !value.is_empty() {
+        // The broker's own marker lists brokered variable names (often "[]");
+        // it holds no credential and is too short to register.
+        if is_secret_name(name)
+            && !value.is_empty()
+            && !name.eq_ignore_ascii_case(BROKERED_CREDENTIALS_ENV_KEY)
+        {
             managed.push((name.to_string(), Zeroizing::new(value.to_string())));
         }
     }
