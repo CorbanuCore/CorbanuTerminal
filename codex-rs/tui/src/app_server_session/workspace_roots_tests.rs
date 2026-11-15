@@ -38,21 +38,18 @@ fn remote_workspace_roots_survive_start_turn_resume_and_fork() -> Result<()> {
                 std::fs::create_dir(extra_root.as_path())?;
                 let base_url = model_server.uri();
                 let extra_root_toml = serde_json::to_string(&extra_root)?;
+                // Corbanu refuses a custom provider named "OpenAI"; use the built-in
+                // OpenAI provider pointed at the mock server instead.
                 std::fs::write(
                     server_home.path().join("config.toml"),
                     format!(
                         r#"
 model = "gpt-5.2"
-model_provider = "workspace-test"
+model_provider = "openai"
+openai_base_url = "{base_url}/v1"
 sandbox_mode = "workspace-write"
 [sandbox_workspace_write]
 writable_roots = [{extra_root_toml}]
-[model_providers.workspace-test]
-name = "OpenAI"
-base_url = "{base_url}/v1"
-wire_api = "responses"
-request_max_retries = 0
-stream_max_retries = 0
 "#
                     ),
                 )?;
@@ -64,6 +61,12 @@ stream_max_retries = 0
                     })
                     .build()
                     .await?;
+                // Corbanu's default model is not an OpenAI one; the fork forwards the
+                // client's model, so the client names the same model and provider.
+                std::fs::write(
+                    client_home.path().join("config.toml"),
+                    "model = \"gpt-5.2\"\nmodel_provider = \"openai\"\n",
+                )?;
                 let client_config = ConfigBuilder::default()
                     .codex_home(client_home.path().to_path_buf())
                     .harness_overrides(ConfigOverrides {
@@ -151,7 +154,9 @@ stream_max_retries = 0
                     "writable_roots = []",
                 );
                 std::fs::write(config_path, updated_config)?;
-                let session_config = chat.config_ref().clone();
+                let mut session_config = chat.config_ref().clone();
+                // The test widget's config keeps Corbanu's default (non-OpenAI) model.
+                session_config.model = Some("gpt-5.2".to_string());
                 let forked = app_server
                     .fork_thread_at(
                         &local_settings,
