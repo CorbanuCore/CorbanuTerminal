@@ -248,7 +248,7 @@ impl Session {
             if self
                 .services
                 .plugins_manager
-                .set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode))
+                .follow_session_auth(self.services.auth_manager())
                 || !self
                     .services
                     .mcp_runtime
@@ -265,9 +265,6 @@ impl Session {
                 published: false,
             };
             let auth = self.services.auth_manager().auth().await;
-            self.services
-                .plugins_manager
-                .set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));
             let desired = self.latest_mcp_desired_state(auth, environments).await;
             let selected_capability_roots = self
                 .resolve_selected_capability_roots_for_step(&desired.environments)

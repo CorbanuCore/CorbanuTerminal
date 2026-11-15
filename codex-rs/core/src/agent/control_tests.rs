@@ -3516,10 +3516,6 @@ async fn cancelled_v2_send_finishes_reload_registration() {
     // also requeued the child's durable mail, which can finish after `thread_created`;
     // evicting before then is a transient `Busy` (#2340). Wait for that pin, bounded,
     // so a pin the cancelled sender leaked still fails here.
-    let pin_was_held = Arc::clone(&reloaded.residency_gate)
-        .try_write_owned()
-        .is_err();
-    eprintln!("#2340-diag: registration pin still held after thread_created: {pin_was_held}");
     drop(
         timeout(
             Duration::from_secs(5),

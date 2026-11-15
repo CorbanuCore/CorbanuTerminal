@@ -586,10 +586,9 @@ pub struct PluginsManager {
     remote_catalog_cache_refresh_state: RwLock<RemoteCatalogCacheRefreshState>,
     restriction_product: Option<Product>,
     auth_manager: Arc<AuthManager>,
-    /// The auth mode of the sign-in a session uses now, pushed by the session
-    /// (PF-84, #2337); `None` until a session sets one, then `auth_manager`'s
-    /// mode no longer applies.
-    session_auth_mode: RwLock<Option<Option<AuthMode>>>,
+    /// The sign-in a session uses now, pushed by the session (PF-84, #2337);
+    /// once set, the auth mode follows it instead of `auth_manager`.
+    session_auth_manager: RwLock<Option<Arc<AuthManager>>>,
     analytics_events_client: RwLock<Option<AnalyticsEventsClient>>,
     plugin_install_source: PluginInstallSource,
     curated_repo_sync: Mutex<Option<CuratedRepoSync>>,
@@ -767,7 +766,7 @@ impl PluginsManager {
             ),
             restriction_product,
             auth_manager,
-            session_auth_mode: RwLock::new(None),
+            session_auth_manager: RwLock::new(None),
             analytics_events_client: RwLock::new(None),
             plugin_install_source: PluginInstallSource::Manual,
             curated_repo_sync: Mutex::new(None),
@@ -780,26 +779,34 @@ impl PluginsManager {
         self
     }
 
-    /// Follows the auth mode of a session's current sign-in (PF-84): a session
-    /// that switched accounts pushes its mode here before refreshing its MCP
-    /// state, as main's `set_auth_mode` does (#2337). Returns whether the
-    /// effective mode changed.
-    pub fn set_auth_mode(&self, auth_mode: Option<AuthMode>) -> bool {
-        let mut stored = match self.session_auth_mode.write() {
+    /// Follows the auth mode of the sign-in a session uses now (PF-84): a
+    /// session that switched accounts hands its auth manager here before it
+    /// refreshes its MCP state, as main's `set_auth_mode` does (#2337). The
+    /// mode then tracks that sign-in, logouts included. Returns whether the
+    /// mode changed.
+    pub fn follow_session_auth(&self, session_auth: Arc<AuthManager>) -> bool {
+        let mut stored = match self.session_auth_manager.write() {
             Ok(guard) => guard,
             Err(err) => err.into_inner(),
         };
-        let previous = stored.unwrap_or_else(|| self.auth_manager.get_api_auth_mode());
-        *stored = Some(auth_mode);
-        previous != auth_mode
+        let previous = stored
+            .as_deref()
+            .unwrap_or(&self.auth_manager)
+            .get_api_auth_mode();
+        let changed = previous != session_auth.get_api_auth_mode();
+        *stored = Some(session_auth);
+        changed
     }
 
     pub fn auth_mode(&self) -> Option<AuthMode> {
-        let stored = match self.session_auth_mode.read() {
-            Ok(guard) => *guard,
-            Err(err) => *err.into_inner(),
+        let session_auth = match self.session_auth_manager.read() {
+            Ok(guard) => guard.clone(),
+            Err(err) => err.into_inner().clone(),
         };
-        stored.unwrap_or_else(|| self.auth_manager.get_api_auth_mode())
+        session_auth
+            .as_deref()
+            .unwrap_or(&self.auth_manager)
+            .get_api_auth_mode()
     }
 
     fn remote_global_catalog_active(&self, config: &PluginsConfigInput) -> bool {
