@@ -1826,12 +1826,23 @@ mod tests {
         let profile = "work"
             .parse::<codex_config::ProfileV2Name>()
             .expect("valid profile name");
-        for key in [
-            "approval_policy",
-            "approvals_reviewer",
-            "sandbox_mode",
-            "default_permissions",
-            "sandbox_workspace_write",
+        let only = |field: &str| {
+            let mut expected = crate::resume_permissions::ResumePermissions::default();
+            match field {
+                "approval_policy" => expected.approval_policy = true,
+                "approvals_reviewer" => expected.approvals_reviewer = true,
+                _ => expected.profile = true,
+            }
+            expected
+        };
+        for (key, field) in [
+            ("approval_policy", "approval_policy"),
+            ("approvals_reviewer", "approvals_reviewer"),
+            ("sandbox_mode", "profile"),
+            ("default_permissions", "profile"),
+            ("sandbox_workspace_write", "profile"),
+            ("permissions", "profile"),
+            ("network", "profile"),
         ] {
             let config = TomlValue::Table(toml::map::Map::from_iter([(
                 key.to_string(),
@@ -1846,9 +1857,9 @@ mod tests {
                 Default::default(),
             )
             .expect("session flags layer stack");
-            assert_ne!(
+            assert_eq!(
                 app.resume_permission_overrides(&app.config),
-                crate::resume_permissions::ResumePermissions::default(),
+                only(field),
                 "session flag {key} should override the saved permissions"
             );
 

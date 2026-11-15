@@ -458,10 +458,17 @@ impl ModelCatalog {
     /// A snapshot of the catalog's models (upstream reads them as a plain field; here they sit
     /// behind a lock because runtime and GPU providers update them).
     pub(crate) fn models(&self) -> Vec<ModelPreset> {
-        self.models
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+        self.with_models(<[ModelPreset]>::to_vec)
+    }
+
+    /// Reads the models without copying them, for paths that run on every redraw.
+    pub(crate) fn with_models<R>(&self, read: impl FnOnce(&[ModelPreset]) -> R) -> R {
+        read(
+            &self
+                .models
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
     }
 
     pub(crate) fn try_list_models(&self) -> Result<Vec<ModelPreset>, Infallible> {

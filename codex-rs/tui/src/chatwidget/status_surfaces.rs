@@ -1100,11 +1100,13 @@ impl ChatWidget {
     fn processing_tier_display_name(&self) -> Option<String> {
         let id = self.current_service_tier()?;
         self.model_catalog
-            .models()
-            .iter()
-            .find(|preset| preset.model == self.current_model())
-            .and_then(|preset| preset.service_tiers.iter().find(|tier| tier.id == id))
-            .map(|tier| tier.name.clone())
+            .with_models(|models| {
+                models
+                    .iter()
+                    .find(|preset| preset.model == self.current_model())
+                    .and_then(|preset| preset.service_tiers.iter().find(|tier| tier.id == id))
+                    .map(|tier| tier.name.clone())
+            })
             .or_else(|| {
                 (id == ServiceTier::Flex.request_value()
                     && self

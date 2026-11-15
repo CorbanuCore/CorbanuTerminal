@@ -410,10 +410,21 @@ async fn accounting_inspect_app_off_and_old_usage_routes() -> anyhow::Result<()>
             crossterm::event::KeyCode::Enter,
             crossterm::event::KeyModifiers::NONE,
         ));
-    // Upstream's analytics dashboard replaced main's token-activity card.
-    assert!(matches!(
-        rx.recv().await,
-        Some(AppEvent::OpenAnalytics { view: None })
-    ));
+    // Upstream's analytics dashboard replaced main's token-activity card; the
+    // menu may send other events first, but never the accounting inspector's.
+    let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, AppEvent::OpenAnalytics { view: None })),
+        "{events:?}"
+    );
+    assert!(
+        !events.iter().any(|event| matches!(
+            event,
+            AppEvent::OpenAccountingInspector { .. } | AppEvent::LoadAccountingInspector { .. }
+        )),
+        "{events:?}"
+    );
     Ok(())
 }
