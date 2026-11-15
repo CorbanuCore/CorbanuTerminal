@@ -172,7 +172,12 @@ fn pf_27_s06_existing_protected_paths_are_denied_outright_on_windows() {
         let path = fixture.codex_home.join(name);
         entries
             .iter()
-            .find(|entry| entry.path == FileSystemPath::Path { path: path.clone() })
+            .find(|entry| {
+                entry.path
+                    == FileSystemPath::Path {
+                        path: path.clone().into(),
+                    }
+            })
             .cloned()
             .unwrap_or_else(|| panic!("no entry for {name}"))
     };
