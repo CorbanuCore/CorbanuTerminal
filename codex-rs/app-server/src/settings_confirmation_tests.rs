@@ -155,3 +155,66 @@ async fn settings_confirmation_terminal_reply_cleans_up_and_never_replies_twice(
         assert!(rx.try_recv().is_err());
     }
 }
+
+/// Core's ThreadSettings reply drives the confirmation: accepted applies,
+/// a rejection carries Core's message, a dropped reply leaves it pending
+/// for the deadline (uncertain), and a stale generation never resolves.
+#[tokio::test]
+async fn core_settings_reply_is_forwarded_to_its_confirmation() {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    let state = Arc::new(Mutex::new(ThreadState::default()));
+    for (operation, reply) in [
+        ("accepted", Some(Ok(()))),
+        (
+            "rejected",
+            Some(Err(codex_protocol::error::CodexErr::InvalidRequest(
+                "invalid thread settings override: nope".to_string(),
+            ))),
+        ),
+        ("dropped", None),
+    ] {
+        let mut receiver = pending(&mut *state.lock().await, /*connection*/ 1, operation);
+        let (core_reply, core_result) = oneshot::channel();
+        match reply {
+            Some(reply) => core_reply.send(reply).unwrap(),
+            None => drop(core_reply),
+        }
+        crate::settings_confirmation::forward_core_settings_result(
+            Arc::clone(&state),
+            operation.to_string(),
+            core_result,
+            deadline,
+        )
+        .await;
+        match operation {
+            "accepted" => assert_eq!(receiver.await.unwrap(), Ok(())),
+            "rejected" => assert_eq!(
+                receiver.await.unwrap(),
+                Err(crate::error_code::invalid_request(
+                    "invalid thread settings override: nope"
+                ))
+            ),
+            _ => {
+                assert_eq!(
+                    receiver.try_recv(),
+                    Err(oneshot::error::TryRecvError::Empty)
+                );
+                assert!(state.lock().await.pending_settings.contains_key(operation));
+                state.lock().await.pending_settings.remove(operation);
+            }
+        }
+    }
+    let stale = pending(&mut *state.lock().await, /*connection*/ 1, "stale");
+    state.lock().await.listener_generation += 1;
+    let (core_reply, core_result) = oneshot::channel();
+    core_reply.send(Ok(())).unwrap();
+    crate::settings_confirmation::forward_core_settings_result(
+        Arc::clone(&state),
+        "stale".to_string(),
+        core_result,
+        deadline,
+    )
+    .await;
+    assert!(stale.await.is_err());
+    assert!(state.lock().await.pending_settings.is_empty());
+}
