@@ -19,7 +19,9 @@ async fn settle(db: &StateRuntime) {
 
 struct FixtureAuth;
 impl codex_api::AuthProvider for FixtureAuth {
-    fn add_auth_headers(&self, _: &mut http::HeaderMap) {}
+    fn add_auth_headers(&self, _: &mut http::HeaderMap) -> Result<(), codex_api::AuthError> {
+        Ok(())
+    }
 }
 
 /// Image generation is billed model inference that ships on by default, and it

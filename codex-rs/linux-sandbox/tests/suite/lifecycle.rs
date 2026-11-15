@@ -169,7 +169,7 @@ impl Fixture {
                 ),
                 FileSystemSandboxEntry::new(
                     FileSystemPath::Path {
-                        path: AbsolutePathBuf::try_from(work.as_path()).unwrap(),
+                        path: AbsolutePathBuf::try_from(work.as_path()).unwrap().into(),
                     },
                     FileSystemAccessMode::Write,
                 ),
@@ -182,7 +182,7 @@ impl Fixture {
             &profile,
             &work,
             /*use_legacy_landlock*/ false,
-            /*allow_network_for_proxy*/ false,
+            /*managed_network*/ None,
         )
     }
 
@@ -221,7 +221,7 @@ impl Fixture {
             &profile,
             &work,
             use_legacy_landlock,
-            /*allow_network_for_proxy*/ false,
+            /*managed_network*/ None,
         )
     }
 

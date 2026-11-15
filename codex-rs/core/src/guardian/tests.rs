@@ -716,6 +716,7 @@ async fn approval_permissions_use_the_owning_environment() -> anyhow::Result<()>
                 ),
                 FileSystemSandboxEntry::new(
                     FileSystemPath::GlobPattern {
+                        scan: None,
                         pattern: "*.secret".into(),
                     },
                     FileSystemAccessMode::Deny,
@@ -2010,7 +2011,7 @@ async fn guardian_request_model_for_auto_review(
     match catalog {
         GuardianTestCatalog::Bundled => {}
         GuardianTestCatalog::Explicit => {
-            let auth_manager = Arc::clone(&session.services.auth_manager);
+            let auth_manager = Arc::clone(&session.services.auth_manager());
             Arc::get_mut(&mut session)
                 .expect("unique session")
                 .services
@@ -2022,16 +2023,8 @@ async fn guardian_request_model_for_auto_review(
             crate::guardian::test_host::install(&session, &turn.config);
         }
         GuardianTestCatalog::ParentOnly => {
-<<<<<<< HEAD
-            let parent_model = turn.model_info.clone();
-            let auth_manager = session.services.auth_manager();
-||||||| 413492cd6c
-            let parent_model = turn.model_info.clone();
-            let auth_manager = Arc::clone(&session.services.auth_manager);
-=======
             let parent_model = turn.model_info().model.as_ref().clone();
-            let auth_manager = Arc::clone(&session.services.auth_manager);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            let auth_manager = session.services.auth_manager();
             let models_manager = StaticModelsManager::new(
                 Some(auth_manager),
                 ModelsResponse {
@@ -2278,19 +2271,11 @@ async fn guardian_review_request_layout_matches_model_visible_request_snapshot()
         ),
     )?;
     session.services.skills_service.clear_cache();
-<<<<<<< HEAD
     apply_guardian_mock_turn_config(&mut turn, Arc::clone(&config));
-||||||| 413492cd6c
-    turn.config = Arc::clone(&config);
-    turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
-=======
-    turn.config = Arc::clone(&config);
-    turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
     update_turn_settings_for_test(&mut turn, |settings| {
         Arc::make_mut(&mut settings.model_info).auto_review_model_override =
             Some("codex-auto-review".to_string());
     });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let session = Arc::new(session);
     let turn = Arc::new(turn);
     seed_guardian_parent_history(&session, &turn).await;
@@ -2541,7 +2526,7 @@ async fn guardian_reuses_prompt_cache_key_and_appends_prior_reviews() -> anyhow:
         .get_model_info("codex-auto-review", &turn.config.to_models_manager_config())
         .await;
     reviewer_model.comp_hash = Some("test-checkpoint".to_owned());
-    let auth_manager = Arc::clone(&session.services.auth_manager);
+    let auth_manager = Arc::clone(&session.services.auth_manager());
     Arc::get_mut(&mut session)
         .expect("unshared session")
         .services
@@ -3993,7 +3978,7 @@ async fn guardian_review_session_config_preserves_parent_network_proxy() {
 async fn guardian_review_session_config_clears_context_overrides_for_distinct_effective_model() {
     let server = start_mock_server().await;
     let (mut session, mut turn) = guardian_test_session_and_turn(&server).await;
-    let auth_manager = Arc::clone(&session.services.auth_manager);
+    let auth_manager = Arc::clone(&session.services.auth_manager());
     Arc::get_mut(&mut session)
         .expect("unique session")
         .services
@@ -4030,16 +4015,8 @@ async fn guardian_review_session_config_clears_context_overrides_for_distinct_ef
 async fn guardian_review_session_config_preserves_context_overrides_for_same_effective_model() {
     let server = start_mock_server().await;
     let (mut session, mut turn) = guardian_test_session_and_turn(&server).await;
-<<<<<<< HEAD
-    let parent_model = turn.model_info.clone();
-    let auth_manager = session.services.auth_manager();
-||||||| 413492cd6c
-    let parent_model = turn.model_info.clone();
-    let auth_manager = Arc::clone(&session.services.auth_manager);
-=======
     let parent_model = turn.model_info().model.as_ref().clone();
-    let auth_manager = Arc::clone(&session.services.auth_manager);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let auth_manager = session.services.auth_manager();
     Arc::get_mut(&mut session)
         .expect("session should be unique")
         .services
@@ -4074,7 +4051,6 @@ async fn guardian_review_session_config_preserves_context_overrides_for_same_eff
 }
 
 #[tokio::test]
-<<<<<<< HEAD
 async fn guardian_review_session_config_keeps_deepseek_review_on_deepseek() {
     let (mut session, mut turn) = crate::session::tests::make_session_and_context().await;
     let mut config = (*turn.config).clone();
@@ -4161,99 +4137,6 @@ async fn guardian_review_session_config_uses_active_model_for_unknown_provider()
 }
 
 #[tokio::test]
-async fn guardian_review_session_config_clears_parent_developer_instructions() {
-    let mut parent_config = test_config().await;
-    parent_config.developer_instructions =
-        Some("parent or managed config should not replace guardian policy".to_string());
-
-    let guardian_config = build_guardian_review_session_config_for_test(
-        &parent_config,
-        /*live_network_config*/ None,
-        "active-model",
-        /*reasoning_effort*/ None,
-        /*model_messages*/ None,
-    )
-    .expect("guardian config");
-
-    assert_eq!(guardian_config.developer_instructions, None);
-    assert_eq!(
-        guardian_config.base_instructions,
-        Some(guardian_policy_prompt_with_config_and_template(
-            BUNDLED_GUARDIAN_POLICY,
-            BUNDLED_GUARDIAN_POLICY_TEMPLATE,
-        ))
-    );
-}
-
-#[tokio::test]
-async fn guardian_review_session_config_clears_legacy_notify() {
-    let mut parent_config = test_config().await;
-    parent_config.notify = Some(vec![
-        "/path/to/notify".to_string(),
-        "turn-ended".to_string(),
-    ]);
-
-    let guardian_config = build_guardian_review_session_config_for_test(
-        &parent_config,
-        /*live_network_config*/ None,
-        "active-model",
-        /*reasoning_effort*/ None,
-        /*model_messages*/ None,
-    )
-    .expect("guardian config");
-
-    assert_eq!(guardian_config.notify, None);
-}
-
-#[tokio::test]
-||||||| 413492cd6c
-async fn guardian_review_session_config_clears_parent_developer_instructions() {
-    let mut parent_config = test_config().await;
-    parent_config.developer_instructions =
-        Some("parent or managed config should not replace guardian policy".to_string());
-
-    let guardian_config = build_guardian_review_session_config_for_test(
-        &parent_config,
-        /*live_network_config*/ None,
-        "active-model",
-        /*reasoning_effort*/ None,
-        /*model_messages*/ None,
-    )
-    .expect("guardian config");
-
-    assert_eq!(guardian_config.developer_instructions, None);
-    assert_eq!(
-        guardian_config.base_instructions,
-        Some(guardian_policy_prompt_with_config_and_template(
-            BUNDLED_GUARDIAN_POLICY,
-            BUNDLED_GUARDIAN_POLICY_TEMPLATE,
-        ))
-    );
-}
-
-#[tokio::test]
-async fn guardian_review_session_config_clears_legacy_notify() {
-    let mut parent_config = test_config().await;
-    parent_config.notify = Some(vec![
-        "/path/to/notify".to_string(),
-        "turn-ended".to_string(),
-    ]);
-
-    let guardian_config = build_guardian_review_session_config_for_test(
-        &parent_config,
-        /*live_network_config*/ None,
-        "active-model",
-        /*reasoning_effort*/ None,
-        /*model_messages*/ None,
-    )
-    .expect("guardian config");
-
-    assert_eq!(guardian_config.notify, None);
-}
-
-#[tokio::test]
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 async fn guardian_review_session_config_uses_live_network_proxy_state() {
     let mut parent_config = test_config().await;
     let mut parent_network = NetworkProxyConfig {
