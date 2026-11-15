@@ -77,8 +77,15 @@ class RemoteEnvPackagesTests(unittest.TestCase):
         self.assertEqual(
             result.stdout.splitlines(),
             [
-                "APT 1", "MIRROR", "SLEEP 30",
-                "APT 2", "SLEEP 60", "APT 3", "SLEEP 120", "APT 4", "READY",
+                "APT 1",
+                "MIRROR",
+                "SLEEP 30",
+                "APT 2",
+                "SLEEP 60",
+                "APT 3",
+                "SLEEP 120",
+                "APT 4",
+                "READY",
             ],
         )
         self.assertIn("Could not resolve", result.stderr)
