@@ -21,13 +21,10 @@ use crate::tui::TuiEvent;
 use crate::update_action::UpdateAction;
 #[cfg(not(debug_assertions))]
 use crate::updates;
-<<<<<<< HEAD
+#[cfg(not(debug_assertions))]
 use crate::updates_cache;
 use codex_product_brand::GITHUB_LATEST_RELEASE_URL;
-||||||| 413492cd6c
-=======
 #[cfg(not(debug_assertions))]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use color_eyre::Result;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
