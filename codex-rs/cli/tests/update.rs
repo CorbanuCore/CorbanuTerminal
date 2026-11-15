@@ -1,3 +1,6 @@
+// The only test here checks the debug-build refusal of `corbanu update`.
+#![cfg(debug_assertions)]
+
 use anyhow::Result;
 use predicates::str::contains;
 use std::path::Path;

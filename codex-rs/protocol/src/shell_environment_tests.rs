@@ -2,10 +2,12 @@ use super::*;
 use crate::secretless_launch;
 use pretty_assertions::assert_eq;
 
+#[cfg(debug_assertions)]
 const CHILD_ENV: &str = "CODEX_PROTOCOL_KEYRING_ISOLATION_CHILD";
 
 /// Runs `test` in a child test process that has the isolation variable set,
 /// so this process's environment is never changed.
+#[cfg(debug_assertions)]
 fn in_isolated_child(test: &str, check: impl FnOnce()) {
     if std::env::var_os(CHILD_ENV).is_some() {
         check();
