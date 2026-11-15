@@ -69,6 +69,7 @@ impl ToolExecutor<ToolInvocation> for ExtensionToolAdapter {
         ToolInvocation: 'a,
     {
         Box::pin(async move {
+            crate::security::protected_surface::check_image_generation(&invocation).await?;
             let (contexts, built_under) =
                 current_extension_file_contexts(&invocation, &mut || {}).await?;
             let accessors: Vec<_> = contexts

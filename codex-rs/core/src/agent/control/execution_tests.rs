@@ -115,15 +115,17 @@ fn execution_guards_do_not_derive_capacity_policy_from_role_names() {
 
 #[test]
 fn human_input_is_control_plane_work_not_worker_execution() {
-    let user_input = Op::UserInput {
-        items: vec![UserInput::Text {
-            text: "Reprioritize the crew while every worker slot is occupied.".to_string(),
-            text_elements: Vec::new(),
-        }],
-        final_output_json_schema: None,
-        responsesapi_client_metadata: None,
-        additional_context: Default::default(),
-        thread_settings: Default::default(),
+    // Upstream submits user input as `Op::TurnInput`.
+    let (reply, _reply_rx) = tokio::sync::oneshot::channel();
+    let user_input = Op::TurnInput {
+        request: Box::new(codex_protocol::turn_input::TurnInputRequest::user_input(
+            vec![UserInput::Text {
+                text: "Reprioritize the crew while every worker slot is occupied.".to_string(),
+                text_elements: Vec::new(),
+            }],
+        )),
+        mode: codex_protocol::turn_input::TurnInputMode::StartOrSteer,
+        reply,
     };
 
     assert!(!super::op_starts_worker_turn(&user_input));

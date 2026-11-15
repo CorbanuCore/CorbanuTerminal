@@ -1476,23 +1476,23 @@ async fn hierarchy_role_base_precedence_over_standard_model_defaults_is_determin
         .iter()
         .find(|model| model.slug == "claude-fable-5")
         .expect("bundled models.json should include claude-fable-5");
-    assert!(
-        fable
-            .base_instructions
-            .contains(STANDARD_BASE_OUTCOME_MARKER)
-    );
+    // Upstream moved catalog instructions into `model_messages.instructions_template`.
+    let instructions = |model: &codex_protocol::openai_models::ModelInfo| {
+        model
+            .model_messages
+            .as_ref()
+            .and_then(|messages| messages.instructions_template.clone())
+            .unwrap_or_default()
+    };
+    assert!(instructions(fable).contains(STANDARD_BASE_OUTCOME_MARKER));
 
     let gpt55 = bundled_models
         .models
         .iter()
         .find(|model| model.slug == "gpt-5.5")
         .expect("bundled models.json should include gpt-5.5");
-    assert!(gpt55.base_instructions.contains("vivid inner life"));
-    assert!(
-        !gpt55
-            .base_instructions
-            .contains(STANDARD_BASE_OUTCOME_MARKER)
-    );
+    assert!(instructions(gpt55).contains("vivid inner life"));
+    assert!(!instructions(gpt55).contains(STANDARD_BASE_OUTCOME_MARKER));
 }
 
 #[test]

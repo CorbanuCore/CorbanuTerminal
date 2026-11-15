@@ -135,7 +135,13 @@ pub(super) async fn mcp_server_elicitation_scenario(
         }
     }
     let mut config = test.config.clone();
-    config.approvals_reviewer = ApprovalsReviewer::User;
+    // S3b (#945, D50, PF-30): a server's strict request is reviewed only when the
+    // automatic reviewer answers; with the person it reaches the person.
+    config.approvals_reviewer = if matches!(request_kind, RequestKind::StrictReview) {
+        ApprovalsReviewer::AutoReview
+    } else {
+        ApprovalsReviewer::User
+    };
     config.mcp_servers.set(serde_json::from_value(json!({
         "elicitation": {
             "command": if cfg!(windows) { "python" } else { "python3" },

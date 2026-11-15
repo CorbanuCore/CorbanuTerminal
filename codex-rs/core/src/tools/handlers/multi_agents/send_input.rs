@@ -40,6 +40,7 @@ impl Handler {
         let ToolInvocation {
             session,
             turn,
+            step_context,
             payload,
             call_id,
             ..
@@ -50,6 +51,13 @@ impl Handler {
         let input_items = parse_collab_input(args.message, args.items)?;
         // #1756: only the caller's own agents (and theirs) take input.
         ensure_own_agent(&session, "send_input", receiver_thread_id).await?;
+        let input_items = crate::security::protected_surface::prepare_agent_media(
+            &session,
+            &step_context,
+            &call_id,
+            input_items,
+        )
+        .await?;
         let prompt = render_input_preview(&input_items);
         // Corbanu (D527 (a)): the shared handle's local backend; `ensure_own_agent` already
         // refused any other backend.
