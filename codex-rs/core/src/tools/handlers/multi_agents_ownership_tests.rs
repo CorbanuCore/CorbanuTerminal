@@ -2,13 +2,16 @@ use super::*;
 use codex_protocol::protocol::InternalSessionSource;
 use pretty_assertions::assert_eq;
 
-/// `Op` has no `PartialEq` on the sync branch; its debug form compares the same ops.
-fn captured_ops(manager: &ThreadManager) -> Vec<String> {
-    manager
+/// What reached any thread: the captured ops (`Op` has no `PartialEq` on the sync branch;
+/// their debug forms compare the same ops) and the user input handed over through
+/// `start_or_steer_turn`, which `captured_ops` doesn't show.
+fn delivered(manager: &ThreadManager) -> (Vec<String>, Vec<(ThreadId, Vec<UserInput>)>) {
+    let ops = manager
         .captured_ops()
         .iter()
         .map(|op| format!("{op:?}"))
-        .collect()
+        .collect();
+    (ops, manager.captured_user_inputs())
 }
 
 struct UnloadedAgent {
@@ -143,7 +146,7 @@ async fn issue_1779_close_refuses_unloaded_foreign_agent_without_closing_edge() 
 async fn issue_1779_send_input_refuses_foreign_agent_before_cold_load() {
     let mut fixture = UnloadedAgent::new().await;
     fixture.use_other_root();
-    let before = captured_ops(&fixture.manager);
+    let before = delivered(&fixture.manager);
     let error = SendInputHandler.handle(invocation(
         fixture.session.clone(), fixture.turn.clone(), "send_input",
         function_payload(json!({"target": fixture.agent.to_string(), "message": "must not arrive", "interrupt": true})),
@@ -154,7 +157,7 @@ async fn issue_1779_send_input_refuses_foreign_agent_before_cold_load() {
             .contains("can only target agents spawned")
     );
     fixture.assert_still_open_and_unloaded().await;
-    assert_eq!(captured_ops(&fixture.manager), before);
+    assert_eq!(delivered(&fixture.manager), before);
     fixture.stop().await;
 }
 
@@ -173,7 +176,7 @@ async fn issue_1779_send_input_rechecks_actual_parent_after_cold_load() {
         .await
         .expect("stale graph fixture");
     fixture.use_other_root();
-    let before = captured_ops(&fixture.manager);
+    let before = delivered(&fixture.manager);
     let error = SendInputHandler.handle(invocation(
         fixture.session.clone(), fixture.turn.clone(), "send_input",
         function_payload(json!({"target": fixture.agent.to_string(), "message": "must not arrive", "interrupt": true})),
@@ -187,7 +190,7 @@ async fn issue_1779_send_input_rechecks_actual_parent_after_cold_load() {
         fixture.manager.get_thread(fixture.agent).await.is_ok(),
         "must exercise the post-load check"
     );
-    assert_eq!(captured_ops(&fixture.manager), before);
+    assert_eq!(delivered(&fixture.manager), before);
     fixture.stop().await;
 }
 
