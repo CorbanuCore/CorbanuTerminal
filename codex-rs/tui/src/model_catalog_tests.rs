@@ -267,3 +267,31 @@ fn listed_models_are_replaced_for_another_account() {
         vec!["shared", "api-only", "rental", "zai:custom"]
     );
 }
+
+#[test]
+fn listed_model_refresh_keeps_collaboration_modes_and_runtime_models() {
+    let modes = vec![CollaborationModeMask {
+        name: "Plan".to_string(),
+        mode: None,
+        model: None,
+        reasoning_effort: None,
+        developer_instructions: None,
+    }];
+    let catalog =
+        ModelCatalog::new(vec![preset("listed-old", None)]).with_collaboration_modes(modes.clone());
+    catalog.mark_listed(&[preset("listed-old", None)]);
+    catalog.replace_gpu_models(vec![preset("gpu-model", Some("gpu-test"))]);
+
+    catalog.replace_listed_models(vec![preset("listed-new", None)]);
+
+    assert_eq!(catalog.collaboration_modes, modes);
+    let models: Vec<String> = catalog
+        .try_list_models()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|preset| preset.model)
+        .collect();
+    assert!(models.contains(&"listed-new".to_string()), "{models:?}");
+    assert!(models.contains(&"gpu-model".to_string()), "{models:?}");
+    assert!(!models.contains(&"listed-old".to_string()), "{models:?}");
+}

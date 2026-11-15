@@ -129,6 +129,17 @@ impl ModelCatalog {
         self
     }
 
+    /// Edits every model in place (for example clearing account-scoped fields) without
+    /// replacing the shared catalog.
+    pub(crate) fn update_models(&self, update: impl FnOnce(&mut [ModelPreset])) {
+        update(
+            &mut self
+                .models
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+    }
+
     /// Records which of the models came from `model/list`.
     pub(crate) fn mark_listed(&self, listed: &[ModelPreset]) {
         *self
