@@ -62,6 +62,13 @@ async fn handle_spawn_agent(
         .map(str::trim)
         .filter(|role| !role.is_empty());
     let input_items = parse_collab_input(args.message, args.items)?;
+    let input_items = crate::security::protected_surface::prepare_agent_media(
+        &session,
+        &step_context,
+        &call_id,
+        input_items,
+    )
+    .await?;
     let prompt = render_input_preview(&input_items);
     let session_source = turn.session_source.clone();
     let child_depth = next_thread_spawn_depth(&session_source);

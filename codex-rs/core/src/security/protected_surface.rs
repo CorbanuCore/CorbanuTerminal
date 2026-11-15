@@ -19,13 +19,16 @@ use codex_utils_path_uri::PathUri;
 use serde_json::Value;
 use std::path::Path;
 
+mod agent_media;
 pub(crate) mod confined;
 mod gate;
 mod git_paths;
+mod image_reads;
 mod read_denials;
 mod typed;
 mod upload_read;
 
+pub(crate) use agent_media::prepare_agent_media;
 pub(crate) use gate::Admission;
 pub(crate) use gate::Route;
 pub(crate) use gate::admit;
@@ -34,6 +37,7 @@ pub(crate) use gate::ask_human_answer;
 pub(crate) use gate::check_dispatch;
 #[cfg(test)]
 pub(crate) use gate::question_id;
+pub(crate) use image_reads::check_image_generation;
 pub(crate) use read_denials::ReadDenials;
 pub(crate) use read_denials::create_missing_database_folder;
 pub(crate) use read_denials::post_taint_read_policy;
@@ -154,7 +158,6 @@ const EXTENSION_NO_PROTECTED_EFFECT: &[(Option<&str>, &str)] = &[
     (Some(FUNCTIONS_NAMESPACE), "create_goal"),
     (Some(FUNCTIONS_NAMESPACE), "update_goal"),
     (Some("web"), "run"),
-    (Some("image_gen"), "imagegen"),
     (Some("memories"), "list"),
     (Some("memories"), "read"),
     (Some("memories"), "search"),
@@ -171,6 +174,9 @@ pub(crate) fn coverage(origin: ToolOrigin, name: &ToolName) -> Coverage {
         ToolOrigin::Mcp => Coverage::OwnCheck,
         ToolOrigin::Dynamic => Coverage::Unclassified,
         ToolOrigin::Extension => {
+            if name.namespace.as_deref() == Some("image_gen") && plain == "imagegen" {
+                return Coverage::OwnCheck;
+            }
             let listed = EXTENSION_NO_PROTECTED_EFFECT
                 .iter()
                 .any(|(namespace, tool)| *namespace == name.namespace.as_deref() && *tool == plain);
