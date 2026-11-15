@@ -3454,7 +3454,10 @@ impl App {
             }
             AppEvent::ModelsLoaded { request_id, result: Ok(models) }
                 if self.chat_widget.model_popup_request_is_current(request_id)
-                    && self.chat_widget.status_account_display() == Some(&StatusAccountDisplay::ApiKey) =>
+                    && matches!(
+                        self.chat_widget.status_account_display(),
+                        Some(StatusAccountDisplay::ApiKey { .. })
+                    ) =>
             {
                 let checked = app_server.constrain_api_key_models(
                     self.chat_widget.config_ref(),

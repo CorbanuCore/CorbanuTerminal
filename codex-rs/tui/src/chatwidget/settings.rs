@@ -76,7 +76,7 @@ impl ChatWidget {
         } else if !self.daybreak_account_eligible() {
             None
         } else {
-            match crate::daybreak::availability(&self.model_catalog.models) {
+            match crate::daybreak::availability(&self.model_catalog.models()) {
                 Some(true) => Some("Enable broader access for cybersecurity work"),
                 Some(false) => Some("Learn about broader access for cybersecurity work"),
                 None => Some("Manage broader access for cybersecurity work"),
@@ -288,6 +288,7 @@ impl ChatWidget {
     ) {
         // Account-update notifications are the identity boundary. The visible account fields can
         // be identical across two accounts, so always invalidate account-scoped requests and data.
+        self.clear_accounting_inspector();
         self.model_popup_request_id = None;
         let api_key_changed = matches!(
             self.status_account_display,

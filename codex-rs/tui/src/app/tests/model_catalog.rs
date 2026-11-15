@@ -126,7 +126,7 @@ async fn model_picker_refresh_updates_app_catalog_from_app_server() -> Result<()
         (expected.clone(), expected)
     );
     app.chat_widget.update_account_state(
-        Some(StatusAccountDisplay::ApiKey),
+        Some(StatusAccountDisplay::ApiKey { env_var: None }),
         /*plan_type*/ None,
         /*has_chatgpt_account*/ false,
         /*has_codex_backend_auth*/ false,

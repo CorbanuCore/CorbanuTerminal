@@ -639,13 +639,19 @@ async fn command_center_new_preserves_permissions_across_sessions() -> Result<()
         LoaderOverrides::default(),
     )
     .await?;
+    let mut permission_server = start_config_write_test_app_server(&app)
+        .await
+        .expect("permission test app server");
     assert!(
-        app.apply_permission_profile_selection(PermissionProfileSelection {
-            profile_id: ":read-only".into(),
-            approval_policy: Some(AskForApproval::UnlessTrusted),
-            approvals_reviewer: Some(ApprovalsReviewer::User),
-            display_label: "Read Only".into(),
-        })
+        app.apply_permission_profile_selection(
+            &mut permission_server,
+            PermissionProfileSelection {
+                profile_id: ":read-only".into(),
+                approval_policy: Some(AskForApproval::UnlessTrusted),
+                approvals_reviewer: Some(ApprovalsReviewer::User),
+                display_label: "Read Only".into(),
+            },
+        )
         .await
     );
     let mut tui = make_test_tui()?;
@@ -1207,7 +1213,7 @@ async fn command_center_new_checkout_and_worktree_preserve_source_and_default_br
                     return Ok::<_, color_eyre::Report>(());
                 }
             }
-            color_eyre::eyre::bail!("permissions menu event stream closed")
+            color_eyre::eyre::bail!("permissions menu event stream closed");
         })
         .await??;
         app.chat_widget.handle_key_event(KeyCode::Up.into());

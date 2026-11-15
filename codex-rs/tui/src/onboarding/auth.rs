@@ -3955,6 +3955,7 @@ Your account and billing path change only after success. Esc keeps the current m
             login_id: Some("login-1".to_string()),
             success: true,
             error: None,
+            onboarding_entrypoint: None,
         });
 
         widget.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));

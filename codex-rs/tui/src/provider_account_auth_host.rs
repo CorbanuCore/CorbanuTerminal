@@ -192,6 +192,7 @@ impl ProviderAccountAuthHost {
             login_id: Some(login_id),
             success,
             error: None,
+            onboarding_entrypoint: None,
         };
         let action = self
             .openai

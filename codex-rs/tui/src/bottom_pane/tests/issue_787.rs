@@ -43,6 +43,7 @@ fn child_exec_request() -> ApprovalRequest {
         ],
         network_approval_context: None,
         additional_permissions: None,
+        kind: Default::default(),
     })
 }
 

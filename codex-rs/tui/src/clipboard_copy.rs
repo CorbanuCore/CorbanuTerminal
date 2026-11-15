@@ -140,6 +140,31 @@ fn copy_to_clipboard(
     )
 }
 
+/// Copy plain text synchronously, outside the session clipboard worker: Corbanu's Task Node brief
+/// and vault-credential copies, which run on their own blocking task (as on main). A terminal
+/// (OSC 52) send is written directly and, as on main, reported like a native copy without a lease.
+pub(crate) fn copy_plain_text_blocking(text: &str) -> Result<Option<ClipboardLease>, String> {
+    copy_to_clipboard(
+        text,
+        CopyFormat::PlainText,
+        || Ok(()),
+        |text| {
+            let target = if std::env::var_os("TMUX").is_some() {
+                Osc52Target::Tmux
+            } else if std::env::var_os("STY").is_some() {
+                Osc52Target::Screen
+            } else {
+                Osc52Target::Direct
+            };
+            write_osc52(&osc52_sequence(text, target)?)
+        },
+    )
+    .map(|outcome| match outcome {
+        CopyOutcome::Copied(lease) => lease,
+        CopyOutcome::Requested => None,
+    })
+}
+
 /// Keeps a platform clipboard owner alive when the backend requires one.
 ///
 /// On Linux/X11 and some Wayland compositors, clipboard contents are served by the

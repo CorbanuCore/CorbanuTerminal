@@ -791,6 +791,7 @@ async fn lifecycle_removes_background_and_current_tasks_without_losing_the_dashb
                             agent_path: None,
                             agent_nickname: None,
                             agent_role: None,
+                            agent_class: None,
                         },
                     ),
                     codex_protocol::SessionId::from(id),

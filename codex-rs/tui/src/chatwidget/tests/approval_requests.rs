@@ -55,7 +55,7 @@ async fn declined_command_history_never_claims_execution_or_success() {
         let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
         chat.on_task_started();
         let mut item = begin_exec(&mut chat, "declined", command);
-        let AppServerThreadItem::CommandExecution { status, .. } = &mut item else {
+        let AppServerThreadItemPayload::CommandExecution { status, .. } = &mut item else {
             panic!("expected command execution");
         };
         *status = AppServerCommandExecutionStatus::Declined;
@@ -100,7 +100,7 @@ async fn failed_command_without_exit_code_never_claims_execution_or_success() {
         let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
         chat.on_task_started();
         let mut item = begin_exec(&mut chat, "pending", command);
-        let AppServerThreadItem::CommandExecution {
+        let AppServerThreadItemPayload::CommandExecution {
             status,
             exit_code,
             duration_ms,
@@ -139,6 +139,7 @@ async fn interrupted_pending_approval_never_claims_execution_or_success() {
             proposed_network_policy_amendments: None,
             additional_permissions: None,
             available_decisions: None,
+            kind: Default::default(),
         },
     );
     handle_turn_interrupted(&mut chat, "turn-1");

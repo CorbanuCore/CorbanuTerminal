@@ -63,6 +63,7 @@ impl App {
                 ),
                 reason: params.reason,
                 grant_root: params.grant_root,
+                response_destination: crate::approval_events::ApprovalResponseDestination::Thread,
             },
         );
         if self.startup_protected_input_boundary && !self.chat_widget.has_active_modal() {

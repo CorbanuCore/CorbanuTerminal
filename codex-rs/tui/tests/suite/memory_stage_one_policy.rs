@@ -7,11 +7,11 @@ use crate::support::tmux::TmuxPane;
 use crate::support::tmux::TmuxServer;
 use anyhow::Result;
 use anyhow::ensure;
+use codex_history::RolloutItem;
+use codex_history::RolloutLine;
 use codex_protocol::ThreadId;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
 use codex_protocol::protocol::SessionSource;
 use core_test_support::responses;
 use std::fs;
@@ -81,15 +81,20 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         let line = RolloutLine {
             timestamp: timestamp.to_rfc3339(),
             ordinal: None,
-            item: RolloutItem::ResponseItem(ResponseItem::Message {
-                id: None,
-                role: "user".into(),
-                content: vec![ContentItem::InputText {
-                    text: CANARY.into(),
-                }],
-                phase: None,
-                internal_chat_message_metadata_passthrough: None,
-            }),
+            item: RolloutItem::ResponseItem(
+                ResponseItem::Message {
+                    id: None,
+                    role: "user".into(),
+                    content: vec![ContentItem::InputText {
+                        text: CANARY.into(),
+                    }],
+                    phase: None,
+                    internal_chat_message_metadata_passthrough: None,
+                    encrypted_content: None,
+                    status: None,
+                }
+                .into(),
+            ),
         };
         fs::write(&rollout, format!("{}\n", serde_json::to_string(&line)?))?;
         let mut metadata =

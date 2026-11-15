@@ -510,6 +510,8 @@ struct SessionPickerRunOptions {
 /// Filtering happens in two layers:
 /// 1. Source and eligible working-directory filtering at the backend.
 /// 2. Typed search filtering over loaded rows in the picker.
+// Main's session-picker launch context is the eighth argument.
+#[allow(clippy::too_many_arguments)]
 pub async fn run_resume_picker_with_app_server(
     uses_remote_filesystem: bool,
     tui: &mut Tui,
@@ -533,6 +535,7 @@ pub async fn run_resume_picker_with_app_server(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_resume_picker_with_app_servers(
     uses_remote_filesystem: bool,
     tui: &mut Tui,

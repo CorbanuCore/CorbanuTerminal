@@ -49,6 +49,7 @@ impl App {
                     message,
                     codex_error_info: None,
                     additional_details: Some(details.clone()),
+                    misalignment: None,
                 },
                 will_retry,
                 thread_id: thread_id.to_string(),
@@ -2287,12 +2288,12 @@ impl App {
     ) {
         match notification {
             ServerNotification::ItemStarted(notification) => {
-                if let codex_app_server_protocol::ThreadItem::CollabAgentToolCall {
+                if let codex_app_server_protocol::ThreadItemPayload::CollabAgentToolCall {
                     id,
                     tool: codex_app_server_protocol::CollabAgentTool::Wait,
                     status: codex_app_server_protocol::CollabAgentToolCallStatus::InProgress,
                     ..
-                } = &notification.item
+                } = &notification.item.payload
                     && let Ok(thread_id) = ThreadId::from_string(&notification.thread_id)
                     && self.is_native_spawn_thread(thread_id)
                 {
@@ -2301,11 +2302,11 @@ impl App {
                 }
             }
             ServerNotification::ItemCompleted(notification) => {
-                if let codex_app_server_protocol::ThreadItem::CollabAgentToolCall {
+                if let codex_app_server_protocol::ThreadItemPayload::CollabAgentToolCall {
                     id,
                     tool: codex_app_server_protocol::CollabAgentTool::Wait,
                     ..
-                } = &notification.item
+                } = &notification.item.payload
                     && let Ok(thread_id) = ThreadId::from_string(&notification.thread_id)
                     && self
                         .spawn_waiting_for_agents_by_thread
@@ -2401,8 +2402,8 @@ impl App {
                 )
             }
             ServerNotification::ItemCompleted(notification) => {
-                match &notification.item {
-                    codex_app_server_protocol::ThreadItem::CollabAgentToolCall {
+                match &notification.item.payload {
+                    codex_app_server_protocol::ThreadItemPayload::CollabAgentToolCall {
                         tool: codex_app_server_protocol::CollabAgentTool::SendInput,
                         status: codex_app_server_protocol::CollabAgentToolCallStatus::Completed,
                         sender_thread_id,
@@ -2416,7 +2417,7 @@ impl App {
                     // `followup_task` admission as a completed Interacted activity rather than
                     // the v1 SendInput item. Both are valid native assignment dispatches when
                     // the exact sender/receiver pair owns an armed assignment.
-                    codex_app_server_protocol::ThreadItem::SubAgentActivity {
+                    codex_app_server_protocol::ThreadItemPayload::SubAgentActivity {
                         kind: codex_app_server_protocol::SubAgentActivityKind::Interacted,
                         agent_thread_id,
                         ..
@@ -2433,9 +2434,12 @@ impl App {
                 // dispatch immediately so dispatch-then-wait works; interrupted/truncated turns
                 // never emit ItemCompleted for that message, and TurnCompleted remains a deduped
                 // catch-all for completed turns.
-                if let codex_app_server_protocol::ThreadItem::AgentMessage {
-                    id, text, phase, ..
-                } = &notification.item
+                if let codex_app_server_protocol::ThreadItemPayload::AgentMessage {
+                    id,
+                    text,
+                    phase,
+                    ..
+                } = &notification.item.payload
                     && !matches!(
                         phase,
                         Some(codex_protocol::models::MessagePhase::Commentary)
@@ -2681,8 +2685,8 @@ impl App {
 }
 
 fn spawn_turn_result_message(turn: &codex_app_server_protocol::Turn) -> Option<String> {
-    let agent_text = turn.items.iter().rev().find_map(|item| match item {
-        codex_app_server_protocol::ThreadItem::AgentMessage { text, phase, .. }
+    let agent_text = turn.item_payloads().rev().find_map(|item| match item {
+        codex_app_server_protocol::ThreadItemPayload::AgentMessage { text, phase, .. }
             if !matches!(
                 phase,
                 Some(codex_protocol::models::MessagePhase::Commentary)

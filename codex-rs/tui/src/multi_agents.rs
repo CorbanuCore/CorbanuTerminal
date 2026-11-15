@@ -790,6 +790,9 @@ mod tests {
             kind: SubAgentActivityKind::Completed,
             agent_thread_id: thread_id.to_string(),
             agent_path: "/root/child".to_string(),
+            agent_nickname: None,
+            agent_role: None,
+            task_preview: None,
         };
 
         assert_eq!(
@@ -798,6 +801,9 @@ mod tests {
                 thread_id,
                 agent_path: "/root/child".to_string(),
                 is_running_hint: false,
+                agent_nickname: None,
+                agent_role: None,
+                task_preview: None,
             })
         );
     }
@@ -991,7 +997,7 @@ mod tests {
             provider_account: None,
         };
         let cell = tool_call_history_cell(
-            &ThreadItem::CollabAgentToolCall {
+            &ThreadItemPayload::CollabAgentToolCall {
                 id: "call-spawn".to_string(),
                 tool: CollabAgentTool::SpawnAgent,
                 status: CollabAgentToolCallStatus::Completed,
@@ -1089,7 +1095,7 @@ mod tests {
     fn named_sub_agent_activity_snapshot() {
         let thread_id =
             ThreadId::from_string("00000000-0000-0000-0000-000000000002").expect("valid thread id");
-        let cell = sub_agent_activity_history_cell(&ThreadItem::SubAgentActivity {
+        let cell = sub_agent_activity_history_cell(&ThreadItemPayload::SubAgentActivity {
             id: "call-send".to_string(),
             kind: SubAgentActivityKind::Interacted,
             agent_thread_id: thread_id.to_string(),
@@ -1099,6 +1105,8 @@ mod tests {
             task_preview: Some(
                 "Close the M2 verification gap from committed SHA 6a78c394.".to_string(),
             ),
+            model: None,
+            reasoning_effort: None,
         })
         .expect("activity item renders");
 

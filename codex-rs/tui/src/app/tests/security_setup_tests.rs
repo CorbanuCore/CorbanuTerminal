@@ -115,6 +115,7 @@ async fn security_setup_fetch_with_default_features_uses_authenticated_codex_end
                 AccountUpdatedNotification {
                     auth_mode: Some(AuthMode::Chatgpt),
                     plan_type: None,
+                    api_key_env_var: None,
                 },
             ))),
         )

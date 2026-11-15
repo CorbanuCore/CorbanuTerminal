@@ -22,7 +22,10 @@ async fn collaboration_catalog_selection_clears_restored_prompt_and_survives_mod
         reasoning_effort: Some(Some(ReasoningEffortConfig::High)),
         developer_instructions: Some(None),
     };
-    Arc::make_mut(&mut chat.model_catalog).collaboration_modes = vec![plan.clone()];
+    chat.model_catalog = Arc::new(
+        chat.model_catalog
+            .with_collaboration_modes_for_test(vec![plan.clone()]),
+    );
     let mut models = chat.model_catalog.try_list_models().unwrap();
     models[0].description = "Refreshed model description".into();
     let request_id = uuid::Uuid::new_v4();
@@ -60,9 +63,10 @@ async fn collaboration_catalog_selection_clears_restored_prompt_and_survives_mod
 #[tokio::test]
 async fn collaboration_catalog_unavailable_preserves_task_and_plan_input() {
     let (mut chat, _events, _ops) = make_chatwidget_manual(Some("gpt-5.2")).await;
-    Arc::make_mut(&mut chat.model_catalog)
-        .collaboration_modes
-        .clear();
+    chat.model_catalog = Arc::new(
+        chat.model_catalog
+            .with_collaboration_modes_for_test(Vec::new()),
+    );
     for mode in [ModeKind::Default, ModeKind::Plan] {
         let restored = CollaborationMode {
             mode,

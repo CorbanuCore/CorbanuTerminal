@@ -29,7 +29,7 @@ async fn custom_model_display_name_in_pickers_preserves_selection_slug() {
     auto.display_name = "Auto Fast".to_string();
     chat.model_catalog = Arc::new(ModelCatalog::new(vec![auto, preset.clone()]));
     chat.set_reasoning_effort(Some(ReasoningEffortConfig::High));
-    chat.open_model_popup_with_presets(chat.model_catalog.models.clone());
+    chat.open_model_popup_with_presets(chat.model_catalog.models());
     assert_chatwidget_snapshot!(
         "custom_model_display_name_quick_picker",
         render_bottom_popup(&chat, /*width*/ 80)
@@ -94,7 +94,7 @@ async fn custom_model_display_name_in_status_line_and_fallback() {
         normalized_backend_snapshot(terminal.backend())
     );
 
-    Arc::make_mut(&mut chat.model_catalog).models.clear();
+    chat.model_catalog.replace_models_for_test(Vec::new());
     assert_eq!(chat.model_display_name(), slug);
     chat.set_model(crate::model_catalog::LUNA_RESERVE_MODEL);
     assert_eq!(chat.model_display_name(), "Luna Reserve");

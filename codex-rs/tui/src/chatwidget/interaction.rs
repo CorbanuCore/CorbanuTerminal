@@ -407,7 +407,6 @@ impl ChatWidget {
     pub(crate) fn show_custom_prompt_view(&mut self, view: CustomPromptView) {
         // Upstream's text-prompt entry: the composer's editor keymap and Vim preference apply.
         self.bottom_pane.show_text_prompt(view);
-        self.refresh_plan_mode_nudge();
         self.request_redraw();
     }
 

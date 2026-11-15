@@ -526,6 +526,7 @@ pub(crate) fn save_account(
                 agent_identity: None,
                 personal_access_token: None,
                 bedrock_api_key: None,
+                bedrock_access_keys: None,
             })
             .map_err(|error| error.to_string())?,
         ),

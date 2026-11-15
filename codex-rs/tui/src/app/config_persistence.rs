@@ -1809,13 +1809,18 @@ mod tests {
         );
     }
 
+    /// Main's check, on upstream's `ResumePermissions`: only direct launch choices (session flags
+    /// and harness overrides) override a resumed thread's saved permissions. Sync decision (S4a,
+    /// sync-s4a4 #2251): a selected `-p` profile's permission keys no longer count, as upstream
+    /// decided; main's `permission_profiles`/`workspace_roots` layer keys are not config keys
+    /// upstream reads, so they are not checked.
     #[tokio::test]
     async fn resume_permission_settings_preserves_only_explicit_permission_overrides() {
         let mut app = make_test_app().await;
 
         assert_eq!(
-            app.resume_permission_settings(),
-            crate::app_server_session::ResumePermissionSettings::RestoreFromThread
+            app.resume_permission_overrides(&app.config),
+            crate::resume_permissions::ResumePermissions::default()
         );
         let profile_path = test_path_buf("/tmp/work.config.toml").abs();
         let profile = "work"
@@ -1826,9 +1831,7 @@ mod tests {
             "approvals_reviewer",
             "sandbox_mode",
             "default_permissions",
-            "permission_profiles",
             "sandbox_workspace_write",
-            "workspace_roots",
         ] {
             let config = TomlValue::Table(toml::map::Map::from_iter([(
                 key.to_string(),
@@ -1843,17 +1846,19 @@ mod tests {
                 Default::default(),
             )
             .expect("session flags layer stack");
-            assert_eq!(
-                app.resume_permission_settings(),
-                crate::app_server_session::ResumePermissionSettings::OverrideFromCurrentConfig
+            assert_ne!(
+                app.resume_permission_overrides(&app.config),
+                crate::resume_permissions::ResumePermissions::default(),
+                "session flag {key} should override the saved permissions"
             );
 
             app.config.config_layer_stack = ConfigLayerStack::default()
                 .with_user_config_profile(&profile_path, Some(&profile), config)
                 .expect("user config profile layer stack");
             assert_eq!(
-                app.resume_permission_settings(),
-                crate::app_server_session::ResumePermissionSettings::OverrideFromCurrentConfig
+                app.resume_permission_overrides(&app.config),
+                crate::resume_permissions::ResumePermissions::default(),
+                "profile key {key} no longer overrides the saved permissions (upstream rule)"
             );
         }
 
@@ -1867,17 +1872,18 @@ mod tests {
             )
             .expect("user config layer stack");
         assert_eq!(
-            app.resume_permission_settings(),
-            crate::app_server_session::ResumePermissionSettings::RestoreFromThread
+            app.resume_permission_overrides(&app.config),
+            crate::resume_permissions::ResumePermissions::default()
         );
 
         app.harness_overrides.sandbox_mode =
             Some(codex_protocol::config_types::SandboxMode::WorkspaceWrite);
         app.harness_overrides.approval_policy =
             Some(codex_protocol::protocol::AskForApproval::Never);
-        assert_eq!(
-            app.resume_permission_settings(),
-            crate::app_server_session::ResumePermissionSettings::OverrideFromCurrentConfig
+        let overrides = app.resume_permission_overrides(&app.config);
+        assert!(
+            overrides.profile && overrides.approval_policy,
+            "{overrides:?}"
         );
     }
 
