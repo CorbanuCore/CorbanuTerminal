@@ -4,6 +4,9 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 
+#[path = "issue_2167_dotenv_tests.rs"]
+mod issue_2167_dotenv;
+
 #[path = "git_config_round6_tests.rs"]
 mod issue_1161_round6;
 
@@ -914,10 +917,11 @@ fn pf_30_s03_review_bypasses_are_closed() {
     ] {
         assert_eq!(script(command), Some(expected), "{command}");
     }
-    // A pathological glob is matched in linear work (#1102).
+    // A pathological glob is matched in linear work (#1102). It can match
+    // a dotenv credential such as `.env.Z` (#2167).
     work::assert_linear("glob", |scale| {
         let glob = format!("ls .{}Z", "*".repeat(15 * scale));
-        assert_eq!(script(&glob), None);
+        assert_eq!(script(&glob), Some(Credentials));
     });
     // Globs in a custom home's own path.
     assert_eq!(
@@ -1198,9 +1202,18 @@ async fn pf_30_s03_orchestrator_rechecks_after_the_prompt() {
             call_id: "probe-call".to_string(),
             tool_name: codex_tools::ToolName::plain("probe"),
         };
-        let result = crate::tools::orchestrator::ToolOrchestrator::new()
-            .run(&mut probe, &environment, &tool_ctx)
-            .await;
+        // A prompt that is never sent (or never answered) fails the test
+        // instead of hanging it (#2187 review).
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(60),
+            crate::tools::orchestrator::ToolOrchestrator::new().run(
+                &mut probe,
+                &environment,
+                &tool_ctx,
+            ),
+        )
+        .await
+        .expect("the probe run finished");
         answerer.abort();
         let prompts = prompts.load(Ordering::SeqCst);
         let label = format!("{during_prompt} kill_switch={kill_switch}");

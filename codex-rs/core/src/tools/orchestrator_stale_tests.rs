@@ -6,39 +6,30 @@
 //! transition is not run.
 //!
 //! The transitions here move the session's policy marker; the live level the
-//! model client reports stays Permissive unless a test sets it.
+//! model client reports stays Permissive unless a test sets it. The person is
+//! a task answering the session's approval prompts (upstream's approval flow
+//! asks through the session, not the tool).
 
 use super::*;
 use crate::session::session::Session;
-use crate::session::tests::make_session_and_context_with_rx;
+use crate::session::turn_context::TurnEnvironment;
 use crate::tools::approvals::ASKED_AGAIN_NOTE;
 use crate::tools::sandboxing::Approvable;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::SandboxErr;
 use codex_protocol::exec_output::ExecToolCallOutput;
+use codex_protocol::protocol::EventMsg;
 use codex_security_policy::PolicyPrincipal;
 use codex_security_policy::PrincipalKind;
 use codex_security_policy::RevocationState;
 use codex_security_policy::SecurityLevel;
-use codex_security_policy::SecuritySettings;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
+use std::sync::Mutex;
 
-fn initialize_policy(session: &Session) -> crate::security::TrustedSecurityController {
-    crate::security::TrustedSecurityController::initialize(
-        &session.services.agent_control.effective_security_policy(),
-        crate::security::PersistedHumanSecurityState::new(
-            SecuritySettings::new(SecurityLevel::Permissive),
-            PolicyPrincipal::new(PrincipalKind::Human, "human:issue-1001").unwrap(),
-            RevocationState::new(),
-        )
-        .unwrap(),
-        session.thread_id,
-        codex_protocol::SessionId::from(session.thread_id),
-        crate::security::EffectivePolicyInitialization::Root,
-    )
-    .expect("initialize the session's policy tree")
-}
+/// Upper bound on one probe run: a prompt that is never sent (or never
+/// answered) fails the test instead of hanging it.
+const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// What happens while the probe is asked or runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -51,26 +42,15 @@ enum Transition {
     Revoke,
 }
 
-/// A tool that needs approval (or not). Each ask records the prompt's
-/// reason, applies the next queued transition while the prompt is open (so
-/// before the answer), and the person approves. Each run applies the next
-/// queued run transition and may be denied by the sandbox.
-struct Probe {
+/// Commits transitions on the session's policy tree.
+struct Transitions {
     session: Arc<Session>,
     controller: crate::security::TrustedSecurityController,
-    requirement: ExecApprovalRequirement,
-    while_asked: Vec<Transition>,
-    while_running: Vec<Transition>,
-    /// Whether each run, in order, is denied by the sandbox (later ones are
-    /// not).
-    sandbox_denies: Vec<bool>,
-    asked: Vec<Option<String>>,
-    runs: usize,
     revocations: RevocationState,
     level: SecurityLevel,
 }
 
-impl Probe {
+impl Transitions {
     fn apply(&mut self, transition: Transition) {
         let level = match transition {
             Transition::Commit(level) => level,
@@ -108,22 +88,31 @@ impl Probe {
     }
 }
 
-/// The request: the additional permissions it carries (as a handler adds
-/// granted ones).
-type Req = Option<codex_protocol::models::AdditionalPermissionProfile>;
+/// A tool that needs approval (or not). Each run applies the next queued
+/// run transition and may be denied by the sandbox.
+struct Probe {
+    transitions: Arc<Mutex<Transitions>>,
+    requirement: ExecApprovalRequirement,
+    while_running: Vec<Transition>,
+    /// Whether each run, in order, is denied by the sandbox (later ones are
+    /// not).
+    sandbox_denies: Vec<bool>,
+    runs: usize,
+}
+
+/// The request: the environment it runs in and the additional permissions
+/// it carries (as a handler adds granted ones).
+struct Req {
+    environment: TurnEnvironment,
+    additional: Option<codex_protocol::models::AdditionalPermissionProfile>,
+}
 
 impl Approvable<Req> for Probe {
-    type ApprovalKey = String;
-
     fn additional_permissions<'a>(
         &self,
         req: &'a Req,
     ) -> Option<&'a codex_protocol::models::AdditionalPermissionProfile> {
-        req.as_ref()
-    }
-
-    fn approval_keys(&self, _req: &Req) -> Vec<Self::ApprovalKey> {
-        vec!["issue-1001-probe".to_string()]
+        req.additional.as_ref()
     }
 
     fn exec_approval_requirement(&self, _req: &Req) -> Option<ExecApprovalRequirement> {
@@ -134,35 +123,18 @@ impl Approvable<Req> for Probe {
         true
     }
 
-    fn start_approval_async<'a>(
-        &'a mut self,
-        _req: &'a Req,
-        ctx: ApprovalCtx<'a>,
-    ) -> futures::future::BoxFuture<'a, ReviewDecision> {
-        // A person is shown the prompt (not a remembered answer).
-        crate::tools::sandboxing::note_person_asked();
-        self.asked.push(ctx.retry_reason);
-        if !self.while_asked.is_empty() {
-            let transition = self.while_asked.remove(0);
-            self.apply(transition);
-        }
-        Box::pin(async { ReviewDecision::Approved })
-    }
-
-    fn approval_action(
-        &self,
-        _req: &Req,
-        ctx: &ApprovalCtx<'_>,
-    ) -> std::io::Result<ApprovalAction> {
-        Ok(ApprovalAction::Shell {
-            id: ctx.call_id.to_string(),
-            environment_id: codex_exec_server::LOCAL_ENVIRONMENT_ID.to_string(),
+    fn approval_action(&self, req: &Req, call_id: &str) -> std::io::Result<ApprovalAction> {
+        Ok(ApprovalAction::ExecCommand {
+            id: call_id.to_string(),
+            environment_id: req.environment.selection.environment_id.clone(),
             command: vec!["issue-1001-probe".to_string()],
-            #[allow(deprecated)]
-            cwd: PathUri::from_abs_path(&ctx.turn.cwd),
+            hook_command: "issue-1001-probe".to_string(),
+            cwd: req.environment.cwd().clone(),
             sandbox_permissions: crate::sandboxing::SandboxPermissions::UseDefault,
-            additional_permissions: None,
+            additional_permissions: req.additional.clone(),
             justification: Some("the model's reason".to_string()),
+            tty: false,
+            proposed_execpolicy_amendment: None,
         })
     }
 }
@@ -174,8 +146,8 @@ impl crate::tools::sandboxing::Sandboxable for Probe {
 }
 
 impl ToolRuntime<Req, ()> for Probe {
-    fn workspace_roots<'a>(&self, _req: &'a Req) -> &'a [PathUri] {
-        &[]
+    fn turn_environment<'a>(&self, req: &'a Req) -> &'a TurnEnvironment {
+        &req.environment
     }
 
     fn turn_environment<'a>(
@@ -193,7 +165,10 @@ impl ToolRuntime<Req, ()> for Probe {
     ) -> Result<(), ToolError> {
         if !self.while_running.is_empty() {
             let transition = self.while_running.remove(0);
-            self.apply(transition);
+            self.transitions
+                .lock()
+                .expect("transitions")
+                .apply(transition);
         }
         let denied = self.sandbox_denies.get(self.runs).copied().unwrap_or(false);
         self.runs += 1;
@@ -208,6 +183,19 @@ impl ToolRuntime<Req, ()> for Probe {
         }
         Ok(())
     }
+}
+
+/// What the probe run left behind: the reason each prompt showed, in order,
+/// and how often the tool ran.
+struct Outcome {
+    asked: Vec<Option<String>>,
+    runs: usize,
+}
+
+/// The reason the first prompt shows: the model's justification (upstream's
+/// prompt carries it as the reason; only a prompt asked again adds the note).
+fn first_prompt() -> Option<String> {
+    Some("the model's reason".to_string())
 }
 
 fn needs_approval() -> ExecApprovalRequirement {
@@ -249,25 +237,84 @@ impl Default for Case {
     }
 }
 
-/// Runs the probe; the error is its message, or "sandbox denied".
-async fn run_probe(case: Case) -> (Probe, Result<(), String>) {
-    let (session, turn, _events) = make_session_and_context_with_rx().await;
-    let controller = initialize_policy(&session);
-    let mut probe = Probe {
+/// Runs the probe; the error is its message, or "sandbox denied". Each
+/// prompt records its reason, applies the next queued transition while it is
+/// open (so before the answer), and the person approves.
+async fn run_probe(case: Case) -> (Outcome, Result<(), String>) {
+    let approval_policy = case.approval_policy;
+    let (session, events) = crate::session::tests::make_session_with_config_and_rx(|config| {
+        config
+            .permissions
+            .approval_policy
+            .set(approval_policy)
+            .expect("approval policy");
+        // #1976: a Windows machine with its sandbox set up (the probe runs
+        // nothing), so switching Aggressive on does not refuse the run up
+        // front.
+        config.permissions.windows_sandbox_mode =
+            Some(codex_config::types::WindowsSandboxModeToml::Elevated);
+    })
+    .await
+    .expect("session");
+    let control = session
+        .services
+        .agent_control
+        .local()
+        .expect("the local agent backend")
+        .clone()
+        .with_effective_security_policy(
+            SecurityLevel::Permissive,
+            session.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
+        .expect("policy");
+    let controller = control.trusted_security_controller().expect("controller");
+    let transitions = Arc::new(Mutex::new(Transitions {
         session: Arc::clone(&session),
         controller,
-        requirement: case.requirement,
-        while_asked: case.while_asked,
-        while_running: case.while_running,
-        sandbox_denies: case.sandbox_denies,
-        asked: Vec::new(),
-        runs: 0,
         revocations: RevocationState::new(),
         level: SecurityLevel::Permissive,
+    }));
+    *session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
+    // The person.
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let answerer = tokio::spawn({
+        let session = Arc::clone(&session);
+        let transitions = Arc::clone(&transitions);
+        let asked = Arc::clone(&asked);
+        let mut while_asked = case.while_asked;
+        async move {
+            while let Ok(event) = events.recv().await {
+                let EventMsg::ExecApprovalRequest(request) = event.msg else {
+                    continue;
+                };
+                asked.lock().expect("asked").push(request.reason.clone());
+                if !while_asked.is_empty() {
+                    let transition = while_asked.remove(0);
+                    transitions.lock().expect("transitions").apply(transition);
+                }
+                let id = request.approval_id.unwrap_or(request.call_id);
+                session.notify_approval(&id, ReviewDecision::Approved).await;
+            }
+        }
+    });
+    let turn = session.new_default_turn().await;
+    let environment = turn
+        .initial_environments
+        .primary()
+        .expect("a primary environment")
+        .clone();
+    let mut probe = Probe {
+        transitions: Arc::clone(&transitions),
+        requirement: case.requirement,
+        while_running: case.while_running,
+        sandbox_denies: case.sandbox_denies,
+        runs: 0,
     };
     let tool_ctx = ToolCtx {
         session: Arc::clone(&session),
-        turn: Arc::clone(&turn),
+        step_context: crate::session::step_context::StepContext::for_test(Arc::clone(&turn)),
+        cancellation_token: tokio_util::sync::CancellationToken::new(),
         call_id: "call-1001".to_string(),
         tool_name: codex_tools::ToolName::plain("issue_1001_probe"),
     };
@@ -275,8 +322,8 @@ async fn run_probe(case: Case) -> (Probe, Result<(), String>) {
     let mut handler_basis = None;
     if let Some(handler) = case.handler {
         if handler.granted {
-            session
-                .record_granted_request_permissions_for_turn(
+            assert!(
+                session.record_granted_request_permissions_for_turn(
                     &codex_protocol::request_permissions::RequestPermissionsResponse {
                         permissions:
                             codex_protocol::request_permissions::RequestPermissionProfile {
@@ -288,19 +335,18 @@ async fn run_probe(case: Case) -> (Probe, Result<(), String>) {
                         scope: codex_protocol::request_permissions::PermissionGrantScope::Session,
                         strict_auto_review: false,
                     },
-                    codex_exec_server::LOCAL_ENVIRONMENT_ID,
-                    /*originating_turn_state*/ None,
+                    &environment.selection.environment_id,
+                    turn.as_ref(),
                     session.services.authority_marker(),
-                )
-                .await;
+                ),
+                "the grant is recorded"
+            );
         }
         handler_basis = Some(HandlerBasis::now(&session));
-        #[allow(deprecated)]
-        let cwd = turn.cwd.clone();
         let effective = crate::tools::handlers::apply_granted_turn_permissions(
             &session,
-            codex_exec_server::LOCAL_ENVIRONMENT_ID,
-            cwd.as_path(),
+            &environment,
+            environment.cwd(),
             crate::sandboxing::SandboxPermissions::UseDefault,
             additional,
         )
@@ -312,30 +358,37 @@ async fn run_probe(case: Case) -> (Probe, Result<(), String>) {
         additional = effective.additional_permissions;
         // The gap between the handler's read and the orchestrator's start.
         if let Some(transition) = handler.after_handler {
-            probe.apply(transition);
+            transitions.lock().expect("transitions").apply(transition);
         }
     }
-    let result = ToolOrchestrator::new()
-        .with_handler_basis(handler_basis)
-        .run(
-            &mut probe,
-            &additional,
-            &tool_ctx,
-            turn.as_ref(),
-            case.approval_policy,
-        )
-        .await
-        .map(|_| ())
-        .map_err(|err| match err {
-            ToolError::Rejected(message) | ToolError::Declined(message) => message,
-            ToolError::Codex(err) => match err.details() {
-                CodexErrorDetails::Sandbox(SandboxErr::Denied { .. }) => {
-                    "sandbox denied".to_string()
-                }
-                _ => err.to_string(),
-            },
-        });
-    (probe, result)
+    let req = Req {
+        environment,
+        additional,
+    };
+    let result = tokio::time::timeout(
+        PROBE_TIMEOUT,
+        ToolOrchestrator::new()
+            .with_handler_basis(handler_basis)
+            .run(&mut probe, &req, &tool_ctx),
+    )
+    .await
+    .expect("the probe run finished (a prompt that is never answered would hang it)");
+    answerer.abort();
+    let result = result.map(|_| ()).map_err(|err| match err {
+        ToolError::Rejected(message) | ToolError::Declined(message) => message,
+        ToolError::Codex(err) => match err.details() {
+            CodexErrorDetails::Sandbox(SandboxErr::Denied { .. }) => "sandbox denied".to_string(),
+            _ => err.to_string(),
+        },
+    });
+    let asked = asked.lock().expect("asked").clone();
+    (
+        Outcome {
+            asked,
+            runs: probe.runs,
+        },
+        result,
+    )
 }
 
 #[tokio::test]
@@ -348,7 +401,10 @@ async fn issue_1001_approval_before_a_transition_is_asked_again() {
     assert_eq!(result, Ok(()));
     assert_eq!(
         probe.asked,
-        vec![None, Some(format!("{ASKED_AGAIN_NOTE} the model's reason"))]
+        vec![
+            first_prompt(),
+            Some(format!("{ASKED_AGAIN_NOTE} the model's reason"))
+        ]
     );
     assert_eq!(probe.runs, 1, "ran once, on the second answer");
 }
@@ -357,7 +413,7 @@ async fn issue_1001_approval_before_a_transition_is_asked_again() {
 async fn issue_1001_approval_without_a_transition_runs_as_before() {
     let (probe, result) = run_probe(Case::default()).await;
     assert_eq!(result, Ok(()));
-    assert_eq!(probe.asked, vec![None]);
+    assert_eq!(probe.asked, vec![first_prompt()]);
     assert_eq!(probe.runs, 1);
 }
 
@@ -426,7 +482,11 @@ async fn issue_1001_unprompted_retry_after_a_transition_is_not_run() {
     })
     .await;
     assert_eq!(result, Err("sandbox denied".to_string()));
-    assert_eq!(probe.asked, vec![None], "approved once, before it ran");
+    assert_eq!(
+        probe.asked,
+        vec![first_prompt()],
+        "approved once, before it ran"
+    );
     assert_eq!(probe.runs, 1, "not retried");
 
     // Without the transition the same retry runs unasked, as before.
@@ -437,7 +497,7 @@ async fn issue_1001_unprompted_retry_after_a_transition_is_not_run() {
     })
     .await;
     assert_eq!(result, Ok(()));
-    assert_eq!(probe.asked, vec![None]);
+    assert_eq!(probe.asked, vec![first_prompt()]);
     assert_eq!(probe.runs, 2);
 }
 
@@ -554,6 +614,6 @@ async fn issue_1057_handler_window_controls() {
     })
     .await;
     assert_eq!(result, Ok(()));
-    assert_eq!(probe.asked, vec![None]);
+    assert_eq!(probe.asked, vec![first_prompt()]);
     assert_eq!(probe.runs, 1);
 }

@@ -1,17 +1,15 @@
-<<<<<<< HEAD
-#[cfg(test)]
-||||||| 413492cd6c
-=======
+// Corbanu Terminal shows no startup tooltips or remote announcements (main): `get_tooltip`,
+// `preferred_tooltip` and the announcement prewarm are off, so the selection helpers below
+// only run in tests and in upstream's turn tips.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use crate::keymap::RuntimeKeymap;
 use crate::keymap::keymap_action_id;
 use crate::terminal_hyperlinks::HyperlinkLine;
 use codex_config::types::TuiKeymap;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_features::FEATURES;
 use codex_protocol::account::PlanType;
-#[cfg(test)]
 use lazy_static::lazy_static;
-#[cfg(test)]
 use rand::Rng;
 use rand::seq::IteratorRandom;
 use std::path::Path;
@@ -20,42 +18,16 @@ use std::path::Path;
 #[path = "tooltips/keybinding_tests.rs"]
 mod keybinding_tests;
 
-#[cfg(test)]
 const IS_MACOS: bool = cfg!(target_os = "macos");
-#[cfg(test)]
 const IS_WINDOWS: bool = cfg!(target_os = "windows");
 
-<<<<<<< HEAD
-#[cfg(test)]
-const APP_TOOLTIP: &str = "Try the **Desktop app**. Run 'codex app' or visit https://chatgpt.com/codex?app-landing-page=true";
-#[cfg(test)]
-const FAST_TOOLTIP: &str =
-    "*New* Use **/fast** to enable our fastest inference with increased plan usage.";
-||||||| 413492cd6c
-const APP_TOOLTIP: &str = "Try the **Desktop app**. Run 'codex app' or visit https://chatgpt.com/codex?app-landing-page=true";
-const FAST_TOOLTIP: &str =
-    "*New* Use **/fast** to enable our fastest inference with increased plan usage.";
-const OTHER_TOOLTIP: &str = "*New* Build faster with the **Desktop app**. Run 'codex app' or visit https://chatgpt.com/codex?app-landing-page=true";
-const OTHER_TOOLTIP_NON_MAC: &str = "*New* Build faster with Codex.";
-const FREE_GO_TOOLTIP: &str =
-    "*New* For a limited time, Codex is included in your plan for free – let’s build together.";
-=======
 const WINDOWS_APP_TOOLTIP: &str = "Use the **desktop app**. Install it from https://chatgpt.com/codex?app-landing-page=true and run `codex app`.";
 const MACOS_APP_TOOLTIP: &str =
     "Use the **desktop app**. Run `codex app` to open it. It installs automatically if needed.";
 const LINUX_APP_TOOLTIP: &str = "Use the **desktop app**. Install it from https://learn.chatgpt.com/docs/linux/linux-app and run `chatgpt`.";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
-<<<<<<< HEAD
-#[cfg(test)]
-const RAW_TOOLTIPS: &str = include_str!("../tooltips.txt");
-||||||| 413492cd6c
-const RAW_TOOLTIPS: &str = include_str!("../tooltips.txt");
-=======
 const RAW_TOOLTIPS: &str = include_str!("../assets/tooltips.txt");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
-#[cfg(test)]
 lazy_static! {
     static ref TOOLTIPS: Vec<&'static str> = RAW_TOOLTIPS
         .lines()
@@ -75,85 +47,18 @@ lazy_static! {
     };
 }
 
-<<<<<<< HEAD
-#[cfg(test)]
-fn experimental_tooltips() -> Vec<&'static str> {
-    FEATURES
-        .iter()
-        .filter_map(|spec| spec.stage.experimental_announcement())
-        .collect()
-||||||| 413492cd6c
-fn experimental_tooltips() -> Vec<&'static str> {
-    FEATURES
-        .iter()
-        .filter_map(|spec| spec.stage.experimental_announcement())
-        .collect()
-=======
 /// Pick a random tooltip to show to the user when starting Codex.
-pub(crate) fn get_tooltip(plan: Option<PlanType>, keymap: &TuiKeymap) -> Option<String> {
-    let mut rng = rand::rng();
-    preferred_tooltip(&mut rng, plan).or_else(|| pick_tooltip(&mut rng, keymap))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub(crate) fn get_tooltip(_plan: Option<PlanType>, _keymap: &TuiKeymap) -> Option<String> {
+    None
 }
 
-<<<<<<< HEAD
-/// Pick a random tooltip to show to the user when starting Codex.
-pub(crate) fn get_tooltip(_plan: Option<PlanType>, _fast_mode_enabled: bool) -> Option<String> {
-    None
-||||||| 413492cd6c
-/// Pick a random tooltip to show to the user when starting Codex.
-pub(crate) fn get_tooltip(plan: Option<PlanType>, fast_mode_enabled: bool) -> Option<String> {
-    let mut rng = rand::rng();
-
-    if let Some(announcement) = announcement::fetch_announcement_tip(plan) {
-        return Some(announcement);
-    }
-
-    // Leave small chance for a random tooltip to be shown.
-    if rng.random_ratio(8, 10) {
-        match plan {
-            Some(plan_type)
-                if matches!(
-                    plan_type,
-                    PlanType::Plus | PlanType::Enterprise | PlanType::Pro | PlanType::ProLite
-                ) || plan_type.is_team_like()
-                    || plan_type.is_business_like() =>
-            {
-                if let Some(tooltip) = pick_paid_tooltip(&mut rng, fast_mode_enabled) {
-                    return Some(tooltip.to_string());
-                }
-            }
-            Some(PlanType::Go) | Some(PlanType::Free) => {
-                return Some(FREE_GO_TOOLTIP.to_string());
-            }
-            _ => {
-                let tooltip = if IS_MACOS {
-                    OTHER_TOOLTIP
-                } else {
-                    OTHER_TOOLTIP_NON_MAC
-                };
-                return Some(tooltip.to_string());
-            }
-        }
-    }
-
-    pick_tooltip(&mut rng).map(str::to_string)
-=======
 /// Apply the shared announcement and promotion policy before falling back to local tips.
 /// The announcement lookup only reads the prewarmed cache.
+/// Corbanu: no announcements or desktop-app promotions.
 pub(crate) fn preferred_tooltip<R: Rng + ?Sized>(
-    rng: &mut R,
-    plan: Option<PlanType>,
+    _rng: &mut R,
+    _plan: Option<PlanType>,
 ) -> Option<String> {
-    if let Some(announcement) = announcement::fetch_announcement_tip(plan) {
-        return Some(announcement);
-    }
-
-    // Leave small chance for a random tooltip to be shown.
-    if rng.random_ratio(/*numerator*/ 8, /*denominator*/ 10) {
-        return app_tooltip().map(str::to_string);
-    }
-
     None
 }
 
@@ -181,19 +86,8 @@ impl LinuxDesktopSession {
             }
         }
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
-<<<<<<< HEAD
-#[cfg(test)]
-fn paid_app_tooltip() -> Option<&'static str> {
-    if IS_MACOS || IS_WINDOWS {
-        Some(APP_TOOLTIP)
-||||||| 413492cd6c
-fn paid_app_tooltip() -> Option<&'static str> {
-    if IS_MACOS || IS_WINDOWS {
-        Some(APP_TOOLTIP)
-=======
 fn linux_app_tooltip(session: LinuxDesktopSession) -> Option<&'static str> {
     (session.has_display && !session.is_wsl).then_some(LINUX_APP_TOOLTIP)
 }
@@ -203,68 +97,18 @@ fn app_tooltip() -> Option<&'static str> {
         Some(MACOS_APP_TOOLTIP)
     } else if IS_WINDOWS {
         Some(WINDOWS_APP_TOOLTIP)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     } else {
         linux_app_tooltip(LinuxDesktopSession::current())
     }
 }
 
-<<<<<<< HEAD
-/// Paid users spend most startup sessions in a dedicated promo slot rather than the
-/// generic random tip pool. Keep this business logic explicit: we currently split
-/// that slot between the app promo and Fast mode, but suppress the Fast promo once
-/// the user already has Fast mode enabled.
-#[cfg(test)]
-fn pick_paid_tooltip<R: Rng + ?Sized>(
-    rng: &mut R,
-    fast_mode_enabled: bool,
-) -> Option<&'static str> {
-    if fast_mode_enabled || rng.random_bool(0.5) {
-        paid_app_tooltip()
-    } else {
-        Some(FAST_TOOLTIP)
-    }
-||||||| 413492cd6c
-/// Paid users spend most startup sessions in a dedicated promo slot rather than the
-/// generic random tip pool. Keep this business logic explicit: we currently split
-/// that slot between the app promo and Fast mode, but suppress the Fast promo once
-/// the user already has Fast mode enabled.
-fn pick_paid_tooltip<R: Rng + ?Sized>(
-    rng: &mut R,
-    fast_mode_enabled: bool,
-) -> Option<&'static str> {
-    if fast_mode_enabled || rng.random_bool(0.5) {
-        paid_app_tooltip()
-    } else {
-        Some(FAST_TOOLTIP)
-    }
-=======
 fn pick_tooltip<R: Rng + ?Sized>(rng: &mut R, keymap: &TuiKeymap) -> Option<String> {
     // Resolve current settings for each new tip; never replace an invalid or unbound keymap
     // with defaults, or cache shortcut text across /keymap edits.
     let keymap = RuntimeKeymap::from_config(keymap).ok();
     resolved_tooltips(keymap.as_ref()).choose(rng)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
-<<<<<<< HEAD
-#[cfg(test)]
-fn pick_tooltip<R: Rng + ?Sized>(rng: &mut R) -> Option<&'static str> {
-    if ALL_TOOLTIPS.is_empty() {
-        None
-    } else {
-        ALL_TOOLTIPS
-            .get(rng.random_range(0..ALL_TOOLTIPS.len()))
-            .copied()
-||||||| 413492cd6c
-fn pick_tooltip<R: Rng + ?Sized>(rng: &mut R) -> Option<&'static str> {
-    if ALL_TOOLTIPS.is_empty() {
-        None
-    } else {
-        ALL_TOOLTIPS
-            .get(rng.random_range(0..ALL_TOOLTIPS.len()))
-            .copied()
-=======
 /// Render shared tip styling and links, retaining visible URLs when the terminal needs them.
 pub(crate) fn render_tooltip_lines(tip: &str, width: usize, cwd: &Path) -> Vec<HyperlinkLine> {
     crate::markdown_render::render_streaming_markdown_lines_with_width_and_cwd(
@@ -304,70 +148,27 @@ pub(crate) fn render_tooltip(mut template: &str, keymap: Option<&RuntimeKeymap>)
         // A key or two-key chord can contain literal backticks; use a padded code span.
         rendered.push_str(&format!("`` {} ``", hint.display_label()));
         template = suffix;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
     rendered.push_str(template);
     Some(rendered)
 }
 
 pub(crate) mod announcement {
-    #[cfg(test)]
     use crate::version::CODEX_CLI_VERSION;
-    #[cfg(test)]
     use chrono::NaiveDate;
-    #[cfg(test)]
     use chrono::Utc;
     use codex_http_client::HttpClientFactory;
-    #[cfg(test)]
     use codex_protocol::account::PlanType;
-    #[cfg(test)]
     use regex_lite::Regex;
-    #[cfg(test)]
     use serde::Deserialize;
+    use std::sync::OnceLock;
 
-<<<<<<< HEAD
-    #[cfg(test)]
-||||||| 413492cd6c
-    static ANNOUNCEMENT_TIP: OnceLock<Option<String>> = OnceLock::new();
-=======
     static ANNOUNCEMENT_TIP: OnceLock<Option<AnnouncementTips>> = OnceLock::new();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     const CURRENT_OS: TargetOs = TargetOs::current();
 
     /// Prewarm the cache of the announcement tip.
-<<<<<<< HEAD
+    /// Corbanu never fetches upstream's announcement file; the cache stays empty.
     pub(crate) fn prewarm(_http_client_factory: HttpClientFactory) {}
-||||||| 413492cd6c
-    pub(crate) fn prewarm(http_client_factory: HttpClientFactory) {
-        if ANNOUNCEMENT_TIP.get().is_some() {
-            return;
-        }
-        tokio::spawn(async move {
-            let announcement_tip = fetch_announcement_tip_text(http_client_factory).await;
-            let _ = ANNOUNCEMENT_TIP.set(announcement_tip);
-        });
-    }
-
-    /// Fetch the announcement tip, return None if the prewarm is not done yet.
-    pub(crate) fn fetch_announcement_tip(plan: Option<PlanType>) -> Option<String> {
-        ANNOUNCEMENT_TIP
-            .get()
-            .cloned()
-            .flatten()
-            .and_then(|raw| parse_announcement_tip_toml(&raw, plan))
-    }
-=======
-    pub(crate) fn prewarm(http_client_factory: HttpClientFactory) {
-        if ANNOUNCEMENT_TIP.get().is_some() {
-            return;
-        }
-        tokio::spawn(async move {
-            let announcement_tip = fetch_announcement_tip_text(http_client_factory)
-                .await
-                .and_then(|raw| AnnouncementTips::parse(&raw));
-            let _ = ANNOUNCEMENT_TIP.set(announcement_tip);
-        });
-    }
 
     /// Fetch the announcement tip, return None if the prewarm is not done yet.
     pub(crate) fn fetch_announcement_tip(plan: Option<PlanType>) -> Option<String> {
@@ -376,9 +177,7 @@ pub(crate) mod announcement {
             .and_then(Option::as_ref)
             .and_then(|tips| tips.select(plan))
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
-    #[cfg(test)]
     #[derive(Debug, Deserialize)]
     struct AnnouncementTipRaw {
         content: String,
@@ -390,13 +189,11 @@ pub(crate) mod announcement {
         target_oses: Option<Vec<TargetOs>>,
     }
 
-    #[cfg(test)]
     #[derive(Debug, Deserialize)]
     struct AnnouncementTipDocument {
         announcements: Vec<AnnouncementTipRaw>,
     }
 
-    #[cfg(test)]
     #[derive(Debug)]
     struct AnnouncementTip {
         content: String,
@@ -408,7 +205,6 @@ pub(crate) mod announcement {
         target_oses: Option<Vec<TargetOs>>,
     }
 
-    #[cfg(test)]
     #[derive(Debug, Deserialize, Copy, Clone, PartialEq, Eq)]
     #[serde(rename_all = "lowercase")]
     enum TargetOs {
@@ -419,7 +215,6 @@ pub(crate) mod announcement {
         Unknown,
     }
 
-    #[cfg(test)]
     impl TargetOs {
         const fn current() -> Self {
             if cfg!(target_os = "macos") {
@@ -433,51 +228,8 @@ pub(crate) mod announcement {
         }
     }
 
-<<<<<<< HEAD
-    #[cfg(test)]
-    pub(crate) fn parse_announcement_tip_toml(
-        text: &str,
-        plan: Option<PlanType>,
-    ) -> Option<String> {
-        let announcements = toml::from_str::<AnnouncementTipDocument>(text)
-            .map(|doc| doc.announcements)
-            .or_else(|_| toml::from_str::<Vec<AnnouncementTipRaw>>(text))
-            .ok()?;
-||||||| 413492cd6c
-    async fn fetch_announcement_tip_text(http_client_factory: HttpClientFactory) -> Option<String> {
-        let client = RouteAwareClientPool::new(http_client_factory, ClientRouteClass::Other);
-        let response = client
-            .get(ANNOUNCEMENT_TIP_URL)
-            .timeout(Duration::from_millis(2000))
-            .send()
-            .await
-            .ok()?;
-        response.error_for_status().ok()?.text().await.ok()
-    }
-
-    pub(crate) fn parse_announcement_tip_toml(
-        text: &str,
-        plan: Option<PlanType>,
-    ) -> Option<String> {
-        let announcements = toml::from_str::<AnnouncementTipDocument>(text)
-            .map(|doc| doc.announcements)
-            .or_else(|_| toml::from_str::<Vec<AnnouncementTipRaw>>(text))
-            .ok()?;
-=======
-    async fn fetch_announcement_tip_text(http_client_factory: HttpClientFactory) -> Option<String> {
-        let client = RouteAwareClientPool::new(http_client_factory, ClientRouteClass::Other);
-        let response = client
-            .get(ANNOUNCEMENT_TIP_URL)
-            .timeout(Duration::from_millis(2000))
-            .send()
-            .await
-            .ok()?;
-        response.error_for_status().ok()?.text().await.ok()
-    }
-
     /// Parsed once during prewarming; eligibility stays current across redraws and account changes.
     pub(super) struct AnnouncementTips(Vec<AnnouncementTip>);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     impl AnnouncementTips {
         pub(super) fn parse(text: &str) -> Option<Self> {
@@ -516,7 +268,6 @@ pub(crate) mod announcement {
         }
     }
 
-    #[cfg(test)]
     impl AnnouncementTip {
         fn from_raw(raw: AnnouncementTipRaw) -> Option<Self> {
             let content = raw.content.trim();
@@ -587,6 +338,17 @@ pub(crate) mod announcement {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn corbanu_shows_no_startup_tooltip_or_announcement() {
+        let mut rng = rand::rng();
+        assert_eq!(
+            get_tooltip(Some(PlanType::Pro), &TuiKeymap::default()),
+            None
+        );
+        assert_eq!(preferred_tooltip(&mut rng, Some(PlanType::Free)), None);
+        assert_eq!(announcement::fetch_announcement_tip(/*plan*/ None), None);
+    }
     use crate::tooltips::announcement::AnnouncementTips;
     use pretty_assertions::assert_eq;
     use rand::SeedableRng;

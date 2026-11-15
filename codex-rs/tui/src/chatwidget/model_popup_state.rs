@@ -11,9 +11,12 @@ impl ChatWidget {
             self.status_account_display,
             Some(StatusAccountDisplay::ApiKey { .. })
         ) {
-            for model in &mut Arc::make_mut(&mut self.model_catalog).models {
-                model.available_access_programs = None;
-            }
+            // The catalog is shared with App (Corbanu); edit it in place.
+            self.model_catalog.update_models(|models| {
+                for model in models {
+                    model.available_access_programs = None;
+                }
+            });
         }
         let request_id = uuid::Uuid::new_v4();
         self.model_popup_request_id = Some(request_id);
@@ -51,7 +54,9 @@ impl ChatWidget {
         {
             return false;
         }
-        Arc::make_mut(&mut self.model_catalog).models = presets;
+        // Keep runtime, GPU and provider models (and the collaboration modes); replace only the
+        // `model/list` part, as App's refresh in event_dispatch does.
+        self.model_catalog.replace_listed_models(presets);
         self.set_daybreak_enabled(self.daybreak_enabled);
         self.refresh_effective_service_tier();
         self.refresh_model_dependent_surfaces();
