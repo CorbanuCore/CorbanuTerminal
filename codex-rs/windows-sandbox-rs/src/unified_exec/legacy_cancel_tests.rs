@@ -11,6 +11,7 @@ use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::DUPLICATE_SAME_ACCESS;
 use windows_sys::Win32::Foundation::DuplicateHandle;
 use windows_sys::Win32::Foundation::HANDLE;
+use windows_sys::Win32::Foundation::WAIT_TIMEOUT;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 
 /// `PUBLIC_OBJECT_BASIC_INFORMATION`.
@@ -96,6 +97,15 @@ fn cancelled_during(step: usize) -> (Vec<(u32, u32)>, bool) {
                 {
                     return;
                 }
+                if job.is_some() {
+                    // Hold the child alive independently of its environment or
+                    // shell startup. TerminateJobObject must end it while suspended.
+                    // SAFETY: the start hook owns a live primary-thread handle.
+                    assert_ne!(
+                        unsafe { windows_sys::Win32::System::Threading::SuspendThread(handles[2]) },
+                        u32::MAX,
+                    );
+                }
                 let copies: Vec<HANDLE> = handles.iter().map(|handle| duplicate(*handle)).collect();
                 // Keep the job observable after cancellation, so the test proves
                 // explicit termination and waiting, not kill-on-last-close.
@@ -136,7 +146,7 @@ fn cancelled_during(step: usize) -> (Vec<(u32, u32)>, bool) {
     });
     let was_running = job.as_ref().is_none_or(|_| {
         // SAFETY: copies[1] is the test\'s duplicate process handle.
-        unsafe { windows_sys::Win32::System::Threading::WaitForSingleObject(copies[1], 0) == 258 }
+        unsafe { windows_sys::Win32::System::Threading::WaitForSingleObject(copies[1], 0) == WAIT_TIMEOUT }
     });
     let waiting: Vec<u32> = copies.iter().map(|copy| handle_count(*copy)).collect();
     release_tx.send(()).expect("release");
