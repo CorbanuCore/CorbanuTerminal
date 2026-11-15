@@ -2,9 +2,13 @@ name: cargo-deny
 
 on:
   workflow_call:
+  schedule:
+    - cron: "23 8 * * *"
 
 jobs:
   cargo-deny:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -15,6 +19,14 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Merge current base into PR checkout
+        if: github.event_name == 'pull_request'
+        working-directory: .
+        env:
+          PR_BASE_REF: ${{ github.base_ref }}
+        run: python3 .github/scripts/cargo_deny.py merge-base
 
       - uses: ./.github/actions/setup-ci
 
@@ -43,13 +55,49 @@ jobs:
           echo "${install_dir}" >> "${GITHUB_PATH}"
 
       - name: Run cargo-deny
-        # Same arguments as the action's defaults (log-level warn,
-        # --all-features, check). Runs in ./codex-rs, so rust-toolchain.toml
-        # selects 1.99.1 as the action's rust-version input did.
-        env:
-          CARGO_TERM_COLOR: always
-        run: cargo-deny --log-level warn --manifest-path ./Cargo.toml --all-features check
+        # Same full check and exit status; JSON also feeds the main-only report.
+        working-directory: .
+        run: python3 .github/scripts/cargo_deny.py check --output "${RUNNER_TEMP}/cargo-deny.jsonl"
+
+      - name: Save main report
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule') }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: cargo-deny-report
+          path: |
+            ${{ runner.temp }}/cargo-deny.jsonl
+            ${{ runner.temp }}/cargo-deny.status
+          if-no-files-found: error
 
       - name: Check for a clean worktree
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree
+
+  report:
+    name: Report main dependencies
+    needs: cargo-deny
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    concurrency:
+      group: cargo-deny-main-report
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cargo-deny-report
+          path: ${{ runner.temp }}/cargo-deny-report
+
+      - name: Update single dependency tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 .github/scripts/cargo_deny.py report --output "${RUNNER_TEMP}/cargo-deny-report/cargo-deny.jsonl"
