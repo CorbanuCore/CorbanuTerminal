@@ -58,7 +58,7 @@ fn profile(
         ),
         FileSystemSandboxEntry::new(
             FileSystemPath::Path {
-                path: AbsolutePathBuf::try_from(denied).unwrap(),
+                path: AbsolutePathBuf::try_from(denied).unwrap().into(),
             },
             FileSystemAccessMode::Deny,
         ),
@@ -85,7 +85,6 @@ async fn run(command: Vec<String>, cwd: &Path, profile: &PermissionProfile) -> E
         network_environment_id: None,
         sandbox_permissions: SandboxPermissions::UseDefault,
         windows_sandbox_level: WindowsSandboxLevel::Disabled,
-        windows_sandbox_private_desktop: false,
         justification: None,
         arg0: None,
     };
@@ -95,6 +94,7 @@ async fn run(command: Vec<String>, cwd: &Path, profile: &PermissionProfile) -> E
         &cwd,
         std::slice::from_ref(&cwd),
         &Some(helper()),
+        /*codex_self_exe*/ &None,
         /*use_legacy_landlock*/ false,
         /*stdout_stream*/ None,
     )

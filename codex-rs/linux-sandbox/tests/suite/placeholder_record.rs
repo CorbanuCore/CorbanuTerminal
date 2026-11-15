@@ -92,7 +92,9 @@ impl Setup {
     ) -> Command {
         let deny = FileSystemSandboxEntry::skip_missing_path(
             FileSystemPath::Path {
-                path: AbsolutePathBuf::try_from(self.placeholder()).unwrap(),
+                path: AbsolutePathBuf::try_from(self.placeholder())
+                    .unwrap()
+                    .into(),
             },
             FileSystemAccessMode::Deny,
         );
@@ -119,7 +121,9 @@ impl Setup {
                 ),
                 FileSystemSandboxEntry::new(
                     FileSystemPath::Path {
-                        path: AbsolutePathBuf::try_from(self.base.as_path()).unwrap(),
+                        path: AbsolutePathBuf::try_from(self.base.as_path())
+                            .unwrap()
+                            .into(),
                     },
                     FileSystemAccessMode::Write,
                 ),
@@ -137,7 +141,7 @@ impl Setup {
             &profile,
             &self.base,
             /*use_legacy_landlock*/ false,
-            /*allow_network_for_proxy*/ false,
+            /*managed_network*/ None,
         );
         insert_placeholder_record_dir_arg(&mut args, &self.corbanu);
         let mut command = Command::new(helper());
@@ -444,7 +448,7 @@ fn runs_starting_at_once_after_a_crash_all_work_and_leave_nothing() {
 fn read_only(path: PathBuf) -> FileSystemSandboxEntry {
     FileSystemSandboxEntry::new(
         FileSystemPath::Path {
-            path: AbsolutePathBuf::try_from(path).unwrap(),
+            path: AbsolutePathBuf::try_from(path).unwrap().into(),
         },
         FileSystemAccessMode::Read,
     )
@@ -477,7 +481,9 @@ fn a_placeholder_folder_another_run_protects_paths_in_is_not_left_behind() {
         if deny {
             entries.push(FileSystemSandboxEntry::new(
                 FileSystemPath::Path {
-                    path: AbsolutePathBuf::try_from(git.join("info/secret")).unwrap(),
+                    path: AbsolutePathBuf::try_from(git.join("info/secret"))
+                        .unwrap()
+                        .into(),
                 },
                 FileSystemAccessMode::Deny,
             ));

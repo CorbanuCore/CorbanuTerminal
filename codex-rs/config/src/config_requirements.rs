@@ -295,6 +295,19 @@ impl ConfigRequirements {
         protected_models.value.contains(model)
     }
 
+    /// Whether administrator requirements force the automatic reviewer to
+    /// answer approvals for `model`, whatever the step's reviewer setting:
+    /// the model requires auto-review, or the person may not be the reviewer.
+    /// Core's approval routing and Corbanu's post-taint dispatch gate both
+    /// read this, so they cannot disagree about who answers.
+    pub fn automatic_reviewer_forced(&self, model: &str) -> bool {
+        self.auto_review_required_for_model(model)
+            || self
+                .approvals_reviewer
+                .can_set(&ApprovalsReviewer::User)
+                .is_err()
+    }
+
     pub fn managed_auth_policy(&self) -> ManagedAuthPolicy {
         ManagedAuthPolicy {
             allowed_login_methods: self
@@ -3271,6 +3284,26 @@ tracestate = { managed = { tenant = "enterprise", region = "us" }, other = { kee
         );
         assert!(!requirements.is_empty());
         Ok(())
+    }
+
+    #[test]
+    fn automatic_reviewer_forced_by_model_or_reviewer_requirement() {
+        let mut requirements = ConfigRequirements::default();
+        assert!(!requirements.automatic_reviewer_forced("any-model"));
+
+        requirements.auto_review_required_models = Some(Sourced::new(
+            BTreeSet::from(["protected-model".to_string()]),
+            RequirementSource::Unknown,
+        ));
+        assert!(requirements.automatic_reviewer_forced("provider/protected-model"));
+        assert!(!requirements.automatic_reviewer_forced("other-model"));
+
+        requirements.auto_review_required_models = None;
+        requirements.approvals_reviewer = ConstrainedWithSource::new(
+            Constrained::allow_only(ApprovalsReviewer::AutoReview),
+            /*source*/ None,
+        );
+        assert!(requirements.automatic_reviewer_forced("other-model"));
     }
 
     #[test]
