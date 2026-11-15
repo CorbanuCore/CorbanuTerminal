@@ -176,7 +176,8 @@ fn child(
         status: 0,
         information: 0,
     };
-    let mut handle = 0;
+    // Upstream's windows-sys makes HANDLE a pointer (main's is an integer).
+    let mut handle: HANDLE = std::ptr::null_mut();
     // SAFETY: ABI matches the NT API; all pointed-to buffers live through the
     // call. The returned handle is owned by File. The name is one component.
     let status = unsafe {
