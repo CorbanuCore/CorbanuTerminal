@@ -134,7 +134,11 @@ async fn resolve_sqlite_config(args: &Args) -> anyhow::Result<SqliteConfig> {
         let sqlite_home = db_path
             .parent()
             .ok_or_else(|| anyhow::anyhow!("logs database path has no parent directory"))?;
-        return Ok(SqliteConfig::from_sqlite_home(sqlite_home).with_logs_db_path(db_path));
+        return Ok(SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+            sqlite_home,
+            /*enforce_delete_on_nfs*/ false,
+        )
+        .with_logs_db_path(db_path));
     }
 
     let mut config_builder = ConfigBuilder::default();

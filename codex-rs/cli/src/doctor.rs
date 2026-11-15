@@ -3305,6 +3305,7 @@ mod tests {
                 )
                 .detail("OpenAI endpoint: HTTP 200"),
             ],
+            corbanu_terminal_version: "0.0.0".to_string(),
         };
         let options = HumanOutputOptions {
             show_details: true,
@@ -4022,7 +4023,7 @@ mod tests {
             )
             .expect("store provider key");
         }
-        let config = ConfigBuilder::default()
+        let config = codex_core::config::ConfigBuilder::default()
             .codex_home(codex_home)
             .build()
             .await
@@ -4650,6 +4651,7 @@ mod tests {
                     overall_status: overall_status(std::slice::from_ref(&check)),
                     codex_version: "0.0.0".to_string(),
                     checks: vec![check],
+                    corbanu_terminal_version: "0.0.0".to_string(),
                 };
                 insta::assert_snapshot!(
                     "doctor_dumb_non_interactive_human",
@@ -4757,6 +4759,7 @@ mod tests {
                 overall_status: check.status,
                 codex_version: "0.0.0".to_string(),
                 checks: vec![check],
+                corbanu_terminal_version: "0.0.0".to_string(),
             },
             HumanOutputOptions {
                 show_details: false,

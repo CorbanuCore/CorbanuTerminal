@@ -13,8 +13,8 @@ use std::sync::atomic::Ordering;
 
 use anyhow::Result;
 use app_test_support::MockResponsesConfig;
+use app_test_support::create_command_execution_sse_response;
 use app_test_support::create_final_assistant_message_sse_response;
-use app_test_support::create_shell_command_sse_response;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use wiremock::Mock;
@@ -270,14 +270,14 @@ async fn run(setup: Setup) -> Result<Run> {
     };
     let mut responses = Vec::new();
     if untrusted_first {
-        responses.push(create_shell_command_sse_response(
+        responses.push(create_command_execution_sse_response(
             vec!["echo".to_string(), "before".to_string()],
             /*workdir*/ None,
             Some(60_000),
             "before",
         )?);
     }
-    responses.push(create_shell_command_sse_response(
+    responses.push(create_command_execution_sse_response(
         vec!["sh".to_string(), "-c".to_string(), script],
         /*workdir*/ None,
         Some(120_000),

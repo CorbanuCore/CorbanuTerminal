@@ -146,6 +146,7 @@ mod tests {
             overall_status: check.status,
             codex_version: "test".to_string(),
             checks: vec![check],
+            corbanu_terminal_version: "0.0.0".to_string(),
         };
         insta::assert_snapshot!(super::super::render_human_report(
             &report,
