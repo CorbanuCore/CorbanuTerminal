@@ -293,6 +293,7 @@ mod tests {
     fn handler() -> CodeModeExecuteHandler {
         CodeModeExecuteHandler::new(
             ToolSpec::Freeform(FreeformTool {
+                defer_loading: None,
                 name: PUBLIC_TOOL_NAME.to_string(),
                 description: String::new(),
                 format: FreeformToolFormat {

@@ -386,7 +386,9 @@ async fn a_prompt_refused_for_a_removed_account_is_not_recorded_as_its_turn() {
     })
     .await;
     let rollout_path = open_thread_persistence(&mut session).await;
-    session.ensure_rollout_materialized().await;
+    session
+        .ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
+        .await;
     let session = Arc::new(session);
     let turn = session
         .new_turn_with_sub_id(
@@ -420,6 +422,7 @@ async fn a_prompt_refused_for_a_removed_account_is_not_recorded_as_its_turn() {
         .spawn_task(
             Arc::clone(&turn),
             vec![TurnInput::UserInput {
+                metadata: Default::default(),
                 content: vec![UserInput::Text {
                     text: REFUSED_PROMPT.to_string(),
                     text_elements: Vec::new(),

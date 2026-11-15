@@ -3,6 +3,8 @@ use pretty_assertions::assert_eq;
 
 fn key(tool: &str) -> McpToolApprovalKey {
     McpToolApprovalKey {
+        link_id: None,
+        plugin_id: None,
         server: "docs".to_string(),
         connector_id: None,
         tool_name: tool.to_string(),

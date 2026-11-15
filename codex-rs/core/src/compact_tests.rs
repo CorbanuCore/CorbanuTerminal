@@ -930,6 +930,8 @@ async fn compaction_respects_and_records_the_provider_request_throttle() {
     let metadata = fixture.metadata();
     let prompt = Prompt {
         input: vec![ResponseItem::Message {
+            encrypted_content: None,
+            status: None,
             id: None,
             role: "user".to_string(),
             content: vec![ContentItem::InputText {

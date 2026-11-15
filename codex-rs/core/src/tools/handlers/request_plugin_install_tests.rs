@@ -36,6 +36,7 @@ use tokio::sync::Mutex;
 async fn request_plugin_install_rejects_subagent_threads(presentation: ToolSuggestPresentation) {
     let (session, mut turn) = make_session_and_context().await;
     turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        agent_class: None,
         parent_thread_id: ThreadId::new(),
         depth: 1,
         agent_path: None,

@@ -146,7 +146,10 @@ async fn issue_505_a_running_session_stores_it_for_turns_mcp_and_clients() {
     );
     let turn = session.new_default_turn().await;
     assert_eq!(
-        (turn.approval_policy.value(), turn.config.approvals_reviewer),
+        (
+            turn.approval_policy().value(),
+            turn.config.approvals_reviewer
+        ),
         HELD
     );
     let mcp = session.latest_mcp_desired_state(/*auth*/ None).await;
