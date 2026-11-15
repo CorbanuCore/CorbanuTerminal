@@ -122,8 +122,7 @@ jobs:
       # After the cache restore, which also restores ~/.cargo/bin.
       - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
         with:
-          tool: nextest
-          version: 0.9.103
+          tool: nextest@0.9.111
 
       - name: Configure rusty_v8 artifact overrides and verify checksums
         uses: openai/codex/.github/actions/setup-rusty-v8@086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a # rust-v0.167.0

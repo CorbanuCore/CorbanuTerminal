@@ -2613,14 +2613,18 @@ async fn user_approval_skips_async_guardian_without_changing_other_modes() -> Re
     use ApprovalsReviewer::User;
     use AskForApproval::Never;
     use AskForApproval::OnRequest;
-    for (approval_policy, reviewer, live_reviewer, expected_reviews) in [
-        (OnRequest, User, None, 1),
-        (Never, User, None, 0),
-        (Never, AutoReview, None, 0),
-        (OnRequest, User, Some(AutoReview), 2),
-        (OnRequest, AutoReview, Some(User), 2),
-        (OnRequest, AutoReview, None, 3),
-        (OnRequest, User, None, 1),
+    // S3b (#945, D50, PF-30): while the person is the reviewer, the node_repl
+    // strict confirmations reach the person (the last column) instead of being
+    // auto-accepted or answered by the reviewer. Never with full access still
+    // accepts them without asking, as main does.
+    for (approval_policy, reviewer, live_reviewer, expected_reviews, person_reviews) in [
+        (OnRequest, User, None, 0, 3),
+        (Never, User, None, 0, 0),
+        (Never, AutoReview, None, 0, 0),
+        (OnRequest, User, Some(AutoReview), 2, 1),
+        (OnRequest, AutoReview, Some(User), 1, 2),
+        (OnRequest, AutoReview, None, 3, 0),
+        (OnRequest, User, None, 0, 3),
     ] {
         let reviews_before = state.guardian_reviews.load(Ordering::SeqCst);
         *state.mcp_messages.lock().expect("MCP messages lock") = vec![
@@ -2648,12 +2652,23 @@ async fn user_approval_skips_async_guardian_without_changing_other_modes() -> Re
             .await?;
         let started: TurnStartResponse =
             timeout(TIMEOUT, app_server.read_response(request_id)).await??;
-        if approval_policy == OnRequest {
+        let user_inputs = usize::from(approval_policy == OnRequest);
+        let mut person_prompts = 0;
+        for _ in 0..user_inputs + person_reviews {
             let request =
                 timeout(TIMEOUT, app_server.read_stream_until_request_message()).await??;
             let ServerRequest::McpServerElicitationRequest { request_id, params } = request else {
                 panic!("expected user input, got {request:?}");
             };
+            if matches!(&params.request, McpServerElicitationRequest::Form { message, .. }
+                if message == "Review tool execution")
+            {
+                person_prompts += 1;
+                app_server
+                    .send_response(request_id, json!({ "action": "accept", "content": {} }))
+                    .await?;
+                continue;
+            }
             assert!(
                 matches!(params.request, McpServerElicitationRequest::Form { message, .. }
                 if message == "Allow this request?")
@@ -2679,6 +2694,7 @@ async fn user_approval_skips_async_guardian_without_changing_other_modes() -> Re
                 )
                 .await?;
         }
+        assert_eq!(person_prompts, person_reviews);
         let completed: TurnCompletedNotification =
             timeout(TIMEOUT, app_server.read_notification("turn/completed")).await??;
         assert_eq!(completed.turn.status, TurnStatus::Completed);

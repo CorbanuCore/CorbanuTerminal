@@ -7,11 +7,15 @@ use super::*;
 use crate::session::tests::make_session_and_context_with_rx;
 use crate::state::TaskKind;
 use crate::tasks::SessionTask;
-use crate::tasks::SessionTaskContext;
 use crate::tasks::SessionTaskResult;
 use codex_protocol::AgentPath;
 use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::TurnAbortReason;
+use codex_protocol::turn_input::TurnInput as SubmittedTurnInput;
+use codex_protocol::turn_input::TurnInputMode;
+use codex_protocol::turn_input::TurnInputRequest;
+use codex_protocol::turn_input::TurnInputSubmission;
+use codex_protocol::turn_input::TurnStartOptions;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -35,13 +39,12 @@ impl SessionTask for StalePollTask {
 
     async fn run(
         self: Arc<Self>,
-        session: Arc<SessionTaskContext>,
+        session: Arc<Session>,
         ctx: Arc<TurnContext>,
         _input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
     ) -> SessionTaskResult {
         cancellation_token.cancelled().await;
-        let session = session.clone_session();
         let (input, _) = session
             .input_queue
             .get_pending_input_for_running_task(&session, &ctx.sub_id)
@@ -82,7 +85,7 @@ async fn stale_poll_after(stop: StopPath) -> (Option<Vec<TurnInput>>, Vec<TurnIn
         /*trigger_turn*/ false,
     );
     sess.input_queue
-        .enqueue_mailbox_communication(mail, /*parent_turn_id*/ None)
+        .enqueue_mailbox_communication(mail.into(), TurnStartOptions::default())
         .await;
 
     match stop {
@@ -90,8 +93,12 @@ async fn stale_poll_after(stop: StopPath) -> (Option<Vec<TurnInput>>, Vec<TurnIn
         StopPath::Replaced => sess.abort_all_tasks(TurnAbortReason::Replaced).await,
         StopPath::Guardian => {
             assert!(
-                sess.abort_turn_if_active(&turn.sub_id, TurnAbortReason::Interrupted)
-                    .await
+                sess.abort_turn_if_active(
+                    &turn.sub_id,
+                    TurnAbortReason::Interrupted,
+                    /*error*/ None,
+                )
+                .await
             );
         }
     }
@@ -134,7 +141,7 @@ impl SessionTask for GatedStalePollTask {
 
     async fn run(
         self: Arc<Self>,
-        session: Arc<SessionTaskContext>,
+        session: Arc<Session>,
         ctx: Arc<TurnContext>,
         _input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
@@ -142,7 +149,6 @@ impl SessionTask for GatedStalePollTask {
         cancellation_token.cancelled().await;
         self.cancelled.notify_one();
         self.go.notified().await;
-        let session = session.clone_session();
         let (input, _) = session
             .input_queue
             .get_pending_input_for_running_task(&session, &ctx.sub_id)
@@ -166,7 +172,7 @@ impl SessionTask for IdleTask {
 
     async fn run(
         self: Arc<Self>,
-        _session: Arc<SessionTaskContext>,
+        _session: Arc<Session>,
         _ctx: Arc<TurnContext>,
         _input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
@@ -198,7 +204,7 @@ async fn guardian_stopped_turn_leaves_a_new_turns_input_and_mail_alone() {
         let sess = Arc::clone(&sess);
         let turn_id = old_turn.sub_id.clone();
         async move {
-            sess.abort_turn_if_active(&turn_id, TurnAbortReason::Interrupted)
+            sess.abort_turn_if_active(&turn_id, TurnAbortReason::Interrupted, /*error*/ None)
                 .await
         }
     });
@@ -210,18 +216,28 @@ async fn guardian_stopped_turn_leaves_a_new_turns_input_and_mail_alone() {
     let new_turn = sess.new_default_turn().await;
     sess.spawn_task(Arc::clone(&new_turn), Vec::new(), IdleTask)
         .await;
-    sess.steer_input(
-        vec![UserInput::Text {
-            text: "steer meant for the new turn".to_string(),
-            text_elements: Vec::new(),
-        }],
-        /*additional_context*/ Default::default(),
-        Some(&new_turn.sub_id),
-        /*client_user_message_id*/ None,
-        /*responsesapi_client_metadata*/ None,
+    // Main called the private `steer_input`; upstream steers through
+    // `turn_input::handle` in steer-only mode.
+    let steered = super::turn_input::handle(
+        &sess,
+        TurnInputRequest::new(SubmittedTurnInput::UserInput {
+            content: vec![UserInput::Text {
+                text: "steer meant for the new turn".to_string(),
+                text_elements: Vec::new(),
+            }],
+            client_id: None,
+        }),
+        TurnInputMode::Steer {
+            expected_turn_id: new_turn.sub_id.clone(),
+        },
+        "steer-new-turn".to_string(),
     )
     .await
     .expect("steer the new turn");
+    assert!(
+        matches!(steered, TurnInputSubmission::Steered { .. }),
+        "{steered:?}"
+    );
     sess.input_queue
         .enqueue_mailbox_communication(
             InterAgentCommunication::new(
@@ -230,8 +246,9 @@ async fn guardian_stopped_turn_leaves_a_new_turns_input_and_mail_alone() {
                 Vec::new(),
                 "mail meant for the new turn".to_string(),
                 /*trigger_turn*/ false,
-            ),
-            /*parent_turn_id*/ None,
+            )
+            .into(),
+            TurnStartOptions::default(),
         )
         .await;
     // Guardian's stop waits 100 ms for the stopped task before aborting it; the stale poll must

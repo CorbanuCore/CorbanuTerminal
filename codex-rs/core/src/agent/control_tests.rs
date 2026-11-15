@@ -45,7 +45,6 @@ use codex_extension_api::empty_extension_registry;
 use codex_features::Feature;
 use codex_history::CompactedItem;
 use codex_history::InitialHistory;
-use codex_history::InitialHistory;
 use codex_history::ResumedHistory;
 use codex_history::RolloutItem;
 use codex_login::AuthManager;
@@ -519,6 +518,7 @@ async fn crew_child_terminal_result_uses_one_triggering_native_mailbox_message()
             environments: Some(Vec::new()),
             thread_extension_init: ExtensionDataInit::default(),
             client_mcp_extensions: Default::default(),
+            ..StartThreadOptions::new(harness.config.clone())
         })
         .await
         .expect("crew manager should start");
@@ -557,6 +557,7 @@ async fn crew_child_terminal_result_uses_one_triggering_native_mailbox_message()
             environments: Some(Vec::new()),
             thread_extension_init: ExtensionDataInit::default(),
             client_mcp_extensions: Default::default(),
+            ..StartThreadOptions::new(harness.config.clone())
         })
         .await
         .expect("crew worker should start");
@@ -905,6 +906,7 @@ async fn direct_native_pane_inherits_live_security_policy_before_first_turn() {
             environments: Some(Vec::new()),
             thread_extension_init: ExtensionDataInit::default(),
             client_mcp_extensions: Default::default(),
+            ..StartThreadOptions::new(harness.config.clone())
         })
         .await
         .expect("direct human pane");
@@ -3364,14 +3366,17 @@ async fn ensure_v2_agent_loaded_recovers_durable_mailbox_and_keeps_child_provide
         .expect("send_inter_agent_communication should succeed after reload");
     let expected = (
         spawned_agent.thread_id,
-        Op::InterAgentCommunication { communication, .. },
+        Op::InterAgentCommunication {
+            communication,
+            start_options: Default::default(),
+        },
     );
     let captured = harness
         .manager
         .captured_ops()
         .into_iter()
-        .find(|entry| *entry == expected);
-    assert_eq!(captured, Some(expected));
+        .find(|entry| captured_op_matches(entry, &expected));
+    assert!(captured.is_some());
 }
 
 #[tokio::test]
@@ -5028,6 +5033,7 @@ async fn v2_spawn_resolves_reported_effort_without_changing_child_selection(
         next_thread_spawn_depth(&parent.session_source),
         /*agent_role*/ None,
         Some("worker".to_string()),
+        /*assignment_id*/ None,
     )
     .expect("child source");
     let (agent, snapshot) = harness
@@ -9296,8 +9302,7 @@ async fn pf_30_s02_child_result_reaches_the_parent_as_agent_data() {
     let history = parent_thread.session.clone_history().await;
     let notification = history
         .raw_items()
-        .iter()
-        .find(|item| has_subagent_notification(std::slice::from_ref(item)))
+        .find(|item| has_subagent_notification(std::slice::from_ref(*item)))
         .expect("notification");
     assert_eq!(
         parent_thread

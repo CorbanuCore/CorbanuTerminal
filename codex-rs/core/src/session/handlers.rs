@@ -191,7 +191,7 @@ impl Session {
         else {
             return;
         };
-        let mut decision = pending.validate(decision);
+        let mut decision = pending.validate(pending.constrain_decision(decision));
         if decision == ReviewDecision::Abort {
             let turn_id = if pending.kind == ExecApprovalKind::HumanCommand {
                 Some(&pending.turn_id)

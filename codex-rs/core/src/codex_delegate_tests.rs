@@ -71,6 +71,7 @@ async fn forward_events_filters_private_events_before_blocked_send_is_cancelled(
         Arc::clone(&io),
         tx_out.clone(),
         cancel.clone(),
+        /*parent_session*/ None,
     ));
 
     for msg in [
@@ -508,7 +509,7 @@ async fn forward_events_counts_delegate_usage_toward_the_parent_once() {
     let (tx_events, rx_events) = bounded(SUBMISSION_CHANNEL_CAPACITY);
     let (tx_sub, _rx_sub) = bounded(SUBMISSION_CHANNEL_CAPACITY);
     let (_agent_status_tx, agent_status) = watch::channel(AgentStatus::PendingInit);
-    let (session, ctx) = crate::session::tests::pf84_session(/*named_accounts*/ true).await;
+    let (session, _ctx) = crate::session::tests::pf84_session(/*named_accounts*/ true).await;
     let io = Arc::new(SessionIo {
         tx_sub,
         rx_event: rx_events,
@@ -516,14 +517,13 @@ async fn forward_events_counts_delegate_usage_toward_the_parent_once() {
         session_loop_termination: completed_session_loop_termination(),
     });
     let (tx_out, rx_out) = bounded(SUBMISSION_CHANNEL_CAPACITY);
+    // Upstream's forwarder takes only the parent session (main also passed
+    // the delegate session, turn and pending approvals).
     let forward = tokio::spawn(forward_events(
         Arc::clone(&io),
-        Arc::clone(&session),
         tx_out,
-        Arc::clone(&session),
-        ctx,
-        Arc::new(Mutex::new(HashMap::new())),
         CancellationToken::new(),
+        Some(Arc::clone(&session)),
     ));
     let usage = |input: i64| codex_protocol::protocol::TokenUsage {
         input_tokens: input,

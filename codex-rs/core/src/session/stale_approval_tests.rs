@@ -6,6 +6,7 @@
 use super::*;
 use crate::session::tests::make_session_and_context_with_rx;
 use crate::state::ActiveTurn;
+use codex_protocol::approvals::ExecApprovalKind;
 use codex_security_policy::PolicyPrincipal;
 use codex_security_policy::PrincipalKind;
 use codex_security_policy::RevocationState;
@@ -18,7 +19,12 @@ const TOOL: &str = "issue-945-tool";
 
 fn initialize_policy(session: &Session) -> crate::security::TrustedSecurityController {
     crate::security::TrustedSecurityController::initialize(
-        &session.services.agent_control.effective_security_policy(),
+        &session
+            .services
+            .agent_control
+            .local()
+            .expect("local agent control")
+            .effective_security_policy(),
         crate::security::PersistedHumanSecurityState::new(
             SecuritySettings::new(SecurityLevel::Permissive),
             PolicyPrincipal::new(PrincipalKind::Human, "human:issue-945").unwrap(),
@@ -52,6 +58,19 @@ async fn prompt_shown(events: &async_channel::Receiver<Event>) -> String {
     .expect("the prompt was shown")
 }
 
+/// The running turn's own grants as later commands may use them. Upstream
+/// keeps turn grants on the `TurnContext`; main's `Session::granted_turn_permissions`
+/// read them from the active turn's state.
+async fn turn_grant(
+    session: &Session,
+    turn_context: &TurnContext,
+    environment_id: &str,
+) -> Option<codex_protocol::models::AdditionalPermissionProfile> {
+    session
+        .usable_grant(turn_context.granted_turn_permissions(environment_id))
+        .await
+}
+
 fn saved_rules(codex_home: &std::path::Path) -> String {
     std::fs::read_to_string(crate::exec_policy::default_policy_path(codex_home)).unwrap_or_default()
 }
@@ -77,13 +96,17 @@ async fn issue_945_dont_ask_again_after_a_level_change_is_not_saved() {
             session
                 .request_command_approval(
                     turn_context.as_ref(),
+                    ExecApprovalKind::Command,
+                    crate::guardian::GuardianReviewContext::from(Arc::clone(&turn_context))
+                        .model_context(),
                     call_id.to_string(),
+                    Some(call_id),
                     /*approval_id*/ None,
                     /*environment_id*/ None,
                     command,
-                    cwd,
+                    cwd.into(),
                     /*reason*/ None,
-                    /*network_approval_context*/ None,
+                    /*network_approval*/ None,
                     Some(amendment),
                     /*additional_permissions*/ None,
                     /*available_decisions*/ None,
@@ -100,7 +123,9 @@ async fn issue_945_dont_ask_again_after_a_level_change_is_not_saved() {
     let approval = ask("call-945-stale");
     let id = prompt_shown(&events).await;
     raise_level(&controller, SecurityLevel::Aggressive);
-    handlers::exec_approval(&session, id, /*turn_id*/ None, dont_ask_again.clone()).await;
+    session
+        .resolve_exec_approval(id, /*turn_id*/ None, dont_ask_again.clone())
+        .await;
     assert_eq!(approval.await.unwrap(), ReviewDecision::Approved);
     assert!(
         !saved_rules(&codex_home).contains(TOOL),
@@ -117,7 +142,9 @@ async fn issue_945_dont_ask_again_after_a_level_change_is_not_saved() {
     // Shown and answered under the level in force: saved as before.
     let approval = ask("call-945-current");
     let id = prompt_shown(&events).await;
-    handlers::exec_approval(&session, id, /*turn_id*/ None, dont_ask_again.clone()).await;
+    session
+        .resolve_exec_approval(id, /*turn_id*/ None, dont_ask_again.clone())
+        .await;
     assert_eq!(approval.await.unwrap(), dont_ask_again);
     let warnings: Vec<String> = std::iter::from_fn(|| events.try_recv().ok())
         .filter_map(|event| match event.msg {
@@ -137,15 +164,15 @@ async fn issue_945_dont_ask_again_without_an_open_prompt_is_not_saved() {
     *session.active_turn.lock().await = Some(ActiveTurn::default());
     let codex_home = session.codex_home().await.to_path_buf();
     std::fs::create_dir_all(&codex_home).unwrap();
-    handlers::exec_approval(
-        &session,
-        "call-945-gone".to_string(),
-        /*turn_id*/ None,
-        ReviewDecision::ApprovedExecpolicyAmendment {
-            proposed_execpolicy_amendment: ExecPolicyAmendment::new(vec![TOOL.to_string()]),
-        },
-    )
-    .await;
+    session
+        .resolve_exec_approval(
+            "call-945-gone".to_string(),
+            /*turn_id*/ None,
+            ReviewDecision::ApprovedExecpolicyAmendment {
+                proposed_execpolicy_amendment: ExecPolicyAmendment::new(vec![TOOL.to_string()]),
+            },
+        )
+        .await;
     assert!(!saved_rules(&codex_home).contains(TOOL));
 }
 
@@ -153,16 +180,17 @@ async fn issue_945_dont_ask_again_without_an_open_prompt_is_not_saved() {
 /// for the session or the turn; one answered under the level in force does.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn issue_945_permission_grant_after_a_level_change_grants_nothing() {
+    use crate::session::step_context::StepContext;
+    use crate::tools::handlers::PreparedPermissionRequest;
     use codex_protocol::request_permissions::PermissionGrantScope;
     use codex_protocol::request_permissions::RequestPermissionProfile;
-    use codex_protocol::request_permissions::RequestPermissionsArgs;
     use codex_protocol::request_permissions::RequestPermissionsResponse;
 
     let (session, turn_context, events) = make_session_and_context_with_rx().await;
     let controller = initialize_policy(&session);
     *session.active_turn.lock().await = Some(ActiveTurn::default());
     let environment = turn_context
-        .environments
+        .initial_environments
         .primary()
         .expect("a primary environment")
         .selection();
@@ -181,14 +209,13 @@ async fn issue_945_permission_grant_after_a_level_change_grants_nothing() {
         tokio::spawn(async move {
             session
                 .request_permissions_for_environment(
-                    &turn_context,
+                    &StepContext::for_test(Arc::clone(&turn_context)),
                     call_id.to_string(),
-                    RequestPermissionsArgs {
-                        environment_id: None,
+                    PreparedPermissionRequest {
+                        environment_id: environment.environment_id,
                         reason: Some("issue 945".to_string()),
                         permissions: network,
                     },
-                    environment,
                     CancellationToken::new(),
                 )
                 .await
@@ -226,7 +253,7 @@ async fn issue_945_permission_grant_after_a_level_change_grants_nothing() {
         None
     );
     assert_eq!(
-        session.granted_turn_permissions(&environment_id).await,
+        turn_grant(&session, &turn_context, &environment_id).await,
         None
     );
 
@@ -255,12 +282,8 @@ async fn issue_1001_permission_grants_end_at_a_level_change() {
     let (session, turn_context, _events) = make_session_and_context_with_rx().await;
     let controller = initialize_policy(&session);
     *session.active_turn.lock().await = Some(ActiveTurn::default());
-    let turn_state = {
-        let active = session.active_turn.lock().await;
-        Arc::clone(&active.as_ref().expect("active turn").turn_state)
-    };
     let environment_id = turn_context
-        .environments
+        .initial_environments
         .primary()
         .expect("a primary environment")
         .selection()
@@ -276,20 +299,18 @@ async fn issue_1001_permission_grants_end_at_a_level_change() {
         scope,
         strict_auto_review: false,
     };
-    let record = async |scope, granted_under| {
-        session
-            .record_granted_request_permissions_for_turn(
-                &grant(scope),
-                &environment_id,
-                Some(&turn_state),
-                granted_under,
-            )
-            .await;
+    let record = |scope, granted_under| {
+        session.record_granted_request_permissions_for_turn(
+            &grant(scope),
+            &environment_id,
+            &turn_context,
+            granted_under,
+        );
     };
     let held = async || {
         (
             session.granted_session_permissions(&environment_id).await,
-            session.granted_turn_permissions(&environment_id).await,
+            turn_grant(&session, &turn_context, &environment_id).await,
         )
     };
     let granted: Option<codex_protocol::models::AdditionalPermissionProfile> =
@@ -297,8 +318,8 @@ async fn issue_1001_permission_grants_end_at_a_level_change() {
 
     // Granted under Permissive, for the session and the turn.
     let permissive = session.services.authority_marker();
-    record(PermissionGrantScope::Session, permissive).await;
-    record(PermissionGrantScope::Turn, permissive).await;
+    record(PermissionGrantScope::Session, permissive);
+    record(PermissionGrantScope::Turn, permissive);
     assert_eq!(held().await, (granted.clone(), granted.clone()));
 
     // The level rises: both end.
@@ -306,14 +327,14 @@ async fn issue_1001_permission_grants_end_at_a_level_change() {
     assert_eq!(held().await, (None, None));
 
     // Answered under Permissive, recorded after the change: not kept.
-    record(PermissionGrantScope::Session, permissive).await;
-    record(PermissionGrantScope::Turn, permissive).await;
+    record(PermissionGrantScope::Session, permissive);
+    record(PermissionGrantScope::Turn, permissive);
     assert_eq!(held().await, (None, None));
 
     // Granted under the level in force: kept as before.
     let moderate = session.services.authority_marker();
-    record(PermissionGrantScope::Session, moderate).await;
-    record(PermissionGrantScope::Turn, moderate).await;
+    record(PermissionGrantScope::Session, moderate);
+    record(PermissionGrantScope::Turn, moderate);
     assert_eq!(held().await, (granted.clone(), granted));
 }
 
@@ -324,12 +345,8 @@ async fn issue_1001_strict_auto_review_ends_with_its_grant() {
     let (session, turn_context, _events) = make_session_and_context_with_rx().await;
     let controller = initialize_policy(&session);
     *session.active_turn.lock().await = Some(ActiveTurn::default());
-    let turn_state = {
-        let active = session.active_turn.lock().await;
-        Arc::clone(&active.as_ref().expect("active turn").turn_state)
-    };
     let environment_id = turn_context
-        .environments
+        .initial_environments
         .primary()
         .expect("a primary environment")
         .selection()
@@ -344,28 +361,26 @@ async fn issue_1001_strict_auto_review_ends_with_its_grant() {
         scope: PermissionGrantScope::Turn,
         strict_auto_review: true,
     };
-    let record = async |granted_under| {
-        session
-            .record_granted_request_permissions_for_turn(
-                &strict_grant,
-                &environment_id,
-                Some(&turn_state),
-                granted_under,
-            )
-            .await;
+    let record = |granted_under| {
+        session.record_granted_request_permissions_for_turn(
+            &strict_grant,
+            &environment_id,
+            &turn_context,
+            granted_under,
+        );
     };
 
     let permissive = session.services.authority_marker();
-    record(permissive).await;
-    assert!(session.strict_auto_review_enabled_for_turn().await);
+    record(permissive);
+    assert!(turn_context.strict_auto_review_enabled());
     raise_level(&controller, SecurityLevel::Moderate);
-    assert!(!session.strict_auto_review_enabled_for_turn().await);
+    assert!(!turn_context.strict_auto_review_enabled());
     // Answered under Permissive, recorded after the change: no grant, no
     // strict auto-review.
-    record(permissive).await;
-    assert!(!session.strict_auto_review_enabled_for_turn().await);
-    record(session.services.authority_marker()).await;
-    assert!(session.strict_auto_review_enabled_for_turn().await);
+    record(permissive);
+    assert!(!turn_context.strict_auto_review_enabled());
+    record(session.services.authority_marker());
+    assert!(turn_context.strict_auto_review_enabled());
 }
 
 /// D52 (#1001): a host allowed for good while Aggressive is in force is saved

@@ -321,14 +321,23 @@ struct RecordingReviewer {
     calls: AtomicUsize,
     active_elicitations: Arc<AtomicUsize>,
     response: ReviewerResponse,
+    /// Corbanu (#945): the person, not the automatic reviewer, answers.
+    person_answers: bool,
+    person_answers_calls: AtomicUsize,
 }
 
 impl RecordingReviewer {
     fn new(response: ReviewerResponse) -> Arc<Self> {
+        Self::with_person_answers(response, /*person_answers*/ false)
+    }
+
+    fn with_person_answers(response: ReviewerResponse, person_answers: bool) -> Arc<Self> {
         Arc::new(Self {
             calls: AtomicUsize::default(),
             active_elicitations: Arc::default(),
             response,
+            person_answers,
+            person_answers_calls: AtomicUsize::default(),
         })
     }
 }
@@ -342,10 +351,10 @@ impl ElicitationReviewer for RecordingReviewer {
         self.calls.fetch_add(/*val*/ 1, Relaxed);
         let active_elicitations = self.active_elicitations.clone();
         let active_during_review = usize::from(
-            request
-                .elicitation
-                .meta()
-                .is_some_and(|meta| meta.get(STRICT_AUTO_REVIEW_KEY) == Some(&Value::Bool(true))),
+            !self.person_answers
+                && request.elicitation.meta().is_some_and(|meta| {
+                    meta.get(STRICT_AUTO_REVIEW_KEY) == Some(&Value::Bool(true))
+                }),
         );
         let response = self.response.clone();
         async move {
@@ -355,6 +364,12 @@ impl ElicitationReviewer for RecordingReviewer {
             response.map_err(anyhow::Error::msg)
         }
         .boxed()
+    }
+
+    fn person_answers(&self, request: ElicitationReviewRequest) -> BoxFuture<'static, bool> {
+        assert_eq!(request.server_name, "independent-mcp");
+        self.person_answers_calls.fetch_add(/*val*/ 1, Relaxed);
+        futures::future::ready(self.person_answers).boxed()
     }
 }
 
@@ -559,6 +574,75 @@ async fn elicitation_without_an_automatic_decision_prompts() {
         assert!(events.is_empty());
         assert!(manager.router.requests.lock().unwrap().pending.is_empty());
     }
+}
+
+/// Corbanu (#945, D50, PF-30): when the person answers this server's
+/// confirmations, a server's strict automatic-review request reaches the person
+/// through the ordinary path instead of being answered by the reviewer.
+#[tokio::test]
+async fn strict_auto_review_request_reaches_the_person_when_the_person_answers() {
+    let reviewer = RecordingReviewer::with_person_answers(Ok(None), /*person_answers*/ true);
+    let (manager, events, sender) = elicitation_fixture(
+        AskForApproval::OnRequest,
+        PermissionProfile::read_only(),
+        Some(reviewer.clone()),
+    );
+    let pending = tokio::spawn(send_elicitation_owned(sender, Some(json!(true))));
+    let event = tokio::time::timeout(std::time::Duration::from_secs(1), events.recv())
+        .await
+        .expect("strict request should prompt the person")
+        .expect("event channel should remain open");
+    let EventMsg::ElicitationRequest(request) = event.msg else {
+        panic!("expected MCP elicitation");
+    };
+    assert!(!pending.is_finished());
+    let ProtocolRequestId::String(request_id) = request.id else {
+        panic!("expected Codex-owned string request ID");
+    };
+    let response = ElicitationResponse {
+        action: ElicitationAction::Decline,
+        content: None,
+        meta: None,
+    };
+    manager
+        .router
+        .resolve(
+            request.server_name,
+            RequestId::String(request_id.into()),
+            response.clone(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(pending.await.unwrap(), response);
+    assert_eq!(reviewer.person_answers_calls.load(Relaxed), 1);
+    // Reviewed once on the ordinary path, which left the answer to the person.
+    assert_eq!(reviewer.calls.load(Relaxed), 1);
+    assert_eq!(reviewer.active_elicitations.load(Relaxed), 0);
+    assert!(events.is_empty());
+    assert!(manager.router.requests.lock().unwrap().pending.is_empty());
+
+    // Without the strict marker the question is not asked.
+    let reviewer = RecordingReviewer::with_person_answers(
+        Ok(Some(approved_response())),
+        /*person_answers*/ true,
+    );
+    let (_, _events, sender) = elicitation_fixture(
+        AskForApproval::OnRequest,
+        PermissionProfile::read_only(),
+        Some(reviewer.clone()),
+    );
+    assert_eq!(
+        send_elicitation(&sender, /*marker*/ None).await,
+        approved_response()
+    );
+    assert_eq!(reviewer.person_answers_calls.load(Relaxed), 0);
+}
+
+async fn send_elicitation_owned(
+    sender: SendElicitation,
+    marker: Option<Value>,
+) -> ElicitationResponse {
+    send_elicitation(&sender, marker).await
 }
 
 async fn assert_declined(marker: Value, response: Option<ReviewerResponse>) {

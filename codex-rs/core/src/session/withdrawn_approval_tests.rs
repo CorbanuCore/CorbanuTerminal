@@ -5,6 +5,7 @@
 use super::*;
 use crate::session::tests::make_session_and_context_with_rx;
 use crate::state::ActiveTurn;
+use codex_protocol::approvals::ExecApprovalKind;
 use pretty_assertions::assert_eq;
 use std::time::Duration;
 
@@ -21,13 +22,17 @@ fn ask(
         session
             .request_command_approval(
                 turn_context.as_ref(),
+                ExecApprovalKind::Command,
+                crate::guardian::GuardianReviewContext::from(Arc::clone(&turn_context))
+                    .model_context(),
                 call_id.to_string(),
+                Some(call_id),
                 Some(format!("{call_id}#approval")),
                 /*environment_id*/ None,
                 vec!["curl".to_string(), "https://example.com".to_string()],
-                cwd,
+                cwd.into(),
                 /*reason*/ None,
-                /*network_approval_context*/ None,
+                /*network_approval*/ None,
                 /*proposed_execpolicy_amendment*/ None,
                 /*additional_permissions*/ None,
                 /*available_decisions*/ None,
@@ -89,13 +94,13 @@ async fn issue_722_answered_approval_is_not_withdrawn() {
     let EventMsg::ExecApprovalRequest(prompt) = next_approval_event(&events).await else {
         panic!("the prompt is shown first");
     };
-    handlers::exec_approval(
-        &session,
-        prompt.effective_approval_id(),
-        /*turn_id*/ None,
-        ReviewDecision::Approved,
-    )
-    .await;
+    session
+        .resolve_exec_approval(
+            prompt.effective_approval_id(),
+            /*turn_id*/ None,
+            ReviewDecision::Approved,
+        )
+        .await;
     assert_eq!(approval.await.unwrap(), ReviewDecision::Approved);
 
     let withdrawn = std::iter::from_fn(|| events.try_recv().ok())
