@@ -339,14 +339,22 @@ impl LocalAppDataGrants {
     /// Removes them; whether none is left.
     fn remove(&mut self) -> bool {
         self.removed = true;
-        let group = crate::winutil::string_from_sid_bytes(
-            &crate::winutil::resolve_sid(crate::token::SANDBOX_USERS_GROUP).expect("group"),
-        )
-        .expect("group sid");
-        let sids: Vec<crate::token::LocalSid> = [group.as_str(), self.cap_sid.as_str()]
-            .into_iter()
-            .map(|sid| crate::token::LocalSid::from_string(sid).expect("sid"))
-            .collect();
+        let sids = (|| -> anyhow::Result<Vec<crate::token::LocalSid>> {
+            let group = crate::winutil::string_from_sid_bytes(&crate::winutil::resolve_sid(
+                crate::token::SANDBOX_USERS_GROUP,
+            )?)?;
+            [group.as_str(), self.cap_sid.as_str()]
+                .into_iter()
+                .map(crate::token::LocalSid::from_string)
+                .collect()
+        })();
+        let sids = match sids {
+            Ok(sids) => sids,
+            Err(err) => {
+                eprintln!("D453 cleanup could not resolve SIDs: {err:#}");
+                return false;
+            }
+        };
         let psids: Vec<_> = sids.iter().map(crate::token::LocalSid::as_ptr).collect();
         // SAFETY: valid SIDs; the folder exists.
         unsafe {
@@ -369,10 +377,18 @@ impl Drop for LocalAppDataGrants {
 /// D453 (#1896 item 1): an elevated command whose writable root holds
 /// `%LOCALAPPDATA%` can neither change the planted-folder records nor add
 /// to, or move, their folder; everyday writes elsewhere in that root still
-/// work. The folder's permissions are reset to what it inherits first, as
-/// on a machine where only the records ever made it.
+/// work. #1953: the known-folder lookup uses a private fixture on this test
+/// thread, so resetting its DACL and granting its parent never touch the
+/// developer's real records folder or LocalAppData.
 #[test]
 fn sec_win_1896_elevated_command_cannot_edit_the_records_folder() {
+    let fixture = user_owned_test_root();
+    let local_app_data = fixture.path().join("LocalAppData");
+    fs::create_dir(&local_app_data).expect("private LocalAppData");
+    crate::integrity_leases::with_test_local_app_data(&local_app_data, check_records_folder);
+}
+
+fn check_records_folder() {
     let Some(codex_home) = elevated_home("sec-1896-records") else {
         return;
     };

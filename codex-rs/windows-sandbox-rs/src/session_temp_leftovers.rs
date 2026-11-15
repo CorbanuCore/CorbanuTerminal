@@ -236,7 +236,8 @@ pub(crate) fn take_sandbox_leftovers(base: &Path, accounts: &[String]) -> Result
                     }
                 }
             }
-            let is_link = attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0;
+            let is_reparse = attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0;
+            let is_link = is_reparse && is_name_surrogate(&look).unwrap_or(false);
             let is_folder = attributes & FILE_ATTRIBUTE_DIRECTORY != 0;
             // D456: a link too, by its name only.
             if (is_folder || is_link) && code_cache(&entry.file_name(), dir == base) {
@@ -247,7 +248,7 @@ pub(crate) fn take_sandbox_leftovers(base: &Path, accounts: &[String]) -> Result
                 }
             }
             // Taken (and so made the user's) before what is in it.
-            if is_folder && !is_link {
+            if is_folder && !is_reparse {
                 stack.push(path);
             }
         }
@@ -260,7 +261,9 @@ pub(crate) fn take_sandbox_leftovers(base: &Path, accounts: &[String]) -> Result
         };
         // A folder, or a link (opened, and so renamed, itself).
         let folder_or_link = look.metadata().is_ok_and(|meta| {
-            meta.file_attributes() & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT) != 0
+            meta.file_attributes() & FILE_ATTRIBUTE_DIRECTORY != 0
+                || (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+                    && is_name_surrogate(&look).unwrap_or(false))
         });
         if folder_or_link && set_aside(cache, &look, &base_key, CACHE_SET_ASIDE) {
             found.code_caches_set_aside += 1;
@@ -405,6 +408,29 @@ fn open(path: &Path, access: u32) -> std::io::Result<File> {
         .share_mode(FILE_SHARE_ALL)
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
         .open(path)
+}
+
+/// A reparse file is a link only when its tag redirects name resolution.
+/// Placeholders and other filter-managed files keep the "files stay" rule.
+fn is_name_surrogate(file: &File) -> std::io::Result<bool> {
+    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_TAG_INFO;
+    use windows_sys::Win32::Storage::FileSystem::FileAttributeTagInfo;
+    use windows_sys::Win32::Storage::FileSystem::GetFileInformationByHandleEx;
+    let mut info: FILE_ATTRIBUTE_TAG_INFO = unsafe { std::mem::zeroed() };
+    // SAFETY: a live handle and an output buffer of the indicated size.
+    let ok = unsafe {
+        GetFileInformationByHandleEx(
+            file.as_raw_handle() as _,
+            FileAttributeTagInfo,
+            std::ptr::from_mut(&mut info).cast(),
+            std::mem::size_of::<FILE_ATTRIBUTE_TAG_INFO>() as u32,
+        )
+    };
+    if ok == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // IsReparseTagNameSurrogate in the Windows SDK.
+    Ok(info.ReparseTag & 0x2000_0000 != 0)
 }
 
 fn comparable(path: &str) -> String {

@@ -12,3 +12,4 @@
   anything there, making the folder first if it doesn't exist yet. Your own
   programs, and Corbanu Terminal itself, are not affected. Writable folders
   that don't hold it are unchanged.
+- Files an older sandbox account created in this folder can retain that account's owner rights until the host replaces them. Recovery of those existing entries remains tracked in #1953; the deny alone does not remove owner rights.

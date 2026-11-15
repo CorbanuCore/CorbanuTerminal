@@ -1,3 +1,5 @@
+#[path = "deny_write_path.rs"]
+mod deny_write_path;
 mod firewall;
 mod read_acl_mutex;
 
@@ -972,10 +974,7 @@ fn run_setup_full(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Res
         // bypass the carveout. Materialize missing carveouts as directories so the deny-write ACL
         // is present before the command starts. Legacy protected children are filtered before
         // payload creation, so this should not create sentinel directories in a workspace.
-        if !path.exists() {
-            std::fs::create_dir_all(path)
-                .with_context(|| format!("failed to create deny-write path {}", path.display()))?;
-        }
+        let _pinned = deny_write_path::pin(path)?;
 
         let deny_sid_strs = workspace_write_cap_sids_for_path(
             &payload.codex_home,

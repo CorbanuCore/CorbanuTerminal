@@ -3,6 +3,42 @@ use pretty_assertions::assert_eq;
 use std::fs;
 use tempfile::TempDir;
 
+/// A non-name-surrogate reparse file (the DFS tag), without a filter driver.
+fn set_file_reparse_tag(path: &Path, set: bool) {
+    use windows_sys::Win32::System::IO::DeviceIoControl;
+    const TAG: u32 = 0x8000_000A;
+    let mut buffer = [0_u8; 16];
+    buffer[..4].copy_from_slice(&TAG.to_le_bytes());
+    let (control, length) = if set {
+        buffer[4..6].copy_from_slice(&8_u16.to_le_bytes());
+        buffer[8..].copy_from_slice(b"corbanu1");
+        (0x0009_00A4, 16)
+    } else {
+        (0x0009_00AC, 8)
+    };
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .expect("open reparse file");
+    let mut returned = 0_u32;
+    // SAFETY: the handle and input/output buffers remain valid for the call.
+    let ok = unsafe {
+        DeviceIoControl(
+            file.as_raw_handle() as _,
+            control,
+            buffer.as_ptr().cast(),
+            length,
+            std::ptr::null_mut(),
+            /*nOutBufferSize*/ 0,
+            &mut returned,
+            std::ptr::null_mut(),
+        )
+    };
+    assert_ne!(ok, 0, "reparse tag: {}", std::io::Error::last_os_error());
+}
+
 fn write(path: &Path, text: &str) {
     fs::create_dir_all(path.parent().expect("parent")).expect("create folder");
     fs::write(path, text).expect("write");
@@ -74,6 +110,9 @@ fn sec_win_d456_code_caches_in_temp_are_renamed_aside() {
     // Not: a cache's name below the top, and a file with a cache's name.
     write(&base.join("sub\\node-compile-cache\\c.cache"), "keep");
     write(&base.join("jiti"), "a file");
+    // #1953: a reparse attribute alone does not make a regular file a link.
+    set_file_reparse_tag(&base.join("jiti"), /*set*/ true);
+    write(&base.join(".net\\app\\library.dll"), "dotnet");
 
     // An account that owns nothing here: only the code caches change.
     let found =
@@ -85,7 +124,7 @@ fn sec_win_d456_code_caches_in_temp_are_renamed_aside() {
             found.code_caches_set_aside,
             found.code_caches_capped
         ),
-        (8, 8, false)
+        (9, 9, false)
     );
 
     assert_eq!(
@@ -127,6 +166,15 @@ fn sec_win_d456_code_caches_in_temp_are_renamed_aside() {
         1,
         "the link's target changed"
     );
+    assert_eq!(
+        read(&moved(&base, ".net").join("app\\library.dll")),
+        "dotnet"
+    );
+    assert!(
+        fs::symlink_metadata(base.join("jiti")).is_ok(),
+        "a non-link file was renamed"
+    );
+    set_file_reparse_tag(&base.join("jiti"), /*set*/ false);
     for (path, text) in [
         ("proj\\m.py", "print(1)\n"),
         ("sub\\node-compile-cache\\c.cache", "keep"),

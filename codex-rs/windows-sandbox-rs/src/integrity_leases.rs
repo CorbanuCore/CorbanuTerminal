@@ -264,7 +264,31 @@ fn registry_dir() -> Option<PathBuf> {
     registry_parent_dir().map(|dir| dir.join(REGISTRY_DIR))
 }
 
+#[cfg(test)]
+thread_local! {
+    static TEST_LOCAL_APP_DATA: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Test-only, thread-local known-folder replacement. The setup helper receives
+/// the resulting deny path in its payload; production known-folder lookup stays
+/// unchanged. Restore the previous value on panic as well as success.
+#[cfg(test)]
+pub(crate) fn with_test_local_app_data<T>(path: &Path, test: impl FnOnce() -> T) -> T {
+    struct Restore(Option<PathBuf>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            TEST_LOCAL_APP_DATA.with(|slot| *slot.borrow_mut() = self.0.take());
+        }
+    }
+    let _restore = Restore(TEST_LOCAL_APP_DATA.with(|slot| slot.replace(Some(path.to_path_buf()))));
+    test()
+}
+
 fn local_app_data() -> Option<PathBuf> {
+    #[cfg(test)]
+    if let Some(path) = TEST_LOCAL_APP_DATA.with(|slot| slot.borrow().clone()) {
+        return Some(path);
+    }
     use windows_sys::Win32::System::Com::CoTaskMemFree;
     use windows_sys::Win32::UI::Shell::FOLDERID_LocalAppData;
     use windows_sys::Win32::UI::Shell::SHGetKnownFolderPath;
