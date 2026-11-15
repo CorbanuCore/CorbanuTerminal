@@ -95,13 +95,9 @@ async fn goal_clock_refresh_redraws_only_when_elapsed_label_changes() {
 #[tokio::test]
 async fn terminal_title_shows_action_required_while_exec_approval_is_pending() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-<<<<<<< HEAD
     cache_test_project_root(&mut chat, Some("project"));
-||||||| 413492cd6c
-=======
     let (frame_requester, mut draw_rx) = FrameRequester::test_channel();
     chat.frame_requester = frame_requester;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     chat.bottom_pane.set_task_running(/*running*/ true);
     let before_refresh = Instant::now();
     chat.refresh_terminal_title();
@@ -177,14 +173,8 @@ async fn terminal_title_shows_action_required_while_exec_approval_is_pending() {
 #[tokio::test]
 async fn terminal_title_action_required_respects_spinner_setting() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-<<<<<<< HEAD
     cache_test_project_root(&mut chat, Some("project"));
-    chat.config.tui_terminal_title = Some(vec!["project".to_string()]);
-||||||| 413492cd6c
-    chat.config.tui_terminal_title = Some(vec!["project".to_string()]);
-=======
     chat.local_settings.tui.terminal_title = Some(vec!["project".to_string()]);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     chat.bottom_pane.set_task_running(/*running*/ true);
     chat.refresh_terminal_title();
 
@@ -214,12 +204,8 @@ async fn terminal_title_action_required_respects_spinner_setting() {
 #[tokio::test]
 async fn terminal_title_action_required_blinks_when_animations_are_enabled() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-<<<<<<< HEAD
     cache_test_project_root(&mut chat, Some("project"));
-||||||| 413492cd6c
-=======
     chat.local_settings.tui.effects.title = false;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     chat.bottom_pane.set_task_running(/*running*/ true);
     assert!(chat.should_animate_terminal_title_spinner());
     chat.local_settings.tui.effects.progress = false;
@@ -265,14 +251,8 @@ async fn terminal_title_action_required_blinks_when_animations_are_enabled() {
 #[tokio::test]
 async fn terminal_title_activity_indicators_do_not_animate_when_animations_are_disabled() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-<<<<<<< HEAD
     cache_test_project_root(&mut chat, Some("project"));
-    chat.config.animations = false;
-||||||| 413492cd6c
-    chat.config.animations = false;
-=======
     chat.local_settings.tui.animations = false;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     chat.bottom_pane.set_task_running(/*running*/ true);
     chat.terminal_title_animation_origin = Instant::now() - std::time::Duration::from_millis(1500);
     chat.refresh_terminal_title();

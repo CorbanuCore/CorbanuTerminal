@@ -105,13 +105,14 @@ jobs:
               -p codex-core --features developer-accounting
 
       - name: Upload the nextest report
-        if: failure()
-        continue-on-error: true
+        if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: nextest-core-developer-accounting
-          path: ${{ env.CARGO_TARGET_DIR }}/nextest/default/junit.xml
-          if-no-files-found: ignore
+          # Nextest's store is relative to the workspace root, independent of
+          # CARGO_TARGET_DIR (which setup-ci moves outside the workspace).
+          path: codex-rs/target/nextest/default/junit.xml
+          if-no-files-found: error
 
       # Only main saves caches; branch runs restore main's (#636).
       - name: Save sccache cache

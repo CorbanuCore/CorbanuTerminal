@@ -43,7 +43,7 @@ async fn custom_model_display_name_in_pickers_preserves_selection_slug() {
     );
     chat.handle_key_event(KeyCode::Enter.into());
     let selected =
-        assert_matches!(events.try_recv(), Ok(AppEvent::OpenReasoningPopup { model }) => model);
+        assert_matches!(events.try_recv(), Ok(AppEvent::OpenReasoningPopup { model, .. }) => model);
     assert_eq!(selected, preset);
     chat.open_reasoning_popup(selected);
     assert_chatwidget_snapshot!(
@@ -51,7 +51,13 @@ async fn custom_model_display_name_in_pickers_preserves_selection_slug() {
         render_bottom_popup(&chat, /*width*/ 80)
     );
     chat.handle_key_event(KeyCode::Enter.into());
-    let persisted = assert_matches!(events.try_recv(), Ok(AppEvent::ApplyModelSelection { model, effort }) => (model, effort));
+    // Corbanu's provider-aware selection: the session model, its effort and the saved default.
+    let persisted = std::iter::from_fn(|| events.try_recv().ok())
+        .find_map(|event| match event {
+            AppEvent::PersistModelSelection { model, effort, .. } => Some((model, effort)),
+            _ => None,
+        })
+        .expect("expected PersistModelSelection");
     assert_eq!(
         persisted,
         (slug.to_string(), Some(ReasoningEffortConfig::High))

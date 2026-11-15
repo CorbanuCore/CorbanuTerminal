@@ -400,6 +400,13 @@ impl App {
         app_server: &mut AppServerSession,
         mut selection: PermissionProfileSelection,
     ) {
+        // Corbanu: the security level can forbid permission changes (PF-24).
+        if let Some(reason) = crate::security::level::permission_change_block_reason() {
+            self.chat_widget
+                .retain_input_after_failed_permission_selection();
+            self.chat_widget.add_error_message(reason);
+            return;
+        }
         if self.reject_pending_permission_change() {
             self.chat_widget
                 .retain_input_after_failed_permission_selection();

@@ -10,6 +10,7 @@ use crossterm::event::KeyEventKind;
 use crossterm::event::KeyModifiers;
 use ratatui::prelude::Stylize as _;
 use ratatui::text::Line;
+use tokio_stream::StreamExt;
 
 pub(crate) mod flow;
 mod model;
@@ -83,7 +84,6 @@ pub(crate) async fn run_external_agent_config_migration_prompt(
     items: &[ExternalAgentConfigMigrationItem],
     selected_items: &[ExternalAgentConfigMigrationItem],
     error: Option<&str>,
-    events: &mut tokio::sync::mpsc::UnboundedReceiver<TuiEvent>,
 ) -> std::io::Result<ExternalAgentConfigMigrationOutcome> {
     let mut screen = ExternalAgentConfigMigrationScreen::new(
         tui.frame_requester(),
@@ -99,8 +99,12 @@ pub(crate) async fn run_external_agent_config_migration_prompt(
         return Ok(ExternalAgentConfigMigrationOutcome::Skip);
     }
 
+    tui.discard_pending_input_before_interactive_screen()?;
+    let events = tui.event_stream();
+    tokio::pin!(events);
+
     while !screen.is_done() {
-        if let Some(event) = events.recv().await {
+        if let Some(event) = events.next().await {
             let _ = tui.screen_size_for_event(&event);
             match event {
                 TuiEvent::Key(key_event) => screen.handle_key(key_event),
@@ -711,11 +715,9 @@ mod tests {
     use super::ExternalAgentConfigMigrationScreen;
     use super::FocusArea;
     use super::MigrationView;
-    use super::run_external_agent_config_migration_prompt;
     use crate::custom_terminal::Terminal;
     use crate::test_backend::VT100Backend;
     use crate::tui::FrameRequester;
-    use crate::tui::TuiEvent;
     use codex_app_server_protocol::ExternalAgentConfigMigrationItem;
     use codex_app_server_protocol::ExternalAgentConfigMigrationItemType;
     use codex_app_server_protocol::PluginsMigration;
@@ -1051,31 +1053,6 @@ mod tests {
 
         assert!(screen.is_done());
         assert_eq!(screen.outcome(), ExternalAgentConfigMigrationOutcome::Skip);
-    }
-
-    #[tokio::test]
-    async fn runtime_prompt_consumes_the_app_event_receiver() {
-        let items = sample_items();
-        let mut tui = crate::tui::test_support::make_test_tui().expect("test tui");
-        let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
-        event_tx
-            .send(TuiEvent::Key(KeyEvent::new(
-                KeyCode::Esc,
-                KeyModifiers::NONE,
-            )))
-            .expect("queue escape");
-
-        let outcome = run_external_agent_config_migration_prompt(
-            &mut tui,
-            &items,
-            &items,
-            /*error*/ None,
-            &mut event_rx,
-        )
-        .await
-        .expect("migration prompt");
-
-        assert_eq!(outcome, ExternalAgentConfigMigrationOutcome::Skip);
     }
 
     #[test]
