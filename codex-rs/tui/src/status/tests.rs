@@ -229,7 +229,8 @@ fn reset_at_from(captured_at: &chrono::DateTime<chrono::Local>, seconds: i64) ->
 }
 
 fn permissions_text_for(config: &Config) -> Option<String> {
-    permissions_text_for_width(config, /*width*/ 80)
+    // Wide enough that the "Next turn: " prefix never wraps the value (main 7995a073cb).
+    permissions_text_for_width(config, /*width*/ 240)
 }
 
 fn permissions_text_for_width(config: &Config, width: u16) -> Option<String> {
