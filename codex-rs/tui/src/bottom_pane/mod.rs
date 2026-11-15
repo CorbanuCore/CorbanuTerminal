@@ -78,15 +78,11 @@ mod actionable_banner;
 mod app_link_view;
 mod apply_patch_header;
 mod approval_overlay;
-<<<<<<< HEAD
 mod approval_typing_guard;
-||||||| 413492cd6c
-=======
 mod async_questions;
 mod config_panel;
 mod empty_state_policy;
 mod hook_status;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod mcp_server_elicitation;
 mod multi_select_picker;
 pub(crate) use multi_select_picker::MultiSelectItem;
@@ -96,15 +92,11 @@ pub(crate) use multi_select_picker::MultiSelectPicker;
 mod question_tests;
 mod questions;
 mod request_user_input;
-<<<<<<< HEAD
 mod security_inspector;
 pub(crate) mod security_level_picker;
 mod security_migration;
 pub(crate) mod security_view;
-||||||| 413492cd6c
-=======
 pub(crate) mod status_line_content;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod status_line_setup;
 mod status_line_style;
 mod status_surface_preview;
@@ -140,13 +132,9 @@ pub(crate) use status_line_style::status_line_from_segments;
 pub(crate) use voice_strip::VoiceStripPhase;
 pub(crate) use voice_strip::VoiceStripState;
 mod bottom_pane_view;
-<<<<<<< HEAD
 mod claude_approval_view;
 pub(crate) use claude_approval_view::ClaudeApprovalView;
-||||||| 413492cd6c
-=======
 mod composer_gap;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod effort_ignition;
 mod view_stack;
 pub(crate) use view_stack::CenteredView;
@@ -324,12 +312,8 @@ pub(crate) use list_selection_view::SELECTION_TOGGLE_BLOCKED_PREFIX;
 pub(crate) use list_selection_view::SELECTION_TOGGLE_UNAVAILABLE_PREFIX;
 pub(crate) use list_selection_view::SelectionAction;
 pub(crate) use list_selection_view::SelectionItem;
-<<<<<<< HEAD
-pub(crate) use list_selection_view::SelectionShortcutAction;
-||||||| 413492cd6c
-=======
 pub(crate) use list_selection_view::SelectionSecondaryAction;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub(crate) use list_selection_view::SelectionShortcutAction;
 
 struct DelayedApprovalRequest {
     request: ApprovalRequest,
@@ -947,7 +931,6 @@ impl BottomPane {
         self.push_view(Box::new(modal));
     }
 
-<<<<<<< HEAD
     /// #787: the request on top, if any, by its shown generation.
     fn top_request_generation(&self) -> Option<u64> {
         self.view_stack
@@ -1015,8 +998,8 @@ impl BottomPane {
     #[cfg(test)]
     pub(crate) fn set_request_input_guard(&mut self, guard: Duration) {
         self.request_input_guard = guard;
-||||||| 413492cd6c
-=======
+    }
+
     /// Preserve restricted drafts, allowing recovery commands only for connected unavailable threads.
     pub(crate) fn handle_restricted_key(
         &mut self,
@@ -1031,18 +1014,10 @@ impl BottomPane {
         let result = self.composer.handle_restricted_key(key, mode);
         self.request_redraw();
         result
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Forward a key event to the active view or the composer.
     pub fn handle_key_event(&mut self, key_event: KeyEvent) -> InputResult {
-<<<<<<< HEAD
-        self.handle_key_event_at(key_event, Instant::now())
-    }
-
-    fn handle_key_event_at(&mut self, key_event: KeyEvent, now: Instant) -> InputResult {
-||||||| 413492cd6c
-=======
         self.handle_key_event_with_activation_key(key_event, /*activation_key*/ None)
     }
 
@@ -1050,6 +1025,21 @@ impl BottomPane {
         &mut self,
         key_event: KeyEvent,
         activation_key: Option<KeyBinding>,
+    ) -> InputResult {
+        self.handle_key_event_with_activation_key_at(key_event, activation_key, Instant::now())
+    }
+
+    /// #787: [`Self::handle_key_event`] at a given time.
+    #[cfg(test)]
+    fn handle_key_event_at(&mut self, key_event: KeyEvent, now: Instant) -> InputResult {
+        self.handle_key_event_with_activation_key_at(key_event, /*activation_key*/ None, now)
+    }
+
+    fn handle_key_event_with_activation_key_at(
+        &mut self,
+        key_event: KeyEvent,
+        activation_key: Option<KeyBinding>,
+        now: Instant,
     ) -> InputResult {
         let routed_key = activation_key.unwrap_or_else(|| KeyBinding::from_event(key_event));
         if self.consume_view_transition_key(routed_key, key_event.kind) {
@@ -1112,7 +1102,6 @@ impl BottomPane {
             self.schedule_active_view_frame();
             return InputResult::None;
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         // If a modal/view is active, handle it here; otherwise forward to composer.
         if !self.view_stack.is_empty() {
             if key_event.kind == KeyEventKind::Release {
@@ -1167,31 +1156,13 @@ impl BottomPane {
             self.request_redraw();
             InputResult::None
         } else {
-<<<<<<< HEAD
-            // If a task is running, allow the
-            // configured action to interrupt even while the composer has focus.
-||||||| 413492cd6c
-            // If a task is running and a status line is visible, allow the
-            // configured action to interrupt even while the composer has focus.
-=======
             if self.handle_inline_banner_key(key_event) {
                 return InputResult::None;
             }
             // Allow the configured interrupt while a task is running, even when its
             // status row is hidden or the composer has focus.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             // When a popup is active, prefer dismissing it over interrupting the task.
             if self.should_interrupt_running_task(key_event) {
-<<<<<<< HEAD
-                // Send Op::Interrupt
-||||||| 413492cd6c
-            if self.should_interrupt_running_task(key_event)
-                && let Some(status) = &self.status
-            {
-                // Send Op::Interrupt
-                status.interrupt();
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 if let Some(status) = &self.status {
                     status.interrupt();
                 } else {
@@ -1282,13 +1253,10 @@ impl BottomPane {
     }
 
     pub fn handle_paste(&mut self, pasted: String) {
-<<<<<<< HEAD
         self.handle_paste_at(pasted, Instant::now());
     }
 
     fn handle_paste_at(&mut self, pasted: String, now: Instant) {
-||||||| 413492cd6c
-=======
         self.interrupt_config_editor_transition();
         if self.warnings_active() {
             if !pasted.is_empty() {
@@ -1305,7 +1273,6 @@ impl BottomPane {
             self.request_redraw();
             return;
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let has_pasted_text = !pasted.is_empty();
         // #523: a view uncovered since the last key learns it first.
         self.sync_top_view();
@@ -2106,12 +2073,8 @@ impl BottomPane {
         let removed_active_view = index + 1 == self.view_stack.len();
         self.view_stack.remove(index);
         if removed_active_view {
-<<<<<<< HEAD
             self.on_top_view_removed();
-||||||| 413492cd6c
-=======
             self.key_chord_reset_requested = true;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             self.schedule_active_view_frame();
         }
         self.request_redraw();
@@ -2214,21 +2177,14 @@ impl BottomPane {
     }
 
     pub(crate) fn terminal_title_requires_action(&self) -> bool {
-<<<<<<< HEAD
         // #624: a request waiting under a view the person opened still needs them.
-        self.view_stack
-            .iter()
-            .any(|view| view.terminal_title_requires_action())
-||||||| 413492cd6c
-        self.active_view()
-            .is_some_and(bottom_pane_view::BottomPaneView::terminal_title_requires_action)
-=======
         self.questions
             .as_ref()
             .is_some_and(|q| q.unanswered_count() > 0)
             || self
-                .active_view()
-                .is_some_and(bottom_pane_view::BottomPaneView::terminal_title_requires_action)
+                .view_stack
+                .iter()
+                .any(|view| view.terminal_title_requires_action())
     }
 
     /// Include requests behind a picker or delayed while the user is typing.
@@ -2257,7 +2213,6 @@ impl BottomPane {
     pub(crate) fn has_centered_view(&self) -> bool {
         self.active_view()
             .is_some_and(|view| view.presentation() == ViewPresentation::Centered)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) fn has_active_view(&self) -> bool {
@@ -2400,7 +2355,6 @@ impl BottomPane {
         self.push_view(view);
     }
 
-<<<<<<< HEAD
     /// #514: shows an app-link view. One that answers a request (a server's
     /// link) takes no key before it is drawn or in the second after, as the
     /// other request views (#787).
@@ -2426,8 +2380,8 @@ impl BottomPane {
             return;
         }
         self.push_view(view);
-||||||| 413492cd6c
-=======
+    }
+
     pub(crate) fn suppress_current_view_key_until_release(
         &mut self,
         key: KeyBinding,
@@ -2463,7 +2417,6 @@ impl BottomPane {
             view.enable_vim_in_insert_mode();
         }
         self.push_view(Box::new(view));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Called when the agent requests user approval.
@@ -2821,7 +2774,6 @@ impl BottomPane {
         self.as_renderable_with_options(ComposerRenderOptions::default())
     }
 
-<<<<<<< HEAD
     /// #624: the notice shown above the view on top while a request view
     /// waits under it (#787: under another request too).
     fn waiting_request_notice(&self) -> Option<&'static str> {
@@ -2836,32 +2788,6 @@ impl BottomPane {
         })
     }
 
-    pub(crate) fn as_renderable_with_composer_right_reserve(
-        &'_ self,
-        composer_right_reserve: u16,
-    ) -> RenderableItem<'_> {
-        if let Some(view) = self.active_view() {
-            let Some(notice) = self.waiting_request_notice() else {
-                return RenderableItem::Borrowed(view);
-            };
-            let mut flex = FlexRenderable::new();
-            flex.push(
-                /*flex*/ 0,
-                RenderableItem::Owned(Box::new(Line::from(vec![
-                    "  ! ".magenta().bold(),
-                    notice.magenta(),
-                ]))),
-            );
-            flex.push(/*flex*/ 1, RenderableItem::Borrowed(view));
-            RenderableItem::Owned(Box::new(flex))
-||||||| 413492cd6c
-    pub(crate) fn as_renderable_with_composer_right_reserve(
-        &'_ self,
-        composer_right_reserve: u16,
-    ) -> RenderableItem<'_> {
-        if let Some(view) = self.active_view() {
-            RenderableItem::Borrowed(view)
-=======
     pub(crate) fn as_renderable_with_options<'a>(
         &'a self,
         options: ComposerRenderOptions<'a>,
@@ -2907,10 +2833,22 @@ impl BottomPane {
         if let Some(view) = views.last() {
             if view.presentation() == ViewPresentation::Centered {
                 RenderableItem::Owned(Box::new(view_stack::ViewStack(views)))
+            } else if views.len() == self.view_stack.len()
+                && let Some(notice) = self.waiting_request_notice()
+            {
+                let mut flex = FlexRenderable::new();
+                flex.push(
+                    /*flex*/ 0,
+                    RenderableItem::Owned(Box::new(Line::from(vec![
+                        "  ! ".magenta().bold(),
+                        notice.magenta(),
+                    ]))),
+                );
+                flex.push(/*flex*/ 1, RenderableItem::Borrowed(view.as_ref()));
+                RenderableItem::Owned(Box::new(flex))
             } else {
                 RenderableItem::Borrowed(view.as_ref())
             }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         } else {
             let mut flex = FlexRenderable::new();
             if let Some(banner) = self
@@ -5588,7 +5526,6 @@ mod tests {
             }
         }
 
-<<<<<<< HEAD
         for dismiss_after_child_accept in [true, false] {
             let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
             let tx = AppEventSender::new(tx_raw);
@@ -5600,36 +5537,9 @@ mod tests {
                 placeholder_text: "Ask Corbanu Terminal to do anything".to_string(),
                 disable_paste_burst: false,
                 animations_enabled: true,
+                effects: Default::default(),
                 skills: Some(Vec::new()),
             });
-||||||| 413492cd6c
-        let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
-        let tx = AppEventSender::new(tx_raw);
-        let mut pane = BottomPane::new(BottomPaneParams {
-            app_event_tx: tx,
-            frame_requester: FrameRequester::test_dummy(),
-            has_input_focus: true,
-            enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
-            disable_paste_burst: false,
-            animations_enabled: true,
-            skills: Some(Vec::new()),
-        });
-=======
-        let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
-        let tx = AppEventSender::new(tx_raw);
-        let mut pane = BottomPane::new(BottomPaneParams {
-            app_event_tx: tx,
-            frame_requester: FrameRequester::test_dummy(),
-            has_input_focus: true,
-            enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
-            disable_paste_burst: false,
-            animations_enabled: true,
-            effects: Default::default(),
-            skills: Some(Vec::new()),
-        });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
             pane.set_composer_input_enabled(/*enabled*/ false, /*placeholder*/ None);
 

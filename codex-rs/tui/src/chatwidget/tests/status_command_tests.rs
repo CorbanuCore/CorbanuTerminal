@@ -210,7 +210,6 @@ async fn account_update_rejects_stale_status_rate_limit_snapshots() {
     assert!(chat.rate_limit_snapshots_by_limit_id.is_empty());
 }
 
-<<<<<<< HEAD
 /// PF-84: a Z.AI session whose threads (the coordinator on `default`, a
 /// spawned agent on `work`, a worker on another provider) reported usage.
 fn zai_session_with_account_usage(chat: &mut ChatWidget, named_accounts: bool) {
@@ -528,8 +527,8 @@ async fn status_named_sign_in_summary_is_filled_in_the_background() {
     let rendered = render_status(&mut chat, &mut rx);
     assert!(rendered.contains("ChatGPT sign-in"), "{rendered}");
     assert!(rendered.contains("(account work)"), "{rendered}");
-||||||| 413492cd6c
-=======
+}
+
 #[tokio::test]
 async fn status_command_renders_immediately_and_updates_first_card_without_status_line() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
@@ -950,5 +949,4 @@ async fn status_command_remains_visible_when_thread_changes_during_usage_refresh
         })),
     ));
     assert!(drain_insert_history(&mut rx).is_empty());
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

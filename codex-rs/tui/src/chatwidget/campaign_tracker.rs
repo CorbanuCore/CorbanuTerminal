@@ -639,15 +639,15 @@ impl ChatWidget {
         }
         self.campaign_tracker_sync();
     }
-    pub(super) fn tracker_item(&mut self, item: &ThreadItem) {
+    pub(super) fn tracker_item(&mut self, item: &ThreadItemPayload) {
         match item {
-            ThreadItem::AgentMessage {text,..}=>self.tracker_capture("agent_output",text,json!({})),
-            ThreadItem::CommandExecution {command,cwd,exit_code,duration_ms,status,..}=>self.tracker_capture_at("tool","",json!({"action":command.chars().take(200).collect::<String>(),"exitCode":exit_code,"durationMs":duration_ms,"status":format!("{status:?}")}),Path::new(cwd.as_str())),
-            ThreadItem::FileChange {changes,status,..}=>self.tracker_capture("tool","",json!({"action":format!("file changes: {}",changes.len()),"status":format!("{status:?}")})),
-            ThreadItem::McpToolCall {server,tool,status,duration_ms,..}=>self.tracker_capture("tool","",json!({"action":format!("{server}/{tool}"),"status":format!("{status:?}"),"durationMs":duration_ms})),
-            ThreadItem::DynamicToolCall {tool,status,duration_ms,..}=>self.tracker_capture("tool","",json!({"action":tool,"status":format!("{status:?}"),"durationMs":duration_ms})),
-            ThreadItem::SubAgentActivity {agent_thread_id,agent_path,kind,..}=>self.tracker_capture("tool","",json!({"action":format!("subagent {kind:?}"),"parentAgentId":agent_thread_id,"artifact":agent_path})),
-            ThreadItem::CollabAgentToolCall {tool,status,sender_thread_id,..}=>self.tracker_capture("tool","",json!({"action":format!("{tool:?}"),"status":format!("{status:?}"),"parentAgentId":sender_thread_id})),
+            ThreadItemPayload::AgentMessage {text,..}=>self.tracker_capture("agent_output",text,json!({})),
+            ThreadItemPayload::CommandExecution {command,cwd,exit_code,duration_ms,status,..}=>self.tracker_capture_at("tool","",json!({"action":command.chars().take(200).collect::<String>(),"exitCode":exit_code,"durationMs":duration_ms,"status":format!("{status:?}")}),Path::new(cwd.as_str())),
+            ThreadItemPayload::FileChange {changes,status,..}=>self.tracker_capture("tool","",json!({"action":format!("file changes: {}",changes.len()),"status":format!("{status:?}")})),
+            ThreadItemPayload::McpToolCall {server,tool,status,duration_ms,..}=>self.tracker_capture("tool","",json!({"action":format!("{server}/{tool}"),"status":format!("{status:?}"),"durationMs":duration_ms})),
+            ThreadItemPayload::DynamicToolCall {tool,status,duration_ms,..}=>self.tracker_capture("tool","",json!({"action":tool,"status":format!("{status:?}"),"durationMs":duration_ms})),
+            ThreadItemPayload::SubAgentActivity {agent_thread_id,agent_path,kind,..}=>self.tracker_capture("tool","",json!({"action":format!("subagent {kind:?}"),"parentAgentId":agent_thread_id,"artifact":agent_path})),
+            ThreadItemPayload::CollabAgentToolCall {tool,status,sender_thread_id,..}=>self.tracker_capture("tool","",json!({"action":format!("{tool:?}"),"status":format!("{status:?}"),"parentAgentId":sender_thread_id})),
             _=>{},
         }
     }

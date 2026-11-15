@@ -37,6 +37,7 @@ fn plan_test_session(thread_id: ThreadId) -> crate::session_state::ThreadSession
         message_history: None,
         network_proxy: None,
         rollout_path: None,
+        provider_account: None,
     }
 }
 
@@ -284,15 +285,8 @@ async fn reasoning_selection_in_plan_mode_without_effort_change_does_not_open_sc
     assert!(
         events.iter().any(|event| matches!(
             event,
-<<<<<<< HEAD
             AppEvent::UpdateModelSelection { model, provider }
-                if model == "gpt-5.4" && provider.as_deref() == Some("openai")
-||||||| 413492cd6c
-            AppEvent::UpdateModel(model) if model == "gpt-5.4"
-=======
-            AppEvent::ApplyModelSelection { model, effort: Some(_) }
-                if model == "gpt-5.5"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                if model == "gpt-5.5" && provider.as_deref() == Some("openai")
         )),
         "expected model and reasoning update event; events: {events:?}"
     );
@@ -466,15 +460,8 @@ async fn reasoning_selection_in_plan_mode_model_switch_does_not_open_scope_promp
     assert!(
         events.iter().any(|event| matches!(
             event,
-<<<<<<< HEAD
             AppEvent::UpdateModelSelection { model, provider }
-                if model == "gpt-5.2" && provider.as_deref() == Some("openai")
-||||||| 413492cd6c
-            AppEvent::UpdateModel(model) if model == "gpt-5.2"
-=======
-            AppEvent::ApplyModelSelection { model, effort: Some(_) }
-                if model == "gpt-5.6-terra"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                if model == "gpt-5.6-terra" && provider.as_deref() == Some("openai")
         )),
         "expected model and reasoning update event; events: {events:?}"
     );
@@ -482,20 +469,12 @@ async fn reasoning_selection_in_plan_mode_model_switch_does_not_open_scope_promp
 
 #[tokio::test]
 async fn plan_reasoning_scope_popup_all_modes_persists_global_and_plan_override() {
-<<<<<<< HEAD
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
     chat.open_plan_reasoning_scope_prompt(
-        "gpt-5.4".to_string(),
+        "gpt-5.5".to_string(),
         Some("openai".to_string()),
         Some(ReasoningEffortConfig::High),
     );
-||||||| 413492cd6c
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
-    chat.open_plan_reasoning_scope_prompt("gpt-5.4".to_string(), Some(ReasoningEffortConfig::High));
-=======
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
-    chat.open_plan_reasoning_scope_prompt("gpt-5.5".to_string(), Some(ReasoningEffortConfig::High));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Down));
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
@@ -518,16 +497,8 @@ async fn plan_reasoning_scope_popup_all_modes_persists_global_and_plan_override(
     assert!(
         events.iter().any(|event| matches!(
             event,
-<<<<<<< HEAD
             AppEvent::PersistModelSelection { model, effort: Some(ReasoningEffortConfig::High), .. }
-                if model == "gpt-5.4"
-||||||| 413492cd6c
-            AppEvent::PersistModelSelection { model, effort: Some(ReasoningEffortConfig::High) }
-                if model == "gpt-5.4"
-=======
-            AppEvent::PersistModelSelection { model, effort: Some(ReasoningEffortConfig::High) }
                 if model == "gpt-5.5"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         )),
         "expected global model reasoning selection persistence; events: {events:?}"
     );
@@ -571,17 +542,11 @@ async fn open_plan_reasoning_scope_prompt_sets_pending_notification() {
     chat.local_settings.tui.notification_settings.notifications =
         Notifications::Custom(vec!["plan-mode-prompt".to_string()]);
 
-<<<<<<< HEAD
     chat.open_plan_reasoning_scope_prompt(
-        "gpt-5.4".to_string(),
+        "gpt-5.5".to_string(),
         Some("openai".to_string()),
         Some(ReasoningEffortConfig::High),
     );
-||||||| 413492cd6c
-    chat.open_plan_reasoning_scope_prompt("gpt-5.4".to_string(), Some(ReasoningEffortConfig::High));
-=======
-    chat.open_plan_reasoning_scope_prompt("gpt-5.5".to_string(), Some(ReasoningEffortConfig::High));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     assert_matches!(
         chat.pending_notification,
@@ -672,14 +637,8 @@ async fn plan_reasoning_scope_popup_mentions_selected_reasoning() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
     chat.set_plan_mode_reasoning_effort(Some(ReasoningEffortConfig::Low));
     chat.open_plan_reasoning_scope_prompt(
-<<<<<<< HEAD
-        "gpt-5.4".to_string(),
-        Some("openai".to_string()),
-||||||| 413492cd6c
-        "gpt-5.4".to_string(),
-=======
         "gpt-5.5".to_string(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        Some("openai".to_string()),
         Some(ReasoningEffortConfig::Medium),
     );
 
@@ -700,48 +659,23 @@ async fn plan_reasoning_scope_popup_mentions_selected_reasoning() {
 async fn plan_reasoning_scope_popup_mentions_built_in_plan_default_when_no_override() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
     chat.open_plan_reasoning_scope_prompt(
-<<<<<<< HEAD
-        "gpt-5.4".to_string(),
-        Some("openai".to_string()),
-||||||| 413492cd6c
-        "gpt-5.4".to_string(),
-=======
         "gpt-5.5".to_string(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        Some("openai".to_string()),
         Some(ReasoningEffortConfig::Medium),
     );
 
     let popup = render_bottom_popup(&chat, /*width*/ 100);
-<<<<<<< HEAD
     assert!(popup.contains("built-in Plan default"));
-||||||| 413492cd6c
-    assert!(popup.contains("built-in Plan default (medium)"));
-=======
-    assert!(
-        popup
-            .split_whitespace()
-            .collect::<String>()
-            .contains("built-inPlandefault(medium)")
-    );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]
 async fn plan_reasoning_scope_popup_plan_only_does_not_update_all_modes_reasoning() {
-<<<<<<< HEAD
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
     chat.open_plan_reasoning_scope_prompt(
-        "gpt-5.4".to_string(),
+        "gpt-5.5".to_string(),
         Some("openai".to_string()),
         Some(ReasoningEffortConfig::High),
     );
-||||||| 413492cd6c
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
-    chat.open_plan_reasoning_scope_prompt("gpt-5.4".to_string(), Some(ReasoningEffortConfig::High));
-=======
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
-    chat.open_plan_reasoning_scope_prompt("gpt-5.5".to_string(), Some(ReasoningEffortConfig::High));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
 
@@ -1432,13 +1366,7 @@ async fn mode_switch_surfaces_model_change_notification_when_effective_model_cha
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-<<<<<<< HEAD
-        plan_messages.contains("Model changed to GPT-5.4-Mini medium for Plan mode."),
-||||||| 413492cd6c
-        plan_messages.contains("Model changed to gpt-5.4-mini medium for Plan mode."),
-=======
-        plan_messages.contains("Model changed to gpt-5.6-luna medium for Plan mode."),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        plan_messages.contains("Model changed to GPT-5.6-Luna medium for Plan mode."),
         "expected Plan-mode model switch notice, got: {plan_messages:?}"
     );
 
@@ -1503,58 +1431,7 @@ async fn plan_slash_command_with_args_submits_prompt_in_plan_mode() {
     let (mut chat, _rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
 
-<<<<<<< HEAD
-    let configured = crate::session_state::ThreadSessionState {
-        thread_id: ThreadId::new(),
-        forked_from_id: None,
-        fork_parent_title: None,
-        thread_name: None,
-        model: "test-model".to_string(),
-        model_provider_id: "test-provider".to_string(),
-        service_tier: None,
-        approval_policy: AskForApproval::Never,
-        approvals_reviewer: ApprovalsReviewer::User,
-        permission_profile: PermissionProfile::read_only(),
-        active_permission_profile: None,
-        cwd: test_path_buf("/home/user/project").abs(),
-        runtime_workspace_roots: Vec::new(),
-        instruction_source_paths: Vec::new(),
-        reasoning_effort: Some(ReasoningEffortConfig::default()),
-        collaboration_mode: None,
-        personality: None,
-        message_history: None,
-        network_proxy: None,
-        rollout_path: None,
-        provider_account: None,
-    };
-    chat.handle_thread_session(configured);
-||||||| 413492cd6c
-    let configured = crate::session_state::ThreadSessionState {
-        thread_id: ThreadId::new(),
-        forked_from_id: None,
-        fork_parent_title: None,
-        thread_name: None,
-        model: "test-model".to_string(),
-        model_provider_id: "test-provider".to_string(),
-        service_tier: None,
-        approval_policy: AskForApproval::Never,
-        approvals_reviewer: ApprovalsReviewer::User,
-        permission_profile: PermissionProfile::read_only(),
-        active_permission_profile: None,
-        cwd: test_path_buf("/home/user/project").abs(),
-        runtime_workspace_roots: Vec::new(),
-        instruction_source_paths: Vec::new(),
-        reasoning_effort: Some(ReasoningEffortConfig::default()),
-        collaboration_mode: None,
-        personality: None,
-        message_history: None,
-        network_proxy: None,
-        rollout_path: None,
-    };
-    chat.handle_thread_session(configured);
-=======
     chat.handle_thread_session(plan_test_session(ThreadId::new()));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     chat.bottom_pane
         .set_composer_text("/plan build the plan".to_string(), Vec::new(), Vec::new());

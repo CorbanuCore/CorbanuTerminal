@@ -293,6 +293,7 @@ impl StartupDraftPump {
     ) -> io::Result<()> {
         let session_action = match session_selection {
             SessionSelection::StartFresh
+            | SessionSelection::ResumePanesOnly { .. }
             | SessionSelection::Exit
             | SessionSelection::AgentsOverview => StartupDraftSessionAction::New,
             SessionSelection::Resume(_) => StartupDraftSessionAction::Resume,
@@ -306,6 +307,11 @@ impl StartupDraftPump {
                 !matches!(session_selection, SessionSelection::AgentsOverview)
             }
             Some(SessionSelection::Exit) => !matches!(session_selection, SessionSelection::Exit),
+            Some(SessionSelection::ResumePanesOnly {
+                codex_thread_id: previous,
+            }) => {
+                !matches!(session_selection, SessionSelection::ResumePanesOnly { codex_thread_id: next } if next == previous)
+            }
             Some(SessionSelection::Resume(previous)) => {
                 !matches!(session_selection, SessionSelection::Resume(next) if previous.thread_id == next.thread_id && previous.cwd == next.cwd)
             }

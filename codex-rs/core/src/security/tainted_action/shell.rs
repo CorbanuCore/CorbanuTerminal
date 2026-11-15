@@ -95,6 +95,9 @@ pub(super) struct SimpleCommand {
     pub(super) after: Joint,
     /// Assignment flow keeps conditional operators across line continuations.
     pub(super) assignment_after: Joint,
+    /// #1973: an assignment name or equals sign came from quoted, escaped
+    /// or substituted text. Keep its old reading, but do not trust it alone.
+    pub(super) assignment_quoted: bool,
     /// #1974: it is lexed inside a `( ... )` subshell, so an assignment in
     /// it does not reach the parent shell.
     pub(super) in_subshell: bool,
@@ -119,6 +122,11 @@ pub(super) struct SimpleCommand {
     /// is checked once.
     pub(super) shells_checked: usize,
     pub(super) shell_seen: bool,
+    /// #2192: the lexer split one of its words at a character the shell
+    /// does not split on (`,`, a non-ASCII space such as U+00A0). The shell
+    /// reads `,r=o` and `x=1,r=o` as one word, so the `r=o` the lexer reads
+    /// there is no assignment.
+    pub(super) split_inside_word: bool,
 }
 
 /// Lexed simple commands, in the order they finish (a substitution comes
@@ -138,6 +146,8 @@ pub(super) struct Lexed {
     pub(super) redirections_read_newly: bool,
     /// #1975: literal braces retained instead of discarded or read as groups.
     pub(super) braces_read_newly: bool,
+    /// #2018: the pre-change reading saw a brace beside shell keywords.
+    pub(super) keyword_braces: bool,
     /// Assignment flow skipped possible comments; retain the literal reading too.
     pub(super) comments_read_newly: bool,
 }
@@ -176,12 +186,14 @@ pub(super) enum Reading {
     /// #1772 redirections and #1975 literal brace arguments.
     #[default]
     LiteralBraces,
+    /// #2018: also recognize groups next to shell keywords.
+    KeywordBraces,
 }
 
 /// [`simple_commands`] under one reading. The classifier combines the
 /// strongest finding from the changed reading and both pre-#1975 readings.
 /// Redirection changes are enabled except in `Legacy`; literal brace
-/// handling is enabled only in `LiteralBraces`. Helper lexers stay `Legacy`.
+/// handling is enabled in `LiteralBraces` and `KeywordBraces`. Helpers stay `Legacy`.
 /// Each flag records whether its change affected the lexed text, so an
 /// equivalent reading need not be judged again.
 pub(super) fn simple_commands_read(command: &[String], reading: Reading) -> Lexed {
@@ -230,6 +242,7 @@ pub(super) fn simple_commands_assignments(
     }
     let too_deep = lexer.too_deep;
     let comments_read_newly = lexer.comments_read_newly;
+    let keyword_braces = lexer.keyword_braces;
     // #1772 review 2: after `finish`, which reorders the last command.
     let (commands, redirections_read_newly, braces_read_newly) = lexer.finish();
     Lexed {
@@ -239,6 +252,7 @@ pub(super) fn simple_commands_assignments(
         comments_read_newly,
         redirections_read_newly,
         braces_read_newly,
+        keyword_braces,
     }
 }
 
@@ -639,6 +653,8 @@ enum Start {
 struct Open {
     outer: SimpleCommand,
     outer_word: String,
+    outer_assignment_equals: bool,
+    outer_assignment_protected: bool,
     outer_assignment_joint: Option<Joint>,
     outer_list_start: usize,
     /// The outer word already holds a lookup's output.
@@ -697,6 +713,9 @@ struct Lexer {
     feeds_finished: Vec<bool>,
     current: SimpleCommand,
     word: String,
+    /// Whether the current word has already reached its assignment value.
+    assignment_equals: bool,
+    assignment_protected: bool,
     /// The word being built holds a lookup's output.
     looked_up: bool,
     /// #1283: the word being built is hidden from the quote-aware reading.
@@ -744,9 +763,54 @@ struct Lexer {
     redirections_read_newly: bool,
     /// #1975: see `Lexed::braces_read_newly`.
     braces_read_newly: bool,
+    keyword_braces: bool,
+    /// #2192: the last split was at a character the shell does not split on.
+    split_pending: bool,
 }
 
 impl Lexer {
+    /// Match original, unquoted keywords. The word lexer strips quotes and
+    /// escapes, so its words alone cannot distinguish `time` from `"time"`.
+    fn keyword_brace(&self, before: &[char], brace: char) -> bool {
+        if self.current.words.is_empty()
+            || !before.last().is_some_and(|ch| ch.is_whitespace())
+            || self.redirect != Redirect::None
+            || self.redirect_word_next
+        {
+            return false;
+        }
+        let mut raw = before
+            .rsplit(|ch| ch.is_whitespace() || matches!(ch, ';' | '&' | '|' | '(' | ')'))
+            .filter(|word| !word.is_empty());
+        let words = self.current.words.as_slice();
+        match brace {
+            '{' => words.iter().rev().all(|word| {
+                work::step();
+                matches!(
+                    word.as_str(),
+                    "if" | "then" | "elif" | "else" | "do" | "while" | "until" | "!" | "time"
+                ) && raw
+                    .next()
+                    .is_some_and(|text| text.iter().copied().eq(word.chars()))
+            }),
+            '}' => {
+                matches!(words, [word] if matches!(word.as_str(), "fi" | "done" | "esac"))
+                    && matches!(
+                        self.groups.as_slice(),
+                        [
+                            ..,
+                            (Group::Brace | Group::UncertainBrace, ..),
+                            (Group::Keyword, ..)
+                        ]
+                    )
+                    && raw
+                        .next()
+                        .is_some_and(|text| text.iter().copied().eq(words[0].chars()))
+            }
+            _ => false,
+        }
+    }
+
     /// D194: the operator at `chars[index]`.
     fn operator(&mut self, chars: &[char], index: usize) {
         let previous = index.checked_sub(1).map(|at| chars[at]);
@@ -764,6 +828,12 @@ impl Lexer {
     }
 
     fn flush(&mut self) {
+        // #2192: text right after such a split is part of the shell's word
+        // before it (`,r=o`, `x=1,r=o`); a split at the end of a word is
+        // not (`sep=,`).
+        if std::mem::take(&mut self.split_pending) && !self.word.is_empty() {
+            self.current.split_inside_word = true;
+        }
         if !self.word.is_empty() {
             let index = Some(self.current.words.len());
             let redirect_word = std::mem::take(&mut self.redirect_word_next);
@@ -807,6 +877,8 @@ impl Lexer {
                 self.current.operated.push(self.current.words.len());
             }
             let word = std::mem::take(&mut self.word);
+            self.assignment_equals = false;
+            self.assignment_protected = false;
             let joint = self.joint.take();
             if self.current.words.is_empty() {
                 self.current.after = joint.unwrap_or_default();
@@ -1026,6 +1098,9 @@ impl Lexer {
             },
         );
         let outer_word = std::mem::take(&mut self.word);
+        let outer_assignment_equals = std::mem::take(&mut self.assignment_equals);
+        let outer_assignment_protected =
+            std::mem::take(&mut self.assignment_protected) || !outer_assignment_equals;
         let outer_looked_up = std::mem::take(&mut self.looked_up);
         let outer_hidden = std::mem::take(&mut self.hidden);
         let outer_operated = std::mem::take(&mut self.operated);
@@ -1036,6 +1111,8 @@ impl Lexer {
         self.open.push(Open {
             outer,
             outer_word,
+            outer_assignment_equals,
+            outer_assignment_protected,
             outer_assignment_joint: self.assignment_joint,
             outer_list_start: self.list_start,
             outer_looked_up,
@@ -1077,6 +1154,8 @@ impl Lexer {
             // unseen.
             self.current = open.outer;
             self.word = open.outer_word;
+            self.assignment_equals = open.outer_assignment_equals;
+            self.assignment_protected = open.outer_assignment_protected;
             self.looked_up = open.outer_looked_up;
             self.hidden = open.outer_hidden;
             self.operated = open.outer_operated;
@@ -1126,6 +1205,8 @@ impl Lexer {
             self.current.fed_by.extend(inner);
         }
         self.word = open.outer_word;
+        self.assignment_equals = open.outer_assignment_equals;
+        self.assignment_protected = open.outer_assignment_protected;
         self.looked_up = open.outer_looked_up;
         self.hidden = open.outer_hidden || spliced.is_some();
         self.operated = open.outer_operated;
@@ -1146,7 +1227,14 @@ impl Lexer {
             } else {
                 UNSEEN_OUTPUT
             };
-            self.word.push_str(spliced.as_deref().unwrap_or(unseen));
+            let value = spliced.as_deref().unwrap_or(unseen);
+            // Output, like ANSI-C decoding, bypasses the character loop.
+            // It cannot introduce a literal assignment name or equals sign.
+            if !self.assignment_equals && value.contains('=') {
+                self.current.assignment_quoted = true;
+                self.assignment_equals = true;
+            }
+            self.word.push_str(value);
         }
     }
 
@@ -1179,6 +1267,7 @@ impl Lexer {
 
     fn arg(&mut self, arg: &str) {
         let chars: Vec<char> = arg.chars().collect();
+        let quoted = assignment_quotes(&chars);
         let mut index = 0;
         // #989: arithmetic text (`$((...))`, `((...))`) up to here holds no
         // command words, so its parameter operators do not count. Not over
@@ -1201,6 +1290,16 @@ impl Lexer {
         while index < chars.len() {
             work::step();
             let ch = chars[index];
+            // Shell assignment names and their equals sign must be plain,
+            // including in later words (`a=1 'r=o'`). Quoting the value
+            // after the equals sign is ordinary assignment syntax.
+            if !self.assignment_equals {
+                self.assignment_protected |= quoted[index];
+                if ch == '=' {
+                    self.current.assignment_quoted |= self.assignment_protected;
+                }
+            }
+            self.assignment_equals |= ch == '=';
             let next = chars.get(index + 1).copied();
             let previous = index.checked_sub(1).map(|at| chars[at]);
             let parameter_brace = match ch {
@@ -1231,7 +1330,15 @@ impl Lexer {
                     self.word.push(literal_char(ch));
                 }
                 '$' if next == Some('\'') => {
+                    let start = self.word.len();
                     index = ansi_c(&chars, index + 2, &mut self.word);
+                    // Decoding skips the per-character equals check. An
+                    // equals sign produced inside this quoted word cannot
+                    // establish an assignment name either.
+                    if !self.assignment_equals && self.word[start..].contains('=') {
+                        self.current.assignment_quoted = true;
+                        self.assignment_equals = true;
+                    }
                     continue;
                 }
                 '$' | '<' | '>' if next == Some('(') => {
@@ -1312,25 +1419,57 @@ impl Lexer {
                 ')' if self.open.last().is_some_and(|open| !open.backtick) => {
                     self.close_substitution(/*arithmetic_close*/ next == Some(')'));
                 }
+                '{' | '}'
+                    if matches!(
+                        self.reading,
+                        Reading::LiteralBraces | Reading::KeywordBraces
+                    ) && self.word.is_empty()
+                        && !parameter_brace
+                        && next.is_none_or(|after| {
+                            after.is_whitespace()
+                                || (ch == '}' && matches!(after, ';' | '&' | '|' | ')'))
+                        })
+                        && self.keyword_brace(&chars[..index], ch) =>
+                {
+                    self.keyword_braces = true;
+                    if self.reading == Reading::LiteralBraces {
+                        // Keep main's literal-brace judgment intact.
+                        self.braces_read_newly = true;
+                        self.word.push(ch);
+                    } else if ch == '{' {
+                        self.open_bracket(Group::Brace);
+                    } else {
+                        // Finish the keyword terminator before selecting the
+                        // surrounding brace group's kind.
+                        self.start(Start::Plain);
+                        self.close_bracket(Group::Brace);
+                    }
+                }
                 // #1975: in bash a brace argument cannot delimit a group.
                 // Closing one at `git fetch -o '}' -- "$r"` splits off the
                 // remote. Keep the main reading for its separate judgment.
                 '{' if self.word.is_empty()
                     && next.is_none_or(char::is_whitespace)
-                    && (self.reading != Reading::LiteralBraces
-                        || self.current.words.is_empty()) =>
+                    && (!matches!(
+                        self.reading,
+                        Reading::LiteralBraces | Reading::KeywordBraces
+                    ) || self.current.words.is_empty()) =>
                 {
                     self.open_bracket(Group::Brace);
                 }
                 '}' if self.word.is_empty()
-                    && (self.reading != Reading::LiteralBraces
-                        || self.current.words.is_empty()) =>
+                    && (!matches!(
+                        self.reading,
+                        Reading::LiteralBraces | Reading::KeywordBraces
+                    ) || self.current.words.is_empty()) =>
                 {
                     self.close_bracket(Group::Brace);
                 }
                 '{' | '}'
-                    if self.reading == Reading::LiteralBraces
-                        && (!parameter_brace || self.word.is_empty()) =>
+                    if matches!(
+                        self.reading,
+                        Reading::LiteralBraces | Reading::KeywordBraces
+                    ) && (!parameter_brace || self.word.is_empty()) =>
                 {
                     self.braces_read_newly = true;
                     self.word.push(ch);
@@ -1437,13 +1576,115 @@ impl Lexer {
                         self.just_closed_group = None;
                     }
                     self.operator(&chars, index);
+                    // An escaped separator also invents the next command,
+                    // even when its first character is no longer escaped.
+                    self.assignment_protected = quoted[index];
                 }
-                ch if ch.is_whitespace() || matches!(ch, '<' | '>' | ',') => self.flush(),
+                ch if ch.is_whitespace() || matches!(ch, '<' | '>' | ',') => {
+                    self.flush();
+                    // #2192: bash and zsh split words only at blanks (space,
+                    // tab) and operators.
+                    self.split_pending = !matches!(ch, ' ' | '\t' | '<' | '>');
+                }
                 ch => self.word.push(literal_char(ch)),
             }
             index += 1;
         }
     }
+}
+
+/// #1973: mark text that cannot establish an assignment just because the
+/// quote-stripping lexer exposes it. This conservative side scan never
+/// changes words or command boundaries, including nested code's old reading.
+fn assignment_quotes(chars: &[char]) -> Vec<bool> {
+    let mut quote = None;
+    let mut ansi = false;
+    let mut escaped = false;
+    let mut comment = false;
+    let mut word_start = true;
+    let mut uncertain = false;
+    let mut nested = Vec::new();
+    let mut code_depth = 0usize;
+    chars
+        .iter()
+        .enumerate()
+        .map(|(index, &ch)| {
+            work::step();
+            let previous = index.checked_sub(1).map(|at| chars[at]);
+            let next = chars.get(index + 1).copied();
+            if comment {
+                comment = ch != '\n';
+                word_start = !comment;
+                return uncertain || comment;
+            }
+            if quote.is_none() && !escaped && nested.is_empty() && ch == '#' && word_start {
+                comment = true;
+                return true;
+            }
+            // Heredoc bodies and quotes inside expansions need a fuller
+            // grammar. Preserve uncertainty after them, but do not make an
+            // ordinary comment, arithmetic counter or mktemp opaque.
+            // The lexer joins backslash-newline. Inside a token this can
+            // hide case, << or $( from this side scan; a continuation after
+            // ordinary command whitespace does not change token spelling.
+            let joined_token = ch == '\\'
+                && next == Some('\n')
+                && previous.is_some_and(|before| !before.is_whitespace())
+                && chars
+                    .get(index + 2)
+                    .is_some_and(|after| !after.is_whitespace());
+            uncertain |= joined_token
+                || (quote.is_none() && ch == '<' && next == Some('<'))
+                || (!nested.is_empty() && matches!(ch, '\'' | '"'))
+                // A case pattern can close with ')' without ending the
+                // substitution. Do not trust quote pairing after case syntax.
+                || (code_depth != 0 && chars[index..].starts_with(&['c', 'a', 's', 'e']))
+                || (ch == '#' && code_depth != 0)
+                || (ch == '#' && quote.is_none() && previous == Some(')'));
+            let continuation = (ch == '\\' && next == Some('\n')) || (escaped && ch == '\n');
+            let protected = uncertain
+                || quote.is_some()
+                || (!continuation && (escaped || matches!(ch, '\'' | '"' | '\\')))
+                || (ch == '$' && matches!(next, Some('\'' | '"')));
+            let plain = !escaped && quote.is_none() && nested.is_empty();
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' && (quote != Some('\'') || ansi) {
+                escaped = true;
+            } else if quote == Some(ch) {
+                quote = None;
+                ansi = false;
+            } else if quote.is_none() && matches!(ch, '\'' | '"') {
+                quote = Some(ch);
+                ansi = ch == '\'' && previous == Some('$');
+            } else if quote != Some('\'') {
+                if ch == '`' {
+                    if nested.last() == Some(&'`') {
+                        nested.pop();
+                        code_depth -= 1;
+                    } else {
+                        nested.push(ch);
+                        code_depth += 1;
+                    }
+                } else if matches!(ch, '(' | '{' | '[')
+                    && (previous == Some('$') || !nested.is_empty())
+                {
+                    nested.push(ch);
+                    code_depth += usize::from(ch == '(');
+                } else if matches!(
+                    (nested.last(), ch),
+                    (Some('('), ')') | (Some('{'), '}') | (Some('['), ']')
+                ) {
+                    nested.pop();
+                    code_depth -= usize::from(ch == ')');
+                }
+            }
+            if !continuation {
+                word_start = plain && matches!(ch, ' ' | '\t' | '\n' | ';' | '&' | '|' | '(');
+            }
+            protected
+        })
+        .collect()
 }
 
 /// #1772 item 2: the index of the quote closing the one at `start`, when

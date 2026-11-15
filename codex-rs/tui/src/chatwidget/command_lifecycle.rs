@@ -4,12 +4,8 @@
 //! exec-cell grouping and unified exec wait state.
 
 use super::*;
-<<<<<<< HEAD
-use codex_app_server_protocol::CommandExecutionStatus;
-||||||| 413492cd6c
-=======
 use crate::exec_cell::CommandOutput;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_app_server_protocol::CommandExecutionStatus;
 
 impl ChatWidget {
     pub(super) fn flush_unified_exec_wait_streak(&mut self) {
@@ -342,7 +338,6 @@ impl ChatWidget {
             command,
             process_id: _,
             source,
-            status,
             command_actions,
             aggregated_output,
             status,
@@ -359,16 +354,13 @@ impl ChatWidget {
             .map(codex_app_server_protocol::CommandAction::into_core)
             .collect();
         let duration = Duration::from_millis(duration_ms.unwrap_or_default().max(0) as u64);
-<<<<<<< HEAD
-||||||| 413492cd6c
-        let exit_code = exit_code.unwrap_or_default();
-=======
-        let exit_code = if status == codex_app_server_protocol::CommandExecutionStatus::Completed {
-            exit_code.unwrap_or_default()
+        // Upstream: a command that did not complete never reads as a success. Declined and
+        // refused commands get their own rows below; a completed one without a code is unknown.
+        let exit_code = if status == CommandExecutionStatus::Completed {
+            exit_code
         } else {
-            exit_code.filter(|code| *code != 0).unwrap_or(1)
+            Some(exit_code.filter(|code| *code != 0).unwrap_or(1))
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let aggregated_output = aggregated_output.unwrap_or_default();
 
         let running = self.running_commands.remove(&id);
@@ -423,22 +415,12 @@ impl ChatWidget {
             None => ExecEndTarget::NewCell,
         };
 
-<<<<<<< HEAD
         // Unified exec interaction rows intentionally hide command output text in the exec cell and
         // instead render the interaction-specific content elsewhere in the UI.
         let output = if status == CommandExecutionStatus::Declined {
             CommandOutput::declined()
         } else if status == CommandExecutionStatus::Refused {
             CommandOutput::refused(aggregated_output)
-||||||| 413492cd6c
-        // Unified exec interaction rows intentionally hide command output text in the exec cell and
-        // instead render the interaction-specific content elsewhere in the UI.
-        let output = if is_unified_exec_interaction {
-            CommandOutput::new(exit_code, String::new())
-=======
-        let output = if is_unified_exec_interaction {
-            CommandOutput::new(exit_code, String::new())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         } else {
             let aggregated_output = if is_unified_exec_interaction {
                 String::new()

@@ -104,7 +104,7 @@ impl App {
                 bootstrap.status_account_display,
                 bootstrap.plan_type,
                 bootstrap.has_chatgpt_account,
-                matches!(bootstrap.auth_mode, Some(TelemetryAuthMode::Chatgpt)),
+                bootstrap.has_codex_backend_auth,
             );
             let thread_id = target.thread_id;
             if let Some(input) = self.agents_overview.input_states.get_mut(&thread_id) {

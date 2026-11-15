@@ -12,7 +12,6 @@ use super::user_messages::remap_colliding_paste_placeholders;
 use super::*;
 
 impl ChatWidget {
-<<<<<<< HEAD
     pub(crate) fn restore_initial_user_message(&mut self) {
         if let Some(message) = self.initial_user_message.take() {
             self.restore_user_message_to_composer(message);
@@ -26,8 +25,9 @@ impl ChatWidget {
             self.restore_initial_user_message();
         } else {
             self.submit_initial_user_message_if_pending();
-||||||| 413492cd6c
-=======
+        }
+    }
+
     pub(crate) fn mention_usage_mut(&mut self) -> &mut MentionUsage {
         self.bottom_pane.mention_usage_mut()
     }
@@ -157,7 +157,6 @@ impl ChatWidget {
         }
         if let Some(draft) = pending_draft.take() {
             self.restore_startup_draft(draft);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
@@ -373,7 +372,6 @@ impl ChatWidget {
     /// When there are queued user messages, restore them into the composer
     /// separated by newlines rather than auto-submitting the next one.
     pub(super) fn on_interrupted_turn(&mut self, reason: TurnAbortReason) {
-<<<<<<< HEAD
         const PRESERVED_INTERRUPT_NOTE: &str = "turn interrupted; process preserved";
         let kill_switch_stopped = std::mem::take(&mut self.turn_lifecycle.kill_switch_stopped);
         for process in &mut self.unified_exec_processes {
@@ -384,10 +382,7 @@ impl ChatWidget {
                     .push(PRESERVED_INTERRUPT_NOTE.to_string());
             }
         }
-||||||| 413492cd6c
-=======
         self.requeue_image_submission();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         // Finalize, log a gentle prompt, and clear running state.
         self.finalize_turn();
         // Cancellation means idle in the program-status protocol, not a failed task.

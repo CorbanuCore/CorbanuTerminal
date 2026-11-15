@@ -32,6 +32,11 @@ pub(super) struct PreparedResume {
     pub(super) read_only: bool,
     pub(super) history_notice: Option<&'static str>,
     pub(super) provider_error: Option<codex_app_server_protocol::ModelProviderError>,
+    pub(super) model_settings: crate::app_server_session::ResumeModelSettings,
+    /// PF-84 (#545): the named account the thread recorded, and the session's previous
+    /// inherited account to restore if attachment fails.
+    pub(super) recorded_account: Option<crate::session_resume::RecordedProviderAccount>,
+    pub(super) previous_provider_account: Option<String>,
 }
 
 impl App {
@@ -50,9 +55,61 @@ impl App {
         target_session: &SessionTarget,
         source: ResumeSource<'_>,
     ) -> std::result::Result<PreparedResume, AppRunControl> {
+        if let Some(message) = crate::security::preflight::resume_refusal(&target_session.thread_id)
+        {
+            self.chat_widget.add_error_message(message);
+            tui.frame_requester().schedule_frame();
+            return Err(AppRunControl::Continue);
+        }
+        // PF-84 (#545): the thread resumes on the account it recorded, so the config this
+        // session keeps for it names that account too.
+        let recorded_account = self.resume_target_recorded_account(target_session).await;
+        let previous_provider_account = std::mem::replace(
+            &mut self.harness_overrides.inherited_provider_account,
+            recorded_account
+                .as_ref()
+                .map(crate::session_resume::RecordedProviderAccount::selection),
+        );
+        let prepared = self
+            .prepare_target_session_with_account(
+                tui,
+                app_server,
+                target_session,
+                source,
+                recorded_account,
+                previous_provider_account.clone(),
+            )
+            .await;
+        if prepared.is_err() {
+            self.harness_overrides.inherited_provider_account = previous_provider_account;
+        }
+        prepared
+    }
+
+    async fn prepare_target_session_with_account(
+        &mut self,
+        tui: &mut tui::Tui,
+        app_server: &mut AppServerSession,
+        target_session: &SessionTarget,
+        source: ResumeSource<'_>,
+        recorded_account: Option<crate::session_resume::RecordedProviderAccount>,
+        previous_provider_account: Option<String>,
+    ) -> std::result::Result<PreparedResume, AppRunControl> {
         let (mut resume_config, local_settings) = self
             .resume_config_for_target(tui, app_server, target_session, source)
             .await?;
+        if let Some(recorded) = recorded_account.as_ref()
+            && let Some(message) = crate::resume_launch::resume_account_error(
+                &resume_config,
+                recorded,
+                codex_model_provider::AccountRecovery::Providers,
+                crate::resume_launch::ThreadOpening::Resume,
+            )
+        {
+            self.chat_widget.add_error_message(message);
+            tui.frame_requester().schedule_frame();
+            return Err(AppRunControl::Continue);
+        }
         if let Err(error) = self.apply_runtime_policy_overrides(
             &mut resume_config,
             RuntimePolicyOverrideScope::ExplicitOnly,
@@ -128,6 +185,9 @@ impl App {
             read_only,
             history_notice,
             provider_error,
+            model_settings,
+            recorded_account,
+            previous_provider_account,
         })
     }
 }
