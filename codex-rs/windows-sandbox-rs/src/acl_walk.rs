@@ -434,7 +434,7 @@ pub(crate) unsafe fn open_folder_unfollowed(
 /// The filesystem root itself is opened without following a reparse point.
 pub(crate) unsafe fn open_absolute_folder(name: &[u16]) -> std::io::Result<Handle> {
     nt_open(
-        /*dir*/ 0,
+        /*dir*/ std::ptr::null_mut(),
         name,
         FILE_TRAVERSE | FILE_READ_ATTRIBUTES,
         /*object_attributes*/ 0,
