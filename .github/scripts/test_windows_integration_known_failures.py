@@ -23,7 +23,6 @@ PACKAGE_DIRS = {"codex-core": "core", "codex-app-server": "app-server"}
 class KnownFailureListTest(unittest.TestCase):
     def test_every_entry_names_an_existing_test_and_an_issue(self) -> None:
         entries = known.load()
-        self.assertTrue(entries)
         self.assertEqual(len(entries), len(set(entries)))
         for entry in entries:
             with self.subTest(test=entry.test):
@@ -37,6 +36,16 @@ class KnownFailureListTest(unittest.TestCase):
                     source.read_text(encoding="utf-8"),
                     rf"(?m)^\s*(pub )?(async )?fn {re.escape(function)}\(",
                 )
+
+    def test_no_known_failures_runs_every_test(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp, "list.txt")
+            path.write_text("# All recorded failures are repaired.\n", encoding="utf-8")
+            entries = known.load(path)
+        self.assertEqual(entries, [])
+        for package in PACKAGE_DIRS:
+            self.assertEqual(known.nextest_filter(entries, package), "all()")
+            self.assertNotIn("were excluded", known.summary(entries, package))
 
     def test_malformed_lines_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -68,7 +77,10 @@ class KnownFailureListTest(unittest.TestCase):
         self.assertEqual(known.nextest_filter(entries, "codex-cli"), "all()")
 
     def test_summary_names_every_excluded_test_and_its_issue(self) -> None:
-        entries = known.load()
+        entries = [
+            known.KnownFailure("codex-core", "suite::a::one", "1"),
+            known.KnownFailure("codex-app-server", "suite::v2::b::two", "2"),
+        ]
         for package in PACKAGE_DIRS:
             text = known.summary(entries, package)
             self.assertIn("Non-blocking", text)
@@ -86,8 +98,9 @@ class KnownFailureListTest(unittest.TestCase):
         )
         result = run("filter", "codex-core")
         self.assertEqual(result.returncode, 0)
-        self.assertTrue(result.stdout.startswith("not (test(=suite::"))
-        self.assertTrue(result.stdout.endswith(")"))
+        self.assertEqual(
+            result.stdout, known.nextest_filter(known.load(), "codex-core")
+        )
         self.assertEqual(run("bogus", "codex-core").returncode, 2)
 
 
