@@ -323,6 +323,7 @@ impl ChatWidget {
     /// cell. If this method treated every unknown end as "complete the active cell", the UI could
     /// merge unrelated commands and hide still-running exploring work.
     pub(crate) fn handle_command_execution_completed_now(&mut self, item: ThreadItemPayload) {
+        let detail = crate::thread_transcript::tools::command_job_detail(&item);
         enum ExecEndTarget {
             // Normal case: the active exec cell already tracks this call id.
             ActiveTracked,
@@ -443,6 +444,14 @@ impl ChatWidget {
                 {
                     let completed = cell.complete_call(&id, output, duration);
                     debug_assert!(completed, "active exec cell should contain {id}");
+                    if let Some(detail) = detail
+                        && let Some(index) =
+                            cell.group.calls.iter().rposition(|call| call.call_id == id)
+                    {
+                        // A command may finish after reasoning was already attached to it.
+                        // Keep its job before that reasoning, matching historical projection.
+                        cell.group.details.set_metadata(index + 1, detail);
+                    }
                     if cell.should_flush() {
                         self.flush_active_cell();
                     } else {
@@ -462,6 +471,12 @@ impl ChatWidget {
                 );
                 let completed = orphan.complete_call(&id, output, duration);
                 debug_assert!(completed, "new orphan exec cell should contain {id}");
+                if let Some(detail) = detail {
+                    orphan
+                        .group
+                        .details
+                        .set_metadata(orphan.group.calls.len(), detail);
+                }
                 self.app_event_tx
                     .send(AppEvent::InsertHistoryCell(Box::new(orphan)));
                 self.request_redraw();
@@ -477,6 +492,11 @@ impl ChatWidget {
                 );
                 let completed = cell.complete_call(&id, output, duration);
                 debug_assert!(completed, "new exec cell should contain {id}");
+                if let Some(detail) = detail {
+                    cell.group
+                        .details
+                        .set_metadata(cell.group.calls.len(), detail);
+                }
                 if let Some(active) = self
                     .transcript
                     .active_cell
@@ -487,6 +507,11 @@ impl ChatWidget {
                     && cell.is_exploring_cell()
                 {
                     // Replayed commands have completion events without matching starts.
+                    cell.group.details.prepend(
+                        std::mem::take(&mut active.group.details),
+                        active.group.calls.len(),
+                    );
+                    active.group.details = cell.group.details;
                     active.group.calls.extend(cell.group.calls);
                     self.bump_active_cell_revision();
                     self.request_redraw();

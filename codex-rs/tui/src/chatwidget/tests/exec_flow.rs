@@ -81,6 +81,31 @@ async fn replayed_command_completion_preserves_tracking_without_duplicate_starts
 }
 
 #[tokio::test]
+async fn repeated_command_completion_updates_one_job_record() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.on_task_started();
+    let mut item = begin_exec(&mut chat, "repeat-job", "cat file.txt");
+    end_exec(
+        &mut chat,
+        item.clone(),
+        "contents\n",
+        "",
+        /*exit_code*/ 0,
+    );
+    if let AppServerThreadItemPayload::CommandExecution { process_id, .. } = &mut item {
+        *process_id = Some("updated-pid".to_owned());
+    }
+    end_exec(&mut chat, item, "contents\n", "", /*exit_code*/ 0);
+
+    let cell = chat.transcript.active_cell.as_ref().unwrap();
+    let raw = lines_to_single_string(&cell.raw_lines());
+    assert_eq!(raw.matches("call=repeat-job").count(), 1);
+    assert!(raw.contains("job: pid=updated-pid · call=repeat-job"));
+    let detailed = lines_to_single_string(&cell.transcript_lines(120));
+    assert_eq!(detailed.matches("call=repeat-job").count(), 1);
+}
+
+#[tokio::test]
 async fn replayed_completion_preserves_unrelated_running_command() {
     for active_mcp in [false, true] {
         let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
@@ -223,7 +248,9 @@ async fn exploration_reasoning_during_followup_command_stays_ordered() {
     assert!(drain_insert_history(&mut rx).is_empty());
     end_exec(&mut chat, second, "contents\n", "", /*exit_code*/ 0);
     let transcript = chat.active_cell_transcript_lines(/*width*/ 80).unwrap();
-    insta::assert_snapshot!(lines_to_single_string(&transcript));
+    insta::assert_snapshot!(
+        lines_to_single_string(&transcript).replace(&test_cwd_display(), "<cwd>")
+    );
 }
 
 #[tokio::test]
@@ -327,7 +354,7 @@ async fn adjacent_exploration_groups_across_reasoning_live_and_replayed() {
         renders.push(render);
     }
     assert_eq!(renders[0], renders[1]);
-    insta::assert_snapshot!(renders[0]);
+    insta::assert_snapshot!(renders[0].replace(&test_cwd_display(), "<cwd>"));
 }
 
 #[tokio::test]
@@ -409,20 +436,32 @@ async fn replayed_commands_preserve_individual_output_and_failure_status() {
         .map(|cell| lines_to_single_string(&cell.transcript_lines(/*width*/ 80)))
         .collect::<Vec<_>>()
         .join("\n");
-    insta::assert_snapshot!(transcript, @r"$ printf first
+    insta::assert_snapshot!(transcript.replace(&test_cwd_display(), "<cwd>"), @r"$ printf first
 first
 ✓ • 5ms
+
+job: pid=not reported · call=call-first · cwd=<cwd> · output=thread
+transcript
 
 $ printf second
 second
 ✓ • 5ms
 
+job: pid=not reported · call=call-second · cwd=<cwd> · output=thread
+transcript
+
 $ printf failure
 failure
 ✗ (7) • 5ms
 
+job: pid=not reported · call=call-failed · cwd=<cwd> · output=thread
+transcript
+
 $ printf declined
 ✗ Did not run (approval declined)
+
+job: pid=not reported · call=call-declined · cwd=<cwd> · output=thread
+transcript
 ");
 }
 

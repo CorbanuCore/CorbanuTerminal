@@ -119,3 +119,38 @@ fn sources_round_trip_and_legacy_items_deserialize_unattributed() -> serde_json:
     );
     Ok(())
 }
+
+#[test]
+fn retained_content_keeps_kinds_and_metadata_aligned() {
+    let kind = |name: &str| super::super::ContentItemKind(name.to_string());
+    let mut item = message(
+        &["a", "b", "c"],
+        /*turn_id*/ None,
+        Some(vec![None, Some("x"), None]),
+    );
+    if let ResponseItem::Message {
+        internal_chat_message_metadata_passthrough: Some(metadata),
+        ..
+    } = &mut item
+    {
+        metadata.content_item_kinds = Some(vec![kind("ka"), kind("kb"), kind("kc")]);
+    }
+
+    retain_texts(&mut item, &["a", "c"]);
+
+    let ResponseItem::Message {
+        content,
+        internal_chat_message_metadata_passthrough: Some(metadata),
+        ..
+    } = &item
+    else {
+        panic!("message keeps its metadata: {item:?}");
+    };
+    assert_eq!(content.len(), 2);
+    assert_eq!(
+        metadata.content_item_kinds,
+        Some(vec![kind("ka"), kind("kc")])
+    );
+    // Only "b" had a source; none is left.
+    assert_eq!(metadata.context_fragment_sources, None);
+}

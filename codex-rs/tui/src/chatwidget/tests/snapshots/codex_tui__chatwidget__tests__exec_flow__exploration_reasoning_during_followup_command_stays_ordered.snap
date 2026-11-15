@@ -1,16 +1,21 @@
 ---
 source: tui/src/chatwidget/tests/exec_flow.rs
-assertion_line: 212
-expression: lines_to_single_string(&transcript)
+assertion_line: 226
+expression: "lines_to_single_string(&transcript).replace(&test_cwd_display(), \"<cwd>\")"
 ---
 $ ls
 file.txt
 ✓ • 5ms
+
+job: pid=not reported · call=first · cwd=<cwd> · output=thread transcript
 
 • Read the file next.
 
 $ cat file.txt
 contents
 ✓ • 5ms
+
+job: pid=not reported · call=second · cwd=<cwd> · output=thread
+transcript
 
 • Waiting for the file.

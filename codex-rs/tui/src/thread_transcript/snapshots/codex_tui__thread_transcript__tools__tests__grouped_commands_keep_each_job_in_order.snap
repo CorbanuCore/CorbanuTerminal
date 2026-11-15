@@ -1,0 +1,16 @@
+---
+source: tui/src/thread_transcript/tools_tests.rs
+assertion_line: 372
+expression: detailed
+---
+$ cat README.md
+output for read-first
+✓ • 0ms
+
+job: pid=101 · call=read-first · cwd=/tmp/project · output=thread transcript
+
+$ cat README.md
+output for read-second
+✓ • 0ms
+
+job: pid=202 · call=read-second · cwd=/tmp/project · output=thread transcript

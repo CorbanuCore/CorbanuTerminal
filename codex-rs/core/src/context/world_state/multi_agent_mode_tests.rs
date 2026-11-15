@@ -12,6 +12,19 @@ fn state(mode: Option<MultiAgentMode>) -> MultiAgentModeState {
     MultiAgentModeState::new(mode)
 }
 
+/// Corbanu (S1c): World State stamps each rendered fragment with its section's producer ID
+/// (`context_fragment_sources`, used to deduplicate context for non-OpenAI providers), so the
+/// expected item carries the same ID.
+fn sourced<F: ContextualUserFragment + 'static>(
+    source_id: &'static str,
+    fragment: F,
+) -> ResponseItem {
+    ContextualUserFragment::into(codex_context_fragments::SourcedFragment::new(
+        source_id,
+        Box::new(fragment),
+    ))
+}
+
 #[test]
 fn snapshots() {
     use PreviousSectionState::Absent;
@@ -138,12 +151,18 @@ fn catalog_role_updates_remain_separate_from_active_mode() {
     assert_eq!(
         updates,
         vec![
-            ContextualUserFragment::into(current_role.with_metadata(
-                codex_protocol::models::ContentItemMetadata::tool(/*namespace*/ None)
-            )),
-            ContextualUserFragment::into(expected_mode.with_metadata(
-                codex_protocol::models::ContentItemMetadata::tool(/*namespace*/ None)
-            )),
+            sourced(
+                <MultiAgentUsageHintState as WorldStateSection>::ID,
+                current_role.with_metadata(codex_protocol::models::ContentItemMetadata::tool(
+                    /*namespace*/ None
+                )),
+            ),
+            sourced(
+                <MultiAgentModeState as WorldStateSection>::ID,
+                expected_mode.with_metadata(codex_protocol::models::ContentItemMetadata::tool(
+                    /*namespace*/ None
+                )),
+            ),
         ],
     );
 }

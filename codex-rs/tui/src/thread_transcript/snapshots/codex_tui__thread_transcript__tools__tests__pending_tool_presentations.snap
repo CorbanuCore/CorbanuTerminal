@@ -1,10 +1,11 @@
 ---
 source: tui/src/thread_transcript/tools_tests.rs
-assertion_line: 135
+assertion_line: 136
 expression: rendered
 ---
 $ cargo check
-In progress at last update
+job: pid=not reported · call=command · cwd=/tmp/project · output=thread transcript
+In progress at last update · -5ms
   output line 1
   output line 2
   output line 3
