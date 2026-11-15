@@ -1231,6 +1231,311 @@ async fn fork_last_filters_latest_session_by_cwd_unless_show_all() -> color_eyre
 }
 
 #[tokio::test]
+async fn explicit_resume_uses_panes_only_for_placeholder_metadata() {
+    let codex_home = TempDir::new().unwrap();
+    let thread_id = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174020").unwrap();
+    let thread_id_text = thread_id.to_string();
+    let placeholder_path = codex_home
+        .path()
+        .join("sessions/spawn-placeholders")
+        .join(format!("rollout-{thread_id}.jsonl"));
+    let target = resume_picker::SessionTarget {
+        backend_id: crate::backend_id::BackendId::new(),
+        path: Some(placeholder_path),
+        thread_id,
+        cwd: None,
+        history_mode: None,
+    };
+    crate::claude_panes::persist_pane_layout(
+        codex_home.path(),
+        &crate::claude_panes::PaneLayoutState {
+            version: crate::claude_panes::PANE_LAYOUT_VERSION,
+            codex_thread_id: Some(thread_id_text.clone()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    let selection = explicit_resume_selection(
+        codex_home.path(),
+        &thread_id_text,
+        Some(target.clone()),
+        /*uses_remote_workspace*/ false,
+    )
+    .await;
+    assert!(matches!(
+        selection,
+        Some(resume_picker::SessionSelection::ResumePanesOnly { codex_thread_id })
+            if codex_thread_id == thread_id_text
+    ));
+    assert!(
+        explicit_fork_selection(Some(target), /*uses_remote_workspace*/ false)
+            .await
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn explicit_resume_requires_a_nonempty_local_rollout() {
+    let codex_home = TempDir::new().unwrap();
+    let thread_id = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174021").unwrap();
+    let thread_id_text = thread_id.to_string();
+    let rollout_path = codex_home.path().join("rollout.jsonl");
+    std::fs::write(&rollout_path, "{\"type\":\"session_meta\"}\n").unwrap();
+    let target = resume_picker::SessionTarget {
+        backend_id: crate::backend_id::BackendId::new(),
+        path: Some(rollout_path),
+        thread_id,
+        cwd: None,
+        history_mode: None,
+    };
+
+    assert!(matches!(
+        explicit_resume_selection(
+            codex_home.path(),
+            &thread_id_text,
+            Some(target.clone()),
+            /*uses_remote_workspace*/ false,
+        )
+        .await,
+        Some(resume_picker::SessionSelection::Resume(_))
+    ));
+    assert!(matches!(
+        explicit_fork_selection(Some(target), /*uses_remote_workspace*/ false).await,
+        Some(resume_picker::SessionSelection::Fork(_))
+    ));
+}
+
+#[tokio::test]
+async fn explicit_remote_resume_does_not_require_a_local_rollout() {
+    let codex_home = TempDir::new().unwrap();
+    let thread_id = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174022").unwrap();
+    let target = resume_picker::SessionTarget {
+        backend_id: crate::backend_id::BackendId::new(),
+        path: None,
+        thread_id,
+        cwd: None,
+        history_mode: None,
+    };
+
+    assert!(matches!(
+        explicit_resume_selection(
+            codex_home.path(),
+            &thread_id.to_string(),
+            Some(target.clone()),
+            /*uses_remote_workspace*/ true,
+        )
+        .await,
+        Some(resume_picker::SessionSelection::Resume(_))
+    ));
+    assert!(matches!(
+        explicit_fork_selection(Some(target), /*uses_remote_workspace*/ true).await,
+        Some(resume_picker::SessionSelection::Fork(_))
+    ));
+}
+
+#[tokio::test]
+async fn resume_last_prefers_thread_on_screen_at_quit() -> color_eyre::Result<()> {
+    let temp_dir = TempDir::new()?;
+    let project_cwd = temp_dir.path().join("project");
+    let other_cwd = temp_dir.path().join("other-project");
+    std::fs::create_dir_all(&project_cwd)?;
+    std::fs::create_dir_all(&other_cwd)?;
+    let config = ConfigBuilder::default()
+        .codex_home(temp_dir.path().to_path_buf())
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(project_cwd.clone()),
+            ..Default::default()
+        })
+        .build()
+        .await?;
+    let model_provider = config.model_provider_id.as_str();
+    let alpha = write_session_rollout(
+        temp_dir.path(),
+        "2025-01-02T10-00-00",
+        "2025-01-02T10:00:00Z",
+        "alpha",
+        model_provider,
+        &project_cwd,
+    )?;
+    let charlie = write_session_rollout(
+        temp_dir.path(),
+        "2025-01-02T12-00-00",
+        "2025-01-02T12:00:00Z",
+        "charlie",
+        model_provider,
+        &project_cwd,
+    )?;
+    let elsewhere = write_session_rollout(
+        temp_dir.path(),
+        "2025-01-02T09-00-00",
+        "2025-01-02T09:00:00Z",
+        "elsewhere",
+        model_provider,
+        &other_cwd,
+    )?;
+    let other_provider = write_session_rollout(
+        temp_dir.path(),
+        "2025-01-02T08-00-00",
+        "2025-01-02T08:00:00Z",
+        "other provider",
+        "some-other-provider",
+        &project_cwd,
+    )?;
+    let mut app_server = AppServerSession::new(
+        crate::backend_id::BackendId::new(),
+        codex_app_server_client::AppServerClient::InProcess(
+            start_test_embedded_app_server(config.clone()).await?,
+        ),
+        ThreadParamsMode::Embedded,
+    );
+    let codex_home = config.codex_home.as_ref();
+    let scope = Some(project_cwd.as_path());
+    let after_every_turn = i64::MAX;
+    async fn resume_last(
+        app_server: &mut AppServerSession,
+        config: &Config,
+        scope: Option<&Path>,
+    ) -> color_eyre::Result<Option<ThreadId>> {
+        Ok(lookup_resume_last_target_with_app_server(
+            app_server, config, scope, /*include_non_interactive*/ false,
+        )
+        .await?
+        .map(|target| target.thread_id))
+    }
+
+    // No quit record: upstream newest-turn semantics.
+    let no_record = resume_last(&mut app_server, &config, scope).await?;
+    // ALPHA was on screen at quit, after CHARLIE's last turn.
+    quit_thread_record::record_quit_thread(codex_home, alpha, after_every_turn);
+    let alpha_on_screen = resume_last(&mut app_server, &config, scope).await?;
+    let fork_last = lookup_latest_session_target_with_app_server(
+        resume_picker::SessionPickerAction::Fork,
+        &mut app_server,
+        &config,
+        scope,
+        /*include_non_interactive*/ false,
+    )
+    .await?
+    .map(|target| target.thread_id);
+    // A turn landed after the quit: newest turn wins again.
+    quit_thread_record::record_quit_thread(codex_home, alpha, /*quit_at*/ 0);
+    let turn_after_quit = resume_last(&mut app_server, &config, scope).await?;
+    // The quit thread is outside the cwd scope.
+    quit_thread_record::record_quit_thread(codex_home, elsewhere, after_every_turn);
+    let out_of_scope = resume_last(&mut app_server, &config, scope).await?;
+    // The quit thread ran on another provider: resume lists every provider (upstream #58202).
+    quit_thread_record::record_quit_thread(codex_home, other_provider, after_every_turn);
+    let provider_mismatch = resume_last(&mut app_server, &config, scope).await?;
+    // The quit thread no longer exists.
+    quit_thread_record::record_quit_thread(codex_home, ThreadId::new(), after_every_turn);
+    let missing = resume_last(&mut app_server, &config, scope).await?;
+    app_server.shutdown().await?;
+
+    assert_eq!(
+        [
+            no_record,
+            alpha_on_screen,
+            fork_last,
+            turn_after_quit,
+            out_of_scope,
+            provider_mismatch,
+            missing
+        ],
+        [
+            Some(charlie),
+            Some(alpha),
+            Some(charlie),
+            Some(charlie),
+            Some(charlie),
+            Some(other_provider),
+            Some(charlie)
+        ]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn resume_last_finds_quit_thread_beyond_first_page() -> color_eyre::Result<()> {
+    let temp_dir = TempDir::new()?;
+    let project_cwd = temp_dir.path().join("project");
+    std::fs::create_dir_all(&project_cwd)?;
+    let config = ConfigBuilder::default()
+        .codex_home(temp_dir.path().to_path_buf())
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(project_cwd.clone()),
+            ..Default::default()
+        })
+        .build()
+        .await?;
+    let model_provider = config.model_provider_id.as_str();
+    let alpha = write_session_rollout(
+        temp_dir.path(),
+        "2025-01-01T10-00-00",
+        "2025-01-01T10:00:00Z",
+        "alpha",
+        model_provider,
+        &project_cwd,
+    )?;
+    for index in 0..105 {
+        let (hour, minute) = (index / 60, index % 60);
+        write_session_rollout(
+            temp_dir.path(),
+            &format!("2025-01-02T{hour:02}-{minute:02}-00"),
+            &format!("2025-01-02T{hour:02}:{minute:02}:00Z"),
+            "filler",
+            model_provider,
+            &project_cwd,
+        )?;
+    }
+    let mut app_server = AppServerSession::new(
+        crate::backend_id::BackendId::new(),
+        codex_app_server_client::AppServerClient::InProcess(
+            start_test_embedded_app_server(config.clone()).await?,
+        ),
+        ThreadParamsMode::Embedded,
+    );
+    let scope = Some(project_cwd.as_path());
+    let mut first_page = latest_session_lookup_params(
+        /*model_providers*/ Some(Vec::new()),
+        scope,
+        /*include_non_interactive*/ false,
+        LatestSessionLookupMode::StateDbOnly,
+    );
+    first_page.limit = Some(100);
+    let alpha_on_first_page = app_server
+        .thread_list(first_page)
+        .await?
+        .data
+        .iter()
+        .any(|thread| thread.id == alpha.to_string());
+    quit_thread_record::record_quit_thread(config.codex_home.as_ref(), alpha, i64::MAX);
+    let target = lookup_resume_last_target_with_app_server(
+        &mut app_server,
+        &config,
+        scope,
+        /*include_non_interactive*/ false,
+    )
+    .await?
+    .map(|target| target.thread_id);
+    app_server.shutdown().await?;
+
+    assert!(!alpha_on_first_page, "ALPHA should be past the first page");
+    assert_eq!(target, Some(alpha));
+    Ok(())
+}
+
+#[test]
+fn fatal_tui_error_preserves_full_cause_chain() {
+    let report =
+        color_eyre::eyre::eyre!("low-level injected cause").wrap_err("turn/start failed in TUI");
+    let rendered = report_as_io_error(report).to_string();
+
+    assert!(rendered.contains("turn/start failed in TUI"));
+    assert!(rendered.contains("low-level injected cause"));
+}
+
+#[tokio::test]
 async fn latest_session_lookup_falls_back_for_rollout_missing_from_state_db()
 -> color_eyre::Result<()> {
     let temp_dir = TempDir::new()?;
