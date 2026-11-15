@@ -64,7 +64,8 @@ impl ChatWidget {
     }
 
     /// Keep a present model picker aligned with the active task, including Reserve entry/exit.
-    pub(super) fn refresh_open_model_picker(&mut self) {
+    /// pub(crate): main's app-level callers (provider management, event dispatch) refresh it too.
+    pub(crate) fn refresh_open_model_picker(&mut self) {
         // Refresh an existing parent without reopening it or interrupting its reasoning child.
         match self.model_popup_view_id() {
             Some(MODEL_SELECTION_VIEW_ID) => self.open_model_popup_with_presets(

@@ -37,8 +37,7 @@ async fn restored_openai_appears_in_already_open_model_picker() -> Result<()> {
         app.chat_widget.current_model().to_string(),
         app.chat_widget.config_ref().model_provider_id.clone(),
     );
-    app.chat_widget
-        .open_all_models_popup(app.model_catalog.try_list_models().unwrap());
+    app.chat_widget.open_all_models_popup();
     let before = render_bottom_popup(&app.chat_widget, /*width*/ 120);
     assert!(!before.contains("OpenAI"), "{before}");
     assert!(before.contains("claude"), "{before}");
@@ -136,8 +135,7 @@ async fn restored_openai_appears_in_already_open_model_picker() -> Result<()> {
 
     // A status event can already be queued when Enter requests a child. Preserve
     // the parent-dismissal flag until that queued reasoning dialog is accepted.
-    app.chat_widget
-        .open_all_models_popup(app.model_catalog.try_list_models().unwrap());
+    app.chat_widget.open_all_models_popup();
     while rx.try_recv().is_ok() {}
     app.chat_widget
         .handle_key_event(KeyEvent::from(KeyCode::Enter));
