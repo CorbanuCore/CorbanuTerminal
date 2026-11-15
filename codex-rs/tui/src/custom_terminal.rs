@@ -904,7 +904,6 @@ mod tests {
     use ratatui::widgets::Widget;
     use ratatui::widgets::Wrap;
 
-<<<<<<< HEAD
     /// #1340: clearing from the home position must not be a whole-screen erase, which tmux
     /// (`scroll-on-clear`, default on) copies into scrollback; it still blanks every row.
     #[test]
@@ -976,11 +975,8 @@ mod tests {
         );
         assert_eq!(terminal.backend().scroll_on_clear_saves(), &[] as &[String]);
     }
-||||||| 413492cd6c
-=======
     #[path = "cursor_tests.rs"]
     mod cursor;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     struct CaptureBackend {
         output: Vec<u8>,

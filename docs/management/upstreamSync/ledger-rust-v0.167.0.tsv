@@ -720,7 +720,7 @@ codex-rs/tui/src/chatwidget/warnings.rs	content	UU	tui	S4b tui chatwidget/bottom
 codex-rs/tui/src/cli.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		1	10	false	false	false	false	
 codex-rs/tui/src/config_update.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		1	4	false	false	false	false	
 codex-rs/tui/src/config_update_tests.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		1	7	true	false	false	false	
-codex-rs/tui/src/custom_terminal.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		1	73	false	false	false	false	
+codex-rs/tui/src/custom_terminal.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	sync-s4a (maintainer)	no	resolved	merged	1	73	false	false	false	false	sync-s4a: main's #1340 row-by-row clear test beside upstream's cursor test module
 codex-rs/tui/src/cwd_prompt.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		1	4	false	false	false	false	
 codex-rs/tui/src/exec_cell/model.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		3	22	false	false	false	true	
 codex-rs/tui/src/exec_cell/render.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		7	128	false	false	false	true	
@@ -739,7 +739,7 @@ codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__session_
 codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		1	12	true	true	false	false	
 codex-rs/tui/src/history_cell/tests.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		1	22	true	false	false	false	
 codex-rs/tui/src/insert_history.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		1	7	false	false	false	false	
-codex-rs/tui/src/keymap_setup/actions.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		1	353	false	false	false	true	
+codex-rs/tui/src/keymap_setup/actions.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	sync-s4a (maintainer)	no	resolved	theirs	1	353	false	false	false	true	sync-s4a: upstream rewrote the action list; main's two approval descriptions name actions that no longer exist
 codex-rs/tui/src/lib.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		48	3227	false	false	false	true	
 codex-rs/tui/src/main.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		2	11	false	false	false	true	
 codex-rs/tui/src/model_catalog.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		4	413	false	false	false	true	
@@ -756,7 +756,7 @@ codex-rs/tui/src/pets/mod.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	
 codex-rs/tui/src/resume_picker.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		12	122	false	false	false	false	
 codex-rs/tui/src/selection_list.rs	modify/delete	UD	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		0	0	false	false	false	false	deleted upstream; skeleton keeps ours
 codex-rs/tui/src/session_resume.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		3	357	false	false	false	false	
-codex-rs/tui/src/slash_command.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		12	59	false	false	false	true	
+codex-rs/tui/src/slash_command.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	sync-s4a (maintainer)	no	resolved	merged	12	59	false	false	false	true	sync-s4a: main's /gpu, /spawn, /orchestrate, /tasknode, /panes, /cost, /docs, Corbanu texts and its during-task rules (archive/delete allowed) beside upstream's /presets, /daybreak, /cd, /pwd, /worktree, /export and /agents (renamed from /agent); /personality and /sandbox-add-read-dir removed with upstream. S4b: bottom_pane/command_popup.rs and chatwidget/slash_dispatch.rs still name SandboxReadRoot/Personality
 codex-rs/tui/src/snapshots/codex_tui__app__tests__clear_ui_after_long_transcript_fresh_header_only.snap	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		2	10	true	true	false	false	
 codex-rs/tui/src/snapshots/codex_tui__app__tests__clear_ui_header_fast_status_fast_capable_models.snap	modify/delete	UD	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		0	0	true	true	false	false	deleted upstream; skeleton keeps ours
 codex-rs/tui/src/snapshots/codex_tui__app__tests__replace_goal_confirmation.snap	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		1	5	true	true	false	false	
@@ -792,9 +792,9 @@ codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_wrap
 codex-rs/tui/src/status/snapshots/codex_tui__status__tests__transcript_overlay_status_rate_limit_refresh.snap	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		3	100	true	true	false	false	
 codex-rs/tui/src/status/tests.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		5	716	true	false	false	true	
 codex-rs/tui/src/test_backend.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		1	6	false	false	false	false	
-codex-rs/tui/src/thread_transcript.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		2	157	false	false	false	false	
-codex-rs/tui/src/tooltips.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		11	195	false	false	false	false	
-codex-rs/tui/src/tui.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		5	81	false	false	false	false	
+codex-rs/tui/src/thread_transcript.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	sync-s4a (maintainer)	no	resolved	theirs	2	157	false	false	false	false	sync-s4a: upstream replaced fallback_transcript_cell with tool/exploration projections; main's transcript job line (pid/call/cwd, 1cd2ac139f) is not yet ported to CommandHistory: follow-up for the compile pass
+codex-rs/tui/src/tooltips.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	sync-s4a (maintainer)	no	resolved	merged	11	195	false	false	false	false	sync-s4a: upstream's file with main's policy: no startup tooltip, no promotions, no announcement fetch from openai/codex (prewarm no-op, URL removed); module allows dead code outside tests; new test pins it. Upstream's turn tips (app/turn_tips.rs) still use the tip list: Decision for Travis
+codex-rs/tui/src/tui.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	sync-s4a (maintainer)	no	resolved	merged	5	81	false	false	false	false	sync-s4a: main's panic diagnostics, ownership guard (TerminalRestoreGuard in InitializedTerminal) and #461 unread-input flush on exit, on upstream's restore_after_exit_with_events; upstream's TerminalInitializationGuard removed (main's guard covers init failure)
 codex-rs/tui/src/update_action.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		5	49	false	false	false	false	
 codex-rs/tui/src/update_prompt.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		1	3	false	false	false	false	
 codex-rs/tui/src/updates.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		1	40	false	false	false	false	
@@ -803,7 +803,7 @@ codex-rs/tui/tests/all.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	una
 codex-rs/tui/tests/suite/focus_palette.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		3	42	true	false	false	false	
 codex-rs/tui/tests/suite/mod.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		3	31	true	false	false	true	
 codex-rs/tui/tests/suite/resize_reflow.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		2	88	true	false	false	false	
-codex-rs/tui/tooltips.txt	modify/delete	UD	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		0	0	false	false	false	false	deleted upstream; skeleton keeps ours
+codex-rs/tui/tooltips.txt	modify/delete	UD	tui	S4a tui app/lib/onboarding/status	3	sync-s4a (maintainer)	no	resolved	deleted	0	0	false	false	false	false	deleted upstream; skeleton keeps ours | sync-s4a: moved upstream to tui/assets/tooltips.txt; main's 2 surviving Corbanu edits (`!` from Corbanu Terminal, `corbanu resume`) applied there
 codex-rs/uds/Cargo.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	7	false	false	false	false	
 codex-rs/windows-sandbox-rs/src/acl.rs	content	UU	windows-sandbox	S3a security resolution	1+2	sync-s3a2 (maintainer)	no	resolved	merged	12	213	false	false	true	true	Both sides' imports; main's #304 exact-entry read checks (Read/ReadExplicit/ReadNewFiles, is_dir) kept over upstream's effective-mask check; upstream's handle-based add_deny_ace (errors propagate, filesystem-root refusal) kept with main's is_dir; upstream's Result revoke_ace kept for windows-sandbox-service (main's deny-read sync no longer uses it); upstream tests moved to acl_upstream_tests.rs.; Windows CI: add_deny_delete_ace keeps main's D263 error text when upstream's add_deny_ace fails
 codex-rs/windows-sandbox-rs/src/acl_tests.rs	add/add	AA	windows-sandbox	S3a security resolution	1+2	sync-s3a2 (maintainer)	no	resolved	merged	1	601	true	false	true	true	add/add: main's PF-27-S07 tests kept here; upstream's tests kept verbatim as acl_upstream_tests.rs (second test module).

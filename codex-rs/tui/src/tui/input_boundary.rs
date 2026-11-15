@@ -9,18 +9,8 @@ use std::io::stdin;
 use std::time::Duration;
 use std::time::Instant;
 
-/// Restores terminal modes when initialization fails before ownership is transferred.
-pub(super) struct TerminalInitializationGuard {
-    pub(super) active: bool,
-}
-
-impl Drop for TerminalInitializationGuard {
-    fn drop(&mut self) {
-        if self.active {
-            let _ = super::restore_after_exit();
-        }
-    }
-}
+// Upstream's `TerminalInitializationGuard` is not needed: Corbanu's `TerminalRestoreGuard`
+// (tui.rs) restores the terminal whenever initialization fails after acquiring it.
 
 /// Drain decoded and unread input before a screen can accept a security-sensitive decision.
 ///

@@ -17,13 +17,9 @@ pub enum SlashCommand {
     // DO NOT ALPHA-SORT! Enum order is presentation order in the popup, so
     // more frequently used commands should be listed first.
     Model,
-<<<<<<< HEAD
     Gpu,
-||||||| 413492cd6c
-=======
     Presets,
     Daybreak,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     Ide,
     Permissions,
     Security,
@@ -54,17 +50,11 @@ pub enum SlashCommand {
     Plan,
     Voice,
     Goal,
-<<<<<<< HEAD
-    Agent,
+    Agents,
     Spawn,
     Orchestrate,
     Tasknode,
     Panes,
-||||||| 413492cd6c
-    Agent,
-=======
-    Agents,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     Side,
     Btw,
     Copy,
@@ -131,21 +121,11 @@ impl SlashCommand {
             SlashCommand::Delete => "permanently delete this session",
             SlashCommand::Clear => "clear the terminal and start a new chat",
             SlashCommand::Fork => "fork the current chat",
-<<<<<<< HEAD
+            SlashCommand::Worktree => "start or continue a conversation in a new worktree",
             SlashCommand::App => "continue this session in Corbanu Terminal Desktop",
             SlashCommand::Quit | SlashCommand::Exit => "exit Corbanu Terminal",
-            SlashCommand::Copy => "copy last response as markdown",
-||||||| 413492cd6c
-            SlashCommand::App => "continue this session in the Desktop app",
-            SlashCommand::Quit | SlashCommand::Exit => "exit Codex",
-            SlashCommand::Copy => "copy last response as markdown",
-=======
-            SlashCommand::Worktree => "start or continue a conversation in a new worktree",
-            SlashCommand::App => "continue this session in the Desktop app",
-            SlashCommand::Quit | SlashCommand::Exit => "exit Codex",
             SlashCommand::Copy => "copy the last response or part of it",
             SlashCommand::Export => "export the conversation as markdown",
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             SlashCommand::Raw => "toggle raw scrollback mode for copy-friendly terminal selection",
             SlashCommand::Tui => "choose the TUI mode for the next launch",
             SlashCommand::Diff => "show git diff (including untracked files)",
@@ -159,19 +139,13 @@ impl SlashCommand {
             SlashCommand::Daemon => "Manage the local background server",
             SlashCommand::Warnings => "view retained warnings and diagnostic details",
             SlashCommand::Status => "show current session configuration and token usage",
-<<<<<<< HEAD
+            SlashCommand::Cd => "change the current working directory",
+            SlashCommand::Pwd => "show the current working directory",
             SlashCommand::Usage if cfg!(feature = "developer-accounting") => {
                 "view recorded request cost, account usage, or use a rate-limit reset"
             }
             SlashCommand::Usage => "view account usage or use a rate-limit reset",
             SlashCommand::Cost => "what your turns cost, on whichever provider served them",
-||||||| 413492cd6c
-            SlashCommand::Usage => "view account usage or use a usage limit reset",
-=======
-            SlashCommand::Cd => "change the current working directory",
-            SlashCommand::Pwd => "show the current working directory",
-            SlashCommand::Usage => "view account usage or use a usage limit reset",
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             SlashCommand::DebugConfig => "show config layers and requirement sources for debugging",
             SlashCommand::Title => "configure which items appear in the terminal title",
             SlashCommand::Statusline => "configure which items appear in the status line",
@@ -182,37 +156,21 @@ impl SlashCommand {
             SlashCommand::MemoryDrop => "DO NOT USE",
             SlashCommand::MemoryUpdate => "DO NOT USE",
             SlashCommand::Model => "choose what model and reasoning effort to use",
-<<<<<<< HEAD
             SlashCommand::Gpu => "rent, inspect, or terminate GPU capacity",
-||||||| 413492cd6c
-=======
             SlashCommand::Presets => "run or save reusable prompts and slash commands",
             SlashCommand::Daybreak => "turn Daybreak on or off",
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             SlashCommand::Ide => {
                 "include current selection, open files, and other context from your IDE"
             }
-<<<<<<< HEAD
-            SlashCommand::Personality => "choose a communication style for Corbanu Terminal",
-||||||| 413492cd6c
-            SlashCommand::Personality => "choose a communication style for Codex",
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             SlashCommand::Plan => "switch to Plan mode",
             SlashCommand::Voice => "start or stop voice; use /voice settings to choose a voice",
             SlashCommand::Goal => "set or view the goal for a long-running task",
-<<<<<<< HEAD
-            SlashCommand::Agent | SlashCommand::MultiAgents => "switch the active agent thread",
+            SlashCommand::Agents => "open the agent command center",
+            SlashCommand::MultiAgents => "switch between this session's subagents",
             SlashCommand::Spawn => "orchestrate Nazgul, Troll, and Orc agent roles",
             SlashCommand::Orchestrate => "attach and manage native pane whips",
             SlashCommand::Tasknode => "interact with Task Node tasks and rewards",
             SlashCommand::Panes => "switch Corbanu Terminal, Claude Code, or agent panes",
-||||||| 413492cd6c
-            SlashCommand::Agent | SlashCommand::MultiAgents => "switch the active agent thread",
-=======
-            SlashCommand::Agents => "open the agent command center",
-            SlashCommand::MultiAgents => "switch between this session's subagents",
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             SlashCommand::Side | SlashCommand::Btw => {
                 "start a side conversation in an ephemeral fork"
             }
@@ -264,21 +222,15 @@ impl SlashCommand {
                 | SlashCommand::Mcp
                 | SlashCommand::Export
                 | SlashCommand::Raw
-<<<<<<< HEAD
                 | SlashCommand::Docs
-||||||| 413492cd6c
-=======
                 | SlashCommand::Cd
                 | SlashCommand::Pwd
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 | SlashCommand::Usage
                 | SlashCommand::Cost
                 | SlashCommand::Pets
                 | SlashCommand::Side
                 | SlashCommand::Btw
                 | SlashCommand::Resume
-<<<<<<< HEAD
-                | SlashCommand::SandboxReadRoot
                 | SlashCommand::Spawn
                 | SlashCommand::Orchestrate
                 | SlashCommand::Tasknode
@@ -286,10 +238,6 @@ impl SlashCommand {
                 | SlashCommand::Wallet
                 | SlashCommand::Telegram
                 | SlashCommand::Gpu
-||||||| 413492cd6c
-                | SlashCommand::SandboxReadRoot
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         )
     }
 
@@ -361,13 +309,6 @@ impl SlashCommand {
     pub fn available_during_task(self) -> bool {
         match self {
             SlashCommand::New
-<<<<<<< HEAD
-||||||| 413492cd6c
-            | SlashCommand::Archive
-            | SlashCommand::Delete
-=======
-            | SlashCommand::Delete
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             | SlashCommand::Fork
             | SlashCommand::Worktree
             | SlashCommand::Init
@@ -388,29 +329,16 @@ impl SlashCommand {
             | SlashCommand::Logout
             | SlashCommand::MemoryDrop
             | SlashCommand::MemoryUpdate => false,
-<<<<<<< HEAD
             SlashCommand::Cost
             | SlashCommand::Diff
             | SlashCommand::Archive
             | SlashCommand::Delete
             | SlashCommand::Docs
-||||||| 413492cd6c
-            SlashCommand::Diff
-=======
-            SlashCommand::Diff
-            | SlashCommand::Archive
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             | SlashCommand::Resume
             | SlashCommand::Model
-<<<<<<< HEAD
             | SlashCommand::Gpu
-            | SlashCommand::Personality
-||||||| 413492cd6c
-            | SlashCommand::Personality
-=======
             | SlashCommand::Presets
             | SlashCommand::Daybreak
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             | SlashCommand::Permissions
             | SlashCommand::Security
             | SlashCommand::Copy
