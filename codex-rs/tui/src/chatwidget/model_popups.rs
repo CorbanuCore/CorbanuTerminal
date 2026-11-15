@@ -961,10 +961,14 @@ impl ChatWidget {
                     effort: effort_for_action.clone(),
                 });
             } else {
-                tx.send(AppEvent::UpdateModelSelection {
-                    model: model_for_action.clone(),
-                    provider: provider_for_action.clone(),
-                });
+                // An explicit Astra pick keeps its task, so the app can offer
+                // the fresh-task sparkle once the model is applied (#2312).
+                tx.send(
+                    AstraModelPickerAction::UpdateModelSelection {
+                        provider: provider_for_action.clone(),
+                    }
+                    .into_picker_event(sparkle_thread, model_for_action.clone()),
+                );
                 tx.send(AppEvent::UpdateReasoningEffort(effort_for_action.clone()));
                 if Self::should_persist_model_provider(provider_for_action.as_deref()) {
                     tx.send(AppEvent::PersistModelSelection {

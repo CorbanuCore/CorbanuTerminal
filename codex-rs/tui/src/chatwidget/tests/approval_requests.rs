@@ -87,9 +87,15 @@ async fn declined_command_history_never_claims_execution_or_success() {
             lines_to_single_string(&display),
             format!("✗ Did not run {command}\n  └ Approval declined\n")
         );
-        assert_eq!(
-            lines_to_single_string(&transcript),
-            format!("$ {command}\n✗ Did not run (approval declined)\n")
+        // #2221 (carried by #2328): the transcript keeps the command's job
+        // record, as main's replayed transcript does; a declined command
+        // reports no process.
+        let transcript = lines_to_single_string(&transcript);
+        assert!(
+            transcript.starts_with(&format!(
+                "$ {command}\n✗ Did not run (approval declined)\n\njob: pid=not reported · call=declined · cwd="
+            )),
+            "{transcript}"
         );
     }
 }
