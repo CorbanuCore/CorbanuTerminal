@@ -208,10 +208,13 @@ jobs:
 
       # `cargo chef cook` writes the recipe's placeholder sources (empty
       # lib.rs/main.rs, versions masked to 0.0.1, rewritten Cargo.lock) over
-      # the checked-out workspace. Restore the real sources before clippy and
-      # fail if any tracked file still differs, or clippy lints the
-      # placeholders and passes (#2261). `--clippy --tests` warms the same
-      # dependency artifacts the clippy step checks below.
+      # the checked-out workspace, and creates untracked ones for targets the
+      # manifests name but the checkout lacks. Restore the tracked sources
+      # before clippy, then fail if any tracked file still differs from HEAD
+      # or any untracked, unignored file remains, or clippy lints the
+      # placeholders and passes (#2261). Nothing is deleted. `--clippy
+      # --tests` warms the same dependency artifacts the clippy step checks
+      # below.
       - name: Pre-warm dependency cache (cargo-chef)
         if: ${{ inputs.profile == 'release' }}
         shell: bash
@@ -221,9 +224,11 @@ jobs:
           cargo chef prepare --recipe-path "$RECIPE"
           cargo chef cook --recipe-path "$RECIPE" --target ${{ inputs.target }} --release --clippy --tests
           git restore --source=HEAD --worktree -- .
-          if ! git diff --quiet HEAD -- .; then
+          # Captured separately so a git error still fails under `set -e`.
+          workspace_status="$(git status --porcelain --untracked-files=all -- .)"
+          if ! git diff --quiet HEAD -- . || [[ -n "$workspace_status" ]]; then
             echo "::error::cargo chef cook left placeholder sources in the workspace"
-            git status --short -- .
+            git status --short --untracked-files=all -- .
             exit 1
           fi
 
