@@ -156,6 +156,12 @@ fn issue_2315_service_acl_refuses_cwd_junction_without_touching_target() {
 
 #[test]
 fn issue_2315_service_acl_matches_interactive_inheritance() {
+    for legacy in [false, true] {
+        check_inheritance_parity(legacy);
+    }
+}
+
+fn check_inheritance_parity(legacy: bool) {
     for initially_protected in [false, true] {
         for inheritance in [DaclInheritance::Inherited, DaclInheritance::Protected] {
             let temp = tempfile::tempdir().unwrap();
@@ -202,6 +208,11 @@ fn issue_2315_service_acl_matches_interactive_inheritance() {
                 unsafe {
                     windows_sys::Win32::Foundation::LocalFree(explicit_sid);
                 }
+                if legacy {
+                    for relative in ["nested/file", "nested"] {
+                        make_legacy_acl(&root.join(relative));
+                    }
+                }
                 apply(&root, mode, inheritance);
             }
             for relative in [
@@ -216,11 +227,67 @@ fn issue_2315_service_acl_matches_interactive_inheritance() {
                 assert_eq!(
                     acl_and_control(&temp.path().join("service").join(relative)),
                     acl_and_control(&temp.path().join("full").join(relative)),
-                    "protection={initially_protected}, path={relative}"
+                    "legacy={legacy}, protection={initially_protected}, desired_protection={}, path={relative}",
+                    matches!(inheritance, DaclInheritance::Protected)
                 );
             }
         }
     }
+}
+
+// Model an ACL created before automatic inheritance: equivalent access, without
+// inherited ACE markers or the auto-inherited control bit. Do not propagate it.
+fn make_legacy_acl(path: &std::path::Path) {
+    use std::os::windows::fs::OpenOptionsExt;
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Security as s;
+    use windows_sys::Win32::Security::Authorization as a;
+    use windows_sys::Win32::Storage::FileSystem as f;
+    let file = fs::OpenOptions::new()
+        .access_mode(f::READ_CONTROL | f::WRITE_DAC)
+        .custom_flags(f::FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)
+        .unwrap();
+    let mut sd = std::ptr::null_mut();
+    let mut acl = std::ptr::null_mut();
+    unsafe {
+        assert_eq!(
+            a::GetSecurityInfo(
+                file.as_raw_handle(),
+                a::SE_FILE_OBJECT,
+                s::DACL_SECURITY_INFORMATION,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                &mut acl,
+                std::ptr::null_mut(),
+                &mut sd
+            ),
+            0
+        );
+        for index in 0..u32::from((*acl).AceCount) {
+            let mut ace = std::ptr::null_mut();
+            assert_ne!(s::GetAce(acl, index, &mut ace), 0);
+            (*ace.cast::<s::ACE_HEADER>()).AceFlags &= !(s::INHERITED_ACE as u8);
+        }
+        assert_ne!(
+            s::SetSecurityDescriptorControl(
+                sd,
+                s::SE_DACL_AUTO_INHERITED | s::SE_DACL_AUTO_INHERIT_REQ,
+                0
+            ),
+            0
+        );
+        assert_ne!(
+            s::SetKernelObjectSecurity(file.as_raw_handle(), s::DACL_SECURITY_INFORMATION, sd),
+            0
+        );
+        windows_sys::Win32::Foundation::LocalFree(sd);
+    }
+    assert_eq!(
+        acl_and_control(path).1,
+        0,
+        "legacy fixture must remain unprotected"
+    );
 }
 
 fn dacl(path: &std::path::Path) -> Vec<u8> {

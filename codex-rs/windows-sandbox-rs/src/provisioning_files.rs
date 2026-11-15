@@ -17,9 +17,9 @@ use windows_sys::Win32::Foundation::LocalFree;
 use windows_sys::Win32::Foundation::NTSTATUS;
 use windows_sys::Win32::Foundation::RtlNtStatusToDosError;
 use windows_sys::Win32::Security as security;
-use windows_sys::Win32::Security::Authorization::GetSecurityInfo;
-use windows_sys::Win32::Security::Authorization::SE_FILE_OBJECT;
 use windows_sys::Win32::Storage::FileSystem as fs;
+use windows_sys::Win32::System::Memory::LPTR;
+use windows_sys::Win32::System::Memory::LocalAlloc;
 
 use crate::no_reparse_dir::DirectoryOpenDisposition;
 use crate::no_reparse_dir::open_directory_no_reparse;
@@ -122,23 +122,36 @@ pub(crate) fn check_output(path: &Path) -> Result<()> {
 struct Descriptor(*mut c_void);
 impl Descriptor {
     fn read(handle: HANDLE) -> Result<Self> {
-        let mut sd = std::ptr::null_mut();
-        let status = unsafe {
-            GetSecurityInfo(
+        let information = security::OWNER_SECURITY_INFORMATION
+            | security::GROUP_SECURITY_INFORMATION
+            | security::DACL_SECURITY_INFORMATION;
+        let mut needed = 0;
+        unsafe {
+            security::GetKernelObjectSecurity(
                 handle,
-                SE_FILE_OBJECT,
-                security::OWNER_SECURITY_INFORMATION
-                    | security::GROUP_SECURITY_INFORMATION
-                    | security::DACL_SECURITY_INFORMATION,
+                information,
                 std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                &mut sd,
-            )
-        };
-        ensure!(status == 0, "read provisioning ACL: {status}");
-        Ok(Self(sd))
+                0,
+                &mut needed,
+            );
+        }
+        ensure!(
+            needed > 0,
+            "size provisioning ACL: {}",
+            std::io::Error::last_os_error()
+        );
+        let sd = Self(unsafe { LocalAlloc(LPTR, needed as usize) });
+        ensure!(!sd.0.is_null(), "allocate provisioning ACL");
+        // Read the object's stored descriptor without GetSecurityInfo's legacy
+        // inheritance inference against a parent whose ACL we already replaced.
+        ensure!(
+            unsafe {
+                security::GetKernelObjectSecurity(handle, information, sd.0, needed, &mut needed)
+            } != 0,
+            "read provisioning ACL: {}",
+            std::io::Error::last_os_error()
+        );
+        Ok(sd)
     }
 }
 impl Drop for Descriptor {
@@ -185,6 +198,49 @@ fn inherit(parent: *const c_void, current: *const c_void, directory: bool) -> Re
     );
     Ok(Inherited(sd))
 }
+fn normalize_legacy(
+    parent: *const c_void,
+    current: *const c_void,
+    directory: bool,
+) -> Result<Option<Inherited>> {
+    let mut control = 0;
+    let mut revision = 0;
+    ensure!(
+        unsafe {
+            security::GetSecurityDescriptorControl(current.cast_mut(), &mut control, &mut revision)
+        } != 0,
+        "read child ACL control"
+    );
+    if control & (security::SE_DACL_AUTO_INHERITED | security::SE_DACL_PROTECTED) != 0 {
+        return Ok(None);
+    }
+    let mapping = security::GENERIC_MAPPING {
+        GenericRead: fs::FILE_GENERIC_READ,
+        GenericWrite: fs::FILE_GENERIC_WRITE,
+        GenericExecute: fs::FILE_GENERIC_EXECUTE,
+        GenericAll: fs::FILE_ALL_ACCESS,
+    };
+    let mut sd = std::ptr::null_mut();
+    // Legacy ACLs lack inherited ACE markers. Identify those ACEs against the
+    // OLD parent, before replacing them with inheritance from the new parent.
+    // Conversion preserves effective access; an ambiguous ACL stays protected.
+    ensure!(
+        unsafe {
+            security::ConvertToAutoInheritPrivateObjectSecurity(
+                parent.cast_mut(),
+                current.cast_mut(),
+                &mut sd,
+                std::ptr::null(),
+                directory,
+                &mapping,
+            )
+        } != 0,
+        "normalize legacy provisioning ACL: {}",
+        std::io::Error::last_os_error()
+    );
+    Ok(Some(Inherited(sd)))
+}
+
 fn set(handle: HANDLE, descriptor: *mut c_void) -> Result<()> {
     let mut control = 0;
     let mut revision = 0;
@@ -304,6 +360,7 @@ pub(crate) fn set_directory_acl(
     let mut budget = MAX_ENTRIES;
     propagate(
         listed.as_raw_handle(),
+        original.0,
         root.0,
         &mut budget,
         /*depth*/ 0,
@@ -312,6 +369,7 @@ pub(crate) fn set_directory_acl(
 
 fn propagate(
     directory: HANDLE,
+    original_parent: *const c_void,
     descriptor: *const c_void,
     budget: &mut usize,
     depth: usize,
@@ -343,7 +401,9 @@ fn propagate(
             "sandbox entry changed type; retry setup"
         );
         let current = Descriptor::read(entry.as_raw_handle())?;
-        let inherited = inherit(descriptor, current.0, is_directory)?;
+        let normalized = normalize_legacy(original_parent, current.0, is_directory)?;
+        let creator = normalized.as_ref().map_or(current.0, |sd| sd.0);
+        let inherited = inherit(descriptor, creator, is_directory)?;
         check_handle(entry.as_raw_handle())?;
         set(entry.as_raw_handle(), inherited.0)?;
         if is_directory {
@@ -371,7 +431,13 @@ fn propagate(
                 ),
                 "sandbox directory changed; retry setup"
             );
-            propagate(listed.as_raw_handle(), inherited.0, budget, depth + 1)?;
+            propagate(
+                listed.as_raw_handle(),
+                current.0,
+                inherited.0,
+                budget,
+                depth + 1,
+            )?;
         }
     }
     Ok(())
