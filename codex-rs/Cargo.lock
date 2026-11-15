@@ -3256,6 +3256,7 @@ dependencies = [
  "codex-file-watcher",
  "codex-http-client",
  "codex-linux-sandbox",
+ "codex-log-guard",
  "codex-mxc-sandbox",
  "codex-network-proxy",
  "codex-otel",
