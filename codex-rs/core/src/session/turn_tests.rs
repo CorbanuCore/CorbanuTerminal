@@ -54,7 +54,8 @@ fn collaboration_turn_input(kind: AgentMessageKind) -> TurnInput {
             "mailbox content".to_string(),
             /*trigger_turn*/ true,
         )
-        .with_kind(kind),
+        .with_kind(kind)
+        .into(),
     )
 }
 
@@ -128,7 +129,7 @@ fn parent_completion_requires_triggering_collaboration_without_operator_input() 
     )
     .with_kind(AgentMessageKind::Informational);
     assert!(!turn_inputs_expect_parent_completion(
-        [TurnInput::InterAgentCommunication(queue_only)].iter()
+        [TurnInput::InterAgentCommunication(queue_only.into())].iter()
     ));
     assert!(!turn_inputs_expect_parent_completion([].iter()));
 }

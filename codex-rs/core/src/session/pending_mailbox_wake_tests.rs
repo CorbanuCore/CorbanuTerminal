@@ -3,6 +3,7 @@ use super::tests::make_session_and_context;
 use crate::state::ActiveTurn;
 use codex_protocol::AgentPath;
 use codex_protocol::protocol::InterAgentCommunication;
+use codex_protocol::turn_input::TurnStartOptions;
 use futures::FutureExt;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
@@ -26,7 +27,13 @@ async fn pending_mailbox_wake_checks_idle_before_preparing_a_turn() {
         );
         session
             .input_queue
-            .enqueue_mailbox_communication(mail.clone(), Some("parent-turn".to_string()))
+            .enqueue_mailbox_communication(
+                mail.clone().into(),
+                TurnStartOptions {
+                    parent_turn_id: Some("parent-turn".to_string()),
+                    ..Default::default()
+                },
+            )
             .await;
 
         // Turn preparation first locks session state. Keep it unavailable so one poll proves
@@ -49,10 +56,13 @@ async fn pending_mailbox_wake_checks_idle_before_preparing_a_turn() {
                 _ => panic!("the wake changed the active turn before preparing a new one"),
             }
         }
+        // Upstream's `TurnStartOptions` (which now carries the parent turn) has
+        // no `PartialEq`; compare the parent turn it carries.
+        let (items, start_options) = session.input_queue.drain_mailbox_input_items().await;
         assert_eq!(
-            session.input_queue.drain_mailbox_input_items().await,
+            (items, start_options.parent_turn_id),
             (
-                vec![TurnInput::InterAgentCommunication(mail)],
+                vec![TurnInput::InterAgentCommunication(mail.into())],
                 Some("parent-turn".to_string()),
             )
         );

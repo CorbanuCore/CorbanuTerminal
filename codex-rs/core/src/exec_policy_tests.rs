@@ -843,6 +843,43 @@ async fn heredoc_script_stays_in_sandbox_despite_inner_allow_rule() {
     .await;
 }
 
+/// S3b: as on main, prompt and forbidden rules still match a heredoc script's
+/// command (upstream dropped the heredoc parse); allow rules do not (above).
+#[tokio::test]
+async fn heredoc_script_keeps_inner_prompt_and_forbidden_rules() {
+    let command = vec_str(&["bash", "-lc", "python3 <<'PY'\nprint('hello')\nPY"]);
+    for (decision, approval_policy) in [
+        ("forbidden", AskForApproval::OnRequest),
+        ("prompt", AskForApproval::OnRequest),
+        ("prompt", AskForApproval::Never),
+    ] {
+        let requirement = exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+            policy_src: Some(format!(
+                r#"prefix_rule(pattern=["python3"], decision="{decision}")"#
+            )),
+            command: command.clone(),
+            approval_policy,
+            permission_profile: PermissionProfile::read_only(),
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            prefix_rule: None,
+        })
+        .await;
+        let expected_forbidden =
+            decision == "forbidden" || approval_policy == AskForApproval::Never;
+        if expected_forbidden {
+            assert!(
+                matches!(requirement, ExecApprovalRequirement::Forbidden { .. }),
+                "{decision} {approval_policy:?}: {requirement:?}"
+            );
+        } else {
+            assert!(
+                matches!(requirement, ExecApprovalRequirement::NeedsApproval { .. }),
+                "{decision} {approval_policy:?}: {requirement:?}"
+            );
+        }
+    }
+}
+
 #[tokio::test]
 async fn proposes_full_command_amendment_for_heredoc_prompts() {
     assert_exec_approval_requirement_for_command(

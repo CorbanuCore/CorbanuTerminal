@@ -23,12 +23,11 @@ impl SessionTask for SlowToRecordToolTask {
 
     async fn run(
         self: Arc<Self>,
-        session: Arc<SessionTaskContext>,
+        session: Arc<Session>,
         ctx: Arc<TurnContext>,
         _input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
     ) -> SessionTaskResult {
-        let session = session.clone_session();
         let item = ResponseItem::FunctionCall {
             encrypted_content: None,
             status: None,
@@ -41,12 +40,15 @@ impl SessionTask for SlowToRecordToolTask {
             internal_chat_message_metadata_passthrough: None,
         };
         session
-            .record_conversation_items(&ctx, std::slice::from_ref(&item))
+            .record_conversation_items(&ctx, ctx.model_info(), std::slice::from_ref(&item))
             .await;
-        let call = ToolRouter::build_tool_call(item)
+        let call = StepContext::for_test(Arc::clone(&ctx))
+            .tool_router
+            .build_tool_call(item)
             .expect("test_sync_tool call should parse")
             .expect("test_sync_tool item should build a tool call");
         let tool = test_tool_runtime(Arc::clone(&session), Arc::clone(&ctx))
+            .await
             .handle_tool_call(call, cancellation_token.child_token());
         // A tool that sleeps is interrupted while running; one that does not is
         // left to finish first.
@@ -61,7 +63,7 @@ impl SessionTask for SlowToRecordToolTask {
         // The interrupt grace period runs out before the output is recorded.
         sleep(Duration::from_secs(60)).await;
         session
-            .record_conversation_items(&ctx, &[output.into()])
+            .record_conversation_items(&ctx, ctx.model_info(), &[output.into_item()])
             .await;
         Ok(None)
     }
@@ -71,9 +73,11 @@ impl SessionTask for SlowToRecordToolTask {
 /// text outputs in history.
 async fn interrupted_call_outputs(arguments: serde_json::Value) -> Vec<Option<String>> {
     let (sess, mut tc) = make_session_and_context().await;
-    tc.model_info()
-        .experimental_supported_tools
-        .push("test_sync_tool".to_string());
+    update_turn_settings_for_test(&mut tc, |settings| {
+        Arc::make_mut(&mut settings.model_info)
+            .experimental_supported_tools
+            .push("test_sync_tool".to_string());
+    });
     let sess = Arc::new(sess);
     let tool_started = Arc::new(tokio::sync::Notify::new());
     sess.spawn_task(
@@ -94,11 +98,10 @@ async fn interrupted_call_outputs(arguments: serde_json::Value) -> Vec<Option<St
     let history = sess.clone_history().await;
     history
         .raw_items()
-        .iter()
         .filter_map(|item| match item {
             ResponseItem::FunctionCallOutput {
                 call_id, output, ..
-            } if call_id == CALL_ID => Some(output.body.to_text()),
+            } if call_id.as_deref() == Some(CALL_ID) => Some(output.body.to_text()),
             _ => None,
         })
         .collect()
@@ -142,7 +145,7 @@ impl SessionTask for SlowToEndPatchedTurnTask {
 
     async fn run(
         self: Arc<Self>,
-        _session: Arc<SessionTaskContext>,
+        _session: Arc<Session>,
         ctx: Arc<TurnContext>,
         _input: Vec<TurnInput>,
         _cancellation_token: CancellationToken,

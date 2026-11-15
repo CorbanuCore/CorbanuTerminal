@@ -295,11 +295,10 @@ async fn server_initiated_mcp_elicitation_can_require_synchronous_auto_review(
         })
         .with_config(move |config| {
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
-            config.approvals_reviewer = if strict_auto_review {
-                ApprovalsReviewer::User
-            } else {
-                ApprovalsReviewer::AutoReview
-            };
+            // S3b: a strict request is reviewed only when the automatic
+            // reviewer answers; with the person it reaches the person
+            // (`user_review_preserves_unsupported_guardian_elicitations`).
+            config.approvals_reviewer = ApprovalsReviewer::AutoReview;
             config
                 .mcp_servers
                 .set(mcp_servers)
@@ -509,11 +508,8 @@ async fn node_elicitations_attribute_independent_reviews_without_changing_action
     };
     let mut builder = builder.with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
-        config.approvals_reviewer = if strict_auto_review {
-            ApprovalsReviewer::User
-        } else {
-            ApprovalsReviewer::AutoReview
-        };
+        // S3b: strict review applies only with the automatic reviewer.
+        config.approvals_reviewer = ApprovalsReviewer::AutoReview;
         config
             .mcp_servers
             .set(mcp_servers)
@@ -770,7 +766,7 @@ async fn strict_browser_nested_review_requires_live_browser_identity(
         .with_model_info_override("gpt-5.5", |model| model.supports_search_tool = false)
         .with_config(|config| {
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
-            config.approvals_reviewer = ApprovalsReviewer::User;
+            config.approvals_reviewer = ApprovalsReviewer::AutoReview; // S3b: strict review needs the automatic reviewer.
         });
     let test = builder.build_with_auto_env(&server).await?;
     wait_for_mcp_server(&test.codex, "codex_apps").await?;
@@ -826,25 +822,48 @@ async fn strict_browser_nested_review_requires_live_browser_identity(
     test.codex.shutdown_and_wait().await?;
     Ok(())
 }
+/// With the person as reviewer, these confirmations reach the person. S3b
+/// (#945, D50, PF-30): that includes a server's strict automatic-review
+/// request and node_repl/cua_repl `js` confirmations, which upstream let the
+/// reviewer answer or auto-accepted.
 #[test_case("form"; "nonempty_form")]
 #[test_case("url"; "url")]
+#[test_case("strict"; "strict_auto_review_request")]
+#[test_case("node_repl"; "node_repl_js_confirmation")]
+#[test_case("cua_repl"; "cua_repl_js_confirmation")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_review_preserves_unsupported_guardian_elicitations(mode: &str) -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_wine_exec!(Ok(()), "the MCP fixture requires a host Python interpreter");
     let server = responses::start_mock_server().await;
-    let form_schema = json!({
-        "type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]
-    });
+    let (server_name, meta, form_schema) = match mode {
+        "strict" => (
+            "elicitation",
+            json!({"codex_strict_auto_review": true}),
+            json!({"type": "object", "properties": {}}),
+        ),
+        "node_repl" | "cua_repl" => (
+            mode,
+            json!({"tool_name": "js", "connector_id": "node_repl"}),
+            json!({"type": "object", "properties": {}}),
+        ),
+        _ => (
+            "elicitation",
+            json!({}),
+            json!({
+                "type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]
+            }),
+        ),
+    };
     let params = if mode == "url" {
         json!({"mode": "url", "url": "https://example.com/approve", "elicitationId": "approval"})
     } else {
         json!({"requestedSchema": form_schema})
     };
     let mcp_servers = serde_json::from_value(json!({
-        "elicitation": {
+        server_name: {
             "command": if cfg!(windows) { "python" } else { "python3" },
-            "args": ["-u", "-c", ELICITATION_SERVER, "{}", "", params.to_string()],
+            "args": ["-u", "-c", ELICITATION_SERVER, meta.to_string(), "", params.to_string()],
             "default_tools_approval_mode": "approve",
         }
     }))?;
@@ -867,13 +886,13 @@ async fn user_review_preserves_unsupported_guardian_elicitations(mode: &str) -> 
         })
         .build_with_auto_env(&server)
         .await?;
-    wait_for_mcp_server(&test.codex, "elicitation").await?;
+    wait_for_mcp_server(&test.codex, server_name).await?;
     responses::mount_sse_once(
         &server,
         responses::sse(vec![
             responses::ev_function_call_with_namespace(
                 "eliciting-tool",
-                "mcp__elicitation",
+                &format!("mcp__{server_name}"),
                 "request_approval",
                 "{}",
             ),
@@ -974,7 +993,7 @@ async fn yielded_code_mode_elicitation_keeps_live_invocation_metadata() -> Resul
                 .enable(codex_features::Feature::CodeMode)
                 .unwrap();
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
-            config.approvals_reviewer = ApprovalsReviewer::User;
+            config.approvals_reviewer = ApprovalsReviewer::AutoReview; // S3b: strict review needs the automatic reviewer.
             config.mcp_servers.set(mcp_servers).unwrap();
         });
     let mut test = builder.build_with_auto_env(&server).await?;

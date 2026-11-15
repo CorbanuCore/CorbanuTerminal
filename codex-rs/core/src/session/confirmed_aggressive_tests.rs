@@ -4,8 +4,10 @@ use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use pretty_assertions::assert_eq;
+use std::sync::Arc;
 
 use super::super::session::SessionSettingsUpdate;
+use super::super::step_settings::StepSettingsUpdate;
 use super::super::tests::make_session_and_context_with_rx;
 use super::super::tests::make_session_configuration_for_tests;
 use crate::config::Constrained;
@@ -15,8 +17,8 @@ fn settings(
     configuration: &super::super::session::SessionConfiguration,
 ) -> (AskForApproval, ApprovalsReviewer) {
     (
-        configuration.approval_policy.value(),
-        configuration.approvals_reviewer,
+        configuration.step_settings.approval_policy.value(),
+        configuration.step_settings.approvals_reviewer,
     )
 }
 
@@ -52,7 +54,8 @@ async fn issue_505_internal_sessions_keep_their_settings() {
         (SessionSource::Cli, true),
     ] {
         let mut configuration = make_session_configuration_for_tests().await;
-        configuration.approval_policy = Constrained::allow_any(AskForApproval::Never);
+        Arc::make_mut(&mut configuration.step_settings).approval_policy =
+            Constrained::allow_any(AskForApproval::Never);
         configuration.session_source = source.clone();
         let outcome = configuration.require_approval_for_every_command();
         if covered {
@@ -61,7 +64,7 @@ async fn issue_505_internal_sessions_keep_their_settings() {
         } else {
             assert_eq!(outcome, ApprovalsOutcome::NotCovered, "{source:?}");
             assert_eq!(
-                configuration.approval_policy.value(),
+                configuration.step_settings.approval_policy.value(),
                 AskForApproval::Never,
                 "{source:?}"
             );
@@ -74,8 +77,9 @@ async fn issue_505_internal_sessions_keep_their_settings() {
 #[tokio::test]
 async fn issue_505_a_managed_approval_policy_is_kept() {
     let mut configuration = make_session_configuration_for_tests().await;
-    configuration.approval_policy = Constrained::allow_only(AskForApproval::OnRequest);
-    configuration.approvals_reviewer = ApprovalsReviewer::AutoReview;
+    let step_settings = Arc::make_mut(&mut configuration.step_settings);
+    step_settings.approval_policy = Constrained::allow_only(AskForApproval::OnRequest);
+    step_settings.approvals_reviewer = ApprovalsReviewer::AutoReview;
     let outcome = configuration.require_approval_for_every_command();
     assert!(matches!(outcome, ApprovalsOutcome::Kept(_)), "{outcome:?}");
     assert_eq!(
@@ -90,22 +94,29 @@ async fn issue_505_a_managed_approval_policy_is_kept() {
 #[tokio::test]
 async fn issue_505_settings_updates_cannot_lower_held_approvals() {
     let mut configuration = make_session_configuration_for_tests().await;
-    configuration.approval_policy = Constrained::allow_any(AskForApproval::Never);
+    Arc::make_mut(&mut configuration.step_settings).approval_policy =
+        Constrained::allow_any(AskForApproval::Never);
     assert_eq!(
         configuration.require_approval_for_every_command(),
         ApprovalsOutcome::Held
     );
     let updated = configuration
-        .apply(&SessionSettingsUpdate {
-            approval_policy: Some(AskForApproval::Never),
-            approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
-            personality: Some(codex_protocol::config_types::Personality::Pragmatic),
-            ..Default::default()
-        })
+        .apply(
+            &SessionSettingsUpdate {
+                step_settings: StepSettingsUpdate {
+                    approval_policy: Some(AskForApproval::Never),
+                    approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
+                    personality: Some(codex_protocol::config_types::Personality::Pragmatic),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            /*current_environments*/ &[],
+        )
         .expect("update");
     assert_eq!(settings(&updated), HELD);
     assert_eq!(
-        updated.personality,
+        updated.step_settings.personality,
         Some(codex_protocol::config_types::Personality::Pragmatic)
     );
 }
@@ -117,8 +128,11 @@ async fn issue_505_a_running_session_stores_it_for_turns_mcp_and_clients() {
     let (session, _turn, rx) = make_session_and_context_with_rx().await;
     session
         .update_settings(SessionSettingsUpdate {
-            approval_policy: Some(AskForApproval::Never),
-            approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
+            step_settings: StepSettingsUpdate {
+                approval_policy: Some(AskForApproval::Never),
+                approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
+                ..Default::default()
+            },
             ..Default::default()
         })
         .await
@@ -146,13 +160,12 @@ async fn issue_505_a_running_session_stores_it_for_turns_mcp_and_clients() {
     );
     let turn = session.new_default_turn().await;
     assert_eq!(
-        (
-            turn.approval_policy().value(),
-            turn.config.approvals_reviewer
-        ),
+        (turn.approval_policy(), turn.config.approvals_reviewer),
         HELD
     );
-    let mcp = session.latest_mcp_desired_state(/*auth*/ None).await;
+    let mcp = session
+        .latest_mcp_desired_state(/*auth*/ None, turn.initial_environments.clone())
+        .await;
     assert_eq!(
         (
             mcp.config.permissions.approval_policy.value(),

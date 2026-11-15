@@ -1375,7 +1375,7 @@ async fn handle_exec_command_user_approved_records_tool_decision() {
 
 #[tokio::test]
 #[traced_test]
-async fn handle_exec_command_user_approved_for_session_records_tool_decision() {
+async fn handle_exec_command_unoffered_session_answer_records_denial() {
     let server = start_mock_server().await;
     let command = touch_command("codex-otel-approval-test");
 
@@ -1432,7 +1432,7 @@ async fn handle_exec_command_user_approved_for_session_records_tool_decision() {
 
     logs_assert(tool_decision_assertion(
         "user_approved_session_call",
-        "approved_for_session",
+        "denied",
         "user",
     ));
 }

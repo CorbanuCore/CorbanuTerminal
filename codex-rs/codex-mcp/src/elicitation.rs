@@ -62,6 +62,15 @@ pub trait ElicitationReviewer: Send + Sync {
         &self,
         request: ElicitationReviewRequest,
     ) -> BoxFuture<'static, Result<Option<ElicitationResponse>>>;
+
+    /// Corbanu (#945, D50, PF-30): whether the person, not the automatic
+    /// reviewer, answers this server's confirmations. A server's strict
+    /// automatic-review request then takes the ordinary path to the person
+    /// instead of being answered by the reviewer. The default keeps upstream's
+    /// strict routing.
+    fn person_answers(&self, _request: ElicitationReviewRequest) -> BoxFuture<'static, bool> {
+        futures::future::ready(false).boxed()
+    }
 }
 
 pub type ElicitationReviewerHandle = Arc<dyn ElicitationReviewer>;
@@ -524,11 +533,25 @@ impl ElicitationRequestManager {
                     });
                 };
 
-                match elicitation
+                let strict_value = elicitation
                     .meta()
-                    .and_then(|meta| meta.get(STRICT_AUTO_REVIEW_KEY))
-                {
-                    Some(Value::Bool(true)) => {
+                    .and_then(|meta| meta.get(STRICT_AUTO_REVIEW_KEY));
+                // Corbanu (#945, D50, PF-30): a server cannot make the automatic
+                // reviewer answer a confirmation the person answers.
+                let person_answers = match (strict_value, reviewer.as_ref()) {
+                    (Some(Value::Bool(true)), Some(reviewer)) => {
+                        reviewer
+                            .person_answers(ElicitationReviewRequest {
+                                server_name: server_name.clone(),
+                                request_id: id.clone(),
+                                elicitation: elicitation.clone(),
+                            })
+                            .await
+                    }
+                    _ => false,
+                };
+                match strict_value {
+                    Some(Value::Bool(true)) if !person_answers => {
                         if matches!(
                             approval_policy,
                             AskForApproval::Granular(config) if !config.allows_mcp_elicitations()
@@ -570,7 +593,7 @@ impl ElicitationRequestManager {
                             },
                         );
                     }
-                    None | Some(Value::Bool(false)) => {}
+                    None | Some(Value::Bool(_)) => {}
                     Some(_) => return Ok(strict_auto_review_decline()),
                 }
 

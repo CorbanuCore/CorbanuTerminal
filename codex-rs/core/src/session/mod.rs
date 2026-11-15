@@ -3742,22 +3742,6 @@ impl Session {
             .await;
     }
 
-    /// #945: the policy marker the open approval prompt `approval_id` was
-    /// shown under; `None` when no such prompt is open.
-    #[expect(
-        clippy::await_holding_invalid_type,
-        reason = "active turn reads must stay consistent with the matching turn state"
-    )]
-    pub(crate) async fn pending_approval_shown_under(
-        &self,
-        approval_id: &str,
-    ) -> Option<Option<(u64, u64)>> {
-        let active = self.active_turn.lock().await;
-        let active = active.as_ref()?;
-        let ts = active.turn_state.lock().await;
-        ts.pending_approval_shown_under(approval_id)
-    }
-
     pub(crate) async fn turn_context_for_sub_id(&self, sub_id: &str) -> Option<Arc<TurnContext>> {
         let active = self.active_turn.lock().await;
         active
@@ -3983,6 +3967,27 @@ impl Session {
         //  command-level approvals use `call_id`.
         // `approval_id` identifies subcommand callbacks and stdin writes.
         let effective_approval_id = approval_id.clone().unwrap_or_else(|| call_id.clone());
+        let parsed_cmd = parse_command(&command);
+        let proposed_network_policy_amendments = network_approval_context.as_ref().map(|context| {
+            vec![
+                NetworkPolicyAmendment {
+                    host: context.host.clone(),
+                    action: NetworkPolicyRuleAction::Allow,
+                },
+                NetworkPolicyAmendment {
+                    host: context.host.clone(),
+                    action: NetworkPolicyRuleAction::Deny,
+                },
+            ]
+        });
+        let available_decisions = available_decisions.unwrap_or_else(|| {
+            ExecApprovalRequestEvent::default_available_decisions(
+                network_approval_context.as_ref(),
+                proposed_execpolicy_amendment.as_ref(),
+                proposed_network_policy_amendments.as_deref(),
+                additional_permissions.as_ref(),
+            )
+        });
         // Add the tx_approve callback to the map before sending the request.
         let (tx_approve, rx_approve) = oneshot::channel();
         let (prev_entry, _network_prompt) = {
@@ -4009,6 +4014,7 @@ impl Session {
                         kind,
                         turn_context.sub_id.clone(),
                         self.services.authority_marker(),
+                        available_decisions.clone(),
                     );
                     let prompt = network_approval_context.as_ref().map(|_| {
                         ts.track_network_prompt(
@@ -4026,27 +4032,6 @@ impl Session {
             warn!("Overwriting existing pending approval for call_id: {effective_approval_id}");
         }
 
-        let parsed_cmd = parse_command(&command);
-        let proposed_network_policy_amendments = network_approval_context.as_ref().map(|context| {
-            vec![
-                NetworkPolicyAmendment {
-                    host: context.host.clone(),
-                    action: NetworkPolicyRuleAction::Allow,
-                },
-                NetworkPolicyAmendment {
-                    host: context.host.clone(),
-                    action: NetworkPolicyRuleAction::Deny,
-                },
-            ]
-        });
-        let available_decisions = available_decisions.unwrap_or_else(|| {
-            ExecApprovalRequestEvent::default_available_decisions(
-                network_approval_context.as_ref(),
-                proposed_execpolicy_amendment.as_ref(),
-                proposed_network_policy_amendments.as_deref(),
-                additional_permissions.as_ref(),
-            )
-        });
         let plugin_attribution = plugin_attribution_override.or_else(|| {
             cwd.to_abs_path()
                 .ok()
@@ -4123,6 +4108,8 @@ impl Session {
                         ExecApprovalKind::Command,
                         turn_context.sub_id.clone(),
                         self.services.authority_marker(),
+                        // Patch prompts offer once or session approval for these files.
+                        vec![ReviewDecision::Approved, ReviewDecision::ApprovedForSession],
                     )
                 }
                 None => None,
@@ -4881,7 +4868,7 @@ impl Session {
             .take_pending_approval(approval_id, /*expected_turn_id*/ None)
             .await
         {
-            let decision = pending.validate(decision);
+            let decision = pending.validate(pending.constrain_decision(decision));
             let _ = pending.sender.send(decision);
         } else {
             warn!("No pending approval found for call_id: {approval_id}");
@@ -7467,6 +7454,10 @@ mod account_switch_tests;
 #[cfg(test)]
 #[path = "home_access_session_tests.rs"]
 mod home_access_session_tests;
+
+#[cfg(test)]
+#[path = "approval_options_tests.rs"]
+mod approval_options_tests;
 
 #[cfg(test)]
 #[path = "stale_approval_tests.rs"]
