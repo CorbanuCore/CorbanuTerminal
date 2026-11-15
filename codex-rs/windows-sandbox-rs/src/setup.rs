@@ -1230,7 +1230,15 @@ fn build_payload_deny_write_paths(
         &deny_write_paths,
     );
     made_on_the_way.extend(deny_write_paths);
-    made_on_the_way.extend(allow_deny_paths.deny);
+    // Resolve policy-derived paths at the same unelevated boundary as explicit
+    // carveouts. The helper must only open that resolved identity, never follow
+    // the original link spelling while it holds elevated access (#1953).
+    made_on_the_way.extend(
+        allow_deny_paths
+            .deny
+            .into_iter()
+            .map(|path| canonicalize_path(&path)),
+    );
     // D453 (#1896 item 1): the planted-folder records (D425), which a root
     // holding `%LOCALAPPDATA%` would otherwise let the command edit, as the
     // non-admin sandbox denies them.
