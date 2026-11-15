@@ -458,7 +458,7 @@ async fn build_report(
                         )
                         .detail(error.to_string())
                         .remediation(
-                            "Fix the reported authentication error, then rerun codex doctor.",
+                            "Fix the reported authentication error, then rerun corbanu doctor.",
                         ),
                     })
                 },
@@ -543,30 +543,8 @@ async fn build_report(
             ) = tokio::join!(
                 async { run_sync_check("config", progress.clone(), || config_load_failure(err)) },
                 async {
-<<<<<<< HEAD
-                    run_sync_check("config", progress.clone(), || {
-                        DoctorCheck::new(
-                            "config.load",
-                            "config",
-                            CheckStatus::Fail,
-                            "config could not be loaded",
-                        )
-                        .detail(err.to_string())
-                        .remediation("Fix the reported config error, then rerun corbanu doctor.")
-||||||| 413492cd6c
-                    run_sync_check("config", progress.clone(), || {
-                        DoctorCheck::new(
-                            "config.load",
-                            "config",
-                            CheckStatus::Fail,
-                            "config could not be loaded",
-                        )
-                        .detail(err.to_string())
-                        .remediation("Fix the reported config error, then rerun codex doctor.")
-=======
                     run_sync_check("network", progress.clone(), || {
                         network::check(/*config*/ None)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     })
                 },
                 async {
@@ -628,7 +606,7 @@ fn config_load_failure(err: &anyhow::Error) -> DoctorCheck {
         CheckStatus::Fail,
         "config could not be loaded",
     )
-    .remediation("Fix the reported config error, then rerun codex doctor.");
+    .remediation("Fix the reported config error, then rerun corbanu doctor.");
     // Error messages can echo config values. Report only typed metadata,
     // including errors wrapped by io::Error, whose source skips the wrapper.
     let config_error = err.chain().find_map(|cause| {
@@ -672,21 +650,6 @@ async fn load_config(
         ..config_overrides_from_interactive(interactive, arg0_paths)
     };
 
-<<<<<<< HEAD
-    ConfigBuilder::default()
-        .cli_overrides(cli_kv_overrides)
-        .harness_overrides(overrides)
-        .build()
-        .await
-        .context("failed to load Corbanu Terminal config")
-||||||| 413492cd6c
-    ConfigBuilder::default()
-        .cli_overrides(cli_kv_overrides)
-        .harness_overrides(overrides)
-        .build()
-        .await
-        .context("failed to load Codex config")
-=======
     let config = crate::cloud_config::config_builder(
         &root_config_overrides,
         LoaderOverrides::default(),
@@ -695,10 +658,9 @@ async fn load_config(
     .await?
     .build()
     .await
-    .context("failed to load Codex config")?;
+    .context("failed to load Corbanu Terminal config")?;
     config.config_layer_stack.ensure_config_server_applied()?;
     Ok(config)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn config_overrides_from_interactive(
@@ -1015,89 +977,15 @@ fn installation_check(show_details: bool) -> DoctorCheck {
     }
 
     if doctor_managed_by_npm(current_exe.as_deref()) {
-<<<<<<< HEAD
-        match npm_global_root_check() {
-            NpmRootCheck::Match { package_root } => {
-                details.push(format!("npm update target: {}", package_root.display()));
-            }
-            NpmRootCheck::Mismatch {
-                running_package_root,
-                npm_package_root,
-            } => {
-                status = CheckStatus::Fail;
-                summary = "npm install -g @agticorp/pfterminal would update a different install"
-                    .to_string();
-                remediation = Some(format!(
-                    "Fix PATH or npm prefix so the running package root ({}) matches the npm global package root ({}).",
-                    running_package_root.display(),
-                    npm_package_root.display()
-                ));
-                details.push(format!(
-                    "running package root: {}",
-                    running_package_root.display()
-                ));
-                details.push(format!("npm package root: {}", npm_package_root.display()));
-            }
-            NpmRootCheck::MissingPackageRoot => {
-                status = status.max(CheckStatus::Warning);
-                summary = "npm-managed launch is missing package-root provenance".to_string();
-                remediation = Some(
-                    "Reinstall or update Corbanu Terminal so the JS shim provides CODEX_MANAGED_PACKAGE_ROOT."
-                        .to_string(),
-                );
-            }
-            NpmRootCheck::NpmUnavailable(error) => {
-                status = status.max(CheckStatus::Warning);
-                summary = "npm-managed launch could not inspect npm global root".to_string();
-                details.push(format!("npm root -g failed: {error}"));
-            }
-||||||| 413492cd6c
-        match npm_global_root_check() {
-            NpmRootCheck::Match { package_root } => {
-                details.push(format!("npm update target: {}", package_root.display()));
-            }
-            NpmRootCheck::Mismatch {
-                running_package_root,
-                npm_package_root,
-            } => {
-                status = CheckStatus::Fail;
-                summary =
-                    "npm install -g @openai/codex would update a different install".to_string();
-                remediation = Some(format!(
-                    "Fix PATH or npm prefix so the running package root ({}) matches the npm global package root ({}).",
-                    running_package_root.display(),
-                    npm_package_root.display()
-                ));
-                details.push(format!(
-                    "running package root: {}",
-                    running_package_root.display()
-                ));
-                details.push(format!("npm package root: {}", npm_package_root.display()));
-            }
-            NpmRootCheck::MissingPackageRoot => {
-                status = status.max(CheckStatus::Warning);
-                summary = "npm-managed launch is missing package-root provenance".to_string();
-                remediation = Some(
-                    "Reinstall or update Codex so the JS shim provides CODEX_MANAGED_PACKAGE_ROOT."
-                        .to_string(),
-                );
-            }
-            NpmRootCheck::NpmUnavailable(error) => {
-                status = status.max(CheckStatus::Warning);
-                summary = "npm-managed launch could not inspect npm global root".to_string();
-                details.push(format!("npm root -g failed: {error}"));
-            }
-=======
         details
             .push("npm update target: not inspected (PATH helpers are not executed)".to_string());
         if env::var_os("CODEX_MANAGED_PACKAGE_ROOT").is_none() {
             status = status.max(CheckStatus::Warning);
             summary = "npm-managed launch is missing package-root provenance".to_string();
             remediation = Some(
-                "Reinstall or update Codex so the JS shim provides CODEX_MANAGED_PACKAGE_ROOT."
+                "Reinstall or update Corbanu Terminal so the JS shim provides CODEX_MANAGED_PACKAGE_ROOT."
                     .to_string(),
             );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
@@ -1219,122 +1107,6 @@ fn display_optional_path(path: Option<&Path>) -> String {
         .unwrap_or_else(|| "none".to_string())
 }
 
-<<<<<<< HEAD
-#[derive(Debug, PartialEq, Eq)]
-enum NpmRootCheck {
-    Match {
-        package_root: PathBuf,
-    },
-    Mismatch {
-        running_package_root: PathBuf,
-        npm_package_root: PathBuf,
-    },
-    MissingPackageRoot,
-    NpmUnavailable(String),
-}
-
-fn npm_global_root_check() -> NpmRootCheck {
-    let Some(running_package_root) = env::var_os("CODEX_MANAGED_PACKAGE_ROOT").map(PathBuf::from)
-    else {
-        return NpmRootCheck::MissingPackageRoot;
-    };
-
-    let output = match run_command(NPM_COMMAND, ["root", "-g"]) {
-        Ok(output) => output,
-        Err(err) => return NpmRootCheck::NpmUnavailable(err),
-    };
-    let Some(npm_root) = output.lines().map(str::trim).find(|line| !line.is_empty()) else {
-        return NpmRootCheck::NpmUnavailable("empty output from npm root -g".to_string());
-    };
-
-    compare_npm_package_roots(&running_package_root, &PathBuf::from(npm_root))
-}
-
-fn compare_npm_package_roots(running_package_root: &Path, npm_root: &Path) -> NpmRootCheck {
-    let npm_package_root = npm_root.join("@agticorp").join("pfterminal");
-    let running = normalize_path_for_compare(running_package_root);
-    let target = normalize_path_for_compare(&npm_package_root);
-    if running == target {
-        NpmRootCheck::Match {
-            package_root: npm_package_root,
-        }
-    } else {
-        NpmRootCheck::Mismatch {
-            running_package_root: running_package_root.to_path_buf(),
-            npm_package_root,
-        }
-    }
-}
-
-fn normalize_path_for_compare(path: &Path) -> String {
-    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let raw = canonical.to_string_lossy().replace('\\', "/");
-    if cfg!(windows) {
-        raw.to_ascii_lowercase()
-    } else {
-        raw
-    }
-}
-
-||||||| 413492cd6c
-#[derive(Debug, PartialEq, Eq)]
-enum NpmRootCheck {
-    Match {
-        package_root: PathBuf,
-    },
-    Mismatch {
-        running_package_root: PathBuf,
-        npm_package_root: PathBuf,
-    },
-    MissingPackageRoot,
-    NpmUnavailable(String),
-}
-
-fn npm_global_root_check() -> NpmRootCheck {
-    let Some(running_package_root) = env::var_os("CODEX_MANAGED_PACKAGE_ROOT").map(PathBuf::from)
-    else {
-        return NpmRootCheck::MissingPackageRoot;
-    };
-
-    let output = match run_command(NPM_COMMAND, ["root", "-g"]) {
-        Ok(output) => output,
-        Err(err) => return NpmRootCheck::NpmUnavailable(err),
-    };
-    let Some(npm_root) = output.lines().map(str::trim).find(|line| !line.is_empty()) else {
-        return NpmRootCheck::NpmUnavailable("empty output from npm root -g".to_string());
-    };
-
-    compare_npm_package_roots(&running_package_root, &PathBuf::from(npm_root))
-}
-
-fn compare_npm_package_roots(running_package_root: &Path, npm_root: &Path) -> NpmRootCheck {
-    let npm_package_root = npm_root.join("@openai").join("codex");
-    let running = normalize_path_for_compare(running_package_root);
-    let target = normalize_path_for_compare(&npm_package_root);
-    if running == target {
-        NpmRootCheck::Match {
-            package_root: npm_package_root,
-        }
-    } else {
-        NpmRootCheck::Mismatch {
-            running_package_root: running_package_root.to_path_buf(),
-            npm_package_root,
-        }
-    }
-}
-
-fn normalize_path_for_compare(path: &Path) -> String {
-    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let raw = canonical.to_string_lossy().replace('\\', "/");
-    if cfg!(windows) {
-        raw.to_ascii_lowercase()
-    } else {
-        raw
-    }
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 fn display_list<T: AsRef<str>>(items: &[T]) -> String {
     if items.is_empty() {
         "none".to_string()
@@ -1347,27 +1119,21 @@ fn display_list<T: AsRef<str>>(items: &[T]) -> String {
     }
 }
 
-<<<<<<< HEAD
 fn terminal_path_entries() -> Vec<String> {
+    let mut seen = BTreeSet::new();
     let mut entries = Vec::new();
     for binary in ["corbanu", "pfterminal"] {
-        #[cfg(windows)]
-        let result = run_command("where", [binary]);
-        #[cfg(not(windows))]
-        let result = run_command("which", ["-a", binary]);
-
+        let Ok(candidates) = which::which_all(binary) else {
+            continue;
+        };
         entries.extend(
-            result
-                .unwrap_or_default()
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty())
-                .filter(|line| !is_process_arg0_alias(line))
-                .map(str::to_string),
+            candidates
+                .filter(|candidate| seen.insert(candidate.clone()))
+                .map(|path| path.display().to_string())
+                .filter(|path| !is_process_arg0_alias(path)),
         );
     }
     entries.sort();
-    entries.dedup();
     entries
 }
 
@@ -1384,45 +1150,14 @@ fn is_process_arg0_alias(path: &str) -> bool {
             .and_then(Path::file_name)
             .and_then(OsStr::to_str)
             == Some("arg0")
-||||||| 413492cd6c
-fn codex_path_entries() -> Vec<String> {
-    #[cfg(windows)]
-    let result = run_command("where", ["codex"]);
-    #[cfg(not(windows))]
-    let result = run_command("which", ["-a", "codex"]);
-
-    result
-        .unwrap_or_default()
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(str::to_string)
-        .collect()
-=======
-fn codex_path_entries() -> Vec<String> {
-    let Ok(candidates) = which::which_all("codex") else {
-        return Vec::new();
-    };
-    let mut seen = BTreeSet::new();
-    candidates
-        .filter(|candidate| seen.insert(candidate.clone()))
-        .map(|path| path.display().to_string())
-        .collect()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn config_check(config: &Config) -> DoctorCheck {
     let mut details = Vec::new();
-<<<<<<< HEAD
-    details.push(format!("PFTERMINAL_HOME: {}", config.codex_home.display()));
-||||||| 413492cd6c
-    details.push(format!("CODEX_HOME: {}", config.codex_home.display()));
-=======
     details
         .push("configuration scope: invocation config, including cloud-managed policy".to_string());
     details.push("active thread overrides: not inspected".to_string());
-    details.push(format!("CODEX_HOME: {}", config.codex_home.display()));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    details.push(format!("PFTERMINAL_HOME: {}", config.codex_home.display()));
     details.push(format!("cwd: {}", config.cwd.display()));
     details.push(format!(
         "model: {}",
@@ -3740,32 +3475,6 @@ mod tests {
     }
 
     #[test]
-<<<<<<< HEAD
-    fn compare_npm_package_roots_detects_match() {
-        let running = PathBuf::from("/prefix/lib/node_modules/@agticorp/pfterminal");
-        let npm_root = PathBuf::from("/prefix/lib/node_modules");
-        assert_eq!(
-            compare_npm_package_roots(&running, &npm_root),
-            NpmRootCheck::Match {
-                package_root: npm_root.join("@agticorp").join("pfterminal")
-            }
-        );
-    }
-
-    #[test]
-    fn compare_npm_package_roots_detects_mismatch() {
-        let running = PathBuf::from("/old/lib/node_modules/@agticorp/pfterminal");
-        let npm_root = PathBuf::from("/new/lib/node_modules");
-        assert_eq!(
-            compare_npm_package_roots(&running, &npm_root),
-            NpmRootCheck::Mismatch {
-                running_package_root: running,
-                npm_package_root: npm_root.join("@agticorp").join("pfterminal"),
-            }
-        );
-    }
-
-    #[test]
     fn process_arg0_alias_is_not_reported_as_a_duplicate_install() {
         let alias = PathBuf::from("/tmp/corbanu-home/tmp/arg0/codex-arg0-session/corbanu");
         let installed = PathBuf::from("/opt/corbanu/bin/corbanu");
@@ -3775,34 +3484,6 @@ mod tests {
     }
 
     #[test]
-||||||| 413492cd6c
-    fn compare_npm_package_roots_detects_match() {
-        let running = PathBuf::from("/prefix/lib/node_modules/@openai/codex");
-        let npm_root = PathBuf::from("/prefix/lib/node_modules");
-        assert_eq!(
-            compare_npm_package_roots(&running, &npm_root),
-            NpmRootCheck::Match {
-                package_root: npm_root.join("@openai").join("codex")
-            }
-        );
-    }
-
-    #[test]
-    fn compare_npm_package_roots_detects_mismatch() {
-        let running = PathBuf::from("/old/lib/node_modules/@openai/codex");
-        let npm_root = PathBuf::from("/new/lib/node_modules");
-        assert_eq!(
-            compare_npm_package_roots(&running, &npm_root),
-            NpmRootCheck::Mismatch {
-                running_package_root: running,
-                npm_package_root: npm_root.join("@openai").join("codex"),
-            }
-        );
-    }
-
-    #[test]
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     fn startup_warning_counts_group_known_sources() {
         let warnings = vec![
             "Skipped loading 2 skill(s) due to invalid SKILL.md files.".to_string(),
@@ -4235,11 +3916,51 @@ mod tests {
             ),
             ProviderAuthReachabilityMode::ApiKey
         );
-<<<<<<< HEAD
+
+        let chatgpt_auth = AuthDotJson {
+            auth_mode: Some(AuthMode::Chatgpt),
+            openai_api_key: None,
+            ..api_key_auth
+        };
+        assert_eq!(
+            provider_auth_reachability_mode_from_auth(
+                /*requires_openai_auth*/ true,
+                /*provider_env_key*/ None,
+                Some("https://custom.example/v1"),
+                |name| name == OPENAI_API_KEY_ENV_VAR,
+                Some(&chatgpt_auth),
+                /*active_provider_key_present*/ false,
+            ),
+            ProviderAuthReachabilityMode::Chatgpt
+        );
+        assert_eq!(
+            provider_auth_reachability_mode_from_auth(
+                /*requires_openai_auth*/ true,
+                Some(OPENAI_API_KEY_ENV_VAR),
+                Some("https://custom.example/v1"),
+                |name| name == OPENAI_API_KEY_ENV_VAR,
+                Some(&chatgpt_auth),
+                /*active_provider_key_present*/ false,
+            ),
+            ProviderAuthReachabilityMode::ApiKey
+        );
+        assert_eq!(
+            provider_auth_reachability_mode_from_auth(
+                /*requires_openai_auth*/ true,
+                /*provider_env_key*/ None,
+                /*provider_base_url*/ None,
+                |name| name == CODEX_API_KEY_ENV_VAR,
+                Some(&chatgpt_auth),
+                /*active_provider_key_present*/ false,
+            ),
+            ProviderAuthReachabilityMode::ApiKey
+        );
         for unrelated_provider_key in [AMBIENT_API_KEY_ENV_VAR, KIMI_CODE_API_KEY_ENV_VAR] {
             assert_eq!(
                 provider_auth_reachability_mode_from_auth(
                     /*requires_openai_auth*/ true,
+                    /*provider_env_key*/ None,
+                    /*provider_base_url*/ None,
                     |name| name == unrelated_provider_key,
                     /*stored_auth*/ None,
                     /*active_provider_key_present*/ false,
@@ -4257,6 +3978,8 @@ mod tests {
         assert_eq!(
             provider_auth_reachability_mode_from_auth(
                 /*requires_openai_auth*/ false,
+                /*provider_env_key*/ None,
+                /*provider_base_url*/ None,
                 |_| false,
                 /*stored_auth*/ None,
                 /*active_provider_key_present*/ true,
@@ -4267,6 +3990,8 @@ mod tests {
         assert_eq!(
             provider_auth_reachability_mode_from_auth(
                 /*requires_openai_auth*/ false,
+                /*provider_env_key*/ None,
+                /*provider_base_url*/ None,
                 |_| false,
                 /*stored_auth*/ None,
                 /*active_provider_key_present*/ false,
@@ -4347,45 +4072,6 @@ mod tests {
         assert!(provider_key_stored(&config, KIMI_CODE_API_KEY_ENV_VAR));
         assert!(!provider_key_stored(&config, OPENAI_API_KEY_ENV_VAR));
         assert!(!provider_key_stored(&config, AMBIENT_API_KEY_ENV_VAR));
-||||||| 413492cd6c
-=======
-
-        let chatgpt_auth = AuthDotJson {
-            auth_mode: Some(AuthMode::Chatgpt),
-            openai_api_key: None,
-            ..api_key_auth
-        };
-        assert_eq!(
-            provider_auth_reachability_mode_from_auth(
-                /*requires_openai_auth*/ true,
-                /*provider_env_key*/ None,
-                Some("https://custom.example/v1"),
-                |name| name == OPENAI_API_KEY_ENV_VAR,
-                Some(&chatgpt_auth),
-            ),
-            ProviderAuthReachabilityMode::Chatgpt
-        );
-        assert_eq!(
-            provider_auth_reachability_mode_from_auth(
-                /*requires_openai_auth*/ true,
-                Some(OPENAI_API_KEY_ENV_VAR),
-                Some("https://custom.example/v1"),
-                |name| name == OPENAI_API_KEY_ENV_VAR,
-                Some(&chatgpt_auth),
-            ),
-            ProviderAuthReachabilityMode::ApiKey
-        );
-        assert_eq!(
-            provider_auth_reachability_mode_from_auth(
-                /*requires_openai_auth*/ true,
-                /*provider_env_key*/ None,
-                /*provider_base_url*/ None,
-                |name| name == CODEX_API_KEY_ENV_VAR,
-                Some(&chatgpt_auth),
-            ),
-            ProviderAuthReachabilityMode::ApiKey
-        );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     #[test]
@@ -4683,29 +4369,12 @@ mod tests {
         // is pending. Keep it alive until the client has consumed the GET response, too.
         let server = tokio::task::spawn_blocking(move || {
             let (mut head_stream, _) = listener.accept().expect("accept HEAD probe request");
-<<<<<<< HEAD
-            let (release_head, head_released) = std::sync::mpsc::channel::<()>();
-            // Never answer HEAD; hold the connection until GET has been answered
-            // so HEAD can only end by timing out.
-            let head = std::thread::spawn(move || {
-                let mut request = [0; 1024];
-                let _ = head_stream.read(&mut request);
-                let _ = head_released.recv();
-            });
-||||||| 413492cd6c
-            let head = std::thread::spawn(move || {
-                let mut request = [0; 1024];
-                let _ = head_stream.read(&mut request);
-                std::thread::sleep(Duration::from_millis(50));
-            });
-=======
             let mut head_request = String::new();
             std::io::BufReader::new(&mut head_stream)
                 .read_line(&mut head_request)
                 .expect("read HEAD request line");
             assert_eq!(head_request, "HEAD /mcp HTTP/1.1\r\n");
             head_received_tx.send(()).expect("signal HEAD receipt");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
             let (mut get_stream, _) = listener.accept().expect("accept GET probe request");
             let mut get_request = String::new();
@@ -4718,33 +4387,11 @@ mod tests {
                     b"HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
                 )
                 .expect("write response");
-<<<<<<< HEAD
-            let _ = release_head.send(());
-            head.join().expect("HEAD holder should finish");
-||||||| 413492cd6c
-            head.join().expect("HEAD holder should finish");
-=======
             // Dropping the sender also releases this wait if the probe panics.
             let _ = probe_done_rx.recv();
             drop(head_stream);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         });
 
-<<<<<<< HEAD
-        // Each probe builds its own client inside this budget; 10 ms let a
-        // loaded CI runner time out the GET as well.
-        let status =
-            mcp_http_probe_url_with_timeout(&format!("http://{addr}/mcp"), Duration::from_secs(1))
-                .await;
-        server.join().expect("probe server thread should finish");
-||||||| 413492cd6c
-        let status = mcp_http_probe_url_with_timeout(
-            &format!("http://{addr}/mcp"),
-            Duration::from_millis(10),
-        )
-        .await;
-        server.join().expect("probe server thread should finish");
-=======
         let url = format!("http://{addr}/mcp");
         let probe = mcp_http_probe_url_with_timeout(&url, Duration::from_millis(10));
         let expire_head = async {
@@ -4755,7 +4402,6 @@ mod tests {
         let (status, ()) = tokio::join!(probe, expire_head);
         drop(probe_done_tx);
         server.await.expect("probe server task should finish");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         assert_eq!(status, Ok("HTTP 405".to_string()));
     }

@@ -1,19 +1,11 @@
 //! Diagnoses whether Corbanu Terminal update paths target the running installation.
 //!
 //! Update diagnostics combine cached version metadata, install-channel hints,
-<<<<<<< HEAD
-//! and bounded latest-version probes. Every supported launch layout converges on
-//! the canonical standalone installer, so diagnostics report the same target the
-//! update command will actually execute.
-||||||| 413492cd6c
-//! and bounded latest-version probes. For npm-managed launches, this module also
-//! verifies that npm install -g would update the package root that launched the
-//! current process, which catches PATH and prefix mismatches before the user runs
-//! an update command.
-=======
-//! and bounded latest-version HTTP probes. It never executes package managers or
-//! other helpers selected by PATH; npm update targets are not verified.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+//! and bounded latest-version HTTP probes. Every supported launch layout
+//! converges on the canonical standalone installer, so diagnostics report the
+//! same target the update command will actually execute. It never executes
+//! package managers or other helpers selected by PATH; npm update targets are
+//! not verified.
 
 use std::path::Path;
 #[cfg(target_os = "macos")]
@@ -24,55 +16,29 @@ use codex_core::config::Config;
 use codex_http_client::ClientRouteClass;
 use codex_http_client::RouteAwareClientPool;
 use codex_install_context::InstallContext;
-<<<<<<< HEAD
-||||||| 413492cd6c
-use codex_install_context::InstallMethod;
-=======
-use codex_install_context::InstallMethod;
 use http::Method;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use serde::Deserialize;
 #[cfg(target_os = "macos")]
 use url::Url;
 
 use super::CheckStatus;
 use super::DoctorCheck;
-<<<<<<< HEAD
-||||||| 413492cd6c
-use super::NpmRootCheck;
-=======
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use super::DoctorIssue;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use super::desktop::platform::InstalledApp;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use super::doctor_install_context;
-<<<<<<< HEAD
-use super::run_command;
-||||||| 413492cd6c
-use super::doctor_managed_by_npm;
-use super::npm_global_root_check;
-use super::run_command;
-=======
 use super::doctor_managed_by_npm;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use super::network;
 
 const MAX_VERSION_RESPONSE_BYTES: usize = 1024 * 1024;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 const VERSION_FILE_NAME: &str = "version.json";
-<<<<<<< HEAD
 const CORBANU_LATEST_RELEASE_URL: &str =
     "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/latest";
 const LEGACY_PFTERMINAL_LATEST_RELEASE_URL: &str =
     "https://api.github.com/repos/agtico/PfTerminal/releases/latest";
-||||||| 413492cd6c
-const GITHUB_LATEST_RELEASE_URL: &str = "https://api.github.com/repos/openai/codex/releases/latest";
-const HOMEBREW_CASK_API_URL: &str = "https://formulae.brew.sh/api/cask/codex.json";
-=======
-const GITHUB_LATEST_RELEASE_URL: &str = "https://api.github.com/repos/openai/codex/releases/latest";
-const HOMEBREW_CASK_API_URL: &str = "https://formulae.brew.sh/api/cask/codex.json";
 #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
 const DESKTOP_UPDATE_URL: &str = "https://persistent.oaistatic.com/codex-app-prod/appcast-x64.xml";
 #[cfg(all(target_os = "macos", not(target_arch = "x86_64")))]
@@ -82,7 +48,6 @@ const BACKEND_DESKTOP_UPDATE_URL: &str = "https://chatgpt.com/backend-api/wham/a
 #[cfg(target_os = "windows")]
 const DESKTOP_UPDATE_URL: &str =
     "https://persistent.oaistatic.com/codex-app-prod/windows-store-update.json";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 /// Builds the update-health row for the current installation.
 ///
@@ -103,49 +68,6 @@ pub(super) async fn updates_check(config: &Config) -> DoctorCheck {
     push_cached_version_details(&mut details, &version_file);
 
     let mut status = CheckStatus::Ok;
-<<<<<<< HEAD
-||||||| 413492cd6c
-    let mut summary = "update configuration is locally consistent".to_string();
-    let mut remediation = None;
-
-    if doctor_managed_by_npm(current_exe.as_deref()) {
-        match npm_global_root_check() {
-            NpmRootCheck::Match { package_root } => {
-                details.push(format!("npm update target: {}", package_root.display()));
-            }
-            NpmRootCheck::Mismatch {
-                running_package_root,
-                npm_package_root,
-            } => {
-                status = CheckStatus::Fail;
-                summary = "update would target a different npm install".to_string();
-                details.push(format!(
-                    "running package root: {}",
-                    running_package_root.display()
-                ));
-                details.push(format!("npm package root: {}", npm_package_root.display()));
-                remediation = Some(format!(
-                    "Fix PATH or npm prefix so the running package root ({}) matches the npm global package root ({}).",
-                    running_package_root.display(),
-                    npm_package_root.display()
-                ));
-            }
-            NpmRootCheck::MissingPackageRoot => {
-                status = status.max(CheckStatus::Warning);
-                summary = "npm update target could not be proven".to_string();
-                remediation = Some(
-                    "Reinstall or update Codex so the JS shim provides CODEX_MANAGED_PACKAGE_ROOT."
-                        .to_string(),
-                );
-            }
-            NpmRootCheck::NpmUnavailable(error) => {
-                status = status.max(CheckStatus::Warning);
-                summary = "npm update target could not be inspected".to_string();
-                details.push(format!("npm root -g failed: {error}"));
-            }
-        }
-    }
-=======
     let summary = "update configuration is locally consistent".to_string();
 
     if doctor_managed_by_npm(current_exe.as_deref()) {
@@ -156,7 +78,6 @@ pub(super) async fn updates_check(config: &Config) -> DoctorCheck {
         config.http_client_factory(),
         ClientRouteClass::Other,
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     match fetch_latest_version(&client, &install_context).await {
         Ok(latest_version) => {
@@ -173,21 +94,6 @@ pub(super) async fn updates_check(config: &Config) -> DoctorCheck {
         }
     }
 
-<<<<<<< HEAD
-    DoctorCheck::new(
-        "updates.status",
-        "updates",
-        status,
-        "update configuration is locally consistent",
-    )
-    .details(details)
-||||||| 413492cd6c
-    let mut check = DoctorCheck::new("updates.status", "updates", status, summary).details(details);
-    if let Some(remediation) = remediation {
-        check = check.remediation(remediation);
-    }
-    check
-=======
     DoctorCheck::new("updates.status", "updates", status, summary).details(details)
 }
 
@@ -461,7 +367,6 @@ async fn latest_macos_staged_build(root: &Path, installed_build: u64) -> Option<
         }
     }
     latest
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn push_cached_version_details(details: &mut Vec<String>, version_file: &Path) {
@@ -486,125 +391,45 @@ fn push_cached_version_details(details: &mut Vec<String>, version_file: &Path) {
     }
 }
 
-<<<<<<< HEAD
 fn update_action_label(_context: &InstallContext) -> &'static str {
     "canonical standalone installer"
-||||||| 413492cd6c
-fn update_action_label(context: &InstallContext) -> &'static str {
-    match &context.method {
-        InstallMethod::Npm => "npm install -g @openai/codex",
-        InstallMethod::Bun => "bun install -g @openai/codex",
-        InstallMethod::Pnpm => "pnpm add -g @openai/codex",
-        InstallMethod::Brew => "brew upgrade --cask codex",
-        InstallMethod::Standalone { .. } => "standalone installer",
-        InstallMethod::Other => "manual or unknown",
-    }
-=======
-fn update_action_label(context: &InstallContext) -> &'static str {
-    match &context.method {
-        InstallMethod::Npm => "npm install -g @openai/codex",
-        InstallMethod::Bun => "bun install -g @openai/codex",
-        InstallMethod::VitePlus => "vp install -g @openai/codex",
-        InstallMethod::Pnpm => "pnpm add -g @openai/codex",
-        InstallMethod::Brew => "brew upgrade --cask codex",
-        InstallMethod::Standalone { .. } => "standalone installer",
-        InstallMethod::Other => "manual or unknown",
-    }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
-<<<<<<< HEAD
-fn fetch_latest_version(_context: &InstallContext) -> Result<String, String> {
-    fetch_latest_github_release_version(CORBANU_LATEST_RELEASE_URL).or_else(|primary_error| {
-        fetch_latest_github_release_version(LEGACY_PFTERMINAL_LATEST_RELEASE_URL).map_err(
-            |fallback_error| {
-                format!(
-                    "canonical endpoint failed ({primary_error}); legacy redirect fallback failed ({fallback_error})"
-                )
-            },
-        )
-    })
-||||||| 413492cd6c
-fn fetch_latest_version(context: &InstallContext) -> Result<String, String> {
-    match &context.method {
-        InstallMethod::Brew => fetch_homebrew_cask_version(),
-        InstallMethod::Npm
-        | InstallMethod::Bun
-        | InstallMethod::Pnpm
-        | InstallMethod::Standalone { .. }
-        | InstallMethod::Other => fetch_latest_github_release_version(),
-    }
-=======
 async fn fetch_latest_version(
     client: &RouteAwareClientPool,
-    context: &InstallContext,
+    _context: &InstallContext,
 ) -> Result<String, String> {
-    match &context.method {
-        InstallMethod::Brew => fetch_homebrew_cask_version(client).await,
-        InstallMethod::Npm
-        | InstallMethod::Bun
-        | InstallMethod::VitePlus
-        | InstallMethod::Pnpm
-        | InstallMethod::Standalone { .. }
-        | InstallMethod::Other => fetch_latest_github_release_version(client).await,
+    match fetch_latest_github_release_version(client, CORBANU_LATEST_RELEASE_URL).await {
+        Ok(version) => Ok(version),
+        Err(primary_error) => {
+            fetch_latest_github_release_version(client, LEGACY_PFTERMINAL_LATEST_RELEASE_URL)
+                .await
+                .map_err(|fallback_error| {
+                    format!(
+                        "canonical endpoint failed ({primary_error}); legacy redirect fallback failed ({fallback_error})"
+                    )
+                })
+        }
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
-<<<<<<< HEAD
-fn fetch_latest_github_release_version(latest_release_url: &str) -> Result<String, String> {
-||||||| 413492cd6c
-fn fetch_latest_github_release_version() -> Result<String, String> {
-=======
 async fn fetch_latest_github_release_version(
     client: &RouteAwareClientPool,
+    latest_release_url: &str,
 ) -> Result<String, String> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     #[derive(Deserialize)]
     struct ReleaseInfo {
         tag_name: String,
     }
 
-<<<<<<< HEAD
-    let info = http_get_json::<ReleaseInfo>(latest_release_url)?;
-||||||| 413492cd6c
-    let info = http_get_json::<ReleaseInfo>(GITHUB_LATEST_RELEASE_URL)?;
-=======
-    let info = http_get_json::<ReleaseInfo>(client, GITHUB_LATEST_RELEASE_URL).await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let info = http_get_json::<ReleaseInfo>(client, latest_release_url).await?;
     info.tag_name
         .strip_prefix("rust-v")
         .map(str::to_string)
         .ok_or_else(|| format!("failed to parse latest tag {}", info.tag_name))
 }
 
-<<<<<<< HEAD
-fn http_get_json<T>(url: &str) -> Result<T, String>
-||||||| 413492cd6c
-fn fetch_homebrew_cask_version() -> Result<String, String> {
-    #[derive(Deserialize)]
-    struct HomebrewCaskInfo {
-        version: String,
-    }
-
-    http_get_json::<HomebrewCaskInfo>(HOMEBREW_CASK_API_URL).map(|info| info.version)
-}
-
-fn http_get_json<T>(url: &str) -> Result<T, String>
-=======
-async fn fetch_homebrew_cask_version(client: &RouteAwareClientPool) -> Result<String, String> {
-    #[derive(Deserialize)]
-    struct HomebrewCaskInfo {
-        version: String,
-    }
-
-    http_get_json::<HomebrewCaskInfo>(client, HOMEBREW_CASK_API_URL)
-        .await
-        .map(|info| info.version)
-}
-
 async fn http_get_json<T>(client: &RouteAwareClientPool, url: &str) -> Result<T, String>
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 where
     T: for<'de> Deserialize<'de>,
 {
@@ -613,7 +438,7 @@ where
             .request(Method::GET, url)
             .header(
                 http::header::USER_AGENT,
-                concat!("codex-doctor/", env!("CARGO_PKG_VERSION")),
+                concat!("corbanu-doctor/", env!("CARGO_PKG_VERSION")),
             )
             .send()
             .await
@@ -661,10 +486,7 @@ struct VersionInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-<<<<<<< HEAD
     use codex_install_context::InstallMethod;
-||||||| 413492cd6c
-=======
     use pretty_assertions::assert_eq;
 
     #[tokio::test]
@@ -844,7 +666,6 @@ mod tests {
         )
         .expect("staged app metadata should be created");
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     #[test]
     fn is_newer_compares_plain_semver() {
