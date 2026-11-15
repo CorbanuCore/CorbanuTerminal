@@ -269,20 +269,12 @@ impl ChatWidget {
                 self.bottom_pane.show_selection_view(SelectionViewParams {
                     title: Some("Archive this session?".to_string()),
                     subtitle: Some(
-<<<<<<< HEAD
-                        "This will archive the current session and exit Corbanu Terminal."
-                            .to_string(),
-||||||| 413492cd6c
-                        "Are you sure? This will archive the current session and exit Codex"
-                            .to_string(),
-=======
                         if self.bottom_pane.is_task_running() {
                             "This will stop the current turn and archive the session."
                         } else {
                             "Are you sure? This will archive the current session"
                         }
                         .to_string(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     ),
                     footer_hint: Some(standard_popup_hint_line()),
                     items: vec![
@@ -302,14 +294,8 @@ impl ChatWidget {
                             ..Default::default()
                         },
                     ],
-<<<<<<< HEAD
                     allow_number_shortcuts: false,
-                    ..Default::default()
-||||||| 413492cd6c
-                    ..Default::default()
-=======
                     ..SelectionViewParams::confirmation()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 });
                 self.request_redraw();
             }
@@ -337,14 +323,8 @@ impl ChatWidget {
                             ..Default::default()
                         },
                     ],
-<<<<<<< HEAD
                     allow_number_shortcuts: false,
-                    ..Default::default()
-||||||| 413492cd6c
-                    ..Default::default()
-=======
                     ..SelectionViewParams::confirmation()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 });
                 self.request_redraw();
             }
@@ -423,21 +403,11 @@ impl ChatWidget {
                 self.open_model_popup();
                 self.defer_input_until_settings_applied();
             }
-<<<<<<< HEAD
             SlashCommand::Gpu => {
                 self.app_event_tx.send(AppEvent::OpenGpuMenu);
             }
-            SlashCommand::Personality => {
-                self.open_personality_popup();
-                self.defer_input_until_settings_applied();
-||||||| 413492cd6c
-            SlashCommand::Personality => {
-                self.open_personality_popup();
-                self.defer_input_until_settings_applied();
-=======
             SlashCommand::Presets => {
                 self.open_quick_dial_menu();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
             SlashCommand::Plan => {
                 self.apply_plan_slash_command();
@@ -1011,7 +981,6 @@ impl ChatWidget {
                 self.add_error_message("Usage: /pwd".to_string());
             }
             SlashCommand::Usage => {
-<<<<<<< HEAD
                 if trimmed.split_whitespace().next() == Some("requests") {
                     // `/cost` is developer-only (PF-60-S03): a build that
                     // records no costs says so instead of opening a view it
@@ -1025,19 +994,10 @@ impl ChatWidget {
                         );
                     }
                 } else if self.ensure_usage_command_available() {
-                    match tokens::TokenActivityView::parse(trimmed) {
-                        Some(view) => self.add_token_activity_output(view),
-||||||| 413492cd6c
-                if self.ensure_usage_command_available() {
-                    match tokens::TokenActivityView::parse(trimmed) {
-                        Some(view) => self.add_token_activity_output(view),
-=======
-                if self.ensure_usage_command_available() {
                     match crate::analytics::TokenActivityView::parse(trimmed) {
                         Some(view) => self
                             .app_event_tx
                             .send(AppEvent::OpenAnalytics { view: Some(view) }),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                         None => self.add_error_message(
                             if cfg!(feature = "developer-accounting") {
                                 "Usage: /usage [daily|weekly|cumulative] or /usage requests [YYYY-MM-DD]"
@@ -1049,7 +1009,6 @@ impl ChatWidget {
                     }
                 }
             }
-<<<<<<< HEAD
             // The recorded-request view, reachable by its own name. It reads
             // this machine's ledger for whatever provider served the turn, so
             // unlike account usage it needs no particular sign-in - and it was
@@ -1058,8 +1017,6 @@ impl ChatWidget {
             SlashCommand::Cost => {
                 self.open_cost_command(trimmed, chrono::Utc::now().date_naive());
             }
-||||||| 413492cd6c
-=======
             SlashCommand::Voice => match trimmed.to_ascii_lowercase().as_str() {
                 "settings" => self.app_event_tx.send(AppEvent::OpenRealtimeSettings),
                 "mute" => self.app_event_tx.send(AppEvent::VoiceControl {
@@ -1072,15 +1029,30 @@ impl ChatWidget {
                 }),
                 _ => self.add_error_message("Usage: /voice [settings|mute|stop]".to_string()),
             },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             SlashCommand::Ide => {
                 self.handle_ide_command_args(trimmed);
             }
-<<<<<<< HEAD
-            SlashCommand::Mcp => match trimmed.to_ascii_lowercase().as_str() {
-                "verbose" => self.add_mcp_output(McpServerStatusDetail::Full),
-                _ => self.add_error_message("Usage: /mcp [verbose]".to_string()),
-            },
+            SlashCommand::Mcp => {
+                if trimmed.eq_ignore_ascii_case("verbose") {
+                    self.add_mcp_output(McpServerStatusDetail::Full);
+                } else if let Some((command, name)) = trimmed.split_once(' ')
+                    && command.eq_ignore_ascii_case("login")
+                    && !name.trim().is_empty()
+                {
+                    if let Some(thread_id) = self.thread_id {
+                        self.app_event_tx.send(AppEvent::StartMcpLogin {
+                            name: name.trim().to_string(),
+                            thread_id,
+                        });
+                    } else {
+                        self.add_error_message(
+                            "MCP sign-in requires an active session.".to_string(),
+                        );
+                    }
+                } else {
+                    self.add_error_message("Usage: /mcp [verbose | login <name>]".to_string());
+                }
+            }
             SlashCommand::Vault => {
                 // `/vault credential add` opens the secure (masked) entry overlay rather than
                 // accepting a secret as chat text. Reject extra args so accidental inline secrets
@@ -1290,32 +1262,6 @@ impl ChatWidget {
                         "Usage: /tasknode [link|status|tasks|task|request|context|team|chat|requests|verification|balance|rewards|logout]"
                             .to_string(),
                     ),
-||||||| 413492cd6c
-            SlashCommand::Mcp => match trimmed.to_ascii_lowercase().as_str() {
-                "verbose" => self.add_mcp_output(McpServerStatusDetail::Full),
-                _ => self.add_error_message("Usage: /mcp [verbose]".to_string()),
-            },
-=======
-            SlashCommand::Mcp => {
-                if trimmed.eq_ignore_ascii_case("verbose") {
-                    self.add_mcp_output(McpServerStatusDetail::Full);
-                } else if let Some((command, name)) = trimmed.split_once(' ')
-                    && command.eq_ignore_ascii_case("login")
-                    && !name.trim().is_empty()
-                {
-                    if let Some(thread_id) = self.thread_id {
-                        self.app_event_tx.send(AppEvent::StartMcpLogin {
-                            name: name.trim().to_string(),
-                            thread_id,
-                        });
-                    } else {
-                        self.add_error_message(
-                            "MCP sign-in requires an active session.".to_string(),
-                        );
-                    }
-                } else {
-                    self.add_error_message("Usage: /mcp [verbose | login <name>]".to_string());
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }
             }
             SlashCommand::Keymap => match trimmed.to_ascii_lowercase().as_str() {
@@ -1686,7 +1632,6 @@ impl ChatWidget {
         self.queued_command_drain_result(cmd)
     }
 
-<<<<<<< HEAD
     /// If `text` is a recognized slash command, dispatch it through the normal
     /// slash-command path and return true. External-pane input forwarding uses
     /// this to keep control-plane commands global: a slash command entered
@@ -1716,12 +1661,7 @@ impl ChatWidget {
         true
     }
 
-    fn builtin_command_flags(&self) -> BuiltinCommandFlags {
-||||||| 413492cd6c
-    fn builtin_command_flags(&self) -> BuiltinCommandFlags {
-=======
     pub(super) fn builtin_command_flags(&self) -> BuiltinCommandFlags {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         #[cfg(target_os = "windows")]
         let allow_elevate_sandbox = {
             let windows_sandbox_level = self.windows_sandbox_config.level();
