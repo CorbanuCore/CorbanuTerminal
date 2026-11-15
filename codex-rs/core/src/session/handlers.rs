@@ -491,7 +491,7 @@ pub async fn review(
 /// #1927: re-admits input an interrupted turn held for the next turn. User input starts a
 /// turn or steers the running one like any submission; response items join a running turn as
 /// extension work (admission checked) or are recorded; agent mail is queued again.
-async fn readmit_interrupted_input(
+pub(super) async fn readmit_interrupted_input(
     sess: &Arc<Session>,
     input: TurnInput,
     final_output_json_schema: Option<Value>,
