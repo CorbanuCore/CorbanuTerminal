@@ -4,12 +4,8 @@ use crate::history_cell::PlainHistoryCell;
 use crate::history_cell::plain_lines;
 use crate::legacy_core::config::Config;
 use crate::line_truncation::line_width;
-<<<<<<< HEAD
 use crate::provider_named_accounts::NamedSignInState;
-||||||| 413492cd6c
-=======
 use crate::style::accent_color;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::token_usage::TokenUsage;
 use crate::token_usage::TokenUsageInfo;
 use crate::version::CODEX_CLI_VERSION;
@@ -19,7 +15,6 @@ use codex_app_server_protocol::AskForApproval;
 use codex_model_provider::provider_uses_first_party_auth_path;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::WireApi;
-use codex_product_brand::PRODUCT_NAME;
 use codex_protocol::ThreadId;
 use codex_protocol::account::PlanType;
 use codex_protocol::config_types::ApprovalsReviewer;
@@ -279,18 +274,12 @@ pub(crate) fn new_status_output_with_rate_limits_handle(
         reasoning_effort_override,
         agents_summary,
         refreshing_rate_limits,
-<<<<<<< HEAD
         account_usage,
         named_sign_in,
-    );
-||||||| 413492cd6c
-    );
-=======
     ));
     let handle = StatusHistoryHandle {
         card: Arc::clone(&card),
     };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     (
         CompositeHistoryCell::new(vec![Box::new(command), Box::new(card)]),
@@ -319,15 +308,9 @@ impl StatusHistoryCell {
         reasoning_effort_override: Option<Option<ReasoningEffort>>,
         agents_summary: String,
         refreshing_rate_limits: bool,
-<<<<<<< HEAD
         account_usage: Option<StatusAccountUsage>,
         named_sign_in: Option<NamedSignInState>,
-    ) -> (Self, StatusHistoryHandle) {
-||||||| 413492cd6c
-    ) -> (Self, StatusHistoryHandle) {
-=======
     ) -> Self {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let approval_policy = AskForApproval::from(config.permissions.approval_policy.value());
         let permission_profile = config.permissions.effective_permission_profile();
         let workspace_roots = config.effective_workspace_roots();
@@ -384,7 +367,6 @@ impl StatusHistoryCell {
             &approval,
             workspace_root_suffix.as_deref(),
         );
-<<<<<<< HEAD
         // PF-84 (#555): name the account the usage rows mark active, which
         // is the one the app server reported for the thread when it did.
         let active_account = account_usage
@@ -410,28 +392,6 @@ impl StatusHistoryCell {
             && named_sign_in
                 .as_ref()
                 .is_some_and(|(_, state)| state == &Some(NamedSignInState::NoSignIn));
-        let model_provider = format_model_provider(
-            config,
-            runtime_model_provider_base_url,
-            active_account,
-            provider_has_named_account,
-            session_account_gone,
-        );
-        let account_usage = account_usage.filter(|_| provider_has_named_account);
-        let show_chatgpt_usage_link = config.model_provider.requires_openai_auth;
-        let account = compose_account_display(account_display);
-        let account_value =
-            status_account_value(config, account_display, named_sign_in, remote_connection);
-        let security = crate::security::view::status_summary(
-            config.security_level,
-            crate::legacy_core::security_level_change::configured_level(config),
-            *session_id,
-        );
-||||||| 413492cd6c
-        let model_provider = format_model_provider(config, runtime_model_provider_base_url);
-        let show_chatgpt_usage_link = config.model_provider.requires_openai_auth;
-        let account = compose_account_display(account_display);
-=======
         let show_chatgpt_usage_link = requires_openai_auth;
         let mut account = compose_account_display(account_display);
         let workspace_matches_provider = if remote_connection.is_some() {
@@ -454,7 +414,22 @@ impl StatusHistoryCell {
         {
             *workspace = None;
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        // Upstream's `model_provider` above is the provider ID; the card shows main's
+        // provider and account line instead (PF-84).
+        let model_provider = format_model_provider(
+            config,
+            active_account,
+            provider_has_named_account,
+            session_account_gone,
+        );
+        let account_usage = account_usage.filter(|_| provider_has_named_account);
+        let account_value =
+            status_account_value(config, account_display, named_sign_in, remote_connection);
+        let security = crate::security::view::status_summary(
+            config.security_level,
+            crate::legacy_core::security_level_change::configured_level(config),
+            *session_id,
+        );
         let session_id = session_id.as_ref().map(std::string::ToString::to_string);
         let forked_from = forked_from.map(|id| id.to_string());
         let default_usage = TokenUsage::default();
@@ -486,72 +461,28 @@ impl StatusHistoryCell {
         let agents_summary = Arc::new(RwLock::new(agents_summary));
         let thread_usage = StatusThreadUsage::default();
 
-<<<<<<< HEAD
-        (
-            Self {
-                model_name,
-                model_details,
-                directory: config.cwd.to_path_buf(),
-                permissions,
-                security,
-                collaboration_mode: collaboration_mode.map(ToString::to_string),
-                model_provider,
-                remote_connection: remote_connection.cloned(),
-                show_chatgpt_usage_link,
-                account,
-                account_value,
-                thread_name,
-                session_id,
-                forked_from,
-                token_usage,
-                account_usage,
-                agents_summary,
-                rate_limit_state: rate_limit_state.clone(),
-            },
-            StatusHistoryHandle { rate_limit_state },
-        )
-||||||| 413492cd6c
-        (
-            Self {
-                model_name,
-                model_details,
-                directory: config.cwd.to_path_buf(),
-                permissions,
-                collaboration_mode: collaboration_mode.map(ToString::to_string),
-                model_provider,
-                remote_connection: remote_connection.cloned(),
-                show_chatgpt_usage_link,
-                account,
-                thread_name,
-                session_id,
-                forked_from,
-                token_usage,
-                agents_summary,
-                rate_limit_state: rate_limit_state.clone(),
-            },
-            StatusHistoryHandle { rate_limit_state },
-        )
-=======
         Self {
             model_name,
             model_details,
             directory: config.cwd.to_path_buf(),
             permissions,
+            security,
             collaboration_mode: collaboration_mode.map(ToString::to_string),
             model_provider,
             remote_connection: remote_connection.cloned(),
             show_chatgpt_usage_link,
             account,
+            account_value,
             thread_name,
             session_id,
             forked_from,
             token_usage,
+            account_usage,
             agents_summary,
             rate_limit_state,
             thread_usage,
             plan_type: _plan_type,
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn token_usage_spans(&self) -> Vec<Span<'static>> {
@@ -881,7 +812,6 @@ fn status_approval_label(
     approval.to_string()
 }
 
-<<<<<<< HEAD
 fn status_account_value(
     config: &Config,
     account_display: Option<&StatusAccountDisplay>,
@@ -928,7 +858,7 @@ fn status_account_value(
     }
 
     account_display.map(|account| match account {
-        StatusAccountDisplay::ChatGpt { email, plan } => match (email, plan) {
+        StatusAccountDisplay::ChatGpt { email, plan, .. } => match (email, plan) {
             (Some(email), Some(plan)) => format!("{email} ({plan})"),
             (Some(email), None) => email.clone(),
             (None, Some(plan)) => plan.clone(),
@@ -951,91 +881,26 @@ fn status_account_value(
     })
 }
 
-impl HistoryCell for StatusHistoryCell {
-    fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-        let mut lines: Vec<Line<'static>> = Vec::new();
-        lines.push(Line::from(vec![
-            Span::from(format!("{}>_ ", FieldFormatter::INDENT)).dim(),
-            Span::from(PRODUCT_NAME).bold(),
-            Span::from(" ").dim(),
-            Span::from(format!("(v{CODEX_CLI_VERSION})")).dim(),
-        ]));
-
-        let available_inner_width = usize::from(width.saturating_sub(4));
-        if available_inner_width == 0 {
-||||||| 413492cd6c
-impl HistoryCell for StatusHistoryCell {
-    fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-        let mut lines: Vec<Line<'static>> = Vec::new();
-        lines.push(Line::from(vec![
-            Span::from(format!("{}>_ ", FieldFormatter::INDENT)).dim(),
-            Span::from("OpenAI Codex").bold(),
-            Span::from(" ").dim(),
-            Span::from(format!("(v{CODEX_CLI_VERSION})")).dim(),
-        ]));
-
-        let available_inner_width = usize::from(width.saturating_sub(4));
-        if available_inner_width == 0 {
-=======
 impl StatusHistoryCell {
     fn content_lines(&self, width: u16) -> Vec<Line<'static>> {
         let available_width = usize::from(width);
         if available_width == 0 {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             return Vec::new();
         }
         let mut lines = Vec::new();
 
-<<<<<<< HEAD
         let account_value = self.account_value.clone();
-||||||| 413492cd6c
-        let account_value = self.account.as_ref().map(|account| match account {
-            StatusAccountDisplay::ChatGpt { email, plan } => match (email, plan) {
-                (Some(email), Some(plan)) => format!("{email} ({plan})"),
-                (Some(email), None) => email.clone(),
-                (None, Some(plan)) => plan.clone(),
-                (None, None) => "ChatGPT".to_string(),
-            },
-            StatusAccountDisplay::ApiKey => {
-                "API key configured (run codex login to use ChatGPT)".to_string()
-            }
-        });
-=======
-        let account_value = self.account.as_ref().map(|account| match account {
-            StatusAccountDisplay::ChatGpt { email, plan, .. } => match (email, plan) {
-                (Some(email), Some(plan)) => format!("{email} ({plan})"),
-                (Some(email), None) => email.clone(),
-                (None, Some(plan)) => plan.clone(),
-                (None, None) => "ChatGPT".to_string(),
-            },
-            StatusAccountDisplay::ApiKey => {
-                "API key configured (run codex login to use ChatGPT)".to_string()
-            }
-        });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
-<<<<<<< HEAD
-        let mut labels: Vec<String> =
-            vec!["Model", "Directory", "Permissions", "Security", "Agents.md"]
-                .into_iter()
-                .map(str::to_string)
-                .collect();
-||||||| 413492cd6c
-        let mut labels: Vec<String> = vec!["Model", "Directory", "Permissions", "Agents.md"]
-            .into_iter()
-            .map(str::to_string)
-            .collect();
-=======
         let workspace = match &self.account {
             Some(StatusAccountDisplay::ChatGpt { workspace, .. }) => workspace.as_deref(),
             _ => None,
         };
 
-        let mut labels: Vec<String> = vec!["Model", "Directory", "Permissions", "Agents.md"]
-            .into_iter()
-            .map(str::to_string)
-            .collect();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let mut labels: Vec<String> =
+            vec!["Model", "Directory", "Permissions", "Security", "Agents.md"]
+                .into_iter()
+                .map(str::to_string)
+                .collect();
         let mut seen: BTreeSet<String> = labels.iter().cloned().collect();
         let thread_name = self.thread_name.as_deref().filter(|name| !name.is_empty());
         #[expect(clippy::expect_used)]
@@ -1075,7 +940,6 @@ impl StatusHistoryCell {
         if self.token_usage.context_window.is_some() {
             push_label(&mut labels, &mut seen, "Context window");
         }
-<<<<<<< HEAD
         let account_usage_lines = self
             .account_usage
             .as_ref()
@@ -1086,10 +950,6 @@ impl StatusHistoryCell {
             push_label(&mut labels, &mut seen, "Account usage");
         }
 
-||||||| 413492cd6c
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.collect_rate_limit_labels(&rate_limit_state, &mut seen, &mut labels);
         self.thread_usage.push_labels(&mut labels, &mut seen);
 
@@ -1313,11 +1173,11 @@ impl HistoryCell for Arc<StatusHistoryCell> {
         self.display_hyperlink_lines(width)
     }
 }
-<<<<<<< HEAD
 
+/// PF-84: the "Model provider" line. Upstream no longer shows the runtime base URL; Corbanu keeps
+/// the line for a non-default provider and for the named account this session's requests use.
 fn format_model_provider(
     config: &Config,
-    runtime_base_url: Option<&str>,
     active_account: Option<&str>,
     provider_has_named_account: bool,
     session_account_gone: bool,
@@ -1329,7 +1189,6 @@ fn format_model_provider(
     } else {
         name
     };
-    let base_url = runtime_base_url.and_then(sanitize_base_url);
     // PF-84-S04: with named accounts on, name the account this session's
     // requests use, `default` included. D86: only when this provider has a
     // named account in the home, so homes without any show what they did.
@@ -1349,15 +1208,11 @@ fn format_model_provider(
                     })
             })
         });
-    let is_default_openai = provider.is_openai() && base_url.is_none();
-    if is_default_openai && account.is_none() {
+    if provider.is_openai() && account.is_none() {
         return None;
     }
 
-    let mut value = match base_url {
-        Some(base_url) => format!("{provider_name} - {base_url}"),
-        None => provider_name.to_string(),
-    };
+    let mut value = provider_name.to_string();
     match account {
         // D171 (#1286): the session's account was removed or signed out; the
         // Account line names it and its recovery.
@@ -1375,58 +1230,3 @@ fn format_model_provider(
     }
     Some(value)
 }
-
-fn sanitize_base_url(raw: &str) -> Option<String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    let Ok(mut url) = Url::parse(trimmed) else {
-        return None;
-    };
-    let _ = url.set_username("");
-    let _ = url.set_password(None);
-    url.set_query(None);
-    url.set_fragment(None);
-    Some(url.to_string().trim_end_matches('/').to_string()).filter(|value| !value.is_empty())
-}
-||||||| 413492cd6c
-
-fn format_model_provider(config: &Config, runtime_base_url: Option<&str>) -> Option<String> {
-    let provider = &config.model_provider;
-    let name = provider.name.trim();
-    let provider_name = if name.is_empty() {
-        config.model_provider_id.as_str()
-    } else {
-        name
-    };
-    let base_url = runtime_base_url.and_then(sanitize_base_url);
-    let is_default_openai = provider.is_openai() && base_url.is_none();
-    if is_default_openai {
-        return None;
-    }
-
-    Some(match base_url {
-        Some(base_url) => format!("{provider_name} - {base_url}"),
-        None => provider_name.to_string(),
-    })
-}
-
-fn sanitize_base_url(raw: &str) -> Option<String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    let Ok(mut url) = Url::parse(trimmed) else {
-        return None;
-    };
-    let _ = url.set_username("");
-    let _ = url.set_password(None);
-    url.set_query(None);
-    url.set_fragment(None);
-    Some(url.to_string().trim_end_matches('/').to_string()).filter(|value| !value.is_empty())
-}
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

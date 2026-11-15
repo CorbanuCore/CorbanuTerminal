@@ -189,48 +189,10 @@ fn sanitize_directory(lines: Vec<String>) -> Vec<String> {
     lines
         .into_iter()
         .map(|line| {
-<<<<<<< HEAD
             let line = super::snapshot_helpers::normalize_snapshot_version(&line);
-            if let (Some(frame_width), Some(dir_pos), Some(pipe_idx)) =
-                (frame_width, line.find("Directory: "), line.rfind('│'))
-            {
-                let prefix = &line[..dir_pos + "Directory: ".len()];
-                let suffix = &line[pipe_idx..];
-                let replacement = "[[workspace]]";
-                let content_width = frame_width.saturating_sub(
-                    UnicodeWidthStr::width(prefix) + UnicodeWidthStr::width(suffix),
-                );
-                let mut rebuilt = prefix.to_string();
-                rebuilt.push_str(replacement);
-                let replacement_width = UnicodeWidthStr::width(replacement);
-                if content_width > replacement_width {
-                    rebuilt.push_str(&" ".repeat(content_width - replacement_width));
-                }
-                rebuilt.push_str(suffix);
-                rebuilt
-||||||| 413492cd6c
-            if let (Some(frame_width), Some(dir_pos), Some(pipe_idx)) =
-                (frame_width, line.find("Directory: "), line.rfind('│'))
-            {
-                let prefix = &line[..dir_pos + "Directory: ".len()];
-                let suffix = &line[pipe_idx..];
-                let replacement = "[[workspace]]";
-                let content_width = frame_width.saturating_sub(
-                    UnicodeWidthStr::width(prefix) + UnicodeWidthStr::width(suffix),
-                );
-                let mut rebuilt = prefix.to_string();
-                rebuilt.push_str(replacement);
-                let replacement_width = UnicodeWidthStr::width(replacement);
-                if content_width > replacement_width {
-                    rebuilt.push_str(&" ".repeat(content_width - replacement_width));
-                }
-                rebuilt.push_str(suffix);
-                rebuilt
-=======
             if let Some((prefix, value)) = line.split_once("Directory:") {
                 let padding = &value[..value.len() - value.trim_start().len()];
                 format!("{prefix}Directory:{padding}[[workspace]]")
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             } else {
                 line
             }
@@ -292,13 +254,7 @@ fn permissions_text_for_width(config: &Config, width: u16) -> Option<String> {
         /*collaboration_mode*/ None,
         /*reasoning_effort_override*/ None,
     );
-<<<<<<< HEAD
-    render_lines(&composite.display_lines(/*width*/ 240))
-||||||| 413492cd6c
-    render_lines(&composite.display_lines(/*width*/ 80))
-=======
     render_lines(&composite.display_lines(width))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .iter()
         .find(|line| line.contains("Permissions:"))
         .and_then(|line| {
@@ -465,16 +421,12 @@ async fn status_snapshot_includes_reasoning_details() {
 #[tokio::test]
 async fn status_snapshot_shows_chatgpt_plan_without_email() {
     let temp_home = TempDir::new().expect("temp home");
-<<<<<<< HEAD
-    write_models_cache(temp_home.path()).expect("write models cache");
+    // Corbanu's default provider is not OpenAI; this test needs the ChatGPT account.
     std::fs::write(
         temp_home.path().join("config.toml"),
         "model_provider = \"openai\"\n",
     )
     .expect("write OpenAI provider config");
-||||||| 413492cd6c
-    write_models_cache(temp_home.path()).expect("write models cache");
-=======
     let profile_path = temp_home.path().join("work.config.toml");
     let loader_overrides = LoaderOverrides {
         user_config_path: Some(profile_path.abs()),
@@ -501,10 +453,12 @@ async fn status_snapshot_shows_chatgpt_plan_without_email() {
         .await;
     std::fs::write(
         &profile_path,
-        format!("chatgpt_base_url = '{}'", server.uri()),
+        format!(
+            "model_provider = \"openai\"\nchatgpt_base_url = '{}'",
+            server.uri()
+        ),
     )
     .expect("configure local ChatGPT fixture");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut config = test_config(&temp_home).await;
     config.chatgpt_base_url = server.uri();
     config.model = Some("gpt-5.1-codex-max".to_string());
@@ -2028,61 +1982,6 @@ async fn status_snapshot_uses_default_reasoning_when_config_empty() {
             is_managed_daemon: is_local_daemon,
         });
 
-<<<<<<< HEAD
-    let model_slug = get_model_offline_for_tests(config.model.as_deref());
-    let token_info = token_info_for(&model_slug, &config, &usage);
-    let (composite, _) = new_status_output_with_rate_limits_handle(
-        &config,
-        /*runtime_model_provider_base_url*/ None,
-        Some(&remote_connection),
-        account_display.as_ref(),
-        Some(&token_info),
-        &usage,
-        &None,
-        /*thread_name*/ None,
-        /*forked_from*/ None,
-        &[],
-        None,
-        now,
-        &model_slug,
-        /*collaboration_mode*/ None,
-        /*reasoning_effort_override*/ Some(Some(ReasoningEffort::Medium)),
-        "<none>".to_string(),
-        /*refreshing_rate_limits*/ false,
-        /*account_usage*/ None,
-        /*named_sign_in*/ None,
-    );
-    let mut rendered_lines = render_lines(&composite.display_lines(/*width*/ 80));
-    if cfg!(windows) {
-        for line in &mut rendered_lines {
-            *line = line.replace('\\', "/");
-||||||| 413492cd6c
-    let model_slug = get_model_offline_for_tests(config.model.as_deref());
-    let token_info = token_info_for(&model_slug, &config, &usage);
-    let (composite, _) = new_status_output_with_rate_limits_handle(
-        &config,
-        /*runtime_model_provider_base_url*/ None,
-        Some(&remote_connection),
-        account_display.as_ref(),
-        Some(&token_info),
-        &usage,
-        &None,
-        /*thread_name*/ None,
-        /*forked_from*/ None,
-        &[],
-        None,
-        now,
-        &model_slug,
-        /*collaboration_mode*/ None,
-        /*reasoning_effort_override*/ Some(Some(ReasoningEffort::Medium)),
-        "<none>".to_string(),
-        /*refreshing_rate_limits*/ false,
-    );
-    let mut rendered_lines = render_lines(&composite.display_lines(/*width*/ 80));
-    if cfg!(windows) {
-        for line in &mut rendered_lines {
-            *line = line.replace('\\', "/");
-=======
         let model_slug = get_model_offline_for_tests(config.model.as_deref());
         let token_info = token_info_for(&model_slug, &config, &usage);
         let (composite, _) = new_status_output_with_rate_limits_handle(
@@ -2104,13 +2003,14 @@ async fn status_snapshot_uses_default_reasoning_when_config_empty() {
             /*reasoning_effort_override*/ Some(Some(ReasoningEffort::Medium)),
             "<none>".to_string(),
             /*refreshing_rate_limits*/ false,
+            /*account_usage*/ None,
+            /*named_sign_in*/ None,
         );
         let mut rendered_lines = render_lines(&composite.display_lines(/*width*/ 80));
         if cfg!(windows) {
             for line in &mut rendered_lines {
                 *line = line.replace('\\', "/");
             }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         let sanitized = sanitize_directory(rendered_lines).join("\n");
         assert_snapshot!(snapshot, sanitized);
@@ -2679,7 +2579,6 @@ async fn status_context_window_uses_last_usage() {
     );
 }
 
-<<<<<<< HEAD
 /// PF-84: a Z.AI session on `account` with named accounts on or off.
 async fn named_account_status(
     named_accounts: bool,
@@ -2773,7 +2672,8 @@ async fn named_account_status_in(
     let account_display = StatusAccountDisplay::ApiKey { env_var: None };
     let (composite, _) = new_status_output_with_rate_limits_handle(
         &config,
-        /*runtime_model_provider_base_url*/ None,
+        config.model_provider.requires_openai_auth,
+        /*model_provider_id*/ None,
         /*remote_connection*/ None,
         Some(&account_display),
         /*token_info*/ None,
@@ -3048,7 +2948,8 @@ async fn default_openai_status_is_unchanged_without_named_accounts() {
         };
         let (composite, _) = new_status_output_with_rate_limits_handle(
             &config,
-            /*runtime_model_provider_base_url*/ None,
+            config.model_provider.requires_openai_auth,
+            /*model_provider_id*/ None,
             /*remote_connection*/ None,
             Some(&account_display),
             /*token_info*/ None,
@@ -3127,7 +3028,8 @@ async fn named_sign_in_status(signed_in: bool, remote: bool, known: bool) -> Str
     });
     let (composite, _) = new_status_output_with_rate_limits_handle(
         &config,
-        /*runtime_model_provider_base_url*/ None,
+        config.model_provider.requires_openai_auth,
+        /*model_provider_id*/ None,
         remote_connection.as_ref(),
         /*account_display*/ None,
         /*token_info*/ None,
@@ -3220,8 +3122,8 @@ async fn status_snapshot_named_sign_in_summary_not_known_yet() {
     .await;
     assert_eq!(removed_unknown, unknown);
     assert_snapshot!(unknown);
-||||||| 413492cd6c
-=======
+}
+
 #[tokio::test]
 async fn status_permissions_include_executor_profile_root() {
     let temp_home = TempDir::new().expect("temp home");
@@ -3286,5 +3188,4 @@ fn reset_timestamps_follow_clock_preference() {
     23:00
     00:00 on 22 Sep
     ");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
