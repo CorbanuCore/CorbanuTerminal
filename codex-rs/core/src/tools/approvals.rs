@@ -918,18 +918,8 @@ impl Session {
                     request().await
                 } else {
                     let tool_name = "unified_exec";
-                    let policy_fingerprint = ctx
-                        .review_context
-                        .environments()
-                        .turn_environments()
-                        .find(|environment| environment.selection.environment_id == *environment_id)
-                        .and_then(|environment| environment.config().exec_policy.as_ref())
-                        .map(codex_execpolicy::RequirementsExecPolicy::fingerprint);
-                    let cache_keys = action
-                        .cache_keys()
-                        .into_iter()
-                        .map(|key| (key, &policy_fingerprint))
-                        .collect();
+                    let cache_keys =
+                        exec_command_cache_keys(action, ctx.review_context.environments());
                     with_cached_approval(
                         &self.services,
                         tool_name,
@@ -1303,6 +1293,28 @@ mod tests;
 #[cfg(all(test, windows))]
 #[path = "approvals_windows_tests.rs"]
 mod windows_tests;
+
+/// The approval-cache keys of a command approval: the action's keys with the exec policy of
+/// the environment it runs in, so an answer given under one policy does not answer under
+/// another.
+pub(crate) fn exec_command_cache_keys(
+    action: &ApprovalAction,
+    environments: &crate::environment_selection::TurnEnvironmentSnapshot,
+) -> Vec<(ApprovalCacheKey, Option<Vec<String>>)> {
+    let ApprovalAction::ExecCommand { environment_id, .. } = action else {
+        return Vec::new();
+    };
+    let policy_fingerprint = environments
+        .turn_environments()
+        .find(|environment| environment.selection.environment_id == *environment_id)
+        .and_then(|environment| environment.config().exec_policy.as_ref())
+        .map(codex_execpolicy::RequirementsExecPolicy::fingerprint);
+    action
+        .cache_keys()
+        .into_iter()
+        .map(|key| (key, policy_fingerprint.clone()))
+        .collect()
+}
 
 #[cfg(test)]
 #[path = "refusal_diagnostics_tests.rs"]

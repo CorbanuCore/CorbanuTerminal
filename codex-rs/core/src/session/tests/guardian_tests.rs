@@ -179,8 +179,43 @@ async fn next_exec_approval(
     .expect("captured action should request user approval")
 }
 
+/// The default Ambient reviewer model is text-only: the node_repl image evidence reaches
+/// neither reviewer request, only its evidence entry does (#2295).
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
+    request_permissions_routes_to_guardian_with_model(
+        codex_model_provider_info::AMBIENT_DEFAULT_MODEL,
+        /*vision*/ false,
+    )
+    .await;
+}
+
+/// #2295: a vision-capable reviewer on the Chat Completions wire gets the node_repl image
+/// evidence as an `image_url` content part in both reviewer requests.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn request_permissions_sends_image_evidence_to_a_vision_chat_reviewer() {
+    request_permissions_routes_to_guardian_with_model(
+        "moonshotai/kimi-k2.7-code",
+        /*vision*/ true,
+    )
+    .await;
+}
+
+/// `image_url.url` of every `image_url` part in the Chat Completions user messages.
+fn chat_user_image_urls(body: &serde_json::Value) -> Vec<String> {
+    body["messages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|message| message["role"] == "user")
+        .filter_map(|message| message["content"].as_array())
+        .flatten()
+        .filter(|part| part["type"] == "image_url")
+        .filter_map(|part| part["image_url"]["url"].as_str().map(str::to_owned))
+        .collect()
+}
+
+async fn request_permissions_routes_to_guardian_with_model(model: &str, vision: bool) {
     let server = start_mock_server().await;
     // The default Ambient provider uses the Chat Completions wire API.
     let guardian_assessment = serde_json::json!({
@@ -191,19 +226,18 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
     })
     .to_string();
     // Upstream reviews both permission requests below: one reply for each.
-    let guardian_request_log = mount_sse_once_chat_completions(
-        &server,
-        chat_completions_sse("z-ai/glm-5.2", &guardian_assessment),
-    )
-    .await;
-    let second_guardian_request_log = mount_sse_once_chat_completions(
-        &server,
-        chat_completions_sse("z-ai/glm-5.2", &guardian_assessment),
-    )
-    .await;
+    let guardian_request_log =
+        mount_sse_once_chat_completions(&server, chat_completions_sse(model, &guardian_assessment))
+            .await;
+    let second_guardian_request_log =
+        mount_sse_once_chat_completions(&server, chat_completions_sse(model, &guardian_assessment))
+            .await;
 
     let (mut session, mut turn_context_raw, _codex_home) =
-        make_session_and_context_with_provider_auth().await;
+        crate::session::tests::make_session_and_context_with_provider_auth_and_model(model).await;
+    // The parent's active model is the reviewer's model here (a provider with a mock
+    // `base_url` falls back to it).
+    assert_eq!(turn_context_raw.model_info().slug, model);
     update_turn_settings_for_test(&mut turn_context_raw, |settings| {
         Arc::make_mut(&mut settings.model_info).node_repl_auto_review_required = true;
     });
@@ -224,6 +258,16 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
         config.codex_home.to_path_buf(),
         session.services.auth_manager(),
         config.model_provider.clone(),
+    );
+    // The reviewer's model as the installed catalogue describes it.
+    assert_eq!(
+        models_manager
+            .get_model_info(model, &config.to_models_manager_config())
+            .await
+            .input_modalities
+            .contains(&codex_protocol::openai_models::InputModality::Image),
+        vision,
+        "catalogued image support of {model}"
     );
     session.services.models_manager = models_manager;
     crate::guardian::test_host::install(&session, &config);
@@ -317,8 +361,22 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
     ];
     for request in &guardian_requests {
         assert_eq!(request.path(), "/v1/chat/completions");
-        // The node_repl review evidence (an image) reaches the reviewer.
-        assert!(request.body_contains_text(image_url));
+        let body = request.body_json();
+        assert_eq!(body["model"], model);
+        if vision {
+            // The node_repl review evidence (an image) reaches the reviewer.
+            assert_eq!(chat_user_image_urls(&body), vec![image_url.to_string()]);
+        } else {
+            // A text-only reviewer gets the evidence entry without the image (#2295: the
+            // Chat Completions prompt carries no omitted-image note there).
+            assert_eq!(chat_user_image_urls(&body), Vec::<String>::new());
+            assert!(!request.body_contains_text(image_url));
+            assert!(
+                request.body_contains_text("[REPL response 1 tool=js cell=cell call=image]"),
+                "{}",
+                body["messages"]
+            );
+        }
     }
     let guardian_request = &guardian_requests[0];
     assert!(guardian_request.body_contains_text("request_permissions"));

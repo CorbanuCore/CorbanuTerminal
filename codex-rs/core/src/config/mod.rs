@@ -793,6 +793,16 @@ pub enum AccountingMode {
     },
 }
 
+/// Corbanu: a configured reasoning effort that config load mapped to another one for the
+/// provider and model it was loaded for (the legacy Ambient/Z.AI mapping).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConfiguredReasoningEffortMapping {
+    pub model_provider_id: String,
+    pub model: Option<String>,
+    pub configured: ReasoningEffort,
+    pub mapped: ReasoningEffort,
+}
+
 /// Application configuration loaded from disk and merged with overrides.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
@@ -1240,6 +1250,10 @@ pub struct Config {
     /// Value to use for `reasoning.effort` when making a request using the
     /// Responses API.
     pub model_reasoning_effort: Option<ReasoningEffort>,
+    /// Corbanu: the configured `model_reasoning_effort` that config load mapped to another
+    /// effort for this provider and model (the legacy Ambient/Z.AI mapping), with the effort
+    /// it became. A built-in crew role that re-reads the configured effort maps it the same way.
+    pub configured_reasoning_effort_mapping: Option<ConfiguredReasoningEffortMapping>,
     /// Optional Plan-mode-specific reasoning effort override used by the TUI.
     ///
     /// When unset, Plan mode uses the built-in Plan preset default (currently
@@ -5461,10 +5475,22 @@ impl Config {
                 || zai_chat_provider_selected)
         {
             cfg.model_reasoning_effort
+                .clone()
                 .map(normalize_ambient_reasoning_effort)
         } else {
-            cfg.model_reasoning_effort
+            cfg.model_reasoning_effort.clone()
         };
+        let configured_reasoning_effort_mapping = cfg
+            .model_reasoning_effort
+            .clone()
+            .zip(model_reasoning_effort.clone())
+            .filter(|(configured, mapped)| configured != mapped)
+            .map(|(configured, mapped)| ConfiguredReasoningEffortMapping {
+                model_provider_id: model_provider_id.clone(),
+                model: model.clone(),
+                configured,
+                mapped,
+            });
         let notices = cfg.notice.unwrap_or_default();
         let service_tier = match service_tier_override {
             Some(Some(service_tier)) => Some(service_tier),
@@ -5974,6 +6000,7 @@ impl Config {
                 .and_then(|auto_review| auto_review.circuit_break_action)
                 .unwrap_or_default(),
             model_reasoning_effort,
+            configured_reasoning_effort_mapping,
             plan_mode_reasoning_effort: cfg.plan_mode_reasoning_effort,
             model_reasoning_summary: cfg.model_reasoning_summary,
             model_supports_reasoning_summaries: cfg.model_supports_reasoning_summaries,

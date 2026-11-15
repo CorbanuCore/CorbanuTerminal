@@ -229,6 +229,27 @@ pub(crate) fn open_no_reparse(
     disposition: u32,
     create_options: u32,
 ) -> Result<OwnedHandle> {
+    open_no_reparse_with_security(
+        root_directory,
+        name,
+        desired_access,
+        share_access,
+        disposition,
+        create_options,
+        ptr::null(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn open_no_reparse_with_security(
+    root_directory: HANDLE,
+    name: &mut [u16],
+    desired_access: u32,
+    share_access: u32,
+    disposition: u32,
+    create_options: u32,
+    security_descriptor: *const c_void,
+) -> Result<OwnedHandle> {
     let name_length = u16::try_from((name.len() - 1) * size_of::<u16>())
         .context("no-reparse path is too long")?;
     let maximum_length = u16::try_from(size_of_val(name)).context("no-reparse path is too long")?;
@@ -242,7 +263,7 @@ pub(crate) fn open_no_reparse(
         root_directory,
         object_name: &object_name,
         attributes: OBJ_CASE_INSENSITIVE | OBJ_DONT_REPARSE,
-        security_descriptor: ptr::null(),
+        security_descriptor,
         security_quality_of_service: ptr::null(),
     };
     let mut io_status_block = IO_STATUS_BLOCK {

@@ -455,7 +455,9 @@ impl ToolRegistry {
             .prepare(&tool.runtime.tool_name(), || {
                 info.entry.to_loadable_spec().into()
             }) {
-            Some(spec) => ToolSearchInfo::from_spec(info.entry.search_text, spec, info.source_info),
+            Some(spec) => {
+                ToolSearchInfo::from_prepared_spec(info.entry.search_text, spec, info.source_info)
+            }
             None => Some(info),
         }
     }

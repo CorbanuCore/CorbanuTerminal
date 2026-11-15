@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use codex_features::Feature;
+use codex_features::SleepToolMode;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_mcp::ToolInfo;
@@ -1263,8 +1264,28 @@ async fn sleep_tool_follows_current_time_config() {
 
 #[tokio::test]
 async fn released_sleep_tool_flag_still_exposes_sleep_without_time_reminders() {
+    // Upstream's released flag defaults to model-driven: a model without the clock tool
+    // and no time reminder gets no sleep tool.
+    let model_driven = probe(|turn| {
+        set_feature(turn, Feature::SleepTool, /*enabled*/ true);
+    })
+    .await;
+    assert!(
+        !model_driven
+            .registered_names
+            .iter()
+            .any(|name| name.ends_with("sleep")),
+        "{:?}",
+        model_driven.registered_names
+    );
+
+    // `[features.sleep_tool] mode = "always_on"` (main's explicit opt-in) offers it
+    // without time reminders.
     let plan = probe(|turn| {
         set_feature(turn, Feature::SleepTool, /*enabled*/ true);
+        update_config(turn, |config| {
+            config.sleep_tool_mode = SleepToolMode::AlwaysOn;
+        });
     })
     .await;
 
@@ -1741,6 +1762,8 @@ async fn tool_namespaces_info_is_opt_in_and_tracks_mcp_exposure() {
 #[tokio::test]
 async fn candidate_model_plan_leaves_selected_model_and_inventory_unchanged() {
     let (_session, mut turn) = make_session_and_context().await;
+    // Corbanu offers edit tools only where the environment can write.
+    set_environment_permission_profile(&mut turn, PermissionProfile::workspace_write());
     set_features(&mut turn, &[Feature::ShellTool, Feature::UnifiedExec]);
     update_config(&mut turn, |config| {
         config.tool_registry.turn_metadata_includes_tool_info = true;
@@ -3511,6 +3534,10 @@ async fn non_mcp_namespaced_tools_are_flattened_and_resolved_without_namespace_t
             |turn| {
                 configure_turn(turn);
                 set_feature(turn, Feature::SleepTool, /*enabled*/ true);
+                // These models have no clock tool; offer sleep regardless of the model.
+                update_config(turn, |config| {
+                    config.sleep_tool_mode = SleepToolMode::AlwaysOn;
+                });
             },
             ToolPlanInputs {
                 extension_tool_executors: vec![Arc::new(TestNamespaceExtensionTool {

@@ -2513,6 +2513,19 @@ fn prefix_ids_track_thread_and_payload(responses_lite: bool) -> anyhow::Result<(
 
     let original = build(&client, &prompt)?;
     assert_eq!(build(&client, &prompt)?, original);
+    if !responses_lite {
+        // Corbanu keeps main's Responses shape: base instructions travel in `instructions`
+        // and tools in `tools`, so no prompt-only prefix items (or ids) are added.
+        assert!(original.input.is_empty(), "{:?}", original.input);
+        assert_eq!(original.instructions, "base instructions");
+        assert!(original.tools.is_some());
+        prompt.base_instructions.text.push_str(" with an update");
+        assert_eq!(
+            build(&client, &prompt)?.instructions,
+            "base instructions with an update"
+        );
+        return Ok(());
+    }
 
     prompt.base_instructions.text.push_str(" with an update");
     let changed_instructions = build(&client, &prompt)?;

@@ -991,6 +991,9 @@ fn run_setup_exe_payload(
     use windows_sys::Win32::UI::Shell::SHELLEXECUTEINFOW;
     use windows_sys::Win32::UI::Shell::ShellExecuteExW;
     let exe = find_setup_exe();
+    // The service reports failures through its event log. Never reopen a daily
+    // log by pathname in the privileged orchestrator before the helper starts.
+    let log_dir = retained_handles.is_empty().then(|| sandbox_dir(codex_home));
     let cleared_report = match clear_setup_error_report(codex_home) {
         Ok(()) => true,
         Err(err) => {
@@ -998,7 +1001,7 @@ fn run_setup_exe_payload(
                 &format!(
                     "setup orchestrator: failed to clear setup_error.json before launch: {err}"
                 ),
-                Some(&sandbox_dir(codex_home)),
+                log_dir.as_deref(),
             );
             false
         }
@@ -1037,7 +1040,7 @@ fn run_setup_exe_payload(
                 &format!(
                     "setup orchestrator: failed to clear setup_error.json after success: {err}"
                 ),
-                Some(&sandbox_dir(codex_home)),
+                log_dir.as_deref(),
             );
         }
         return Ok(());
@@ -1087,7 +1090,7 @@ fn run_setup_exe_payload(
     if let Err(err) = clear_setup_error_report(codex_home) {
         log_note(
             &format!("setup orchestrator: failed to clear setup_error.json after success: {err}"),
-            Some(&sandbox_dir(codex_home)),
+            log_dir.as_deref(),
         );
     }
     Ok(())

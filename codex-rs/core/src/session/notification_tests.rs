@@ -5,7 +5,9 @@ use pretty_assertions::assert_eq;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn task_finish_preserves_notification_budget_and_queued_user_input() {
-    let (session, turn, _rx) = make_session_and_context_with_rx().await;
+    // Corbanu: user input left at a natural turn end starts a follow-up turn, which needs the
+    // submission loop.
+    let (session, turn, rx) = make_session_and_context_with_submission_loop_and_rx().await;
     session
         .spawn_task(
             Arc::clone(&turn),
@@ -73,17 +75,36 @@ async fn task_finish_preserves_notification_budget_and_queued_user_input() {
         inject.await;
     });
 
+    // The finishing turn keeps the notification's budget and the late notification. Corbanu
+    // hands the queued user input to a follow-up turn (upstream records it on this turn), which
+    // records it after them.
     let expected = vec![
         notification(codex_utils_output_truncation::truncate_text(
             &text,
             codex_utils_output_truncation::TruncationPolicy::Tokens(120),
         )),
-        session.response_item_from_user_input(user_input),
         late[0].clone(),
     ];
-    let history = session.clone_history().await;
+    expect_user_message_item_started(&rx, &user_input).await;
+    let user_item = strip_response_item_ids(&strip_metadata_from_items(&[
+        session.response_item_from_user_input(user_input)
+    ]));
+    let items = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let items = strip_response_item_ids(&strip_metadata_from_items(&raw_history_items(
+                &session.clone_history().await,
+            )));
+            if items.iter().any(|item| user_item.contains(item)) {
+                break items;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the follow-up turn records the queued user input");
     assert_eq!(
-        strip_response_item_ids(&strip_metadata_from_items(&raw_history_items(&history))),
+        items[..expected.len()].to_vec(),
         strip_response_item_ids(&strip_metadata_from_items(&expected)),
     );
+    session.abort_all_tasks(TurnAbortReason::Interrupted).await;
 }
