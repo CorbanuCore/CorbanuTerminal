@@ -1,52 +1,60 @@
 ---
 source: tui/src/thread_transcript/tools_tests.rs
+assertion_line: 255
 expression: "snapshots.join(\"\\n\\n\")"
 ---
 declined
 $ cargo check
-Declined
+job: pid=not reported · call=command · cwd=/tmp/project · output=thread transcript
+Declined · -5ms
   first line
     indented output
   last line
 
 opaque command
 $ C:\Program Files\Git\bin\bash.exe -lc "echo hi"
-Completed · exit 0
+job: pid=not reported · call=command · cwd=/tmp/project · output=thread transcript
+Completed · exit 0 · -5ms
   first line
     indented output
   last line
 
 UNC command
 $ \\server\share\tool.exe -arg
-Completed · exit 0
+job: pid=not reported · call=command · cwd=/tmp/project · output=thread transcript
+Completed · exit 0 · -5ms
   first line
     indented output
   last line
 
 completed interaction
 $ cargo check
-Terminal interaction · Completed · exit 0
+job: pid=not reported · call=command · cwd=/tmp/project · output=thread transcript
+Terminal interaction · Completed · exit 0 · -5ms
   first line
     indented output
   last line
 
 failed interaction
 $ cargo check
-Terminal interaction · Failed · exit 7
+job: pid=not reported · call=command · cwd=/tmp/project · output=thread transcript
+Terminal interaction · Failed · exit 7 · -5ms
   first line
     indented output
   last line
 
 failed interaction without exit code
 $ cargo check
-Terminal interaction · Failed
+job: pid=not reported · call=command · cwd=/tmp/project · output=thread transcript
+Terminal interaction · Failed · -5ms
   first line
     indented output
   last line
 
 pending interaction
 $ cargo check
-Terminal interaction · In progress at last update
+job: pid=not reported · call=command · cwd=/tmp/project · output=thread transcript
+Terminal interaction · In progress at last update · -5ms
   first line
     indented output
   last line
