@@ -278,6 +278,14 @@ fn file_print_does_not_follow_a_link_tagged_before_the_reopen() {
 
 #[cfg(windows)]
 fn check_retagged_reopen<G>(privilege_guard: impl FnOnce() -> G + 'static) -> Option<bool> {
+    check_retagged_reopen_with(privilege_guard, retag_as_link)
+}
+
+#[cfg(windows)]
+fn check_retagged_reopen_with<G>(
+    privilege_guard: impl FnOnce() -> G + 'static,
+    retag: impl Fn(&Path, u32, &str) -> std::io::Result<()> + 'static,
+) -> Option<bool> {
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::Foundation::GetLastError;
     use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
@@ -333,11 +341,11 @@ fn check_retagged_reopen<G>(privilege_guard: impl FnOnce() -> G + 'static) -> Op
                     .take()
                     .expect("hook called once");
                 let _guard = guard();
-                match retag_as_link(&path, TAG_HSM, &target) {
+                match retag(&path, TAG_HSM, &target) {
                     Ok(()) => retagged.set(Some(true)),
                     Err(err) if err.raw_os_error() == Some(1314) => {
-                        // Developer Mode permits CreateSymbolicLink with its
-                        // unprivileged flag, but not this direct FSCTL retag.
+                        // CreateSymbolicLink succeeding in Developer Mode does
+                        // not guarantee this direct retag has the privilege.
                         panic!("retag failed: {err}");
                     }
                     Err(err) => panic!("retag failed: {err}"),
