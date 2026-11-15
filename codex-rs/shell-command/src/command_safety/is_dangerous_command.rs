@@ -298,6 +298,25 @@ mod tests {
         }
     }
 
+    /// Corbanu (S3b): words that may still expand keep their source spelling
+    /// in the danger check, as on main.
+    #[test]
+    fn forced_rm_with_expandable_words_is_dangerous() {
+        for script in [
+            "rm -r\\f /",
+            "rm -{r,f} /",
+            "rm -rf{,} /tmp/example",
+            "rm -rf* /tmp/example",
+        ] {
+            let command = vec_str(&["bash", "-lc", script]);
+            assert_eq!(
+                dangerous_command_match(&command),
+                Some(DangerousCommandMatch::ForcedRm),
+                "{script}"
+            );
+        }
+    }
+
     #[test]
     fn non_forced_or_non_literal_rm_is_not_dangerous() {
         for command in [

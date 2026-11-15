@@ -40,6 +40,7 @@ use crate::config::Config;
 use crate::sandboxing::SandboxPermissions;
 use crate::tools::sandboxing::ExecApprovalRequirement;
 use codex_shell_command::bash::parse_shell_lc_plain_commands;
+use codex_shell_command::bash::parse_shell_lc_single_command_prefix;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use shlex::try_join as shlex_try_join;
 
@@ -526,6 +527,14 @@ impl ExecPolicyManager {
         let mut evaluation = exec_policy.check_multiple_with_options(
             commands.iter(),
             &exec_policy_fallback,
+            &match_options,
+        );
+        // S3b: upstream no longer matches rules against a heredoc script's
+        // command; main did. Keep its prompt and forbidden rules at every level.
+        apply_heredoc_restrictive_matches(
+            &mut evaluation,
+            exec_policy.as_ref(),
+            full_command,
             &match_options,
         );
         if self.strict_rules_for(live_aggressive) {
@@ -1248,6 +1257,41 @@ fn strict_forbidden_matches(policy: &Policy, command: &[String]) -> Vec<RuleMatc
         }
     }
     matches
+}
+
+/// S3b: main matched rules against the single command of a heredoc script
+/// (`bash -lc "python3 <<'PY' …"`), so a `prompt` or `forbidden` rule for
+/// `python3` applied. Upstream dropped that parse, which keeps such scripts in
+/// the sandbox (stricter for allow rules) but stopped those rules matching.
+/// This adds back only the prompt and forbidden rule matches; it never allows.
+fn apply_heredoc_restrictive_matches(
+    evaluation: &mut Evaluation,
+    policy: &Policy,
+    command: &[String],
+    match_options: &MatchOptions,
+) {
+    let Some(heredoc_command) = parse_shell_lc_single_command_prefix(command) else {
+        return;
+    };
+    let found = policy.check_multiple_with_options(
+        std::iter::once(&heredoc_command),
+        &|_: &[String]| Decision::Allow,
+        match_options,
+    );
+    let restrictive = found
+        .matched_rules
+        .into_iter()
+        .filter(|rule_match| is_policy_match(rule_match) && rule_match.decision() > Decision::Allow)
+        .filter(|rule_match| !evaluation.matched_rules.contains(rule_match))
+        .collect::<Vec<_>>();
+    let Some(decision) = restrictive.iter().map(RuleMatch::decision).max() else {
+        return;
+    };
+    evaluation.decision = evaluation.decision.max(decision);
+    // These first, so a refusal names the rule that caused it.
+    let mut matched_rules = restrictive;
+    matched_rules.append(&mut evaluation.matched_rules);
+    evaluation.matched_rules = matched_rules;
 }
 
 /// Make `evaluation` Forbidden when [`strict_forbidden_matches`] finds any.
