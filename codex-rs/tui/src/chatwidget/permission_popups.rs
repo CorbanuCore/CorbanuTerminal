@@ -166,16 +166,8 @@ impl ChatWidget {
 
         let footer_note = show_elevate_sandbox_hint.then(|| {
             vec![
-<<<<<<< HEAD
                 "The non-admin sandbox blocks writes and deletes outside your workspace except in low-integrity folders. It can't stop commands from reading your files, its network block can be bypassed, and it carries greater risk if prompt injected. To upgrade to the default sandbox, run ".dim(),
-                "/setup-default-sandbox".cyan(),
-||||||| 413492cd6c
-                "The non-admin sandbox protects your files and prevents network access under most circumstances. However, it carries greater risk if prompt injected. To upgrade to the default sandbox, run ".dim(),
-                "/setup-default-sandbox".cyan(),
-=======
-                "The non-admin sandbox protects your files and prevents network access under most circumstances. However, it carries greater risk if prompt injected. To upgrade to the default sandbox, run ".dim(),
                 "/setup-default-sandbox".fg(accent_color()),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 ".".dim(),
             ]
             .into()
@@ -281,7 +273,6 @@ impl ChatWidget {
         approvals_reviewer: ApprovalsReviewer,
     ) -> Vec<SelectionAction> {
         vec![Box::new(move |tx| {
-<<<<<<< HEAD
             tx.send(AppEvent::SelectPermissionPreset(
                 PermissionProfileSelection {
                     profile_id: active_permission_profile.id.clone(),
@@ -289,41 +280,6 @@ impl ChatWidget {
                     approvals_reviewer: Some(approvals_reviewer),
                     display_label: label.clone(),
                 },
-||||||| 413492cd6c
-            tx.send(AppEvent::CodexOp(AppCommand::override_turn_context(
-                /*cwd*/ None,
-                Some(approval),
-                Some(approvals_reviewer),
-                Some(permission_profile.clone()),
-                Some(active_permission_profile.clone()),
-                /*windows_sandbox_level*/ None,
-                /*model*/ None,
-                /*effort*/ None,
-                /*summary*/ None,
-                /*service_tier*/ None,
-                /*collaboration_mode*/ None,
-                /*personality*/ None,
-            )));
-            tx.send(AppEvent::UpdateAskForApprovalPolicy(approval));
-            tx.send(AppEvent::UpdateActivePermissionProfile(
-                active_permission_profile.clone(),
-=======
-            tx.send(AppEvent::CodexOp(AppCommand::override_turn_context(
-                /*cwd*/ None,
-                Some(approval),
-                Some(approvals_reviewer),
-                Some(permission_profile.clone()),
-                Some(active_permission_profile.clone()),
-                /*model*/ None,
-                /*effort*/ None,
-                /*summary*/ None,
-                /*service_tier*/ None,
-                /*collaboration_mode*/ None,
-            )));
-            tx.send(AppEvent::UpdateAskForApprovalPolicy(approval));
-            tx.send(AppEvent::UpdateActivePermissionProfile(
-                active_permission_profile.clone(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             ));
         })]
     }
@@ -466,31 +422,6 @@ impl ChatWidget {
             })
         });
         let title_line = Line::from("Enable full access?").bold();
-<<<<<<< HEAD
-        let info_line = Line::from(vec![
-            "When Corbanu runs with full access, it can edit any file on your computer and run commands with network, without your approval. "
-                .into(),
-            "Exercise caution when enabling full access. This significantly increases the risk of data loss, leaks, or unexpected behavior."
-                .fg(Color::Red),
-        ]);
-        header_children.push(Box::new(title_line));
-        header_children.push(Box::new(
-            Paragraph::new(vec![info_line]).wrap(Wrap { trim: false }),
-        ));
-        let header = ColumnRenderable::with(header_children);
-||||||| 413492cd6c
-        let info_line = Line::from(vec![
-            "When Codex runs with full access, it can edit any file on your computer and run commands with network, without your approval. "
-                .into(),
-            "Exercise caution when enabling full access. This significantly increases the risk of data loss, leaks, or unexpected behavior."
-                .fg(Color::Red),
-        ]);
-        header_children.push(Box::new(title_line));
-        header_children.push(Box::new(
-            Paragraph::new(vec![info_line]).wrap(Wrap { trim: false }),
-        ));
-        let header = ColumnRenderable::with(header_children);
-=======
         let info_lines = if is_cyber_model {
             let recommendation = if auto_review_available(&self.config) {
                 "We strongly recommend selecting \"Approve for me\" instead, and customizing the reviewer policy for your use case."
@@ -500,7 +431,7 @@ impl ChatWidget {
             vec![
                 Line::default(),
                 Line::from(
-                    "When Codex runs with full access, it can edit any file on your computer and run commands with network, without your approval.",
+                    "When Corbanu runs with full access, it can edit any file on your computer and run commands with network, without your approval.",
                 ),
                 Line::default(),
                 Line::from(vec![
@@ -511,7 +442,7 @@ impl ChatWidget {
             ]
         } else {
             vec![Line::from(vec![
-                "When Codex runs with full access, it can edit any file on your computer and run commands with network, without your approval. "
+                "When Corbanu runs with full access, it can edit any file on your computer and run commands with network, without your approval. "
                     .into(),
                 "Exercise caution when enabling full access. This significantly increases the risk of data loss, leaks, or unexpected behavior."
                     .red(),
@@ -523,7 +454,6 @@ impl ChatWidget {
                 .collect::<Vec<_>>(),
         )
         .wrap(Wrap { trim: false });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         let accept_actions = profile_selection.map_or_else(
             || {
@@ -580,16 +510,10 @@ impl ChatWidget {
         self.bottom_pane.show_selection_view(SelectionViewParams {
             items,
             header: Box::new(header),
-<<<<<<< HEAD
             initial_selected_idx: Some(1),
             allow_number_shortcuts: false,
             on_cancel: Some(Box::new(report_not_enabled)),
-            ..Default::default()
-||||||| 413492cd6c
-            ..Default::default()
-=======
             ..SelectionViewParams::confirmation()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         });
     }
 }
