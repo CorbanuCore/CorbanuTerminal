@@ -4,13 +4,8 @@ assertion_line: 480
 expression: terminal.backend()
 ---
 
-<<<<<<< HEAD
-> Corbanu Terminal just got an upgrade. Introducing gpt-5.1.
-||||||| 413492cd6c
-> Codex just got an upgrade. Introducing gpt-5.1.
-=======
-  Codex just got an upgrade. Introducing gpt-5.1.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+  Corbanu Terminal just got an upgrade. Introducing
+  gpt-5.1.
 
   We recommend switching from gpt-5 to gpt-5.1.
 
