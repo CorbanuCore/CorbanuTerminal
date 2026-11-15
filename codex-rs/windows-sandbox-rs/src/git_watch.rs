@@ -707,7 +707,6 @@ pub(crate) fn unfollowed_print_at(
 }
 
 /// [`hash`] of `file`, `None` when it holds more than `size` bytes.
-#[cfg(windows)]
 fn hash_at_most(file: std::fs::File, size: u64) -> Option<String> {
     let mut limited = file.take(size.saturating_add(1));
     let text = hash_read(&mut limited);
@@ -765,9 +764,15 @@ fn content_print(path: &Path) -> String {
     }
 }
 
-/// The SHA-256 of what `file` holds, or `unreadable`.
-fn hash(mut file: std::fs::File) -> String {
-    hash_read(&mut file)
+/// The SHA-256 of what `file` holds, or `unreadable`. A file that grows
+/// beyond its opened size differs every time, rather than extending the read.
+fn hash(file: std::fs::File) -> String {
+    let Ok(size) = file.metadata().map(|metadata| metadata.len()) else {
+        return "unreadable".to_string();
+    };
+    #[cfg(test)]
+    tests::before_hash();
+    hash_at_most(file, size).unwrap_or_else(truncated)
 }
 
 /// The SHA-256 of what `reader` gives, or `unreadable`.

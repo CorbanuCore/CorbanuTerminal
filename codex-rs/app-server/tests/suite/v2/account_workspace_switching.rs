@@ -385,6 +385,7 @@ async fn workspace_switch_validates_and_preserves_managed_login(
         AccountUpdatedNotification {
             auth_mode: Some(AuthMode::Chatgpt),
             plan_type: Some(AccountPlanType::Business),
+            api_key_env_var: None,
         }
     );
     assert_eq!(

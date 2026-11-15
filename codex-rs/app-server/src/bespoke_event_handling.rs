@@ -159,18 +159,6 @@ pub(crate) async fn apply_bespoke_event_handling(
         id: event_turn_id,
         msg,
     } = event;
-    if matches!(msg, EventMsg::ThreadSettingsApplied(_) | EventMsg::Error(_)) {
-        let mut state = thread_state.lock().await;
-        if state.listener_matches(&conversation) {
-            let result = match &msg {
-                EventMsg::Error(error) => {
-                    Err(crate::error_code::invalid_request(error.message.clone()))
-                }
-                _ => Ok(()),
-            };
-            state.finish_settings_confirmation(&event_turn_id, result);
-        }
-    }
     let approval_starts_command = msg.command_approval_start().is_some();
     match msg {
         EventMsg::TurnStarted(payload) => {

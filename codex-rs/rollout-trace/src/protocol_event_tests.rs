@@ -66,6 +66,9 @@ fn completed_sub_agent_activity_is_not_a_tool_runtime_event() -> anyhow::Result<
         occurred_at_ms: 1234,
         agent_thread_id: ThreadId::new(),
         agent_path: AgentPath::try_from("/root/reviewer").map_err(anyhow::Error::msg)?,
+        agent_nickname: None,
+        agent_role: None,
+        task_preview: None,
         kind: SubAgentActivityKind::Completed,
     });
 

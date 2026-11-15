@@ -144,7 +144,7 @@ fn pf_33_s02_destination_guard_drops_local_binding_from_provisioning() {
         enabled: true,
         proxy_url: "http://127.0.0.1:43128".to_string(),
         enable_socks5: false,
-        allow_local_binding: true,
+        allow_local_binding: Some(true),
         ..Default::default()
     };
     config.set_url_destination_policy(/*enabled*/ true);

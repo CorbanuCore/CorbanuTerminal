@@ -1773,6 +1773,39 @@ impl Session {
             turn_environments.update_selections(environment_selections);
             session_configuration.environments = turn_environments.selections();
             let resolved_environments = turn_environments.snapshot().await;
+            let live_level = crate::client::live_level_of(
+                config.security_level,
+                Some(&ingress_policy),
+                thread_id,
+            );
+            if live_level != codex_security_policy::SecurityLevel::Permissive {
+                for environment in resolved_environments.turn_environments() {
+                    // Bound the remote connection future's Send proof during session creation.
+                    if let Some(gap) = crate::security::windows_unsandboxed::remote_gap(
+                        &environment.environment,
+                        // MXC counts as no sandbox (D522 (a)), as for commands.
+                        crate::tools::orchestrator::unsandboxed_check_level(
+                            environment.config(),
+                            session_configuration.windows_sandbox_level,
+                        ),
+                    )
+                    .boxed()
+                    .await
+                    {
+                        post_session_configured_events.push(Event {
+                            id: INITIAL_SUBMIT_ID.to_owned(),
+                            msg: EventMsg::Warning(WarningEvent {
+                                message:
+                                    crate::security::windows_unsandboxed::remote_startup_notice(
+                                        live_level,
+                                        &environment.selection.environment_id,
+                                        gap,
+                                    ),
+                            }),
+                        });
+                    }
+                }
+            }
             let agents_md_manager = Arc::new(AgentsMdManager::new(instructions));
             // Keep discovery's future out of the large embedded startup/resume frame.
             let plugin_skill_warmup = Box::pin(warm_plugins_and_skills_for_session_init(

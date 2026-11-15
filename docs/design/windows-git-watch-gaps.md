@@ -377,8 +377,9 @@ together with decision 1.
    session ran its preparation, this start included, on the async thread:
    a current-thread runtime's other tasks stalled for 152–279 ms (38k
    files) and 612–835 ms (`repo` client) per command; with it moved off,
-   16–22 ms (the timer's resolution). What is flagged is byte-identical
-   either way.
+   16–22 ms (about the timer's resolution). The first spawn, including
+   setup, stalled for 3.4–6.8 s before the move. What is flagged is
+   byte-identical either way.
    Profiled (#1909, same runner type): the `repo` client's walk is slow
    because the fixture has 47,141 folders (the 38k-file tree has 3,946),
    not because it is a `repo` client. The walk takes 0.39–0.56 s

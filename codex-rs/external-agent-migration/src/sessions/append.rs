@@ -221,7 +221,8 @@ fn source_model_items(items: &[RolloutItem]) -> Option<Vec<SourceModelItem<'_>>>
             RolloutItem::SessionMeta(_)
             | RolloutItem::InterAgentCommunicationMetadata { .. }
             | RolloutItem::TokenUsageRecord(_)
-            | RolloutItem::RealtimeItem(_) => {}
+            | RolloutItem::RealtimeItem(_)
+            | RolloutItem::SourceOrigin(_) => {}
             RolloutItem::ResponseItem(response_item) => {
                 model_items.push(SourceModelItem {
                     response_item: &response_item.item,
@@ -265,7 +266,8 @@ fn history_model_items(items: &[RolloutItem]) -> Option<Vec<&ResponseItem>> {
             | RolloutItem::RealtimeItem(_)
             | RolloutItem::RetainedContext(_)
             | RolloutItem::DynamicToolsUpdated { .. }
-            | RolloutItem::SecurityRiskScore(_) => {}
+            | RolloutItem::SecurityRiskScore(_)
+            | RolloutItem::SourceOrigin(_) => {}
             RolloutItem::ResponseItem(response_item) => model_items.push(&response_item.item),
             RolloutItem::EventMsg(
                 EventMsg::ContextCompacted(_) | EventMsg::ThreadRolledBack(_),

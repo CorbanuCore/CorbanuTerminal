@@ -244,6 +244,13 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: cargo build --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --bins
+      - name: Deny-write paths never follow links (#1953)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- setup_provisioning::deny_write_path::tests::issue_1953 --nocapture --test-threads=1 2>&1 | tee deny-1953.log
+          grep -q 'test result: ok. 5 passed' deny-1953.log
       - name: Sandbox user passwords meet Windows complexity (#1776)
         if: ${{ !cancelled() }}
         shell: bash

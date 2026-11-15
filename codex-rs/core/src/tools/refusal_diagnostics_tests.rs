@@ -29,6 +29,7 @@ async fn assert_command_status(out: Result<ExecToolCallOutput, ToolError>, expec
             ToolEventCtx::new(
                 session.as_ref(),
                 turn.as_ref(),
+                turn.model_info(),
                 "issue822",
                 /*turn_diff_tracker*/ None,
             ),
@@ -121,7 +122,11 @@ async fn issue873_timed_out_approvals_stay_declined_and_aborted_ones_end_the_tur
     let error = resolved(ReviewDecision::Abort, ApprovalResolutionSource::User)
         .expect_err("no permission to proceed");
     assert!(
-        matches!(&error, ToolError::Codex(CodexErr::TurnAborted)),
+        matches!(
+            &error,
+            ToolError::Codex(err)
+                if matches!(err.details(), codex_protocol::error::CodexErrorDetails::TurnAborted)
+        ),
         "{error:?}"
     );
 }
@@ -177,6 +182,7 @@ async fn issue941_actual_approvals_off_reason_survives_command_events() {
                 ToolEventCtx::new(
                     session.as_ref(),
                     turn.as_ref(),
+                    turn.model_info(),
                     "issue941",
                     /*turn_diff_tracker*/ None,
                 ),

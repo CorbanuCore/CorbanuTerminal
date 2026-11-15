@@ -1,3 +1,7 @@
+#[path = "acl_deny_write.rs"]
+mod deny_write;
+pub use deny_write::add_deny_write_ace_to_handle;
+
 use crate::winutil::resolve_sid;
 use crate::winutil::sid_bytes_from_string;
 use crate::winutil::to_wide;

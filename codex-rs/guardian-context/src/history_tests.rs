@@ -139,6 +139,7 @@ fn byte_limits_are_independent_and_oversized_items_do_not_clear_history() {
             // Serialization omits this content, but retention must still count it.
             content: Some(vec![ReasoningItemContent::Text { text: oversized }]),
             encrypted_content: None,
+            anthropic_content_block: None,
             internal_chat_message_metadata_passthrough: None,
         }
         .into(),

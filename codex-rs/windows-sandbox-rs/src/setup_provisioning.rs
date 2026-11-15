@@ -2,6 +2,7 @@
 //! Full and read-ACL setup remain helper entrypoints; only they may launch a read-ACL child.
 //! Command-line account provisioning cannot enter the service's admitted Core path.
 
+mod deny_write_path;
 mod firewall;
 mod service;
 pub use service::provision_sandbox_in_process;
@@ -14,7 +15,7 @@ use crate::SetupErrorReport;
 use crate::SetupFailure;
 use crate::SetupRuntime;
 use crate::acquire_sandbox_setup_lock;
-use crate::add_deny_write_ace;
+use crate::add_deny_write_ace_to_handle;
 use crate::apply_deny_read_acls;
 use crate::convert_string_sid_to_sid;
 use crate::ensure_allow_mask_aces_with_inheritance;
@@ -1178,10 +1179,8 @@ fn run_setup_full(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Res
         // bypass the carveout. Materialize missing carveouts as directories so the deny-write ACL
         // is present before the command starts. Legacy protected children are filtered before
         // payload creation, so this should not create sentinel directories in a workspace.
-        if !path.exists() {
-            std::fs::create_dir_all(path)
-                .with_context(|| format!("failed to create deny-write path {}", path.display()))?;
-        }
+        let pinned = deny_write_path::pin(path)?;
+        let target = pinned.last().context("deny-write path has no target")?;
 
         let deny_sid_strs = workspace_write_cap_sids_for_path(
             &payload.codex_home,
@@ -1195,7 +1194,7 @@ fn run_setup_full(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Res
                     .ok_or_else(|| anyhow::anyhow!("convert deny capability SID failed"))?
             };
 
-            match unsafe { add_deny_write_ace(path, deny_psid) } {
+            match unsafe { add_deny_write_ace_to_handle(target.as_raw_handle() as _, deny_psid) } {
                 Ok(true) => {
                     log_line(
                         log,

@@ -138,7 +138,11 @@ network_proxy = true
 
         // The child sees only a dummy, and Core's in-process injection path has
         // no raw value to add: only the broker process can substitute it.
-        let state = network.build_state_with_audit_metadata(NetworkProxyAuditMetadata::default())?;
+        let state = network.build_state_with_audit_metadata(
+            NetworkProxyAuditMetadata::default(),
+            codex_utils_path_uri::Platform::native(),
+            codex_network_proxy::LocalBindingPolicy::DefaultFalse,
+        )?;
         let mut env = HashMap::from([(
             "OPENAI_API_KEY".to_string(),
             SYNTHETIC_OPENAI_KEY.to_string(),
@@ -153,7 +157,7 @@ network_proxy = true
             HeaderValue::from_str(&format!("Bearer {dummy}")).expect("header"),
         );
         let original = headers.clone();
-        let result = state.inject_request_credentials(
+        let result = state.inject_request_credentials_for_request(
             "https",
             "api.openai.com",
             /*port*/ 443,

@@ -44,6 +44,8 @@ fn request_with_metadata_and_source(
     output.mark_tool_calls_complete();
     ResponsesApiRequest {
         model: "test".to_string(),
+        instructions: String::new(),
+        previous_response_id: None,
         input: vec![output],
         tools: None,
         tool_choice: "auto".to_string(),
@@ -57,6 +59,11 @@ fn request_with_metadata_and_source(
         prompt_cache_key: None,
         text: None,
         client_metadata: Some(HashMap::from([("padding".to_string(), "x".to_string())])),
+        thinking_budget: None,
+        emit_usage: None,
+        enable_thinking: None,
+        reasoning_effort: None,
+        provider_options: None,
         access_programs: None,
     }
 }

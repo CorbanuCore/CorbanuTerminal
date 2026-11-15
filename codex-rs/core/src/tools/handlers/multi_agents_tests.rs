@@ -43,7 +43,6 @@ use crate::tools::handlers::multi_agents_v2::SpawnAgentHandler as SpawnAgentHand
 use crate::tools::handlers::multi_agents_v2::WaitAgentHandler as WaitAgentHandlerV2;
 use crate::tools::handlers::multi_agents_v2::message_tool::MessageToolResult;
 use crate::turn_diff_tracker::TurnDiffTracker;
-use codex_extension_api::ExtensionDataInit;
 use codex_extension_api::empty_extension_registry;
 use codex_features::Feature;
 use codex_history::InitialHistory;
@@ -119,6 +118,9 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
+
+#[path = "multi_agents_ownership_tests.rs"]
+mod ownership;
 
 fn model_facing_error_message(error: &FunctionCallError) -> Option<&str> {
     match error {
@@ -516,7 +518,7 @@ async fn register_v2_wait_child(
         .start_thread((*turn.config).clone())
         .await
         .expect("root thread should start");
-    set_agent_control(&mut session, manager.agent_control());
+    set_agent_control(session, manager.agent_control());
     session.thread_id = root.thread_id;
     let child = session
         .services
@@ -2639,6 +2641,12 @@ async fn multi_agent_v2_list_agents_lists_only_the_callers_agents() {
         .expect("other root should start");
     set_agent_control(&mut session, manager.agent_control());
     session.thread_id = root.thread_id;
+    // Register on the handler's control before the foreign spawn. Each call to
+    // manager.agent_control() creates a separate registry.
+    session
+        .services
+        .agent_control
+        .register_session_root(root.thread_id, /*current_parent_thread_id*/ None);
     let mut config = (*turn.config).clone();
     config
         .features

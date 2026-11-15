@@ -139,6 +139,7 @@ fn command_params(
     available_decisions: Option<Vec<CommandExecutionApprovalDecision>>,
 ) -> CommandExecutionRequestApprovalParams {
     CommandExecutionRequestApprovalParams {
+        kind: Default::default(),
         thread_id: "thread".to_string(),
         turn_id: "turn".to_string(),
         item_id: "item".to_string(),

@@ -258,6 +258,7 @@ dependencies = [
  "codex-features",
  "codex-login",
  "codex-model-provider",
+ "codex-models-manager",
  "codex-protocol",
  "codex-utils-cargo-bin",
  "core_test_support",
@@ -2210,6 +2211,7 @@ dependencies = [
 name = "codex-app-server-transport"
 version = "0.1.48"
 dependencies = [
+ "anyhow",
  "axum",
  "base64 0.22.1",
  "chrono",
@@ -3328,6 +3330,7 @@ dependencies = [
  "codex-core",
  "codex-exec-server",
  "codex-http-client",
+ "codex-log-guard",
  "codex-login",
  "codex-model-provider",
  "codex-protocol",

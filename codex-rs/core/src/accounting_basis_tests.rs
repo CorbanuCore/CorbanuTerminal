@@ -689,7 +689,7 @@ fn moonshot_route_is_priced_by_the_route() {
     let chat = custom(codex_model_provider_info::WireApi::Chat);
     let mut header_key = chat.clone();
     header_key.http_headers = Some(
-        [("Authorization".to_string(), "Bearer elsewhere".to_string())]
+        [("Authorization".to_string(), "Bearer elsewhere".into())]
             .into_iter()
             .collect(),
     );

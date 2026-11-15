@@ -194,7 +194,7 @@ async fn feedback_upload_recovers_persisted_evidence_and_reports_sqlite_failures
         .write(home.path())?;
     let thread_id = ThreadId::new();
     let attached_id = ThreadId::new();
-    let sqlite = core_test_support::load_default_config_for_test(&home)
+    let sqlite = app_test_support::load_default_config_for_test(&home)
         .await
         .sqlite;
     let state =

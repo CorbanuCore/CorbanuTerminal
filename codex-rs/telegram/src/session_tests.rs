@@ -358,6 +358,7 @@ async fn racing_callbacks_can_consume_an_approval_only_once() {
 
 fn command_params(thread_id: &str) -> CommandExecutionRequestApprovalParams {
     CommandExecutionRequestApprovalParams {
+        kind: Default::default(),
         thread_id: thread_id.to_string(),
         turn_id: "turn".to_string(),
         item_id: "item".to_string(),

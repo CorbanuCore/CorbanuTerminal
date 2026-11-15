@@ -530,21 +530,43 @@ impl Session {
                 })
             },
         );
+        // D491/D510 also apply when a protected level has a full-disk profile.
+        // Keep a context for discovery and subsequent skill resource reads.
+        let level = self.services.model_client().live_level();
+        let protected_level = level != codex_security_policy::SecurityLevel::Permissive;
+        // The session's Windows sandbox level, as commands and file tools judge it.
+        let session_windows_level = self
+            .state
+            .lock()
+            .await
+            .session_configuration
+            .windows_sandbox_level;
         if !restricted_file_system
+            && !protected_level
             && !config
                 .features
                 .enabled(Feature::ExecutorCapabilityDiscovery)
         {
             return (None, false);
         }
-        let sandbox_contexts = if restricted_file_system {
+        let sandbox_contexts = if restricted_file_system || protected_level {
             environments
                 .turn_environments()
                 .map(|environment| {
-                    (
-                        environment.selection.environment_id.clone(),
-                        environment.sandbox_context(/*additional_permissions*/ None),
-                    )
+                    let mut sandbox =
+                        environment.sandbox_context(/*additional_permissions*/ None);
+                    // #2088: the same refusal as file tools in this environment (MXC as
+                    // none, D522 (a)).
+                    sandbox.unsandboxed_refusal =
+                        crate::security::windows_unsandboxed::environment_file_refusal(
+                            level,
+                            crate::tools::orchestrator::unsandboxed_check_level(
+                                environment.config(),
+                                session_windows_level,
+                            ),
+                            environment,
+                        );
+                    (environment.selection.environment_id.clone(), sandbox)
                 })
                 .collect::<HashMap<_, _>>()
         } else {
@@ -558,7 +580,7 @@ impl Session {
             .iter()
             .filter(|root| {
                 let selected_root = root.selected_root();
-                if !restricted_file_system {
+                if !restricted_file_system && !protected_level {
                     return true;
                 }
                 let CapabilityRootLocation::Environment { environment_id, .. } =
@@ -604,6 +626,13 @@ impl Session {
         cache.ensure_capacity(remote_environment_count);
         let mut snapshots = Vec::new();
         let mut skipped_incompatible_executor = false;
+        // The session's Windows sandbox level, as commands and file tools judge it.
+        let session_windows_level = self
+            .state
+            .lock()
+            .await
+            .session_configuration
+            .windows_sandbox_level;
         for selected in environments.turn_environments() {
             if !selected.environment.is_remote() {
                 continue;
@@ -623,9 +652,32 @@ impl Session {
                 skipped_incompatible_executor = true;
                 continue;
             }
+            // #2088 (D491/D510): as V1 discovery, nothing is discovered under a protected
+            // level on an executor that cannot confine it (MXC as none, D522 (a)).
+            let mut sandbox = selected.sandbox_context(/*additional_permissions*/ None);
+            let check_level = crate::tools::orchestrator::unsandboxed_check_level(
+                selected.config(),
+                session_windows_level,
+            );
+            sandbox.unsandboxed_refusal =
+                crate::security::windows_unsandboxed::environment_file_refusal(
+                    self.services.model_client().live_level(),
+                    check_level,
+                    selected,
+                );
+            if sandbox.unsandboxed_refusal.is_some()
+                && info.host_sandbox_verdict(check_level)
+                    != codex_exec_server::HostSandboxVerdict::Confined
+            {
+                tracing::warn!(
+                    environment_id,
+                    "skipped executor discovery V2 without the executor's sandbox"
+                );
+                continue;
+            }
             let request = DiscoverV2CapabilitiesRequest {
                 cwd: selected.cwd().clone(),
-                sandbox: Some(selected.sandbox_context(/*additional_permissions*/ None)),
+                sandbox: Some(sandbox),
             };
             let result = cache
                 .discover(environment_id, &selected.environment, request)
