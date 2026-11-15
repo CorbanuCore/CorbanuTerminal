@@ -15,15 +15,14 @@ use crate::legacy_core::config::Config;
 use crate::tui::Tui;
 use codex_config::types::ResumeCwdMode;
 use codex_protocol::ThreadId;
+use codex_rollout::open_rollout_line_reader;
 use codex_utils_path as path_utils;
-<<<<<<< HEAD
 use serde::Deserialize;
 use serde_json::Value;
+use std::io;
 
 #[derive(Default)]
 struct RolloutResumeState {
-    thread_id: Option<ThreadId>,
-    cwd: Option<PathBuf>,
     model: Option<String>,
     provider_account: Option<RecordedProviderAccount>,
 }
@@ -43,14 +42,7 @@ impl RecordedProviderAccount {
 }
 
 #[derive(Deserialize)]
-struct SessionMetadata {
-    id: ThreadId,
-    cwd: PathBuf,
-}
-
-#[derive(Deserialize)]
-struct TurnContextResumeState {
-    cwd: PathBuf,
+struct TurnContextModelState {
     model: String,
 }
 
@@ -68,37 +60,6 @@ struct RawRecord {
     item_type: String,
     payload: Option<Value>,
 }
-||||||| 413492cd6c
-use serde::Deserialize;
-use serde_json::Value;
-
-#[derive(Default)]
-struct RolloutResumeState {
-    thread_id: Option<ThreadId>,
-    cwd: Option<PathBuf>,
-    model: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct SessionMetadata {
-    id: ThreadId,
-    cwd: PathBuf,
-}
-
-#[derive(Deserialize)]
-struct TurnContextResumeState {
-    cwd: PathBuf,
-    model: String,
-}
-
-#[derive(Deserialize)]
-struct RawRecord {
-    #[serde(rename = "type")]
-    item_type: String,
-    payload: Option<Value>,
-}
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ResolveCwdOutcome {
@@ -164,6 +125,15 @@ pub(crate) async fn read_session_cwd(
     }
 }
 
+/// PF-84 (#545): the model the thread at `path` last ran, for checking its
+/// recorded provider before an app server is started (`resume_launch`).
+pub(crate) async fn read_session_model(path: &Path) -> Option<String> {
+    read_rollout_resume_state(path)
+        .await
+        .ok()
+        .and_then(|state| state.model)
+}
+
 /// PF-84 (#545): the account the thread at `path` ran on, read the same way
 /// the app server picks it on resume (the newest turn context only), so the
 /// TUI can check it before deciding whether provider onboarding is needed.
@@ -180,28 +150,6 @@ pub(crate) async fn resolve_cwd_for_resume_or_fork(
     history_cwd: Option<PathBuf>,
     action: CwdPromptAction,
     cwd_context: ResumeCwdContext<'_>,
-) -> color_eyre::Result<ResolveCwdOutcome> {
-    let mut events = tui.event_stream();
-    resolve_cwd_for_resume_or_fork_with_events(
-        tui,
-        config,
-        state_db_ctx,
-        target_session,
-        action,
-        cwd_context,
-        &mut events,
-    )
-    .await
-}
-
-pub(crate) async fn resolve_cwd_for_resume_or_fork_with_events(
-    tui: &mut Tui,
-    config: &Config,
-    state_db_ctx: Option<&StateRuntime>,
-    target_session: &SessionTarget,
-    action: CwdPromptAction,
-    cwd_context: ResumeCwdContext<'_>,
-    events: &mut (dyn tokio_stream::Stream<Item = crate::tui::TuiEvent> + Send + Unpin),
 ) -> color_eyre::Result<ResolveCwdOutcome> {
     if matches!(cwd_context.mode, Some(ResumeCwdMode::Current)) {
         return Ok(ResolveCwdOutcome::Continue(Some(
@@ -223,6 +171,8 @@ pub(crate) async fn resolve_cwd_for_resume_or_fork_with_events(
         Some(ResumeCwdMode::Current) | None => {}
     }
     if cwds_differ(cwd_context.current_cwd, &history_cwd) {
+        // The prompt reads terminal input through the shared event broker.
+        let mut events = tui.event_stream();
         let selection_outcome = cwd_prompt::run_cwd_selection_prompt(
             tui,
             config,
@@ -231,7 +181,7 @@ pub(crate) async fn resolve_cwd_for_resume_or_fork_with_events(
             &history_cwd,
             cwd_context.remembered_current_cwd,
             cwd_context.allow_remember_current,
-            events,
+            &mut events,
         )
         .await?;
         return Ok(match selection_outcome {
@@ -254,7 +204,10 @@ pub(crate) fn cwds_differ(current_cwd: &Path, session_cwd: &Path) -> bool {
     !path_utils::paths_match_after_normalization(current_cwd, session_cwd)
 }
 
-<<<<<<< HEAD
+/// PF-84 (#545): the newest turn context's model and provider account in the
+/// rollout at `path`, read the same way the app server picks the account on
+/// resume. Upstream reads the session cwd from the app server; these are read
+/// before one is started.
 async fn read_rollout_resume_state(path: &Path) -> io::Result<RolloutResumeState> {
     let mut reader = open_rollout_line_reader(path).await?;
     let mut state = RolloutResumeState::default();
@@ -272,31 +225,20 @@ async fn read_rollout_resume_state(path: &Path) -> io::Result<RolloutResumeState
         let Some(payload) = record.payload else {
             continue;
         };
-
-        match record.item_type.as_str() {
-            "session_meta" if state.thread_id.is_none() => {
-                if let Ok(metadata) = serde_json::from_value::<SessionMetadata>(payload) {
-                    state.thread_id = Some(metadata.id);
-                    state.cwd.get_or_insert(metadata.cwd);
-                }
+        if record.item_type == "turn_context" {
+            if let Ok(turn_context) =
+                serde_json::from_value::<TurnContextModelState>(payload.clone())
+            {
+                state.model = Some(turn_context.model);
             }
-            "turn_context" => {
-                state.provider_account =
-                    serde_json::from_value::<TurnContextAccountState>(payload.clone())
-                        .ok()
-                        .and_then(|turn_context| {
-                            Some(RecordedProviderAccount {
-                                provider_id: turn_context.model_provider?,
-                                account: turn_context.provider_account?,
-                            })
-                        });
-                if let Ok(turn_context) = serde_json::from_value::<TurnContextResumeState>(payload)
-                {
-                    state.cwd = Some(turn_context.cwd);
-                    state.model = Some(turn_context.model);
-                }
-            }
-            _ => {}
+            state.provider_account = serde_json::from_value::<TurnContextAccountState>(payload)
+                .ok()
+                .and_then(|turn_context| {
+                    Some(RecordedProviderAccount {
+                        provider_id: turn_context.model_provider?,
+                        account: turn_context.provider_account?,
+                    })
+                });
         }
     }
 
@@ -310,62 +252,12 @@ async fn read_rollout_resume_state(path: &Path) -> io::Result<RolloutResumeState
     }
 }
 
-||||||| 413492cd6c
-async fn read_rollout_resume_state(path: &Path) -> io::Result<RolloutResumeState> {
-    let mut reader = open_rollout_line_reader(path).await?;
-    let mut state = RolloutResumeState::default();
-    let mut saw_record = false;
-
-    while let Some(line) = reader.next_line().await? {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let Ok(record) = serde_json::from_str::<RawRecord>(trimmed) else {
-            continue;
-        };
-        saw_record = true;
-        let Some(payload) = record.payload else {
-            continue;
-        };
-
-        match record.item_type.as_str() {
-            "session_meta" if state.thread_id.is_none() => {
-                if let Ok(metadata) = serde_json::from_value::<SessionMetadata>(payload) {
-                    state.thread_id = Some(metadata.id);
-                    state.cwd.get_or_insert(metadata.cwd);
-                }
-            }
-            "turn_context" => {
-                if let Ok(turn_context) = serde_json::from_value::<TurnContextResumeState>(payload)
-                {
-                    state.cwd = Some(turn_context.cwd);
-                    state.model = Some(turn_context.model);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    if saw_record {
-        Ok(state)
-    } else {
-        Err(io::Error::other(format!(
-            "rollout at {} is empty",
-            path.display()
-        )))
-    }
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(test)]
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
 
-<<<<<<< HEAD
     fn rollout_line(
         timestamp: &str,
         item_type: &str,
@@ -385,47 +277,6 @@ mod tests {
             text.push('\n');
         }
         std::fs::write(path, text)
-    }
-
-    #[tokio::test]
-    async fn rollout_resume_state_prefers_latest_turn_context() -> std::io::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let thread_id = ThreadId::new();
-        let original = temp_dir.path().join("original");
-        let latest = temp_dir.path().join("latest");
-        let rollout_path = temp_dir.path().join("rollout.jsonl");
-        write_rollout_lines(
-            &rollout_path,
-            &[
-                rollout_line(
-                    "t0",
-                    "session_meta",
-                    serde_json::json!({
-                        "id": thread_id,
-                        "cwd": original,
-                        "originator": "test",
-                        "cli_version": "test",
-                    }),
-                ),
-                rollout_line(
-                    "t1",
-                    "turn_context",
-                    serde_json::json!({ "cwd": temp_dir.path().join("middle"), "model": "middle" }),
-                ),
-                rollout_line(
-                    "t2",
-                    "turn_context",
-                    serde_json::json!({ "cwd": latest.clone(), "model": "latest" }),
-                ),
-            ],
-        )?;
-
-        let state = read_rollout_resume_state(&rollout_path).await?;
-
-        assert_eq!(state.thread_id, Some(thread_id));
-        assert_eq!(state.cwd, Some(latest));
-        assert_eq!(state.model, Some("latest".to_string()));
-        Ok(())
     }
 
     #[tokio::test]
@@ -461,383 +312,6 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn rollout_resume_state_falls_back_to_session_meta() -> std::io::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let thread_id = ThreadId::new();
-        let cwd = temp_dir.path().join("session");
-        let rollout_path = temp_dir.path().join("rollout.jsonl");
-        write_rollout_lines(
-            &rollout_path,
-            &[rollout_line(
-                "t0",
-                "session_meta",
-                serde_json::json!({
-                    "id": thread_id,
-                    "cwd": cwd.clone(),
-                    "originator": "test",
-                    "cli_version": "test",
-                }),
-            )],
-        )?;
-
-        let state = read_rollout_resume_state(&rollout_path).await?;
-
-        assert_eq!(state.thread_id, Some(thread_id));
-        assert_eq!(state.cwd, Some(cwd));
-        assert_eq!(state.model, None);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn rollout_resume_state_skips_malformed_lines() -> std::io::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let thread_id = ThreadId::new();
-        let cwd = temp_dir.path().join("session");
-        let rollout_path = temp_dir.path().join("rollout.jsonl");
-        let valid_line = serde_json::to_string(&rollout_line(
-            "t0",
-            "session_meta",
-            serde_json::json!({
-                "id": thread_id,
-                "cwd": cwd.clone(),
-                "originator": "test",
-                "cli_version": "test",
-            }),
-        ))
-        .expect("serialize rollout line");
-        std::fs::write(&rollout_path, format!("{valid_line}\n{{"))?;
-
-        let state = read_rollout_resume_state(&rollout_path).await?;
-
-        assert_eq!(state.thread_id, Some(thread_id));
-        assert_eq!(state.cwd, Some(cwd));
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn rollout_resume_state_preserves_legacy_fork_child_context() -> std::io::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let thread_id = ThreadId::from_string("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
-            .expect("legacy thread id");
-        let parent_thread_id = ThreadId::from_string("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
-            .expect("legacy parent id");
-        let child_cwd = temp_dir.path().join("child");
-        let rollout_path = temp_dir.path().join("rollout.jsonl");
-        write_rollout_lines(
-            &rollout_path,
-            &[
-                rollout_line(
-                    "t0",
-                    "session_meta",
-                    serde_json::json!({
-                        "id": thread_id,
-                        "forked_from_id": parent_thread_id,
-                        "cwd": temp_dir.path().join("initial"),
-                        "originator": "test",
-                        "cli_version": "test",
-                    }),
-                ),
-                rollout_line(
-                    "t1",
-                    "event_msg",
-                    serde_json::json!({ "type": "task_started", "turn_id": "legacy-child-turn" }),
-                ),
-                rollout_line(
-                    "t2",
-                    "turn_context",
-                    serde_json::json!({ "cwd": child_cwd.clone(), "model": "child-model" }),
-                ),
-            ],
-        )?;
-
-        let state = read_rollout_resume_state(&rollout_path).await?;
-
-        assert_eq!(state.thread_id, Some(thread_id));
-        assert_eq!(state.cwd, Some(child_cwd));
-        assert_eq!(state.model.as_deref(), Some("child-model"));
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn session_cwd_prefers_state_metadata_over_rollout_context() -> std::io::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let thread_id = ThreadId::new();
-        let session_cwd = temp_dir.path().join("child");
-        let rollout_path = temp_dir.path().join("rollout.jsonl");
-        write_rollout_lines(
-            &rollout_path,
-            &[
-                rollout_line(
-                    "t0",
-                    "session_meta",
-                    serde_json::json!({
-                        "id": thread_id,
-                        "cwd": session_cwd,
-                        "originator": "test",
-                        "cli_version": "test",
-                    }),
-                ),
-                rollout_line(
-                    "t1",
-                    "turn_context",
-                    serde_json::json!({
-                        "cwd": temp_dir.path().join("copied-parent"),
-                        "model": "parent-model",
-                    }),
-                ),
-            ],
-        )?;
-        let state_runtime = StateRuntime::init(
-            codex_state::SqliteConfig::new_for_testing(temp_dir.path().abs()),
-            "test-provider".to_string(),
-        )
-        .await
-        .map_err(std::io::Error::other)?;
-        let created_at = chrono::DateTime::parse_from_rfc3339("2025-01-05T12:00:00Z")
-            .expect("timestamp should parse")
-            .with_timezone(&chrono::Utc);
-        let mut builder = codex_state::ThreadMetadataBuilder::new(
-            thread_id,
-            rollout_path.clone(),
-            created_at,
-            serde_json::from_value(serde_json::json!("cli"))
-                .expect("cli session source should deserialize"),
-        );
-        builder.cwd = session_cwd.clone();
-        state_runtime
-            .upsert_thread(&builder.build("test-provider"))
-            .await
-            .map_err(std::io::Error::other)?;
-
-        let cwd =
-            read_session_cwd(Some(state_runtime.as_ref()), thread_id, Some(&rollout_path)).await;
-
-        assert_eq!(cwd, Some(session_cwd));
-        Ok(())
-    }
-
-||||||| 413492cd6c
-    fn rollout_line(
-        timestamp: &str,
-        item_type: &str,
-        payload: serde_json::Value,
-    ) -> serde_json::Value {
-        serde_json::json!({
-            "timestamp": timestamp,
-            "type": item_type,
-            "payload": payload,
-        })
-    }
-
-    fn write_rollout_lines(path: &Path, lines: &[serde_json::Value]) -> std::io::Result<()> {
-        let mut text = String::new();
-        for line in lines {
-            text.push_str(&serde_json::to_string(line).expect("serialize rollout"));
-            text.push('\n');
-        }
-        std::fs::write(path, text)
-    }
-
-    #[tokio::test]
-    async fn rollout_resume_state_prefers_latest_turn_context() -> std::io::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let thread_id = ThreadId::new();
-        let original = temp_dir.path().join("original");
-        let latest = temp_dir.path().join("latest");
-        let rollout_path = temp_dir.path().join("rollout.jsonl");
-        write_rollout_lines(
-            &rollout_path,
-            &[
-                rollout_line(
-                    "t0",
-                    "session_meta",
-                    serde_json::json!({
-                        "id": thread_id,
-                        "cwd": original,
-                        "originator": "test",
-                        "cli_version": "test",
-                    }),
-                ),
-                rollout_line(
-                    "t1",
-                    "turn_context",
-                    serde_json::json!({ "cwd": temp_dir.path().join("middle"), "model": "middle" }),
-                ),
-                rollout_line(
-                    "t2",
-                    "turn_context",
-                    serde_json::json!({ "cwd": latest.clone(), "model": "latest" }),
-                ),
-            ],
-        )?;
-
-        let state = read_rollout_resume_state(&rollout_path).await?;
-
-        assert_eq!(state.thread_id, Some(thread_id));
-        assert_eq!(state.cwd, Some(latest));
-        assert_eq!(state.model, Some("latest".to_string()));
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn rollout_resume_state_falls_back_to_session_meta() -> std::io::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let thread_id = ThreadId::new();
-        let cwd = temp_dir.path().join("session");
-        let rollout_path = temp_dir.path().join("rollout.jsonl");
-        write_rollout_lines(
-            &rollout_path,
-            &[rollout_line(
-                "t0",
-                "session_meta",
-                serde_json::json!({
-                    "id": thread_id,
-                    "cwd": cwd.clone(),
-                    "originator": "test",
-                    "cli_version": "test",
-                }),
-            )],
-        )?;
-
-        let state = read_rollout_resume_state(&rollout_path).await?;
-
-        assert_eq!(state.thread_id, Some(thread_id));
-        assert_eq!(state.cwd, Some(cwd));
-        assert_eq!(state.model, None);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn rollout_resume_state_skips_malformed_lines() -> std::io::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let thread_id = ThreadId::new();
-        let cwd = temp_dir.path().join("session");
-        let rollout_path = temp_dir.path().join("rollout.jsonl");
-        let valid_line = serde_json::to_string(&rollout_line(
-            "t0",
-            "session_meta",
-            serde_json::json!({
-                "id": thread_id,
-                "cwd": cwd.clone(),
-                "originator": "test",
-                "cli_version": "test",
-            }),
-        ))
-        .expect("serialize rollout line");
-        std::fs::write(&rollout_path, format!("{valid_line}\n{{"))?;
-
-        let state = read_rollout_resume_state(&rollout_path).await?;
-
-        assert_eq!(state.thread_id, Some(thread_id));
-        assert_eq!(state.cwd, Some(cwd));
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn rollout_resume_state_preserves_legacy_fork_child_context() -> std::io::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let thread_id = ThreadId::from_string("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
-            .expect("legacy thread id");
-        let parent_thread_id = ThreadId::from_string("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
-            .expect("legacy parent id");
-        let child_cwd = temp_dir.path().join("child");
-        let rollout_path = temp_dir.path().join("rollout.jsonl");
-        write_rollout_lines(
-            &rollout_path,
-            &[
-                rollout_line(
-                    "t0",
-                    "session_meta",
-                    serde_json::json!({
-                        "id": thread_id,
-                        "forked_from_id": parent_thread_id,
-                        "cwd": temp_dir.path().join("initial"),
-                        "originator": "test",
-                        "cli_version": "test",
-                    }),
-                ),
-                rollout_line(
-                    "t1",
-                    "event_msg",
-                    serde_json::json!({ "type": "task_started", "turn_id": "legacy-child-turn" }),
-                ),
-                rollout_line(
-                    "t2",
-                    "turn_context",
-                    serde_json::json!({ "cwd": child_cwd.clone(), "model": "child-model" }),
-                ),
-            ],
-        )?;
-
-        let state = read_rollout_resume_state(&rollout_path).await?;
-
-        assert_eq!(state.thread_id, Some(thread_id));
-        assert_eq!(state.cwd, Some(child_cwd));
-        assert_eq!(state.model.as_deref(), Some("child-model"));
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn session_cwd_prefers_state_metadata_over_rollout_context() -> std::io::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let thread_id = ThreadId::new();
-        let session_cwd = temp_dir.path().join("child");
-        let rollout_path = temp_dir.path().join("rollout.jsonl");
-        write_rollout_lines(
-            &rollout_path,
-            &[
-                rollout_line(
-                    "t0",
-                    "session_meta",
-                    serde_json::json!({
-                        "id": thread_id,
-                        "cwd": session_cwd,
-                        "originator": "test",
-                        "cli_version": "test",
-                    }),
-                ),
-                rollout_line(
-                    "t1",
-                    "turn_context",
-                    serde_json::json!({
-                        "cwd": temp_dir.path().join("copied-parent"),
-                        "model": "parent-model",
-                    }),
-                ),
-            ],
-        )?;
-        let state_runtime = StateRuntime::init(
-            codex_state::SqliteConfig::new_for_testing(temp_dir.path().abs()),
-            "test-provider".to_string(),
-        )
-        .await
-        .map_err(std::io::Error::other)?;
-        let created_at = chrono::DateTime::parse_from_rfc3339("2025-01-05T12:00:00Z")
-            .expect("timestamp should parse")
-            .with_timezone(&chrono::Utc);
-        let mut builder = codex_state::ThreadMetadataBuilder::new(
-            thread_id,
-            rollout_path.clone(),
-            created_at,
-            serde_json::from_value(serde_json::json!("cli"))
-                .expect("cli session source should deserialize"),
-        );
-        builder.cwd = session_cwd.clone();
-        state_runtime
-            .upsert_thread(&builder.build("test-provider"))
-            .await
-            .map_err(std::io::Error::other)?;
-
-        let cwd =
-            read_session_cwd(Some(state_runtime.as_ref()), thread_id, Some(&rollout_path)).await;
-
-        assert_eq!(cwd, Some(session_cwd));
-        Ok(())
-    }
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     #[tokio::test]
     async fn configured_resume_cwd_skips_prompt() -> color_eyre::Result<()> {
         let temp_dir = TempDir::new()?;

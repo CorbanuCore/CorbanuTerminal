@@ -208,12 +208,10 @@ pub(crate) async fn check_resume_before_onboarding(
     if recorded.provider_id != config.model_provider_id
         && let resume_picker::SessionSelection::Resume(target) = selection
     {
-        let model = crate::session_resume::read_session_model(
-            /*state_db_ctx*/ None,
-            target.thread_id,
-            target.path.as_deref(),
-        )
-        .await;
+        let model = match target.path.as_deref() {
+            Some(path) => crate::session_resume::read_session_model(path).await,
+            None => None,
+        };
         thread_config = recorded_provider_config(config, recorded, model);
         if thread_config.is_none() {
             let resolution = crate::startup_provider::resolve(config, Some(openai(config))).await;
