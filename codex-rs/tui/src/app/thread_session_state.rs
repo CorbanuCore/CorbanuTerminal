@@ -90,14 +90,8 @@ impl App {
                 // `thread/read` does not include all thread settings, so do not carry
                 // thread-scoped state from the currently active session.
                 session.collaboration_mode = None;
-<<<<<<< HEAD
-                session.personality = None;
                 session.provider_account = None;
-||||||| 413492cd6c
-                session.personality = None;
-=======
                 session.daybreak_enabled = false;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
             session
         } else {

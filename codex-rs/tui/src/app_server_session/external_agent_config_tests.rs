@@ -67,12 +67,18 @@ async fn external_agent_config_migration_over_shared_transport() -> Result<()> {
         let workspace = tempfile::tempdir()?;
         let cwd = workspace.path();
         let mut tui = crate::tui::test_support::make_test_tui()?;
+        let (_tui_event_tx, mut tui_events) = tokio::sync::mpsc::unbounded_channel();
         // Exercise the actual /import entry point, including remote home-only detection.
         for cwd in [Some(cwd), None] {
             assert!(matches!(
-                handle_external_agent_config_migration_prompt(&mut tui, &mut session, cwd)
-                    .await
-                    .map_err(|err| color_eyre::eyre::eyre!(err))?,
+                handle_external_agent_config_migration_prompt(
+                    &mut tui,
+                    &mut session,
+                    cwd,
+                    &mut tui_events,
+                )
+                .await
+                .map_err(|err| color_eyre::eyre::eyre!(err))?,
                 ExternalAgentConfigMigrationFlowOutcome::NoItems
             ));
         }

@@ -1,19 +1,15 @@
 //! Informational, warning, update, and policy notice history cells.
 
 use super::*;
-<<<<<<< HEAD
-use codex_product_brand::GITHUB_LATEST_RELEASE_URL;
-use codex_product_brand::GITHUB_REPOSITORY_URL;
-||||||| 413492cd6c
-=======
 use crate::style::accent_color;
 use crate::terminal_hyperlinks::LineWrapPolicy;
 use crate::terminal_hyperlinks::remap_source_wrapped_line;
 use crate::wrapping::adaptive_wrap_line_to_width;
+use codex_product_brand::GITHUB_LATEST_RELEASE_URL;
+use codex_product_brand::GITHUB_REPOSITORY_URL;
 
 #[cfg_attr(not(test), allow(dead_code))]
 const RECAP_HEADING: &str = "Conversation recap";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 #[cfg_attr(debug_assertions, allow(dead_code))]
 #[derive(Debug)]
@@ -45,15 +41,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
         } else {
             line![
                 "See ",
-<<<<<<< HEAD
-                GITHUB_REPOSITORY_URL.cyan().underlined(),
-||||||| 413492cd6c
-                "https://github.com/openai/codex".cyan().underlined(),
-=======
-                "https://github.com/openai/codex"
-                    .fg(accent_color())
-                    .underlined(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                GITHUB_REPOSITORY_URL.fg(accent_color()).underlined(),
                 " for installation options."
             ]
         };
@@ -68,17 +56,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
             update_instruction,
             "",
             "See full release notes:",
-<<<<<<< HEAD
-            GITHUB_LATEST_RELEASE_URL.cyan().underlined(),
-||||||| 413492cd6c
-            "https://github.com/openai/codex/releases/latest"
-                .cyan()
-                .underlined(),
-=======
-            "https://github.com/openai/codex/releases/latest"
-                .fg(accent_color())
-                .underlined(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            GITHUB_LATEST_RELEASE_URL.fg(accent_color()).underlined(),
         ];
 
         let inner_width = content

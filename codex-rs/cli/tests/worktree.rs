@@ -610,11 +610,9 @@ trust_level = "trusted"
         }
         if matches!(startup_result, Ok(Ok(()))) && renamed.is_ok() {
             if !fork && backend == "embedded" {
-                for (input, expected) in [
-                    ("/daemon\r", "Install latest public stable"),
-                    ("\r", "Update and exit"),
-                    ("\x1b[B\r", "Updating the local background server..."),
-                ] {
+                // Corbanu hides the public-stable daemon install (it would fetch upstream's
+                // installer; D564), so the menu opens on this CLI build and the session quits.
+                for (input, expected) in [("/daemon\r", "Use this CLI build")] {
                     session
                         .writer_sender()
                         .send(input.as_bytes().to_vec())
@@ -629,6 +627,9 @@ trust_level = "trusted"
                     .await
                     .with_context(|| format!("waiting for {expected}: {output}"))??;
                 }
+                session.writer_sender().send(b"\x1b".to_vec()).await?;
+                tokio::time::sleep(Duration::from_millis(/*millis*/ 300)).await;
+                session.writer_sender().send(b"/quit\r".to_vec()).await?;
             } else {
                 session.writer_sender().send(b"/quit\r".to_vec()).await?;
             }
@@ -663,14 +664,13 @@ trust_level = "trusted"
                 .flat_map(|resource| resource["scopeMetrics"].as_array().into_iter().flatten())
                 .flat_map(|scope| scope["metrics"].as_array().into_iter().flatten())
                 .collect::<Vec<_>>();
-            if backend == "embedded" {
-                let update = exported
+            // No daemon update is handed off, so no `codex.daemon.update` metric is expected.
+            assert!(
+                !exported
                     .iter()
-                    .find(|metric| metric["name"] == "codex.daemon.update")
-                    .context("handoff metric")?;
-                let update_point = &update["sum"]["dataPoints"][0];
-                assert_eq!(update_point["asInt"], 1);
-            }
+                    .any(|metric| metric["name"] == "codex.daemon.update"),
+                "{exported:?}"
+            );
             let point = exported
                 .iter()
                 .filter(|metric| metric["name"] == "codex.tui.start")

@@ -1,11 +1,7 @@
-<<<<<<< HEAD
-use codex_product_brand::PRODUCT_NAME;
-||||||| 413492cd6c
-=======
 //! Shared welcome header for the existing sign-in and Bedrock onboarding pickers.
 //! The logo occupies a fixed stage so its motion never shifts the choices below it.
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_product_brand::PRODUCT_NAME;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyEventKind;
 use ratatui::buffer::Buffer;
