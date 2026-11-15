@@ -20,6 +20,9 @@ use serde::Serialize;
 use std::path::Path;
 use std::path::PathBuf;
 
+#[path = "nested_metadata_mount.rs"]
+mod mount;
+
 const PROJECT_METADATA_NAMES: [&str; 2] = [".codex", ".agents"];
 const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
 
@@ -286,9 +289,10 @@ fn open_by_path(path: &Path, access: u32) -> std::io::Result<crate::acl::walk::H
 }
 
 /// #1909: the folder holding `path` (absolute), reached one folder at a time
-/// from the top of its volume, following no link, and the last name of
-/// `path`; `None` if any folder on the way can't be opened that way (also a
-/// folder a volume is mounted on: such a path counts as changed every time).
+/// from the top of its volume, and the last name of `path`. D490 / #1992:
+/// a mount or junction to an entire volume is opened by its global GUID; other links
+/// are never followed. Anything ambiguous still counts as changed every time.
+/// The caller must compare the final metadata's volume and file ID.
 fn open_parent_unfollowed(path: &Path) -> Option<(crate::acl::walk::Handle, Vec<u16>)> {
     use std::os::windows::ffi::OsStrExt as _;
     use std::path::Component;
@@ -314,6 +318,16 @@ fn open_parent_unfollowed(path: &Path) -> Option<(crate::acl::walk::Handle, Vec<
                 crate::acl::walk::FolderAccess::Traverse,
             )
         }
+        .or_else(|err| {
+            // Only a refused reparse triggers mount recognition. Access and
+            // I/O errors retain their conservative result.
+            const ERROR_REPARSE_POINT_ENCOUNTERED: i32 = 4395;
+            if err.raw_os_error() != Some(ERROR_REPARSE_POINT_ENCOUNTERED) {
+                return Err(err);
+            }
+            // SAFETY: the parent remains open until the new handle is held.
+            unsafe { mount::open_volume(dir.0, &name) }.ok_or(err)
+        })
         .ok()?;
     }
     Some((dir, last))
@@ -679,8 +693,9 @@ fn contents_within(folder: &Path, budget: &ContentBudget) -> crate::git_watch::P
 /// other folders, #1909 item 4) make it differ every time.
 ///
 /// #1909: nothing is looked up by path below the top of the volume:
-/// `folder` is reached one folder at a time from there, following no link
-/// ([`open_parent_unfollowed`]), and must still be the file `expected`;
+/// `folder` is reached one folder at a time from there, refusing links
+/// except mounts/junctions to volume GUID roots ([`open_parent_unfollowed`]), and must
+/// still be the file `expected` on the recorded volume;
 /// each folder below it is opened through the folder it was listed in.
 /// Otherwise (a folder on the way swapped for a link, say) it differs
 /// every time.

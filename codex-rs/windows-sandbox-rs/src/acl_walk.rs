@@ -428,6 +428,21 @@ pub(crate) unsafe fn open_folder_unfollowed(
         .map_err(|status| std::io::Error::from_raw_os_error(RtlNtStatusToDosError(status) as i32))
 }
 
+/// Opens a trusted absolute NT directory name without passing through the
+/// caller's DOS-device namespace. The caller must constrain the name before
+/// using this; the volume-mount reader supplies only `\\GLOBAL??\\Volume{GUID}\\`.
+/// The filesystem root itself is opened without following a reparse point.
+pub(crate) unsafe fn open_absolute_folder(name: &[u16]) -> std::io::Result<Handle> {
+    nt_open(
+        /*dir*/ 0,
+        name,
+        FILE_TRAVERSE | FILE_READ_ATTRIBUTES,
+        /*object_attributes*/ 0,
+        FILE_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT,
+    )
+    .map_err(|status| std::io::Error::from_raw_os_error(RtlNtStatusToDosError(status) as i32))
+}
+
 /// Fails unless `name` is one plain name: never empty, a path or a stream
 /// (`name:stream`).
 fn plain_name(name: &[u16]) -> Result<()> {
