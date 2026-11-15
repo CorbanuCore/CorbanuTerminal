@@ -154,7 +154,9 @@ impl ViewImageHandler {
         let codex_home = turn.config.codex_home.clone();
         let admission = crate::security::protected_surface::admit(
             &session,
-            turn.approval_policy.value(),
+            // Sync: the step's captured settings, as for MCP calls (main reads
+            // the turn's live policy, which upstream's step context replaces).
+            step_context.settings.approval_policy(),
             crate::security::protected_surface::Route::FileRead,
             &call_id,
             move || {
