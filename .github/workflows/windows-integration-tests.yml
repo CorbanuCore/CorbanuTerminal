@@ -125,6 +125,11 @@ jobs:
           tool: nextest
           version: 0.9.103
 
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        uses: CorbanuCore/CorbanuTerminal/.github/actions/setup-rusty-v8@11d9de6c9269db69b4cd6f861449d1eca80a9a03
+        with:
+          target: x86_64-pc-windows-msvc
+
       # Binaries the tests start from other packages; cargo builds only the
       # tested package's own binaries.
       - name: Build helper binaries

@@ -144,6 +144,11 @@ jobs:
       - name: Install DotSlash
         uses: facebook/install-dotslash@1e4e7b3e07eaca387acb98f1d4720e0bee8dbb6a # v2
 
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        uses: CorbanuCore/CorbanuTerminal/.github/actions/setup-rusty-v8@11d9de6c9269db69b4cd6f861449d1eca80a9a03
+        with:
+          target: x86_64-unknown-linux-gnu
+
       # Same binaries the Bazel job stages: the CLI and its code-mode host,
       # side by side in one folder.
       - name: Build codex with Cargo

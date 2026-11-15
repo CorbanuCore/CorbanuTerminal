@@ -120,6 +120,11 @@ jobs:
             sccache-core-security-${{ inputs.runner }}-${{ inputs.target }}-${{ steps.sccache_config.outputs.lockhash }}-
             sccache-core-security-${{ inputs.runner }}-${{ inputs.target }}-
 
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        uses: CorbanuCore/CorbanuTerminal/.github/actions/setup-rusty-v8@11d9de6c9269db69b4cd6f861449d1eca80a9a03
+        with:
+          target: ${{ inputs.target }}
+
       - name: Build the codex-core test binaries
         run: |
           cargo test --locked --target ${{ inputs.target }} -p codex-core --lib --no-run

@@ -75,6 +75,12 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        if: ${{ matrix.bundle != 'helpers' }}
+        uses: CorbanuCore/CorbanuTerminal/.github/actions/setup-rusty-v8@11d9de6c9269db69b4cd6f861449d1eca80a9a03
+        with:
+          target: ${{ matrix.target }}
+
       - name: Cargo build (Windows binaries)
         shell: bash
         run: |
