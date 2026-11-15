@@ -359,6 +359,7 @@ mod guardian_tests;
 mod hard_abort_tool_output_tests;
 mod mcp_skill_dependency_tests;
 mod panicking_task_tests;
+mod steering_authority_tests;
 
 fn user_message(text: &str) -> ResponseItem {
     ResponseItem::Message {
