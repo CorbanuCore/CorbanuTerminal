@@ -419,7 +419,6 @@ impl StatusHistoryCell {
         let model_provider = format_model_provider(
             config,
             model_provider.as_deref(),
-            remote_connection.is_some(),
             active_account,
             provider_has_named_account,
             session_account_gone,
@@ -1176,29 +1175,23 @@ impl HistoryCell for Arc<StatusHistoryCell> {
     }
 }
 
-/// The "Model provider" line. Like upstream, a provider ID reported by a connected server, or one
-/// that differs from this home's configuration, is shown as reported. Otherwise (PF-84) the line
-/// names this home's provider, when it is not the default OpenAI one, and the named account this
-/// session's requests use. Upstream no longer shows the runtime base URL.
+/// The "Model provider" line. As upstream, it names the provider ID the thread or connected server
+/// reports, else this home's provider name. PF-84: it also names the named account this session's
+/// requests use, and stays hidden for the default OpenAI provider without one. Upstream no longer
+/// shows the runtime base URL.
 fn format_model_provider(
     config: &Config,
     reported_provider_id: Option<&str>,
-    remote_connection: bool,
     active_account: Option<&str>,
     provider_has_named_account: bool,
     session_account_gone: bool,
 ) -> Option<String> {
-    if let Some(provider_id) = reported_provider_id
-        && (remote_connection || provider_id != config.model_provider_id)
-    {
-        return Some(provider_id.to_string());
-    }
     let provider = &config.model_provider;
     let name = provider.name.trim();
-    let provider_name = if name.is_empty() {
-        config.model_provider_id.as_str()
-    } else {
-        name
+    let provider_name = match reported_provider_id {
+        Some(provider_id) => provider_id,
+        None if name.is_empty() => config.model_provider_id.as_str(),
+        None => name,
     };
     // PF-84-S04: with named accounts on, name the account this session's
     // requests use, `default` included. D86: only when this provider has a
@@ -1219,7 +1212,11 @@ fn format_model_provider(
                     })
             })
         });
-    if provider.is_openai() && account.is_none() {
+    let is_default_openai = match reported_provider_id {
+        Some(provider_id) => provider_id == OPENAI_PROVIDER_ID,
+        None => provider.is_openai(),
+    };
+    if is_default_openai && account.is_none() {
         return None;
     }
 
