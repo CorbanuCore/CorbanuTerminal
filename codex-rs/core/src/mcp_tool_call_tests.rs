@@ -4303,8 +4303,8 @@ async fn issue_2145_reviewed(
 /// #1011 (item 1) end to end (#2145): a lasting answer from the automatic
 /// reviewer is limited to what the prompt would have offered, like a
 /// person's. Without the elicitation form "always allow" isn't offered, and
-/// under a protected level with untrusted content (#942) neither lasting
-/// option is; offered, the answer stands. (A permission hook can only allow
+/// under a protected level, where #942's fresh-approval rule applies,
+/// neither lasting option is; offered, the answer stands. (A permission hook can only allow
 /// once or deny, so it can't give a lasting answer.)
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn issue_2145_reviewer_lasting_answer_is_limited_to_what_was_offered() {

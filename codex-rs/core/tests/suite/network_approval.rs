@@ -3320,11 +3320,12 @@ async fn local_session_grant_does_not_allow_the_same_host_on_a_remote_executor()
         local(local_cwd.path().abs()),
         test.executor_environment().selection().clone(),
     ];
-    mount_exec_network_turn(
+    let command = remote_network_proxy_request_command("PROXY");
+    let local_responses = mount_exec_network_turn(
         &server,
         "resp-network-local",
         "exec-network-local",
-        network_fetch_args(LOCAL_ENVIRONMENT_ID),
+        network_probe_args(&command, LOCAL_ENVIRONMENT_ID),
     )
     .await?;
     submit_managed_network_turn(
@@ -3343,7 +3344,8 @@ async fn local_session_grant_does_not_allow_the_same_host_on_a_remote_executor()
             decision: ReviewDecision::ApprovedForSession,
         })
         .await?;
-    wait_for_turn_complete(&test).await;
+    wait_for_completion_without_network_prompt(&test).await;
+    assert_network_probe_allowed(&local_responses, "exec-network-local");
 
     let remote_responses = mount_exec_network_turn(
         &server,
@@ -3870,6 +3872,12 @@ async fn managed_network_unified_exec_test_with_features(
     let test = managed_network_unified_exec_builder(features)?
         .build_with_remote_and_local_env(server)
         .await?;
+    // In the remote lane `config.cwd` is the container-side cwd, but these
+    // tests also run commands in the local environment with that same cwd.
+    // Make sure it exists on the host too (main 619c2f7aad).
+    if core_test_support::is_remote_test_environment() {
+        fs::create_dir_all(&test.config.cwd)?;
+    }
     assert!(test.config.managed_network_requirements_enabled());
     assert!(test.config.permissions.network.is_some());
     assert!(test.session_configured.network_proxy.is_some());
@@ -3907,6 +3915,12 @@ async fn network_unified_exec_test(
     )?
     .build_with_remote_and_local_env(server)
     .await?;
+    // In the remote lane `config.cwd` is the container-side cwd, but these
+    // tests also run commands in the local environment with that same cwd.
+    // Make sure it exists on the host too (main 619c2f7aad).
+    if core_test_support::is_remote_test_environment() {
+        fs::create_dir_all(&test.config.cwd)?;
+    }
     assert_eq!(
         test.config.managed_network_requirements_enabled(),
         managed_requirements,
