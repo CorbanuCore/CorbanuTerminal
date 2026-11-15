@@ -35,6 +35,12 @@ pub(super) async fn run_main_inner(
     };
     #[cfg(not(windows))]
     let elevated_warning: Option<&str> = None;
+    // PF-24-S02 "restart now": the same arguments, without sending the
+    // initial prompt and images a second time.
+    if security::restart::restarted() {
+        cli.prompt = None;
+        cli.images.clear();
+    }
     let strict_config = cli.strict_config;
     if cli.shared.worktree {
         if explicit_remote_endpoint.is_some() {
@@ -105,6 +111,19 @@ pub(super) async fn run_main_inner(
             std::process::exit(1);
         }
     };
+    let mut security_launch =
+        security::launch::LaunchPlan::prepare(&codex_home, &mut cli_kv_overrides)
+            .unwrap_or_else(|message| exit_with_security_error(&message));
+    // A security level other than Permissive is enforced only in this process's own
+    // embedded app server: refuse an explicit remote or daemon endpoint up front.
+    let non_embedded_refusal = security_launch
+        .check_target(/*uses_remote_app_server*/ true)
+        .err();
+    if explicit_remote_endpoint.is_some()
+        && let Some(message) = &non_embedded_refusal
+    {
+        exit_with_security_error(message);
+    }
 
     // A bound socket at the default path may be an SSH forward. Keep a verified
     // endpoint so replacing the advertised alias cannot redirect local config.
@@ -220,6 +239,10 @@ pub(super) async fn run_main_inner(
         workload_identity_selected,
         std::env::var_os(codex_exec_server::CODEX_EXEC_SERVER_URL_ENV_VAR).as_deref(),
     );
+    // Corbanu: likewise, such a level never reuses or starts the shared background server.
+    if daemon_exclusion.is_none() && non_embedded_refusal.is_some() {
+        daemon_exclusion = Some("the Corbanu security level");
+    }
     let reuse_implicit_local_daemon = daemon_exclusion.is_none();
     let search_forces_embedded = cli.web_search
         && daemon_startup::config_exclusion(
@@ -328,11 +351,12 @@ pub(super) async fn run_main_inner(
     }
     // Keep normal terminal signals available until local configuration is ready. Once raw
     // mode begins, StartupDraft immediately takes ownership of input.
-    let (initialized_terminal, terminal_restore_guard) = tokio::task::spawn_blocking(|| {
-        tui::init().map(|terminal| (terminal, TerminalRestoreGuard::new()))
-    })
-    .await
-    .map_err(std::io::Error::other)??;
+    let initialized_terminal = tokio::task::spawn_blocking(tui::init)
+        .await
+        .map_err(std::io::Error::other)??;
+    // Created on the thread that runs the TUI, which panic diagnostics treat as the terminal
+    // owner (`tui::init` runs on a blocking thread).
+    let terminal_restore_guard = TerminalRestoreGuard::new();
     // Snapshot the backend size sampled during init, before any viewport changes or resizes.
     let initial_terminal_size = initialized_terminal.terminal.last_known_screen_size;
     let terminal_size_tags = crate::terminal_size_telemetry::tags(initial_terminal_size);
@@ -403,6 +427,10 @@ pub(super) async fn run_main_inner(
         ))
         .await??;
     let bootstrap_config_toml = &bootstrap_config.config_toml;
+    security_launch.extend_env_overrides(
+        &bootstrap_config_toml.shell_environment_policy,
+        &mut cli_kv_overrides,
+    );
 
     let cwd_override = if app_server_target.uses_remote_workspace() {
         None
@@ -479,6 +507,12 @@ pub(super) async fn run_main_inner(
         ));
     }
 
+    let launch_explicitly_selects_model_or_provider = cli.model.is_some()
+        || cli.oss
+        || cli_kv_overrides
+            .iter()
+            .any(|(key, _)| matches!(key.as_str(), "model" | "model_provider"));
+
     // When using `--oss`, let the bootstrapper pick the model based on selected provider
     let model = if let Some(model) = &cli.model {
         Some(model.clone())
@@ -496,6 +530,12 @@ pub(super) async fn run_main_inner(
 
     let mut overrides = ConfigOverrides {
         model,
+        // Interactive startup must tolerate model/provider pairs persisted by
+        // older releases. Preserve the configured provider and let its model
+        // catalog select a valid default. Explicit launch choices and
+        // --strict-config remain fail-closed.
+        allow_provider_model_fallback: !strict_config
+            && !launch_explicitly_selects_model_or_provider,
         approval_policy,
         sandbox_mode,
         cwd: cwd_override,
@@ -505,8 +545,10 @@ pub(super) async fn run_main_inner(
         show_raw_agent_reasoning: cli.oss.then_some(true),
         bypass_hook_trust: cli.bypass_hook_trust.then_some(true),
         additional_writable_roots: additional_dirs,
+        provider_account: cli.account.clone(),
         ..Default::default()
     };
+    security_launch.apply_launch_overrides(&mut overrides);
 
     let mut config = startup_draft
         .run_until(load_config_or_exit(
@@ -567,6 +609,37 @@ pub(super) async fn run_main_inner(
     } else {
         None
     };
+    // Security levels verify the config this session actually runs with (after `--worktree`).
+    let origin_registry_update = security_launch.origin_registry_update();
+    if let Err(message) = startup_draft
+        .run_until(security_launch.finish(&mut config))
+        .await?
+    {
+        exit_with_security_error(&message);
+    }
+    // PF-84 (#426): a missing named account (`--account` or
+    // `[provider_accounts]`) is refused before onboarding, with exec's
+    // recovery text, instead of asking for a default key. The account a
+    // resumed thread recorded is checked once the thread is selected (#545),
+    // and so is `[provider_accounts]` for a resume, which runs on that
+    // recorded account instead (#555). A local daemon serves this same home;
+    // a remote app server checks its own home at thread start.
+    let deferred_account_check =
+        !app_server_target.uses_remote_workspace() && defers_launch_account_check(&cli, &config);
+    if !app_server_target.uses_remote_workspace()
+        && let Some(message) =
+            crate::resume_launch::launch_account_error(&config, deferred_account_check)
+    {
+        exit_with_security_error(&message);
+    }
+    if let Some(aggressive) = origin_registry_update
+        && let Err(err) = security::nested::register_origin(&codex_home, aggressive)
+        && aggressive
+    {
+        config.startup_warnings.push(format!(
+            "Could not record this Corbanu home for nested-launch checks ({err}); an agent command that changes CODEX_HOME may not be recognised as nested."
+        ));
+    }
     let auto_start_daemon = cfg!(any(unix, windows))
         && (cli.agents_overview || config.features.enabled(Feature::DaemonAutoStart))
         && implicit_connection
@@ -654,6 +727,55 @@ pub(super) async fn run_main_inner(
     if compatibility_warning.is_some() {
         app_server_target = AppServerTarget::Embedded;
         daemon_exclusion = Some("daemon feature settings");
+    }
+    // PF-84-S06: a launch on a named account (or a resume/fork) leaves the default
+    // login in place and never reuses a local daemon; every other launch enforces
+    // the login restrictions on it here.
+    if !workload_identity_selected {
+        let launches_resume_or_fork = is_resume_launch(&cli)
+            || cli.fork_picker
+            || cli.fork_last
+            || cli.fork_session_id.is_some();
+        let settled = startup_draft
+            .run_until(default_login_launch::settle_default_login_at_launch(
+                &config,
+                launches_resume_or_fork,
+                app_server_target,
+            ))
+            .await?;
+        let default_login_launch::DefaultLoginAtLaunch {
+            app_server_target: settled_target,
+            left_in_place,
+            daemon_not_reused,
+        } = match settled {
+            Ok(settled) => settled,
+            Err(err) => {
+                restore_terminal_before_fatal_exit();
+                #[allow(clippy::print_stderr)]
+                {
+                    eprintln!("{err}");
+                }
+                if let Some(worktree) = managed_worktree.as_ref() {
+                    worktree.report_startup_failure();
+                }
+                std::process::exit(1);
+            }
+        };
+        app_server_target = settled_target;
+        if !matches!(app_server_target, AppServerTarget::LocalDaemon { .. }) {
+            // The launch no longer uses a daemon it may have started above.
+            managed_daemon = false;
+        }
+        if left_in_place {
+            codex_login::leave_default_login_unenforced();
+        }
+        config.startup_warnings.extend(daemon_not_reused);
+    }
+    // Defense in depth: the final target must still satisfy the security level.
+    if !matches!(app_server_target, AppServerTarget::Embedded)
+        && let Some(message) = &non_embedded_refusal
+    {
+        exit_with_security_error(message);
     }
     if app_server_target.uses_embedded_network_policy() {
         embedded_network_policy.activate(&mut config);
@@ -882,27 +1004,6 @@ pub(super) async fn run_main_inner(
         }
     }
 
-    if !app_server_target.uses_remote_workspace() && !workload_identity_selected {
-        #[allow(clippy::print_stderr)]
-        if let Err(err) = startup_draft
-            .run_until(enforce_login_restrictions(&config.auth_config()))
-            .await?
-        {
-            restore_terminal_before_fatal_exit();
-            eprintln!("{err}");
-            if let Some(worktree) = managed_worktree.as_ref() {
-                worktree.report_startup_failure();
-            }
-            launch_telemetry.record(&app_server_target, /*connected*/ false);
-            if let Some(otel) = otel {
-                let _ = otel
-                    .shutdown_with_timeout(INTERACTIVE_OTEL_SHUTDOWN_TIMEOUT)
-                    .await;
-            }
-            std::process::exit(1);
-        }
-    }
-
     let (tui_file_layer, _tui_file_log_guard) = if config_toml_log_dir_configured {
         let log_dir = config.log_dir.clone();
         std::fs::create_dir_all(&log_dir)?;
@@ -926,7 +1027,7 @@ pub(super) async fn run_main_inner(
             )
         });
         let file_layer = tracing_subscriber::fmt::layer()
-            .with_writer(non_blocking)
+            .with_writer(move || gated_log_writer::GatedLogWriter(non_blocking.clone()))
             .with_target(true)
             .with_ansi(false)
             .with_span_events(
@@ -978,14 +1079,41 @@ pub(super) async fn run_main_inner(
         .clone()
         .map(|layer| layer.with_filter(log_db::default_filter()));
 
-    let _ = tracing_subscriber::registry()
-        .with(tui_file_layer)
-        .with(feedback_layer)
-        .with(feedback_metadata_layer)
-        .with(log_db_layer)
-        .with(otel_logger_layer)
-        .with(otel_tracing_layer)
-        .try_init();
+    let _ = codex_log_guard::guard(
+        tracing_subscriber::registry()
+            .with(tui_file_layer)
+            .with(feedback_layer)
+            .with(feedback_metadata_layer)
+            .with(log_db_layer)
+            .with(otel_logger_layer)
+            .with(otel_tracing_layer),
+    )
+    .try_init();
+
+    // Older builds wrote credentials to these files (#179, #196). Masking
+    // keeps every byte offset, so it runs beside this process's appends.
+    std::thread::spawn({
+        let log_dir = config.log_dir.clone();
+        #[cfg(target_os = "windows")]
+        let sandbox_dir = codex_windows_sandbox::sandbox_dir(&config.codex_home);
+        move || {
+            for name in [TUI_LOG_FILE_NAME, "codex-login.log"] {
+                if let Err(err) = codex_state::scrub_log_file_once(&log_dir.join(name)) {
+                    tracing::warn!("failed to scrub old secrets from {name}: {err}");
+                }
+            }
+            // Older builds logged sandboxed command lines verbatim (#398).
+            #[cfg(target_os = "windows")]
+            if let Err(err) = codex_state::scrub_sandbox_logs_once(&sandbox_dir) {
+                tracing::warn!("failed to scrub old secrets from the sandbox logs: {err}");
+            }
+            // #158: put back integrity labels a crashed sandbox session left.
+            #[cfg(target_os = "windows")]
+            if let Err(err) = codex_windows_sandbox::repair_stale_integrity_labels() {
+                tracing::warn!("failed to repair stale sandbox integrity labels: {err:#}");
+            }
+        }
+    });
 
     if let Err(err) = screen_reader_result {
         tracing::warn!("Could not save screen-reader detection: {err}");
@@ -1018,7 +1146,7 @@ pub(super) async fn run_main_inner(
     .await
     .map_err(|err| {
         err.downcast::<std::io::Error>()
-            .unwrap_or_else(|err| std::io::Error::other(err.to_string()))
+            .unwrap_or_else(report_as_io_error)
     });
 
     if let Some(worktree) = managed_worktree.as_ref() {
