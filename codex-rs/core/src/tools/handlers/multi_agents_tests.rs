@@ -95,6 +95,9 @@ use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
+#[path = "multi_agents_ownership_tests.rs"]
+mod ownership;
+
 fn model_facing_error_message(error: &FunctionCallError) -> Option<&str> {
     match error {
         FunctionCallError::RespondToModel(message)

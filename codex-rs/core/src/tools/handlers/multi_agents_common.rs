@@ -659,21 +659,27 @@ fn validate_spawn_agent_reasoning_effort(
 }
 
 /// #1756 (as #1701 for `wait_agent`): agent tools act only on the caller's
-/// own agents, spawned by it or by its agents. A loaded thread the caller
-/// did not spawn is refused; an id that is not loaded is left to the tool
-/// (it reports it as not found). The registry not being readable refuses.
+/// own agents, spawned by it or by its agents. Registered unloaded agents
+/// require an open persisted ancestry before loading or closing; unknown ids
+/// retain the tool's not-found response. An unreadable ownership check refuses.
 pub(crate) async fn ensure_own_agent(
     session: &Session,
     tool: &str,
     agent_id: ThreadId,
 ) -> Result<(), FunctionCallError> {
-    if session
+    let foreign = match session
         .services
         .agent_control
-        .is_foreign_loaded_thread(session.thread_id, agent_id)
+        .is_foreign_agent(session.thread_id, agent_id)
         .await
-        .unwrap_or(true)
     {
+        Ok(foreign) => foreign,
+        Err(err) if matches!(err.details(), CodexErrorDetails::ThreadNotFound(_)) => {
+            return Err(collab_agent_error(agent_id, err));
+        }
+        Err(_) => true,
+    };
+    if foreign {
         return Err(FunctionCallError::RespondToModel(format!(
             "{tool} can only target agents spawned by this agent or by its sub-agents; `{agent_id}` is not one of them"
         )));
