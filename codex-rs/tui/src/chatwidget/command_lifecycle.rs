@@ -338,7 +338,6 @@ impl ChatWidget {
             command,
             process_id: _,
             source,
-            status,
             command_actions,
             aggregated_output,
             status,

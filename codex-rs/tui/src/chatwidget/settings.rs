@@ -45,7 +45,7 @@ impl ChatWidget {
             && (self.has_chatgpt_account
                 || !matches!(
                     self.status_account_display,
-                    Some(StatusAccountDisplay::ApiKey)
+                    Some(StatusAccountDisplay::ApiKey { .. })
                 )
                 || self
                     .config
@@ -66,7 +66,7 @@ impl ChatWidget {
             && (self.has_chatgpt_account
                 || matches!(
                     self.status_account_display,
-                    Some(StatusAccountDisplay::ApiKey)
+                    Some(StatusAccountDisplay::ApiKey { .. })
                 ))
     }
 
@@ -289,8 +289,13 @@ impl ChatWidget {
         // Account-update notifications are the identity boundary. The visible account fields can
         // be identical across two accounts, so always invalidate account-scoped requests and data.
         self.model_popup_request_id = None;
-        let api_key_changed = self.status_account_display == Some(StatusAccountDisplay::ApiKey)
-            || status_account_display == Some(StatusAccountDisplay::ApiKey);
+        let api_key_changed = matches!(
+            self.status_account_display,
+            Some(StatusAccountDisplay::ApiKey { .. })
+        ) || matches!(
+            status_account_display,
+            Some(StatusAccountDisplay::ApiKey { .. })
+        );
         self.invalidate_permission_discovery();
         self.permission_discovery = None;
         self.invalidate_connector_scope();
@@ -704,7 +709,9 @@ impl ChatWidget {
                         .map(|preset| preset.display_name)
                 })
                 .filter(|display_name| !display_name.trim().is_empty())
-                .unwrap_or_else(|| model.to_string())
+                // Upstream's fallback names (e.g. Luna Reserve) for models
+                // missing from the catalog.
+                .unwrap_or_else(|| crate::model_catalog::model_display_name(model).to_string())
         }
     }
 

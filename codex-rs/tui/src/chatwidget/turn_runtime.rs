@@ -577,7 +577,7 @@ impl ChatWidget {
                     None,
             ),
             Some(RateLimitReachedType::WorkspaceOwnerUsageLimitReached) => (
-                    "Usage limit reached. You've reached your usage limit. Increase your limits to continue using codex."
+                    "Usage limit reached. You've reached your usage limit. Increase your limits to continue using Corbanu Terminal."
                         .to_string(),
                     None,
             ),
