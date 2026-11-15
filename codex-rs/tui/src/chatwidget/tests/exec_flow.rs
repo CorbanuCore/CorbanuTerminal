@@ -223,7 +223,9 @@ async fn exploration_reasoning_during_followup_command_stays_ordered() {
     assert!(drain_insert_history(&mut rx).is_empty());
     end_exec(&mut chat, second, "contents\n", "", /*exit_code*/ 0);
     let transcript = chat.active_cell_transcript_lines(/*width*/ 80).unwrap();
-    insta::assert_snapshot!(lines_to_single_string(&transcript));
+    insta::assert_snapshot!(
+        lines_to_single_string(&transcript).replace(&test_cwd_display(), "<cwd>")
+    );
 }
 
 #[tokio::test]
@@ -327,7 +329,7 @@ async fn adjacent_exploration_groups_across_reasoning_live_and_replayed() {
         renders.push(render);
     }
     assert_eq!(renders[0], renders[1]);
-    insta::assert_snapshot!(renders[0]);
+    insta::assert_snapshot!(renders[0].replace(&test_cwd_display(), "<cwd>"));
 }
 
 #[tokio::test]
@@ -409,21 +411,32 @@ async fn replayed_commands_preserve_individual_output_and_failure_status() {
         .map(|cell| lines_to_single_string(&cell.transcript_lines(/*width*/ 80)))
         .collect::<Vec<_>>()
         .join("\n");
-    insta::assert_snapshot!(transcript, @r"$ printf first
+    insta::assert_snapshot!(transcript.replace(&test_cwd_display(), "<cwd>"), @r"$ printf first
 first
 ✓ • 5ms
+
+job: pid=not reported · call=call-first · cwd=<cwd> · output=thread
+transcript
 
 $ printf second
 second
 ✓ • 5ms
 
+job: pid=not reported · call=call-second · cwd=<cwd> · output=thread
+transcript
+
 $ printf failure
 failure
 ✗ (7) • 5ms
 
+job: pid=not reported · call=call-failed · cwd=<cwd> · output=thread
+transcript
+
 $ printf declined
-declined
-✗ (1) • 5ms
+✗ Did not run (approval declined)
+
+job: pid=not reported · call=call-declined · cwd=<cwd> · output=thread
+transcript
 ");
 }
 

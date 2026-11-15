@@ -171,7 +171,8 @@ async fn older_tool_projection_matches_initial_replay() {
         format!(
             "compact:\n{}\ndetailed:\n{}",
             lines_to_single_string(&exploration.display_lines(/*width*/ 40)),
-            lines_to_single_string(&exploration.transcript_lines(/*width*/ 40)),
+            lines_to_single_string(&exploration.transcript_lines(/*width*/ 40))
+                .replace(&test_cwd_display(), "<cwd>"),
         )
     );
 }

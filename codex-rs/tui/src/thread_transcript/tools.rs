@@ -4,6 +4,7 @@
 //! changes composer state, or leaves an animation running; pending items retain their last known
 //! status. Callers own chronological grouping.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::exec_cell::CommandOutput;
@@ -12,6 +13,7 @@ use crate::exec_cell::new_active_exec_command;
 use crate::history_cell::McpInvocation;
 use crate::history_cell::McpToolCallCell;
 use crate::history_cell::PlainHistoryCell;
+use crate::history_cell::PrefixedWrappedHistoryCell;
 use crate::history_cell::new_active_mcp_tool_call;
 use codex_app_server_protocol::CollabAgentTool;
 use codex_app_server_protocol::CollabAgentToolCallStatus;
@@ -30,7 +32,11 @@ use ratatui::text::Line;
 pub(crate) fn historical_tool_fallback(item: &ThreadItemPayload) -> Option<PlainHistoryCell> {
     let lines = match item {
         ThreadItemPayload::CommandExecution {
+            id,
             command,
+            cwd,
+            process_id,
+            duration_ms,
             source,
             status,
             aggregated_output,
@@ -63,8 +69,12 @@ pub(crate) fn historical_tool_fallback(item: &ThreadItemPayload) -> Option<Plain
             {
                 status_line.push_str(&format!(" · exit {code}"));
             }
+            if let Some(duration) = duration_ms {
+                status_line.push_str(&format!(" · {duration}ms"));
+            }
             let mut lines: Vec<Line<'static>> = vec![
                 vec!["$ ".dim(), command.clone().into()].into(),
+                command_job_line(id, process_id.as_deref(), cwd.as_str()),
                 status_line.dim().into(),
             ];
             if let Some(output) = aggregated_output {
@@ -120,8 +130,36 @@ fn replay_command_args(command: &str) -> Option<Vec<String>> {
     (shlex::try_join(args.iter().map(String::as_str)).as_deref() == Ok(command)).then_some(args)
 }
 
+pub(crate) fn command_job_detail(
+    item: &ThreadItemPayload,
+) -> Option<Arc<dyn crate::history_cell::HistoryCell>> {
+    let ThreadItemPayload::CommandExecution {
+        id,
+        process_id,
+        cwd,
+        ..
+    } = item
+    else {
+        return None;
+    };
+    Some(Arc::new(PrefixedWrappedHistoryCell::new(
+        vec![command_job_line(id, process_id.as_deref(), cwd.as_str())],
+        "",
+        "",
+    )))
+}
+
+fn command_job_line(id: &str, process_id: Option<&str>, cwd: &str) -> Line<'static> {
+    let process_id = process_id.unwrap_or("not reported");
+    format!("job: pid={process_id} · call={id} · cwd={cwd} · output=thread transcript")
+        .dim()
+        .into()
+}
+
 pub(crate) struct CommandHistory {
     pub(crate) id: String,
+    pub(crate) cwd: String,
+    pub(crate) process_id: Option<String>,
     pub(crate) command: Vec<String>,
     pub(crate) parsed: Vec<ParsedCommand>,
     pub(crate) source: CommandExecutionSource,
@@ -134,6 +172,8 @@ impl CommandHistory {
     pub(crate) fn from_item(item: ThreadItemPayload) -> Option<Self> {
         let ThreadItemPayload::CommandExecution {
             id,
+            cwd,
+            process_id,
             command,
             source,
             status,
@@ -161,6 +201,8 @@ impl CommandHistory {
         };
         Some(Self {
             id,
+            cwd: cwd.as_str().to_owned(),
+            process_id,
             command: replay_command_args(&command)?,
             parsed: command_actions
                 .into_iter()
@@ -174,6 +216,7 @@ impl CommandHistory {
     }
 
     pub(crate) fn into_cell(self) -> ExecCell {
+        let job_line = command_job_line(&self.id, self.process_id.as_deref(), &self.cwd);
         let output = CommandOutput::new(self.exit_code, self.aggregated_output);
         let mut cell = new_active_exec_command(
             self.id.clone(),
@@ -185,6 +228,14 @@ impl CommandHistory {
         );
         let completed = cell.complete_call(&self.id, output, self.duration);
         debug_assert!(completed, "new exec cell should contain {}", self.id);
+        // Keep each job with its command through exploration grouping and page joins.
+        // Activity details appear in expanded and raw transcripts without changing the preview.
+        cell.group
+            .push_detail(Arc::new(PrefixedWrappedHistoryCell::new(
+                vec![job_line],
+                "",
+                "",
+            )));
         cell
     }
 }
