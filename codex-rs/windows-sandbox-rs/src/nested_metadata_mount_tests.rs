@@ -1,4 +1,5 @@
 use super::*;
+use pretty_assertions::assert_eq;
 use windows_sys::Win32::Storage::FileSystem::GetVolumeNameForVolumeMountPointW;
 use windows_sys::Win32::Storage::FileSystem::GetVolumePathNameW;
 
