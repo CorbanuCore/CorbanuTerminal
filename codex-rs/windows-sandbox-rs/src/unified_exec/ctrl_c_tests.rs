@@ -145,7 +145,6 @@ fn run_input_case(mode: &str, code: i32) {
             &[],
             /*tty*/ true,
             /*stdin_open*/ true,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn input probe");

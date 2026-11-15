@@ -150,7 +150,9 @@ class ChangedCrateTestPackagesTest(unittest.TestCase):
 
 
 class AffectedPackagesTest(unittest.TestCase):
-    def test_cargo_graph_handles_implicit_members_aliases_targets_and_cycles(self) -> None:
+    def test_cargo_graph_handles_implicit_members_aliases_targets_and_cycles(
+        self,
+    ) -> None:
         # Use real Cargo metadata from a registry-free fixture. The support
         # crate isn't in members; dev dependencies make a cycle with its parent.
         manifests = {
@@ -158,7 +160,7 @@ class AffectedPackagesTest(unittest.TestCase):
             "leaf/Cargo.toml": '[package]\nname = "leaf"\nversion = "0.1.0"\n',
             "app/Cargo.toml": (
                 '[package]\nname = "app"\nversion = "0.1.0"\n'
-                '[target.\'cfg(windows)\'.build-dependencies]\n'
+                "[target.'cfg(windows)'.build-dependencies]\n"
                 'renamed = { package = "leaf", path = "../leaf", optional = true }\n'
                 '[dev-dependencies]\nsupport = { path = "tests/support" }\n'
             ),
@@ -184,16 +186,22 @@ class AffectedPackagesTest(unittest.TestCase):
                 ["app", "leaf", "support"],
             )
             self.assertEqual(
-                affected_packages(["codex-rs/app/tests/support/src/lib.rs"], metadata, root),
+                affected_packages(
+                    ["codex-rs/app/tests/support/src/lib.rs"], metadata, root
+                ),
                 ["app", "support"],
             )
             # At the cap retain precise coverage; past it select everything.
             self.assertEqual(
-                affected_packages(["codex-rs/leaf/src/lib.rs"], metadata, root, limit=3),
+                affected_packages(
+                    ["codex-rs/leaf/src/lib.rs"], metadata, root, limit=3
+                ),
                 ["app", "leaf", "support"],
             )
             self.assertEqual(
-                affected_packages(["codex-rs/leaf/src/lib.rs"], metadata, root, limit=2),
+                affected_packages(
+                    ["codex-rs/leaf/src/lib.rs"], metadata, root, limit=2
+                ),
                 ["app", "leaf", "other", "support"],
             )
             for path in (
@@ -212,7 +220,9 @@ class AffectedPackagesTest(unittest.TestCase):
     def test_real_test_support_crates_are_discovered(self) -> None:
         packages = tested_packages(ROOT)
         self.assertEqual(packages["codex-rs/core/tests/common"], "core_test_support")
-        self.assertEqual(packages["codex-rs/app-server/tests/common"], "app_test_support")
+        self.assertEqual(
+            packages["codex-rs/app-server/tests/common"], "app_test_support"
+        )
         # Sync: upstream removed the codex-mcp-server crate (and its
         # mcp_test_support); main's third assertion doesn't apply here.
         self.assertNotIn("codex-rs/mcp-server/tests/common", packages)

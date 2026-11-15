@@ -129,7 +129,9 @@ def affected_packages(
         return all_packages
 
     if any(path.startswith(FULL_SUITE_PATHS) for path in files):
-        return full_suite("workspace manifest, lockfile, toolchain or configuration changed")
+        return full_suite(
+            "workspace manifest, lockfile, toolchain or configuration changed"
+        )
     selected = set(selected_packages(files, directories))
     # A deleted/moved crate no longer has metadata at HEAD. Its former
     # dependents cannot be recovered from that graph: conservatively test all.
