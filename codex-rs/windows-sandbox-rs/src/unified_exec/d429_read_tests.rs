@@ -540,6 +540,27 @@ fn sec_win_d429_legacy_workloads_still_work() {
     assert!(failures.is_empty(), "{failures:#?}\n{}", sandbox_log(home));
 }
 
+/// #1842: Ctrl-C must reach a legacy command even when Core is elevated.
+#[test]
+fn sec_win_1842_legacy_conpty_receives_ctrl_c() {
+    let _guard = legacy_process_test_guard();
+    let root = user_owned_test_root();
+    let home = sandbox_home("1842-ctrl-c");
+    let cmd = system32_exe("cmd.exe").display().to_string();
+    let ended = current_thread_runtime().block_on(end_a_running_command(
+        root.path(),
+        home.path(),
+        &cmd,
+        /*interrupt*/ true,
+    ));
+    assert_eq!(
+        ended,
+        "ended exit=Ok(-1073741510)",
+        "{}",
+        sandbox_log(home.path())
+    );
+}
+
 /// Starts `cmd` running `ping` in a legacy command and ends it as Core does:
 /// with Ctrl-C typed into its ConPTY when `interrupt`, otherwise by
 /// terminating the session. Reports whether it exited within 20 seconds.
