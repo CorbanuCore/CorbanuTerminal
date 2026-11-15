@@ -1,10 +1,11 @@
 ---
 source: tui/src/status/tests.rs
+assertion_line: 1252
 expression: sanitized
 ---
 /status
 
-  >_ Corbanu Terminal (v<V>)
+  >_ Corbanu Terminal (v<V>)  
 
   Visit https://chatgpt.com/settings/usage for
   up-to-date
@@ -20,8 +21,8 @@ expression: sanitized
                          for approval)
   Security:              Requested Permissive;
                          effective protection
-                         unverified
-                         (/security)
+                         unverified (/
+                         security)
   Agents.md:             <none>
 
   Token usage:           1.2K total  (800

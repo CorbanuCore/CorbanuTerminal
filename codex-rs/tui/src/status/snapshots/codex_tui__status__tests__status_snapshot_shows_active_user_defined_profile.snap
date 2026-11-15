@@ -1,10 +1,11 @@
 ---
 source: tui/src/status/tests.rs
+assertion_line: 851
 expression: sanitized
 ---
 /status
 
-  >_ Corbanu Terminal (v<V>)
+  >_ Corbanu Terminal (v<V>)  
 
   Visit https://chatgpt.com/settings/usage for up-to-date
   information on rate limits and credits
@@ -12,8 +13,8 @@ expression: sanitized
   Model:           gpt-5.1-codex-max (reasoning none, summaries auto)
   Directory:       [[workspace]]
   Permissions:     Next turn: Profile locked (read-only, Ask for approval)
-  Security:        Requested Permissive; effective protection unverified
-                   (/security)
+  Security:        Requested Permissive; effective protection unverified (/
+                   security)
   Agents.md:       <none>
 
   Token usage:     0 total  (0 input + 0 output)

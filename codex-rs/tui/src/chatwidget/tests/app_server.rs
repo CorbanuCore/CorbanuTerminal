@@ -2175,7 +2175,7 @@ async fn live_app_server_server_overloaded_error_renders_error() {
         let rendered = lines_to_single_string(&cells[0]);
         insta::allow_duplicates! {
             if message.is_empty() {
-                insta::assert_snapshot!(rendered, @"■ Codex is currently experiencing high load.");
+                insta::assert_snapshot!(rendered, @"■ Corbanu Terminal is currently experiencing high load.");
             } else {
                 insta::assert_snapshot!(rendered, @"■ server overloaded");
             }
@@ -2342,7 +2342,8 @@ async fn live_app_server_manual_thread_name_updates_status_surfaces() {
         .iter()
         .map(|lines| lines_to_single_string(lines))
         .collect::<String>();
-    let footer = render_bottom_popup(&chat, /*width*/ 80);
+    // Wide enough for Corbanu's longer footer to keep the thread name.
+    let footer = render_bottom_popup(&chat, /*width*/ 120);
     let title = chat.last_terminal_title.as_deref().unwrap();
     assert_chatwidget_snapshot!(
         "manual_thread_name_status_surfaces",

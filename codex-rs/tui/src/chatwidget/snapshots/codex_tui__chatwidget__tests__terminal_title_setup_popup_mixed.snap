@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/status_surface_previews.rs
+assertion_line: 537
 expression: terminal_title_popup_snapshot(&mut chat)
 ---
   Configure Terminal Title
@@ -16,5 +17,5 @@ expression: terminal_title_popup_snapshot(&mut chat)
   [ ] activity       Spinner while working, action-required message while blocked
   [ ] run-state      Compact session run-state text (Ready, Working, Thinking)
 ↓
-  project | Mixed preview thread | Tasks 0/0 | Daybreak on
+  tmp | Mixed preview thread | Tasks 0/0 | Daybreak on
   space toggle · ←/→ reorder · enter save · esc cancel
