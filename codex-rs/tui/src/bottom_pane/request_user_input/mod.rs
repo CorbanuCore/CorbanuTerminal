@@ -693,7 +693,9 @@ impl RequestUserInputOverlay {
     fn footer_tips(&self) -> Vec<Line<'static>> {
         let mut tips = Vec::new();
         if let Some(notice) = self.notice() {
-            tips.push(FooterTip::highlighted(notice));
+            tips.push(Line::from(
+                notice.fg(crate::style::accent_color()).bold().not_dim(),
+            ));
         }
         let notes_visible = self.notes_ui_visible();
         if self.has_options() {

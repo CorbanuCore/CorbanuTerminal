@@ -34,6 +34,7 @@ use crate::app::app_server_requests::ResolvedAppServerRequest;
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
 use crate::key_hint;
+use crate::key_hint::KeyBindingListExt;
 use crate::keymap::ListAction;
 use crate::keymap::ListKeymap;
 use crate::render::Insets;

@@ -57,6 +57,7 @@ use crate::bottom_pane::selection_popup_common::render_menu_surface;
 use crate::bottom_pane::selection_popup_common::render_rows;
 use crate::footer_hint::shortcut;
 use crate::key_hint;
+use crate::key_hint::KeyBindingListExt;
 use crate::key_hint::ShortcutHint;
 use crate::keymap::KeymapContext;
 use crate::keymap::ListAction;
