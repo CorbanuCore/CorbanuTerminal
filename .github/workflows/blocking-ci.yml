@@ -28,6 +28,11 @@ jobs:
   cargo-deny:
     name: cargo-deny
     uses: ./.github/workflows/cargo-deny.yml
+    # Only its main-only report job uses write access; the checker is read-only.
+    permissions:
+      contents: read
+      actions: read
+      issues: write
     secrets: inherit
 
   codespell:

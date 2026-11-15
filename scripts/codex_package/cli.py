@@ -168,6 +168,11 @@ def create_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--codex-conpty-launcher-bin",
+        type=Path,
+        help="Optional prebuilt Windows codex-conpty-launcher.exe; otherwise built with Cargo.",
+    )
+    parser.add_argument(
         "--codex-windows-sandbox-setup-bin",
         type=Path,
         help=(
@@ -236,6 +241,11 @@ def assemble_package(args: argparse.Namespace) -> Path:
             "prebuilt Windows codex-command-runner.exe executable",
             "--codex-command-runner-bin",
         ),
+        codex_conpty_launcher_bin=resolve_optional_input_path(
+            args.codex_conpty_launcher_bin,
+            "prebuilt Windows codex-conpty-launcher.exe executable",
+            "--codex-conpty-launcher-bin",
+        ),
         codex_windows_sandbox_setup_bin=resolve_optional_input_path(
             args.codex_windows_sandbox_setup_bin,
             "prebuilt Windows codex-windows-sandbox-setup.exe executable",
@@ -251,6 +261,7 @@ def assemble_package(args: argparse.Namespace) -> Path:
         rg_bin=resolve_rg_bin(spec, args.rg_bin),
         bwrap_bin=source_outputs.bwrap_bin,
         codex_command_runner_bin=source_outputs.codex_command_runner_bin,
+        codex_conpty_launcher_bin=source_outputs.codex_conpty_launcher_bin,
         codex_windows_sandbox_setup_bin=source_outputs.codex_windows_sandbox_setup_bin,
     )
     prepare_package_dir(package_dir, force=args.force)

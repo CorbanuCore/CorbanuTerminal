@@ -24,6 +24,7 @@ The builder creates a canonical package directory inherited from Codex:
 ├── codex-resources
 │   ├── bwrap                             # Linux only
 │   ├── codex-command-runner.exe          # Windows only
+│   ├── codex-conpty-launcher.exe         # Windows only
 │   └── codex-windows-sandbox-setup.exe   # Windows only
 └── codex-path
     └── rg[.exe]
@@ -72,7 +73,7 @@ override was provided:
 - `codex` and `codex-app-server`: `codex-exec-server`, unless `--exec-server-bin`
   is provided
 - Linux targets: `bwrap`, unless `--bwrap-bin` is provided
-- Windows targets: `codex-command-runner` and `codex-windows-sandbox-setup`,
+- Windows targets: `codex-command-runner`, `codex-conpty-launcher` and `codex-windows-sandbox-setup`,
   unless the corresponding prebuilt helper flags are provided
 
 The default cargo profile is `dev-small` because local iteration should favor
@@ -101,7 +102,7 @@ after its integrity digest has been embedded in Codex.
 
 Release jobs that already built package resource binaries should also pass the
 corresponding resource flags: `--bwrap-bin` for Linux packages, and
-`--codex-command-runner-bin` plus `--codex-windows-sandbox-setup-bin` for
+`--codex-command-runner-bin`, `--codex-conpty-launcher-bin` and `--codex-windows-sandbox-setup-bin` for
 Windows packages. This keeps package archive creation as a pure staging step
 after signing instead of rebuilding resources.
 

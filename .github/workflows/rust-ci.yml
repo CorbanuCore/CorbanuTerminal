@@ -37,6 +37,8 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      # The Linux test selector uses Cargo's workspace/dependency metadata.
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
       - name: Detect changed paths (no external action)
         id: detect
         shell: bash
@@ -112,7 +114,7 @@ jobs:
           fi
           echo "Argument comment lint packages: ${packages:-none}"
           echo "argument_comment_lint_packages=${packages% }" >> "$GITHUB_OUTPUT"
-          # Crates whose tests run on Linux: any file under them changed (#1972).
+          # Changed crates and their reverse dependents, with full-suite fallback (#1989).
           test_packages=""
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             test_packages="$(python3 .github/scripts/changed_crate_test_packages.py "$BASE_SHA" "$HEAD_SHA" | tr '\n' ' ')"

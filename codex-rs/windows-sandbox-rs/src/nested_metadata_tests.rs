@@ -1,6 +1,9 @@
 use super::*;
 use pretty_assertions::assert_eq;
 
+#[path = "nested_metadata_mount_tests.rs"]
+mod mount_points;
+
 type ListHook = std::sync::Arc<dyn Fn(&Path) + Send + Sync>;
 
 /// #1909: called (on any walk thread) with each folder just before it is
