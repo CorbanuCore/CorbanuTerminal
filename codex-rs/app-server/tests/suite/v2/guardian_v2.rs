@@ -948,7 +948,7 @@ async fn guardian_v2_routes_scoped_tool_approvals(
     }
     if matches!(lifecycle, ThreadLifecycle::RootUserInputCompaction) {
         mock_config = mock_config
-            .with_provider_name("OpenAI")
+            .with_builtin_openai_provider()
             .disable_feature(Feature::TokenBudget)
             .disable_feature(Feature::EnableRequestCompression);
     }
