@@ -68,37 +68,6 @@ async fn replayed_command_completion_preserves_tracking_without_duplicate_starts
         Some(ReplayKind::ThreadSnapshot),
     );
 
-<<<<<<< HEAD
-    // The approval modal should display the command snippet for user confirmation.
-    let area = Rect::new(0, 0, 80, chat.desired_height(/*width*/ 80));
-    let mut buf = ratatui::buffer::Buffer::empty(area);
-    chat.render(area, &mut buf);
-    assert_chatwidget_snapshot!("exec_approval_modal_exec", format!("{buf:?}"));
-
-    // Approve via keyboard and verify a concise decision history line is added
-    press_approval_shortcut(&mut chat, 'y');
-    let decision = drain_insert_history(&mut rx)
-        .pop()
-        .expect("expected decision cell in history");
-    assert_chatwidget_snapshot!(
-        "exec_approval_history_decision_approved_short",
-        lines_to_single_string(&decision)
-||||||| 413492cd6c
-    // The approval modal should display the command snippet for user confirmation.
-    let area = Rect::new(0, 0, 80, chat.desired_height(/*width*/ 80));
-    let mut buf = ratatui::buffer::Buffer::empty(area);
-    chat.render(area, &mut buf);
-    assert_chatwidget_snapshot!("exec_approval_modal_exec", format!("{buf:?}"));
-
-    // Approve via keyboard and verify a concise decision history line is added
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
-    let decision = drain_insert_history(&mut rx)
-        .pop()
-        .expect("expected decision cell in history");
-    assert_chatwidget_snapshot!(
-        "exec_approval_history_decision_approved_short",
-        lines_to_single_string(&decision)
-=======
     assert!(chat.running_commands.is_empty());
     assert!(chat.unified_exec_processes.is_empty());
     let history = drain_insert_history(&mut rx)
@@ -108,7 +77,6 @@ async fn replayed_command_completion_preserves_tracking_without_duplicate_starts
     assert_eq!(
         history,
         vec!["• Ran cat replay\n  └ (no output)\n".to_string()]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     );
 }
 
@@ -245,91 +213,6 @@ async fn exploration_nonzero_exits_remain_visible_beside_successful_reads() {
 #[tokio::test]
 async fn exploration_reasoning_during_followup_command_stays_ordered() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-<<<<<<< HEAD
-
-    handle_exec_approval_request(
-        &mut chat,
-        "sub-short",
-        ExecApprovalRequestEvent {
-            call_id: "call-parent".into(),
-            approval_id: Some("approval-subcommand".into()),
-            turn_id: "turn-short".into(),
-            environment_id: None,
-            command: vec!["bash".into(), "-lc".into(), "echo hello world".into()],
-            cwd: AbsolutePathBuf::current_dir().expect("current dir"),
-            reason: Some(
-                "this is a test reason such as one that would be produced by the model".into(),
-            ),
-            network_approval_context: None,
-            proposed_execpolicy_amendment: None,
-            proposed_network_policy_amendments: None,
-            additional_permissions: None,
-            available_decisions: None,
-        },
-    );
-
-    press_approval_shortcut(&mut chat, 'y');
-
-    let mut found = false;
-    while let Ok(app_ev) = rx.try_recv() {
-        if let AppEvent::SubmitThreadOp {
-            op: Op::ExecApproval { id, decision, .. },
-            ..
-        } = app_ev
-        {
-            assert_eq!(id, "approval-subcommand");
-            assert_matches!(
-                decision,
-                codex_app_server_protocol::CommandExecutionApprovalDecision::Accept
-            );
-            found = true;
-            break;
-        }
-    }
-    assert!(found, "expected ExecApproval op to be sent");
-||||||| 413492cd6c
-
-    handle_exec_approval_request(
-        &mut chat,
-        "sub-short",
-        ExecApprovalRequestEvent {
-            call_id: "call-parent".into(),
-            approval_id: Some("approval-subcommand".into()),
-            turn_id: "turn-short".into(),
-            environment_id: None,
-            command: vec!["bash".into(), "-lc".into(), "echo hello world".into()],
-            cwd: AbsolutePathBuf::current_dir().expect("current dir"),
-            reason: Some(
-                "this is a test reason such as one that would be produced by the model".into(),
-            ),
-            network_approval_context: None,
-            proposed_execpolicy_amendment: None,
-            proposed_network_policy_amendments: None,
-            additional_permissions: None,
-            available_decisions: None,
-        },
-    );
-
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
-
-    let mut found = false;
-    while let Ok(app_ev) = rx.try_recv() {
-        if let AppEvent::SubmitThreadOp {
-            op: Op::ExecApproval { id, decision, .. },
-            ..
-        } = app_ev
-        {
-            assert_eq!(id, "approval-subcommand");
-            assert_matches!(
-                decision,
-                codex_app_server_protocol::CommandExecutionApprovalDecision::Accept
-            );
-            found = true;
-            break;
-        }
-    }
-    assert!(found, "expected ExecApproval op to be sent");
-=======
     let first = begin_exec(&mut chat, "first", "ls");
     end_exec(&mut chat, first, "file.txt\n", "", /*exit_code*/ 0);
     chat.on_agent_reasoning_delta("Read the file next.".to_string());
@@ -341,7 +224,6 @@ async fn exploration_reasoning_during_followup_command_stays_ordered() {
     end_exec(&mut chat, second, "contents\n", "", /*exit_code*/ 0);
     let transcript = chat.active_cell_transcript_lines(/*width*/ 80).unwrap();
     insta::assert_snapshot!(lines_to_single_string(&transcript));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]
@@ -444,102 +326,8 @@ async fn adjacent_exploration_groups_across_reasoning_live_and_replayed() {
         }
         renders.push(render);
     }
-<<<<<<< HEAD
-    assert!(
-        saw_first_line,
-        "expected modal to show first line of multiline snippet"
-    );
-
-    // Deny via keyboard; decision snippet should be single-line and elided with " ..."
-    press_approval_shortcut(&mut chat, 'n');
-    let aborted_multi = drain_insert_history(&mut rx)
-        .pop()
-        .expect("expected aborted decision cell (multiline)");
-    assert_chatwidget_snapshot!(
-        "exec_approval_history_decision_aborted_multiline",
-        lines_to_single_string(&aborted_multi)
-    );
-
-    // Very long single-line command: decision snippet should be truncated <= 80 chars with trailing ...
-    let long = format!("echo {}", "a".repeat(200));
-    let ev_long = ExecApprovalRequestEvent {
-        call_id: "call-long".into(),
-        approval_id: Some("call-long".into()),
-        turn_id: "turn-long".into(),
-        environment_id: None,
-        command: vec!["bash".into(), "-lc".into(), long],
-        cwd: AbsolutePathBuf::current_dir().expect("current dir"),
-        reason: None,
-        network_approval_context: None,
-        proposed_execpolicy_amendment: None,
-        proposed_network_policy_amendments: None,
-        additional_permissions: None,
-        available_decisions: None,
-    };
-    handle_exec_approval_request(&mut chat, "sub-long", ev_long);
-    let proposed_long = drain_insert_history(&mut rx);
-    assert!(
-        proposed_long.is_empty(),
-        "expected long approval request to avoid emitting history cells before decision"
-    );
-    press_approval_shortcut(&mut chat, 'n');
-    let aborted_long = drain_insert_history(&mut rx)
-        .pop()
-        .expect("expected aborted decision cell (long)");
-    assert_chatwidget_snapshot!(
-        "exec_approval_history_decision_aborted_long",
-        lines_to_single_string(&aborted_long)
-    );
-||||||| 413492cd6c
-    assert!(
-        saw_first_line,
-        "expected modal to show first line of multiline snippet"
-    );
-
-    // Deny via keyboard; decision snippet should be single-line and elided with " ..."
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
-    let aborted_multi = drain_insert_history(&mut rx)
-        .pop()
-        .expect("expected aborted decision cell (multiline)");
-    assert_chatwidget_snapshot!(
-        "exec_approval_history_decision_aborted_multiline",
-        lines_to_single_string(&aborted_multi)
-    );
-
-    // Very long single-line command: decision snippet should be truncated <= 80 chars with trailing ...
-    let long = format!("echo {}", "a".repeat(200));
-    let ev_long = ExecApprovalRequestEvent {
-        call_id: "call-long".into(),
-        approval_id: Some("call-long".into()),
-        turn_id: "turn-long".into(),
-        environment_id: None,
-        command: vec!["bash".into(), "-lc".into(), long],
-        cwd: AbsolutePathBuf::current_dir().expect("current dir"),
-        reason: None,
-        network_approval_context: None,
-        proposed_execpolicy_amendment: None,
-        proposed_network_policy_amendments: None,
-        additional_permissions: None,
-        available_decisions: None,
-    };
-    handle_exec_approval_request(&mut chat, "sub-long", ev_long);
-    let proposed_long = drain_insert_history(&mut rx);
-    assert!(
-        proposed_long.is_empty(),
-        "expected long approval request to avoid emitting history cells before decision"
-    );
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
-    let aborted_long = drain_insert_history(&mut rx)
-        .pop()
-        .expect("expected aborted decision cell (long)");
-    assert_chatwidget_snapshot!(
-        "exec_approval_history_decision_aborted_long",
-        lines_to_single_string(&aborted_long)
-    );
-=======
     assert_eq!(renders[0], renders[1]);
     insta::assert_snapshot!(renders[0]);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]
@@ -1720,14 +1508,8 @@ async fn approval_modal_patch_snapshot() -> anyhow::Result<()> {
         turn_id: "turn-approve-patch".into(),
         changes,
         reason: Some("The model wants to apply changes".into()),
-<<<<<<< HEAD
-        grant_root: Some(PathBuf::from("/tmp")),
-        response_destination: ApprovalResponseDestination::Thread,
-||||||| 413492cd6c
-        grant_root: Some(PathBuf::from("/tmp")),
-=======
         grant_root: Some(test_path_buf("/tmp/project")),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        response_destination: ApprovalResponseDestination::Thread,
     };
     handle_apply_patch_approval_request(&mut chat, "sub-approve-patch", ev);
 
