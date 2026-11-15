@@ -1,14 +1,16 @@
 ---
 source: tui/src/app/tests.rs
+assertion_line: 2565
 expression: normalized
 ---
   New Assignment - Manager
   Choose who manages Worker Worker. Selecting starts the 8-hour Draft-with-Manager assignment.
 
   Search panes
+
 › Create Manager pane (default)  Create a Corbanu Terminal pane using glm-5.3-flash and start in
                                  Drafting.
   Bind Manager                   Corbanu Terminal; idle; 00000000-0000-0000-0000-000000000492;
                                  starts in Drafting
 
-  Press enter to confirm or esc to go back
+  enter select · esc back

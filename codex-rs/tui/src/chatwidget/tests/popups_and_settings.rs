@@ -4278,6 +4278,8 @@ async fn model_picker_refresh_preserves_highlight() {
         ];
         for preset in &mut presets {
             preset.display_name = "Shared display name".to_string();
+            // The bundled catalog now hides gpt-5.5; this picker needs both rows.
+            preset.show_in_picker = true;
         }
         chat.model_catalog = Arc::new(ModelCatalog::new(presets.clone()));
         chat.open_model_popup();

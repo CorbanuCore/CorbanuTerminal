@@ -8,6 +8,7 @@ expression: rendered
   $0.25 reserved by in-flight requests
   Prices are exact upstream cost with zero markup, per million tokens.
 
+
 › 1. Top up balance                 Choose any positive canonical-USDC amount
   2. Manage API keys                Unlock to load key summaries and balances
   3. Create API key                 Unlock and reveal a new key exactly once
@@ -18,4 +19,4 @@ expression: rendered
   6. API key cbn_live_4D7K          Last used 2026-08-30T12:10:00.000Z · select to revoke
   7. Refresh                        Reload balance and model prices
 
-  Press enter to confirm or esc to go back
+  enter select · esc back

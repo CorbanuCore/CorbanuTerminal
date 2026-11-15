@@ -1,7 +1,10 @@
 ---
 source: tui/src/app/tests.rs
-expression: "render_bottom_popup(&app.chat_widget, 80)"
+assertion_line: 2923
+expression: normalized
 ---
+  ! A request is waiting; it shows when you close this.
+
   Subagents
   Select an agent to watch. ⌥← previous, ⌥→ next.
 

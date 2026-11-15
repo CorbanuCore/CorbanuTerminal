@@ -298,7 +298,7 @@ impl App {
             app_server: AppServerSession,
             other_backends: &mut Vec<AppServerSession>,
         ) -> AppExitInfo {
-            let exit_info = cancel_session_start(app_server).await;
+            let exit_info = crate::boxed_future!(cancel_session_start(app_server)).await;
             shutdown_startup_sessions(other_backends.drain(..)).await;
             exit_info
         }
@@ -390,9 +390,10 @@ impl App {
         let mut bootstrap = startup_bootstrap;
         if bootstrap.is_none() && !server_owned_fresh_bootstrap {
             bootstrap = Some(
-                match startup_draft
-                    .run_until(tui, app_server.bootstrap(&config))
-                    .await
+                match crate::boxed_future!(
+                    startup_draft.run_until(tui, app_server.bootstrap(&config))
+                )
+                .await
                 {
                     Ok(bootstrap) => startup_try!(bootstrap),
                     Err(err) => {
@@ -417,19 +418,18 @@ impl App {
             }
         }
         let startup_defaults = if fresh_start {
-            match startup_draft
-                .run_until(
-                    tui,
-                    prepare_fresh_startup_config(
-                        &mut config,
-                        &app_server,
-                        &app_server_target,
-                        &cli_kv_overrides,
-                        &harness_overrides,
-                        &environment_manager,
-                    ),
-                )
-                .await
+            match crate::boxed_future!(startup_draft.run_until(
+                tui,
+                prepare_fresh_startup_config(
+                    &mut config,
+                    &app_server,
+                    &app_server_target,
+                    &cli_kv_overrides,
+                    &harness_overrides,
+                    &environment_manager,
+                ),
+            ))
+            .await
             {
                 Ok(Ok(defaults)) => defaults,
                 Ok(Err(err)) => {
@@ -449,19 +449,18 @@ impl App {
         );
         let bootstrap = match bootstrap {
             Some(bootstrap) => bootstrap,
-            None => match startup_draft
-                .run_until(
-                    tui,
-                    bootstrap_server_owned_start(
-                        &mut app_server,
-                        &mut config,
-                        &mut launch_choices,
-                        startup_defaults.server_defaults_read,
-                        &cli_kv_overrides,
-                        &harness_overrides,
-                    ),
-                )
-                .await
+            None => match crate::boxed_future!(startup_draft.run_until(
+                tui,
+                bootstrap_server_owned_start(
+                    &mut app_server,
+                    &mut config,
+                    &mut launch_choices,
+                    startup_defaults.server_defaults_read,
+                    &cli_kv_overrides,
+                    &harness_overrides,
+                ),
+            ))
+            .await
             {
                 Ok(bootstrap) => startup_try!(bootstrap),
                 Err(err) => {
@@ -564,18 +563,20 @@ impl App {
         ) && !crate::uses_remote_workspace_or_environment(
             &app_server_target,
             environment_manager.as_ref(),
-        ) && let Err(error) = app_server
-            .start_dynamic_tool_mcp(
-                config.clone(),
-                app_event_tx.clone(),
-                dynamic_tool_status_updates.clone(),
-            )
-            .await
+        ) && let Err(error) = crate::boxed_future!(app_server.start_dynamic_tool_mcp(
+            config.clone(),
+            app_event_tx.clone(),
+            dynamic_tool_status_updates.clone(),
+        ))
+        .await
         {
             tracing::warn!(%error, "TUI task delegation is unavailable without its MCP server");
         }
-        let provider_runtime =
-            crate::startup_provider::resolve_for_app(&config, startup_provider_resolution).await;
+        let provider_runtime = crate::boxed_future!(crate::startup_provider::resolve_for_app(
+            &config,
+            startup_provider_resolution
+        ))
+        .await;
         crate::model_catalog::include_runtime_model(
             &mut available_models,
             &model,
@@ -683,16 +684,15 @@ impl App {
                 let startup_tooltip_override = if start_in_agents_overview {
                     None
                 } else {
-                    match startup_draft
-                        .run_until(
-                            tui,
-                            prepare_startup_tooltip_override(
-                                &mut local_settings,
-                                &available_models,
-                                is_first_run,
-                            ),
-                        )
-                        .await
+                    match crate::boxed_future!(startup_draft.run_until(
+                        tui,
+                        prepare_startup_tooltip_override(
+                            &mut local_settings,
+                            &available_models,
+                            is_first_run,
+                        ),
+                    ))
+                    .await
                     {
                         Ok(tooltip_override) => tooltip_override,
                         Err(err) => {
@@ -759,21 +759,20 @@ impl App {
                     &config,
                     &harness_overrides,
                 );
-                let resumed = match startup_draft
-                    .run_until(
-                        tui,
-                        app_server.resume_thread_with_permission_overrides(
-                            &local_settings,
-                            config.clone(),
-                            target_session.thread_id,
-                            model_settings,
-                            crate::resume_permissions::ResumePermissions::from_overrides(
-                                &config,
-                                &harness_overrides,
-                            ),
+                let resumed = match crate::boxed_future!(startup_draft.run_until(
+                    tui,
+                    app_server.resume_thread_with_permission_overrides(
+                        &local_settings,
+                        config.clone(),
+                        target_session.thread_id,
+                        model_settings,
+                        crate::resume_permissions::ResumePermissions::from_overrides(
+                            &config,
+                            &harness_overrides,
                         ),
-                    )
-                    .await
+                    ),
+                ))
+                .await
                 {
                     Ok(Ok(resumed)) => Ok(resumed),
                     Ok(Err(err))
@@ -782,16 +781,15 @@ impl App {
                     {
                         provider_error = crate::app_server_session::model_provider_error(&err);
                         read_only_thread = true;
-                        match startup_draft
-                            .run_until(
-                                tui,
-                                app_server.read_thread_for_viewing(
-                                    &config,
-                                    &local_settings,
-                                    target_session.thread_id,
-                                ),
-                            )
-                            .await
+                        match crate::boxed_future!(startup_draft.run_until(
+                            tui,
+                            app_server.read_thread_for_viewing(
+                                &config,
+                                &local_settings,
+                                target_session.thread_id,
+                            ),
+                        ))
+                        .await
                         {
                             Ok(result) => result.map(|(thread, notice)| {
                                 history_notice = notice;
@@ -829,7 +827,7 @@ impl App {
                             &harness_overrides,
                         ),
                     );
-                    let resumed = complete_session_start(
+                    let resumed = crate::boxed_future!(complete_session_start(
                         &mut app_server,
                         SessionStartConfig {
                             config: &config,
@@ -842,7 +840,7 @@ impl App {
                             startup_draft.flush_pending_events(tui).await?;
                             run_unarchive_prompt(tui, target_session.thread_id, action).await
                         },
-                    )
+                    ))
                     .await;
                     // #656: a resume the server refused ends the launch with a plain message.
                     let resumed = match resumed {
@@ -867,9 +865,11 @@ impl App {
                         SessionStartOutcome::Started(started) => Some(*started),
                         SessionStartOutcome::CommandCenter => None,
                         SessionStartOutcome::Exit => {
-                            return Ok(
-                                cancel_startup_sessions(app_server, &mut other_backends).await
-                            );
+                            return Ok(crate::boxed_future!(cancel_startup_sessions(
+                                app_server,
+                                &mut other_backends
+                            ))
+                            .await);
                         }
                     }
                 };
@@ -883,13 +883,14 @@ impl App {
                     config.service_tier = resumed.session.service_tier.clone();
                     if !read_only_thread
                         && !resumed.blocks_direct_input
-                        && let Err(error) = resume_defaults::remember_resumed_model(
-                            &app_server,
-                            &config,
-                            model_settings,
-                            &resumed.session,
-                        )
-                        .await
+                        && let Err(error) =
+                            crate::boxed_future!(resume_defaults::remember_resumed_model(
+                                &app_server,
+                                &config,
+                                model_settings,
+                                &resumed.session,
+                            ))
+                            .await
                     {
                         app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
                             history_cell::new_error_event(format!(
@@ -958,17 +959,16 @@ impl App {
                     /*inc*/ 1,
                     &[("source", "cli_subcommand")],
                 );
-                let forked = match startup_draft
-                    .run_until(
-                        tui,
-                        app_server.fork_thread_with_permission_mode(
-                            &local_settings,
-                            config.clone(),
-                            target_session.thread_id,
-                            permission_mode,
-                        ),
-                    )
-                    .await
+                let forked = match crate::boxed_future!(startup_draft.run_until(
+                    tui,
+                    app_server.fork_thread_with_permission_mode(
+                        &local_settings,
+                        config.clone(),
+                        target_session.thread_id,
+                        permission_mode,
+                    ),
+                ))
+                .await
                 {
                     Ok(forked) => forked,
                     Err(err) => {
@@ -977,7 +977,7 @@ impl App {
                     }
                 };
                 let action = SessionStartAction::Fork(permission_mode);
-                let forked = complete_session_start(
+                let forked = crate::boxed_future!(complete_session_start(
                     &mut app_server,
                     SessionStartConfig {
                         config: &config,
@@ -990,7 +990,7 @@ impl App {
                         startup_draft.flush_pending_events(tui).await?;
                         run_unarchive_prompt(tui, target_session.thread_id, action).await
                     },
-                )
+                ))
                 .await;
                 // #656: a fork the server refused ends the launch with a plain message.
                 let forked = match forked {
@@ -1013,7 +1013,11 @@ impl App {
                     SessionStartOutcome::Started(started) => Some(*started),
                     SessionStartOutcome::CommandCenter => None,
                     SessionStartOutcome::Exit => {
-                        return Ok(cancel_startup_sessions(app_server, &mut other_backends).await);
+                        return Ok(crate::boxed_future!(cancel_startup_sessions(
+                            app_server,
+                            &mut other_backends
+                        ))
+                        .await);
                     }
                 };
                 if let Some(forked) = &forked {
@@ -1517,21 +1521,20 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             } else if read_only_thread {
                 app.chat_widget.show_external_writer_thread();
             }
-            match startup_draft
-                .run_until(
-                    tui,
-                    app.enqueue_primary_thread_session(started.session, started.turns),
-                )
-                .await
+            match crate::boxed_future!(startup_draft.run_until(
+                tui,
+                app.enqueue_primary_thread_session(started.session, started.turns),
+            ))
+            .await
             {
                 Ok(result) => startup_try!(result),
                 Err(err) => {
                     return shutdown_on_startup_error(app_server, &mut other_backends, err).await;
                 }
             }
-            app.restore_codex_user_panes_from_saved_state(&mut app_server)
+            crate::boxed_future!(app.restore_codex_user_panes_from_saved_state(&mut app_server))
                 .await;
-            app.restore_native_spawn_panes_from_saved_state(&mut app_server)
+            crate::boxed_future!(app.restore_native_spawn_panes_from_saved_state(&mut app_server))
                 .await;
             app.audit_restored_assignments();
             if let Some(error) = provider_error {
@@ -1547,15 +1550,11 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             }
             if !read_only_thread
                 && should_prompt_for_paused_goal_after_startup_resume
-                && let Err(err) = startup_draft
-                    .run_until(
-                        tui,
-                        app.maybe_prompt_resume_paused_goal_after_resume(
-                            &mut app_server,
-                            thread_id,
-                        ),
-                    )
-                    .await
+                && let Err(err) = crate::boxed_future!(startup_draft.run_until(
+                    tui,
+                    app.maybe_prompt_resume_paused_goal_after_resume(&mut app_server, thread_id,),
+                ))
+                .await
             {
                 return shutdown_on_startup_error(app_server, &mut other_backends, err).await;
             }
@@ -1892,7 +1891,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
                         app.active_thread_rx.is_some()
                     ) && !has_pending_app_events && !app.reconnect.offline => {
                         if let Some(event) = active {
-                            if let Err(err) = app.handle_active_thread_event(tui, backends.session_at_mut(displayed_session), event).await {
+                            if let Err(err) = crate::boxed_future!(app.handle_active_thread_event(tui, backends.session_at_mut(displayed_session), event)).await {
                                 tracing::error!(error = ?err, "contained active-thread event failure");
                                 app.chat_widget.add_error_message(format!(
                                     "A pane event failed but Corbanu Terminal is still running: {err:#}"
@@ -1926,7 +1925,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
                             {
                                 app.startup_protected_input_boundary = false;
                             }
-                            match app.handle_tui_event(tui, backends.session_at_mut(displayed_session), event).await {
+                            match crate::boxed_future!(app.handle_tui_event(tui, backends.session_at_mut(displayed_session), event)).await {
                                 Ok(control) => control,
                                 Err(err) if app.recover_transport_error(&err) => AppRunControl::Continue,
                                 Err(err) => {
@@ -1939,7 +1938,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
                             }
                         } else {
                             tracing::warn!("terminal input stream closed; shutting down active thread");
-                            app.handle_exit_mode(backends.session_at_mut(displayed_session), ExitMode::ShutdownFirst).await
+                            crate::boxed_future!(app.handle_exit_mode(backends.session_at_mut(displayed_session), ExitMode::ShutdownFirst)).await
                         }
                     }
                     signal = tokio::signal::ctrl_c() => {
@@ -1967,7 +1966,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
                                 }
                             }
                         } else {
-                            app.handle_exit_mode(backends.session_at_mut(displayed_session), ExitMode::ShutdownFirst).await
+                            crate::boxed_future!(app.handle_exit_mode(backends.session_at_mut(displayed_session), ExitMode::ShutdownFirst)).await
                         }
                     }
                     _ = gpu_runtime_overlay_tick.tick() => {
@@ -1978,7 +1977,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
                         match app_server_event {
                             Some(event) if owner != displayed_owner || !app.reconnect.offline => {
                                 if let Some(session) = backends.session(owner) {
-                                    app.handle_polled_backend_event(session, displayed_owner, event).await;
+                                    crate::boxed_future!(app.handle_polled_backend_event(session, displayed_owner, event)).await;
                                 }
                             }
                             Some(_) => {}
@@ -2010,16 +2009,16 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
                         reconnect = None;
                         match result {
                             Ok(connected) if reconnect_owner != displayed_owner => {
-                                let _ = connected.session.shutdown().await;
+                                let _ = crate::boxed_future!(connected.session.shutdown()).await;
                             }
                             Err(_) if reconnect_owner != displayed_owner => {}
                             Ok(connected) => {
-                                if let Err(err) = app.finish_reconnect(tui, backends.session_at_mut(displayed_session), &mut app_event_rx, connected, CODEX_CLI_VERSION).await {
+                                if let Err(err) = crate::boxed_future!(app.finish_reconnect(tui, backends.session_at_mut(displayed_session), &mut app_event_rx, connected, CODEX_CLI_VERSION)).await {
                                     break Err(err);
                                 }
                                 backends.resume_events(displayed_owner);
-                                app.restore_codex_user_panes_from_saved_state(backends.session_at_mut(displayed_session)).await;
-                                app.restore_native_spawn_panes_from_saved_state(backends.session_at_mut(displayed_session)).await;
+                                crate::boxed_future!(app.restore_codex_user_panes_from_saved_state(backends.session_at_mut(displayed_session))).await;
+                                crate::boxed_future!(app.restore_native_spawn_panes_from_saved_state(backends.session_at_mut(displayed_session))).await;
                                 waiting_for_initial_session_configured = app.pending_startup_thread_start;
                                 if app.pending_startup_thread_start {
                                     spawn_startup_thread_start(
@@ -2161,9 +2160,9 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             Ok(_) => "user or terminal exit",
             Err(_) => "TUI event loop failure",
         };
-        if let Err(error) = app
-            .show_backend_shutdown_control_events(tui, shutdown_detail)
-            .await
+        if let Err(error) =
+            crate::boxed_future!(app.show_backend_shutdown_control_events(tui, shutdown_detail))
+                .await
         {
             tracing::error!(
                 error = ?error,
@@ -2172,7 +2171,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             );
         }
         app.abort_all_thread_event_listeners();
-        if let Err(err) = backends.shutdown().await {
+        if let Err(err) = crate::boxed_future!(backends.shutdown()).await {
             tracing::error!(error = ?err, "failed to shut down embedded app server");
         }
         let clear_pet_result = tui.clear_ambient_pet_image();

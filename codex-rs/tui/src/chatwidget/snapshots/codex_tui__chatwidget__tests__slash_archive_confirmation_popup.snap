@@ -1,12 +1,13 @@
 ---
 source: tui/src/chatwidget/tests/slash_commands.rs
+assertion_line: 3424
 expression: popup
 ---
       Archive this session?
 › As  Are you sure? This will archive the current session
 
-  Z.
-    › 1. No, don't archive  Return to the current session
-      2. Yes, archive       Archive this session now
+  Z.                                                                        : -…
+    › No, don't archive  Return to the current session
+      Yes, archive       Archive this session now
 
       enter select · esc back

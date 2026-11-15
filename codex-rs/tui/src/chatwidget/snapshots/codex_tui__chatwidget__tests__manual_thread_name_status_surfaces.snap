@@ -1,6 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/app_server.rs
-assertion_line: 2347
+assertion_line: 2352
 expression: "normalize_snapshot_paths(format!(\"transcript:\\n{transcript}\\nfooter:\\n{footer}\\ntitle: {title}\"))"
 ---
 transcript:
@@ -8,5 +8,5 @@ transcript:
 footer:
 › Ask Corbanu Terminal to do anything
 
-  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…
+  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -- tok/s · review-fix
 title: review-fix | project
