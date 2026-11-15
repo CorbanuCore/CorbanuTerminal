@@ -19,6 +19,12 @@ pub enum ConstraintError {
     #[error("To use model `{model}`, you need to use auto review.")]
     AutoReviewRequired { model: String },
 
+    #[error("cannot update `{field_name}`: {reason}")]
+    SessionInvariant {
+        field_name: &'static str,
+        reason: String,
+    },
+
     #[error("field `{field_name}` cannot be empty")]
     EmptyField { field_name: String },
 

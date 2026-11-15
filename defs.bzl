@@ -408,12 +408,15 @@ def codex_rust_crate(
         unit_test_kwargs = {}
         if unit_test_alone and unit_test_shard_count:
             fail("unit_test_alone cannot be combined with sharding " + unit_test_name)
+
         # Upstream gives unit tests the integration tests' `extra_binaries`;
         # `unit_test_extra_binaries` (main #2141) adds unit-test-only ones.
         unit_test_runfile_env = {
             binary_label: "CARGO_BIN_EXE_" + Label(binary_label).name
             for binary_label in extra_binaries + [
-                binary for binary in unit_test_extra_binaries if binary not in extra_binaries
+                binary
+                for binary in unit_test_extra_binaries
+                if binary not in extra_binaries
             ]
         }
         alone_skips = [arg for test in unit_test_alone for arg in ["--skip", test]]
