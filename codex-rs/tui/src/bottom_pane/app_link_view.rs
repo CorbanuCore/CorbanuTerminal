@@ -34,6 +34,7 @@ use crate::app::app_server_requests::ResolvedAppServerRequest;
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
 use crate::key_hint;
+use crate::key_hint::KeyBindingListExt;
 use crate::keymap::ListAction;
 use crate::keymap::ListKeymap;
 use crate::render::Insets;
@@ -820,51 +821,23 @@ impl AppLinkView {
     }
 
     fn hint_line(&self) -> Line<'static> {
-<<<<<<< HEAD
         if let Some(notice) = self.notice() {
             return Line::from(notice);
         }
         if self.is_tool_suggestion() {
+            // #514: a request takes the arrow keys and Enter only; Tab is
+            // typed text there (it completes words in the composer).
             return Line::from(vec![
-                "Use ".into(),
                 key_hint::plain(KeyCode::Up).into(),
                 " ".into(),
                 key_hint::plain(KeyCode::Down).into(),
-                " to move, ".into(),
+                " move · ".into(),
                 key_hint::plain(KeyCode::Enter).into(),
-                " to select, ".into(),
+                " select · ".into(),
                 key_hint::plain(KeyCode::Esc).into(),
-                " to close".into(),
+                " close".into(),
             ]);
         }
-        Line::from(vec![
-            "Use ".into(),
-            key_hint::plain(KeyCode::Tab).into(),
-            " / ".into(),
-            key_hint::plain(KeyCode::Up).into(),
-            " ".into(),
-            key_hint::plain(KeyCode::Down).into(),
-            " to move, ".into(),
-            key_hint::plain(KeyCode::Enter).into(),
-            " to select, ".into(),
-            key_hint::plain(KeyCode::Esc).into(),
-            " to close".into(),
-        ])
-||||||| 413492cd6c
-        Line::from(vec![
-            "Use ".into(),
-            key_hint::plain(KeyCode::Tab).into(),
-            " / ".into(),
-            key_hint::plain(KeyCode::Up).into(),
-            " ".into(),
-            key_hint::plain(KeyCode::Down).into(),
-            " to move, ".into(),
-            key_hint::plain(KeyCode::Enter).into(),
-            " to select, ".into(),
-            key_hint::plain(KeyCode::Esc).into(),
-            " to close".into(),
-        ])
-=======
         let mut spans = vec![key_hint::plain(KeyCode::Tab).into()];
         if let Some(move_up) = self.list_keymap.primary_hint(ListAction::MoveUp) {
             spans.push(" / ".into());
@@ -886,19 +859,16 @@ impl AppLinkView {
             spans.push(" close".into());
         }
         Line::from(spans)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
 impl BottomPaneView for AppLinkView {
-<<<<<<< HEAD
     fn answers_request(&self) -> bool {
         self.elicitation_target.is_some()
-||||||| 413492cd6c
-=======
+    }
+
     fn keymap_contexts(&self) -> crate::keymap::KeymapContextSet {
         crate::keymap::KeymapContextSet::new(crate::keymap::KeymapContext::List)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
