@@ -8,21 +8,17 @@ mod copy_mode_tests;
 #[path = "tests/mcp_login_tests.rs"]
 mod mcp_login_tests;
 
-#[path = "tests/math_interruption_tests.rs"]
-mod math_interruption_tests;
-#[path = "tests/security_setup_tests.rs"]
-mod security_setup_tests;
 #[path = "tests/accounting_tests.rs"]
 mod accounting_tests;
 #[path = "tests/exit_resume_tests.rs"]
 mod exit_resume_tests;
+#[path = "tests/math_interruption_tests.rs"]
+mod math_interruption_tests;
+#[path = "tests/security_setup_tests.rs"]
+mod security_setup_tests;
 
 #[path = "tests/advanced_reasoning_tests.rs"]
 mod advanced_reasoning_tests;
-mod dispatch_integration;
-mod issue_613;
-mod issue_646;
-mod issue_660;
 #[path = "tests/agents_navigation_tests.rs"]
 mod agents_navigation_tests;
 #[path = "tests/approvals_reviewer_error_tests.rs"]
@@ -45,6 +41,7 @@ mod buffered_replay;
 mod connector_policy;
 #[path = "tests/disconnect_tests.rs"]
 mod disconnect;
+mod dispatch_integration;
 #[path = "tests/external_writer_fork_tests.rs"]
 mod external_writer_fork_tests;
 #[path = "tests/fork_workspace_roots_tests.rs"]
@@ -53,6 +50,9 @@ mod fork_workspace_roots_tests;
 mod fresh_sparkle_tests;
 #[path = "tests/home_cleanup_tests.rs"]
 mod home_cleanup_tests;
+mod issue_613;
+mod issue_646;
+mod issue_660;
 #[path = "tests/key_chords.rs"]
 mod key_chords;
 #[path = "tests/local_command_scroll_tests.rs"]
