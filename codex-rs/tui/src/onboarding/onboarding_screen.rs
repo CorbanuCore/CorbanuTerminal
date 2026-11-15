@@ -1541,6 +1541,7 @@ mod tests {
         OnboardingScreen {
             request_frame: FrameRequester::test_dummy(),
             steps: vec![Step::Auth(widget)],
+            remote_trust_key: None,
             is_done: false,
             should_exit: false,
             provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),
