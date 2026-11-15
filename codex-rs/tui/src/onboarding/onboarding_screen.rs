@@ -60,26 +60,18 @@ use crate::onboarding::auth::ApiKeyProviderOption;
 use crate::onboarding::auth::AuthModeWidget;
 use crate::onboarding::auth::SignInOption;
 use crate::onboarding::auth::SignInState;
-<<<<<<< HEAD
 use crate::onboarding::auth::catalog_sign_in_options_from_statuses;
-||||||| 413492cd6c
-=======
 use crate::onboarding::bedrock::BedrockState;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::onboarding::keys;
 use crate::onboarding::provider_setup::DeferredProviderSetup;
 use crate::onboarding::provider_setup::ProviderSetupSession;
 use crate::onboarding::trust_directory::TrustDirectorySelection;
 use crate::onboarding::trust_directory::TrustDirectoryWidget;
 use crate::onboarding::welcome::WelcomeWidget;
-<<<<<<< HEAD
 use crate::provider_auth_effect_executor::ProviderAuthEffectExecutor;
 use crate::provider_status_host::ProviderAccountMetadata;
 use crate::provider_status_host::ProviderStatusHost;
-||||||| 413492cd6c
-=======
 use crate::startup_draft::StartupCancelled;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::tui::FrameRequester;
 use crate::tui::MouseCapture;
 use crate::tui::Tui;
@@ -132,6 +124,7 @@ pub(crate) struct OnboardingScreen {
     provider_auth_executor: Option<ProviderAuthEffectExecutor>,
     provider_auth_action_rx:
         tokio::sync::mpsc::UnboundedReceiver<codex_provider_auth::ProviderAuthAction>,
+    claude_event_rx: tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
 }
 
 pub(crate) struct OnboardingScreenArgs {
@@ -154,7 +147,6 @@ pub(crate) struct OnboardingResult {
     pub deferred_provider_setup: Option<DeferredProviderSetup>,
 }
 
-<<<<<<< HEAD
 fn provider_api_key_options(host: &ProviderStatusHost) -> Vec<ApiKeyProviderOption> {
     host.catalog()
         .entries()
@@ -210,29 +202,13 @@ fn initial_sign_in_option(
             .copied()
             .unwrap_or(SignInOption::ChatGpt),
     }
-||||||| 413492cd6c
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct ApiKeyEntryContext {
-    /// True when onboarding is currently rendering the API-key entry state.
-    active: bool,
-    /// True when the API-key input field currently contains user text.
-    has_text: bool,
-=======
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct TextEntryContext {
-    /// Whether onboarding is currently rendering a text-entry state.
-    active: bool,
-    /// Whether printable quit shortcuts should be consumed as text input.
-    has_text: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl OnboardingScreen {
-    pub(crate) async fn new(
-        tui: &mut Tui,
-        args: OnboardingScreenArgs,
-        claude_event_tx: AppEventSender,
-    ) -> Self {
+    pub(crate) async fn new(tui: &mut Tui, args: OnboardingScreenArgs) -> Self {
+        // Claude sign-in and provider discovery report back to the onboarding loop.
+        let (claude_event_tx, claude_event_rx) = tokio::sync::mpsc::unbounded_channel();
+        let claude_event_tx = AppEventSender::new(claude_event_tx);
         let OnboardingScreenArgs {
             show_trust_screen,
             remote_project_trust,
@@ -246,7 +222,6 @@ impl OnboardingScreen {
         } = args;
         let local_settings = crate::local_settings::LocalSettings::from(&config);
         let cwd = config.cwd.to_path_buf();
-<<<<<<< HEAD
         let provider_status_host = ProviderStatusHost::from_config(
             &config,
             ProviderAccountMetadata {
@@ -275,7 +250,6 @@ impl OnboardingScreen {
             )
         });
         let codex_home = config.codex_home.to_path_buf();
-        let forced_login_method = config.forced_login_method;
         let mut api_key_provider_id = config.model_provider_id.clone();
         let mut api_key_provider_name = config.model_provider.name.clone();
         let mut api_key_env_var = config.model_provider.env_key.clone();
@@ -299,14 +273,10 @@ impl OnboardingScreen {
             api_key_provider_name = provider.name.clone();
             api_key_env_var = provider.environment_variable().map(str::to_string);
         }
-||||||| 413492cd6c
-        let forced_login_method = config.forced_login_method;
-=======
         let remote_trust_key = remote_project_trust
             .as_ref()
             .map(|project| project.trust_target.to_string_lossy().into_owned());
         let auth_config = config.auth_config();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let mut steps: Vec<Step> = Vec::new();
         steps.push(Step::Welcome(WelcomeWidget::new(
             !matches!(login_status, LoginStatus::NotAuthenticated),
@@ -330,7 +300,6 @@ impl OnboardingScreen {
         #[cfg(not(target_os = "windows"))]
         let show_windows_create_sandbox_hint = false;
         if show_login_screen {
-<<<<<<< HEAD
             let catalog_options = catalog_sign_in_options_from_statuses(
                 &provider_status_host,
                 &provider_statuses,
@@ -338,23 +307,25 @@ impl OnboardingScreen {
             );
             let has_multiple_provider_options = catalog_options.len() > 1;
             // #1563: a chosen but unset Corbanu Plan starts on its own setup row.
-            let highlighted_mode = if forced_login_method.is_none()
+            let highlighted_mode = if auth_config.forced_login_method.is_none()
                 && config.model_provider_id
                     == codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID
                 && catalog_options.contains(&SignInOption::CorbanuPlan)
             {
                 SignInOption::CorbanuPlan
             } else {
-                initial_sign_in_option(&catalog_options, forced_login_method)
+                initial_sign_in_option(&catalog_options, auth_config.forced_login_method)
             };
-            let initial_sign_in_state =
-                if matches!(forced_login_method, Some(ForcedLoginMethod::Api))
-                    || (!has_multiple_provider_options && api_key_env_var.is_some())
-                {
-                    SignInState::ApiKeyEntry(ApiKeyInputState::from_env(api_key_env_var.as_deref()))
-                } else {
-                    SignInState::PickMode
-                };
+            let initial_sign_in_state = if matches!(
+                auth_config.forced_login_method,
+                Some(ForcedLoginMethod::Api)
+            ) || (!has_multiple_provider_options
+                && api_key_env_var.is_some())
+            {
+                SignInState::ApiKeyEntry(ApiKeyInputState::from_env(api_key_env_var.as_deref()))
+            } else {
+                SignInState::PickMode
+            };
             let named_account_methods = if config
                 .features
                 .enabled(codex_features::Feature::NamedAccounts)
@@ -385,19 +356,6 @@ impl OnboardingScreen {
             } else {
                 std::collections::BTreeMap::new()
             };
-||||||| 413492cd6c
-            let highlighted_mode = match forced_login_method {
-                Some(ForcedLoginMethod::Api) => SignInOption::ApiKey,
-                _ => SignInOption::ChatGpt,
-            };
-=======
-            let highlighted_mode =
-                if auth_config.is_login_method_allowed(ForcedLoginMethod::Chatgpt) {
-                    SignInOption::ChatGpt
-                } else {
-                    SignInOption::OtherMethods
-                };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             if let Some(app_server_request_handle) = app_server_request_handle {
                 let mut widget = AuthModeWidget {
                     request_frame: tui.frame_requester(),
@@ -406,33 +364,21 @@ impl OnboardingScreen {
                     error: Arc::new(RwLock::new(None)),
                     sign_in_state: Arc::new(RwLock::new(initial_sign_in_state)),
                     login_status,
-<<<<<<< HEAD
                     replace_provider_with_openai_on_login: config.model_provider_id
                         == codex_model_provider_info::OPENAI_PROVIDER_ID
                         || !config.model_provider.requires_openai_auth,
-||||||| 413492cd6c
-=======
                     app_server_target,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     app_server_request_handle,
-<<<<<<< HEAD
-                    forced_login_method,
                     api_key_provider_id,
                     api_key_provider_name,
                     api_key_env_var,
                     api_key_provider_options,
                     selected_api_key_option,
-                    animations_enabled: config.animations,
-||||||| 413492cd6c
-                    forced_login_method,
-                    animations_enabled: config.animations,
-=======
                     auth_config,
                     bedrock_setup_enabled,
                     gcp_setup_enabled,
                     animations_enabled: local_settings.tui.animations
                         && local_settings.tui.effects.shimmer,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     animations_suppressed: std::cell::Cell::new(false),
                     codex_home,
                     claude_event_tx,
@@ -485,6 +431,7 @@ impl OnboardingScreen {
             provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),
             provider_auth_executor,
             provider_auth_action_rx,
+            claude_event_rx,
         }
     }
 
@@ -551,7 +498,6 @@ impl OnboardingScreen {
         self.should_exit
     }
 
-<<<<<<< HEAD
     fn configured_provider(&self) -> Option<String> {
         self.steps.iter().find_map(|step| {
             if let Step::Auth(widget) = step {
@@ -564,17 +510,16 @@ impl OnboardingScreen {
     fn deferred_provider_setup(&self) -> Option<DeferredProviderSetup> {
         self.steps.iter().find_map(|step| match step {
             Step::Auth(widget) => widget.deferred_provider_setup(),
-            Step::Welcome(_) | Step::TrustDirectory(_) => None,
+            Step::Welcome(_) | Step::TrustDirectory(_) | Step::GovCloudGuidance { .. } => None,
         })
-||||||| 413492cd6c
-=======
+    }
+
     /// Check whether the first unfinished onboarding step can grant directory trust.
     fn is_trust_step_active(&self) -> bool {
         self.steps
             .iter()
             .find(|step| matches!(step.get_step_state(), StepState::InProgress))
             .is_some_and(|step| matches!(step, Step::TrustDirectory(_)))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn cancel_auth_if_active(&self) {
@@ -608,7 +553,6 @@ impl OnboardingScreen {
         }
     }
 
-<<<<<<< HEAD
     fn handle_claude_event(&mut self, event: AppEvent) {
         if let Some(widget) = self.auth_widget_mut() {
             widget.handle_claude_event(event);
@@ -628,31 +572,6 @@ impl OnboardingScreen {
                     if let Some(widget) = self.auth_widget_mut() {
                         widget.on_api_key_configured(target.provider_id.as_str());
                     }
-||||||| 413492cd6c
-    fn api_key_entry_context(&self) -> ApiKeyEntryContext {
-        self.steps
-            .iter()
-            .find_map(|step| {
-                if let Step::Auth(widget) = step {
-                    Some(ApiKeyEntryContext {
-                        active: widget.is_api_key_entry_active(),
-                        has_text: widget.api_key_entry_has_text(),
-                    })
-                } else {
-                    None
-=======
-    fn text_entry_context(&self) -> TextEntryContext {
-        self.steps
-            .iter()
-            .find_map(|step| {
-                if let Step::Auth(widget) = step {
-                    Some(TextEntryContext {
-                        active: widget.is_text_entry_active(),
-                        has_text: widget.should_suppress_printable_quit(),
-                    })
-                } else {
-                    None
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }
                 effect => {
                     if let Some(executor) = &self.provider_auth_executor {
@@ -677,20 +596,8 @@ impl OnboardingScreen {
 impl KeyboardHandler for OnboardingScreen {
     /// Route key events to onboarding steps while preserving text-entry safety.
     ///
-<<<<<<< HEAD
     /// While a text field has focus, printable quit bindings are text. Control
     /// quit chords still work as emergency exits.
-||||||| 413492cd6c
-    /// In API-key entry mode, printable quit bindings are suppressed only after
-    /// the user has started typing in the API-key field. This keeps the
-    /// printable `q` quit key usable on an empty field while protecting in-progress
-    /// text entry from accidental exits. Control/alt quit chords still work as
-    /// emergency exits.
-=======
-    /// OpenAI API-key entry suppresses printable quit bindings after typing
-    /// starts, while cloud provider fields suppress them from the first character.
-    /// Control/alt quit chords still work as emergency exits.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         if key_event.kind == KeyEventKind::Release {
             if let Some(widget) = self.auth_widget_mut() {
@@ -698,21 +605,9 @@ impl KeyboardHandler for OnboardingScreen {
             }
             return;
         }
-<<<<<<< HEAD
-||||||| 413492cd6c
-        let api_key_entry_context = self.api_key_entry_context();
-=======
-        let text_entry_context = self.text_entry_context();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let should_quit = key_event.kind == KeyEventKind::Press
             && keys::QUIT.is_pressed(key_event)
-<<<<<<< HEAD
             && !is_text_key_in_text_field(key_event, self.text_entry_active());
-||||||| 413492cd6c
-            && !suppress_quit_while_typing_api_key(key_event, api_key_entry_context);
-=======
-            && !suppress_quit_while_typing(key_event, text_entry_context);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if should_quit {
             if self.is_auth_in_progress() {
                 self.cancel_auth_if_active();
@@ -765,33 +660,10 @@ impl KeyboardHandler for OnboardingScreen {
     }
 }
 
-<<<<<<< HEAD
 /// Returns `true` when a key is text for the focused text field, so it must
 /// never act as a shortcut: a printable character without control/alt.
 fn is_text_key_in_text_field(key_event: KeyEvent, text_entry_active: bool) -> bool {
     text_entry_active
-||||||| 413492cd6c
-/// Returns `true` when a quit shortcut should be ignored as text input.
-///
-/// This only applies while API-key entry is active and the key is a printable
-/// character without control/alt modifiers and there is already text in the
-/// input field. Empty input intentionally does not trigger suppression so
-/// the printable `q` quit key can still exit onboarding.
-fn suppress_quit_while_typing_api_key(
-    key_event: KeyEvent,
-    api_key_entry_context: ApiKeyEntryContext,
-) -> bool {
-    api_key_entry_context.active
-        && api_key_entry_context.has_text
-=======
-/// Returns `true` when a quit shortcut should be ignored as text input.
-///
-/// This only applies when the active text-entry state suppresses printable quit
-/// shortcuts and the key has no control/alt modifiers.
-fn suppress_quit_while_typing(key_event: KeyEvent, text_entry_context: TextEntryContext) -> bool {
-    text_entry_context.active
-        && text_entry_context.has_text
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         && matches!(key_event.code, KeyCode::Char(_))
         && !key_event
             .modifiers
@@ -803,7 +675,7 @@ impl WidgetRef for &OnboardingScreen {
         let suppress_animations = self.should_suppress_animations();
         let logo_presentation = if suppress_animations {
             Presentation::Hidden
-        } else if self.text_entry_context().active {
+        } else if self.text_entry_active() {
             Presentation::Faded
         } else {
             Presentation::Animated
@@ -970,6 +842,10 @@ pub(crate) async fn run_gov_cloud_guidance(tui: &mut Tui) -> Result<()> {
         remote_trust_key: None,
         is_done: false,
         should_exit: false,
+        provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),
+        provider_auth_executor: None,
+        provider_auth_action_rx: tokio::sync::mpsc::unbounded_channel().1,
+        claude_event_rx: tokio::sync::mpsc::unbounded_channel().1,
     };
     let result = run_onboarding_screen(
         screen, /*app_server_request_handle*/ None, /*app_server*/ None, tui,
@@ -1022,18 +898,6 @@ async fn run_onboarding_screen_inner(
     tui: &mut Tui,
 ) -> Result<OnboardingResult> {
     use tokio_stream::StreamExt;
-<<<<<<< HEAD
-
-    let app_server_request_handle = args.app_server_request_handle.clone();
-    let (claude_event_tx, mut claude_event_rx) = tokio::sync::mpsc::unbounded_channel();
-    let mut onboarding_screen =
-        OnboardingScreen::new(tui, args, AppEventSender::new(claude_event_tx)).await;
-||||||| 413492cd6c
-
-    let app_server_request_handle = args.app_server_request_handle.clone();
-    let mut onboarding_screen = OnboardingScreen::new(tui, args).await;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut directory_trust_persisted = false;
     // One-time guard to fully clear the screen after ChatGPT login success message is shown
     let mut did_full_clear_after_success = false;
@@ -1047,6 +911,8 @@ async fn run_onboarding_screen_inner(
     let tui_events = tui.event_stream();
     tokio::pin!(tui_events);
     let mut trust_step_was_active = onboarding_screen.is_trust_step_active();
+    let mut claude_events_open = true;
+    let mut provider_actions_open = true;
 
     while !onboarding_screen.is_done() {
         tokio::select! {
@@ -1187,14 +1053,17 @@ async fn run_onboarding_screen_inner(
                     }
                 }
             }
-            event = claude_event_rx.recv() => {
-                if let Some(event) = event {
-                    onboarding_screen.handle_claude_event(event);
+            // A closed channel (the gov-cloud guidance screen has no senders) is not polled again.
+            event = onboarding_screen.claude_event_rx.recv(), if claude_events_open => {
+                match event {
+                    Some(event) => onboarding_screen.handle_claude_event(event),
+                    None => claude_events_open = false,
                 }
             }
-            action = onboarding_screen.provider_auth_action_rx.recv() => {
-                if let Some(action) = action {
-                    onboarding_screen.handle_provider_auth_action(action);
+            action = onboarding_screen.provider_auth_action_rx.recv(), if provider_actions_open => {
+                match action {
+                    Some(action) => onboarding_screen.handle_provider_auth_action(action),
+                    None => provider_actions_open = false,
                 }
             }
         }
@@ -1224,7 +1093,6 @@ async fn run_onboarding_screen_inner(
     })
 }
 
-<<<<<<< HEAD
 fn openai_metadata(login_status: LoginStatus) -> codex_login::OpenAiAuthMetadata {
     match login_status {
         LoginStatus::NotAuthenticated => codex_login::OpenAiAuthMetadata::Missing,
@@ -1240,8 +1108,8 @@ fn openai_metadata(login_status: LoginStatus) -> codex_login::OpenAiAuthMetadata
         }
         LoginStatus::AuthMode(_) => codex_login::OpenAiAuthMetadata::Unsupported,
     }
-||||||| 413492cd6c
-=======
+}
+
 /// Render a newly activated trust step before discarding keys from the preceding screen.
 ///
 /// Once the step is active, preserve fresh navigation and confirmation input.
@@ -1256,7 +1124,6 @@ fn discard_pending_input_on_trust_step_transition(
     }
     *trust_step_was_active = trust_step_is_active;
     Ok(())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 async fn persist_selected_trust(
@@ -1334,36 +1201,19 @@ async fn persist_selected_trust(
 
 #[cfg(test)]
 mod tests {
-<<<<<<< HEAD
-    use super::KeyboardHandler;
-||||||| 413492cd6c
-    use super::ApiKeyEntryContext;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     use super::OnboardingScreen;
     use super::Step;
     use super::StepState;
     use super::StepStateProvider;
-<<<<<<< HEAD
+    use super::discard_pending_input_on_trust_step_transition;
     use super::initial_sign_in_option;
     use super::is_text_key_in_text_field;
-||||||| 413492cd6c
-=======
-    use super::TextEntryContext;
-    use super::discard_pending_input_on_trust_step_transition;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     use super::persist_selected_trust;
-<<<<<<< HEAD
     use super::provider_api_key_options;
     use super::visible_step_indices;
     use crate::onboarding::auth::SignInOption;
     use crate::onboarding::auth::catalog_sign_in_options;
-||||||| 413492cd6c
-    use super::suppress_quit_while_typing_api_key;
-=======
-    use super::suppress_quit_while_typing;
     use crate::onboarding::onboarding_screen::KeyboardHandler;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     use crate::onboarding::trust_directory::TrustDirectorySelection;
     use crate::onboarding::trust_directory::TrustDirectoryWidget;
     use crate::provider_status_host::ProviderStatusHost;
@@ -1376,45 +1226,20 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-<<<<<<< HEAD
     fn printable_quit_key_is_text_in_a_text_field_even_when_empty() {
         // #461: an empty field must not quit either, or a value that starts
         // with `q` ends the session and the rest reaches the shell.
         assert!(is_text_key_in_text_field(
-||||||| 413492cd6c
-    fn suppresses_printable_quit_key_during_api_key_entry() {
-        let suppressed = suppress_quit_while_typing_api_key(
-=======
-    fn suppresses_printable_quit_key_during_api_key_entry() {
-        let suppressed = suppress_quit_while_typing(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
-<<<<<<< HEAD
             /*text_entry_active*/ true,
         ));
         assert!(is_text_key_in_text_field(
             KeyEvent::new(KeyCode::Char('Q'), KeyModifiers::SHIFT),
             /*text_entry_active*/ true,
         ));
-||||||| 413492cd6c
-            ApiKeyEntryContext {
-                active: true,
-                has_text: true,
-            },
-        );
-        assert!(suppressed);
-=======
-            TextEntryContext {
-                active: true,
-                has_text: true,
-            },
-        );
-        assert!(suppressed);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     #[test]
-<<<<<<< HEAD
     fn control_quit_chords_still_quit_from_a_text_field() {
         for key in ['c', 'd'] {
             assert!(!is_text_key_in_text_field(
@@ -1427,36 +1252,12 @@ mod tests {
     #[test]
     fn printable_quit_key_is_a_shortcut_outside_text_fields() {
         assert!(!is_text_key_in_text_field(
-||||||| 413492cd6c
-    fn does_not_suppress_printable_quit_key_when_api_key_input_is_empty() {
-        let suppressed = suppress_quit_while_typing_api_key(
-=======
-    fn does_not_suppress_printable_quit_key_when_api_key_input_is_empty() {
-        let suppressed = suppress_quit_while_typing(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
-<<<<<<< HEAD
             /*text_entry_active*/ false,
         ));
-||||||| 413492cd6c
-            ApiKeyEntryContext {
-                active: true,
-                has_text: false,
-            },
-        );
-        assert!(!suppressed);
-=======
-            TextEntryContext {
-                active: true,
-                has_text: false,
-            },
-        );
-        assert!(!suppressed);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     #[test]
-<<<<<<< HEAD
     fn forced_chatgpt_never_defaults_to_the_hidden_anthropic_option() {
         assert_eq!(
             initial_sign_in_option(
@@ -1464,28 +1265,10 @@ mod tests {
                 Some(ForcedLoginMethod::Chatgpt),
             ),
             SignInOption::ChatGpt
-||||||| 413492cd6c
-    fn does_not_suppress_control_quit_key_during_api_key_entry() {
-        let suppressed = suppress_quit_while_typing_api_key(
-            KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL),
-            ApiKeyEntryContext {
-                active: true,
-                has_text: true,
-            },
-=======
-    fn does_not_suppress_control_quit_key_during_api_key_entry() {
-        let suppressed = suppress_quit_while_typing(
-            KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL),
-            TextEntryContext {
-                active: true,
-                has_text: true,
-            },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         );
     }
 
     #[test]
-<<<<<<< HEAD
     fn forced_api_key_never_defaults_to_the_hidden_anthropic_option() {
         assert_eq!(
             initial_sign_in_option(
@@ -1510,21 +1293,6 @@ mod tests {
                 name: "PF53 Custom".to_string(),
                 env_key: Some("PF53_CUSTOM_API_KEY".to_string()),
                 ..Default::default()
-||||||| 413492cd6c
-    fn does_not_suppress_when_not_in_api_key_entry() {
-        let suppressed = suppress_quit_while_typing_api_key(
-            KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
-            ApiKeyEntryContext {
-                active: false,
-                has_text: true,
-=======
-    fn does_not_suppress_when_not_in_api_key_entry() {
-        let suppressed = suppress_quit_while_typing(
-            KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
-            TextEntryContext {
-                active: false,
-                has_text: true,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             },
         );
         let host = ProviderStatusHost::from_config(
@@ -1636,6 +1404,10 @@ mod tests {
             remote_trust_key: None,
             is_done: false,
             should_exit: false,
+            provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),
+            provider_auth_executor: None,
+            provider_auth_action_rx: tokio::sync::mpsc::unbounded_channel().1,
+            claude_event_rx: tokio::sync::mpsc::unbounded_channel().1,
         };
 
         let mut buffered_keys = vec![KeyEvent::from(KeyCode::Enter)];
@@ -1703,6 +1475,10 @@ mod tests {
                 remote_trust_key: Some("/workspace/project".to_string()),
                 is_done: false,
                 should_exit: false,
+                provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),
+                provider_auth_executor: None,
+                provider_auth_action_rx: tokio::sync::mpsc::unbounded_channel().1,
+                claude_event_rx: tokio::sync::mpsc::unbounded_channel().1,
             };
             screen.handle_key_event(key.into());
             assert!(!persist_selected_trust(&mut screen, /*request_handle*/ None).await);
@@ -1739,6 +1515,7 @@ mod tests {
             provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),
             provider_auth_executor: None,
             provider_auth_action_rx,
+            claude_event_rx: tokio::sync::mpsc::unbounded_channel().1,
         };
 
         let persisted =
@@ -1764,11 +1541,13 @@ mod tests {
         OnboardingScreen {
             request_frame: FrameRequester::test_dummy(),
             steps: vec![Step::Auth(widget)],
+            remote_trust_key: None,
             is_done: false,
             should_exit: false,
             provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),
             provider_auth_executor: None,
             provider_auth_action_rx,
+            claude_event_rx: tokio::sync::mpsc::unbounded_channel().1,
         }
     }
 
@@ -1884,7 +1663,7 @@ mod tests {
         use crate::onboarding::provider_setup::ProviderSetupPhase;
 
         let (mut widget, _home) = crate::onboarding::auth::tests::widget_forced_chatgpt().await;
-        widget.forced_login_method = None;
+        widget.auth_config.forced_login_method = None;
         let options = provider_api_key_options(&widget.provider_status_host);
         let kimi = options
             .iter()

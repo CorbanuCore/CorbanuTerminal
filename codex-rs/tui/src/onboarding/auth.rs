@@ -15,12 +15,8 @@ use codex_app_server_protocol::CancelLoginAccountParams;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::LoginAccountParams;
 use codex_app_server_protocol::LoginAccountResponse;
-<<<<<<< HEAD
-use codex_login::OPENAI_API_KEY_ENV_VAR;
-||||||| 413492cd6c
-=======
 use codex_login::AuthConfig;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_login::OPENAI_API_KEY_ENV_VAR;
 use codex_login::read_openai_api_key_from_env;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
@@ -54,15 +50,11 @@ use std::time::Instant;
 use uuid::Uuid;
 
 use crate::LoginStatus;
-<<<<<<< HEAD
+use crate::activation_key_guard::ActivationKeyGuard;
 use crate::app_event::AppEvent;
 use crate::app_event::ClaudeSubscriptionTokenSecret;
 use crate::app_event_sender::AppEventSender;
 use crate::chatwidget::claude_code_login::ClaudeCodeLoginInput;
-||||||| 413492cd6c
-=======
-use crate::activation_key_guard::ActivationKeyGuard;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::key_hint::KeyBinding;
 use crate::key_hint::KeyBindingListExt;
 use crate::motion::MotionMode;
@@ -123,7 +115,6 @@ pub(crate) enum SignInState {
     ChatGptSuccessMessage,
     ChatGptSuccess,
     ApiKeyEntry(ApiKeyInputState),
-<<<<<<< HEAD
     ApiKeySaving,
     ApiKeyConfigured {
         provider: Option<String>,
@@ -167,34 +158,36 @@ pub(crate) enum SignInState {
     AccountSaved {
         message: String,
     },
-    Complete,
-||||||| 413492cd6c
-    ApiKeyConfigured,
-=======
-    ApiKeyConfigured,
     Bedrock(BedrockState),
     BedrockConfigured,
     Gcp(GcpState),
     GcpConfigured,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    Complete,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SignInOption {
     ChatGpt,
     DeviceCode,
-<<<<<<< HEAD
     AnthropicAccount,
-||||||| 413492cd6c
-=======
+    /// Upstream's "Sign in another way" row: opens the API-key, Bedrock and Vertex AI submenu
+    /// of the OpenAI sign-in screen (not the Corbanu provider picker).
     OtherMethods,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     ApiKey,
-<<<<<<< HEAD
     ProviderApiKey(usize),
     ProviderRuntime(usize),
     CorbanuPlan,
+    /// Upstream's Amazon Bedrock and Vertex AI wizards (feature-gated, OpenAI provider only).
+    Bedrock,
+    Gcp,
     Done,
+}
+
+impl SignInOption {
+    /// Rows of upstream's "Sign in another way" submenu.
+    fn is_alternative(self) -> bool {
+        matches!(self, Self::ApiKey | Self::Bedrock | Self::Gcp)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -209,29 +202,12 @@ pub(crate) enum ClaudeAuthMethod {
     #[default]
     ManagedToken,
     ClaudeCodeLogin,
-||||||| 413492cd6c
-=======
-    Bedrock,
-    Gcp,
-}
-
-impl SignInOption {
-    fn is_alternative(self) -> bool {
-        !matches!(self, Self::ChatGpt | Self::DeviceCode | Self::OtherMethods)
-    }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 const API_KEY_DISABLED_MESSAGE: &str = "API key login is disabled.";
-<<<<<<< HEAD
 const API_KEY_MASK_CHAR: char = '•';
 
-fn onboarding_request_id() -> codex_app_server_protocol::RequestId {
-||||||| 413492cd6c
-fn onboarding_request_id() -> codex_app_server_protocol::RequestId {
-=======
 pub(super) fn onboarding_request_id() -> codex_app_server_protocol::RequestId {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     codex_app_server_protocol::RequestId::String(Uuid::new_v4().to_string())
 }
 
@@ -343,10 +319,6 @@ impl ContinueWithDeviceCodeState {
 
 impl KeyboardHandler for AuthModeWidget {
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-<<<<<<< HEAD
-        if self.handle_named_account_key_event(&key_event) {
-||||||| 413492cd6c
-=======
         if self
             .activation_key_guard
             .as_mut()
@@ -355,8 +327,10 @@ impl KeyboardHandler for AuthModeWidget {
         {
             return;
         }
-        if self.handle_gcp_key_event(&key_event) || self.handle_bedrock_key_event(&key_event) {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        if self.handle_named_account_key_event(&key_event)
+            || self.handle_gcp_key_event(&key_event)
+            || self.handle_bedrock_key_event(&key_event)
+        {
             return;
         }
         if self.handle_api_key_entry_key_event(&key_event) {
@@ -393,14 +367,9 @@ impl KeyboardHandler for AuthModeWidget {
             let sign_in_state = { (*self.sign_in_state.read().unwrap()).clone() };
             match sign_in_state {
                 SignInState::PickMode => {
-<<<<<<< HEAD
                     let highlighted = self.effective_highlight(&self.displayed_sign_in_options());
-                    self.handle_sign_in_option(highlighted);
-||||||| 413492cd6c
-                    self.handle_sign_in_option(self.highlighted_mode);
-=======
+                    self.highlighted_mode = highlighted;
                     self.activate_highlighted_mode(key_event);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }
                 SignInState::ChatGptSuccessMessage | SignInState::ChatGptSuccess => {
                     self.finish_openai_account_setup();
@@ -423,6 +392,7 @@ impl KeyboardHandler for AuthModeWidget {
         }
         if keys::CANCEL.is_pressed(key_event) {
             if matches!(*self.sign_in_state.read().unwrap(), SignInState::PickMode)
+                && self.uses_openai_sign_in_menu()
                 && self.highlighted_mode.is_alternative()
             {
                 self.highlighted_mode = SignInOption::OtherMethods;
@@ -434,32 +404,27 @@ impl KeyboardHandler for AuthModeWidget {
     }
 
     fn handle_paste(&mut self, pasted: String) {
-<<<<<<< HEAD
         if self.handle_named_account_paste(&pasted) {
             return;
         }
-        if !self.handle_claude_auth_paste(&pasted) {
-            let _ = self.handle_api_key_entry_paste(pasted);
-||||||| 413492cd6c
-        let _ = self.handle_api_key_entry_paste(pasted);
-=======
+        if self.handle_claude_auth_paste(&pasted) {
+            return;
+        }
         let mut state = self.sign_in_state.write().unwrap();
         let input = match &mut *state {
             SignInState::Bedrock(state) => state.active_input_mut(),
             SignInState::Gcp(state) => state.active_input_mut(),
-            SignInState::ApiKeyEntry(_) => {
+            _ => {
                 drop(state);
                 let _ = self.handle_api_key_entry_paste(pasted);
                 return;
             }
-            _ => None,
         };
         if let Some(input) = input {
             input.paste(&pasted);
             self.set_error(/*message*/ None);
             drop(state);
             self.request_frame.schedule_frame();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 }
@@ -557,27 +522,17 @@ pub(crate) struct AuthModeWidget {
     pub error: Arc<RwLock<Option<String>>>,
     pub sign_in_state: Arc<RwLock<SignInState>>,
     pub login_status: LoginStatus,
-<<<<<<< HEAD
     pub replace_provider_with_openai_on_login: bool,
-||||||| 413492cd6c
-=======
     pub app_server_target: crate::AppServerTarget,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub app_server_request_handle: AppServerRequestHandle,
-<<<<<<< HEAD
-    pub forced_login_method: Option<ForcedLoginMethod>,
     pub api_key_provider_id: String,
     pub api_key_provider_name: String,
     pub api_key_env_var: Option<String>,
     pub api_key_provider_options: Vec<ApiKeyProviderOption>,
     pub selected_api_key_option: Option<ApiKeyProviderOption>,
-||||||| 413492cd6c
-    pub forced_login_method: Option<ForcedLoginMethod>,
-=======
     pub auth_config: AuthConfig,
     pub bedrock_setup_enabled: bool,
     pub gcp_setup_enabled: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub animations_enabled: bool,
     pub animations_suppressed: Cell<bool>,
     pub codex_home: std::path::PathBuf,
@@ -651,7 +606,6 @@ impl AuthModeWidget {
         self.error.read().unwrap().clone()
     }
 
-<<<<<<< HEAD
     /// Returns whether a text field (an API key, a Claude token or code, or a
     /// named account's name or value) has focus, or its value is being saved.
     /// While it does, every printable key is text, never a shortcut: a
@@ -668,6 +622,8 @@ impl AuthModeWidget {
             | SignInState::AccountNameEntry { .. }
             | SignInState::AccountValueEntry { .. }
             | SignInState::AccountSaving => true,
+            SignInState::Bedrock(state) => state.is_text_entry_active(),
+            SignInState::Gcp(state) => state.is_text_entry_active(),
             SignInState::PickMode
             | SignInState::ChatGptContinueInBrowser(_)
             | SignInState::ChatGptDeviceCode(_)
@@ -681,26 +637,12 @@ impl AuthModeWidget {
             | SignInState::ClaudeAccountConfigured { .. }
             | SignInState::ConfiguredProviderChoice { .. }
             | SignInState::AccountSaved { .. }
+            | SignInState::BedrockConfigured
+            | SignInState::GcpConfigured
             | SignInState::Complete => false,
-||||||| 413492cd6c
-    /// Returns whether the auth flow is currently in API-key entry mode.
-    pub(crate) fn is_api_key_entry_active(&self) -> bool {
-        self.sign_in_state
-            .read()
-            .is_ok_and(|guard| matches!(&*guard, SignInState::ApiKeyEntry(_)))
-=======
-    /// Returns whether the auth flow is currently accepting text input.
-    pub(crate) fn is_text_entry_active(&self) -> bool {
-        self.sign_in_state.read().is_ok_and(|guard| match &*guard {
-            SignInState::ApiKeyEntry(_) => true,
-            SignInState::Bedrock(state) => state.is_text_entry_active(),
-            SignInState::Gcp(state) => state.is_text_entry_active(),
-            _ => false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         })
     }
 
-<<<<<<< HEAD
     /// The focused text field's current value, for tests.
     #[cfg(test)]
     pub(crate) fn text_entry_value(&self) -> Option<String> {
@@ -713,25 +655,16 @@ impl AuthModeWidget {
             SignInState::AccountValueEntry { value, .. } => Some(value.to_string()),
             _ => None,
         }
-||||||| 413492cd6c
-    /// Returns whether the API-key entry field currently contains any text.
-    pub(crate) fn api_key_entry_has_text(&self) -> bool {
-        self.sign_in_state.read().is_ok_and(
-            |guard| matches!(&*guard, SignInState::ApiKeyEntry(state) if !state.value.is_empty()),
-        )
-=======
+    }
+
     /// Returns whether printable quit shortcuts must be treated as text input.
     ///
-    /// OpenAI API-key entry keeps its existing empty-field quit behavior, while
-    /// Cloud setup fields accept printable input from their first character.
+    /// Corbanu keeps main's rule (#461): while any text field is active, even an
+    /// empty API-key field, every printable key is text; onboarding checks
+    /// `is_text_entry_active` directly. Upstream lets an empty API-key field quit.
+    #[cfg(test)]
     pub(crate) fn should_suppress_printable_quit(&self) -> bool {
-        self.sign_in_state.read().is_ok_and(|guard| match &*guard {
-            SignInState::ApiKeyEntry(state) => !state.value.is_empty(),
-            SignInState::Bedrock(state) => state.is_text_entry_active(),
-            SignInState::Gcp(state) => state.is_text_entry_active(),
-            _ => false,
-        })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        self.is_text_entry_active()
     }
 
     fn confirm_binding(&self) -> KeyBinding {
@@ -748,7 +681,7 @@ impl AuthModeWidget {
     }
 
     fn provider_picker_enabled(&self) -> bool {
-        self.forced_login_method.is_none()
+        self.auth_config.forced_login_method.is_none()
             && !catalog_sign_in_options_from_statuses(
                 &self.provider_status_host,
                 &self.provider_statuses.read().unwrap(),
@@ -767,7 +700,6 @@ impl AuthModeWidget {
     }
 
     fn displayed_sign_in_options(&self) -> Vec<SignInOption> {
-<<<<<<< HEAD
         if self.provider_picker_enabled() {
             let mut options = catalog_sign_in_options_from_statuses(
                 &self.provider_status_host,
@@ -781,9 +713,7 @@ impl AuthModeWidget {
             return vec![SignInOption::CorbanuPlan, SignInOption::Done];
         }
 
-||||||| 413492cd6c
-        let mut options = vec![SignInOption::ChatGpt];
-=======
+        // Upstream's OpenAI sign-in menu, with its "Sign in another way" submenu.
         if self.highlighted_mode.is_alternative() {
             let mut options = vec![SignInOption::ApiKey];
             if self.bedrock_setup_enabled {
@@ -795,56 +725,26 @@ impl AuthModeWidget {
             return options;
         }
         let mut options = vec![SignInOption::ChatGpt];
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if self.is_chatgpt_login_allowed() {
-            let mut options = vec![SignInOption::ChatGpt];
-            options.push(SignInOption::DeviceCode);
-            if self.is_api_login_allowed() {
-                options.push(SignInOption::ApiKey);
-            }
-            options
-        } else if self.is_api_login_allowed() {
-            vec![SignInOption::ApiKey]
-        } else {
-            Vec::new()
-        }
-<<<<<<< HEAD
-    }
-
-    fn selectable_sign_in_options(&self) -> Vec<SignInOption> {
-        if self.provider_picker_enabled() {
-            return self.displayed_sign_in_options();
-        }
-        if self.forced_api_uses_corbanu_route() {
-            return self.displayed_sign_in_options();
-        }
-
-        let mut options = Vec::new();
-        if self.is_chatgpt_login_allowed() {
-            options.push(SignInOption::ChatGpt);
             options.push(SignInOption::DeviceCode);
         }
         if self.is_api_login_allowed() {
-            options.push(SignInOption::ApiKey);
-||||||| 413492cd6c
-        if self.is_api_login_allowed() {
-            options.push(SignInOption::ApiKey);
+            options.push(SignInOption::OtherMethods);
         }
         options
     }
 
+    /// The OpenAI sign-in menu (not the Corbanu provider picker or the forced Corbanu route),
+    /// where upstream's "Sign in another way" submenu applies.
+    fn uses_openai_sign_in_menu(&self) -> bool {
+        !self.provider_picker_enabled() && !self.forced_api_uses_corbanu_route()
+    }
+
+    #[cfg(test)]
     fn selectable_sign_in_options(&self) -> Vec<SignInOption> {
-        let mut options = Vec::new();
-        if self.is_chatgpt_login_allowed() {
-            options.push(SignInOption::ChatGpt);
-            options.push(SignInOption::DeviceCode);
-        }
-        if self.is_api_login_allowed() {
-            options.push(SignInOption::ApiKey);
-=======
-        if self.is_api_login_allowed() {
-            options.push(SignInOption::OtherMethods);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let mut options = self.displayed_sign_in_options();
+        if self.uses_openai_sign_in_menu() && !self.is_chatgpt_login_allowed() {
+            options.retain(|option| *option != SignInOption::ChatGpt);
         }
         options
     }
@@ -932,7 +832,6 @@ impl AuthModeWidget {
                     self.disallow_api_login();
                 }
             }
-<<<<<<< HEAD
             SignInOption::ProviderApiKey(index) => {
                 if self.select_provider_api_key_option(index) {
                     self.begin_provider(&self.api_key_provider_id.clone());
@@ -971,8 +870,7 @@ impl AuthModeWidget {
                     ));
                 }
                 self.request_frame.schedule_frame();
-||||||| 413492cd6c
-=======
+            }
             SignInOption::Bedrock => {
                 if self.bedrock_setup_enabled && self.is_api_login_allowed() {
                     self.start_bedrock_discovery();
@@ -988,7 +886,6 @@ impl AuthModeWidget {
                 } else if !self.is_api_login_allowed() {
                     self.disallow_api_login();
                 }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
         }
     }
@@ -1025,8 +922,10 @@ impl AuthModeWidget {
     /// configured provider has no pasted-key option, but is set up through the
     /// Corbanu API wallet row (Corbanu Plan). That row is its API-key setup.
     fn forced_api_uses_corbanu_route(&self) -> bool {
-        matches!(self.forced_login_method, Some(ForcedLoginMethod::Api))
-            && self.selected_api_key_option.is_none()
+        matches!(
+            self.auth_config.forced_login_method,
+            Some(ForcedLoginMethod::Api)
+        ) && self.selected_api_key_option.is_none()
             && self
                 .provider_status_host
                 .catalog()
@@ -1066,6 +965,9 @@ impl AuthModeWidget {
             SignInOption::AnthropicAccount => "Claude account sign-in".to_string(),
             SignInOption::ApiKey | SignInOption::ProviderApiKey(_) => "a new API key".to_string(),
             SignInOption::CorbanuPlan => "Corbanu API".to_string(),
+            SignInOption::OtherMethods => "another sign-in method".to_string(),
+            SignInOption::Bedrock => "Amazon Bedrock setup".to_string(),
+            SignInOption::Gcp => "Google Cloud Vertex AI setup".to_string(),
             SignInOption::ProviderRuntime(_) | SignInOption::Done => "setup".to_string(),
         }
     }
@@ -1233,7 +1135,10 @@ impl AuthModeWidget {
     }
 
     fn ambient_api_key_required(&self) -> bool {
-        matches!(self.forced_login_method, Some(ForcedLoginMethod::Api))
+        matches!(
+            self.auth_config.forced_login_method,
+            Some(ForcedLoginMethod::Api)
+        )
     }
 
     fn provider_api_key_required(&self) -> bool {
@@ -1295,7 +1200,6 @@ impl AuthModeWidget {
     }
 
     fn render_pick_mode(&self, area: Rect, buf: &mut Buffer) {
-<<<<<<< HEAD
         let header_lines: Vec<Line> = if self.provider_picker_enabled() {
             vec![
                 Line::from(vec![
@@ -1316,34 +1220,13 @@ impl AuthModeWidget {
                 ]),
                 "".into(),
             ]
+        } else if self.uses_openai_sign_in_menu() && self.highlighted_mode.is_alternative() {
+            vec!["  Sign in another way".into(), "".into()]
         } else {
             vec![
                 Line::from(vec![
                     "  ".into(),
                     "Sign in with ChatGPT to use OpenAI-hosted models".into(),
-||||||| 413492cd6c
-        let mut lines: Vec<Line> = vec![
-            Line::from(vec![
-                "  ".into(),
-                "Sign in with ChatGPT to use Codex as part of your paid plan".into(),
-            ]),
-            Line::from(vec![
-                "  ".into(),
-                "or connect an API key for usage-based billing".into(),
-            ]),
-            "".into(),
-        ];
-=======
-        let mut lines: Vec<Line> = if self.highlighted_mode.is_alternative() {
-            vec!["  Sign in another way".into(), "".into()]
-        } else if self.bedrock_setup_enabled || self.gcp_setup_enabled {
-            vec!["  Choose how you want to use Codex.".into(), "".into()]
-        } else {
-            vec![
-                Line::from(vec![
-                    "  ".into(),
-                    "Sign in with ChatGPT to use Codex as part of your paid plan".into(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 ]),
                 Line::from(vec![
                     "  ".into(),
@@ -1353,25 +1236,11 @@ impl AuthModeWidget {
             ]
         };
 
-<<<<<<< HEAD
         let highlighted_row = self.effective_highlight(&self.displayed_sign_in_options());
         let create_mode_item = |idx: usize,
                                 selected_mode: SignInOption,
                                 text: &str,
                                 description: &str|
-||||||| 413492cd6c
-        let create_mode_item = |idx: usize,
-                                selected_mode: SignInOption,
-                                text: &str,
-                                description: &str|
-=======
-        let options_start = lines.len();
-        let mut compact_options = Vec::new();
-        let mut create_mode_item = |idx: usize,
-                                    selected_mode: SignInOption,
-                                    text: &str,
-                                    description: &str|
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
          -> Vec<Line<'static>> {
             let is_selected = highlighted_row == selected_mode;
             let caret = if is_selected { ">" } else { " " };
@@ -1394,7 +1263,6 @@ impl AuthModeWidget {
                     .style(Style::default().add_modifier(Modifier::DIM))
             };
 
-            compact_options.push(line1.clone());
             vec![line1, line2]
         };
 
@@ -1410,14 +1278,14 @@ impl AuthModeWidget {
         for (idx, option) in displayed_options.iter().copied().enumerate() {
             match option {
                 SignInOption::OtherMethods => {
-                    lines.extend(create_mode_item(
+                    option_lines.extend(create_mode_item(
                         idx,
                         option,
                         "Sign in another way",
                         if self.bedrock_setup_enabled || self.gcp_setup_enabled {
                             "Use an API key or another provider"
                         } else {
-                            "Use an OpenAI API key"
+                            "Use an API key"
                         },
                     ));
                 }
@@ -1460,17 +1328,10 @@ impl AuthModeWidget {
                     option_lines.extend(create_mode_item(
                         idx,
                         option,
-<<<<<<< HEAD
                         &text,
-||||||| 413492cd6c
-                        "Provide your own API key",
-=======
-                        "Use an OpenAI API key",
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                         "Pay for what you use",
                     ));
                 }
-<<<<<<< HEAD
                 SignInOption::ProviderApiKey(provider_index) => {
                     if let Some(provider) = self.api_key_provider_options.get(provider_index) {
                         let storage_description = match &provider.target.storage {
@@ -1551,10 +1412,10 @@ impl AuthModeWidget {
                         } else {
                             "Configure a usable provider or queue Corbanu API first"
                         },
-||||||| 413492cd6c
-=======
+                    ));
+                }
                 SignInOption::Bedrock => {
-                    lines.extend(create_mode_item(
+                    option_lines.extend(create_mode_item(
                         idx,
                         option,
                         "Use Amazon Bedrock",
@@ -1562,24 +1423,18 @@ impl AuthModeWidget {
                     ));
                 }
                 SignInOption::Gcp => {
-                    lines.extend(create_mode_item(
+                    option_lines.extend(create_mode_item(
                         idx,
                         option,
                         "Use Google Cloud Vertex AI",
                         "Connect using your Google Cloud credentials",
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     ));
                 }
             }
             option_lines.push("".into());
         }
 
-<<<<<<< HEAD
         let mut footer_lines = Vec::new();
-||||||| 413492cd6c
-=======
-        let options_end = lines.len();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if !self.is_api_login_allowed() {
             footer_lines.push(
                 "  API key login is disabled by this workspace. Sign in with ChatGPT to continue."
@@ -1594,8 +1449,8 @@ impl AuthModeWidget {
             self.confirm_binding().into(),
             " to continue".dim(),
         ]));
-        if self.highlighted_mode.is_alternative() {
-            lines.push(Line::from(vec![
+        if self.uses_openai_sign_in_menu() && self.highlighted_mode.is_alternative() {
+            footer_lines.push(Line::from(vec![
                 "  Press ".dim(),
                 self.cancel_binding().into(),
                 " to go back".dim(),
@@ -1606,7 +1461,6 @@ impl AuthModeWidget {
             footer_lines.push(err.red().into());
         }
 
-<<<<<<< HEAD
         let header_height = (header_lines.len() as u16).min(area.height);
         let footer_height = (footer_lines.len() as u16).min(area.height - header_height);
         let options_height = area.height - header_height - footer_height;
@@ -1620,19 +1474,6 @@ impl AuthModeWidget {
         );
 
         Paragraph::new(header_lines)
-||||||| 413492cd6c
-        Paragraph::new(lines)
-=======
-        // Keep the options and confirmation hint visible in short terminals.
-        if Paragraph::new(lines.clone())
-            .wrap(Wrap { trim: false })
-            .line_count(area.width)
-            > usize::from(area.height)
-        {
-            lines.splice(options_start..options_end, compact_options);
-        }
-        Paragraph::new(lines)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             .wrap(Wrap { trim: false })
             .render(header_area, buf);
 
@@ -1688,29 +1529,16 @@ impl AuthModeWidget {
         }
         let mut lines = vec![spans.into(), "".into()];
 
-<<<<<<< HEAD
-        let sign_in_state = self.sign_in_state.read().unwrap();
-        let auth_url = if let SignInState::ChatGptContinueInBrowser(state) = &*sign_in_state
-            && !state.auth_url.is_empty()
-        {
-            lines.push(crate::provider_auth_presentation::OPENAI_BROWSER_GUIDANCE.into());
-||||||| 413492cd6c
-        let sign_in_state = self.sign_in_state.read().unwrap();
-        let auth_url = if let SignInState::ChatGptContinueInBrowser(state) = &*sign_in_state
-            && !state.auth_url.is_empty()
-        {
-            lines.push("  If the link doesn't open automatically, open the following link to authenticate:".into());
-=======
         let auth_url = if !state.auth_url.is_empty() {
             lines.push(Line::from(vec![
-                "  If the link doesn't open automatically, press ".into(),
+                crate::provider_auth_presentation::OPENAI_BROWSER_GUIDANCE.into(),
+                " Press ".into(),
                 keys::COPY_LINK[0].into(),
-                " to copy it:".into(),
+                " to copy it.".into(),
             ]));
             if let Some(message) = self.error_message() {
                 lines.push(format!("  {message}").dim().into());
             }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             lines.push("".into());
             lines.push(Line::from(vec![
                 "  ".into(),
@@ -2021,7 +1849,6 @@ impl AuthModeWidget {
                 .bold(),
             ]),
             "".into(),
-<<<<<<< HEAD
             crate::provider_auth_presentation::api_key_guidance(
                 &self
                     .selected_api_key_option
@@ -2030,11 +1857,6 @@ impl AuthModeWidget {
                     .unwrap_or(codex_provider_auth::ApiKeyStorage::OpenAiAuth),
             )
             .into(),
-||||||| 413492cd6c
-            "  Paste or type your API key below. It will be stored locally in auth.json.".into(),
-=======
-            "  Paste or type your API key below.".into(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             "".into(),
         ];
         if let Some(env_var) = state.prepopulated_env_var.as_ref() {
@@ -2739,7 +2561,6 @@ impl StepStateProvider for AuthModeWidget {
             | SignInState::ChatGptContinueInBrowser(_)
             | SignInState::ChatGptDeviceCode(_)
             | SignInState::ChatGptSuccessMessage
-<<<<<<< HEAD
             | SignInState::ClaudeAuthMethodChoice { .. }
             | SignInState::ClaudeManagedTokenEntry(_)
             | SignInState::ClaudeManagedTokenSaving
@@ -2755,18 +2576,11 @@ impl StepStateProvider for AuthModeWidget {
             SignInState::ChatGptSuccess
             | SignInState::ApiKeyConfigured { .. }
             | SignInState::ClaudeAccountConfigured { .. } => StepState::InProgress,
-            SignInState::Complete => StepState::Complete,
-||||||| 413492cd6c
-            | SignInState::ChatGptSuccessMessage => StepState::InProgress,
-            SignInState::ChatGptSuccess | SignInState::ApiKeyConfigured => StepState::Complete,
-=======
-            | SignInState::Bedrock(_)
-            | SignInState::Gcp(_) => StepState::InProgress,
-            SignInState::ChatGptSuccess
-            | SignInState::ApiKeyConfigured
-            | SignInState::BedrockConfigured
-            | SignInState::GcpConfigured => StepState::Complete,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            SignInState::Bedrock(_) | SignInState::Gcp(_) => StepState::InProgress,
+            // Upstream's cloud wizards finish onboarding once their provider is configured.
+            SignInState::Complete | SignInState::BedrockConfigured | SignInState::GcpConfigured => {
+                StepState::Complete
+            }
         }
     }
 }
@@ -2799,7 +2613,6 @@ impl WidgetRef for AuthModeWidget {
             SignInState::ApiKeyConfigured { .. } => {
                 self.render_api_key_configured(area, buf);
             }
-<<<<<<< HEAD
             SignInState::ClaudeAuthMethodChoice { highlighted } => {
                 self.render_claude_method_choice(area, buf, *highlighted);
             }
@@ -2841,8 +2654,6 @@ impl WidgetRef for AuthModeWidget {
                 self.render_named_account_state(area, buf, &sign_in_state);
             }
             SignInState::Complete => {}
-||||||| 413492cd6c
-=======
             SignInState::Bedrock(state) => {
                 state.render(area, buf, self.error_message());
             }
@@ -2859,7 +2670,6 @@ impl WidgetRef for AuthModeWidget {
                     .wrap(Wrap { trim: false })
                     .render(area, buf);
             }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 }
@@ -2917,11 +2727,6 @@ pub(crate) mod tests {
         "originator=codex_cli_rs"
     );
 
-<<<<<<< HEAD
-    pub(crate) async fn widget_forced_chatgpt() -> (AuthModeWidget, TempDir) {
-||||||| 413492cd6c
-    async fn widget_forced_chatgpt() -> (AuthModeWidget, TempDir) {
-=======
     #[test]
     fn opens_login_browser_for_local_app_servers() -> color_eyre::Result<()> {
         let endpoint = RemoteAppServerEndpoint::UnixSocket {
@@ -2994,8 +2799,7 @@ pub(crate) mod tests {
         ));
     }
 
-    pub(super) async fn widget_forced_chatgpt() -> (AuthModeWidget, TempDir) {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    pub(crate) async fn widget_forced_chatgpt() -> (AuthModeWidget, TempDir) {
         let codex_home = TempDir::new().unwrap();
         let codex_home_path = codex_home.path().to_path_buf();
         let config = ConfigBuilder::default()
@@ -3003,7 +2807,6 @@ pub(crate) mod tests {
             .build()
             .await
             .unwrap();
-<<<<<<< HEAD
         let provider_status_host = ProviderStatusHost::from_config(
             &config,
             crate::provider_status_host::ProviderAccountMetadata::default(),
@@ -3014,12 +2817,7 @@ pub(crate) mod tests {
         )));
         let (provider_auth_action_tx, _provider_auth_action_rx) =
             tokio::sync::mpsc::unbounded_channel();
-        let auth_route_config = config.auth_route_config();
-||||||| 413492cd6c
-        let auth_route_config = config.auth_route_config();
-=======
         let mut auth_config = config.auth_config();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let client = InProcessAppServerClient::start(InProcessClientStartArgs {
             required_human_approval: true,
             arg0_paths: Arg0DispatchPaths::default(),
@@ -3053,12 +2851,8 @@ pub(crate) mod tests {
         })
         .await
         .unwrap();
-<<<<<<< HEAD
         let (claude_event_tx, _claude_event_rx) = tokio::sync::mpsc::unbounded_channel();
-||||||| 413492cd6c
-=======
         auth_config.forced_login_method = Some(ForcedLoginMethod::Chatgpt);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let widget = AuthModeWidget {
             request_frame: FrameRequester::test_dummy(),
             highlighted_mode: SignInOption::ChatGpt,
@@ -3066,27 +2860,17 @@ pub(crate) mod tests {
             error: Arc::new(RwLock::new(None)),
             sign_in_state: Arc::new(RwLock::new(SignInState::PickMode)),
             login_status: LoginStatus::NotAuthenticated,
-<<<<<<< HEAD
             replace_provider_with_openai_on_login: true,
-||||||| 413492cd6c
-=======
             app_server_target: crate::AppServerTarget::Embedded,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             app_server_request_handle: AppServerRequestHandle::InProcess(client.request_handle()),
-<<<<<<< HEAD
-            forced_login_method: Some(ForcedLoginMethod::Chatgpt),
             api_key_provider_id: "openai".to_string(),
             api_key_provider_name: "OpenAI".to_string(),
             api_key_env_var: None,
             api_key_provider_options: Vec::new(),
             selected_api_key_option: None,
-||||||| 413492cd6c
-            forced_login_method: Some(ForcedLoginMethod::Chatgpt),
-=======
             auth_config,
             bedrock_setup_enabled: false,
             gcp_setup_enabled: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             animations_enabled: true,
             animations_suppressed: std::cell::Cell::new(false),
             codex_home: codex_home_path,
@@ -3140,7 +2924,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn provider_key_picker_shows_codex_account_and_provider_keys() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.forced_login_method = None;
+        widget.auth_config.forced_login_method = None;
         widget.highlighted_mode = SignInOption::ProviderApiKey(0);
         widget.api_key_provider_options = vec![
             api_key_option("openai", "OpenAI", "OPENAI_API_KEY"),
@@ -3220,7 +3004,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn provider_key_picker_scrolls_to_the_highlighted_provider_in_a_short_terminal() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.forced_login_method = None;
+        widget.auth_config.forced_login_method = None;
         widget.api_key_provider_options = vec![
             api_key_option("anthropic", "Anthropic", "ANTHROPIC_API_KEY"),
             api_key_option("ambient", "Ambient", "AMBIENT_API_KEY"),
@@ -3254,7 +3038,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn provider_picker_shows_position_when_rows_exceed_the_window() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.forced_login_method = None;
+        widget.auth_config.forced_login_method = None;
         widget.highlighted_mode = SignInOption::ProviderApiKey(0);
         widget.api_key_provider_options = vec![
             api_key_option("openai", "OpenAI", "OPENAI_API_KEY"),
@@ -3301,7 +3085,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn forced_api_policy_rejects_device_code_selection() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.forced_login_method = Some(ForcedLoginMethod::Api);
+        widget.auth_config.forced_login_method = Some(ForcedLoginMethod::Api);
         widget.highlighted_mode = SignInOption::DeviceCode;
         widget.api_key_provider_options = vec![api_key_option("zai", "Z.AI", "ZAI_API_KEY")];
 
@@ -3477,7 +3261,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn api_key_row_begins_setup_for_the_selected_provider() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.forced_login_method = Some(ForcedLoginMethod::Api);
+        widget.auth_config.forced_login_method = Some(ForcedLoginMethod::Api);
         let option = api_key_option("zai", "Z.AI", "ZAI_API_KEY");
         widget.api_key_provider_options = vec![option.clone()];
         widget.selected_api_key_option = Some(option);
@@ -3516,7 +3300,7 @@ pub(crate) mod tests {
     async fn issue1571_forced_api_with_corbanu_plan_offers_the_wallet_row() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
         // As OnboardingScreen::new builds the widget for that config.
-        widget.forced_login_method = Some(ForcedLoginMethod::Api);
+        widget.auth_config.forced_login_method = Some(ForcedLoginMethod::Api);
         widget.api_key_provider_id =
             codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID.to_string();
         widget.api_key_provider_name = "Corbanu Plan".to_string();
@@ -3583,7 +3367,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn issue1571_forced_api_with_a_key_provider_keeps_the_key_prompt() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.forced_login_method = Some(ForcedLoginMethod::Api);
+        widget.auth_config.forced_login_method = Some(ForcedLoginMethod::Api);
         let option = api_key_option("zai", "Z.AI", "ZAI_API_KEY");
         widget.api_key_provider_id = "zai".to_string();
         widget.api_key_provider_name = "Z.AI".to_string();
@@ -3609,7 +3393,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn provider_api_key_save_is_single_flight() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.forced_login_method = None;
+        widget.auth_config.forced_login_method = None;
         widget.api_key_provider_options =
             vec![api_key_option("deepseek", "DeepSeek", "DEEPSEEK_API_KEY")];
         assert!(widget.select_provider_api_key_option(/*index*/ 0));
@@ -3663,7 +3447,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn explicit_noninteractive_provider_option_records_the_replacement() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.forced_login_method = None;
+        widget.auth_config.forced_login_method = None;
         let option = catalog_sign_in_options(
             &widget.provider_status_host,
             &widget.api_key_provider_options,
@@ -3700,7 +3484,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn local_runtime_rows_say_not_checked() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.forced_login_method = None;
+        widget.auth_config.forced_login_method = None;
         let option = catalog_sign_in_options(
             &widget.provider_status_host,
             &widget.api_key_provider_options,
@@ -3777,7 +3561,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn anthropic_account_opens_recommended_method_choice_and_cancel_is_inert() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.forced_login_method = None;
+        widget.auth_config.forced_login_method = None;
         widget.api_key_provider_options = vec![api_key_option(
             codex_model_provider_info::ANTHROPIC_PROVIDER_ID,
             "Anthropic",

@@ -17,7 +17,7 @@ use crate::provider_named_accounts::AddAccountMethod;
 const CANARY: &str = "sk-ant-oat01-pf84-s04-onboarding-canary";
 
 fn configure_claude(widget: &mut AuthModeWidget) -> usize {
-    widget.forced_login_method = None;
+    widget.auth_config.forced_login_method = None;
     widget.provider_status_host.update_account_metadata(
         crate::provider_status_host::ProviderAccountMetadata {
             claude: codex_provider_auth::ClaudeCredentialMetadata::Configured {
