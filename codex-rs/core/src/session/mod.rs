@@ -2927,20 +2927,20 @@ impl Session {
             .map(Some)
     }
 
-    /// #945: the policy marker the open approval prompt `approval_id` was
-    /// shown under; `None` when no such prompt is open.
+    /// Take an open prompt once, with its offered answers and policy marker.
+    /// Validation and persistence must use this same prompt (#2213, #945).
     #[expect(
         clippy::await_holding_invalid_type,
         reason = "active turn reads must stay consistent with the matching turn state"
     )]
-    pub(crate) async fn pending_approval_shown_under(
+    pub(crate) async fn take_pending_approval(
         &self,
         approval_id: &str,
-    ) -> Option<Option<(u64, u64)>> {
+    ) -> Option<crate::state::PendingApproval> {
         let active = self.active_turn.lock().await;
         let active = active.as_ref()?;
-        let ts = active.turn_state.lock().await;
-        ts.pending_approval_shown_under(approval_id)
+        let mut ts = active.turn_state.lock().await;
+        ts.remove_pending_approval(approval_id)
     }
 
     pub(crate) async fn turn_context_for_sub_id(&self, sub_id: &str) -> Option<Arc<TurnContext>> {
@@ -3125,26 +3125,6 @@ impl Session {
         //  command-level approvals use `call_id`.
         // `approval_id` is only present for subcommand callbacks (execve intercept)
         let effective_approval_id = approval_id.clone().unwrap_or_else(|| call_id.clone());
-        // Add the tx_approve callback to the map before sending the request.
-        let (tx_approve, rx_approve) = oneshot::channel();
-        let prev_entry = {
-            let mut active = self.active_turn.lock().await;
-            match active.as_mut() {
-                Some(at) => {
-                    let mut ts = at.turn_state.lock().await;
-                    ts.insert_pending_approval(
-                        effective_approval_id.clone(),
-                        tx_approve,
-                        self.services.authority_marker(),
-                    )
-                }
-                None => None,
-            }
-        };
-        if prev_entry.is_some() {
-            warn!("Overwriting existing pending approval for call_id: {effective_approval_id}");
-        }
-
         let parsed_cmd = parse_command(&command);
         let proposed_network_policy_amendments = network_approval_context.as_ref().map(|context| {
             vec![
@@ -3166,6 +3146,27 @@ impl Session {
                 additional_permissions.as_ref(),
             )
         });
+        // Add the tx_approve callback to the map before sending the request.
+        let (tx_approve, rx_approve) = oneshot::channel();
+        let prev_entry = {
+            let mut active = self.active_turn.lock().await;
+            match active.as_mut() {
+                Some(at) => {
+                    let mut ts = at.turn_state.lock().await;
+                    ts.insert_pending_approval(
+                        effective_approval_id.clone(),
+                        tx_approve,
+                        self.services.authority_marker(),
+                        available_decisions.clone(),
+                    )
+                }
+                None => None,
+            }
+        };
+        if prev_entry.is_some() {
+            warn!("Overwriting existing pending approval for call_id: {effective_approval_id}");
+        }
+
         let plugin_attribution = plugin_attribution_override
             .or_else(|| turn_context.plugin_attribution_for_command(&command, &cwd));
         let (plugin_id, script_path) = plugin_attribution
@@ -3233,6 +3234,8 @@ impl Session {
                         approval_id.clone(),
                         tx_approve,
                         self.services.authority_marker(),
+                        // Patch prompts offer once or session approval for these files.
+                        vec![ReviewDecision::Approved, ReviewDecision::ApprovedForSession],
                     )
                 }
                 None => None,
@@ -3970,24 +3973,11 @@ impl Session {
         }
     }
 
-    #[expect(
-        clippy::await_holding_invalid_type,
-        reason = "active turn checks and turn state updates must remain atomic"
-    )]
     pub async fn notify_approval(&self, approval_id: &str, decision: ReviewDecision) {
-        let entry = {
-            let mut active = self.active_turn.lock().await;
-            match active.as_mut() {
-                Some(at) => {
-                    let mut ts = at.turn_state.lock().await;
-                    ts.remove_pending_approval(approval_id)
-                }
-                None => None,
-            }
-        };
-        match entry {
-            Some(tx_approve) => {
-                tx_approve.send(decision).ok();
+        match self.take_pending_approval(approval_id).await {
+            Some(pending) => {
+                let decision = pending.constrain_decision(decision);
+                pending.tx.send(decision).ok();
             }
             None => {
                 warn!("No pending approval found for call_id: {approval_id}");
@@ -5721,6 +5711,10 @@ mod account_switch_tests;
 #[cfg(test)]
 #[path = "home_access_session_tests.rs"]
 mod home_access_session_tests;
+
+#[cfg(test)]
+#[path = "approval_options_tests.rs"]
+mod approval_options_tests;
 
 #[cfg(test)]
 #[path = "stale_approval_tests.rs"]

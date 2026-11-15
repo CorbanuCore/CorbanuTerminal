@@ -1,5 +1,8 @@
 #![allow(clippy::unwrap_used)]
 
+#[path = "approval_options.rs"]
+mod approval_options;
+
 use anyhow::Context;
 use anyhow::Result;
 use codex_config::types::ApprovalsReviewer;
@@ -3258,8 +3261,7 @@ async fn approving_fallback_rule_for_compound_command_works() -> Result<()> {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn denying_network_policy_amendment_persists_policy_and_skips_future_network_prompt()
--> Result<()> {
+async fn issue_2213_unoffered_network_deny_rule_is_not_saved_and_prompts_again() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
@@ -3419,7 +3421,7 @@ allow_local_binding = true
     wait_for_completion(&test).await;
 
     let policy_path = test.home.path().join("rules").join("default.rules");
-    let policy_contents = fs::read_to_string(&policy_path)?;
+    let policy_contents = fs::read_to_string(&policy_path).unwrap_or_default();
     let expected_rule = format!(
         r#"network_rule(host="{}", protocol="{}", decision="deny", justification="Deny {} access to {}")"#,
         deny_network_amendment.host,
@@ -3438,10 +3440,10 @@ allow_local_binding = true
         deny_network_amendment.host
     );
     assert!(
-        policy_contents.contains(&expected_rule),
-        "unexpected policy contents: {policy_contents}"
+        !policy_contents.contains(&expected_rule),
+        "unoffered rule was saved: {policy_contents}"
     );
-    assert!(first_results.requests().iter().any(|request| {
+    assert!(!first_results.requests().iter().any(|request| {
         request.body_contains_text(&format!(
             "Denied network rule saved in execpolicy (denylist): {}",
             deny_network_amendment.host
@@ -3493,6 +3495,7 @@ allow_local_binding = true
     .await?;
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let mut network_prompted_again = false;
     loop {
         let remaining = deadline
             .checked_duration_since(std::time::Instant::now())
@@ -3510,19 +3513,17 @@ allow_local_binding = true
         .await;
         match event {
             EventMsg::ExecApprovalRequest(approval) => {
-                if approval.command.first().map(std::string::String::as_str)
-                    == Some("network-access")
-                {
-                    panic!(
-                        "unexpected network approval request: {:?}",
-                        approval.command
-                    );
-                }
+                let decision = if approval.network_approval_context.is_some() {
+                    network_prompted_again = true;
+                    ReviewDecision::denied("no")
+                } else {
+                    ReviewDecision::Approved
+                };
                 test.codex
                     .submit(Op::ExecApproval {
                         id: approval.effective_approval_id(),
                         turn_id: None,
-                        decision: ReviewDecision::Approved,
+                        decision,
                     })
                     .await?;
             }
@@ -3531,6 +3532,10 @@ allow_local_binding = true
         }
     }
 
+    assert!(
+        network_prompted_again,
+        "an unoffered answer must not save a rule"
+    );
     let second_output = parse_result(
         &second_results
             .single_request()

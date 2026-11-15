@@ -228,6 +228,36 @@ fn denied() -> NetworkDecision {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_2213_network_rejects_unoffered_rule_without_remembering() {
+    for answer in [
+        ReviewDecision::ApprovedExecpolicyAmendment {
+            proposed_execpolicy_amendment: codex_protocol::approvals::ExecPolicyAmendment::new(
+                vec!["unoffered-command".to_string()],
+            ),
+        },
+        ReviewDecision::NetworkPolicyAmendment {
+            network_policy_amendment: NetworkPolicyAmendment {
+                host: "different.example".to_string(),
+                action: NetworkPolicyRuleAction::Allow,
+            },
+        },
+    ] {
+        let fixture = Fixture::new().await;
+        let mut decision = fixture.request();
+        let shown = fixture.prompt(&mut decision).await;
+        assert!(!shown.effective_available_decisions().contains(&answer));
+        fixture.answer(&shown, answer).await;
+        assert_eq!(decided(decision).await, denied());
+        assert!(!fixture.host_approved_for_session().await);
+        let mut retry = fixture.request();
+        let shown = fixture.prompt(&mut retry).await;
+        fixture.answer(&shown, ReviewDecision::Approved).await;
+        assert_eq!(decided(retry).await, NetworkDecision::Allow);
+        fixture.session.interrupt_task().await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn issue_945_for_session_answer_after_a_level_change_is_asked_again() {
     let fixture = Fixture::new().await;
     let mut decision = fixture.request();
