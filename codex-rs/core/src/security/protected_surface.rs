@@ -132,6 +132,9 @@ const CHILD_AGENT: &[&str] = &[
 const NO_PROTECTED_EFFECT: &[&str] = &[
     "update_plan",
     "request_user_input",
+    // Upstream (#42354): shows a message to the person without ending the turn, like the
+    // model's own reply text; nothing is read, written or sent elsewhere.
+    "send_message_to_user_async",
     "sleep",
     "curr_time",
     "get_context_remaining",

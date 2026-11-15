@@ -2645,7 +2645,7 @@ async fn multi_agent_v2_list_agents_lists_only_the_callers_agents() {
     // manager.agent_control() creates a separate registry.
     session
         .services
-        .agent_control
+        .local_agent_runtime
         .register_session_root(root.thread_id, /*current_parent_thread_id*/ None);
     let mut config = (*turn.config).clone();
     config
