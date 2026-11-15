@@ -17,6 +17,7 @@ use crate::codex_thread::ThreadConfigSnapshot;
 use crate::config::PermissionProfileSnapshot;
 use crate::thread_manager::StartThreadOptions;
 use codex_features::Feature;
+use codex_history::RolloutItem;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
 use codex_protocol::error::AgentErrorContext;
 use codex_protocol::intersect_effective_permission_profiles;
@@ -624,7 +625,7 @@ impl LocalAgentControl {
             parent
                 .session
                 .services
-                .model_client
+                .model_client()
                 .prompt_cache_key_policy()
         });
         let inherited_instructions = if let Some(parent) = inherited_parent {

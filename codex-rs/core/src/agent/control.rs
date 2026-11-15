@@ -1303,7 +1303,7 @@ impl LocalAgentControl {
         let parent_thread = state.get_thread(parent_thread_id).await?;
         parent_thread
             .session
-            .try_ensure_rollout_materialized()
+            .try_ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
             .await
             .map_err(|err| {
                 CodexErr::Fatal(format!(
@@ -1335,7 +1335,7 @@ impl LocalAgentControl {
         }
         child_thread
             .session
-            .try_ensure_rollout_materialized()
+            .try_ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
             .await
             .map_err(|err| {
                 CodexErr::Fatal(format!(
