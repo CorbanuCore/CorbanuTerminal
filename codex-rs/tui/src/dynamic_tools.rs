@@ -485,7 +485,6 @@ async fn execute_inner(
                 return Err("title must not be empty".to_string());
             }
             let source_thread = read_thread(&handle, &params.thread_id).await?;
-            refuse_resume_under_security_level(&params.thread_id)?;
             if source_thread.ephemeral {
                 return Err(
                     "ephemeral tasks cannot create inspectable background tasks".to_string()
@@ -697,8 +696,8 @@ async fn execute_inner(
             validate_prompt(&arguments.prompt, MAX_INPUT_BYTES)?;
             let prompt = delegated_prompt(&params.thread_id, &arguments.prompt);
             validate_prompt(&prompt, MAX_DELEGATED_INPUT_BYTES)?;
-            let thread = read_thread(&handle, &arguments.thread_id).await?;
             refuse_resume_under_security_level(&arguments.thread_id)?;
+            let thread = read_thread(&handle, &arguments.thread_id).await?;
             let exclude_turns = thread.history_mode == ThreadHistoryMode::Paginated;
             let resumed: ThreadResumeResponse = request_with_history_fallback(
                 &handle,
