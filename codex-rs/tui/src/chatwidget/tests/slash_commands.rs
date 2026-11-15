@@ -51,7 +51,7 @@ async fn accounting_inspect_command_without_account_auth() {
         assert!(render_bottom_popup(&chat, /*width*/ 80).contains("Loading recorded requests"));
     }
     assert!(ops.try_recv().is_err());
-    chat.clear_pending_token_activity_refreshes();
+    chat.clear_accounting_inspector();
     chat.dispatch_command_with_args(SlashCommand::Usage, "weekly".into(), Vec::new());
     let cells = drain_insert_history(&mut rx);
     assert!(
@@ -1708,8 +1708,10 @@ async fn signed_out_usage_command_with_args_reports_chatgpt_login_requirement() 
                 plugins_command_enabled: true,
                 token_activity_command_enabled: false,
                 service_tier_commands_enabled: true,
+                daybreak_command_description: None,
                 goal_command_enabled: true,
-                personality_command_enabled: true,
+                voice_command_enabled: false,
+                worktrees_enabled: true,
                 allow_elevate_sandbox: true,
                 side_conversation_active: false,
             },
@@ -4408,8 +4410,10 @@ async fn cost_command_is_listed_and_runs_without_chatgpt_auth() {
             plugins_command_enabled: true,
             token_activity_command_enabled: false,
             service_tier_commands_enabled: true,
+            daybreak_command_description: None,
             goal_command_enabled: true,
-            personality_command_enabled: true,
+            voice_command_enabled: false,
+            worktrees_enabled: true,
             allow_elevate_sandbox: true,
             side_conversation_active: false,
         }
@@ -4437,7 +4441,7 @@ async fn cost_command_is_listed_and_runs_without_chatgpt_auth() {
     assert!(
         !events
             .iter()
-            .any(|event| matches!(event, AppEvent::RefreshTokenActivity { .. })),
+            .any(|event| matches!(event, AppEvent::OpenAnalytics { .. })),
         "`/cost` reads the local ledger, not the account API"
     );
     let rendered = events

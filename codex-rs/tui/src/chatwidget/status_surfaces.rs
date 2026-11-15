@@ -893,8 +893,7 @@ impl ChatWidget {
             StatusLineItem::SessionId => self.thread_id.map(|id| id.to_string()),
             StatusLineItem::FastMode => Some(
                 self.processing_tier_display_name()
-                    .unwrap_or("Standard")
-                    .to_string(),
+                    .unwrap_or_else(|| "Standard".to_string()),
             ),
             StatusLineItem::Daybreak => Some(
                 if self.daybreak_enabled && !self.side_conversation_active() {
@@ -1098,14 +1097,16 @@ impl ChatWidget {
         )
     }
 
-    fn processing_tier_display_name(&self) -> Option<&str> {
+    fn processing_tier_display_name(&self) -> Option<String> {
         let id = self.current_service_tier()?;
         self.model_catalog
-            .models
-            .iter()
-            .find(|preset| preset.model == self.current_model())
-            .and_then(|preset| preset.service_tiers.iter().find(|tier| tier.id == id))
-            .map(|tier| tier.name.as_str())
+            .with_models(|models| {
+                models
+                    .iter()
+                    .find(|preset| preset.model == self.current_model())
+                    .and_then(|preset| preset.service_tiers.iter().find(|tier| tier.id == id))
+                    .map(|tier| tier.name.clone())
+            })
             .or_else(|| {
                 (id == ServiceTier::Flex.request_value()
                     && self
@@ -1113,7 +1114,7 @@ impl ChatWidget {
                         .model_providers
                         .get(&self.config.model_provider_id)
                         .is_some_and(|provider| !provider.is_amazon_bedrock()))
-                .then_some("Flex")
+                .then(|| "Flex".to_string())
             })
     }
 

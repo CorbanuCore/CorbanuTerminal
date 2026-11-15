@@ -241,6 +241,7 @@ pub(crate) fn base_profile(containment: &ClaudeContainment) -> Result<Permission
         AbsolutePathBuf::from_absolute_path(path)
             .with_context(|| format!("`{}` is not absolute", path.display()))
     };
+    let uri = |path: &Path| absolute(path).map(|path| PathUri::from_abs_path(&path));
     let mut file_system = FileSystemSandboxPolicy::workspace_write(
         &[absolute(&containment.state_dir)?],
         /*exclude_tmpdir_env_var*/ true,
@@ -249,13 +250,13 @@ pub(crate) fn base_profile(containment: &ClaudeContainment) -> Result<Permission
     file_system.entries.extend([
         FileSystemSandboxEntry::new(
             FileSystemPath::Path {
-                path: absolute(&containment.settings_path())?,
+                path: uri(&containment.settings_path())?,
             },
             FileSystemAccessMode::Read,
         ),
         FileSystemSandboxEntry::new(
             FileSystemPath::Path {
-                path: absolute(&containment.panes_dir)?,
+                path: uri(&containment.panes_dir)?,
             },
             FileSystemAccessMode::Deny,
         ),
@@ -270,9 +271,7 @@ pub(crate) fn base_profile(containment: &ClaudeContainment) -> Result<Permission
             let path = sibling.path();
             if path != containment.state_dir {
                 file_system.entries.push(FileSystemSandboxEntry::new(
-                    FileSystemPath::Path {
-                        path: absolute(&path)?,
-                    },
+                    FileSystemPath::Path { path: uri(&path)? },
                     FileSystemAccessMode::Deny,
                 ));
             }
@@ -474,6 +473,8 @@ pub(crate) fn sandboxed(
                 managed_network: Some(ManagedNetworkSandboxContext {
                     loopback_ports: vec![bridge_port],
                     allow_local_binding: false,
+                    allow_unix_sockets: Vec::new(),
+                    dangerously_allow_all_unix_sockets: false,
                 }),
                 additional_permissions: None,
             },
@@ -483,10 +484,9 @@ pub(crate) fn sandboxed(
             environment_id: None,
             network: None,
             sandbox_policy_cwd: &cwd,
-            codex_linux_sandbox_exe: containment.linux_sandbox_exe.as_deref(),
+            sandbox_exe: containment.linux_sandbox_exe.as_deref(),
             use_legacy_landlock: false,
             windows_sandbox_level: WindowsSandboxLevel::Disabled,
-            windows_sandbox_private_desktop: false,
         })
         .map_err(|err| anyhow!("could not sandbox Claude Code: {err}"))?;
     Ok(ContainedCommand {

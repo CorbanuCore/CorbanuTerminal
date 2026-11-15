@@ -128,8 +128,8 @@ impl App {
             let effective = self.chat_widget.config_ref();
             self.config.permissions = effective.permissions.clone();
             self.config.approvals_reviewer = effective.approvals_reviewer;
-            self.runtime_approval_policy_override = Some(AskForApproval::from(
-                self.config.permissions.approval_policy.value(),
+            self.runtime_approval_policy_override = Some(RuntimeApprovalPolicyOverride::Explicit(
+                AskForApproval::from(self.config.permissions.approval_policy.value()),
             ));
             self.runtime_permission_profile_override =
                 Some(RuntimePermissionProfileOverride::from_config(&self.config));

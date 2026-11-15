@@ -978,6 +978,7 @@ impl App {
                 AdditionalContextEntry {
                     value: context,
                     kind: AdditionalContextKind::Application,
+                    name: None,
                 },
             );
             map
@@ -1634,10 +1635,13 @@ impl App {
             return;
         }
         let mut assistant_text = String::new();
-        for item in &turn.items {
+        for item in turn.item_payloads() {
             match item {
-                codex_app_server_protocol::ThreadItem::AgentMessage {
-                    id, text, phase, ..
+                codex_app_server_protocol::ThreadItemPayload::AgentMessage {
+                    id,
+                    text,
+                    phase,
+                    ..
                 } => {
                     // Core represents injected inter-agent instructions as commentary AgentMessages.
                     // They are model input rendered for context, not assistant-authored host commands.
@@ -1653,7 +1657,7 @@ impl App {
                     assistant_text.push_str(text);
                     let _ = id;
                 }
-                codex_app_server_protocol::ThreadItem::CollabAgentToolCall {
+                codex_app_server_protocol::ThreadItemPayload::CollabAgentToolCall {
                     tool: codex_app_server_protocol::CollabAgentTool::SendInput,
                     status: codex_app_server_protocol::CollabAgentToolCallStatus::Completed,
                     sender_thread_id,
@@ -1661,7 +1665,7 @@ impl App {
                     ..
                 } => self
                     .note_native_collab_assignment_dispatch(sender_thread_id, receiver_thread_ids),
-                codex_app_server_protocol::ThreadItem::SubAgentActivity {
+                codex_app_server_protocol::ThreadItemPayload::SubAgentActivity {
                     kind: codex_app_server_protocol::SubAgentActivityKind::Interacted,
                     agent_thread_id,
                     ..
@@ -6712,6 +6716,8 @@ Done."#;
             availability_nux: None,
             supported_in_api: true,
             input_modalities: codex_protocol::openai_models::default_input_modalities(),
+            available_access_programs: None,
+            model_specialty: None,
         }
     }
 

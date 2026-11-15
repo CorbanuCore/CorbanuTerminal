@@ -59,7 +59,7 @@ async fn bedrock_astra_model_and_reasoning_pickers() {
         chat.handle_key_event(KeyEvent::from(KeyCode::Char('5')));
         let advanced =
             std::iter::from_fn(|| events.try_recv().ok()).find_map(|event| match event {
-                AppEvent::OpenAdvancedReasoningPopup { model } => Some(model),
+                AppEvent::OpenAdvancedReasoningPopup { model, .. } => Some(model),
                 _ => None,
             });
         chat.open_advanced_reasoning_popup(advanced.expect("advanced reasoning popup"));

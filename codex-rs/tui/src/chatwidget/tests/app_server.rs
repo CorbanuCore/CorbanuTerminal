@@ -1644,6 +1644,9 @@ async fn live_app_server_sub_agent_activity_renders_once() {
         kind: codex_app_server_protocol::SubAgentActivityKind::Completed,
         agent_thread_id: ThreadId::new().to_string(),
         agent_path: "/root/researcher".to_string(),
+        agent_nickname: None,
+        agent_role: None,
+        task_preview: None,
     };
 
     chat.handle_server_notification(

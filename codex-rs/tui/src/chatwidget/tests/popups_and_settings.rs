@@ -4023,6 +4023,8 @@ async fn spawn_single_effort_model_creates_directly_for_troll() {
         availability_nux: None,
         supported_in_api: true,
         input_modalities: default_input_modalities(),
+        available_access_programs: None,
+        model_specialty: None,
     };
     chat.open_all_models_popup_for_purpose(
         vec![preset],
@@ -5254,7 +5256,7 @@ async fn model_reasoning_selection_popup_applies_custom_effort() {
         .collect::<Vec<_>>();
     assert_eq!(
         selected_effort_events,
-        vec![("gpt-5.5".to_string(), Some(custom_effort))]
+        vec![(Some("gpt-5.5".to_string()), Some(custom_effort))]
     );
 }
 

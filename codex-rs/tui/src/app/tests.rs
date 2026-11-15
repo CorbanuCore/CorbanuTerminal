@@ -2908,6 +2908,9 @@ async fn open_agent_picker_selects_path_backed_agent() -> Result<()> {
                 agent_path: "/root/review".to_string(),
                 model: None,
                 reasoning_effort: None,
+                agent_nickname: None,
+                agent_role: None,
+                task_preview: None,
             },
             /*started_at_ms*/ 0,
         ),
@@ -3515,7 +3518,6 @@ async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()
             config,
             parent_thread_id,
             crate::app_server_session::ResumeModelSettings::RestoreFromThread,
-            crate::app_server_session::ResumePermissionSettings::RestoreFromThread,
         )
         .await?;
     app.enqueue_primary_thread_session(started.session, started.turns)
@@ -5317,8 +5319,8 @@ async fn issue_867_kill_switch_names_a_stopped_sub_agent() -> Result<()> {
         rendered
     };
     let agent_list = |app: &mut App| {
-        app.chat_widget
-            .show_selection_view(app.agent_picker_selection_view_params(/*selected*/ None));
+        let params = app.agent_picker_selection_view_params(/*selected*/ None);
+        app.chat_widget.show_selection_view(params);
         render_bottom_popup(&app.chat_widget, /*width*/ 100)
     };
 
@@ -8275,11 +8277,13 @@ fn turn_completed_with_agent_message(
             ..test_turn(
                 turn_id,
                 status,
-                vec![ThreadItem::AgentMessage {
+                vec![ThreadItemPayload::AgentMessage {
                     id: "agent-message-1".to_string(),
                     text: message.to_string(),
                     phase: None,
                     memory_citation: None,
+                    delivery: None,
+                    questions: None,
                 }],
             )
         },
@@ -8360,12 +8364,14 @@ fn item_completed_notification(
     ServerNotification::ItemCompleted(ItemCompletedNotification {
         thread_id: thread_id.to_string(),
         turn_id: turn_id.to_string(),
-        item: ThreadItem::AgentMessage {
+        item: ThreadItem::untimed(ThreadItemPayload::AgentMessage {
             id: item_id.to_string(),
             text: message.to_string(),
             phase: None,
             memory_citation: None,
-        },
+            delivery: None,
+            questions: None,
+        }),
         completed_at_ms: 0,
     })
 }
@@ -9656,12 +9662,12 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
     local_settings.tui.alternate_screen = codex_config::types::AltScreenMode::Never;
     local_settings.tui.terminal_resize_reflow_max_rows = Some(2);
     let started = app_server
-        .resume_thread(
+        .resume_thread_with_permission_overrides(
             &local_settings,
             config.clone(),
             source_thread_id,
             crate::app_server_session::ResumeModelSettings::OverrideFromCurrentConfig,
-            crate::app_server_session::ResumePermissionSettings::OverrideFromCurrentConfig,
+            crate::resume_permissions::ResumePermissions::CURRENT_CONFIG,
         )
         .await?;
     assert!(app_server.has_older_history(source_thread_id));
@@ -10667,14 +10673,20 @@ async fn changing_cyber_model_reasoning_preserves_selected_permissions() {
         model.model_specialty = Some(MODEL_SPECIALTY_CYBER.to_string());
         app.model_catalog = Arc::new(ModelCatalog::new(vec![model]));
 
+        let mut permission_server = start_config_write_test_app_server(&app)
+            .await
+            .expect("permission test app server");
         assert!(
-            app.apply_permission_profile_selection(PermissionProfileSelection {
-                profile_id: codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY
-                    .to_string(),
-                approval_policy: Some(AskForApproval::OnRequest),
-                approvals_reviewer: Some(ApprovalsReviewer::User),
-                display_label: "Read Only".to_string(),
-            })
+            app.apply_permission_profile_selection(
+                &mut permission_server,
+                PermissionProfileSelection {
+                    profile_id: codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY
+                        .to_string(),
+                    approval_policy: Some(AskForApproval::OnRequest),
+                    approvals_reviewer: Some(ApprovalsReviewer::User),
+                    display_label: "Read Only".to_string(),
+                },
+            )
             .await
         );
 
@@ -11739,7 +11751,8 @@ fn claude_pane_text_op(text: &str) -> Op {
         service_tier: None,
         final_output_json_schema: None,
         collaboration_mode: None,
-        personality: None,
+        client_user_message_id: "test-message".to_string(),
+        turn_trigger: "user",
     }
 }
 
@@ -12084,21 +12097,19 @@ async fn thread_account_usage_reaches_status_and_resets_with_the_session() {
         feedback: app.feedback.clone(),
         is_first_run: false,
         status_account_display: app.chat_widget.status_account_display().cloned(),
-        runtime_model_provider_base_url: app
-            .chat_widget
-            .runtime_model_provider_base_url()
-            .map(str::to_string),
         initial_plan_type: app.chat_widget.current_plan_type(),
         model: Some(app.chat_widget.current_model().to_string()),
         startup_tooltip_override: None,
         status_line_invalid_items_warned: app.status_line_invalid_items_warned.clone(),
         terminal_title_invalid_items_warned: app.terminal_title_invalid_items_warned.clone(),
         session_telemetry: app.session_telemetry.clone(),
+        local_settings: crate::local_settings::LocalSettings::from(&app.config),
+        requires_openai_auth: app.chat_widget.requires_openai_auth,
     });
     app.replace_chat_widget(replacement);
     assert_eq!(totals(&app), expected);
 
-    app.reset_thread_event_state();
+    app.reset_thread_event_state().await;
     assert_eq!(totals(&app), vec![("default".to_string(), 0)]);
 }
 

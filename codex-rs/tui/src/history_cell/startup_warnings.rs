@@ -34,7 +34,11 @@ impl StartupWarningsCell {
         let mcp_servers: BTreeSet<_> = servers.into_iter().collect();
         let sign_in_servers = match failure_reason {
             Some(McpServerStartupFailureReason::ReauthenticationRequired) => mcp_servers.clone(),
-            None => BTreeSet::new(),
+            // Corbanu: the OpenAI account, not the MCP server, needs signing in again; the
+            // provider-health notice (`chatwidget/provider_health.rs`) says so, not an MCP sign-in.
+            Some(McpServerStartupFailureReason::OpenAiAccountReauthenticationRequired) | None => {
+                BTreeSet::new()
+            }
         };
         Self {
             mcp_details: mcp_servers

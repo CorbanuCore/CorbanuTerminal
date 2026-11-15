@@ -56,7 +56,7 @@ async fn resumed_initial_messages_render_history() {
     chat.handle_thread_session(configured.clone());
     assert!(
         chat.model_catalog
-            .models
+            .models()
             .iter()
             .all(|model| model.available_access_programs.is_none()),
         "access from the launch directory must not carry over to the attached project"

@@ -106,7 +106,8 @@ async fn native_manager_host_adapter_dispatches_only_from_completed_assignment_t
     ) else {
         unreachable!("helper returns ItemCompleted");
     };
-    let ThreadItem::AgentMessage { phase, .. } = &mut injected_instruction.item else {
+    let ThreadItemPayload::AgentMessage { phase, .. } = &mut injected_instruction.item.payload
+    else {
         unreachable!("helper returns AgentMessage");
     };
     *phase = Some(codex_protocol::models::MessagePhase::Commentary);
@@ -178,7 +179,7 @@ async fn native_manager_host_adapter_dispatches_only_from_completed_assignment_t
 }
 
 struct RealDispatchFixture {
-    app: App,
+    app: Box<App>,
     app_events: tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
     server: AppServerSession,
     tui: crate::tui::Tui,
@@ -307,7 +308,9 @@ supports_websockets = false
         )
         .await
         {
-            self.app.handle_app_server_event(&self.server, event).await;
+            self.app
+                .handle_app_server_event(&self.server, event.event)
+                .await;
         }
         tokio::task::yield_now().await;
         Ok(())
@@ -801,6 +804,8 @@ fn cold_restored_orc_task_is_readmitted_through_core_mailbox() -> Result<()> {
         let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 3).await?;
         let target = fixture.spawn_target("Snaga").await?;
         let root_seed = AppCommand::user_turn(
+            "user",
+            uuid::Uuid::new_v4().to_string(),
             vec![codex_app_server_protocol::UserInput::Text {
                 text: "seed the root rollout before restart".to_string(),
                 text_elements: Vec::new(),
@@ -814,7 +819,6 @@ fn cold_restored_orc_task_is_readmitted_through_core_mailbox() -> Result<()> {
             /*service_tier*/ None,
             /*final_output_json_schema*/ None,
             /*collaboration_mode*/ None,
-            fixture.app.config.personality,
         );
         fixture
             .app
@@ -855,19 +859,19 @@ fn cold_restored_orc_task_is_readmitted_through_core_mailbox() -> Result<()> {
         .await?;
         let root = restarted
             .resume_thread(
+                &crate::local_settings::LocalSettings::from(&fixture.app.config),
                 fixture.app.config.clone(),
                 fixture.root,
                 crate::app_server_session::ResumeModelSettings::RestoreFromThread,
-                crate::app_server_session::ResumePermissionSettings::RestoreFromThread,
             )
             .await?;
         fixture.app.primary_session_configured = Some(root.session);
         let restored_target = restarted
             .resume_thread(
+                &crate::local_settings::LocalSettings::from(&fixture.app.config),
                 fixture.app.config.clone(),
                 target,
                 crate::app_server_session::ResumeModelSettings::RestoreFromThread,
-                crate::app_server_session::ResumePermissionSettings::RestoreFromThread,
             )
             .await?;
         let channel = fixture.app.ensure_thread_channel(target);

@@ -292,7 +292,6 @@ fn set_config_provider_for_test_model(config: &mut Config, model: &str) {
     } else if matches!(
         trimmed,
         codex_model_provider_info::AMAZON_BEDROCK_GPT_5_5_MODEL_ID
-            | codex_model_provider_info::AMAZON_BEDROCK_GPT_5_4_MODEL_ID
     ) {
         Some((
             codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID.to_string(),
@@ -500,7 +499,7 @@ pub(crate) fn set_fast_mode_test_catalog_for_models(
     .map(Into::into)
     .collect();
 
-    Arc::make_mut(&mut chat.model_catalog).models = models;
+    chat.model_catalog.replace_models_for_test(models);
 }
 
 pub(crate) async fn make_chatwidget_manual_with_sender() -> (

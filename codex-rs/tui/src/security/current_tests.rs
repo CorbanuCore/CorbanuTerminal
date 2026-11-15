@@ -444,6 +444,7 @@ async fn sec_437_thread_settings_keep_the_aggressive_rows() {
         },
         multi_agent_mode: Default::default(),
         personality: None,
+        disabled_plugin_ids: Vec::new(),
     };
 
     // The milestone's rows: rebuilt from the projection alone.

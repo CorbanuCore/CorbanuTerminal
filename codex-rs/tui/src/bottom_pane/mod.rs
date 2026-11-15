@@ -4130,6 +4130,7 @@ mod tests {
                     },
                 ]),
             }],
+            is_blocking: true,
             auto_resolution_ms: None,
         }
     }

@@ -1095,17 +1095,21 @@ async fn issue_442_credential_templates_are_exempt() {
         verify(&config, /*rules_present*/ true, &origin),
         Vec::<String>::new()
     );
-    let matcher = codex_protocol::permissions::ReadDenyMatcher::new(
+    let matcher = codex_protocol::permissions::ReadDenyMatcher::try_new_for_local_paths(
         &config.permissions.file_system_sandbox_policy(),
         &work,
     )
+    .expect("valid deny rules")
     .expect("deny rules");
     for template in [".env.example", "app/.env.sample", ".ENV.Template"] {
-        assert!(!matcher.is_read_denied(&work.join(template)), "{template}");
+        assert!(
+            !matcher.is_local_path_read_denied(&work.join(template)),
+            "{template}"
+        );
     }
     for credential in [".env", "app/.env.local", ".envrc"] {
         assert!(
-            matcher.is_read_denied(&work.join(credential)),
+            matcher.is_local_path_read_denied(&work.join(credential)),
             "{credential}"
         );
     }

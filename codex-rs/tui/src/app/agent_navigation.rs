@@ -70,13 +70,13 @@ pub(crate) enum AgentNavigationDirection {
 }
 
 #[derive(Clone, Copy)]
-pub(super) enum AgentPickerThreadVisibility {
+pub(crate) enum AgentPickerThreadVisibility {
     Visible,
     Hidden,
 }
 
 #[derive(Debug)]
-pub(super) struct AgentPickerRefreshState {
+pub(crate) struct AgentPickerRefreshState {
     root: ThreadId,
     request_id: Uuid,
     pub(super) visibility_changed_threads: HashSet<ThreadId>,

@@ -2,6 +2,7 @@
 //! GPU and plan models): moved out of `app/tests.rs` to keep it under the 512,000-byte blob limit.
 
 use super::*;
+use pretty_assertions::assert_eq;
 
 #[tokio::test]
 async fn collab_receiver_notification_caches_result_preview() {
@@ -20,7 +21,7 @@ async fn collab_receiver_notification_caches_result_preview() {
             thread_id: ThreadId::new().to_string(),
             turn_id: "turn-1".to_string(),
             completed_at_ms: 0,
-            item: ThreadItem::CollabAgentToolCall {
+            item: ThreadItem::untimed(ThreadItemPayload::CollabAgentToolCall {
                 id: "wait-1".to_string(),
                 tool: codex_app_server_protocol::CollabAgentTool::Wait,
                 status: codex_app_server_protocol::CollabAgentToolCallStatus::Completed,
@@ -37,7 +38,7 @@ async fn collab_receiver_notification_caches_result_preview() {
                         message: Some("created animated proof card".to_string()),
                     },
                 )]),
-            },
+            }),
         }),
     )));
 
@@ -93,7 +94,7 @@ async fn native_followup_dispatch_transitions_only_the_matching_assignment() {
             thread_id: manager_thread_id.to_string(),
             turn_id: "turn-1".to_string(),
             completed_at_ms: 0,
-            item: ThreadItem::SubAgentActivity {
+            item: ThreadItem::untimed(ThreadItemPayload::SubAgentActivity {
                 id: call_id.to_string(),
                 kind: codex_app_server_protocol::SubAgentActivityKind::Interacted,
                 agent_thread_id: receiver_thread_id.to_string(),
@@ -101,7 +102,9 @@ async fn native_followup_dispatch_transitions_only_the_matching_assignment() {
                 agent_nickname: None,
                 agent_role: None,
                 task_preview: None,
-            },
+                model: None,
+                reasoning_effort: None,
+            }),
         })
     };
 
@@ -719,7 +722,10 @@ async fn delete_current_thread_routes_active_claude_pane_to_external_cleanup() {
     ))
     .await
     .expect("embedded app server");
-    let control = Box::pin(app.delete_current_thread(&mut app_server)).await;
+    let mut tui = crate::tui::test_support::make_test_tui().expect("test tui");
+    let control = Box::pin(app.delete_current_thread(&mut tui, &mut app_server))
+        .await
+        .expect("delete current thread");
 
     assert!(matches!(
         control,
@@ -1958,16 +1964,16 @@ async fn restored_spawn_resume_uses_saved_runtime_instead_of_parent_runtime() {
     );
     assert_eq!(
         permission_settings,
-        crate::app_server_session::ResumePermissionSettings::RestoreFromThread
+        crate::resume_permissions::ResumePermissions::default()
     );
 
     app.harness_overrides.sandbox_mode = Some(SandboxMode::WorkspaceWrite);
     app.harness_overrides.approval_policy =
         Some(codex_protocol::protocol::AskForApproval::OnRequest);
     let (_, _, permission_settings) = app.native_spawn_resume_request(Some(&saved_runtime));
-    assert_eq!(
-        permission_settings,
-        crate::app_server_session::ResumePermissionSettings::OverrideFromCurrentConfig
+    assert!(
+        permission_settings.profile && permission_settings.approval_policy,
+        "{permission_settings:?}"
     );
 }
 
@@ -3066,7 +3072,7 @@ async fn stale_receiver_running_status_does_not_hide_completed_orc_report() {
             thread_id: troll_thread_id.to_string(),
             turn_id: "turn-wait".to_string(),
             completed_at_ms: 0,
-            item: ThreadItem::CollabAgentToolCall {
+            item: ThreadItem::untimed(ThreadItemPayload::CollabAgentToolCall {
                 id: "wait-1".to_string(),
                 tool: codex_app_server_protocol::CollabAgentTool::Wait,
                 status: codex_app_server_protocol::CollabAgentToolCallStatus::Completed,
@@ -3083,7 +3089,7 @@ async fn stale_receiver_running_status_does_not_hide_completed_orc_report() {
                         message: None,
                     },
                 )]),
-            },
+            }),
         }),
     )));
 
@@ -3633,7 +3639,7 @@ async fn claude_orc_completion_is_reported_to_parent_troll_context() {
 }
 
 pub(super) async fn make_child_report_auto_claude_pane_app() -> (
-    App,
+    Box<App>,
     tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
     String,
     String,
@@ -5284,7 +5290,7 @@ async fn issue_507_kill_switch_from_another_process_stops_claude_panes_once() {
     assert!(text.contains("Nothing restarts by itself here"), "{text}");
     assert_eq!(
         app.kill_switch_held_claude_tasks,
-        vec![(troll_pane_id.clone(), "held task".to_string())]
+        vec![(troll_pane_id, "held task".to_string())]
     );
     // It goes with that pane's next turn (#602's delivery, tested there).
 }
@@ -5633,7 +5639,7 @@ async fn issue_507_waiting_claude_task_survives_a_refused_turn() {
         .interrupt_turn(&orc_pane_id)
         .expect("stop the busy turn");
     app.on_claude_pane_turn_finished(orc_pane_id.clone(), Err("interrupted".to_string()));
-    app.submit_claude_pane_task(orc_pane_id.clone(), "pf507 next".to_string());
+    app.submit_claude_pane_task(orc_pane_id, "pf507 next".to_string());
     assert!(app.kill_switch_held_claude_tasks.is_empty());
     let prompt = &app.claude_panes.prepared_prompts[1].1;
     assert!(prompt.contains("pf507 waiting"), "{prompt}");
@@ -5771,7 +5777,7 @@ async fn issue_507_report_of_a_stopped_claude_turn_starts_no_parent_turn() {
     issue_507_switch(&app, HumanRevocation::KillSwitchOff);
     drop(running);
     let output = interrupted_claude_turn(&app);
-    app.on_claude_pane_turn_finished(orc_pane_id.clone(), Ok(output));
+    app.on_claude_pane_turn_finished(orc_pane_id, Ok(output));
 
     assert!(
         drain_claude_pane_task_events(&mut app_event_rx).is_empty(),
@@ -6515,6 +6521,7 @@ async fn native_spawn_registration_persists_started_session_model_provider_pair(
         },
         turns: Vec::new(),
         blocks_direct_input: false,
+        task_tools_available: false,
     };
     app.register_spawn_agent_pane(
         troll_thread_id,
