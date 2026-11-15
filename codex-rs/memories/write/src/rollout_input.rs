@@ -122,9 +122,13 @@ pub(crate) fn serialize_tiered_input(
             | RolloutItem::SecurityRiskScore(_)
             | RolloutItem::TokenUsageRecord(_)
             | RolloutItem::RetainedContext(_)
+            | RolloutItem::SourceOrigin(_)
             | RolloutItem::EventMsg(_) => None,
         };
         let Some(mut item) = item else { continue };
+        // #578: local provenance (fragment sources and producer) is not part
+        // of the memory text.
+        item.clear_local_provenance();
         if let ResponseItem::Message { content, .. } = &mut item {
             for part in content {
                 match part {
