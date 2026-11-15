@@ -14,7 +14,9 @@ pub(crate) fn uses_server_owned_fresh_bootstrap(
     !matches!(target, AppServerTarget::Embedded)
         && matches!(
             selection,
-            SessionSelection::StartFresh | SessionSelection::Exit
+            SessionSelection::StartFresh
+                | SessionSelection::ResumePanesOnly { .. }
+                | SessionSelection::Exit
         )
         && loader_overrides.user_config_profile.is_none()
 }

@@ -231,15 +231,9 @@ async fn thread_title_falls_back_to_thread_id_when_unnamed() {
 #[tokio::test]
 async fn status_line_setup_popup_hardcoded_only_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-<<<<<<< HEAD
     // Keep the snapshot independent of the host's temporary-directory layout.
     cache_project_root(&mut chat, "tmp");
-    chat.config.tui_status_line = Some(vec![
-||||||| 413492cd6c
-    chat.config.tui_status_line = Some(vec![
-=======
     chat.local_settings.tui.status_line = Some(vec![
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         "project-name".to_string(),
         "git-branch".to_string(),
         "thread-title".to_string(),
@@ -471,13 +465,9 @@ async fn status_line_setup_popup_rate_limits_snapshot() {
 #[tokio::test]
 async fn status_line_setup_popup_mixed_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-<<<<<<< HEAD
     cache_project_root(&mut chat, "tmp");
-||||||| 413492cd6c
-=======
     chat.has_chatgpt_account = true;
     chat.set_feature_enabled(Feature::CliDaybreak, /*enabled*/ true);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     chat.status_line_branch = Some("feature/mixed-preview".to_string());
     chat.thread_name = Some("Mixed preview thread".to_string());
     chat.set_daybreak_enabled(/*enabled*/ true);
@@ -532,13 +522,9 @@ async fn terminal_title_setup_popup_hardcoded_only_snapshot() {
 #[tokio::test]
 async fn terminal_title_setup_popup_mixed_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-<<<<<<< HEAD
     cache_project_root(&mut chat, "tmp");
-||||||| 413492cd6c
-=======
     chat.has_chatgpt_account = true;
     chat.set_feature_enabled(Feature::CliDaybreak, /*enabled*/ true);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     chat.thread_name = Some("Mixed preview thread".to_string());
     chat.set_daybreak_enabled(/*enabled*/ true);
     chat.local_settings.tui.terminal_title = Some(vec![

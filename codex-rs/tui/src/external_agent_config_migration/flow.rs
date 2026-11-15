@@ -256,7 +256,6 @@ pub(crate) async fn handle_external_agent_config_migration_prompt(
     tui: &mut tui::Tui,
     app_server: &mut AppServerSession,
     cwd: Option<&Path>,
-    tui_events: &mut tokio::sync::mpsc::UnboundedReceiver<tui::TuiEvent>,
 ) -> Result<ExternalAgentConfigMigrationFlowOutcome, String> {
     if app_server.external_agent_config_import_in_progress() {
         return Err(EXTERNAL_AGENT_CONFIG_IMPORT_IN_PROGRESS_MESSAGE.to_string());
@@ -305,7 +304,7 @@ pub(crate) async fn handle_external_agent_config_migration_prompt(
             .iter()
             .map(|detected| detected.source)
             .collect::<Vec<_>>();
-        match run_external_agent_config_source_prompt(tui, &sources, tui_events).await {
+        match run_external_agent_config_source_prompt(tui, &sources).await {
             Ok(Some(source)) => source,
             Ok(None) => return Ok(ExternalAgentConfigMigrationFlowOutcome::Cancelled),
             Err(err) => return Ok(ExternalAgentConfigMigrationFlowOutcome::TerminalError(err)),
@@ -328,7 +327,6 @@ pub(crate) async fn handle_external_agent_config_migration_prompt(
             &detected_items,
             &selected_items,
             error.as_deref(),
-            tui_events,
         )
         .await
         {

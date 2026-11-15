@@ -23,11 +23,17 @@ pub struct DisconnectInfo {
 
 impl App {
     pub(super) fn exit_info(&self, exit_reason: ExitReason) -> AppExitInfo {
-        let thread_id = self.chat_widget.thread_id().or(self.primary_thread_id);
+        // Prefer the thread on screen, then the primary session (#1412), then a thread whose
+        // saved pane layout can still be resumed.
+        let exit_resumable_thread = self.exit_resumable_thread();
+        let thread_id = exit_resumable_thread
+            .as_ref()
+            .map(|thread| thread.thread_id)
+            .or_else(|| self.chat_widget.thread_id().or(self.primary_thread_id));
         let disconnect_info = thread_id.and_then(|_| {
             let command = match &self.app_server_target {
                 AppServerTarget::Embedded => return None,
-                AppServerTarget::LocalDaemon { .. } => vec!["codex".to_string()],
+                AppServerTarget::LocalDaemon { .. } => vec!["corbanu".to_string()],
                 AppServerTarget::Remote { endpoint } => {
                     let address = match endpoint {
                         RemoteAppServerEndpoint::WebSocket { websocket_url, .. } => {
@@ -44,7 +50,7 @@ impl App {
                             format!("unix://{}", socket_path.display())
                         }
                     };
-                    vec!["codex".to_string(), "--remote".to_string(), address]
+                    vec!["corbanu".to_string(), "--remote".to_string(), address]
                 }
             };
             let stop_hint = self
@@ -60,16 +66,28 @@ impl App {
         AppExitInfo {
             token_usage: self.token_usage(),
             thread_id,
-            resume_hint: resumable_thread(
-                thread_id,
-                self.chat_widget.thread_name(),
-                self.chat_widget.rollout_path().as_deref(),
-            ),
+            resume_hint: exit_resumable_thread.or_else(|| {
+                pane_layout_resumable_thread(self.config.codex_home.as_ref(), thread_id)
+            }),
             disconnect_info,
             update_action: self.pending_update_action,
             exit_reason,
         }
     }
+}
+
+/// A thread with a saved pane layout can be resumed even without a rollout file.
+pub(super) fn pane_layout_resumable_thread(
+    codex_home: &Path,
+    thread_id: Option<ThreadId>,
+) -> Option<ResumableThread> {
+    let thread_id = thread_id?;
+    let thread_id_text = thread_id.to_string();
+    crate::claude_panes::load_pane_layout(codex_home, Some(&thread_id_text))?;
+    Some(ResumableThread {
+        thread_id,
+        thread_name: None,
+    })
 }
 
 impl AppExitInfo {
@@ -88,7 +106,7 @@ impl AppExitInfo {
         {
             let turn_interrupted = matches!(self.exit_reason, ExitReason::TurnInterrupted);
             let message = match self.exit_reason {
-                ExitReason::UserRequested => {
+                ExitReason::UserRequested | ExitReason::Restart => {
                     "Disconnected from this task. Any running work continues."
                 }
                 ExitReason::Fatal(_) => "Disconnected from this task. Work may still be running.",
@@ -131,12 +149,12 @@ impl AppExitInfo {
             lines.push("To continue this session, run:".to_string());
             lines.push(format!(
                 "  {}",
-                color_command(format!("codex resume {}", thread.thread_id)),
+                color_command(format!("corbanu resume {}", thread.thread_id)),
             ));
             if let Some(thread_name) = thread.thread_name.filter(|name| !name.is_empty()) {
                 lines.push(format!(
                     "Or run {} and select {}.",
-                    color_command("codex resume".to_string()),
+                    color_command("corbanu resume".to_string()),
                     color_command(thread_name),
                 ));
             }

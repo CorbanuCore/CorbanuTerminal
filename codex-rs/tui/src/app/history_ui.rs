@@ -79,12 +79,9 @@ impl App {
         // A committed cell can unblock a settled /usage card that was waiting
         // behind a transient active cell or a provisional stream tail.
         self.chat_widget.request_pending_usage_output_insertion();
-<<<<<<< HEAD
         // History insertions frequently arrive from background AppEvents while the operator is
         // idle. Flush queued terminal lines immediately instead of waiting for another keypress.
         tui.frame_requester().schedule_frame();
-||||||| 413492cd6c
-=======
         if is_session_header {
             self.merge_startup_warnings(tui, &history_cell::StartupWarningsCell::default());
         }
@@ -270,7 +267,6 @@ impl App {
         }
         self.pending_thread_usage_history_refresh = false;
         Ok(())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(super) fn pending_usage_output_insertion_blocked(&self) -> bool {
@@ -336,20 +332,14 @@ impl App {
     fn clear_ui_header_cell_with_version(
         &self,
         version: &'static str,
-<<<<<<< HEAD
-||||||| 413492cd6c
-    ) -> Vec<Line<'static>> {
-=======
-    ) -> Vec<Line<'static>> {
+    ) -> history_cell::SessionHeaderHistoryCell {
         self.clear_ui_header_cell(version)
-            .display_lines_for_mode(width, self.chat_widget.history_render_mode())
     }
 
     /// Share the source-backed header between retained drawing and legacy terminal insertion.
     fn clear_ui_header_cell(
         &self,
         version: &'static str,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     ) -> history_cell::SessionHeaderHistoryCell {
         history_cell::SessionHeaderHistoryCell::new(
             self.chat_widget.model_display_name().to_string(),
@@ -366,8 +356,13 @@ impl App {
         width: u16,
         version: &'static str,
     ) -> Vec<Line<'static>> {
-        self.clear_ui_header_cell_with_version(version)
-            .display_lines(width)
+        self.clear_ui_header_cell(version)
+            .display_lines_for_mode(width, self.chat_widget.history_render_mode())
+    }
+
+    #[cfg(test)]
+    pub(super) fn clear_ui_header_lines(&self, width: u16) -> Vec<Line<'static>> {
+        self.clear_ui_header_lines_with_version(width, CODEX_CLI_VERSION)
     }
 
     pub(super) fn start_cleared_display(&mut self, tui: &mut tui::Tui) {
@@ -379,7 +374,19 @@ impl App {
     }
 
     pub(super) fn queue_clear_ui_header(&mut self, tui: &mut tui::Tui) {
-<<<<<<< HEAD
+        if tui.is_owned_screen() {
+            if !self.transcript_cells.iter().any(|cell| {
+                cell.as_any().is::<history_cell::SessionInfoCell>()
+                    || cell.as_any().is::<history_cell::SessionHeaderHistoryCell>()
+            }) {
+                let header: Arc<dyn HistoryCell> =
+                    Arc::new(self.clear_ui_header_cell(CODEX_CLI_VERSION));
+                self.transcript_cells.insert(/*index*/ 0, header);
+            }
+            tui.frame_requester().schedule_frame();
+            return;
+        }
+        // Corbanu: the header is a history cell so a model change can refresh it in place.
         let header = self.clear_ui_header_cell_with_version(CODEX_CLI_VERSION);
         self.insert_history_cell(tui, Box::new(header));
     }
@@ -400,38 +407,6 @@ impl App {
         });
         if changed != Some(true) {
             return Ok(());
-||||||| 413492cd6c
-        let width = self
-            .chat_widget
-            .history_wrap_width(tui.terminal.last_known_screen_size.width);
-        let header_lines = self.clear_ui_header_lines(width);
-        if !header_lines.is_empty() {
-            tui.insert_history_lines(header_lines);
-            self.has_emitted_history_lines = true;
-=======
-        if tui.is_owned_screen() {
-            if !self.transcript_cells.iter().any(|cell| {
-                cell.as_any().is::<history_cell::SessionInfoCell>()
-                    || cell.as_any().is::<history_cell::SessionHeaderHistoryCell>()
-            }) {
-                let header: Arc<dyn HistoryCell> =
-                    Arc::new(self.clear_ui_header_cell(CODEX_CLI_VERSION));
-                self.transcript_cells.insert(/*index*/ 0, header);
-            }
-            tui.frame_requester().schedule_frame();
-            return;
-        }
-        let width = self
-            .chat_widget
-            .history_wrap_width(tui.terminal.last_known_screen_size.width);
-        let header_lines = self.clear_ui_header_lines(width);
-        if !header_lines.is_empty() {
-            tui.insert_history_lines_with_wrap_policy(
-                header_lines,
-                self.history_line_wrap_policy(),
-            );
-            self.has_emitted_history_lines = true;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
 
         if let Some(Overlay::Transcript(overlay)) = &mut self.overlay {

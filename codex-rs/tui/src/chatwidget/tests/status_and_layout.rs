@@ -2367,7 +2367,6 @@ async fn ctrl_c_interrupt_pauses_active_goal_turn() {
 }
 
 #[tokio::test]
-<<<<<<< HEAD
 async fn ctrl_c_interrupts_agent_turn_even_if_bottom_pane_running_state_is_stale() {
     let (mut chat, _rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     handle_turn_started(&mut chat, "turn-1");
@@ -2379,8 +2378,9 @@ async fn ctrl_c_interrupts_agent_turn_even_if_bottom_pane_running_state_is_stale
         Ok(Op::Interrupt) => {}
         other => panic!("expected Op::Interrupt, got {other:?}"),
     }
-||||||| 413492cd6c
-=======
+}
+
+#[tokio::test]
 async fn program_status_stays_working_when_input_acknowledges_an_active_goal() {
     use crate::terminal_program_status::ProgramStatus;
 
@@ -2409,7 +2409,6 @@ async fn program_status_stays_working_when_input_acknowledges_an_active_goal() {
             ProgramStatus::Idle,
         ]
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]
@@ -3162,7 +3161,6 @@ async fn status_line_invalid_items_warn_once() {
 }
 
 #[tokio::test]
-<<<<<<< HEAD
 async fn default_status_line_includes_product_brand() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
 
@@ -3231,7 +3229,8 @@ async fn status_line_tps_updates_from_completed_turn_average() {
 
     let status_line = status_line_text(&chat).expect("status line should render after TPS sample");
     assert!(status_line.contains("Corbanu Terminal"));
-    assert!(status_line.ends_with("TPS: 20.0 tok/s"));
+    // Reasoning is a subset of the 30 output tokens: 30 / 2 seconds.
+    assert!(status_line.ends_with("TPS: 15.0 tok/s"));
 }
 
 #[tokio::test]
@@ -3281,9 +3280,11 @@ async fn status_line_tps_updates_when_usage_arrives_after_completion() {
     let status_line =
         status_line_text(&chat).expect("status line should render after late usage update");
     assert!(status_line.contains("Corbanu Terminal"));
-    assert!(status_line.ends_with("TPS: 20.0 tok/s"));
-||||||| 413492cd6c
-=======
+    // Reasoning is a subset of the 30 output tokens: 30 / 2 seconds.
+    assert!(status_line.ends_with("TPS: 15.0 tok/s"));
+}
+
+#[tokio::test]
 async fn status_line_hostname_renders_current_machine_hostname() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.thread_id = Some(ThreadId::new());
@@ -3296,7 +3297,6 @@ async fn status_line_hostname_renders_current_machine_hostname() {
         drain_insert_history(&mut rx).is_empty(),
         "hostname should be accepted as a status line item"
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]
@@ -4306,21 +4306,11 @@ async fn completed_turn_clears_visible_running_hook() {
 }
 
 #[tokio::test]
-<<<<<<< HEAD
-async fn status_line_fast_mode_renders_on_and_off() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
-    chat.config.tui_status_line = Some(vec!["fast-mode".to_string()]);
-||||||| 413492cd6c
-async fn status_line_fast_mode_renders_on_and_off() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    chat.config.tui_status_line = Some(vec!["fast-mode".to_string()]);
-=======
 async fn status_line_processing_tier_updates_with_selection() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
     set_fast_mode_test_catalog(&mut chat);
     chat.local_settings.tui.status_line = Some(vec!["fast-mode".to_string()]);
     chat.local_settings.tui.terminal_title = Some(vec!["fast-mode".to_string()]);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     chat.refresh_status_line();
     assert_eq!(status_line_text(&chat), Some("Standard".to_string()));
@@ -4434,21 +4424,7 @@ async fn status_line_model_with_reasoning_includes_fast_for_fast_capable_models(
     ]);
     chat.set_reasoning_effort(Some(ReasoningEffortConfig::XHigh));
     chat.set_service_tier(Some(ServiceTier::Fast.request_value().to_string()));
-<<<<<<< HEAD
-    set_chatgpt_auth(&mut chat);
-    set_fast_mode_test_catalog(&mut chat);
-    assert!(get_available_model(&chat, "gpt-5.4").supports_fast_mode());
-    chat.refresh_status_line();
     let test_cwd = test_cwd_display();
-||||||| 413492cd6c
-    set_chatgpt_auth(&mut chat);
-    set_fast_mode_test_catalog(&mut chat);
-    assert!(get_available_model(&chat, "gpt-5.4").supports_fast_mode());
-    chat.refresh_status_line();
-    let test_cwd = test_path_display("/tmp/project");
-=======
-    let test_cwd = test_path_display("/tmp/project");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     assert_eq!(
         status_line_text(&chat),

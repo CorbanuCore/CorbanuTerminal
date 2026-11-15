@@ -116,6 +116,7 @@ impl App {
             }
             SessionSelection::Exit
             | SessionSelection::StartFresh
+            | SessionSelection::ResumePanesOnly { .. }
             | SessionSelection::AgentsOverview => {
                 self.refresh_in_memory_config_from_disk_best_effort("closing the session picker")
                     .await;
