@@ -33,12 +33,8 @@ use crate::render::Insets;
 use crate::render::RectExt as _;
 use crate::render::renderable::ColumnRenderable;
 use crate::render::renderable::Renderable;
-<<<<<<< HEAD
 use crate::selection_list::list_position_label;
-||||||| 413492cd6c
-=======
 use crate::wrapping::word_wrap_lines;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 use super::CancellationEvent;
 use super::bottom_pane_view::BottomPaneView;
@@ -147,19 +143,17 @@ pub(crate) struct SelectionToggle {
     pub action: Box<SelectionToggleAction>,
 }
 
-<<<<<<< HEAD
 pub(crate) struct SelectionShortcutAction {
     pub key: KeyBinding,
     pub action: SelectionAction,
     pub dismiss_on_select: bool,
-||||||| 413492cd6c
-=======
+}
+
 /// A displayed toggle value with the number of its save actions still in flight.
 #[derive(Clone, Copy)]
 pub(crate) struct SelectionToggleState {
     pub is_on: bool,
     pub pending_actions: usize,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 /// Callback invoked whenever the highlighted item changes (arrow keys, search
@@ -180,6 +174,8 @@ pub(crate) type OnCancelCallback = Option<Box<dyn Fn(&AppEventSender) + Send + S
 /// be accepted and are skipped by keyboard navigation.
 #[derive(Default)]
 pub(crate) struct SelectionItem {
+    /// Stable identity for retaining focus when rows or provider tabs change.
+    pub selection_id: Option<String>,
     pub name: String,
     /// Indent beneath the preceding parent, using this letter instead of a numeric shortcut.
     pub child_label: Option<char>,
@@ -198,16 +194,12 @@ pub(crate) struct SelectionItem {
     pub is_current: bool,
     pub is_disabled: bool,
     pub actions: Vec<SelectionAction>,
-<<<<<<< HEAD
     pub selected_shortcuts: Vec<SelectionShortcutAction>,
-||||||| 413492cd6c
-=======
     pub secondary_action: Option<SelectionSecondaryAction>,
     /// Footer hint shown while this row is selected.
     pub footer_hint: Option<Line<'static>>,
     /// Footer hint shown instead while on-demand search is active.
     pub search_footer_hint: Option<Line<'static>>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub dismiss_on_select: bool,
     /// Require an explicit accept key after a direct shortcut highlights this sensitive item.
     pub require_explicit_confirmation: bool,
@@ -250,19 +242,15 @@ pub(crate) struct SelectionViewParams {
     pub tabs: Vec<SelectionTab>,
     pub initial_tab_id: Option<String>,
     pub is_searchable: bool,
-<<<<<<< HEAD
     /// Whether bare number keys immediately select and accept numbered rows.
     /// Disable this for destructive, billable, or security-sensitive confirmations so an
     /// unrelated digit cannot commit the action without explicit navigation and Enter.
     pub allow_number_shortcuts: bool,
-||||||| 413492cd6c
-=======
     /// Optional non-text key that can toggle a row while printable keys edit the search query.
     pub search_toggle_key: Option<KeyBinding>,
     pub search_mode: SearchMode,
     /// Use ordinal digits in the gutter; when false, use only each row's explicit shortcut.
     pub auto_number_shortcuts: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub search_placeholder: Option<String>,
     pub col_width_mode: ColumnWidthMode,
     pub row_display: SelectionRowDisplay,
@@ -327,14 +315,10 @@ impl Default for SelectionViewParams {
             tabs: Vec::new(),
             initial_tab_id: None,
             is_searchable: false,
-<<<<<<< HEAD
             allow_number_shortcuts: true,
-||||||| 413492cd6c
-=======
             search_toggle_key: None,
             search_mode: SearchMode::default(),
             auto_number_shortcuts: true,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             search_placeholder: None,
             col_width_mode: ColumnWidthMode::AutoVisible,
             row_display: SelectionRowDisplay::Wrapped,
@@ -389,15 +373,11 @@ pub(crate) struct ListSelectionView {
     pub(super) dismiss_after_child_accept: bool,
     pub(super) app_event_tx: AppEventSender,
     is_searchable: bool,
-<<<<<<< HEAD
     allow_number_shortcuts: bool,
-||||||| 413492cd6c
-=======
     search_toggle_key: Option<KeyBinding>,
     search_mode: SearchMode,
     search_active: bool,
     auto_number_shortcuts: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     search_query: String,
     search_placeholder: Option<String>,
     col_width_mode: ColumnWidthMode,
@@ -551,18 +531,12 @@ impl ListSelectionView {
             dismiss_after_child_accept: false,
             app_event_tx,
             is_searchable: params.is_searchable,
-<<<<<<< HEAD
             allow_number_shortcuts: params.allow_number_shortcuts,
-            search_query: String::new(),
-||||||| 413492cd6c
-            search_query: String::new(),
-=======
             search_toggle_key: params.search_toggle_key,
             search_mode: params.search_mode,
             search_active,
             search_query,
             auto_number_shortcuts: params.auto_number_shortcuts,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             search_placeholder: if params.is_searchable {
                 params.search_placeholder
             } else {
@@ -1084,10 +1058,6 @@ impl ListSelectionView {
         }
     }
 
-<<<<<<< HEAD
-||||||| 413492cd6c
-    #[cfg(test)]
-=======
     fn select_shortcut(&mut self, actual_idx: usize) {
         let previously_selected = self.selected_actual_idx();
         self.state.selected_idx = Some(actual_idx);
@@ -1123,7 +1093,10 @@ impl ListSelectionView {
         self.edit_search_query(String::clear);
     }
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    pub(super) fn dismiss_when_child_accepts(&mut self) {
+        self.dismiss_after_child_accept = true;
+    }
+
     pub(crate) fn set_search_query(&mut self, query: String) {
         let selected_actual_idx = self.selected_actual_idx();
         let changes_item_source =
@@ -1374,22 +1347,12 @@ impl BottomPaneView for ListSelectionView {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-<<<<<<< HEAD
         if self.completion.is_some() {
             return;
         }
-        // Searchable lists reserve printable characters for query input. This
-        // keeps vim-style plain j/k/h/l useful in non-search lists without
-        // making those letters impossible to type into a filter.
-||||||| 413492cd6c
-        // Searchable lists reserve printable characters for query input. This
-        // keeps vim-style plain j/k/h/l useful in non-search lists without
-        // making those letters impossible to type into a filter.
-=======
         // An active search reserves printable keys for the query. On-demand search leaves the
         // configured list bindings untouched until its shortcut is pressed.
         let search_field_visible = self.search_field_visible();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let allow_plain_char_navigation =
             !search_field_visible || !is_plain_text_key_event(key_event);
         let allow_plain_char_actions =
@@ -1533,20 +1496,10 @@ impl BottomPaneView for ListSelectionView {
                     self.select_shortcut(idx);
                     return;
                 }
-<<<<<<< HEAD
                 if self.allow_number_shortcuts
-                    && let Some(idx) = c
-                        .to_digit(10)
-||||||| 413492cd6c
-                if let Some(idx) = c
-                    .to_digit(10)
-                    .map(|d| d as usize)
-                    .and_then(|number| self.actual_idx_for_enabled_number(number))
-=======
-                if self.auto_number_shortcuts
+                    && self.auto_number_shortcuts
                     && let Some(idx) = c
                         .to_digit(/*radix*/ 10)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                         .map(|d| d as usize)
                         .and_then(|number| self.actual_idx_for_enabled_number(number))
                 {
@@ -1588,12 +1541,14 @@ impl BottomPaneView for ListSelectionView {
         self.view_id
     }
 
-    fn search_query(&self) -> Option<&str> {
-        self.is_searchable.then_some(self.search_query.as_str())
-    }
-
     fn selected_index(&self) -> Option<usize> {
         self.selected_actual_idx()
+    }
+
+    fn selected_item_id(&self) -> Option<&str> {
+        self.selected_actual_idx()
+            .and_then(|index| self.active_items().get(index))
+            .and_then(|item| item.selection_id.as_deref())
     }
 
     fn selection_toggle_states(&self) -> Vec<Option<SelectionToggleState>> {

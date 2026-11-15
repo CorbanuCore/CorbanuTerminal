@@ -161,21 +161,18 @@ pub(crate) enum StatusLineItem {
     /// Latest checklist task progress from `update_plan` (if available).
     TaskProgress,
 
-<<<<<<< HEAD
     /// Product branding.
     Brand,
 
     /// Unified generated-token throughput estimate.
     Tps,
-||||||| 413492cd6c
-=======
+
     /// Named config profile selected for this invocation.
     Profile,
 
     /// Model provider ID for the active thread.
     #[strum(to_string = "provider", serialize = "model-provider")]
     Provider,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl StatusLineItem {

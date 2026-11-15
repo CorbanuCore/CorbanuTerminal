@@ -126,49 +126,6 @@ pub(crate) fn thread_to_transcript_cells(
     cells
 }
 
-<<<<<<< HEAD
-fn fallback_transcript_cell(item: &ThreadItem) -> Option<PlainHistoryCell> {
-    let lines = match item {
-        ThreadItem::HookPrompt { fragments, .. } => fragments
-            .iter()
-            .map(|fragment| {
-                vec![
-                    "hook prompt: ".dim(),
-                    fragment.text.trim().to_string().into(),
-                ]
-                .into()
-            })
-            .collect::<Vec<_>>(),
-        ThreadItem::CommandExecution {
-            id,
-            command,
-            cwd,
-            process_id,
-            status,
-            aggregated_output,
-            exit_code,
-            duration_ms,
-            ..
-||||||| 413492cd6c
-fn fallback_transcript_cell(item: &ThreadItem) -> Option<PlainHistoryCell> {
-    let lines = match item {
-        ThreadItem::HookPrompt { fragments, .. } => fragments
-            .iter()
-            .map(|fragment| {
-                vec![
-                    "hook prompt: ".dim(),
-                    fragment.text.trim().to_string().into(),
-                ]
-                .into()
-            })
-            .collect::<Vec<_>>(),
-        ThreadItem::CommandExecution {
-            command,
-            status,
-            aggregated_output,
-            exit_code,
-            ..
-=======
 pub(crate) fn thread_items_to_transcript_cells(
     thread_id: Option<ThreadId>,
     cwd: &AbsolutePathBuf,
@@ -279,45 +236,11 @@ fn item_to_cells(
             id,
             client_id,
             content,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         } => {
-<<<<<<< HEAD
-            let mut lines: Vec<Line<'static>> =
-                vec![vec!["$ ".dim(), command.clone().into()].into()];
-            lines.push(
-                format!(
-                    "job: pid={} · call={} · cwd={} · output=thread transcript",
-                    process_id.as_deref().unwrap_or("not reported"),
-                    id,
-                    cwd.as_str()
-                )
-                .dim()
-                .into(),
-            );
-            lines.push(
-                format!(
-                    "status: {status:?}{}{}",
-                    exit_code
-                        .map(|code| format!(" · exit {code}"))
-                        .unwrap_or_default(),
-                    duration_ms
-                        .map(|duration| format!(" · {duration}ms"))
-                        .unwrap_or_default()
-||||||| 413492cd6c
-            let mut lines: Vec<Line<'static>> =
-                vec![vec!["$ ".dim(), command.clone().into()].into()];
-            lines.push(
-                format!(
-                    "status: {status:?}{}",
-                    exit_code
-                        .map(|code| format!(" · exit {code}"))
-                        .unwrap_or_default()
-=======
             if content.iter().any(|input| {
                 matches!(
                     input,
                     UserInput::Audio { .. } | UserInput::LocalAudio { .. }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 )
             }) {
                 tracing::warn!(
