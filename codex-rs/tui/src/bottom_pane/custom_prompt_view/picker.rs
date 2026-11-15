@@ -98,12 +98,24 @@ impl CustomPromptView {
         } else {
             " back"
         };
-        let hint = Line::from(vec![
-            key_hint::plain(KeyCode::Enter).into(),
-            format!(" {} · ", self.submit_label).dim(),
-            key_hint::plain(KeyCode::Esc).into(),
-            cancel_label.dim(),
-        ]);
+        let hint = if self.submit_mode == CustomPromptSubmitMode::CtrlD {
+            // Ctrl+D submits; Enter inserts a newline.
+            Line::from(vec![
+                key_hint::ctrl(KeyCode::Char('d')).into(),
+                format!(" {} · ", self.submit_label).dim(),
+                key_hint::plain(KeyCode::Enter).into(),
+                " newline · ".dim(),
+                key_hint::plain(KeyCode::Esc).into(),
+                cancel_label.dim(),
+            ])
+        } else {
+            Line::from(vec![
+                key_hint::plain(KeyCode::Enter).into(),
+                format!(" {} · ", self.submit_label).dim(),
+                key_hint::plain(KeyCode::Esc).into(),
+                cancel_label.dim(),
+            ])
+        };
         let vim_mode = self.textarea.vim_mode_indicator_span().map(Line::from);
         Paragraph::new(hint.clone()).render(areas.footer, buf);
         if let Some(mode) = vim_mode
