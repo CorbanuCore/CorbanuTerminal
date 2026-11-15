@@ -185,9 +185,34 @@ fn issue_2315_service_acl_matches_interactive_inheritance() {
                 }
                 fs::create_dir(root.join("nested")).unwrap();
                 fs::write(root.join("nested/file"), b"ordinary").unwrap();
+                apply(
+                    &root.join("protected"),
+                    SetupMode::Full,
+                    DaclInheritance::Protected,
+                );
+                fs::write(root.join("protected/file"), b"protected child").unwrap();
+                let explicit_sid = super::sid_bytes_to_psid(&sid).unwrap();
+                for relative in ["explicit", "protected/explicit"] {
+                    let file = root.join(relative);
+                    fs::write(&file, b"explicit child").unwrap();
+                    unsafe {
+                        crate::ensure_allow_write_aces(&file, &[explicit_sid]).unwrap();
+                    }
+                }
+                unsafe {
+                    windows_sys::Win32::Foundation::LocalFree(explicit_sid);
+                }
                 apply(&root, mode, inheritance);
             }
-            for relative in ["", "nested", "nested/file"] {
+            for relative in [
+                "",
+                "nested",
+                "nested/file",
+                "explicit",
+                "protected",
+                "protected/file",
+                "protected/explicit",
+            ] {
                 assert_eq!(
                     acl_and_control(&temp.path().join("service").join(relative)),
                     acl_and_control(&temp.path().join("full").join(relative)),
