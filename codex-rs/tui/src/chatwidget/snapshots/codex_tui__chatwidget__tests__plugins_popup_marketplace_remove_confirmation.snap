@@ -3,9 +3,9 @@ source: tui/src/chatwidget/tests/popups_and_settings.rs
 expression: confirmation
 ---
                 Plugins
-› Ask Codex to  Remove Repo Marketplace marketplace?
+› Ask Corbanu   Remove Repo Marketplace marketplace?
                 This removes the configured marketplace from Corbanu Terminal.
-  GPT-5.6-Sol
+  Z.AI GLM 5.
 
               › 1. Remove marketplace  Remove this marketplace from the available
                                        plugin list

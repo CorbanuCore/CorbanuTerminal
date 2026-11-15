@@ -2,7 +2,7 @@
 source: tui/src/chatwidget/tests/slash_commands.rs
 expression: popup
 ---
-  Rename thread
+  Rename pane
 
 › Current project title
 
