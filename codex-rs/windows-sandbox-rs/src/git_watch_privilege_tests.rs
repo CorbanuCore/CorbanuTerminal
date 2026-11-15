@@ -27,7 +27,8 @@ fn remove_process_privilege() {
     // SAFETY: this child owns its process token; the opened handle is closed
     // before checking the adjustment result. No other tests run in this child.
     unsafe {
-        let mut token = 0;
+        // Upstream's windows-sys makes HANDLE a pointer (main's is an integer).
+        let mut token: windows_sys::Win32::Foundation::HANDLE = std::ptr::null_mut();
         assert_ne!(
             OpenProcessToken(
                 GetCurrentProcess(),
