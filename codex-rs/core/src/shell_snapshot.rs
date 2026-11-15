@@ -1,3 +1,6 @@
+#[path = "shell_snapshot_filter.rs"]
+mod filter;
+
 use std::io::ErrorKind;
 use std::path::Path;
 use std::process::Stdio;
@@ -222,8 +225,9 @@ async fn write_shell_snapshot(
     let shell = get_shell(shell_type, /*path*/ None)
         .with_context(|| format!("No available shell for {shell_type:?}"))?;
 
-    let raw_snapshot = capture_snapshot(&shell, cwd, removed_env_vars).await?;
-    let snapshot = strip_snapshot_preamble(&raw_snapshot)?;
+    let raw_snapshot =
+        zeroize::Zeroizing::new(capture_snapshot(&shell, cwd, removed_env_vars).await?);
+    let snapshot = filter::filter_snapshot(&raw_snapshot, removed_env_vars)?;
 
     if let Some(parent) = output_path.parent() {
         let parent_display = parent.display();
@@ -253,6 +257,7 @@ async fn capture_snapshot(
         ShellType::PowerShell => powershell_snapshot_script(removed_env_vars),
         ShellType::Cmd => bail!("Shell snapshotting is not yet supported for {shell_type:?}"),
     };
+    let script = filter::capture_script(script, shell_type);
     run_script_with_timeout(
         shell,
         &script,
@@ -333,8 +338,8 @@ async fn run_script_with_timeout(
 
     if !output.status.success() {
         let status = output.status;
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("Snapshot command exited with status {status}: {stderr}");
+        // Startup diagnostics may contain the very credentials being captured.
+        bail!("Snapshot command exited with status {status}");
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
@@ -675,6 +680,10 @@ fn snapshot_session_id_from_file_name(file_name: &str) -> Option<&str> {
         _ => None,
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "shell_snapshot_alias_tests.rs"]
+mod alias_tests;
 
 #[cfg(test)]
 #[path = "shell_snapshot_tests.rs"]
