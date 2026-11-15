@@ -12,7 +12,6 @@ use codex_protocol::permissions::FileSystemSpecialPath;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use pretty_assertions::assert_eq;
 
-<<<<<<< HEAD
 #[tokio::test]
 async fn permission_confirmation_deferral_preserves_payload_queue_and_running_state() {
     for running in [false, true] {
@@ -85,8 +84,8 @@ async fn permission_confirmation_deferral_preserves_payload_queue_and_running_st
         assert_eq!(chat.queued_user_message_texts(), vec!["queued"]);
         assert!(ops.try_recv().is_err());
     }
-||||||| 413492cd6c
-=======
+}
+
 #[cfg(target_os = "windows")]
 #[tokio::test]
 async fn remote_windows_agent_permission_uses_server_selection() {
@@ -105,10 +104,10 @@ async fn remote_windows_agent_permission_uses_server_selection() {
         /*return_to_permissions*/ false,
     );
     actions[0](&chat.app_event_tx);
-    assert!(matches!(events.try_recv(), Ok(AppEvent::CodexOp(_))));
+    // Corbanu routes a preset through the app's security-level gate.
     assert!(matches!(
         events.try_recv(),
-        Ok(AppEvent::UpdateAskForApprovalPolicy(_))
+        Ok(AppEvent::SelectPermissionPreset(_))
     ));
 }
 
@@ -454,7 +453,6 @@ async fn permission_discovery_failure_can_retry_and_empty_catalog_keeps_current_
     );
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
     assert!(rx.try_recv().is_err());
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn app_server_workspace_write_profile(extra_root: AbsolutePathBuf) -> PermissionProfile {
@@ -886,18 +884,14 @@ async fn approvals_selection_popup_snapshot_windows_degraded_sandbox() {
         popup.contains("non-admin sandbox"),
         "expected degraded sandbox note in approvals popup: {popup}"
     );
-<<<<<<< HEAD
     assert!(
         popup.contains("reading your files"),
         "expected non-admin sandbox risk in approvals popup: {popup}"
     );
-||||||| 413492cd6c
-=======
     assert!(chat.builtin_command_flags().allow_elevate_sandbox);
     chat.windows_sandbox_config.requirements =
         Some(Some(vec![WindowsSandboxSetupMode::Unelevated]));
     assert!(!chat.builtin_command_flags().allow_elevate_sandbox);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]
@@ -1944,91 +1938,11 @@ async fn permissions_selection_sends_reviewer_in_confirmation_request() {
     );
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
 
-<<<<<<< HEAD
     assert_permission_preset_request(
         &mut rx,
         BUILT_IN_PERMISSION_PROFILE_WORKSPACE,
         AskForApproval::OnRequest,
         ApprovalsReviewer::AutoReview,
-||||||| 413492cd6c
-    let op = std::iter::from_fn(|| rx.try_recv().ok())
-        .find_map(|event| match event {
-            AppEvent::CodexOp(op @ Op::OverrideTurnContext { .. }) => Some(op),
-            _ => None,
-        })
-        .expect("expected OverrideTurnContext op");
-
-    assert_eq!(
-        op,
-        Op::OverrideTurnContext {
-            cwd: None,
-            approval_policy: Some(AskForApproval::OnRequest),
-            approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
-            permission_profile: Some(PermissionProfile::workspace_write()),
-            active_permission_profile: Some(ActivePermissionProfile::new(
-                BUILT_IN_PERMISSION_PROFILE_WORKSPACE,
-            )),
-            windows_sandbox_level: None,
-            model: None,
-            effort: None,
-            summary: None,
-            service_tier: None,
-            collaboration_mode: None,
-            personality: None,
-        }
-    );
-
-    let active_permission_profile_update = std::iter::from_fn(|| rx.try_recv().ok())
-        .find_map(|event| match event {
-            AppEvent::UpdateActivePermissionProfile(active_permission_profile) => {
-                Some(active_permission_profile)
-            }
-            _ => None,
-        })
-        .expect("expected UpdateActivePermissionProfile event");
-
-    assert_eq!(
-        active_permission_profile_update,
-        ActivePermissionProfile::new(BUILT_IN_PERMISSION_PROFILE_WORKSPACE)
-=======
-    let op = std::iter::from_fn(|| rx.try_recv().ok())
-        .find_map(|event| match event {
-            AppEvent::CodexOp(op @ Op::OverrideTurnContext { .. }) => Some(op),
-            _ => None,
-        })
-        .expect("expected OverrideTurnContext op");
-
-    assert_eq!(
-        op,
-        Op::OverrideTurnContext {
-            cwd: None,
-            approval_policy: Some(AskForApproval::OnRequest),
-            approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
-            permission_profile: Some(PermissionProfile::workspace_write()),
-            active_permission_profile: Some(ActivePermissionProfile::new(
-                BUILT_IN_PERMISSION_PROFILE_WORKSPACE,
-            )),
-            model: None,
-            effort: None,
-            summary: None,
-            service_tier: None,
-            collaboration_mode: None,
-        }
-    );
-
-    let active_permission_profile_update = std::iter::from_fn(|| rx.try_recv().ok())
-        .find_map(|event| match event {
-            AppEvent::UpdateActivePermissionProfile(active_permission_profile) => {
-                Some(active_permission_profile)
-            }
-            _ => None,
-        })
-        .expect("expected UpdateActivePermissionProfile event");
-
-    assert_eq!(
-        active_permission_profile_update,
-        ActivePermissionProfile::new(BUILT_IN_PERMISSION_PROFILE_WORKSPACE)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     );
     assert_eq!(chat.config.approvals_reviewer, ApprovalsReviewer::User);
 }
@@ -2131,7 +2045,7 @@ fn assert_permission_preset_request(
 }
 
 /// #1506 item 2 (D262): the startup prompt for project folders that appeared
-/// while a non-admin sandbox command ran.
+/// while a Windows sandbox command ran.
 #[tokio::test]
 async fn planted_project_metadata_prompt_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
@@ -2169,4 +2083,80 @@ async fn windows_sandbox_unelevated_policy_hides_admin_setup() {
         rx.try_recv(),
         Ok(AppEvent::BeginWindowsSandboxLegacySetup { .. })
     ));
+}
+
+/// D424 (#1775): the startup prompt asks about a recorded `.git` below the
+/// working folder too (git runs anywhere), not only one at or above it;
+/// recorded `.codex`/`.agents` folders below it stay out (Core doesn't load
+/// them from there), and so does a `.git` elsewhere.
+#[tokio::test]
+async fn planted_prompt_covers_git_below_the_working_folder() {
+    let (_codex_home, mut config) = test_config().await;
+    // A real folder, canonical, so the result doesn't depend on the host.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let base = dunce::canonicalize(dir.path()).expect("canonical");
+    let cwd = base.join("project");
+    std::fs::create_dir_all(&cwd).expect("create project");
+    config.cwd = cwd.abs();
+    let other = base.join("other");
+    let planted = vec![
+        cwd.join(".git"),
+        cwd.join("vendor").join(".git"),
+        cwd.join("vendor").join(".codex"),
+        other.join(".git"),
+    ];
+    assert_eq!(
+        crate::chatwidget::windows_sandbox_prompts::planted_to_ask_about(planted, &config),
+        vec![cwd.join(".git"), cwd.join("vendor").join(".git")]
+    );
+}
+
+/// D420 (#1775): the same prompt for repositories that appeared or whose
+/// config or hooks changed, with what changed.
+#[tokio::test]
+async fn planted_repo_changes_prompt_snapshot() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.open_planted_prompt(
+        vec![PathBuf::from("project/.git")],
+        vec![
+            codex_config::PlantedGitChange {
+                path: PathBuf::from("project/vendor/.git"),
+                changes: vec!["new repository".to_string()],
+            },
+            codex_config::PlantedGitChange {
+                path: PathBuf::from("scratch"),
+                changes: vec![
+                    "hooks/post-checkout added".to_string(),
+                    "config changed".to_string(),
+                ],
+            },
+        ],
+        std::collections::BTreeMap::new(),
+    );
+    assert_chatwidget_snapshot!(
+        "planted_repo_changes_prompt",
+        render_bottom_popup(&chat, /*width*/ 100)
+    );
+}
+
+/// D332 (#1682): the same prompt for a `.git` that appeared or changed, alone
+/// and next to project folders.
+#[tokio::test]
+async fn planted_git_prompt_snapshot() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.open_planted_project_metadata_prompt(vec![PathBuf::from("project/.git")]);
+    assert_chatwidget_snapshot!(
+        "planted_git_prompt",
+        render_bottom_popup(&chat, /*width*/ 100)
+    );
+
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.open_planted_project_metadata_prompt(vec![
+        PathBuf::from("project/.codex"),
+        PathBuf::from("project/.git"),
+    ]);
+    assert_chatwidget_snapshot!(
+        "planted_git_and_project_folder_prompt",
+        render_bottom_popup(&chat, /*width*/ 100)
+    );
 }
