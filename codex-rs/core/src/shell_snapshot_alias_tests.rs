@@ -81,6 +81,24 @@ SAFE_LOCAL='not exported'
             .output()?;
         assert!(replay.status.success(), "replay failed for {kind:?}");
         assert_eq!(String::from_utf8(replay.stdout)?, "ordinary value");
+
+        if kind == ShellType::Zsh {
+            // A zsh scalar can hold NULs, including apparently valid frame tags.
+            // Reject it in the shell rather than trusting the Rust parser to
+            // distinguish data from protocol delimiters.
+            std::fs::write(
+                home.path().join(".zshrc"),
+                format!("{startup}\nBINARY_VALUE=$'x\\0value\\0GH_TOKEN\\0ordinary\\0'\n"),
+            )?;
+            let rejected = std::process::Command::new(executable)
+                .args(["-c", &script])
+                .env_clear()
+                .env("PATH", "/usr/bin:/bin")
+                .env("HOME", home.path())
+                .env("ZDOTDIR", home.path())
+                .output()?;
+            assert!(!rejected.status.success(), "NUL-bearing capture must fail");
+        }
     }
     Ok(())
 }

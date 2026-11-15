@@ -44,9 +44,14 @@ pub(super) fn capture_script(script: String, shell_type: ShellType) -> String {
         ":"
     };
     // zsh includes a NUL in its default IFS. It is shell plumbing, not a
-    // credential; every other embedded NUL fails the framing check closed.
+    // credential. Reject other embedded NULs before they can forge frames.
     let skip_default_ifs = if shell_type == ShellType::Zsh {
         r#"[[ "$__corbanu_snapshot_name" == IFS && "$IFS" == $' \t\n\0' ]] && continue"#
+    } else {
+        ":"
+    };
+    let reject_nul = if shell_type == ShellType::Zsh {
+        r#"[[ "${(P)__corbanu_snapshot_name}" == *$'\0'* ]] && exit 1"#
     } else {
         ":"
     };
@@ -57,6 +62,7 @@ pub(super) fn capture_script(script: String, shell_type: ShellType) -> String {
   esac
   {skip_default_ifs}
   {lookup}
+  {reject_nul}
   printf '\0value\0%s\0%s\0' "$__corbanu_snapshot_name" "{value}"
 done
 "#
@@ -81,7 +87,7 @@ done
         // NUL-delimited environment entries preserve literal newlines and "=".
         // Parsing export -p line by line can mistake a value for another export.
         return format!(
-            "{prefix}\nprintf '# exports\\n'\nprintf '\\0environment\\0'\ncommand env -0 || exit 1\nprintf '\\0'\n"
+            "{prefix}\nprintf '\\0environment\\0'\ncommand env -0 || exit 1\nprintf '\\0'\n"
         );
     }
     let skip_readonly = if shell_type == ShellType::Zsh {
@@ -91,13 +97,13 @@ done
     };
     format!(
         r#"{prefix}
-printf '# exports\n'
 for __corbanu_snapshot_name in $({exports}); do
   case "$__corbanu_snapshot_name" in
     ""|[0-9]*|*[!A-Za-z0-9_]*) continue ;;
   esac
   {lookup}
   {skip_readonly}
+  {reject_nul}
   printf '\0export\0%s\0%s\0' "$__corbanu_snapshot_name" "{value}"
   {declaration}
   printf '\0'
@@ -106,8 +112,10 @@ done
     )
 }
 
-/// Apply both the process registry (including vault-resolved values) and a
-/// capture-local registry. Never arm or add startup values to the process gate:
+/// Apply a capture-local registry and the process registry when armed. The
+/// latter includes registered vault values; enabling secret_output_gate normally
+/// disables snapshots, but another session in the process may have armed it.
+/// Never arm or add startup values to the process gate:
 /// snapshot hygiene must not alter what commands receive or other sinks mask.
 pub(super) fn filter_snapshot(raw: &str, removed: &[String]) -> Result<String> {
     filter_with_gate(raw, removed, output_gate::global())
@@ -208,6 +216,8 @@ fn filter_with_gate(raw: &str, removed: &[String], process_gate: &OutputGate) ->
         super::excluded_exports_regex(removed)
     ))?;
     let mut snapshot = super::strip_snapshot_preamble(&text)?;
+    let mut safe_exports = String::new();
+    let mut export_count = 0;
     for (name, value, declaration) in exports {
         if name.starts_with("__corbanu_snapshot_")
             || excluded.is_match(name)
@@ -219,11 +229,14 @@ fn filter_with_gate(raw: &str, removed: &[String], process_gate: &OutputGate) ->
         if declaration.is_empty() {
             // POSIX sh has no portable per-variable declaration printer.
             let value = value.replace('\'', "'\\''");
-            snapshot.push_str(&format!("export {name}='{value}'\n"));
+            safe_exports.push_str(&format!("export {name}='{value}'\n"));
         } else {
-            snapshot.push_str(declaration);
+            safe_exports.push_str(declaration);
         }
+        export_count += 1;
     }
+    snapshot.push_str(&format!("# exports {export_count}\n"));
+    snapshot.push_str(&safe_exports);
     // Functions/aliases can embed the same values too. Refuse the snapshot
     // rather than writing a partial or syntactically altered shell program.
     if sensitive(&snapshot) {

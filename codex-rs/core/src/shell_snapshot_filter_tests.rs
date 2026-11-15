@@ -3,7 +3,7 @@ use pretty_assertions::assert_eq;
 
 fn capture(value: &str) -> String {
     format!(
-        "\0value\0SAFE_EXPORT\0ordinary\0# Snapshot file\n# exports\n\0export\0HIDDEN_HEADER\0{value}\0export HIDDEN_HEADER='serialized';\n\0\0export\0SAFE_EXPORT\0ordinary\0export SAFE_EXPORT='ordinary';\n\0"
+        "\0value\0SAFE_EXPORT\0ordinary\0# Snapshot file\n\0export\0HIDDEN_HEADER\0{value}\0export HIDDEN_HEADER='serialized';\n\0\0export\0SAFE_EXPORT\0ordinary\0export SAFE_EXPORT='ordinary';\n\0"
     )
 }
 
@@ -17,7 +17,7 @@ fn snapshot_uses_registered_vault_values_before_shell_quoting() -> Result<()> {
         let snapshot = filter_with_gate(&capture(&value), &[], &gate)?;
         assert_eq!(
             snapshot,
-            "# Snapshot file\n# exports\nexport SAFE_EXPORT='ordinary';\n"
+            "# Snapshot file\n# exports 1\nexport SAFE_EXPORT='ordinary';\n"
         );
     }
     Ok(())
@@ -43,7 +43,7 @@ fn snapshot_preserves_unmatched_values() -> Result<()> {
     let snapshot = filter_with_gate(&capture("ordinary header"), &[], &OutputGate::new())?;
     assert_eq!(
         snapshot,
-        "# Snapshot file\n# exports\nexport HIDDEN_HEADER='serialized';\nexport SAFE_EXPORT='ordinary';\n"
+        "# Snapshot file\n# exports 2\nexport HIDDEN_HEADER='serialized';\nexport SAFE_EXPORT='ordinary';\n"
     );
     Ok(())
 }
