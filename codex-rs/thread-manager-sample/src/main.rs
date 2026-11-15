@@ -239,17 +239,11 @@ async fn new_config(
         .clone();
 
     let mut config = Config {
-<<<<<<< HEAD
         accounting: AccountingMode::Disabled,
-        config_layer_stack: ConfigLayerStack::default(),
-||||||| 413492cd6c
-        config_layer_stack: ConfigLayerStack::default(),
-=======
         application_network_policy: Default::default(),
         application_auth_route_config: Some(auth_config.auth_route_config.clone()),
         config_layer_stack,
         plugins: Default::default(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         startup_warnings: Vec::new(),
         bypass_hook_trust: false,
         model,
@@ -391,17 +385,10 @@ async fn new_config(
         experimental_realtime_ws_startup_context: None,
         experimental_realtime_start_instructions: None,
         experimental_thread_store: ThreadStoreConfig::Local,
-<<<<<<< HEAD
-        forced_chatgpt_workspace_id: None,
-        forced_login_method: None,
-        configured_forced_login_method: None,
-||||||| 413492cd6c
-        forced_chatgpt_workspace_id: None,
-        forced_login_method: None,
-=======
         forced_chatgpt_workspace_id: auth_config.forced_chatgpt_workspace_id.clone(),
         forced_login_method: auth_config.forced_login_method,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        // The sample has no API-key provider, so nothing implies a login method.
+        configured_forced_login_method: auth_config.forced_login_method,
         web_search_mode: Constrained::allow_any(WebSearchMode::Disabled),
         web_search_config: None,
         experimental_request_user_input_enabled: true,
