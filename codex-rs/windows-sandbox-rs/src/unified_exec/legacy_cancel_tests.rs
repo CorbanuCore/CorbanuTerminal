@@ -164,7 +164,9 @@ fn cancelled_during(step: usize) -> (Vec<(u32, u32)>, bool) {
     *test_hooks::AFTER_BLOCKING_STEP.lock().expect("hook") = None;
     let ended_before_release = job.as_ref().is_none_or(|_| {
         // SAFETY: copies[1] is the test's duplicate process handle.
-        unsafe { windows_sys::Win32::System::Threading::WaitForSingleObject(copies[1] as HANDLE, 0) == 0 }
+        unsafe {
+            windows_sys::Win32::System::Threading::WaitForSingleObject(copies[1] as HANDLE, 0) == 0
+        }
     });
     // Clean up even on the fail-before version, whose plain lease drop left
     // the command running while this test retained the job.

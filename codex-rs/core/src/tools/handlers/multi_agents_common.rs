@@ -222,10 +222,7 @@ pub(crate) async fn ensure_own_agent(
             "{tool} needs Corbanu's local agent backend to check that `{agent_id}` is this agent's own"
         )));
     };
-    let foreign = match control
-        .is_foreign_agent(session.thread_id, agent_id)
-        .await
-    {
+    let foreign = match control.is_foreign_agent(session.thread_id, agent_id).await {
         Ok(foreign) => foreign,
         Err(err) if matches!(err.details(), CodexErrorDetails::ThreadNotFound(_)) => {
             return Err(collab_agent_error(agent_id, err));
