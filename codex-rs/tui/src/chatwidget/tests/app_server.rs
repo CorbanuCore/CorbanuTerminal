@@ -1200,9 +1200,7 @@ async fn openai_api_key_env_fallback_notice_renders_as_warning() {
         /*replay_kind*/ None,
     );
 
-    // Upstream keeps warnings out of the chat view (footer count and /warnings);
-    // the wording is checked where it is shown, in the transcript.
-    let cells = drain_insert_history_transcript(&mut rx);
+    let cells = drain_insert_history(&mut rx);
     assert_eq!(cells.len(), 1, "expected one notice history cell");
     assert_chatwidget_snapshot!(
         "openai_api_key_env_fallback_notice",
@@ -1225,9 +1223,7 @@ async fn moderate_git_folder_write_warning_renders_the_level() {
         /*replay_kind*/ None,
     );
 
-    // Upstream keeps warnings out of the chat view (footer count and /warnings);
-    // the wording is checked where it is shown, in the transcript.
-    let cells = drain_insert_history_transcript(&mut rx);
+    let cells = drain_insert_history(&mut rx);
     assert_eq!(cells.len(), 1, "expected one warning history cell");
     assert_chatwidget_snapshot!(
         "moderate_git_folder_write_warning",

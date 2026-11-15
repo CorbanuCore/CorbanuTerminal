@@ -49,7 +49,7 @@ async fn issue_2150_empty_provider_startup_warning_snapshot() {
         .find(|warning| warning.starts_with("No provider is allowed for spawned agents"))
         .expect("empty policy warning");
     let rendered = lines_to_single_string(
-        &history_cell::new_warning_event(warning.clone()).transcript_lines(/*width*/ 80),
+        &history_cell::new_warning_event(warning.clone()).display_lines(/*width*/ 80),
     );
     insta::with_settings!({snapshot_path => "../../snapshots"}, {
         insta::assert_snapshot!("issue_2150_empty_provider_startup_warning", rendered);

@@ -132,7 +132,7 @@ async fn apps_rejection_marks_openai_not_current_claude_and_r_opens_recovery() {
     let warning = std::iter::from_fn(|| rx.try_recv().ok())
         .filter_map(|event| match event {
             crate::app_event::AppEvent::InsertHistoryCell(cell) => {
-                Some(cell.transcript_lines(/*width*/ 80))
+                Some(cell.display_lines(/*width*/ 80))
             }
             _ => None,
         })

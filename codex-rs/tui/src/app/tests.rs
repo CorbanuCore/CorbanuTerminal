@@ -589,7 +589,7 @@ fn legacy_windows_sandbox_startup_warning_snapshot() {
         &history_cell::new_warning_event(
             codex_sandboxing::LEGACY_WINDOWS_SANDBOX_WARNING.to_string(),
         )
-        .transcript_lines(/*width*/ 80),
+        .display_lines(/*width*/ 80),
     );
 
     assert_app_snapshot!("legacy_windows_sandbox_startup_warning", rendered);
