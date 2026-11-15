@@ -95,11 +95,19 @@ pub(crate) async fn apply_spawn_agent_account(
     // The level in force, including a stricter one committed during the
     // session or inherited from the parent; an unreadable policy counts as
     // Aggressive.
+    // A controller other than the local backend cannot report the policy,
+    // so it counts as Aggressive too (fail closed).
     let level = session
         .services
         .agent_control
-        .effective_security_policy()
-        .snapshot_for_agent(session.thread_id)
+        .local_or_unsupported()
+        .ok()
+        .and_then(|control| {
+            control
+                .effective_security_policy()
+                .snapshot_for_agent(session.thread_id)
+                .ok()
+        })
         .map_or(SecurityLevel::Aggressive, |policy| {
             turn.config.security_level.max(policy.level)
         });
@@ -108,7 +116,7 @@ pub(crate) async fn apply_spawn_agent_account(
             .account
             .as_ref()
             .map_or("default", |account| account.name.as_str());
-        if turn.approval_policy.value() == AskForApproval::Never {
+        if turn.approval_policy() == AskForApproval::Never {
             return refuse(format!(
                 "Running a spawned agent on account `{shown}` of `{provider_id}` needs the \
                  user's approval under the Aggressive security level, and approvals are off."

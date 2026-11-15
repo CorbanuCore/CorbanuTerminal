@@ -188,7 +188,7 @@ impl RequestPluginInstallHandler {
             })?;
         let tool = if self.presentation == ToolSuggestPresentation::RecommendationContext {
             let plugin_id = tool.id().to_string();
-            let auth = session.services.auth_manager.auth().await;
+            let auth = session.services.auth_manager().auth().await;
             let plugins_config = turn.config.plugins_config_input();
             match codex_core_plugins::hydrate_selected_recommended_plugin_install_metadata(
                 &plugins_config,

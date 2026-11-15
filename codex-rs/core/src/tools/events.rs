@@ -402,7 +402,7 @@ impl ToolEmitter {
         ctx: ToolEventCtx<'_>,
         out: &Result<ExecToolCallOutput, ToolError>,
     ) -> Option<String> {
-        let Self::Shell { command, cwd, .. } = self else {
+        let Self::UnifiedExec { command, cwd, .. } = self else {
             return None;
         };
         let cwd = cwd.to_abs_path().ok()?;
@@ -605,12 +605,9 @@ async fn emit_exec_stage(
         }
         ToolEventStage::Failure(ToolEventFailure::Refused(message)) => {
             let exec_result = ExecCommandResult {
-                stdout: String::new(),
-                stderr: message.clone(),
-                aggregated_output: message.clone(),
+                aggregated_output: message,
                 exit_code: -1,
                 duration: Duration::ZERO,
-                formatted_output: message,
                 status: ExecCommandStatus::Refused,
             };
             emit_exec_end(ctx, exec_input, exec_result).await;

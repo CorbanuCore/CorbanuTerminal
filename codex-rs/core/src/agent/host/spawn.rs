@@ -76,7 +76,7 @@ async fn prepare_spawn_inputs(
         prompt_cache_key: parent
             .session
             .services
-            .model_client
+            .model_client()
             .prompt_cache_key_policy(),
         ..StartThreadOptions::new(config)
     };
