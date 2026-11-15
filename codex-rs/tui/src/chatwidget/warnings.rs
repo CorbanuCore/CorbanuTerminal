@@ -22,15 +22,6 @@ pub(crate) struct WarningDisplayState {
     /// Initialization config warnings may also arrive as ordinary thread warnings.
     pub(super) startup_config_warnings: HashSet<String>,
     fallback_model_metadata_slugs: HashSet<String>,
-<<<<<<< HEAD
-    /// Config warnings already shown at startup. The session repeats its
-    /// config's startup warnings once; each repeat is shown only once (#419).
-    shown_config_warnings: HashSet<String>,
-    /// Config warnings that arrived before the session header; shown right
-    /// after it so a startup redraw cannot hide them.
-    pending_config_warnings: Vec<(String, String)>,
-||||||| 413492cd6c
-=======
     /// Only hide an unchanged diagnostic: an identity can acquire more details later.
     pub(crate) dismissed: BTreeMap<WarningId, String>,
     /// Identity of the current transcript; queued decisions must not survive its reset.
@@ -38,7 +29,6 @@ pub(crate) struct WarningDisplayState {
     /// Warning-bearing history cells are immutable. Avoid rebuilding diagnostic text until
     /// the transcript's cell identities or the user's dismissal decisions change.
     pub(crate) synced_cells: Option<Vec<Arc<dyn HistoryCell>>>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl WarningDisplayState {
@@ -50,32 +40,9 @@ impl WarningDisplayState {
     }
 
     pub(super) fn should_display(&mut self, message: &str) -> bool {
-<<<<<<< HEAD
-        if self.shown_config_warnings.remove(message) {
-            return false;
-        }
-        fallback_model_metadata_warning_slug(message)
-            .is_none_or(|slug| self.fallback_model_metadata_slugs.insert(slug.to_string()))
-||||||| 413492cd6c
-        fallback_model_metadata_warning_slug(message)
-            .is_none_or(|slug| self.fallback_model_metadata_slugs.insert(slug.to_string()))
-=======
         !self.startup_config_warnings.contains(message)
             && fallback_model_metadata_warning_slug(message)
                 .is_none_or(|slug| self.fallback_model_metadata_slugs.insert(slug.to_string()))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-    }
-
-    pub(super) fn config_warning_shown(&mut self, summary: String) {
-        self.shown_config_warnings.insert(summary);
-    }
-
-    pub(super) fn defer_config_warning(&mut self, summary: String, message: String) {
-        self.pending_config_warnings.push((summary, message));
-    }
-
-    pub(super) fn take_pending_config_warnings(&mut self) -> Vec<(String, String)> {
-        std::mem::take(&mut self.pending_config_warnings)
     }
 }
 
@@ -85,21 +52,6 @@ fn fallback_model_metadata_warning_slug(message: &str) -> Option<&str> {
         .strip_suffix(FALLBACK_MODEL_METADATA_WARNING_SUFFIX)
 }
 
-<<<<<<< HEAD
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_session_repeat_of_a_config_warning_is_shown_once() {
-        let mut state = WarningDisplayState::default();
-        let warning = "`[provider_accounts]` is ignored";
-        assert!(state.should_display(warning));
-        state.config_warning_shown(warning.to_string());
-        assert!(!state.should_display(warning));
-        assert!(state.should_display(warning));
-||||||| 413492cd6c
-=======
 impl super::ChatWidget {
     pub(crate) fn take_warning_body(&self) -> Option<(Rect, TextLayout, usize)> {
         let view = self.bottom_pane.active_warning()?;
@@ -201,6 +153,5 @@ impl super::ChatWidget {
             return true;
         }
         false
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }

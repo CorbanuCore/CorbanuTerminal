@@ -136,8 +136,11 @@ impl ChatWidget {
         self.thread_provider_account = session.provider_account.clone();
         self.current_cwd = Some(session.cwd.to_path_buf());
         self.config.cwd = session.cwd.clone();
-<<<<<<< HEAD
         self.apply_thread_model_provider(session.model_provider_id.clone());
+        self.set_daybreak_enabled(self.daybreak_enabled);
+        if connector_scope_changed {
+            self.invalidate_connector_scope();
+        }
         // #1251: when the session runs on a named sign-in account, cache its
         // summary for `/status` now, off the UI thread.
         if codex_model_provider::named_sign_in_account(&self.config.model_provider).is_some() {
@@ -145,13 +148,6 @@ impl ChatWidget {
                 &self.model_catalog,
                 &self.config,
             );
-||||||| 413492cd6c
-=======
-        self.config.model_provider_id = session.model_provider_id.clone();
-        self.set_daybreak_enabled(self.daybreak_enabled);
-        if connector_scope_changed {
-            self.invalidate_connector_scope();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         let runtime_workspace_roots = session.runtime_workspace_roots.clone();
         self.config.workspace_roots = runtime_workspace_roots.clone();
@@ -265,15 +261,10 @@ impl ChatWidget {
             self.transcript.active_cell = None;
             self.bump_active_cell_revision();
         }
-<<<<<<< HEAD
-        self.show_deferred_config_warnings();
-||||||| 413492cd6c
-=======
         // Emit notices after replacing or removing the placeholder header.
         if self.daybreak_enabled && previous_thread_id != self.thread_id {
             self.add_info_message("Daybreak is on for new turns.".into(), /*hint*/ None);
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.transcript.saw_copy_source_this_turn = false;
         self.refresh_skills_for_current_cwd(/*force_reload*/ true);
         self.refresh_connector_mentions(/*force_refresh*/ false);
