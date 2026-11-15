@@ -90,3 +90,27 @@ fn windows_sandbox_server_policy_controls_setup_choices() {
     assert!(!unknown.allows(Elevated));
     assert!(!unknown.allows(Unelevated));
 }
+
+#[test]
+fn issue_691_783_protected_levels_need_the_elevated_sandbox_set_up() {
+    assert_eq!(
+        setup_steps(WindowsSandboxLevel::Elevated, /*setup_complete*/ true),
+        None
+    );
+    let not_set_up = setup_steps(WindowsSandboxLevel::Disabled, /*setup_complete*/ true).unwrap();
+    assert!(not_set_up.contains("/permissions"), "{not_set_up}");
+    let non_admin = setup_steps(
+        WindowsSandboxLevel::RestrictedToken,
+        /*setup_complete*/ true,
+    )
+    .unwrap();
+    assert!(non_admin.contains("/setup-default-sandbox"), "{non_admin}");
+    let unfinished = setup_steps(WindowsSandboxLevel::Elevated, /*setup_complete*/ false).unwrap();
+    assert!(
+        unfinished.contains("setup has not finished"),
+        "{unfinished}"
+    );
+    for steps in [not_set_up, non_admin, unfinished] {
+        assert!(!steps.ends_with('.'), "{steps}");
+    }
+}
