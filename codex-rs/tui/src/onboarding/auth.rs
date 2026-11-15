@@ -740,6 +740,7 @@ impl AuthModeWidget {
         !self.provider_picker_enabled() && !self.forced_api_uses_corbanu_route()
     }
 
+    #[cfg(test)]
     fn selectable_sign_in_options(&self) -> Vec<SignInOption> {
         let mut options = self.displayed_sign_in_options();
         if self.uses_openai_sign_in_menu() && !self.is_chatgpt_login_allowed() {
@@ -1284,7 +1285,7 @@ impl AuthModeWidget {
                         if self.bedrock_setup_enabled || self.gcp_setup_enabled {
                             "Use an API key or another provider"
                         } else {
-                            "Use an OpenAI API key"
+                            "Use an API key"
                         },
                     ));
                 }

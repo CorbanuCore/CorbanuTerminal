@@ -510,7 +510,7 @@ impl OnboardingScreen {
     fn deferred_provider_setup(&self) -> Option<DeferredProviderSetup> {
         self.steps.iter().find_map(|step| match step {
             Step::Auth(widget) => widget.deferred_provider_setup(),
-            Step::Welcome(_) | Step::TrustDirectory(_) => None,
+            Step::Welcome(_) | Step::TrustDirectory(_) | Step::GovCloudGuidance { .. } => None,
         })
     }
 
@@ -1404,6 +1404,10 @@ mod tests {
             remote_trust_key: None,
             is_done: false,
             should_exit: false,
+            provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),
+            provider_auth_executor: None,
+            provider_auth_action_rx: tokio::sync::mpsc::unbounded_channel().1,
+            claude_event_rx: tokio::sync::mpsc::unbounded_channel().1,
         };
 
         let mut buffered_keys = vec![KeyEvent::from(KeyCode::Enter)];
@@ -1471,6 +1475,10 @@ mod tests {
                 remote_trust_key: Some("/workspace/project".to_string()),
                 is_done: false,
                 should_exit: false,
+                provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),
+                provider_auth_executor: None,
+                provider_auth_action_rx: tokio::sync::mpsc::unbounded_channel().1,
+                claude_event_rx: tokio::sync::mpsc::unbounded_channel().1,
             };
             screen.handle_key_event(key.into());
             assert!(!persist_selected_trust(&mut screen, /*request_handle*/ None).await);
