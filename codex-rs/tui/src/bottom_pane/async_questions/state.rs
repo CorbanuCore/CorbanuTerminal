@@ -61,9 +61,14 @@ impl AsyncQuestions {
 
     pub(crate) fn set_expanded(&mut self, expanded: bool) {
         self.save_current_draft();
+        let was_expanded = self.expanded;
         self.expanded = expanded && !self.state.pending.is_empty();
         if self.expanded {
             self.snooze_auto_resolution();
+            if !was_expanded {
+                // #787: the panel shows anew.
+                self.expand_epoch += 1;
+            }
         }
     }
 
@@ -251,6 +256,8 @@ impl AsyncQuestions {
         self.expanded = self.state.expanded && !self.state.pending.is_empty();
         if self.expanded {
             self.snooze_auto_resolution();
+            // #787: a restored panel shows anew.
+            self.expand_epoch += 1;
         }
         self.restore_current_draft();
         self.resolve_answers(&answered_ids.into_iter().collect::<Vec<_>>());

@@ -127,7 +127,13 @@ impl ChatWidget {
         } else {
             let interrupting = !editing && self.chat_keymap.interrupt_turn.is_pressed(key);
             self.bottom_pane.handle_key_event(key);
-            if interrupting {
+            // #787: a key dropped as the question appeared interrupted nothing.
+            let dropped = self
+                .bottom_pane
+                .questions
+                .as_ref()
+                .is_some_and(|q| q.last_input_dropped());
+            if interrupting && !dropped {
                 self.pause_active_goal_for_interrupt();
             }
             let submission = self

@@ -160,6 +160,7 @@ impl BottomPaneView for AsyncQuestions {
         if key.kind == KeyEventKind::Release || self.is_complete() {
             return;
         }
+        self.early_input = None;
         self.snooze_auto_resolution();
         if self.handles_key_as_editing(key) {
             self.edit(key);
@@ -265,6 +266,10 @@ impl BottomPaneView for AsyncQuestions {
         }
     }
 
+    fn on_early_input(&mut self) {
+        self.early_input = self.displayed_question_generation();
+    }
+
     fn terminal_title_requires_action(&self) -> bool {
         !self.is_complete()
     }
@@ -287,6 +292,7 @@ impl BottomPaneView for AsyncQuestions {
         if self.is_complete() || text.is_empty() {
             return false;
         }
+        self.early_input = None;
         self.snooze_auto_resolution();
         if !self.focus_is_notes() {
             self.focus_other();

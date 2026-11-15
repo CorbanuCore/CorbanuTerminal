@@ -8,6 +8,7 @@ use crate::bottom_pane::ChatComposer;
 use crate::bottom_pane::ChatComposerConfig;
 use crate::bottom_pane::InputResult;
 use crate::bottom_pane::bottom_pane_view::BottomPaneView;
+use crate::bottom_pane::bottom_pane_view::next_shown_request_generation;
 use crate::bottom_pane::chat_composer::ComposerDraft;
 use crate::bottom_pane::scroll_state::ScrollState;
 use crate::bottom_pane::selection_popup_common::GenericDisplayRow;
@@ -74,6 +75,20 @@ pub(crate) struct AsyncQuestions {
     // Ignore autorepeat from the number key that opened Other.
     other_selector: Option<KeyCode>,
     pub(super) composer: ChatComposer,
+    /// #787: counts expansions; the panel expanded again is new to the person.
+    expand_epoch: u64,
+    /// #787: the question last asked for by [`Self::displayed_question_generation`].
+    shown_question: std::cell::RefCell<Option<ShownQuestion>>,
+    /// #787: the bottom pane dropped the last input to this question (the
+    /// generation it was shown with); its footer says so.
+    early_input: Option<u64>,
+}
+
+/// #787: a question on show and the generation it took.
+struct ShownQuestion {
+    expand_epoch: u64,
+    question_id: String,
+    generation: u64,
 }
 
 impl AsyncQuestions {
@@ -108,7 +123,50 @@ impl AsyncQuestions {
             keymap,
             other_selector: None,
             composer,
+            expand_epoch: 0,
+            shown_question: std::cell::RefCell::new(None),
+            early_input: None,
         }
+    }
+
+    /// #787: the question on show while the panel is expanded, by a
+    /// generation taken anew whenever another question shows (an answer,
+    /// a skip, a desktop reply, navigation) or the panel expands again, as
+    /// [`BottomPaneView::shown_request_generation`] does for request views.
+    /// The bottom pane drops input that reaches it before it was drawn or in
+    /// the moment after.
+    pub(crate) fn displayed_question_generation(&self) -> Option<u64> {
+        if !self.expanded {
+            return None;
+        }
+        let question_id = &self.current_answer()?.question_id;
+        let mut shown = self.shown_question.borrow_mut();
+        if let Some(shown) = shown.as_ref()
+            && shown.expand_epoch == self.expand_epoch
+            && shown.question_id == *question_id
+        {
+            return Some(shown.generation);
+        }
+        let generation = next_shown_request_generation();
+        *shown = Some(ShownQuestion {
+            expand_epoch: self.expand_epoch,
+            question_id: question_id.clone(),
+            generation,
+        });
+        Some(generation)
+    }
+
+    /// #787: whether the bottom pane dropped the last input to this
+    /// question as it appeared.
+    pub(crate) fn last_input_dropped(&self) -> bool {
+        self.early_input.is_some()
+    }
+
+    /// #787: input dropped as the question on show appeared; its footer
+    /// says so until input reaches it or another question shows.
+    fn shows_early_input_notice(&self) -> bool {
+        self.early_input
+            .is_some_and(|generation| self.displayed_question_generation() == Some(generation))
     }
 
     fn current_question(&self) -> Option<&AsyncUserInputQuestion> {
