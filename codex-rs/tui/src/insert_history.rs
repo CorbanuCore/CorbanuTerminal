@@ -50,20 +50,10 @@ pub enum HistoryLineWrapPolicy {
 
 /// Selects the terminal escape strategy used when writing history above the viewport.
 ///
-<<<<<<< HEAD
-/// Raw lines intentionally remain unbroken so terminal selection copies their source faithfully.
-/// Zellij does not constrain soft-wrapped continuation rows to Codex's scroll region, so its raw
-/// path appends history through the terminal and reserves blank rows for the next viewport draw.
-/// The standard path also takes it when its scroll region would be a single row (#1039) or
-/// empty, because the viewport fills the screen (#1082).
-||||||| 413492cd6c
-/// Raw lines intentionally remain unbroken so terminal selection copies their source faithfully.
-/// Zellij does not constrain soft-wrapped continuation rows to Codex's scroll region, so its raw
-/// path appends history through the terminal and reserves blank rows for the next viewport draw.
-=======
 /// Full-screen insertion preserves terminal-native scrollback when partial scroll regions are
-/// unreliable and keeps terminal-managed soft wrapping intact for Zellij.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+/// unreliable and keeps terminal-managed soft wrapping intact for Zellij. The standard path also
+/// takes it when its scroll region would be a single row (#1039) or empty, because the viewport
+/// fills the screen (#1082).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InsertHistoryMode {
     Standard,
@@ -161,7 +151,7 @@ where
         && wrapped_lines > 0
         && area.top().saturating_add(standard_scroll_amount) <= 1
     {
-        InsertHistoryMode::ZellijRaw
+        InsertHistoryMode::FullScreen
     } else {
         mode
     };

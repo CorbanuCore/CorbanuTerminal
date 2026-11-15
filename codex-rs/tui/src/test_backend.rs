@@ -77,20 +77,14 @@ impl VT100Backend {
         Self::with_scrollback(width, height, /*scrollback_len*/ 0)
     }
 
+    /// Like [`Self::new`], keeping up to `scrollback_len` rows that scroll off the top.
     pub fn with_scrollback(width: u16, height: u16, scrollback_len: usize) -> Self {
         crossterm::style::force_color_output(true);
         Self {
-<<<<<<< HEAD
             crossterm_backend: CrosstermBackend::new(ScrollOnClearParser::new(
-                height, width, /*scrollback*/ 0,
-||||||| 413492cd6c
-            crossterm_backend: CrosstermBackend::new(vt100::Parser::new(height, width, 0)),
-=======
-            crossterm_backend: CrosstermBackend::new(vt100::Parser::new(
                 height,
                 width,
                 scrollback_len,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             )),
         }
     }
@@ -103,18 +97,6 @@ impl VT100Backend {
     #[allow(dead_code)]
     pub fn scroll_on_clear_saves(&self) -> &[String] {
         &self.crossterm_backend.writer().saves
-    }
-
-    /// Like [`Self::new`], keeping up to `scrollback` rows that scroll off the top.
-    // Used by the crate's unit tests, not by `tests/all`, which shares this file.
-    #[allow(dead_code)]
-    pub fn with_scrollback(width: u16, height: u16, scrollback: usize) -> Self {
-        crossterm::style::force_color_output(true);
-        Self {
-            crossterm_backend: CrosstermBackend::new(ScrollOnClearParser::new(
-                height, width, scrollback,
-            )),
-        }
     }
 
     #[allow(dead_code)]

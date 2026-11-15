@@ -330,15 +330,9 @@ impl App {
             )),
             footer_hint: Some(standard_popup_hint_line()),
             items,
-<<<<<<< HEAD
             initial_selected_idx: Some(1),
             allow_number_shortcuts: false,
-            ..Default::default()
-||||||| 413492cd6c
-            ..Default::default()
-=======
             ..SelectionViewParams::confirmation()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         });
     }
 

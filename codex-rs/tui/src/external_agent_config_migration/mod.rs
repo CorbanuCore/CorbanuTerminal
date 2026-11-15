@@ -83,14 +83,8 @@ pub(crate) async fn run_external_agent_config_migration_prompt(
     items: &[ExternalAgentConfigMigrationItem],
     selected_items: &[ExternalAgentConfigMigrationItem],
     error: Option<&str>,
-<<<<<<< HEAD
     events: &mut tokio::sync::mpsc::UnboundedReceiver<TuiEvent>,
-) -> ExternalAgentConfigMigrationOutcome {
-||||||| 413492cd6c
-) -> ExternalAgentConfigMigrationOutcome {
-=======
 ) -> std::io::Result<ExternalAgentConfigMigrationOutcome> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut screen = ExternalAgentConfigMigrationScreen::new(
         tui.frame_requester(),
         items,
@@ -105,26 +99,9 @@ pub(crate) async fn run_external_agent_config_migration_prompt(
         return Ok(ExternalAgentConfigMigrationOutcome::Skip);
     }
 
-<<<<<<< HEAD
-||||||| 413492cd6c
-    let events = tui.event_stream();
-    tokio::pin!(events);
-
-=======
-    tui.discard_pending_input_before_interactive_screen()?;
-    let events = tui.event_stream();
-    tokio::pin!(events);
-
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     while !screen.is_done() {
-<<<<<<< HEAD
         if let Some(event) = events.recv().await {
-||||||| 413492cd6c
-        if let Some(event) = events.next().await {
-=======
-        if let Some(event) = events.next().await {
             let _ = tui.screen_size_for_event(&event);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             match event {
                 TuiEvent::Key(key_event) => screen.handle_key(key_event),
                 TuiEvent::Paste(_) | TuiEvent::FocusLost | TuiEvent::Mouse(_) => {}
@@ -1095,7 +1072,8 @@ mod tests {
             /*error*/ None,
             &mut event_rx,
         )
-        .await;
+        .await
+        .expect("migration prompt");
 
         assert_eq!(outcome, ExternalAgentConfigMigrationOutcome::Skip);
     }

@@ -8,17 +8,10 @@ use super::app_server_event_targets::server_notification_thread_target;
 use super::app_server_event_targets::server_request_thread_id;
 use super::app_server_requests::BufferedServerRequest;
 use crate::app_command::AppCommand;
-<<<<<<< HEAD
-use crate::app_event::ConnectorsSnapshot;
-||||||| 413492cd6c
-use crate::app_event::AppEvent;
-use crate::app_event::ConnectorsSnapshot;
-=======
 use crate::app_event::AppEvent;
 use crate::app_event::RateLimitRefreshOrigin;
 #[cfg(any(target_os = "windows", test))]
 use crate::app_event::WindowsSandboxEnableMode;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::app_info::app_info_from_api;
 use crate::app_server_session::AppServerSession;
 use crate::app_server_session::status_account_display_from_auth_mode;
@@ -419,24 +412,10 @@ impl App {
                             | AuthMode::PersonalAccessToken
                     )
                 );
-<<<<<<< HEAD
-                self.chat_widget.update_account_state(
-                    status_account_display_from_auth_mode(
-                        notification.auth_mode,
-                        notification.plan_type,
-                        notification.api_key_env_var.clone(),
-                    ),
-||||||| 413492cd6c
-                self.chat_widget.update_account_state(
-                    status_account_display_from_auth_mode(
-                        notification.auth_mode,
-                        notification.plan_type,
-                    ),
-=======
                 let account_display = status_account_display_from_auth_mode(
                     notification.auth_mode,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     notification.plan_type,
+                    notification.api_key_env_var.clone(),
                 );
                 let has_chatgpt_account = notification
                     .auth_mode

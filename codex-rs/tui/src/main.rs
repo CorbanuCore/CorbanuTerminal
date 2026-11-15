@@ -23,12 +23,8 @@ struct TopCli {
 }
 
 fn main() -> anyhow::Result<()> {
-<<<<<<< HEAD
     codex_tui::take_restart_marker();
-||||||| 413492cd6c
-=======
     codex_build_info::initialize!();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     arg0_dispatch_or_else(|arg0_paths: Arg0DispatchPaths| async move {
         let top_cli = TopCli::parse();
         // An agent command under security level Aggressive must not start
@@ -60,7 +56,6 @@ fn main() -> anyhow::Result<()> {
                 eprintln!("ERROR: {message}");
                 true
             }
-<<<<<<< HEAD
             ExitReason::Restart => {
                 print!("{}", codex_tui::RESTART_BANNER);
                 std::io::stdout().flush()?;
@@ -68,12 +63,7 @@ fn main() -> anyhow::Result<()> {
                 eprintln!("\nERROR: could not restart ({err}); start it again yourself");
                 std::process::exit(1);
             }
-            ExitReason::UserRequested => false,
-||||||| 413492cd6c
-            ExitReason::UserRequested => false,
-=======
             ExitReason::UserRequested | ExitReason::TurnInterrupted => false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
 
         let color_enabled = supports_color::on(Stream::Stdout).is_some();
