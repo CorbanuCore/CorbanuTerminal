@@ -232,9 +232,11 @@ The kill switch (`/security` → `g`) works under every level.
   sandbox up (#1976; see `docs/sandbox.md`). The same applies when the
   session works on a remote Windows machine without one, from any computer
   (#2050), and to a remote machine whose exec-server is too old to say.
-- If your own settings turn the sandbox off (full access), commands that the
-  protected-file rules don't cover run without one. Choose a sandbox in your
-  settings to keep every command in it.
+- On macOS and Linux, if your own settings turn the sandbox off (full access),
+  commands that the protected-file rules don't cover run without one. Choose a
+  sandbox in your settings to keep every command in it. Windows full access
+  still uses the elevated sandbox and has a known directory-access and latency
+  limitation; see [full access on Windows](sandbox.md#full-access-at-moderate-or-aggressive).
 - With full access in your own settings, commands can also write the project's
   `.git`, except its hooks and config (with a sandbox setting `.git` stays
   read-only). A command could leave something there that your own git later

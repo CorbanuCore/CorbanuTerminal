@@ -38,6 +38,28 @@ described below, because that sandbox can't block reads. With the default
 sandbox selected, nothing changes: if its setup hasn't run yet, the first
 sandboxed command runs it.
 
+### Full access at Moderate or Aggressive
+
+A full-access permission profile still uses the elevated sandbox at these
+security levels. This combination has a known limitation
+([#2021](https://github.com/CorbanuCore/CorbanuTerminal/issues/2021)):
+a command in a private user-profile folder can fail with Windows error 267,
+and setup or commands can be very slow. The sandbox account does not
+automatically have your account's access to every folder.
+
+Error 267 means the working directory is invalid or inaccessible to the
+sandbox account. Check that the directory exists. A verified workaround for
+project work is a directory outside private user-profile folders with
+`sandbox_mode = "workspace-write"` and `[windows] sandbox = "elevated"`,
+keeping your security level. This limits writable access to the workspace
+and configured writable roots; it does not repair full access. Moving the
+project alone, while keeping full access, does not resolve the reported delay.
+
+Workspace-write alone is not a verified workaround for a private folder:
+in testing, PowerShell launched there but started at `C:\`, and relative
+file writes failed. Check the command's actual working directory and output;
+a successful shell exit code alone does not prove that it used your project.
+
 ### Remote Windows machines
 
 The same rule applies where the commands actually run (#2050, D510). When
