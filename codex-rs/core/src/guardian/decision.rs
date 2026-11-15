@@ -103,12 +103,9 @@ pub(crate) fn decide_approval(
         let requirements = live_config.config_layer_stack.requirements();
         let model_requires_review =
             requirements.auto_review_required_for_model(&context.model_info.slug);
+        // Shared with Corbanu's post-taint dispatch gate (`check_dispatch`).
         let require_guardian = options.require_guardian
-            || model_requires_review
-            || requirements
-                .approvals_reviewer
-                .can_set(&codex_protocol::config_types::ApprovalsReviewer::User)
-                .is_err();
+            || requirements.automatic_reviewer_forced(&context.model_info.slug);
         let full_access = context.environments().has_full_access(
             context.approval_policy,
             &turn.config.permissions.effective_permission_profile(),
