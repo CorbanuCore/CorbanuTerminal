@@ -775,11 +775,18 @@ async fn spawn_agent_limit_failure_emits_bounded_metric() {
     .expect("create in-memory metrics client");
     let (mut session, mut turn) = make_session_and_context().await;
     turn.session_telemetry = turn.session_telemetry.clone().with_metrics(metrics.clone());
+    let manager = thread_manager();
+    // Corbanu (PF-23-S03): a child inherits its live parent's security policy, so a spawn
+    // from a parent that isn't running is refused before the thread limit is checked.
+    let root = manager
+        .start_thread(StartThreadOptions::new((*turn.config).clone()))
+        .await
+        .expect("root thread should start");
+    session.thread_id = root.thread_id;
     let mut config = (*turn.config).clone();
     config.agent_max_threads = Some(0);
     config.apps_mcp_product_sku = Some("codex".to_string());
     turn.config = Arc::new(config);
-    let manager = thread_manager();
     set_agent_control(&mut session, manager.agent_control());
 
     let Err(err) = SpawnAgentHandler::default()
@@ -8835,7 +8842,14 @@ async fn issue_2000_a_role_rebuilt_child_keeps_the_raised_windows_sandbox() {
     crate::agent::role::apply_role_to_config(&mut config, Some("sandbox-role"))
         .await
         .expect("role should apply");
-    // The role rebuilt the config from the starting layers.
+    // Upstream's role application keeps the session's raised level (main rebuilt the
+    // config from the starting layers here, dropping it).
+    assert_eq!(
+        WindowsSandboxLevel::from_config(&config),
+        WindowsSandboxLevel::Elevated
+    );
+    // A config that lost the level, as main's rebuilt one did, gets it back from the turn.
+    config.set_windows_elevated_sandbox_enabled(/*value*/ false);
     assert_eq!(WindowsSandboxLevel::from_config(&config), starting);
     apply_spawn_agent_runtime_overrides(&mut config, &turn).expect("runtime overrides");
     assert_eq!(

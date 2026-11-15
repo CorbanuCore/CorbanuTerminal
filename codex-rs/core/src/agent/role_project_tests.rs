@@ -32,13 +32,12 @@ base_url = "https://relay.example/v1"
 
 [features]
 respect_system_proxy = true
-
-[debug.config_lockfile]
-export_dir = "export"
 "#;
+// Upstream removed `debug.config_lockfile` (main's denylist covers it): a role file that sets
+// it doesn't parse and is ignored whole, so this fixture leaves it out.
 
 const IGNORED_KEYS: &str = "openai_base_url, model_provider, model_providers, notify, \
-sqlite_home, log_dir, features.respect_system_proxy, debug.config_lockfile";
+sqlite_home, log_dir, features.respect_system_proxy";
 
 struct Fixture {
     codex_home: TempDir,
@@ -121,8 +120,7 @@ fn unapplied_warnings(config: &Config) -> Vec<&str> {
 }
 
 /// The keys of `DENYLISTED_ROLE` a user role sets but a spawned agent does not apply.
-const UNAPPLIED_USER_KEYS: [&str; 6] = [
-    "debug",
+const UNAPPLIED_USER_KEYS: [&str; 5] = [
     "features.respect_system_proxy",
     "log_dir",
     "notify",
@@ -262,8 +260,8 @@ async fn roles_record_where_they_were_declared_and_project_roles_warn() {
             .as_str()
         ]
     );
-    // The denylist empties `debug` and leaves only applied keys, so the project's
-    // file gets no D526 warning; both user files do.
+    // The denylist leaves only applied keys, so the project's file gets no D526
+    // warning; both user files do.
     let unapplied = UNAPPLIED_USER_KEYS.map(ToOwned::to_owned);
     let mut warnings = unapplied_warnings(&config);
     warnings.sort();

@@ -36,8 +36,8 @@ async fn issue863_custom_native_spawn_send_followup_keep_source_and_ciphertext()
         .start_thread((*turn.config).clone())
         .await
         .expect("root");
-    session.services.local_agent_runtime = manager.agent_control().runtime.clone();
-    session.services.agent_control = Arc::new(manager.agent_control());
+    // One control: each `manager.agent_control()` call builds a separate registry.
+    set_agent_control(&mut session, manager.agent_control());
     session.thread_id = root.thread_id;
     let session = Arc::new(session);
     let turn = Arc::new(turn);
@@ -122,8 +122,8 @@ async fn issue863_custom_native_send_followup_reject_builtin_before_mailbox_muta
         .start_thread((*turn.config).clone())
         .await
         .expect("root");
-    session.services.local_agent_runtime = manager.agent_control().runtime.clone();
-    session.services.agent_control = Arc::new(manager.agent_control());
+    // One control: each `manager.agent_control()` call builds a separate registry.
+    set_agent_control(&mut session, manager.agent_control());
     session.thread_id = root.thread_id;
     let builtin_path = AgentPath::try_from("/root/builtin").expect("path");
     let mut config = (*turn.config).clone();
@@ -378,8 +378,8 @@ async fn issue1127_custom_native_send_followup_to_another_account_are_refused() 
         .start_thread((*turn.config).clone())
         .await
         .expect("root");
-    session.services.local_agent_runtime = manager.agent_control().runtime.clone();
-    session.services.agent_control = Arc::new(manager.agent_control());
+    // One control: each `manager.agent_control()` call builds a separate registry.
+    set_agent_control(&mut session, manager.agent_control());
     session.thread_id = root.thread_id;
     let work_path = AgentPath::try_from("/root/work_child").expect("path");
     let mut child_config = (*turn.config).clone();
