@@ -21,6 +21,7 @@ use codex_plugin::ExecutorPluginHookSource;
 use codex_protocol::items::ModelInvocationContext;
 use codex_protocol::models::AdditionalPermissionProfile;
 use codex_protocol::protocol::TurnContextItem;
+use codex_utils_path_uri::PathUri;
 use tokio_util::sync::CancellationToken;
 
 /// Request-scoped state that may change between model sampling requests.
@@ -66,19 +67,28 @@ impl StepContext {
     }
 
     /// Pairs the step's environments with access, each through [`Self::file_access_context`].
-    pub(crate) async fn environments(
-        &self,
-        session: &Session,
-    ) -> Vec<(&TurnEnvironment, impl EnvironmentAccess + '_)> {
+    /// Each context is built once, so every operation first checks that no security
+    /// transition was committed since (#2183 review): one made during the step refuses the
+    /// step's file access instead of using permissions decided under the earlier policy.
+    pub(crate) async fn environments<'a>(
+        &'a self,
+        session: &'a Session,
+    ) -> Vec<(&'a TurnEnvironment, impl EnvironmentAccess + 'a)> {
+        // Taken before the contexts are built, so a transition while they are built counts.
+        let decided_under = session.services.authority_marker();
         let mut environments = Vec::new();
         for environment in self.environments.turn_environments() {
             let context = self.file_access_context(session, environment).await;
             environments.push((
                 environment,
-                FileSystemEnvironmentAccessor::new(
-                    environment.environment.filesystem_ref(),
-                    context,
-                ),
+                StepFileAccess {
+                    inner: FileSystemEnvironmentAccessor::new(
+                        environment.environment.filesystem_ref(),
+                        context,
+                    ),
+                    session,
+                    decided_under,
+                },
             ));
         }
         environments
@@ -132,6 +142,140 @@ impl StepContext {
                 .effective_reasoning_effort()
                 .map(|effort| effort.to_string()),
         }
+    }
+}
+
+/// A step's file access in one environment: its context was built under `decided_under`
+/// (D50's policy marker); after a security transition every operation is refused.
+struct StepFileAccess<'a> {
+    inner: FileSystemEnvironmentAccessor<'a>,
+    session: &'a Session,
+    decided_under: Option<(u64, u64)>,
+}
+
+/// Why a step's file access was refused after a security transition.
+pub(crate) const STEP_FILE_ACCESS_STALE: &str = "file access refused: the security policy \
+     changed during this step; it is decided again on the next step";
+
+impl StepFileAccess<'_> {
+    fn stale(&self) -> Option<std::io::Error> {
+        self.session
+            .services
+            .transition_since(self.decided_under)
+            .then(|| {
+                std::io::Error::new(std::io::ErrorKind::PermissionDenied, STEP_FILE_ACCESS_STALE)
+            })
+    }
+}
+
+/// Forwards one operation to the step's accessor unless a transition made it stale.
+macro_rules! checked {
+    ($self:ident, $call:expr) => {
+        match $self.stale() {
+            Some(error) => Box::pin(async move { Err(error) }),
+            None => $call,
+        }
+    };
+}
+
+impl EnvironmentAccess for StepFileAccess<'_> {
+    fn cache_key(&self) -> codex_file_system::EnvironmentAccessKey {
+        self.inner.cache_key()
+    }
+
+    fn canonicalize<'b>(
+        &'b self,
+        path: &'b PathUri,
+    ) -> codex_file_system::ExecutorFileSystemFuture<'b, PathUri> {
+        checked!(self, self.inner.canonicalize(path))
+    }
+
+    fn read_file<'b>(
+        &'b self,
+        path: &'b PathUri,
+        options: codex_file_system::ReadFileOptions,
+    ) -> codex_file_system::ExecutorFileSystemFuture<'b, Vec<u8>> {
+        checked!(self, self.inner.read_file(path, options))
+    }
+
+    fn read_file_stream<'b>(
+        &'b self,
+        path: &'b PathUri,
+    ) -> codex_file_system::ExecutorFileSystemFuture<'b, codex_file_system::FileSystemReadStream>
+    {
+        checked!(self, self.inner.read_file_stream(path))
+    }
+
+    fn write_file_stream<'b>(
+        &'b self,
+        path: &'b PathUri,
+        contents: futures::stream::BoxStream<
+            'b,
+            codex_file_system::FileSystemResult<codex_file_system::Bytes>,
+        >,
+    ) -> codex_file_system::ExecutorFileSystemFuture<'b, u64> {
+        checked!(self, self.inner.write_file_stream(path, contents))
+    }
+
+    fn write_file<'b>(
+        &'b self,
+        path: &'b PathUri,
+        contents: Vec<u8>,
+        options: codex_file_system::WriteFileOptions,
+    ) -> codex_file_system::ExecutorFileSystemFuture<'b, ()> {
+        checked!(self, self.inner.write_file(path, contents, options))
+    }
+
+    fn create_directory<'b>(
+        &'b self,
+        path: &'b PathUri,
+        options: codex_file_system::CreateDirectoryOptions,
+    ) -> codex_file_system::ExecutorFileSystemFuture<'b, ()> {
+        checked!(self, self.inner.create_directory(path, options))
+    }
+
+    fn get_metadata<'b>(
+        &'b self,
+        path: &'b PathUri,
+        options: codex_file_system::GetMetadataOptions,
+    ) -> codex_file_system::ExecutorFileSystemFuture<'b, codex_file_system::FileMetadata> {
+        checked!(self, self.inner.get_metadata(path, options))
+    }
+
+    fn read_directory<'b>(
+        &'b self,
+        path: &'b PathUri,
+    ) -> codex_file_system::ExecutorFileSystemFuture<'b, Vec<codex_file_system::ReadDirectoryEntry>>
+    {
+        checked!(self, self.inner.read_directory(path))
+    }
+
+    fn walk<'b>(
+        &'b self,
+        path: &'b PathUri,
+        options: codex_file_system::WalkOptions,
+    ) -> codex_file_system::ExecutorFileSystemFuture<'b, codex_file_system::WalkOutcome> {
+        checked!(self, self.inner.walk(path, options))
+    }
+
+    fn remove<'b>(
+        &'b self,
+        path: &'b PathUri,
+        options: codex_file_system::RemoveOptions,
+    ) -> codex_file_system::ExecutorFileSystemFuture<'b, ()> {
+        checked!(self, self.inner.remove(path, options))
+    }
+
+    fn copy<'b>(
+        &'b self,
+        source_path: &'b PathUri,
+        destination_path: &'b PathUri,
+        options: codex_file_system::CopyOptions,
+    ) -> codex_file_system::ExecutorFileSystemFuture<'b, ()> {
+        checked!(
+            self,
+            self.inner.copy(source_path, destination_path, options)
+        )
     }
 }
 
