@@ -518,18 +518,12 @@ impl ChatWidget {
             ));
         }
 
-<<<<<<< HEAD
         if render_in_history {
             self.campaign_tracker_turn = Some(uuid::Uuid::new_v4().to_string());
         }
         self.tracker_capture(if self.campaign_tracker_automated_input {"automated_prompt"} else {"human_prompt"}, &submitted_message.text, serde_json::json!({"attachmentCount": submitted_message.local_images.len() + submitted_message.remote_image_urls.len()}));
-        if !self.submit_op(op.clone()) {
-||||||| 413492cd6c
-        if !self.submit_op(op.clone()) {
-=======
         // The app submits recourse turns directly to the verified fork.
         if source != UserMessageSource::SafetyRecourse && !self.submit_op(op.clone()) {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             return (false, None);
         }
         if source != UserMessageSource::QuestionAnswer {

@@ -47,7 +47,7 @@ async fn resumed_initial_messages_render_history() {
     };
 
     // The first attachment can change project credentials even with an in-process server.
-    chat.status_account_display = Some(StatusAccountDisplay::ApiKey);
+    chat.status_account_display = Some(StatusAccountDisplay::ApiKey { env_var: None });
     let mut model = crate::test_support::TEST_MODEL_PRESETS[0].clone();
     model.available_access_programs = Some(codex_protocol::openai_models::ModelAccessPrograms {
         cyber: vec![codex_protocol::turn_input::CyberAccessProgram::Standard],
@@ -71,7 +71,7 @@ async fn resumed_initial_messages_render_history() {
     );
 
     // A saved On preference cannot bypass the API-key gate.
-    chat.status_account_display = Some(StatusAccountDisplay::ApiKey);
+    chat.status_account_display = Some(StatusAccountDisplay::ApiKey { env_var: None });
     chat.set_feature_enabled(Feature::ApiKeyCyberAccessPrograms, /*enabled*/ false);
     chat.set_feature_enabled(Feature::CliDaybreak, /*enabled*/ true);
     configured.thread_id = ThreadId::new();

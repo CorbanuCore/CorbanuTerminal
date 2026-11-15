@@ -297,49 +297,6 @@ impl ApprovalOverlay {
         list_keymap: &ListKeymap,
     ) -> (Vec<ApprovalOption>, SelectionViewParams) {
         let (options, title) = match request {
-<<<<<<< HEAD
-            ApprovalRequest::Exec(request) => (
-                {
-                    let mut options = exec_options(
-                        &request.available_decisions,
-                        request.network_approval_context.as_ref(),
-                        request.additional_permissions.as_ref(),
-                        approval_keymap,
-                    );
-                    if grant_offer(request, features).is_some() {
-                        options.push(grant_option());
-                    }
-                    options
-                },
-                request.network_approval_context.as_ref().map_or_else(
-                    || "Would you like to run the following command?".to_string(),
-                    |network_approval_context| {
-                        format!(
-                            "Do you want to approve network access to \"{}\"?",
-                            network_approval_context.host
-                        )
-                    },
-                ),
-            ),
-||||||| 413492cd6c
-            ApprovalRequest::Exec(request) => (
-                exec_options(
-                    &request.available_decisions,
-                    request.network_approval_context.as_ref(),
-                    request.additional_permissions.as_ref(),
-                    approval_keymap,
-                ),
-                request.network_approval_context.as_ref().map_or_else(
-                    || "Would you like to run the following command?".to_string(),
-                    |network_approval_context| {
-                        format!(
-                            "Do you want to approve network access to \"{}\"?",
-                            network_approval_context.host
-                        )
-                    },
-                ),
-            ),
-=======
             ApprovalRequest::Exec(request) => {
                 let title = if request.kind == CommandExecutionApprovalKind::WriteStdin {
                     request.command.get(2).map_or_else(
@@ -359,17 +316,17 @@ impl ApprovalOverlay {
                         },
                     )
                 };
-                (
-                    exec_options(
-                        &request.available_decisions,
-                        request.network_approval_context.as_ref(),
-                        request.additional_permissions.as_ref(),
-                        approval_keymap,
-                    ),
-                    title,
-                )
+                let mut options = exec_options(
+                    &request.available_decisions,
+                    request.network_approval_context.as_ref(),
+                    request.additional_permissions.as_ref(),
+                    approval_keymap,
+                );
+                if grant_offer(request, features).is_some() {
+                    options.push(grant_option());
+                }
+                (options, title)
             }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             ApprovalRequest::Permissions(_) => (
                 permissions_options(approval_keymap),
                 "Would you like to grant these permissions?".to_string(),
@@ -396,14 +353,10 @@ impl ApprovalOverlay {
             .iter()
             .map(|opt| SelectionItem {
                 name: opt.label.clone(),
-<<<<<<< HEAD
                 // Persistent options have no shortcut; showing one would invite it.
-                display_shortcut: opt.shortcuts.first().copied().filter(|_| !opt.persistent),
-||||||| 413492cd6c
-                display_shortcut: opt.shortcuts.first().copied(),
-=======
-                display_shortcut: approval_keymap.hint_for_bindings(&opt.shortcuts),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                display_shortcut: approval_keymap
+                    .hint_for_bindings(&opt.shortcuts)
+                    .filter(|_| !opt.persistent),
                 dismiss_on_select: false,
                 ..Default::default()
             })
@@ -420,16 +373,10 @@ impl ApprovalOverlay {
             footer_hint: Some(approval_footer_hint(request, approval_keymap, list_keymap)),
             items,
             header,
-<<<<<<< HEAD
             initial_selected_idx,
-            ..Default::default()
-||||||| 413492cd6c
-            ..Default::default()
-=======
             header_view_all_hint: approval_keymap
                 .primary_hint("open_fullscreen", &approval_keymap.open_fullscreen),
             ..SelectionViewParams::picker()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
 
         (options, params)
@@ -960,15 +907,13 @@ impl ApprovalOverlay {
 }
 
 impl BottomPaneView for ApprovalOverlay {
-<<<<<<< HEAD
     fn answers_request(&self) -> bool {
         true
-||||||| 413492cd6c
-=======
+    }
+
     fn keymap_contexts(&self) -> crate::keymap::KeymapContextSet {
         crate::keymap::KeymapContextSet::new(crate::keymap::KeymapContext::Approval)
             .with(crate::keymap::KeymapContext::List)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {

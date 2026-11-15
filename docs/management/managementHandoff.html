@@ -15,8 +15,85 @@ th{background:#f5f5f7}.warn{background:#fff4e5;border-left:4px solid #f0a020;pad
 </head>
 <body>
 <h1>Corbanu Terminal — management handoff</h1>
-<p><small>Current update: <a href="#update-20261114">2026-11-14 15:16Z (handoff-doc24)</a>. Owner: <b>Travis</b>. Repository: <code>CorbanuCore/CorbanuTerminal</code>.</small></p>
-<div class="note" id="update-20261114"><b>Update 2026-11-14 15:16Z (handoff-doc24).</b>
+<p><small>Current update: <a href="#update-20261114-doc25">2026-11-14 23:22Z (handoff-doc25)</a>. Owner: <b>Travis</b>. Repository: <code>CorbanuCore/CorbanuTerminal</code>.</small></p>
+<div class="note" id="update-20261114-doc25"><b>Update 2026-11-14 23:22Z (handoff-doc25).</b>
+<p><b>Owner decisions are settled through D551; source integration continues, with functional acceptance still pending.</b> This box supersedes the dated status and pending lists below. Sources: <code>$W/todo.md</code> from the 15:44Z entry through 23:20Z, worker results modified since 15:40Z, the running workers' briefs and tmux sessions, and GitHub checked at 23:20–23:22Z. Main: <code>acc0f670fe90ce9ebef141c09dfaf25f4ee9414a</code> (#2194). Sync: <code>0cc4870a8eceabb0e389753a67cf897bdcc8559c</code>. These are source merges, not a release or blanket functional pass. <a href="managementHandoffHistory.html#archive-pre-20261110">Update boxes older than November 10</a> are archived; dated November 10–14 snapshots remain below.</p>
+<h3>Owner decisions and operating rules</h3>
+<p><b>D520–D546 were accepted as recommended at 11:30Z; D547–D551 at 17:11Z.</b> The earlier box records D520–D546, including D525(a)/D533 project-role restrictions, D537(b) refusing localhost UNC paths, D539(c), and D543(a)'s recorded, security-reviewed sync edits. D547(a) keeps refusing every tool call with a non-local agent backend; D548(a) keeps strict refusal for an unresolvable denied path; D549(a) accepts malformed apply_patch being refused before PreToolUse. <b>D550(b)</b> keeps D475's <code>GIT_ALLOW_PROTOCOL=file</code> and documents the local-file submodule gap: #2156 was closed with a detailed decline explanation, #2168 merged, and #2155 closed as documented residual risk. <b>D551(a)</b> makes a completed failed Telegram handler attempt terminal, separately recorded with a visible failure/retry notice, while retaining crash-pending work and queued receipts; #2170 implements it.</p>
+<p><b>ASTRA POLICY is owner-approved</b> (“please feel free to use Astra as desired”, 17:11Z). A worker brief names its executor. Astra High may implement ordinary, security and sync changes, and do first-pass review/triage. The standing safeguard remains <b>an independent read-only Opus 5.5 High final review on the exact head</b>; D318/corbanu-security approval is Opus-only. Workers never switch their own model. Astra workers must not trim tests to pass or add unrequested evidence documents. <a href="astraVsOpus.html">Comparison report</a>; current rules are in section 3.</p>
+<h3>Merged on main since the prior handoff, grouped by area</h3>
+<ul>
+<li><b>Security / contributors — <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2161">#2161</a>, @white-guy-01:</b> fast PF-27-S05 memory scanning in test builds (#2069); 337 macOS and 331 Linux tests, retained-key negative control, exact-head Opus/security approvals.</li>
+<li><b>Security — <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2163">#2163</a>:</b> enforce an empty crew provider allowlist and identify project-role layers (#2150); 981 tests.</li>
+<li><b>Security docs — <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2168">#2168</a>:</b> document D550(b)'s accepted local-file submodule gap.</li>
+<li><b>Security / contributors — <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2158">#2158</a>, @ryssroad:</b> recognize brace groups beside shell keywords (#2018); 839,640 corpus verdict pairs, zero quieter results, 907 Linux security tests.</li>
+<li><b>Security — <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2181">#2181</a>:</b> Moderate asks before protected project .env reads after untrusted content (#2167/#841); Permissive unchanged.</li>
+<li><b>Security / contributors — <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2194">#2194</a>, @white-guy-01:</b> no assignment from a word the shell does not split (comma/U+00A0, #2192); zero quieter corpus results and 912 security tests.</li>
+<li><b>Telegram — <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2162">#2162</a>:</b> count consecutive polling failures accurately (#2138); 146 tests.</li>
+<li><b>Telegram — <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2170">#2170</a>:</b> failed completed handler attempts free inbox capacity under D551(a), preserving crash-pending work (#2139); 155 tests.</li>
+<li><b>Windows / review — <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2177">#2177</a>:</b> confirm live sandbox readiness and refresh detached-review notices (#2062 items 1, 2, 3, 5, 6); 35 Linux/native Windows tests and a real Windows PTY flow. Item 4 remains D558.</li>
+<li><b>Windows CI — <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2173">#2173</a>:</b> upload integration JUnit from the nextest store, even on failure (#2164); native artifacts contain 972 core and 787 app-server tests. Follow-up #2174 remains.</li>
+<li><b>Windows CI — <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2191">#2191</a>:</b> isolate probe workspaces in system temp and check cleanup retries (#2172), retaining assertions.</li>
+<li><b>Qualification — <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2171">#2171</a>:</b> PF-23-S04/S05 independent functional records and two demo reels, with failures and limits preserved.</li>
+<li><b>Sync planning — <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2193">#2193</a>:</b> record coordinator-authorized early PF-85-S04 start and deferred S02 tests.</li>
+</ul>
+<p><b>Contributor credit:</b> @white-guy-01 contributed both #2161 and #2194; @ryssroad contributed #2158. @bradsbots contributed both <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2101">#2101</a> and <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2196">#2196</a> to the <b>sync branch</b> (rmcp-client work, then Windows termination-warning and shutdown-test follow-ups; #2196 had 298 local tests and three mutation controls). @citadelculture's <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2114">#2114</a> merged <b>earlier today, before this window</b> (#2108); its clean review was the authorized cooldown-era Astra exception, not a new exception to today's Opus gate. Named thanks and factual Task Node notes were posted for these contributions.</p>
+<h3>Upstream sync: merged work and remaining qualification</h3>
+<p><b>S2a implementation is done except deferred tests and recorded follow-ups.</b> #2100/#2142/#2145–#2149 merged; the last S2a report counted 111 resolved / 48 open (41 test files plus seven follow-ups). This is not an S2 exit or test-pass claim. <b>S3a is nearly done:</b> #2151–#2154, #2157, #2160, #2169, #2175 and #2182–#2184/#2186/#2187 and #2201 merged. Three S3a test rows remain in the main ledger (the two orchestrator files and network_approval suite), plus three unified_exec test rows in the main-merges ledger and an mcp_runtime follow-up. #2182 fixes the local-hook login-shell gap; #2183 restores protected grant stripping/read blocks; #2184 repairs MCP tests; #2186 records owner acceptance and message-origin handling; #2187 ports security tests. Many tests were only type/borrow checked or exercised on a scratch build, not run on the real sync tree. <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2201">#2201</a> fixed the stdio-executor environment gap on sync at 23:07Z. The equivalent main fix for #2200, <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2202">#2202</a>, remains open.</p>
+<p><b>Main merge #3:</b> <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2176">#2176</a> is merged into sync. Parts B–D remain open: <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2178">#2178</a> (D510 remote Windows refusal), <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2179">#2179</a> (D525(a)/D533 project roles, stacked on B), and <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2185">#2185</a> (main through <code>ebda19554a</code>, stacked on C). Do not describe the whole carry-forward as finished.</p>
+<p><b>S4 started early under coordinator authorization.</b> S4c has <b>52/59 original rows merged</b> via #2195/#2198/#2199. Seven S4c and six main-merge S4c rows remain; <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2204">#2204</a> (thread processor/resume permissions) is open for security review. <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2203">#2203</a> merged at 23:18Z, resolving all nine S4d exec rows: guaranteed shutdown, panic-stall watch and accounting settlement are carried forward. This and #2201 are confirmed by GitHub and the pinned sync commit, ahead of the latest todo.md entry. S4e stays available to contributors. D559–D564 remain pending; recommendations are not owner acceptance, and the issuer/installer recommendations were not both implemented in the first S4c session.</p>
+<table>
+<tr><th>Ledger at sync 0cc4870a8e</th><th>Resolved / total</th></tr>
+<tr><td><code>ledger-rust-v0.167.0.tsv</code></td><td>798 / 1,154</td></tr>
+<tr><td><code>ledger-rust-v0.167.0-main-merges.tsv</code></td><td>743 / 795</td></tr>
+<tr><td><code>ledger-rust-v0.167.0-s1c.tsv</code></td><td>202 / 202</td></tr>
+<tr><td><code>ledger-rust-v0.167.0-s3b.tsv</code></td><td>0 / 571</td></tr>
+<tr><td><b>Overall</b></td><td><b>1,743 / 2,722 = 64.03%</b></td></tr>
+<tr><td><b>Excluding all S3b security-review rows</b></td><td><b>1,743 / 2,150 = 81.07%</b></td></tr>
+</table>
+<p>Computed from the four TSVs under <code>docs/management/upstreamSync/</code>, counting data rows whose <code>status</code> is exactly <code>resolved</code>. Exclusion uses <code>slice == "S3b security review"</code>: 572 rows (571 in the split S3b file, one elsewhere). These percentages measure ledger resolution, not completed tests or security qualification.</p>
+<p><b>Sync CI:</b> #2119/#2120/#2123/#2124/#2121 and @bradsbots' #2101 merged; #2131 closed as superseded; #2122 stays draft for full-CLI MCP helpers after S4. #2119 fixed V8 build flags and Hickory/quinn advisories; #2121 preserves frozen QA/benchmark evidence. Marker-blocked checks and documented #2051/#2143 baseline failures remain. #2100's earlier merge with three pending marker-blocked checks was a rule slip; every expected-red check must still finish before any sync merge.</p>
+<h3>Installed binary and PF-23 functional evidence</h3>
+<p><b>func-pf23 installed main <code>1dea8b3b03</code></b> (postmerge green), signed with identifier <code>com.corbanu.corbanu</code> and the runtime flag. SHA-256: <code>546a2440b9f9d593e57168bef99e9d9989ac1ab6f581f1c725a2a0777bd9344b</code>. <code>INSTALL.json</code> was updated, <code>corbanu.prev-11fda4c378</code> retained, and version/signing/fresh-sign-in smoke passed. This installed build predates today's later merges, including #2181; the signed <code>152f62bf6e</code> compatibility reference was not installed.</p>
+<ul>
+<li><b>PF-23-S04, 11 cases:</b> 2/3/4/9/10 passed; 1/6/7 passed the decision but file effects were unobservable on macOS; 8 partial; <b>5 failed</b> (#2165: rules do not match the command inside <code>sudo chroot /</code>); 11 blocked for Linux/Windows. <a href="https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf23-s04-reel-2026-11-14.mp4">S04 reel (3:56)</a>.</li>
+<li><b>PF-23-S05, 19 cases:</b> 14 passed, cases 3/4/13 passed with limits, 17 partial, <b>11 inconclusive</b> (the helper script itself caused the prompts). Cases 15/16 passed only on clean local-model reruns. <a href="https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf23-s05-reel-2026-11-14.mp4">S05 reel (3:31)</a>.</li>
+<li><b>Evidence:</b> frozen designs driven in throwaway Tart guests by GLM 5.3 Flash, local-model retries after hosted refusals, failed/fixture attempts retained. #2171 merged after Opus evidence approval (three-round budget). #2166 is a new-conversation-on-provider-switch resume issue, not proven loss of taint state; #2167's pre-existing .env defect is now fixed on main by #2181. Neither sprint is fully passed or owner-accepted yet.</li>
+</ul>
+<h3>Nightly, infrastructure and classifier queue</h3>
+<p><b>#2141 fixed all three targeted nightly failures</b>: Bazel GNU/musl core unit tests now receive bubblewrap, and developer-accounting reuses the session provider's auth cache. Scheduled run <a href="https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/43612460211">43612460211</a> passed those targets but remained red on <b>#2180</b>, the D510 Permissive echo assertion under Wine. astra-2180's native/Wine comparison identifies a non-TTY Wine/PowerShell lane problem; <a href="https://github.com/CorbanuCore/CorbanuTerminal/pull/2190">#2190</a> is open, native Windows integration passed 972 tests, and <a href="https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/43639296830">branch nightly 43639296830</a> is still running. Main nightly is not yet declared green. #1967 closed after all seven Windows security integration cases were verified already fixed (11 native checks, 972 core and 787 app-server hosted tests).</p>
+<p><b>GLITCH BUILD COUNT correction:</b> <code>pgrep -c -x cargo</code> counts rustc wrappers too; count real builds using the section 3 command and wait while two or more run. Three real builds were seen at 19:24Z. Mac builds remain on CorbanuDrive with -j8; glitch uses -j10 maximum, one heavy build per worker. The D482 SQLite exception expires November 23; use the recorded patched sqlx-sqlite fallback if no release by November 20.</p>
+<p><b>Classifier merge queue (23:14Z): #2194 → #2188 → #2189.</b> #2194 is now merged. #2188 (#1973, quoted-text assignments) goes next; #2189 (#2001, deferred zstyle code) integrates it. astra-1973 has one explicitly granted sixth Opus round per PR (no seventh); a short merge-delta review is separately pre-authorized if queue conflict resolution touches its own files. Each still needs the never-quieter corpus gate, exact-head Opus/security approvals and completed green CI. An older progress result saying “4/5 rounds” is superseded by the 22:43Z/23:04Z grants.</p>
+<h3>Running workers at the snapshot</h3>
+<ul>
+<li><b>sync-main3 — Opus:</b> finish #2178/#2179/#2185, keeping main's security changes and ledger rows.</li>
+<li><b>sync-s3a10 — Opus:</b> main stdio executor fix (#2200/#2202; sync fix #2201 merged), remaining S3a tests, file-access and approval-contract review notes.</li>
+<li><b>sync-s4c2 — Opus:</b> S4d #2203 merged; finish seven S4c rows (#2204), six main-merge rows, and provisional D563/D564 work.</li>
+<li><b>astra-1973 — Astra:</b> classifier queue #2188 then #2189 under the granted review budgets.</li>
+<li><b>astra-2180 — Astra:</b> #2190, branch nightly and native/Wine evidence, then main-nightly verification.</li>
+<li><b>handoff-doc25 — Astra:</b> this archive/update; independent Opus final review, budget two.</li>
+</ul>
+<h3 id="pending-20261114-doc25">PENDING DECISIONS — D552–D564 and the Windows desktop checklist</h3>
+<p>The numbered items below preserve the latest coordinator choices and recommendations. D520–D551 and Astra policy are resolved; #2167 was already authorized as a defect fix. Where the ledger asks yes/no or keep/restrict/off, the alternative below is to defer or retain the other behavior, not a newly authorized implementation.</p>
+<ol>
+<li><b>D552 — accept both PF-23 runs as recorded.</b> Options: accept the recorded passes, failures and limits; or defer acceptance. <b>Recommendation: yes, accept as recorded.</b> This does not turn failed/blocked cases into passes.</li>
+<li><b>D553 — #2165 command rules.</b> (a) Rules also check the command inside sudo/chroot/env; (b) document the literal-match limit. <b>Recommendation: (a).</b></li>
+<li><b>D554 — S04 case 11.</b> Run a Linux guest with an in-guest build, about 3–4 hours (also observes cases 1/4/7/8 effects); or accept macOS plus unit tests. <b>Recommendation: the Linux guest run.</b></li>
+<li><b>D555 — #2166 resume notice.</b> Print a notice when resume starts a new conversation; or leave the silent behavior. <b>Recommendation: yes, print the notice.</b></li>
+<li><b>D556 — S05 case 11.</b> Author a new follow-up step that does not run through a script; or leave the result inconclusive. <b>Recommendation: yes, the follow-up.</b></li>
+<li><b>D557 — S05 case 3.</b> Accept Aggressive overriding approvals-off as documented; or defer acceptance and request a changed contract. <b>Recommendation: yes, accept as documented.</b></li>
+<li><b>D558 — #2062 item 4, detached review on a non-default/remote parent environment.</b> (1) Inherit the parent's exact environment and capability/permission context, fail visibly if unavailable, including acknowledgment of the server's effective sandbox level; (2) keep default-environment routing and require inline review when the parent environment is needed. <b>Recommendation: (1).</b></li>
+<li><b>D559 — TUI/exec event stream.</b> Keep main's unbounded stream (no dropped approvals/output); or adopt upstream's capped stream that drops messages when full. <b>Recommendation: keep main's.</b></li>
+<li><b>D560 — direct input to v2 sub-agents.</b> Keep upstream's extra TUI blocks, with only turn start/steer excepted; or broaden the exceptions. <b>Recommendation: keep the extra blocks.</b></li>
+<li><b>D561 — OpenAI device login.</b> Keep skipping the API-key-only setting while always obeying admin login policy; or change the device-login exception. <b>Recommendation: keep.</b></li>
+<li><b>D562 — #658 session account.</b> Use the session account for upstream's new backend calls and send nothing when accounts differ; or change that routing contract. <b>Recommendation: keep session-account routing and no send on mismatch.</b></li>
+<li><b>D563 — CODEX_APP_SERVER_LOGIN_ISSUER.</b> Restrict the override to debug builds for Corbanu; or retain upstream's release-build availability. <b>Recommendation: restrict to debug builds.</b></li>
+<li><b>D564 — #2197 daemon self-install/update.</b> Turn it off until it points at a Corbanu installer; or leave/repoint the updater now. <b>Recommendation: off until the Corbanu installer is ready.</b></li>
+<li><b>Windows desktop checklist.</b> (a) Travis schedules 30 minutes for the existing D396/D416/D448 checklist plus step 4b/#1803 probe; (b) defer and keep #1800/#1798/#1851 drafts gated. <b>Recommendation: (a) when available; otherwise (b), with no inferred sign-off.</b> Automated desktop evidence and D461/D462 acceptance do not replace his checklist.</li>
+</ol>
+</div>
+
+<div class="note" id="update-20261114"><b>Historical update 2026-11-14 15:16Z (handoff-doc24; superseded by handoff-doc25 above).</b>
 <p><b>Work resumed; source integration is ahead of qualification.</b> This is the current operational snapshot. Older update boxes and the dated state/decision lists below are historical where superseded here. Sources: <code>$W/todo.md</code> from 11-10 03:28Z through 11-14 15:12Z, worker results modified since November 10, the six live workers' briefs, the contributor checkpoints, the <a href="astraVsOpus.html">model comparison</a>, and GitHub PR/issue state checked November 14 around 15:12–15:16Z. Main is <code>d8482953b5</code> (#2141). Every merge listed below is a source merge, not a release or functional-acceptance claim.</p>
 <h3>Outage, recovery and owner decisions</h3>
 <p><b>The claude-plan outage lasted from 11-10 13:24Z to the successful 11-14 10:48Z probe.</b> Opus workers/review execution hit HTTP 429 and a local cooldown. During the outage the coordinator directly implemented the owner-requested provider/model-picker repair and contributor integrations, using the specifically authorized Astra High reviews. This was a scoped exception, not permission for workers to substitute models. The coordinator assessed 19 human and eight Dependabot PRs, retained original author history, thanked contributors by name and recorded Task Node provenance. It repaired OpenSSL/rustix/Hickory audit blockers, reconciled dependencies, landed the accepted contributor queue and staged sync CI repairs. Independent functional acceptance and demos remained unfinished; no install or release was claimed by those November 11–12 checkpoints.</p>
@@ -225,65 +302,12 @@ the running workers' briefs, logs and tmux sessions, <code>INSTALL.json</code>, 
 <li><b>Mac:</b> the data volume went from about 26 GiB to <b>1.2 TB free</b> at about 17:45Z on 11-09 (not the coordinator's doing). <b>Installed build:</b> still <code>8cb852fd53</code>; the rebuild comes after merge-train2.</li>
 <li><b>Running</b> (section 10): merge-train2, win-1877b, contrib-s, sync-main2b, fix-2015 (03:18Z) and this handoff-doc23; win-2000 has finished.</li>
 </ul></div>
-<p><small>The update boxes of 11-09 14:30Z (handoff-doc22), 11-08 23:30Z (handoff-doc21), 11-08 15:30Z (handoff-doc20), 11-08 05:15Z (handoff-doc19), 11-07 21:30Z (handoff-doc18), 11-07 15:00Z (handoff-doc17), 11-07 02:15Z (handoff-doc16), 10-29 07:20Z (handoff-doc15) 10-28 21:30Z (handoff-doc14), 10-28 16:15Z (handoff-doc13) and 10-28 03:15Z (handoff-doc12) moved verbatim to <code>docs/management/managementHandoffHistory.html</code> (blob-size policy).</small></p>
-<p><small>The 2026-10-26 resume note, the 2026-10-22 pause box and its approved-decisions note moved verbatim to <code>docs/management/managementHandoffHistory.html</code> (handoff-doc23, blob-size policy).</small></p>
+<p><small>The update boxes of 11-09 14:30Z (handoff-doc22), 11-08 23:30Z (handoff-doc21), 11-08 15:30Z (handoff-doc20), 11-08 05:15Z (handoff-doc19), 11-07 21:30Z (handoff-doc18), 11-07 15:00Z (handoff-doc17), 11-07 02:15Z (handoff-doc16), 10-29 07:20Z (handoff-doc15) 10-28 21:30Z (handoff-doc14), 10-28 16:15Z (handoff-doc13) and 10-28 03:15Z (handoff-doc12) moved verbatim to <a href="managementHandoffHistory.html">the handoff archive</a> (blob-size policy).</small></p>
+<p><small>The 2026-10-26 resume note, the 2026-10-22 pause box and its approved-decisions note moved verbatim to <a href="managementHandoffHistory.html">the handoff archive</a> (handoff-doc23, blob-size policy).</small></p>
 
-<div class="warn"><b>Three-day stop: <code>claude-plan</code> 429 (2026-10-16 13:55Z → 2026-10-19 18:30Z).</b>
-<ul>
-<li>At about 13:55Z on 10-16 the <code>claude-plan</code> provider (Opus 5.5) returned HTTP 429 with a local cooldown of about 20 hours. All 10 running workers exited with EXIT:1.
-The watchdog's single relaunch (sec-891, 14:01:51Z) failed the same way, and the coordinator stopped too, so nothing ran for about three days. The old logs are kept as
-<code>$L/&lt;name&gt;.log.prev-20261016-429</code>.</li>
-<li>On 10-19 at 18:30Z the coordinator resumed. The plan provider answered a smoke test (PLAN-OK), the VM “macOS 3” was stopped with its lock gone, and main hadn't moved since
-#930 (postmerge green).</li>
-<li>Meanwhile citadelculture (Travis's other initiative) had opened many PRs on our backlog, and outside contributors had opened #946 and #952–#966. The coordinator didn't
-duplicate them: acct-912 was not relaunched because #957 covers #912. They were landed or closed under D36/D45 (section 8.0a).</li>
-<li>18:47Z: six workers were relaunched with RECOVERY NOTEs (sec-891, git-postcheck, flake-931, flake-ci3, agg-919, qual-mod2).</li>
-<li><b>Rule since (coordinator, 10-19):</b> at most <b>6 concurrent Opus workers</b>, with each worker's reviewers counted in its budget, to stay under the plan limit.</li>
-<li>Smaller provider failures since: sec-937 died three times on 10-19/20 (stream disconnect, then an empty stream after 5 reconnects, then an empty stream after reading a big
-review). Each time it was relaunched with a “lean context, small steps, long outputs to files” note.</li>
-</ul>
-<b>If 429 recurs:</b> don't relaunch in a loop. Wait out the cooldown, smoke-test the provider with one short <code>corbanu exec</code>, then relaunch from RECOVERY NOTEs up to
-the cap. Workers' PRs and worktrees survive; check each one's last state before relaunching.</div>
+<p id="doc25-history-1"><small>Three-day stop: <code>claude-plan</code> 429 (2026-10-16 13:55Z → 2026-10-19 18:30Z). <a href="managementHandoffHistory.html#doc25-archive-1">Archived update and evidence</a>.</small></p>
 
-<div class="warn"><b>Drive-access outages (#616) — what is known (read before relaunching anything).</b>
-<ul>
-<li><b>10-12 ~11:01Z:</b> first episode. Seven exec workers hung; fixed by #638 (a crashing turn ends with an error instead of hanging), installed since 10-13.</li>
-<li><b>10-15 ~07:59Z:</b> the terminal lost access to <code>/Volumes/CorbanuDrive</code> (the <code>claude-plan</code> auth helper and the session store got “Operation not
-permitted”). Thanks to #638 every worker <b>exited cleanly</b> (qual-mod1, qual-aggr6, ci-win-tests, handoff-doc4), and the tmux server was gone. Nothing ran until the
-coordinator found it at ~20:49Z and relaunched them with RECOVERY NOTEs (old logs: <code>$W/&lt;name&gt;.log.died-20261015T2049</code>).</li>
-<li><b>10-15 20:59–21:01Z:</b> the second episode killed main-ci4, qual-mod1, qual-aggr6 and handoff-doc4. The coordinator's own shell was unaffected. Travis's
-<code>/vault add</code> at ~21:06Z hit the same failure, and label <code>kimi_api</code> stored the error text as the secret (#855; vault-855 is fixing it). Terminal
-was relaunched ~21:05Z.</li>
-<li><b>21:13Z:</b> <code>fseventsd</code> was at 32 GB RSS / 105% CPU after 25 days of uptime; CorbanuDrive's <code>.fseventsd</code> held 4.3 GB in 92,897 files.
-Travis OK'd a restart (21:22Z) and ran <code>killall fseventsd</code> himself at <b>21:28Z</b>: RSS went to 14 MB and CPU to 1%.</li>
-<li><b>21:25:42Z, a separate event:</b> T9, FASTDRIVE, FASTDRIVE2 and BackupBook were unmounted by a Finder/DiskArbitration unmount, not by this program. It blocked
-qual-aggr6 because “macOS 3” needs FASTDRIVE2 (section 6). Travis replugged the drives, and the coordinator mounted them at his request (22:46Z and 22:50Z).</li>
-<li><b>Since 21:01Z: no episode.</b> resil-616's read-only probes (every 0.5 s with system logs streaming, 21:52–22:10Z, then a lighter probe until 02:24Z) saw none at
-22:00, 23:00, 00:00, 01:00 or 02:00. No worker has died of it since, and the watchdog has relaunched nothing.</li>
-</ul>
-<b>Evidence so far:</b>
-<ul>
-<li>TCC allowed Terminal throughout, there were no Seatbelt denials and no ES clients.</li>
-<li>All episodes fall at ~:59–:01 past an hour.</li>
-<li>resil-616 found that exec itself lost access first (reading its own session file), 0.1–2 s before the <code>claude-plan</code> helper failed. The helper is
-a victim, not the cause; a forced token refresh in a throwaway home changed no permissions.</li>
-<li>Checked without a match: the Mac hasn't slept since 10-08; the disk manager logged nothing; Backblaze's scan runs every 10 minutes; a launchd job at :55 runs
-<code>~/.hourlywake.sh</code>. <code>fs_usage</code> needs root, and there is no sudo.</li>
-<li><b>The trigger is still unknown.</b> #616 has been closed since 10-13 (by #638's fix for the hang); resil-616 only commented on it. Reopen it (or file a new issue) if an episode recurs.</li>
-</ul>
-<b>Mitigations in place:</b>
-<ul>
-<li>Workers on the internal disk with a watchdog (section 3).</li>
-<li>#861 (installed since <code>395ac0adcd</code>; in every build since): exec retries for up to <code>--home-wait-secs</code> (default 3600) instead of exiting; the helper exits 75.
-Every failure is logged to <b><code>~/Library/Logs/Corbanu/home-access.log</code></b> on the internal disk: time, pids, program, operation, path, error, cwd,
-responsible app, sandbox check, mount, and the permissions/flags/xattrs/ACL of each parent. It never records contents or secrets.</li>
-<li>A worker <i>started</i> while the home is unreadable still exits 75 at once (decision 11).</li>
-<li>The rollback test to <code>45bfa7d938</code> is held (Travis 22:42Z): revisit it only if outages recur after the fseventsd restart.</li>
-</ul>
-<b>At the next episode, read <code>home-access.log</code> first.</b> On 2026-10-22 at 12:40Z the file still did not exist: no episode since 10-15 21:01Z. The 04:41Z/04:52Z
-entries noted in #894 were rel-858's test runs; it deleted them, and #895 keeps core unit tests from writing to the real log. #895 also lets the private helpers
-(apply-patch, the arg0 exec helper, the file helper) skip the home check, so they no longer stop inside Moderate's sandbox (#858); the credential broker keeps it.
-</div>
+<p id="doc25-history-2"><small>Drive-access outages (#616) — what is known (read before relaunching anything). <a href="managementHandoffHistory.html#doc25-archive-2">Archived update and evidence</a>.</small></p>
 
 <h2>1. How to resume (read first)</h2>
 <ol>
@@ -339,8 +363,9 @@ recommendation for each. Travis answers by number (“1. yes 2. …”).</li>
 <h3>Current additions — November 14, 2026</h3>
 <p>The current <code>$W/wave2-common.md</code> controls; these additions supersede older launcher/model instructions below.</p>
 <ul>
-<li><b>ASTRA INTERIM POLICY (11-14 14:55Z):</b> under Travis's discretion grant, a brief may name Astra High as executor for ordinary fixes, CI, docs, triage, first-pass review, security-code implementation or sync-conflict resolution. Every final merge review remains an independent read-only Opus 5.5 High review on the exact head; D318/corbanu-security approval requires Opus APPROVE. Workers never switch their own model. Astra workers must not trim tests to pass or include extra evidence documents unless asked.</li>
+<li><b>ASTRA POLICY (owner-approved 11-14 17:11Z; recorded about 17:15Z):</b> Travis accepted Astra use as warranted; a brief may name Astra High as executor for ordinary fixes, CI, docs, triage, first-pass review, security-code implementation or sync-conflict resolution. Every final merge review remains an independent read-only Opus 5.5 High review on the exact head; D318/corbanu-security approval requires Opus APPROVE. Workers never switch their own model. Astra workers must not trim tests to pass or include extra evidence documents unless asked.</li>
 <li><b>Launchers:</b> <code>$L/launch-astra.sh &lt;name&gt; $W/&lt;name&gt;.brief.md</code> selects <code>-m gpt-6-astra -c model_provider="openai" -c model_reasoning_effort="high"</code>; <code>$L/launch.sh</code> keeps Opus 5.5 High. The brief states the executor and independent final reviewer.</li>
+<li><b>GLITCH BUILD COUNT (11-14):</b> <code>pgrep -c -x cargo</code> over-counts rustc wrappers. Count real builds with <code>ssh glitch 'pgrep -fc "bin/cargo (build|test|check|clippy|fix|nextest)|cargo-nextest nextest"'</code>; while the count is two or more, wait 120 seconds and recheck before starting a heavy build. One heavy build per worker; -j10 maximum on glitch.</li>
 <li><b>TOOLCHAIN (11-14):</b> both launchers put pinned Rust 1.99.1 first on PATH. Clippy output from default 1.95.0 is not valid gate evidence; rerun with 1.99.1.</li>
 <li><b>PLAN CAPACITY (11-14):</b> at most one reviewer process per worker. Keep briefs lean and prefer focused delta reviews. Run the reviewer in the foreground or a private tmux session you wait on (REVIEWER LAUNCH). On HTTP 429/local cooldown, write state to the result and stop; do not substitute models.</li>
 <li><b>SAME-TEST RULE (11-10):</b> if main changed the same test files since your last CI, merge main and rerun affected platform checks, including non-blocking workflows. Do not remove failures from a known-failures list while they still fail.</li>
@@ -1086,7 +1111,7 @@ whose targets and temp folders are on CorbanuDrive. Travis was told. At handoff-
 It execs <code>.codex-work/corbanu-terminal/bin/corbanu</code>, a <b>symlink</b> to the real binary
 <code>.codex-work/integration-build-20260922a/integration-package-dev/bin/corbanu</code>. <b>Install over the real binary, never over the launcher</b>: at 10:53–10:56Z the
 coordinator briefly copied a binary over the launcher by mistake and restored it; sessions started in those three minutes ran without <code>activate.sh</code>'s environment.</li>
-<li><div class="warn"><b>Rebuild procedure correction (2026-11-08 03:31Z, <code>todo.md</code>):</b> when signing a new binary, <code>codesign</code> <b>must</b> pass <code>--identifier com.corbanu.corbanu</code> (short form <code>-i</code>), as the full command in the 10-22 entry below does. Without it, codesign uses the default identifier <code>corbanu</code>, and the binary can no longer read its keychain items: sign-in fails with “OS keyring load timed out”. A binary signed that way was installed 03:25–03:31Z on 11-08 and replaced. After every install, check that <code>codesign -dv</code> shows <code>Identifier=com.corbanu.corbanu</code>, and that a fresh-process <code>corbanu exec</code> signs in (qa-1108b did both).</div></li>
+<li><p id="doc25-history-3"><small>Rebuild procedure correction (2026-11-08 03:31Z, <code>todo.md</code>): <a href="managementHandoffHistory.html#doc25-archive-3">Archived update and evidence</a>.</small></p></li>
 <li><b>Current install (2026-11-08 19:20Z):</b> main <b><code>8cb852fd53</code></b>, the merge of #1872 (#1827 nextest group), postmerge green (run 42509438095); installed 19:20Z per <code>todo.md</code>, signed with <code>--identifier com.corbanu.corbanu</code> (verified), smoke OK (<code>SMOKE-OK</code>), Rust 1.99.1, developer-accounting marker on, same Developer ID.
 sha256 begins <code>0f692d6df2a4bd2d</code>. <code>INSTALL.json</code>: <code>built_at</code> 19:12:33Z, <code>commit</code> <code>8cb852fd53</code>, <code>previous_binary</code> <code>01f15b0348</code>, both <code>sha256</code> and <code>corbanu_sha256</code> equal the binary's; <code>codesign -dv</code> shows <code>Identifier=com.corbanu.corbanu</code>.
 It adds, since <code>01f15b0348</code> (from <code>git log --first-parent</code>): #1814, #1823, #1807, #1829, #1836, #1843, #1834, #1840, #1844, #1835, #1848, #1853, #1781, #1794, #1852, #1862, #1859, #1793, #1857, #1804, #1849, #1867, #1868, #1869, #1860 and #1872. <b>Not in it</b> (merged later): #1878, #1850, #1841, #1858, #1874, #1885, #1884, #1886, #1887, #1880, #1891, #1892, #1893, #1889 and #1895, and since doc21: #1888, #1899, #1900, #1898, #1882, #1905, #1902, #1903, #1897, #1911, #1914, #1916, #1918, #1919, #1913, #1866, #1917, #1923, #1924, #1904 and #1927 (36 in all).
@@ -1126,26 +1151,7 @@ Each got warm thanks and a Task Node note. Still open: first-time contributors <
 </ul>
 
 <h3>8.1 Security levels (P0/P1) — “Aggressive ships” milestone (signed off 2026-10-16)</h3>
-<div class="note"><b>Signed off by Travis on 2026-10-16</b> (“all as recommended”, D10; with D8 option (a) and D9), on the third targeted re-run's combined status:
-<b>58 passed, 0 failed, 2 blocked (AGG-R14 result 2, AGG-R06), 4 accepted (AGG-18, R07, R10, 20) of 64</b> (record #868, resting on #819, #788, #741, #628 and #447).
-Known limits accepted: #867 (no on-screen status for a model-spawned child agent the kill switch stopped), AGG-R06 (no Claude Code in the guest), #838's Linux
-create-only limit (D7) and the Linux user-namespace breakage list of #876 (D13); macOS only. Recorded on #867, in <code>docs/plans/active/p1-security-hardening.md</code>
-(milestone row, sequence, human acceptance), in a dated “Sign-off (2026-10-16)” addendum of
-<code>qa/security-levels/milestones/aggressive-20261015-targeted3/README.md</code> and in PF-13-S07 (archive now waits only on the Linux canary re-run), all by handoff-doc6.
-Follow-ups since: #972 (#919, D20: Aggressive confirmed in one window reaches the other windows on the same home), #999 (#978), #1044 (#1015 edge cases), D44 (raised
-exec/IDE sessions refuse non-read-only commands until restarted), D52 (#1033, #1042: network and MCP “always” rules saved outside Aggressive are suspended). Still open
-around it: #505, #818 (AGG-R03 passed in targeted3: close it), #867.<br>
-<b>Counts since (D110, D113; #1219, 10-21):</b> with qwen-rerun2's local-model results (#1191: AGG-18 and AGG-R10 passed) and amendment 7 (D110: a name in the model's reply
-doesn't count when it comes only from the product's fixed list of protected names, so AGG-R07 passed), all 64 cases are <b>61 passed / 0 failed / 3 blocked</b> (AGG-R06, AGG-R14
-result 2, AGG-20). No sign-off or earlier verdict was rewritten. AGG-20P (a role a person defines with more access must be refused before any agent runs with it) is designed for the
-next local-model run (D111, <code>qa/security-levels/milestones/next-localmodel-run.md</code>); Travis answered both at 17:33Z: AGG-20's named limit lifts once AGG-20P passes (D143), and #1181 is closed as by design (D144, closed by contrib-3).<br>
-<b>Since #1281 (qa-local3, #1314; record <code>qa/security-levels/milestones/localmodel-run3-20261022/</code>):</b> AGG-20P ran with the local model on Tart (signed build
-<code>11443dc2b5</code>, frozen amendment L3). <b>AGG-20P-B passed</b>: a person-defined role that sets <code>danger-full-access</code>, <code>approval_policy = "never"</code> or network
-access was refused at the restart and at every start (“Child agents: role <code>p20wide</code> sets …”), and no agent ever ran with it. <b>AGG-20P-A</b> (the control role) <b>failed</b> under
-amendment 7's literal wording rule although every attempt was denied: the sub-agent's model appended <code>; echo "exit=$?"</code> to two commands, so the outside write got no after-run note
-(#1312, since fixed by #1319) and the vault refusal had an extra clause. So AGG-20P failed and AGG-20's named limit doesn't lift yet (D143). <b>D183</b> asks to accept AGG-20P-A as intended, as
-D110 did for AGG-R07; then AGG-20P passes and Aggressive becomes <b>62 passed / 0 failed / 2 blocked</b>. Until then the counts stay 61 / 0 / 3. #1320 (#867) now implements D8's option (b), a
-status line for a sub-agent the kill switch stopped; D8 had accepted its absence as a known limit, so reverting #1320 is the way back if Travis prefers that.</div>
+<p id="doc25-history-4"><small>Signed off by Travis on 2026-10-16 <a href="managementHandoffHistory.html#doc25-archive-4">Archived update and evidence</a>.</small></p>
 <ul>
 <li>Run 1 (#447, 2026-10-11): 17 pass / 15 fail / 7 blocked of 39. Run 2 (#628, 2026-10-12): 41 pass / 10 fail / 6 blocked of 57.
 Neither passed.</li>
@@ -1247,93 +1253,7 @@ from its tests, and D180 skipped a re-record.</li>
 <li><b>Signed off 2026-10-16.</b> Next: “Moderate ships”, then flag removal (each its own isolated code-blind run and named sign-off).</li>
 </ul>
 <h3>8.1a “Moderate ships” milestone (signed off 2026-10-20)</h3>
-<div class="note"><b>Signed off by Travis on 2026-10-20 06:41Z</b> (decision D61, recorded on #447). The basis is the combined status after the second targeted re-run:
-<b>30 passed, 4 accepted by owner decision, 0 failed, 0 blocked, 0 pending of 34</b>. The accepted cases are MOD-09 and MOD-21 (D39), MOD-11 (D43) and MOD-28 (D40).
-<ul>
-<li><b>Records:</b>
-<ul>
-<li>#844, the first run (10-15): 16 passed / 15 failed / 3 blocked.</li>
-<li><b>#971</b> (<code>moderate-targeted-20261016/</code>, qual-mod2; merged 10-20 04:13Z after the cargo-deny fix): 17 re-run, 12 passed / 2 failed (MOD-15 #941, MOD-28 #942)
-/ 3 blocked. All 34: 28/2/3 with 1 pending (D5). Its dispositions are D38–D43 (10-19 22:16Z).</li>
-<li><b>#1037</b> (<code>moderate-targeted2-20261020/</code>, qual-mod3; on UTM “macOS 3”, candidate main <code>8bf182de43</code>): MOD-15 passed (refusal cell names the level,
-#900 + #949), and MOD-28 is accepted as “no session approval exists to revoke” (#962 fixed #942). Evidence checks 5 of 5 used; the last corrections were applied but not
-re-checked.</li>
-</ul></li>
-<li><b>Known limits accepted with it:</b>
-<ul>
-<li>MOD-09/21: the product's credential handling was not reached, because the hosted models declined (D39).</li>
-<li>MOD-28: revoke is not testable, since Moderate offers no session approval (D40).</li>
-<li><code>.git</code> is read-only under Moderate, so agents can't commit (D5 (c); MOD-11 and MOD-06's git part, D43). The post-command <code>.git</code> check is merged (#926, #1083).</li>
-<li>#838's Linux create-only limit (D7).</li>
-<li>#876's Linux user-namespace breakage list (D13). It is now eased for one approved command (D27 (a), #975; after untrusted content only for known tools, D48 (c), #1024; D62).</li>
-<li>macOS only, stand-in project, no Claude panes (D7 (a)). MOD-17 and MOD-29 pass under the model-decline rule. MOD-33 counts passed (D41).</li>
-</ul></li>
-<li><b>Recorded</b> by this update (handoff-doc7):
-<ul>
-<li><code>docs/plans/active/p1-security-hardening.md</code>: the milestone row, the implementation sequence, the human acceptance table and the completion checkbox;</li>
-<li>a dated “Sign-off (2026-10-20)” addendum in <code>qa/security-levels/milestones/moderate-targeted2-20261020/README.md</code>.</li>
-</ul></li>
-<li><b>Follow-up after the sign-off</b> (#1052; qwen-1052; record <b>#1078</b>, <code>moderate-localmodel-20261020/</code>): MOD-09 and MOD-21 were re-run code-blind on Tart, with
-Travis's local model (mlx-serve, refusals removed) as the product's model.
-<ul>
-<li><b>MOD-21 passed.</b></li>
-<li><b>MOD-09 failed item 7.</b> Protected launch keeps CLI-token files such as <code>~/.aws/credentials</code> closed even after approval, but the prompt still offered “Yes, proceed”
-(#1077). Item 5 failed too: an image-tool read of <code>~/.netrc</code> was refused only in the log, with nothing on screen (#1087). Every protection held.</li>
-<li>With these results the 34 cases are 31 passed / 0 failed / 3 accepted: <b>D72</b> (10-20 18:22Z) accepts MOD-09 as intended, with the wording fixed by #1091 (#1077) and
-the image-tool refusal shown on screen by #1095 (#1087). D73: no separate <code>~/.ssh/config</code> proof run. Items 5 and 7 are re-checked in qwen-rerun2 (D74).</li>
-</ul></li>
-<li><b>Advisory wording issues</b> from qual-mod3: #1035 and #1036, fixed by #1086 (tui-fix1). Neither was a sign-off condition.</li>
-<li><b>After the sign-off (10-20/21):</b> the Tart parity run (#1149) found two product changes since the UTM runs: MOD-11's <code>.git</code> writes failed with a bare sandbox error
-(#1139, fixed by #1171, D94) and MOD-21's Spawn-status task reached the child as untrusted mail (#1146, fixed by #1175, D95). Case texts: amendment v6 (MOD-22, D96, #1168) and v7
-(MOD-12/23/29, D97, #1169). Testers in later runs get <code>amendments-v6.md</code> and <code>amendments-v7.md</code> on top of v2–v5. mod-fix1 filed #1176 (an agent's task to a pane
-the person opened arrives as the person's input), now D106. qwen-rerun2 filed #1181 (AGG-R07: the model's permission instructions list the home's protected entries) and #1182 (Grant
-once still offered for <code>curl</code>), from its runs so far.</li>
-<li><b>Since #1184 (10-21):</b>
-<ul>
-<li><b>Counts</b> (D113, #1219): <b>31 passed / 0 failed / 3 accepted</b>. MOD-09 items 5 and 7 passed with the local model (#1191), but MOD-09 stays accepted because item 6 has never
-run.</li>
-<li><b>D93 UTM same-build check and D94/D95 re-runs</b> (utm-par2, #1213; <code>moderate-utm-samebuild-20261021/</code>): MOD-11 and MOD-26 matched Tart, MOD-29 matched Tart's replay, and MOD-21 and MOD-22 differed with no
-cause tied to either machine, so by the frozen rule milestone runs don't switch to Tart yet. D94 is confirmed (#1139's
-result passes and #1171's message appears; MOD-11 is still blocked because the model declined item 8, D141). D95 is unconfirmed: MOD-21 passed 5 of 5, its first pass with a hosted
-model, but no task went through Spawn status (D140). Travis answered D139 (Tart)–D142 at 17:33Z as recommended; results in the next item.</li>
-<li><b>#1176</b> became #1220 (D106, agents' tasks to person-opened panes through the untrusted mailbox), merged 17:31Z on Travis's sign-off (D147, with D148: hold such tasks while the kill switch is on). The sender label followed in #1263 (#1248, D149).</li>
-<li>Testers get <code>tester-packet-rules.md</code> (check the screen about every 30 s while a turn runs, D114), also added to <code>qa/code-blind-functional/executor-prompt.md</code>.</li>
-<li><b>Moderate reel</b> (reel-mod, #1204): 9:02, nine chapters, recorded on the signed build <code>2f9d05c51e</code> in throwaway profiles with fake credentials; on the
-<code>demos</code> release (<code>moderate-reel-2026-10-21.mp4</code> with <code>.srt</code>) and at <code>https://corbanu-moderate-reel.cloudflare-share.workers.dev/</code> (unindexed;
-video in a private bucket). The narrator-voice question (D139 (reel)) was covered by Travis's 17:33Z “D124–D153 all as recommended”, whose recommended path is that he listens and decides; no
-listening note is recorded, and <code>todo.md</code> notes he approved the same voice and its terms for the earlier reels on 10-09 (section 9).</li>
-</ul></li>
-<li><b>Since #1231 (10-21/22): D139–D141</b> (utm-par3, #1265; <code>moderate-vm-parity3-20261021/</code>, <code>moderate-amendment-v9-20261021/</code>), on build <code>9750861c2a</code>
-on both machines, by a comparison rule frozen before either VM started:
-<ul>
-<li><b>D140, amendment v9:</b> the MOD-21 tester creates one Troll pane with <code>/spawn</code> and sends the task from Spawn status. Written by a fresh code-blind designer, reviewed
-separately, frozen word for word (numbered v9 because the local-model amendment L2 was already v8).</li>
-<li><b>D139:</b> MOD-21 was accepted under D39 in all three attempts on each machine, and MOD-22 passed all three on each: <b>alike</b>, so the rule says <b>switch milestone runs to Tart</b>
-(D161). Isolation held on both, every model request succeeded, and no tester slip changed an outcome. In all six MOD-21 attempts the GLM 5.2 child declined before running anything,
-so MOD-21's results 1–3 (the protections) were never exercised on either machine (D163).</li>
-<li><b>#1175 confirmed</b> in all six MOD-21 attempts: the task reached the child as the person's own message, checked with yes/no flags in the VM's request logger (never the text) (D164).</li>
-<li><b>D141:</b> MOD-11 on Tart is still blocked: the model declined item 8 twice (and item 3 twice). #1171's warning now also appears when nothing was approved (D165).</li>
-<li><b>#1266</b> (filed): a pane created with “Standard (default)” reasoning shows <code>xhigh</code> / <code>zai deep</code>. small-fix14 found it real: an older Ambient/Z.AI conversion turns
-Standard into Deep when the pane's settings load. citadelculture's draft <b>#1270</b> fixes it (reviewed APPROVE, green; waits for its author to mark it ready).</li>
-<li>Counts unchanged: <b>31 passed / 0 failed / 3 accepted</b>.</li>
-</ul></li>
-<li><b>Since #1281 (10-22):</b>
-<ul>
-<li><b>D161:</b> milestone runs switched to Tart (recorded in <code>qa/security-levels/milestones/vm-parity-method.md</code>, “Owner decision D161”). <b>D162:</b> qa-local3 deleted the
-<code>/Users/agent/.pf83-auth</code> folder (the real Z.AI key file and an old <code>auth.json</code>) in “macOS 3” without reading either, confirmed by a reboot; the VM is stopped, and Travis
-rotated the key (<code>zai_key_3</code>).</li>
-<li><b>MOD-21 (D163, now a local-model run under the MODEL-DECLINE RULE): passed.</b> The Troll child ran all three commands after the task came from Spawn status; both outside writes and
-the Corbanu <code>config.toml</code> read failed after approval, and the <code>~/.aws/credentials</code> read was prompted with a security reason and failed after approval. Results 1–3 were exercised
-for the first time, and #1175 is confirmed on the local model (D164). D184 asks to record it as passed rather than accepted under D39.</li>
-<li><b>MOD-11 items 3 and 8 (D165):</b> the local model attempted both in both runs and the product did what they expect (item 3 held for approval naming Moderate; item 8 failed after
-approval with the security-state message), but both testers skipped the <code>~/.zshrc</code> setup step and reworded the requests, so both runs are recorded blocked. D182 asks to close
-MOD-11 as passed; D185 adds a setup checklist to tester packets.</li>
-<li>Counts unchanged: <b>31 passed / 0 failed / 3 accepted</b>. If D182 closes MOD-11 as passed, they would be 32 / 0 / 2 (MOD-09 and MOD-28 accepted).</li>
-<li>#1270 (citadelculture, #1266: “Standard” reasoning shown as Deep in Spawn) is still a draft.</li>
-</ul></li>
-<li><b>Next milestone:</b> flag removal. PF-84 named accounts comes first (D67, D84), then the security flag-removal run (P1 plan: code-blind run, sign-off, PF-21 Permissive
-compatibility, no critical finding open).</li>
-</ul></div>
+<p id="doc25-history-5"><small>Signed off by Travis on 2026-10-20 06:41Z <a href="managementHandoffHistory.html#doc25-archive-5">Archived update and evidence</a>.</small></p>
 
 <ul>
 <li><code>moderate-prep</code> (done 06:08Z, #751): Moderate was not ready (no picker path); readiness doc at
@@ -1409,98 +1329,11 @@ Travis's sign-off.</li>
 <code>qa/demos/index/named-accounts-reel.md</code> (#735); published on Cloudflare 10-14 at
 <code>https://corbanu-named-accounts-reel.cloudflare-share.workers.dev/</code> after Travis's OK (decision 20; #761).</li>
 </ul>
-<div class="note"><b>PF-84 since 10-16 (pf84-ga, pf84-ga2; next sprint per D67/D84).</b> Travis is keen to finish named accounts and remove the
-<code>named_accounts</code> flag (D67). pf84-ga merged #1067 (#689), #1069 (#694), #1076 (#588) and #1081 (prerequisite status in
-<code>docs/plans/proposed/named-accounts-flag-removal.md</code>; #426 re-verification test; #425–#428 status) and opened <b>draft #1080</b> (flag on by default — needs
-Travis's sign-off). Its full Linux suite (<code>rust-ci-full</code> run 39406405883) fails <b>143 tests</b>: ~34 assume the flag is off (test-only fixes), and the rest come
-from one blocker, <b>#1085</b> (with the flag on, a standalone app server withholds pre-thread ChatGPT requests even in a home with no named accounts; 109 tests). List:
-<code>$W/pf84-ga-1080-fullci-fails.txt</code>. pf84-ga2 has <b>PR #1090</b> (the #1085 fix, held for D78), prepares REG-02 (D80) and the #1080 test updates. Open decisions
-D78–D84 (then open; answered 10-20 18:22Z, section 9). Still needed before flag removal: live ChatGPT and Bedrock checks (test accounts, D79), the code-blind run, Travis's Windows gate (#694) and sign-off.</div>
-<div class="note"><b>PF-84 since #1093 (10-20 12:20Z – 10-21 05:45Z).</b> Travis answered D78–D84 and D86 at 18:22Z (all as recommended; recorded on #1085). Merged:
-<ul>
-<li><b>#1090</b> (#1085, D78): the pre-conversation hold applies only in homes that have or select a named OpenAI account; an account added while the server runs latches the
-hold; an unreadable vault counts as having named accounts.</li>
-<li><b>#1096</b> (REG-02, D80): <code>login status</code> prints “API key configured” and the per-home fingerprint, never part of a key.</li>
-<li><b>#1124</b> (#1074), <b>#1127</b> (#1016), <b>#1140</b> (#1129, which small-fix7 found; a PF-84 blocker under D84) and <b>#1163</b> (#1144).</li>
-</ul>
-<b>Draft #1080</b> (head <code>bdbf2a9c4f</code>, last updated 10-20 12:55Z): pf84-ga2 updated the 34 flag-off tests. With #1090 the full flag-on Linux suite had <b>0 failures</b>
-(rust-ci-full 39418880587), against 143 before. Still to do, in D84's order:
-<ol>
-<li>apply D86 in #1080 (<code>/status</code> shows the account only when that provider has a named account in the home; pf84-ga2's 23 snapshot updates revert), merge main
-and re-run the flag-on full suite;</li>
-<li>the live ChatGPT check: <b>D79</b>, Travis creates a free ChatGPT account (new email). It signs in only inside a disposable VM through a device code Travis approves in his
-browser, so no password is shared, and the tokens go with the VM;</li>
-<li>the Bedrock live check: <b>D99</b>, (a) Travis creates an AWS account with an IAM user limited to one model in one region, or (b) mock-only for now (recommended);</li>
-<li>the code-blind run (Tart if D93 matches, else UTM), Travis's Windows gate (#694), sign-off, then merge #1080.</li>
-</ol>
-D81 (unit tests for the approvals-off refusal), D82 (<code>corbanu fork</code> without an account entry stays refused, documented) and D83 (#979: merge it ourselves with credit
-around 10-27 if the contributor hasn't marked it ready) are accepted.</div>
-<div class="note"><b>PF-84 since #1184 (10-21 05:45Z – 13:45Z).</b> Travis created the D79 test account and chose mock-only Bedrock (D99 (b)) at 08:38Z. Merged:
-<ul>
-<li><b>#1192</b> (D86, pf84-d86): <code>/status</code> names the account on the provider line only when the session is on (or has used) a named account of that provider, or the vault
-lists one for it; if the vault can't be read, the account is shown. Otherwise the line is as without the feature. With the flag off nothing changes and the vault isn't read.
-pf84-d86 then merged main into draft <b>#1080</b> (head <code>8f59118a5a</code>), putting back the 23 <code>/status</code> snapshots, and CI is green. A flag-on run on glitch found no
-failure caused by the flag. Filed <b>#1193</b>: when the quick checks don't decide, <code>/status</code> reads the vault index on the UI thread (D124).</li>
-<li><b>#1206</b>, the live ChatGPT check (pf84-live1, record <code>qa/provider-auth/pf-84/live-chatgpt-20261021/</code>), on the installed build <code>2f9d05c51e</code> in a throwaway
-home whose default login was a fake API key. Travis approved the device-code sign-in of named account <code>t1</code> at 08:40Z. <b>10 of 10 checks passed</b>: the sign-in; a live
-turn only <code>t1</code> could answer; no fallback (the same prompt without <code>--account</code> got a 401 from the default login); the default login file unchanged throughout;
-<code>/status</code>; resume; switching to Z.AI and back; fork; a sub-agent on <code>t1</code>, also after reload; and refusals naming <code>t1</code> after sign-out. The keychain was kept
-out by <code>CORBANU_TEST_NO_NATIVE_KEYRING=1</code> plus file storage; the account was signed out and the home deleted afterwards.
-<ul>
-<li>Not verified live: a token refresh saved back to the account (D135) and removing the account mid-session (D136; the two extra sign-in codes expired unrelayed).</li>
-<li>Filed #1205 and #1208 (low; D138). bradsbots has opened #1226 and #1224 for them.</li>
-</ul></li>
-</ul>
-<b>Before #1080 can merge</b> (D84's order): D124 (#1193) and D125; the isolated code-blind run on a fresh build with #1192 and the #1193 fix (D137), including mid-session removal
-(D136), the partial #555 legs and #426's two remaining legs; Travis's Windows gate (#694); his sign-off. #979 (D83) merges with credit around 10-27 if still a draft.</div>
-<div class="note"><b>PF-84 since #1231 (10-21 13:45Z – 10-22 01:30Z).</b> Travis answered D124–D138 at 17:33Z and D155 at 22:18Z (all as recommended) and approved the D136 sign-in at 22:14Z.
-<ul>
-<li><b>#1250</b> (pf84-1193, D124/D125, merged 18:53Z): a background job works out which providers have a named account in the home and caches it; <code>/status</code> only reads that cache.
-It refreshes at session start, after any account change or <code>/vault</code> delete, when <code>/providers</code> opens and after each <code>/status</code>; until known, or if the vault can't be read,
-the account is shown. A home without named accounts now looks exactly as with the flag off (D125). #1193 is closed; <b>#1251</b> (a named ChatGPT sign-in session still reads its
-sign-in summary on the UI thread) is D155 (a), after the flag removal.</li>
-<li>bradsbots' #1224, #1226, #1258 and #1259 fixed #1208 and #1205 (D138).</li>
-<li><b>Draft #1080</b>: main merged in again without a force-push, head <code>016d47e6de</code>, all checks green; locally 4,682 tests passed with the flag on (the one failure is Mac-only: the socket path on the external drive is too long).</li>
-<li><b>Code-blind run (pf84-cb1, launched 20:01Z; D137, D136, D135, D99, D138).</b> Flag ON, as #1080 will make it, on the separately signed <code>corbanu.31b9f3ca</code> (main
-<code>31b9f3cad8</code>, with #1192 and #1250), copied privately into each guest; the installed binary is not used. A frozen code-blind design (designer plus a separate reviewer) covers the
-PF-84 acceptance criteria, the partial #555 legs, #426's two remaining legs, mid-session account removal with the free test account (D136) and the D86/D124/D125 <code>/status</code>
-behaviour; GLM 5.3 Flash testers on Z.AI drive the TUI. Fresh Tart clone per group, one at a time; throwaway credentials only, the test account signed out and its credentials deleted
-before a clone is. Its sequence log shows the main groups G1–G9 done at 00:46Z, the replays G6R and G8R at 01:14Z, and the amendment-v2 groups R1–R4 under way (R3 from
-01:46Z; log read at about 01:50Z). <b>Interim, from its integrator notes</b> (verdicts are final only in its record):
-<ul>
-<li><b>D136</b> (G9): the tester's check failed: after the account was removed mid-session, the session kept answering on <code>t1</code>'s in-memory sign-in. There was no fallback to the
-default login, and no trace of <code>t1</code> remained (account list, config and vault).</li>
-<li><b>NA-05</b> (R2): an in-app <code>/resume</code> of a conversation whose account was removed resumed it on the current account without a message, while the CLI path refuses (GH-02
-passed). pf84-cb1 is re-checking it against the documented rule that an explicit <code>--account</code> wins, since that session was started with one.</li>
-<li>Possible defect (G3): pasting a name and pressing Enter in the same second in the add-account name field left the field open, so the key typed next appeared in it in clear.</li>
-<li>Design premises corrected by amendment v2: the product refuses a typed key (pipe it in), and <code>/providers</code> shows 8 of 18 rows with no scroll hint (an advisory UX defect).
-With v2, NA-01 and NA-04 passed in R1 and PR-01 and GH-02 in R2; NA-10's tester failure in R1 was judged a design-premise mismatch (choosing the account starts a
-new session); the other amended cases were still to run.</li>
-</ul>
-Its record goes to <code>qa/provider-auth/pf-84/</code> in a docs PR with an independent
-review (budget 5).</li>
-</ul>
-<b>Before #1080 can merge:</b> pf84-cb1's record; Travis's Windows gate (#694); his sign-off. #979 (D83) merges with credit around 10-27 if still a draft.</div>
-<div class="note"><b>PF-84 since #1281 (10-22 01:30Z – 12:45Z).</b> Travis answered D171–D177 at 05:15Z and D181 at 08:20Z (approving the sign-in at 08:24Z), all as recommended.
-<ul>
-<li><b>pf84-cb1 finished</b> (04:40Z; record <b>#1285</b>, <code>qa/provider-auth/pf-84/code-blind-20261021/</code>): 28 frozen cases, 10 amended through the same designer, reviewer and freeze
-steps. <b>23 passed, 2 in part (NA-10, ST-02), 1 incomplete (NA-06's rename never ran), 2 failed</b>: D136 (#1286, the blocker: after <code>t1</code> was removed from another terminal, the
-session kept answering on its sign-in and <code>/status</code> still named it) and NA-05 (#1287: in a TUI started with <code>--account personal</code>, in-app <code>/resume</code> moved a
-conversation whose account was removed to <code>personal</code> silently). All #555 legs and both #426 legs passed. Filed too: #1288 (lists hide rows with no hint), #1289 (a key typed right
-after the account name can show in clear in the name field) and #1290 (Escape doesn't cancel a pending device-code sign-in).</li>
-<li><b>Fixes</b> (pf84-fix2): <b>#1299</b> (D171), <b>#1300</b> (D172 (a), D173, D174) and <b>#1301</b> (D175), section 8.0e. pf84-fix2 merged main into draft #1080; its checks are green on
-<code>437db9ca35</code> (08:55Z: 35 passed, 9 skipped). pf84-1311's <b>#1317</b> fixed #1311 items 1–4 (item 5, realtime's key fallback, stays with #889) and filed #1326 (low; covered by
-citadelculture's drafts #1330, ready to merge as is, and #1329, which needs a re-check when the clear is skipped; #1343 holds the two cases neither covers).</li>
-<li><b>Re-run</b> (pf84-rerun, <b>#1325</b>): on a private signed build of main <code>f61397ca41</code> (with #1299–#1301), with one test-account sign-in (D181, 08:24Z) inside the D136 VM.
-<b>D136 passed</b> (both later prompts refused with the recovery text, <code>/status</code> “account unavailable”, nothing sent to <code>api.openai.com</code>), <b>NA-05 passed</b> (the notice names
-both accounts) and <b>NA-06 passed</b> on a replay, rename included. The advisory “no ChatGPT traffic after removal” check stays inconclusive (two connections opened before the removal stayed
-open); the coordinator decided no timing re-run. First-run cases now: <b>26 passed, 2 in part</b>. Filed #1324 (plugin catalog fetched about four times; fixed by #1333) and #1331 (low: a
-refused prompt is saved as a turn on the removed account, bradsbots' #1338; <code>/providers</code> local rows varied by VM).</li>
-<li>Contributors on the D176 items (TUI lane, after the flag removal): bradsbots' #1337 (#1289) and #1346 (#1288, opened 12:53Z) and citadelculture's draft #1316 (#1290).</li>
-</ul>
-<b>Before #1080 can merge:</b> the <b>Windows gate</b> (#694; brief <code>$W/win-gate-pf84.md</code>: build #1080's head on Travis's Windows machine and run the Windows PF-84 cases with named
-accounts on, including D171's removal refusal, the one-time vault-index write and #694's held-lock canary; its GLM testers need Z.AI, so D190 first; launch when Travis says the machine is up),
-then <b>Travis's sign-off</b>, then merge #1080 and do #1251 (D155 (a)). #979 (D83) merges with credit around 10-27 if still a draft.</div>
+<p id="doc25-history-6"><small>PF-84 since 10-16 (pf84-ga, pf84-ga2; next sprint per D67/D84). <a href="managementHandoffHistory.html#doc25-archive-6">Archived update and evidence</a>.</small></p>
+<p id="doc25-history-7"><small>PF-84 since #1093 (10-20 12:20Z – 10-21 05:45Z). <a href="managementHandoffHistory.html#doc25-archive-7">Archived update and evidence</a>.</small></p>
+<p id="doc25-history-8"><small>PF-84 since #1184 (10-21 05:45Z – 13:45Z). <a href="managementHandoffHistory.html#doc25-archive-8">Archived update and evidence</a>.</small></p>
+<p id="doc25-history-9"><small>PF-84 since #1231 (10-21 13:45Z – 10-22 01:30Z). <a href="managementHandoffHistory.html#doc25-archive-9">Archived update and evidence</a>.</small></p>
+<p id="doc25-history-10"><small>PF-84 since #1281 (10-22 01:30Z – 12:45Z). <a href="managementHandoffHistory.html#doc25-archive-10">Archived update and evidence</a>.</small></p>
 <h3>8.3 Shared-DB contention and reliability</h3>
 <p>#538 fixed the “database is locked” errors (wave 1). Wave 2: #616 exec panic/hang fixed (#638; a crashing turn now ends with an error,
 plus a 5-minute safety net Travis kept); #586 init-lock protection merged (#608); separate database folder protected (#645, #672);
@@ -1525,21 +1358,7 @@ contrib-sec3 (14:00Z). bradsbots' #1225 (pipe handshake in the forked-child lock
 <p><b>Since #1231:</b> merged #1225, #991 and #1005 (bradsbots; #1005 chosen over #1232 by D154), #1227 (citadelculture, Windows lock coverage) and #1260 (small-fix12: lock-test
 children exit with the test process, #1252); Linux sandbox #1238 (sbx-1056), #1116 (D150) and #1100 (security round 2). #918 and #1003 are closed. Open: #1271 and #1277 (duplicate
 #1003 test moves), #1272 (#928 follow-up), draft #1246 (<code>statx</code>, D160), #1056, #928, #732.</p>
-<div><b>Drive-access outages (#616), 10-15/16</b> — timeline and evidence in the box at the top. Travis's decision 8 (21:07Z) gave two parts:
-<ul>
-<li><b>Worker infrastructure</b> on the internal disk with a watchdog (section 3).</li>
-<li><b><code>resil-616</code></b> (#861, merged <code>395ac0adcd</code>, installed 03:08Z):
-<ul>
-<li>The sign-in helper exits 75 when it can't read the home. Exec then retries (1 s doubling to 60 s, a message at least every 60 s) for up to
-<code>--home-wait-secs</code> (default 3600). If the helper's own sandbox denies the read, it exits 1.</li>
-<li>Items that couldn't be saved stay in memory and are saved at exit within the same window.</li>
-<li>The message no longer blames macOS privacy, and every failure goes to <code>~/Library/Logs/Corbanu/home-access.log</code>; <code>docs/exec.md</code> describes it.
-The TUI is unchanged.</li>
-</ul></li>
-</ul>
-Follow-ups: #858 and #872 fixed by #895 (rel-858); #866 fixed by #887; D11 answered (A: a worker started while the home is unreadable still exits 75; the
-watchdog relaunches it). #855 fixed by #879, and #886 (no plaintext provider-key fallback when the vault lock can't be opened) merged 10-16 11:05Z with D17.
-<code>kimi_api</code> still holds error text: Travis deletes it in <code>/vault</code> (D18). </div>
+<p id="doc25-history-11"><small>Drive-access outages (#616), 10-15/16 <a href="managementHandoffHistory.html#doc25-archive-11">Archived update and evidence</a>.</small></p>
 <h3>8.4 PF-60 developer accounting</h3>
 <p>Closed and archived earlier. Wave 2 fixed #654 (requests under Aggressive were not recorded; #669) and #564 (#687). Travis 10-14
 (decision 29): the follow-up sprints S06–S10 start after the Moderate picker sprint — so after <code>mod-picker</code> finished, <code>pf60-s06</code>
@@ -2479,7 +2298,7 @@ Was (win-1648, 16:29Z): D367: how to close #1721: (a) remove the sandbox account
 </ul></li>
 </ol>
 
-<p><small>Older snapshots of sections 10–12 (2026-11-09 14:30Z and earlier, back to the 12:45Z closeout) and the older update boxes moved verbatim to <code>docs/management/managementHandoffHistory.html</code> (blob-size policy).</small></p>
+<p><small>Older snapshots of sections 10–12 (2026-11-09 14:30Z and earlier, back to the 12:45Z closeout) and the older update boxes moved verbatim to <a href="managementHandoffHistory.html">the handoff archive</a> (blob-size policy).</small></p>
 
 <h2>13. Files</h2>
 <ul>

@@ -15,13 +15,7 @@ before scroll:
   6. Item 6                                         desc 6                                      
   7. Item 7                                         desc 7                                      
   8. Item 8                                         desc 8                                      
-<<<<<<< HEAD
-                                                                                         1 / 9  
-||||||| 413492cd6c
-                                                                                                
-=======
-↓                                                                                               
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+↓                                                                                        1 / 9  
 
 after scroll:
   Debug                                                                                         

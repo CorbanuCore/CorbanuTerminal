@@ -57,12 +57,8 @@ impl TurnLifecycleState {
         self.finish();
         self.last_turn_id = None;
         self.budget_limited_turn_ids.clear();
-<<<<<<< HEAD
         self.kill_switch_stopped = false;
-||||||| 413492cd6c
-=======
         self.rendered_completion_turn_ids.clear();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(super) fn set_prevent_idle_sleep(&mut self, enabled: bool) {

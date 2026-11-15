@@ -897,25 +897,6 @@ mod tests {
 
     #[test]
     fn history_search_footer_action_hints_are_emphasized() {
-<<<<<<< HEAD
-        let (tx, _rx) = unbounded_channel::<AppEvent>();
-        let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(
-            /*has_input_focus*/ true,
-            sender,
-            /*enhanced_keys_supported*/ true,
-            "Ask Corbanu Terminal to do anything".to_string(),
-            /*disable_paste_burst*/ false,
-||||||| 413492cd6c
-        let (tx, _rx) = unbounded_channel::<AppEvent>();
-        let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(
-            /*has_input_focus*/ true,
-            sender,
-            /*enhanced_keys_supported*/ true,
-            "Ask Codex to do anything".to_string(),
-            /*disable_paste_burst*/ false,
-=======
         crate::terminal_palette::with_test_default_colors(
             crate::terminal_probe::DefaultColors {
                 fg: (240, 240, 240),
@@ -928,7 +909,7 @@ mod tests {
                     /*has_input_focus*/ true,
                     sender,
                     /*enhanced_keys_supported*/ true,
-                    "Ask Codex to do anything".to_string(),
+                    "Ask Corbanu Terminal to do anything".to_string(),
                     /*disable_paste_burst*/ false,
                 );
                 composer
@@ -988,7 +969,6 @@ mod tests {
                 let cancel_style = line.spans[7].style;
                 assert!(cancel_style.add_modifier.contains(Modifier::DIM));
             },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         );
     }
 
