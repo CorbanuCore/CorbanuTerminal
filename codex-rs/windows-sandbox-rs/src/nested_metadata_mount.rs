@@ -114,5 +114,8 @@ fn volume_root(buffer: &[u8]) -> Option<String> {
     {
         return None;
     }
+    // Object-manager lookup is case-sensitive without OBJ_CASE_INSENSITIVE;
+    // normalize the GUID rather than broadening name lookup for the walk.
+    let guid = guid.to_ascii_lowercase();
     Some(format!(r"\GLOBAL??\Volume{{{guid}}}\"))
 }

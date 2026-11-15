@@ -20,6 +20,14 @@ fn only_an_exact_volume_guid_root_is_recognized() {
         volume_root(&reparse(&target)),
         Some(format!(r"\GLOBAL??\Volume{{{guid}}}\"))
     );
+    assert_eq!(
+        volume_root(&reparse(&format!(
+            r"\??\Volume{{{}}}\",
+            guid.to_ascii_uppercase()
+        ))),
+        volume_root(&reparse(&target)),
+        "GUID case must not change the volume object name"
+    );
     for target in [
         r"\??\C:\",
         r"\??\UNC\server\share\",

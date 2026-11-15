@@ -47,7 +47,11 @@ impl Mounted {
                 .expect("Unicode volume name")
         };
         let link = temp.path().join("mount");
-        junction(&link, Path::new(&text(&volume_name)));
+        let volume_name = text(&volume_name);
+        let (prefix, guid) = volume_name.split_once('{').expect("volume GUID");
+        // GUID spelling is case-insensitive even for the absolute NT open.
+        let volume_name = format!("{prefix}{{{}", guid.to_ascii_uppercase());
+        junction(&link, Path::new(&volume_name));
         let root = link.join(payload.strip_prefix(text(&volume_path)).expect("on volume"));
         assert!(root.is_dir(), "mount reaches the fixture");
         Self {
