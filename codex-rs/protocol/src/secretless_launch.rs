@@ -212,17 +212,32 @@ fn authority_has_password(rest: &str) -> bool {
         .is_some_and(|(userinfo, _)| userinfo.contains(':'))
 }
 
-/// URI schemes written `scheme:user@host` with no `//` (`mailto:a@b.example`,
-/// `sip:alice@host`, the npm alias `npm:pkg@latest`); their first part is a
-/// scheme, not a user name.
+/// Prefixes written `prefix:name@host` that are not a user name: URI schemes
+/// with no `//` (`mailto:a@b.example`, `sip:alice@host`, the npm alias
+/// `npm:pkg@latest`) and cloud IAM member kinds (`group:devs@example.com`,
+/// `serviceAccount:sa@proj.iam.gserviceaccount.com`). `user:` is deliberately
+/// absent: `user:alice@example.com` has the same shape as `user:pass@proxy`.
 const OPAQUE_USER_SCHEMES: &[&str] = &[
-    "mailto", "sip", "sips", "xmpp", "im", "pres", "tel", "acct", "news", "npm",
+    "mailto",
+    "sip",
+    "sips",
+    "xmpp",
+    "im",
+    "pres",
+    "tel",
+    "acct",
+    "news",
+    "npm",
+    "group",
+    "serviceaccount",
+    "deleted",
 ];
 
 /// `user:pass@host[:port][/path]` with no scheme, as curl accepts for proxies.
 /// The shape is strict so that values without a password, emails, `git@host:repo`,
 /// image digests (`img:tag@sha256:...`) and package specs (`npm:pkg@1.2.3`) pass.
 fn is_schemeless_url_with_password(token: &str) -> bool {
+    let token = token.trim_matches(|c| matches!(c, '"' | '\'' | '(' | ')' | '<' | '>'));
     let authority = token.split(['/', '?', '#']).next().unwrap_or_default();
     let Some((userinfo, host_port)) = authority.rsplit_once('@') else {
         return false;
@@ -232,10 +247,12 @@ fn is_schemeless_url_with_password(token: &str) -> bool {
     };
     !user.is_empty()
         && !password.is_empty()
-        && user.chars().all(|c| c == '@' || is_userinfo_char(c))
+        && user
+            .chars()
+            .all(|c| c == '@' || c == '\\' || is_userinfo_char(c))
         && password
             .chars()
-            .all(|c| c == ':' || c == '@' || is_userinfo_char(c))
+            .all(|c| c.is_ascii_graphic() && !matches!(c, '\\' | '"' | '`'))
         && !OPAQUE_USER_SCHEMES
             .iter()
             .any(|scheme| user.eq_ignore_ascii_case(scheme))
@@ -243,8 +260,9 @@ fn is_schemeless_url_with_password(token: &str) -> bool {
 }
 
 /// RFC 3986 unreserved characters, sub-delims and `%` escapes, minus the
-/// item separators `,` and `;`. Callers also accept a raw `@` (an email user
-/// name, or a password curl splits at the last `@`).
+/// item separators `,` and `;`. The user part also accepts a raw `@` (an email
+/// user name) and `\` (`DOMAIN\user`); the password accepts any printable ASCII
+/// except `\`, `"` and `` ` `` so that Windows paths and shell prompts pass.
 fn is_userinfo_char(c: char) -> bool {
     c.is_ascii_alphanumeric()
         || matches!(
@@ -285,6 +303,7 @@ fn is_host_and_port(host_port: &str) -> bool {
 }
 
 fn is_dns_name_or_ipv4(host: &str) -> bool {
+    let host = host.strip_suffix('.').unwrap_or(host);
     let labels: Vec<&str> = host.split('.').collect();
     let labels_ok = labels.iter().all(|label| {
         label.starts_with(|c: char| c.is_ascii_alphanumeric())

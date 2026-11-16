@@ -97,6 +97,10 @@ fn pf_27_s02_schemeless_proxy_password_is_detected() {
         "user:pass@proxy.example.com/",
         "--proxy=user:pass@proxy.example.com:3128",
         "localhost, user:pass@proxy:3128",
+        r"DOMAIN\user:pass@proxy:8080",
+        "user:p^ss{x}|y@proxy:3128",
+        "\"user:pass@proxy:3128\"",
+        "(user:pass@proxy.example.com.:3128)",
     ] {
         assert!(value_has_url_password(value), "{value} must be detected");
     }
@@ -119,6 +123,8 @@ fn pf_27_s02_user_without_password_is_kept() {
             "user@host",
             "user@proxy:3128",
             "http://user@proxy:3128/ user@other:8080",
+            // Empty password: kept here, while `http://user:@proxy` stays
+            // flagged by the original `://` rule (stricter-only).
             "user:@proxy:3128",
         ],
     );
@@ -185,6 +191,8 @@ fn pf_27_s02_opaque_scheme_uris_are_kept() {
             "sip:alice@example.com",
             "xmpp:alice@example.com",
             "npm:lodash@latest",
+            "group:devs@example.com",
+            "serviceAccount:sa@proj.iam.gserviceaccount.com",
         ],
     );
 }
