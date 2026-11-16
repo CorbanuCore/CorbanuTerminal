@@ -131,9 +131,10 @@ X-Managed = "required"
         })
         .with_cloud_config_bundle(managed.clone())
         .with_config(|config| {
-            // The fixture normally replaces the selected provider with its mock provider.
-            // Restore the provider entry selected by the real requirements-aware loader.
-            config.model_provider = config.model_providers[&config.model_provider_id].clone();
+            // The generic fixture replaces both the provider and its route ID with OpenAI.
+            // Every case here selects gateway, either locally or through requirements.
+            config.model_provider_id = "gateway".to_string();
+            config.model_provider = config.model_providers["gateway"].clone();
         })
         .build_with_auto_env(&local)
         .await?;

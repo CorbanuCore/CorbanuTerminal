@@ -366,7 +366,7 @@ async fn provider_credentials_and_tool_env_never_reach_trace_logs() -> anyhow::R
     Ok(())
 }
 
-/// The Responses websocket logs its handshake response headers at INFO; a
+/// The Responses websocket logs its handshake status at INFO; a response
 /// `set-cookie` value must not reach any sink.
 #[tokio::test]
 async fn websocket_handshake_response_headers_never_reach_logs() -> anyhow::Result<()> {
@@ -400,13 +400,13 @@ async fn websocket_handshake_response_headers_never_reach_logs() -> anyhow::Resu
     let log_text = sinks
         .assert_clean(
             guard,
-            &["successfully connected to websocket"],
+            &["successfully connected to Responses WebSocket"],
             &[COOKIE_VALUE],
         )
         .await?;
     assert!(
-        log_text.contains("\"set-cookie\": \"REDACTED\""),
-        "the handshake headers should be logged with values redacted"
+        log_text.contains("status=101"),
+        "the successful handshake status should be logged without response headers"
     );
     Ok(())
 }
@@ -458,7 +458,11 @@ async fn websocket_api_key_never_reaches_trace_logs() -> anyhow::Result<()> {
     server.shutdown().await;
 
     let log_text = sinks
-        .assert_clean(guard, &["successfully connected to websocket"], &[API_KEY])
+        .assert_clean(
+            guard,
+            &["successfully connected to Responses WebSocket"],
+            &[API_KEY],
+        )
         .await?;
     // The bridge delivered tungstenite's records; only TRACE was dropped.
     assert!(
