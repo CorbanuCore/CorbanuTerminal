@@ -361,7 +361,12 @@ async fn mcp_refresh_updates_plugin_auth_mode_before_checking_pending_state() {
             .and_then(|auth| auth.get_token().ok()),
         Some("new-api-key".to_string())
     );
-    assert_eq!(session.services.plugins_manager.auth_mode(), auth_mode);
+    // Sync (#2337): the plugins track the followed sign-in live, as upstream's
+    // track their own auth manager (`mcp_refresh_detects_shared_auth_manager_changes`).
+    assert_eq!(
+        session.services.plugins_manager.auth_mode(),
+        Some(codex_protocol::auth::AuthMode::ApiKey)
+    );
     session.mcp_refresh.claim();
 
     session.refresh_mcp_if_dirty().await;

@@ -11,9 +11,9 @@ name: windows-integration-tests
 # This workflow runs them with Cargo and nextest on windows-2022 (msvc), one
 # package per matrix leg, on PRs that change the package (or this job's files).
 # It is NOT called from blocking-ci.yml, so `CI required` neither waits for it
-# nor fails with it: the first native runs found 32 failures, listed with their
-# issues in .github/windows-integration-known-failures.txt and excluded here so
-# a new failure stands out. Trial (scratch run 42626867876, cold, no compile
+# nor fails with it. Any remaining known failures are listed with their issues
+# in .github/windows-integration-known-failures.txt and excluded here so a new
+# failure stands out. Trial (scratch run 42626867876, cold, no compile
 # cache): about 22 minutes to build, then 4.5 minutes of tests for codex-core
 # and 12.5 for codex-app-server.
 on:
@@ -83,6 +83,9 @@ jobs:
         working-directory: codex-rs
     env:
       CARGO_INCREMENTAL: "0"
+      # The fixture writer and app-server child must use the same file-backed
+      # credential store. Children always deny native keyring access (#1969).
+      CORBANU_TEST_NO_NATIVE_KEYRING: "1"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:

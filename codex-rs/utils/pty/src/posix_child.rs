@@ -219,6 +219,16 @@ impl NativeChild {
             let mut defaults = std::mem::zeroed();
             cvt_errno(libc::sigemptyset(&mut defaults))?;
             cvt_errno(libc::sigaddset(&mut defaults, libc::SIGPIPE))?;
+            let mut signal_flags = libc::POSIX_SPAWN_SETSIGDEF;
+            if request.reset_signals {
+                for signal in crate::process_group::CHILD_DEFAULT_SIGNALS {
+                    cvt_errno(libc::sigaddset(&mut defaults, signal))?;
+                }
+                let mut empty_mask = std::mem::zeroed();
+                cvt_errno(libc::sigemptyset(&mut empty_mask))?;
+                cvt(libc::posix_spawnattr_setsigmask(&mut attrs.0, &empty_mask))?;
+                signal_flags |= libc::POSIX_SPAWN_SETSIGMASK;
+            }
             cvt(libc::posix_spawnattr_setsigdefault(&mut attrs.0, &defaults))?;
             #[cfg(target_os = "macos")]
             let descriptor_flags = match request.descriptor_policy {
@@ -229,7 +239,7 @@ impl NativeChild {
             let descriptor_flags = 0;
             let result = libc::posix_spawnattr_setflags(
                 &mut attrs.0,
-                (group_flags | descriptor_flags | libc::POSIX_SPAWN_SETSIGDEF) as _,
+                (group_flags | descriptor_flags | signal_flags) as _,
             );
             // Unsupported attributes fail before posix_spawn can select its fallback.
             if result == libc::EINVAL && request.fallback == crate::SpawnFallback::Compatible {

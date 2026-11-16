@@ -5677,6 +5677,9 @@ impl Session {
         // Corbanu (#1545): the whole communication, its mailbox message id
         // included, so a resume knows it was applied (`applied_agent_message_ids`).
         let mut persisted = (*communication).clone();
+        // #2339: the order it took live, which input accepted before it but recorded
+        // after it does not share.
+        persisted.recorded_input_order = Some(order);
         if let ResponseItem::AgentMessage {
             id,
             internal_chat_message_metadata_passthrough,

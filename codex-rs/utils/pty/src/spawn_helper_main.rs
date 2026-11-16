@@ -67,6 +67,7 @@ pub(super) fn dispatch(mut args: impl Iterator<Item = std::ffi::OsString>) -> ! 
         }
         match setup {
             crate::spawn_helper::Setup::Pipe => {
+                crate::process_group::reset_child_signals()?;
                 crate::process_group::detach_from_tty()?;
                 crate::process_group::set_parent_death_signal(parent_pid)?;
             }

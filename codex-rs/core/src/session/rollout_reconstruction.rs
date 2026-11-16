@@ -519,14 +519,16 @@ impl ContextManager {
                     history.replay_annotated_item(response_item, truncation_policy);
                 }
                 RolloutItem::InterAgentCommunication(communication) => {
-                    // Corbanu (#1545) persists the whole communication, not upstream's agent
-                    // message with its input order. Replayed in physical order, it takes the
-                    // next order as it did when recorded, so deliveries around it and the
-                    // resumed order counter match the live session.
+                    // Corbanu (#1545) persists the whole communication with the input order
+                    // it took live (#2339), so deliveries around it and the resumed order
+                    // counter match the live session. A rollout from before #2339 has no
+                    // order: replayed in physical order, it takes the next one.
                     let envelope = ResponseItemEnvelope {
                         item: communication.to_model_input_item(),
                         metadata: Some(codex_history::CodexHarnessMetadata {
-                            user_input_order: Some(history.reserve_input_order()),
+                            user_input_order: Some(
+                                history.restore_input_order(communication.recorded_input_order),
+                            ),
                             ..Default::default()
                         }),
                     };

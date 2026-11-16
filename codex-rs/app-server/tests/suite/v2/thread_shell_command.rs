@@ -288,7 +288,11 @@ async fn check_thread_shell_command_in_active_turn(timeout_ms: Option<i64>) -> R
     assert_eq!(source, &CommandExecutionSource::Agent);
     assert_eq!(
         command,
-        &format_with_current_shell_display("python3 -c 'print(42)'")
+        &format_with_current_shell_display(if cfg!(windows) {
+            "python3 '-c' 'print(42)'"
+        } else {
+            "python3 -c 'print(42)'"
+        })
     );
 
     let server_req = timeout(

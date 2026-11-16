@@ -304,6 +304,12 @@ impl ContextManager {
         Arc::make_mut(&mut self.retained_context).reserve_order()
     }
 
+    /// Restores an input order recorded before a resume, or reserves the next one
+    /// for rollouts that did not record it (#2339).
+    pub(crate) fn restore_input_order(&mut self, recorded_order: Option<u64>) -> u64 {
+        Arc::make_mut(&mut self.retained_context).restore_order(recorded_order)
+    }
+
     pub(crate) fn record_retained_context(&mut self, event: &RetainedContextEvent) -> bool {
         if !Arc::make_mut(&mut self.retained_context).record(event) {
             return false;

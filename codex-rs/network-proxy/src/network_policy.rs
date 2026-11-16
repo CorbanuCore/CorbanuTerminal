@@ -776,7 +776,12 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn evaluate_host_policy_emits_domain_event_for_decider_allow_override() {
-        let state = network_proxy_state_for_policy(NetworkProxyConfig::default());
+        // Skip the live DNS lookup in the local-address check so the host reaches the decider
+        // as not_allowed rather than not_allowed_local when DNS is unavailable.
+        let state = network_proxy_state_for_policy(NetworkProxyConfig {
+            allow_local_binding: Some(true),
+            ..NetworkProxyConfig::default()
+        });
         let calls = Arc::new(AtomicUsize::new(0));
         let decider: Arc<dyn NetworkPolicyDecider> = Arc::new({
             let calls = calls.clone();
@@ -847,6 +852,8 @@ mod tests {
         let state = network_proxy_state_for_policy({
             let mut network = NetworkProxyConfig::default();
             network.set_allowed_domains(vec!["example.com".to_string()]);
+            // Skip the live DNS lookup in the local-address check; this test covers attribution.
+            network.allow_local_binding = Some(true);
             network
         });
         state.register_execution("token-baseline-allow", "local", "execution-baseline-allow");
@@ -937,7 +944,12 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn evaluate_host_policy_emits_domain_event_for_decider_ask() {
-        let state = network_proxy_state_for_policy(NetworkProxyConfig::default());
+        // Skip the live DNS lookup in the local-address check so the host reaches the decider
+        // as not_allowed rather than not_allowed_local when DNS is unavailable.
+        let state = network_proxy_state_for_policy(NetworkProxyConfig {
+            allow_local_binding: Some(true),
+            ..NetworkProxyConfig::default()
+        });
         let decider: Arc<dyn NetworkPolicyDecider> =
             Arc::new(|_req| async { NetworkDecision::ask(REASON_NOT_ALLOWED) });
         let request = NetworkPolicyRequest::new(NetworkPolicyRequestArgs {

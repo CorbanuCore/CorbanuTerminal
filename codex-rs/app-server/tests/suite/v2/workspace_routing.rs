@@ -155,7 +155,7 @@ async fn saved_workspace_is_discovered_once_and_not_the_default_account(
     .await??;
     assert_eq!(
         notification.params,
-        Some(json!({"authMode": "chatgpt", "planType": plan_type}))
+        Some(json!({"authMode": "chatgpt", "planType": plan_type, "apiKeyEnvVar": null}))
     );
     let expected = json!({
         "account": {"type": "chatgpt", "email": "user@example.com", "planType": plan_type, "workspaceName": "Selected workspace"},
@@ -345,7 +345,9 @@ async fn login_and_workspace_switch_notify_after_routing_is_ready_then_logout_cl
         .await??;
         assert_eq!(
             notification.params,
-            Some(json!({"authMode": "chatgptAuthTokens", "planType": "enterprise"}))
+            Some(
+                json!({"authMode": "chatgptAuthTokens", "planType": "enterprise", "apiKeyEnvVar": null})
+            )
         );
         assert_eq!(
             read(&mut server).await?["workspaceRouting"],
@@ -466,7 +468,7 @@ async fn api_only_login_does_not_discover_chatgpt_routing() -> Result<()> {
     let _: LoginAccountResponse = timeout(READ_TIMEOUT, server.read_response(request)).await??;
     assert_eq!(
         read(&mut server).await?,
-        json!({"account": {"type": "apiKey"}, "requiresOpenaiAuth": true, "workspaceRouting": null})
+        json!({"account": {"type": "apiKey", "envVar": null}, "requiresOpenaiAuth": true, "workspaceRouting": null})
     );
     backend.verify().await;
     Ok(())

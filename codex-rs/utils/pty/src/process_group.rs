@@ -21,6 +21,46 @@ use std::io;
 
 use tokio::process::Child;
 
+/// Signals whose dispositions command children restore to the default.
+///
+/// Ignored dispositions and blocked signals survive exec. In particular, a
+/// shell cannot trap SIGINT/SIGQUIT if they were ignored when it started.
+#[cfg(unix)]
+pub(crate) const CHILD_DEFAULT_SIGNALS: [libc::c_int; 6] = [
+    libc::SIGCHLD,
+    libc::SIGHUP,
+    libc::SIGINT,
+    libc::SIGQUIT,
+    libc::SIGTERM,
+    libc::SIGALRM,
+];
+
+/// Restore command signal handling in a forked child before exec: default
+/// dispositions for [`CHILD_DEFAULT_SIGNALS`] and an empty signal mask.
+/// Keep pipe and PTY children consistent, using only async-signal-safe calls.
+#[cfg(unix)]
+pub(crate) fn reset_child_signals() -> io::Result<()> {
+    // SAFETY: all pointers refer to initialized stack storage. sigemptyset,
+    // sigaction and sigprocmask are async-signal-safe; no allocation or locks
+    // are used in this pre_exec helper.
+    unsafe {
+        let mut action: libc::sigaction = std::mem::zeroed();
+        action.sa_sigaction = libc::SIG_DFL;
+        if libc::sigemptyset(&mut action.sa_mask) == -1 {
+            return Err(io::Error::last_os_error());
+        }
+        for signal in CHILD_DEFAULT_SIGNALS {
+            if libc::sigaction(signal, &action, std::ptr::null_mut()) == -1 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        if libc::sigprocmask(libc::SIG_SETMASK, &action.sa_mask, std::ptr::null_mut()) == -1 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    Ok(())
+}
+
 #[cfg(target_os = "linux")]
 /// Ensure the child receives SIGTERM when the original parent dies.
 ///
