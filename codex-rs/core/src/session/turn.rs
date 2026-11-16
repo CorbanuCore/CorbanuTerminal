@@ -256,8 +256,10 @@ pub(crate) async fn run_turn(
     )
     .await
     {
+        // Pre-turn compaction precedes input recording, including mail admitted with the
+        // user's prompt. Preserve those inputs once on failure, honoring prompt hooks.
+        run_hooks_and_record_inputs(&sess, &turn_context, &input).await;
         if matches!(err.details(), CodexErrorDetails::TurnAborted) {
-            run_hooks_and_record_inputs(&sess, &turn_context, &input).await;
             return Err(err);
         }
         let error = err.to_codex_protocol_error();
