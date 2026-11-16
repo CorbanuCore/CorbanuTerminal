@@ -33,53 +33,45 @@ running app-server version when applicable.
 
 ## Bootstrap flow
 
-For a new remote machine:
+For a machine with an existing Corbanu managed standalone installation:
 
 ```sh
-curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.sh | sh
-$HOME/.codex/packages/standalone/current/codex app-server daemon bootstrap --remote-control
+corbanu app-server daemon bootstrap --remote-control
 ```
 
 `bootstrap` requires the standalone managed install. It records the daemon
 settings under `CODEX_HOME/app-server-daemon/`, starts app-server as a
-pidfile-backed detached process, and launches a detached updater loop.
+pidfile-backed detached process, and stops any previous detached updater loop.
+Its JSON response reports `autoUpdateEnabled: false`.
 
 ## Installation and update cases
 
-The daemon assumes Codex is installed through `install.sh` and always launches
-the standalone managed binary under `CODEX_HOME`.
+Corbanu Terminal disables daemon-managed self-install and automatic updates
+until the managed installer supports Corbanu Terminal (owner decision D564,
+#2197). The daemon does not download or run an installer. Invoking the internal
+`pid-update-loop` command returns an error immediately with manual installation
+guidance.
 
-| Situation | What starts | Does this daemon fetch new binaries? | Does a running app-server eventually move to a newer binary on its own? |
-| --- | --- | --- | --- |
-| `install.sh` has run, but only `start` is used | `start` uses `CODEX_HOME/packages/standalone/current/codex` | No | No. The managed path is used when starting or restarting, but no updater is installed. |
-| `install.sh` has run, then `bootstrap` is used | The pidfile backend uses `CODEX_HOME/packages/standalone/current/codex` | Yes. Bootstrap launches a detached updater loop that runs `install.sh` hourly. | Yes, while that updater process is alive and app-server is already running. After a successful fetch, the updater restarts app-server with the refreshed binary and only then replaces its own process image. |
-| Some other tool updates the managed binary path | The next fresh start or restart uses the updated file at that path | Only if `bootstrap` is active, because the updater still runs `install.sh` on its normal cadence. | Without `bootstrap`, no. With `bootstrap`, the next successful updater pass compares the managed binary contents after `install.sh` runs; if app-server is running and they differ from the updater's current image, it refreshes app-server first and then itself. |
+Install or update Corbanu Terminal using the platform-specific commands in the
+[installation instructions](../../README.md#install), then explicitly restart
+the daemon. All mutating lifecycle commands stop an updater left by an older
+build; `start`, `restart`, `stop` and `bootstrap` do so even when the managed
+binary is missing. An old updater remains active until one of those commands
+runs or the machine reboots.
 
-### Standalone installs
+The daemon still requires the existing standalone managed binary
+at `CODEX_HOME/packages/standalone/current/codex`; installer support for that
+layout remains a follow-up. A missing managed binary produces an actionable
+error instead of attempting an automatic installation.
 
-For installs created by `install.sh`:
+`start`, `restart`, `stop`, version reporting and remote-control management
+remain available for an existing managed installation. `bootstrap` starts
+app-server without starting an updater. A running app-server stays on its
+current executable until an explicit restart after a manual update.
 
-- lifecycle commands always use the standalone managed binary path
-- `bootstrap` is supported
-- `bootstrap` starts a detached pid-backed updater loop that fetches via
-  `install.sh`
-- after a successful refresh, if app-server is running and the managed binary
-  contents changed, the updater restarts app-server with that binary first and
-  only then replaces its own process image
-- the updater loop is not reboot-persistent; it must be started again by
-  rerunning `bootstrap` after a reboot
-
-### Out-of-band updates
-
-This daemon does not watch arbitrary executable files for replacement. If some
-other tool updates the managed binary path:
-
-- without `bootstrap`, a currently running app-server remains on the old
-  executable image until an explicit `restart`
-- with `bootstrap`, the detached updater loop notices the changed managed
-  binary on its next successful scheduled pass after running `install.sh`; if
-  app-server is running, it refreshes app-server first and then refreshes itself
-  once that replacement starts successfully
+Product basis: **Product principles** — “Maintain continuous Codex parity
+without removing Corbanu-specific behavior.” D564 authorizes disabling the
+upstream installer while Corbanu managed-install support is pending.
 
 ## Lifecycle semantics
 
@@ -92,9 +84,9 @@ JSON-RPC initialize handshake on the Unix control socket.
 for future starts. If a managed app-server is already running, they restart it
 so the new setting takes effect immediately.
 
-Top-level `codex remote-control` bootstraps with `--remote-control` when the
-updater loop is not running. Otherwise it enables remote control and starts the
-daemon normally.
+Top-level `corbanu remote-control` stops any previous updater. It enables
+remote control on an existing managed daemon, or bootstraps with
+`--remote-control` when the daemon is not running.
 
 `stop` sends a graceful termination request first, then sends a second
 termination signal after the grace window if the process is still alive.

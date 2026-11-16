@@ -5,6 +5,10 @@ mod remote_control_client;
 mod settings;
 mod update_loop;
 
+#[cfg(all(test, unix))]
+#[path = "bootstrap_tests.rs"]
+mod bootstrap_tests;
+
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -33,7 +37,6 @@ const UPDATE_PID_FILE_NAME: &str = "app-server-updater.pid";
 const OPERATION_LOCK_FILE_NAME: &str = "daemon.lock";
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const STATE_DIR_NAME: &str = "app-server-daemon";
-const PFTERMINAL_INSTALLER_COMMAND: &str = "curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.sh | CORBANU_NON_INTERACTIVE=1 sh";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LifecycleCommand {
@@ -235,6 +238,7 @@ pub async fn set_remote_control(mode: RemoteControlMode) -> Result<RemoteControl
 pub async fn run_pid_update_loop(
     http_client_factory: codex_http_client::HttpClientFactory,
 ) -> Result<()> {
+    update_loop::ensure_managed_updates_enabled()?;
     ensure_supported_platform()?;
     update_loop::run(http_client_factory).await
 }
@@ -297,6 +301,7 @@ impl Daemon {
 
     async fn start(&self) -> Result<LifecycleOutput> {
         let settings = self.load_settings().await?;
+        self.stop_managed_updater(&settings).await?;
         if let Ok(info) = client::probe(&self.socket_path).await {
             return Ok(self
                 .output(
@@ -335,6 +340,7 @@ impl Daemon {
 
     async fn restart(&self) -> Result<LifecycleOutput> {
         let settings = self.load_settings().await?;
+        self.stop_managed_updater(&settings).await?;
         if client::probe(&self.socket_path).await.is_ok()
             && self.running_backend(&settings).await?.is_none()
         {
@@ -408,6 +414,7 @@ impl Daemon {
 
     async fn stop(&self) -> Result<LifecycleOutput> {
         let settings = self.load_settings().await?;
+        self.stop_managed_updater(&settings).await?;
         if let Some(backend) = self.running_backend_instance(&settings).await? {
             backend.stop().await?;
             return Ok(self
@@ -495,7 +502,8 @@ impl Daemon {
     async fn ensure_remote_control_started(&self) -> Result<RemoteControlStartOutput> {
         let _operation_lock = self.acquire_operation_lock().await?;
         let settings = self.load_settings().await?;
-        if self.is_bootstrapped(&settings).await? {
+        self.stop_managed_updater(&settings).await?;
+        if self.running_backend(&settings).await?.is_some() {
             let _ = self
                 .set_remote_control_locked(RemoteControlMode::Enabled)
                 .await?;
@@ -531,6 +539,7 @@ impl Daemon {
         mode: RemoteControlMode,
     ) -> Result<RemoteControlOutput> {
         let previous_settings = self.load_settings().await?;
+        self.stop_managed_updater(&previous_settings).await?;
         let mut settings = previous_settings.clone();
         let remote_control_enabled = mode.is_enabled();
         let backend = self.running_backend_instance(&previous_settings).await?;
@@ -586,11 +595,12 @@ impl Daemon {
     }
 
     async fn bootstrap_locked(&self, options: BootstrapOptions) -> Result<BootstrapOutput> {
-        self.ensure_managed_codex_bin()?;
-
         let settings = DaemonSettings {
             remote_control_enabled: options.remote_control_enabled,
         };
+        self.stop_managed_updater(&settings).await?;
+        self.ensure_managed_codex_bin()?;
+
         if client::probe(&self.socket_path).await.is_ok()
             && self.running_backend(&settings).await?.is_none()
         {
@@ -606,18 +616,14 @@ impl Daemon {
 
         let backend = backend::pid_backend(self.backend_paths(&settings));
         backend.start().await?;
-        let updater = backend::pid_update_loop_backend(self.backend_paths(&settings));
-        if updater.is_starting_or_running().await? {
-            updater.stop().await?;
-        }
-        updater.start().await?;
+        eprintln!("{}", update_loop::MANAGED_UPDATES_DISABLED_MESSAGE);
 
         let info = self.wait_until_ready().await?;
         let managed_codex_version = self.managed_codex_version_best_effort().await;
         Ok(BootstrapOutput {
             status: BootstrapStatus::Bootstrapped,
             backend: BackendKind::Pid,
-            auto_update_enabled: true,
+            auto_update_enabled: false,
             remote_control_enabled: settings.remote_control_enabled,
             managed_codex_path: self.managed_codex_bin.clone(),
             managed_codex_version,
@@ -660,9 +666,12 @@ impl Daemon {
         backend.start().await
     }
 
-    async fn is_bootstrapped(&self, settings: &DaemonSettings) -> Result<bool> {
+    async fn stop_managed_updater(&self, settings: &DaemonSettings) -> Result<()> {
         let updater = backend::pid_update_loop_backend(self.backend_paths(settings));
-        updater.is_starting_or_running().await
+        if updater.is_starting_or_running().await? {
+            updater.stop().await?;
+        }
+        Ok(())
     }
 
     fn ensure_managed_codex_bin(&self) -> Result<()> {
@@ -672,11 +681,8 @@ impl Daemon {
 
         let managed_codex_path = self.managed_codex_bin.display();
         Err(anyhow!(
-            "managed standalone Codex install not found at {managed_codex_path}\n\n\
-             This command requires the standalone install managed by the Codex installer, because \
-             the daemon starts and updates app-server from that fixed path.\n\n\
-             Install it with:\n  {PFTERMINAL_INSTALLER_COMMAND}\n\n\
-             Then rerun the command you just tried."
+            "managed standalone Corbanu Terminal install not found at {managed_codex_path}\n\n{}",
+            update_loop::MANAGED_UPDATES_DISABLED_MESSAGE
         ))
     }
 
@@ -977,7 +983,7 @@ mod tests {
         let bootstrap_output = BootstrapOutput {
             status: BootstrapStatus::Bootstrapped,
             backend: BackendKind::Pid,
-            auto_update_enabled: true,
+            auto_update_enabled: false,
             remote_control_enabled: true,
             managed_codex_path: "codex".into(),
             managed_codex_version: Some("1.2.3".to_string()),
@@ -992,7 +998,7 @@ mod tests {
             serde_json::json!({
                 "status": "bootstrapped",
                 "backend": "pid",
-                "autoUpdateEnabled": true,
+                "autoUpdateEnabled": false,
                 "remoteControlEnabled": true,
                 "managedCodexPath": "codex",
                 "managedCodexVersion": "1.2.3",
@@ -1005,6 +1011,31 @@ mod tests {
             serde_json::to_value(output).expect("serialize"),
             serde_json::to_value(bootstrap_output).expect("serialize")
         );
+    }
+
+    #[test]
+    fn missing_managed_install_explains_manual_corbanu_installation() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let daemon = Daemon {
+            socket_path: temp_dir.path().join("app-server-control.sock"),
+            pid_file: temp_dir.path().join("app-server.pid"),
+            update_pid_file: temp_dir.path().join("app-server-updater.pid"),
+            operation_lock_file: temp_dir.path().join("daemon.lock"),
+            settings_file: temp_dir.path().join("settings.json"),
+            managed_codex_bin: temp_dir.path().join("missing-codex"),
+        };
+        let error = daemon
+            .ensure_managed_codex_bin()
+            .expect_err("missing install");
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "managed standalone Corbanu Terminal install not found at {}\n\n{}",
+                daemon.managed_codex_bin.display(),
+                "Corbanu Terminal daemon self-install/update is disabled until the managed installer supports Corbanu Terminal. Install or update Corbanu Terminal manually using the instructions at https://github.com/CorbanuCore/CorbanuTerminal#install. Then restart the daemon."
+            )
+        );
+        assert!(!daemon.managed_codex_bin.exists());
     }
 
     #[tokio::test]
