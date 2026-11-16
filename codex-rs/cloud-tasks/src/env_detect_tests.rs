@@ -47,6 +47,10 @@ async fn production_http_forwards_headers_and_decodes_response() {
                 Err(error) => panic!("environment HTTP listener should accept: {error}"),
             }
         };
+        // Windows inherits the listener's nonblocking mode on accepted sockets.
+        stream
+            .set_nonblocking(false)
+            .expect("environment HTTP stream should become blocking");
         stream
             .set_read_timeout(Some(Duration::from_secs(2)))
             .expect("environment HTTP stream should get a read timeout");
