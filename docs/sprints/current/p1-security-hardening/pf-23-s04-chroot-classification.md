@@ -64,15 +64,15 @@ finder/exec launcher coverage, authentication recovery and other contributor fea
 - [x] Frozen independent [code-blind design](../../../../qa/security-levels/sprints/PF-23-S04/codeblind-design.md) before functional execution; all eleven cases remain unexecuted.
 - [x] Initial integrated classifier: 404/404 passed; independent review nevertheless found inherited script-input loss. New regression reproduced it; repair and final qualification remain in progress.
 - [x] Closed inherited script-input finding with red/green tests and independent repair review; pre-reconciliation classifier406/406 passed. Recorded corpus:5397 cases/10794 verdicts,62 new asks,0 quieter outcomes,0 kind changes or panics. Combined current-main replay remains required below.
-- [x] Frozen cases run code-blind on `1dea8b3b03` on 2026-11-14 ([record](../../../../qa/security-levels/sprints/PF-23-S04/functional-20261114.md), [reel](../../../../qa/demos/index/pf23-s04-reel.md)):
-  case 5 failed (#2165); effect legs of 1, 6-8 not exercised; Linux/Windows blocked; #2167 predates the sprint.
+- [x] Frozen cases run code-blind on `1dea8b3b03` on 2026-11-14 ([record](../../../../qa/security-levels/sprints/PF-23-S04/functional-20261114.md), [reel](../../../../qa/demos/index/pf23-s04-reel.md)): case 5 failed (#2165); effect legs of 1, 6-8 not exercised; Linux/Windows blocked; #2167 predates the sprint.
+- [x] Linux leg (D554) run code-blind on `51bd768363`, Tart Ubuntu 24.04 aarch64, 2026-11-16 ([record](../../../../qa/security-levels/sprints/PF-23-S04/functional-20261116-linux.md)): effects of 1, 4, 7 and 8's missing root observed at Moderate; case 5 failed for `unshare -r chroot` (#2455); Windows blocked.
 
 ## Remaining
 
 - [ ] Format and run final-tree focused chroot and full classifier tests.
 - [ ] Verify no verdict becomes quieter on the recorded comparison corpus.
 - [ ] Independent exact-head security review and all CI complete green.
-- [ ] Independent review of the functional record (#2171); owner decisions on case 5 (#2165) and case 11's Linux/Windows legs.
+- [ ] Independent review of the functional record (#2171); owner decisions on case 5 (#2165, fixed by #2396; #2455 for `unshare`) and case 11's Windows leg.
 - [ ] Record integrated commit, user-visible limits and actual evidence; archive only when all gates pass.
 
 ## Verification
