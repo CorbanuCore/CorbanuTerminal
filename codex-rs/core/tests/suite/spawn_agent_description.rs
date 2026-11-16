@@ -475,11 +475,13 @@ pub(super) async fn model_catalog_refresh_requests(
         description.contains(expected_inherited_model_guidance),
         "expected inherited-model guidance in spawn_agent description: {description:?}"
     );
+    // Corbanu: V2's provider/model guidance above replaces upstream's in-context
+    // "Do not set the `model` field" sentence, so only V1 carries it.
     assert_eq!(
         description.contains(
             "Do not set the `model` field unless the user explicitly asks for a different model."
         ),
-        multi_agent_version == MultiAgentVersion::V1 || model_catalog_in_context,
+        multi_agent_version == MultiAgentVersion::V1,
         "expected model override usage guidance in spawn_agent description: {description:?}"
     );
     assert!(
