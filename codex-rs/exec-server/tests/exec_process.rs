@@ -506,12 +506,12 @@ enum CredentialStartup {
 
 #[cfg(unix)]
 #[test_case(false, "bash", &["-lc", "-lc"], CredentialStartup::Inherited; "unmasked")]
-#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "bash", &["-c", "-c", "-lc"], CredentialStartup::Inherited; "masked_bash"))]
-#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "bash", &["-lc", "-lc"], CredentialStartup::Inherited; "bash_profile_fallback"))]
-#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::OrdinaryLogin; "zsh_profile_gateway_fallback"))]
-#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::Inherited; "masked_zsh_inherited_credentials"))]
-#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::Profile; "masked_zsh_profile_credentials"))]
-#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::UnsupportedProfile; "zsh_unsupported_profile_fallback"))]
+#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "bash", &["-c", "-c", "-lc"], CredentialStartup::Inherited => ignore["S3b (D353/D354): upstream credential engine is off; main engine brokers one-way, so startup files see placeholders and inherited aliases are not rewritten (#2356)"]; "masked_bash"))]
+#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "bash", &["-lc", "-lc"], CredentialStartup::Inherited => ignore["S3b (D353/D354): upstream credential engine is off; main engine brokers one-way, so startup files see placeholders and inherited aliases are not rewritten (#2356)"]; "bash_profile_fallback"))]
+#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::OrdinaryLogin => ignore["S3b (D353/D354): upstream credential engine is off; main engine brokers one-way, so startup files see placeholders and inherited aliases are not rewritten (#2356)"]; "zsh_profile_gateway_fallback"))]
+#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::Inherited => ignore["S3b (D353/D354): upstream credential engine is off; main engine brokers one-way, so startup files see placeholders and inherited aliases are not rewritten (#2356)"]; "masked_zsh_inherited_credentials"))]
+#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::Profile => ignore["S3b (D353/D354): upstream credential engine is off; main engine brokers one-way, so startup files see placeholders and the unmasked fallback is #2365 (#2356)"]; "masked_zsh_profile_credentials"))]
+#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::UnsupportedProfile => ignore["S3b (D353/D354): upstream credential engine is off; main engine brokers one-way, so startup files see placeholders and the unmasked fallback is #2365 (#2356)"]; "zsh_unsupported_profile_fallback"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[serial_test::serial(remote_exec_server)]
 async fn shell_snapshot_v2_remote_managed_proxy_uses_prepared_execution_context(

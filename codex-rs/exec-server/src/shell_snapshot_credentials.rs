@@ -24,6 +24,7 @@ use codex_shell_command::shell_snapshot::prepare_snapshot_credentials;
 use super::CaptureResult;
 use super::MAX_FILE_SNAPSHOT_BYTES;
 use super::MAX_SNAPSHOT_BYTES;
+use super::SnapshotCredentialFilter;
 use super::SnapshotReplay;
 use super::parse_snapshot;
 use crate::local_process::shell_environment_policy;
@@ -54,6 +55,7 @@ pub(super) fn restore_fallback(prepared: &mut PreparedExecRequest) {
 pub(super) async fn prepare(
     params: &ExecParams,
     output: &[u8],
+    launch_values: impl IntoIterator<Item = (&str, &str)>,
     replay: SnapshotReplay,
     proxy: &NetworkProxy,
     credential_brokers: &RemoteCredentialBrokerCache,
@@ -75,7 +77,13 @@ pub(super) async fn prepare(
         })
         .collect::<Option<HashMap<_, _>>>()
         .ok_or_else(unsupported)?;
-    let mut snapshot = parse_snapshot(ShellType::Zsh, output, params.env_policy.as_ref(), replay)?;
+    let mut snapshot = parse_snapshot(
+        ShellType::Zsh,
+        output,
+        params.env_policy.as_ref(),
+        replay,
+        /*credential_filter*/ None,
+    )?;
     let mut policy = params
         .env_policy
         .as_ref()
@@ -297,5 +305,23 @@ pub(super) async fn prepare(
     if environment_bytes > MAX_SNAPSHOT_BYTES || snapshot.state.len() > state_limit {
         return Err(unsupported());
     }
+    // Corbanu #2356: functions, aliases and the replay script carry no real
+    // credential. Placeholders are restored first so they are not mistaken for
+    // one. Export-level filtering here awaits the broker-path decision (D640).
+    let launch_values = launch_values
+        .into_iter()
+        .map(|(name, value)| {
+            let mut value = zeroize::Zeroizing::new(value.to_string());
+            proxy.restore_brokered_text(&mut value);
+            (name, value)
+        })
+        .collect::<Vec<_>>();
+    SnapshotCredentialFilter::new(
+        launch_values
+            .iter()
+            .map(|(name, value)| (*name, value.as_str())),
+        params.env_policy.as_ref(),
+    )?
+    .ensure_clean(&snapshot.state)?;
     Ok(snapshot)
 }
