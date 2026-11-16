@@ -19,6 +19,7 @@ use codex_features::Feature;
 use codex_protocol::AgentPath;
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ModeKind;
+use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::Settings;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
@@ -1273,7 +1274,7 @@ async fn turn_input_submission_applies_thread_settings_only_after_accepted_input
     .await
     .expect("started turn should reach its first model request");
 
-    // Corbanu (D532 (a), PF-13): a running turn keeps the permissions it was
+    // Corbanu (D529 (a), D532 (a), PF-13): a running turn keeps the permissions it was
     // admitted under, so a steer whose settings would change the turn's
     // authority (here the approval policy) is returned to the client and none of
     // its settings are committed. Upstream steers and applies them.
@@ -1305,6 +1306,32 @@ async fn turn_input_submission_applies_thread_settings_only_after_accepted_input
     );
     assert_eq!(codex.environment_selections().await, original_environments);
 
+    // A steer whose settings leave the turn's authority unchanged is accepted,
+    // and its settings commit with it.
+    assert_ne!(
+        codex.config_snapshot().await.reasoning_summary,
+        Some(ReasoningSummary::Detailed)
+    );
+    let accepted = codex
+        .start_or_steer_turn(user_message_request("accepted steer").with_thread_settings(
+            ThreadSettingsOverrides {
+                summary: Some(ReasoningSummary::Detailed),
+                ..Default::default()
+            },
+        ))
+        .await
+        .expect("an authority-preserving steer should be accepted");
+    assert_eq!(
+        accepted,
+        TurnInputSubmission::Steered {
+            root_turn_id: turn_id.clone(),
+            turn_id
+        }
+    );
+    let snapshot = codex.config_snapshot().await;
+    assert_eq!(snapshot.reasoning_summary, Some(ReasoningSummary::Detailed));
+    assert_eq!(snapshot.approval_policy, AskForApproval::OnRequest);
+
     release_response
         .send(())
         .expect("response gate should remain open");
@@ -1314,7 +1341,8 @@ async fn turn_input_submission_applies_thread_settings_only_after_accepted_input
     let rejected = codex
         .steer_turn(
             user_message_request("no active turn").with_thread_settings(ThreadSettingsOverrides {
-                approval_policy: Some(AskForApproval::OnRequest),
+                approval_policy: Some(AskForApproval::Never),
+                summary: Some(ReasoningSummary::Concise),
                 environments: Some(TurnEnvironmentRequests::new(
                     rejected_cwd.clone(),
                     vec![local_request(rejected_cwd)],
@@ -1331,10 +1359,9 @@ async fn turn_input_submission_applies_thread_settings_only_after_accepted_input
             reason: NotSubmittedReason::NoActiveTurn,
         }
     );
-    assert_eq!(
-        codex.config_snapshot().await.approval_policy,
-        AskForApproval::OnRequest
-    );
+    let snapshot = codex.config_snapshot().await;
+    assert_eq!(snapshot.approval_policy, AskForApproval::OnRequest);
+    assert_eq!(snapshot.reasoning_summary, Some(ReasoningSummary::Detailed));
     assert_eq!(codex.environment_selections().await, original_environments);
     server.shutdown().await;
 }
