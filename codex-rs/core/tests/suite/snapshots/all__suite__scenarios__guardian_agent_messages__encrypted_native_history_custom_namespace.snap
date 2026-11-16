@@ -1,5 +1,6 @@
 ---
 source: core/tests/suite/scenarios_guardian_agent_messages_tests.rs
+assertion_line: 315
 expression: snapshot
 ---
 Scenario: A historical MAv2 send_message call and an encrypted parent reply reach both Guardian reviews exactly once, in order. Calls retain their original IDs, namespace and encryption metadata, with a paired evidence-only output. The second review appends to the first request. Ciphertext and decisions are mocked; this verifies transport, not backend decryption or authorization outcomes.
@@ -7,10 +8,8 @@ Scenario: A historical MAv2 send_message call and an encrypted parent reply reac
 ## Window 1
 -- request 1 (turn) --
 00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer:
     <PERMISSIONS_INSTRUCTIONS>
-02:message/developer:
+01:message/developer:
     You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.
 
     At the start of your turn, you are the active agent.
@@ -25,26 +24,24 @@ Scenario: A historical MAv2 send_message call and an encrypted parent reply reac
 
     When calling `wait_agent`, prefer longer waits (minutes) to avoid busy polling.
 
-    There are 4 available concurrency slots, meaning that up to 4 agents can be active at once, including you.
+    There are 6 available concurrency slots, meaning that up to 6 agents can be active at once, including you.
 
     Full-history forks (`fork_turns` omitted or `"all"`) inherit the parent model and reasoning effort and d...uctions; when doing so, set `fork_turns` to `"none"`. [hash=18ccf7e93ecabab9]
-03:message/developer:
+02:message/developer:
     <MULTI_AGENT_MODE>
-04:message/user:
+03:message/user:
     <ENVIRONMENT_CONTEXT>
-05:message/user:
+04:message/user:
     Check the change after the parent confirms the exact action.
 -- request 2 (turn) --
-06:function_call/team.send_message:{"message":"opaque-message-request","target":"missing_worker"}
-07:function_call_output:live agent path `/root/missing_worker` not found
+05:function_call/team.send_message:{"message":"opaque-message-request","target":"missing_worker"}
+06:function_call_output:live agent path `/root/missing_worker` not found
 
 ## Window 2 (after request 2: settings changed (tools))
 -- request 3 (turn) --
 00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer:
     <PERMISSIONS_INSTRUCTIONS>
-02:message/developer:
+01:message/developer:
     You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.
 
     At the start of your turn, you are the active agent.
@@ -59,26 +56,28 @@ Scenario: A historical MAv2 send_message call and an encrypted parent reply reac
 
     When calling `wait_agent`, prefer longer waits (minutes) to avoid busy polling.
 
-    There are 4 available concurrency slots, meaning that up to 4 agents can be active at once, including you.
+    There are 6 available concurrency slots, meaning that up to 6 agents can be active at once, including you.
 
     Full-history forks (`fork_turns` omitted or `"all"`) inherit the parent model and reasoning effort and d...uctions; when doing so, set `fork_turns` to `"none"`. [hash=18ccf7e93ecabab9]
-03:message/developer:
+02:message/developer:
     <MULTI_AGENT_MODE>
+03:message/user:
+    <ENVIRONMENT_CONTEXT>
 04:message/user:
-    <ENVIRONMENT_CONTEXT>
-05:message/user:
     Check the change after the parent confirms the exact action.
-06:function_call/team.send_message:{"message":"opaque-message-request","target":"missing_worker"}
-07:function_call_output:live agent path `/root/missing_worker` not found
-08:message/assistant:
+05:function_call/team.send_message:{"message":"opaque-message-request","target":"missing_worker"}
+06:function_call_output:live agent path `/root/missing_worker` not found
+07:message/assistant:
     I will wait for the parent reply before checking the change.
-09:message/developer:
+08:message/developer:
     <PERMISSIONS_INSTRUCTIONS>
-10:message/user:
+09:message/user:
     <ENVIRONMENT_CONTEXT>
-11:agent_message
+10:agent_message
+11:message/user:
+    Continue.
 
-## Window 3 (after request 3: input diverged at item 00, settings changed (model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
+## Window 3 (after request 3: input diverged at item 00, settings changed (instructions, model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
 -- request 4 (turn) --
 00:additional_tools/developer (1; hash=65a86311792f6c71):
         - namespace/functions; hash=dcfbcf0da1c2d607
@@ -156,13 +155,11 @@ Scenario: A historical MAv2 send_message call and an encrypted parent reply reac
     [12] >>> APPROVAL REQUEST END
 
 
-## Window 4 (after request 4: input diverged at item 00, settings changed (model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
+## Window 4 (after request 4: input diverged at item 00, settings changed (instructions, model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
 -- request 5 (turn) --
 00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer:
     <PERMISSIONS_INSTRUCTIONS>
-02:message/developer:
+01:message/developer:
     You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.
 
     At the start of your turn, you are the active agent.
@@ -177,28 +174,30 @@ Scenario: A historical MAv2 send_message call and an encrypted parent reply reac
 
     When calling `wait_agent`, prefer longer waits (minutes) to avoid busy polling.
 
-    There are 4 available concurrency slots, meaning that up to 4 agents can be active at once, including you.
+    There are 6 available concurrency slots, meaning that up to 6 agents can be active at once, including you.
 
     Full-history forks (`fork_turns` omitted or `"all"`) inherit the parent model and reasoning effort and d...uctions; when doing so, set `fork_turns` to `"none"`. [hash=18ccf7e93ecabab9]
-03:message/developer:
+02:message/developer:
     <MULTI_AGENT_MODE>
+03:message/user:
+    <ENVIRONMENT_CONTEXT>
 04:message/user:
-    <ENVIRONMENT_CONTEXT>
-05:message/user:
     Check the change after the parent confirms the exact action.
-06:function_call/team.send_message:{"message":"opaque-message-request","target":"missing_worker"}
-07:function_call_output:live agent path `/root/missing_worker` not found
-08:message/assistant:
+05:function_call/team.send_message:{"message":"opaque-message-request","target":"missing_worker"}
+06:function_call_output:live agent path `/root/missing_worker` not found
+07:message/assistant:
     I will wait for the parent reply before checking the change.
-09:message/developer:
+08:message/developer:
     <PERMISSIONS_INSTRUCTIONS>
-10:message/user:
+09:message/user:
     <ENVIRONMENT_CONTEXT>
-11:agent_message
-12:function_call/exec_command:{"cmd":"exit 0","justification":"Check the requested change.","sandbox_permissions":"require_escalated"}
-13:function_call_output:exec_command failed: CreateProcess { message: "Rejected(\\"This action was rejected due to unacceptable r...e risk. Otherwise, stop and request user input.\\")" } [hash=ae05158f838e6b05]
+10:agent_message
+11:function_call/exec_command:{"cmd":"exit 0","justification":"Check the requested change.","sandbox_permissions":"require_escalated"}
+12:function_call_output:exec_command failed: This action was rejected due to unacceptable risk.
+    Reason: Mock assessment; no command is executed.
+    The agent must not attempt to achieve the same outcome via workaround, indirect execution, or policy cir... of the risk. Otherwise, stop and request user input. [hash=316a6640caee3870]
 
-## Window 5 (after request 5: input diverged at item 00, settings changed (model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
+## Window 5 (after request 5: input diverged at item 00, settings changed (instructions, model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
 -- request 6 (turn) --
 00:additional_tools/developer (1; hash=65a86311792f6c71):
         - namespace/functions; hash=dcfbcf0da1c2d607
@@ -284,7 +283,9 @@ Scenario: A historical MAv2 send_message call and an encrypted parent reply reac
 
     [02] >>> TRANSCRIPT DELTA START
 
-    [03] [7] tool exec_command result: exec_command failed: CreateProcess { message: "Rejected(\\"This action was ...e risk. Otherwise, stop and request user input.\\")" } [hash=d1ef25a4ca0209de]
+    [03] [7] tool exec_command result: exec_command failed: This action was rejected due to unacceptable risk.
+        Reason: Mock assessment; no command is executed.
+        The agent must not attempt to achieve the same outcome via workaround, indirect execution, or policy cir... of the risk. Otherwise, stop and request user input. [hash=316a6640caee3870]
 
     [04]
         [8] tool exec_command call: {"cmd":"exit 0","sandbox_permissions":"require_escalated","justification":"Check the requested change."}
@@ -321,13 +322,11 @@ Scenario: A historical MAv2 send_message call and an encrypted parent reply reac
     [15] >>> APPROVAL REQUEST END
 
 
-## Window 6 (after request 6: input diverged at item 00, settings changed (model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
+## Window 6 (after request 6: input diverged at item 00, settings changed (instructions, model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
 -- request 7 (turn) --
 00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer:
     <PERMISSIONS_INSTRUCTIONS>
-02:message/developer:
+01:message/developer:
     You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.
 
     At the start of your turn, you are the active agent.
@@ -342,25 +341,29 @@ Scenario: A historical MAv2 send_message call and an encrypted parent reply reac
 
     When calling `wait_agent`, prefer longer waits (minutes) to avoid busy polling.
 
-    There are 4 available concurrency slots, meaning that up to 4 agents can be active at once, including you.
+    There are 6 available concurrency slots, meaning that up to 6 agents can be active at once, including you.
 
     Full-history forks (`fork_turns` omitted or `"all"`) inherit the parent model and reasoning effort and d...uctions; when doing so, set `fork_turns` to `"none"`. [hash=18ccf7e93ecabab9]
-03:message/developer:
+02:message/developer:
     <MULTI_AGENT_MODE>
+03:message/user:
+    <ENVIRONMENT_CONTEXT>
 04:message/user:
-    <ENVIRONMENT_CONTEXT>
-05:message/user:
     Check the change after the parent confirms the exact action.
-06:function_call/team.send_message:{"message":"opaque-message-request","target":"missing_worker"}
-07:function_call_output:live agent path `/root/missing_worker` not found
-08:message/assistant:
+05:function_call/team.send_message:{"message":"opaque-message-request","target":"missing_worker"}
+06:function_call_output:live agent path `/root/missing_worker` not found
+07:message/assistant:
     I will wait for the parent reply before checking the change.
-09:message/developer:
+08:message/developer:
     <PERMISSIONS_INSTRUCTIONS>
-10:message/user:
+09:message/user:
     <ENVIRONMENT_CONTEXT>
-11:agent_message
-12:function_call/exec_command:{"cmd":"exit 0","justification":"Check the requested change.","sandbox_permissions":"require_escalated"}
-13:function_call_output:exec_command failed: CreateProcess { message: "Rejected(\\"This action was rejected due to unacceptable r...e risk. Otherwise, stop and request user input.\\")" } [hash=ae05158f838e6b05]
-14:function_call/exec_command:{"cmd":"exit 0","justification":"Check the requested change.","sandbox_permissions":"require_escalated"}
-15:function_call_output:exec_command failed: CreateProcess { message: "Rejected(\\"This action was rejected due to unacceptable r...e risk. Otherwise, stop and request user input.\\")" } [hash=ae05158f838e6b05]
+10:agent_message
+11:function_call/exec_command:{"cmd":"exit 0","justification":"Check the requested change.","sandbox_permissions":"require_escalated"}
+12:function_call_output:exec_command failed: This action was rejected due to unacceptable risk.
+    Reason: Mock assessment; no command is executed.
+    The agent must not attempt to achieve the same outcome via workaround, indirect execution, or policy cir... of the risk. Otherwise, stop and request user input. [hash=316a6640caee3870]
+13:function_call/exec_command:{"cmd":"exit 0","justification":"Check the requested change.","sandbox_permissions":"require_escalated"}
+14:function_call_output:exec_command failed: This action was rejected due to unacceptable risk.
+    Reason: Mock assessment; no command is executed.
+    The agent must not attempt to achieve the same outcome via workaround, indirect execution, or policy cir... of the risk. Otherwise, stop and request user input. [hash=316a6640caee3870]
