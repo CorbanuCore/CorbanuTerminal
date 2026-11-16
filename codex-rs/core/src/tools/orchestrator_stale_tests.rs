@@ -338,6 +338,7 @@ async fn run_probe(case: Case) -> (Outcome, Result<(), String>) {
         handler_basis = Some(HandlerBasis::now(&session));
         let effective = crate::tools::handlers::apply_granted_turn_permissions(
             &session,
+            &turn,
             &environment,
             environment.cwd(),
             crate::sandboxing::SandboxPermissions::UseDefault,
