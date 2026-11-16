@@ -42,6 +42,8 @@ use tokio::time::timeout;
 use tracing::Instrument;
 use tracing::info_span;
 
+#[path = "shell_snapshot_filter.rs"]
+mod filter;
 #[path = "shell_snapshot_sandbox.rs"]
 mod sandbox;
 
@@ -647,17 +649,19 @@ async fn capture_snapshot(
     } else {
         SnapshotShellMode::NonLogin
     };
-    let raw_snapshot = run_script_with_timeout(
-        shell,
-        &script,
-        SNAPSHOT_TIMEOUT,
-        shell_mode,
-        cwd,
-        credential_broker,
-        sandbox,
-        removed_env_vars,
-    )
-    .await?;
+    let raw_snapshot = zeroize::Zeroizing::new(
+        run_script_with_timeout(
+            shell,
+            &script,
+            SNAPSHOT_TIMEOUT,
+            shell_mode,
+            cwd,
+            credential_broker,
+            sandbox,
+            removed_env_vars,
+        )
+        .await?,
+    );
     let mut capture = CapturedSnapshot::parse(shell_type, raw_snapshot.as_bytes())
         .ok_or_else(|| anyhow!("invalid shell snapshot capture"))?;
     // #310: no secret-named export, nor a provider credential name, is written
@@ -665,10 +669,13 @@ async fn capture_snapshot(
     // shell startup files define no longer reaches commands through the
     // snapshot (as on main). The captured environment, and so the broker's
     // credential and alias handling, is untouched.
-    let secret_exports = secret_export_patterns(removed_env_vars);
-    capture.retain_exports(|key| !secret_exports.iter().any(|pattern| pattern.matches(key)));
+    // #2314: nor is any export whose value carries a protected credential.
+    let credential_filter =
+        filter::retain_safe_exports(&mut capture, raw_snapshot.len(), removed_env_vars)?;
     let Some(credential_broker) = credential_broker else {
-        return Ok((capture.render_script(shell_environment_policy), None));
+        let snapshot = capture.render_script(shell_environment_policy);
+        credential_filter.ensure_clean(&snapshot)?;
+        return Ok((snapshot, None));
     };
 
     let original_env = std::str::from_utf8(capture.environment)?
@@ -916,6 +923,7 @@ async fn capture_snapshot(
     else {
         bail!("shell snapshot contains a brokered credential outside exported environment");
     };
+    credential_filter.ensure_clean(&snapshot)?;
     let mut startup_credential_keys = brokered_credential_value_env_keys(&discovery_env);
     startup_credential_keys.extend(unbrokered_credentials.keys().cloned());
     unset_credential_keys.extend(rejected_alias_keys.into_iter().filter(|key| {
