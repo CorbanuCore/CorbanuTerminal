@@ -45,6 +45,7 @@ use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -265,27 +266,45 @@ async fn guardian_review_turns_and_tools_reach_analytics() -> Result<()> {
         .iter()
         .filter(|event| event["event_params"]["subagent_source"] == "guardian")
         .collect::<Vec<_>>();
+    // Guardian setup can initialize a session before choosing the review session.
+    // Check every child event against its lifecycle, then correlate actual reviews
+    // with the recorded request IDs instead of attributing all initialization to one thread.
+    let initialized_threads = children
+        .iter()
+        .filter(|event| event["event_type"] == "codex_thread_initialized")
+        .map(|event| {
+            event["event_params"]["thread_id"]
+                .as_str()
+                .expect("initialized Guardian thread ID")
+        })
+        .collect::<HashSet<_>>();
+    for review in &reviews {
+        assert!(
+            initialized_threads.contains(review["thread_id"].as_str().expect("review thread ID"))
+        );
+    }
     for event in &children {
         let params = &event["event_params"];
-        // A failed Guardian review can replace its session. Attribute each
-        // event to the review that emitted its turn, not the first session.
-        let review = reviews
-            .iter()
-            .find(|review| review["turn_id"] == params["turn_id"])
-            .expect("event belongs to a recorded Guardian review");
+        assert!(
+            initialized_threads.contains(params["thread_id"].as_str().expect("event thread ID"))
+        );
+        if matches!(
+            event["event_type"].as_str(),
+            Some("codex_turn_event" | "codex_web_search_event")
+        ) {
+            let review = reviews
+                .iter()
+                .find(|review| review["turn_id"] == params["turn_id"])
+                .expect("event belongs to a recorded Guardian review turn");
+            assert_eq!(params["thread_id"], review["thread_id"]);
+        }
         assert_eq!(
             json!([
-                params["thread_id"],
                 params["session_id"],
                 params["parent_thread_id"],
                 params["thread_source"]
             ]),
-            json!([
-                review["thread_id"],
-                thread.session_id,
-                thread.id,
-                "guardian_review"
-            ])
+            json!([thread.session_id, thread.id, "guardian_review"])
         );
     }
     let turns = children

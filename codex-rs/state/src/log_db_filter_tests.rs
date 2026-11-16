@@ -31,6 +31,14 @@ async fn sqlite_sink_filters_noisy_targets_without_dropping_useful_diagnostics()
     tracing::trace!(target: "opentelemetry_sdk", "dropped-trace");
     tracing::debug!(target: "opentelemetry_sdk", "dropped-debug");
     tracing::info!(target: "opentelemetry_sdk", "retained-info");
+    tracing::error!(
+        name: "PeriodicReader.ExportError",
+        target: "opentelemetry_sdk",
+        name = "PeriodicReader.ExportError",
+        error = "synthetic collector rejection"
+    );
+    tracing::error!(target: "opentelemetry_sdk", "retained-sdk-error");
+    tracing::warn!(target: "opentelemetry_sdk", "retained-sdk-warning");
     tracing::warn!(target: "sqlx::query", "dropped-slow-query-warning");
     tracing::warn!(target: "sqlx::pool::acquire", "dropped-slow-acquire-warning");
     tracing::warn!(target: "sqlx::other", "dropped-sqlx-warning");
@@ -111,6 +119,8 @@ async fn sqlite_sink_filters_noisy_targets_without_dropping_useful_diagnostics()
             .collect::<Vec<_>>(),
         vec![
             ("INFO", "opentelemetry_sdk", Some("retained-info")),
+            ("ERROR", "opentelemetry_sdk", Some("retained-sdk-error")),
+            ("WARN", "opentelemetry_sdk", Some("retained-sdk-warning")),
             (
                 "INFO",
                 "sqlx_application",

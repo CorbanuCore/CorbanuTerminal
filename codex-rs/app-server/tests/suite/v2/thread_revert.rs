@@ -424,17 +424,7 @@ async fn thread_revert_replaces_paginated_history_before_turn() -> Result<()> {
     let response_mock =
         responses::mount_sse_sequence(&server, vec![responses::sse_completed("done"); 4]).await;
     let codex_home = TempDir::new()?;
-    // D644: this upstream scenario depends on the models' upstream personality templates.
-    let catalog_path = codex_home.path().join("upstream-models.json");
-    std::fs::write(
-        &catalog_path,
-        serde_json::to_vec(&core_test_support::model_catalog::upstream_model_catalog())?,
-    )?;
     MockResponsesConfig::new(&server.uri())
-        .with_root_config(&format!(
-            "model_catalog_json = {}",
-            serde_json::to_string(&catalog_path)?
-        ))
         .with_model("gpt-5.5")
         .enable_feature(Feature::FastMode)
         .write(codex_home.path())?;

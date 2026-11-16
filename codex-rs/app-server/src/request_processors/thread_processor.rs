@@ -5288,10 +5288,26 @@ impl ThreadRequestProcessor {
                     mismatch_details.join("; ")
                 );
             }
-            self.config_manager
-                .check_thread_model_provider_for_input(existing_thread.config().await.as_ref())
-                .await
-                .map_err(|err| config_load_error(&err))?;
+            let config = existing_thread.config().await;
+            // Rejoining a parent-owned V2 child observes its retained runtime; it
+            // does not select a provider or admit direct input. Mixed-provider crews
+            // still have to satisfy current managed requirements and network policy.
+            let is_v2_child = existing_thread.multi_agent_version()
+                == Some(codex_protocol::protocol::MultiAgentVersion::V2)
+                && matches!(
+                    config_snapshot.session_source,
+                    CoreSessionSource::SubAgent(CoreSubAgentSource::ThreadSpawn { .. })
+                );
+            let provider_check = if is_v2_child {
+                self.config_manager
+                    .check_thread_model_provider(config.as_ref())
+                    .await
+            } else {
+                self.config_manager
+                    .check_thread_model_provider_for_input(config.as_ref())
+                    .await
+            };
+            provider_check.map_err(|err| config_load_error(&err))?;
             let redact_resume_payloads =
                 should_redact_thread_resume_payloads(app_server_client_name.as_deref());
             let include_turns = !params.exclude_turns;

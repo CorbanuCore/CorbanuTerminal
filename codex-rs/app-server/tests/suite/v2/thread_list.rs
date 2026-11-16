@@ -1755,6 +1755,16 @@ async fn thread_list_reports_loaded_subagent_direct_input_capability() -> Result
         if should_resume {
             let resume = (thread_id.clone(), source, capability);
             if version == Some(MultiAgentVersion::V2) {
+                // Parent-owned resume restores the child's saved runtime, not request overrides.
+                let context = serde_json::from_value(json!({
+                    "cwd": test_absolute_path("/"),
+                    "approval_policy": "never",
+                    "sandbox_policy": {"type": "read-only"},
+                    "model": "gpt-5.4",
+                    "model_provider": "mock_provider",
+                    "effort": "low",
+                }))?;
+                append_rollout_item_to_path(&path, &RolloutItem::TurnContext(context)).await?;
                 threads_to_resume.push(resume);
             } else {
                 threads_to_resume.insert(/*index*/ 0, resume);
