@@ -163,7 +163,7 @@ fn explicit_paste_and_disabled_detection_submit_without_lookahead() {
         submitted("0123456789abcdef\nsecond line")
     );
 
-    composer.set_disable_paste_burst(true);
+    composer.set_disable_paste_burst(/*disabled*/ true);
     let mut now = Instant::now();
     type_burst(&mut composer, "0123456789abcdef", &mut now);
     assert_eq!(
