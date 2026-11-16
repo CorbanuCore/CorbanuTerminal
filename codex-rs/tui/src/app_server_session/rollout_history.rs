@@ -221,6 +221,7 @@ impl AppServerSession {
         if params.exclude_turns {
             rollout_maintenance_guard = None;
         }
+        crate::security::aggressive::enforce_approval(&mut params.approval_policy);
         let request_id = self.next_request_id();
         let resume_response = self
             .request_handle

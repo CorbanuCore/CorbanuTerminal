@@ -214,3 +214,142 @@ async fn reconnect_sends_the_aggressive_approval() -> Result<()> {
     }
     Ok(())
 }
+
+/// Requests built without the launch overrides: `AppServerSession` starts,
+/// forks and plain resumes, and the agent tools' own resume, fork and start.
+#[tokio::test]
+async fn agent_tools_and_session_requests_send_the_aggressive_approval() -> Result<()> {
+    use crate::security::level::ChosenLevel;
+
+    for aggressive in [false, true] {
+        let _levels = aggressive.then(|| {
+            crate::security::level::test_levels::set(
+                ChosenLevel::Aggressive,
+                ChosenLevel::Aggressive,
+            )
+        });
+        let app = make_test_app().await;
+        let (mut app_server, requests, _proxy) = start_recording_app_server(
+            &app.config,
+            /*blocked_thread_list*/ None,
+            /*failed_thread_name*/ None,
+        )
+        .await?;
+        let caller = app_server
+            .start_thread(&app.config)
+            .await?
+            .session
+            .thread_id;
+        let target = app_server
+            .start_thread(&app.config)
+            .await?
+            .session
+            .thread_id;
+        let starts = recorded_params(&requests, "thread/start");
+        assert_eq!(starts.len(), 2);
+        if aggressive {
+            for params in &starts {
+                assert_eq!(params["approvalPolicy"], "untrusted", "{params}");
+            }
+        }
+        requests.lock().expect("request recorder lock").clear();
+
+        // `AppServerSession` resume and fork with no permission choice.
+        let _ = app_server
+            .resume_thread(
+                &app.local_settings,
+                app.config.clone(),
+                target,
+                crate::app_server_session::ResumeModelSettings::RestoreFromThread,
+            )
+            .await;
+        let _ = app_server
+            .fork_thread(&app.local_settings, app.config.clone(), target)
+            .await;
+        assert_eq!(
+            resume_approvals(&requests),
+            vec![expected(aggressive)],
+            "session resume, aggressive={aggressive}"
+        );
+        assert_eq!(
+            recorded_params(&requests, "thread/fork")
+                .iter()
+                .filter(|params| params["approvalPolicy"] == "untrusted")
+                .count(),
+            usize::from(aggressive),
+            "session fork, aggressive={aggressive}"
+        );
+        requests.lock().expect("request recorder lock").clear();
+
+        // The agent tools build their own requests.
+        for (tool, arguments) in [
+            ("fork_thread", json!({"threadId": target})),
+            (
+                "send_message_to_thread",
+                json!({"threadId": target, "prompt": "hello"}),
+            ),
+            ("create_thread", json!({"prompt": "hello"})),
+        ] {
+            let (_status_sender, status_updates) =
+                tokio::sync::broadcast::channel(/*capacity*/ 1);
+            let _ = tokio::time::timeout(
+                Duration::from_secs(/*secs*/ 20),
+                crate::dynamic_tools::execute(
+                    app_server.request_handle(),
+                    codex_app_server_protocol::DynamicToolCallParams {
+                        thread_id: caller.to_string(),
+                        turn_id: "source-turn".to_string(),
+                        call_id: format!("d621-{tool}"),
+                        namespace: Some(crate::dynamic_tools::NAMESPACE.to_string()),
+                        tool: tool.to_string(),
+                        arguments,
+                    },
+                    codex_app_server_protocol::ThreadStartParams::default(),
+                    app.config.features.get().clone(),
+                    status_updates,
+                    /*app_event_tx*/ None,
+                ),
+            )
+            .await;
+        }
+        let sent = ["thread/fork", "thread/resume", "thread/start"]
+            .into_iter()
+            .flat_map(|method| {
+                recorded_params(&requests, method)
+                    .into_iter()
+                    .map(move |params| {
+                        (
+                            method,
+                            params["approvalPolicy"].as_str().map(str::to_string),
+                        )
+                    })
+            })
+            .collect::<Vec<_>>();
+        // fork_thread's fork, send_message_to_thread's resume, and
+        // create_thread's source resume and start.
+        assert_eq!(
+            sent.iter().map(|(method, _)| *method).collect::<Vec<_>>(),
+            vec![
+                "thread/fork",
+                "thread/resume",
+                "thread/resume",
+                "thread/start"
+            ],
+            "{sent:?}"
+        );
+        if aggressive {
+            assert!(
+                sent.iter()
+                    .all(|(_, policy)| policy.as_deref() == Some("untrusted")),
+                "{sent:?}"
+            );
+        } else {
+            // Outside Aggressive the tools leave the policy to the thread
+            // (create_thread copies the source thread's).
+            assert_eq!(sent[0].1, None, "{sent:?}");
+            assert_eq!(sent[1].1, None, "{sent:?}");
+            assert_eq!(sent[2].1, None, "{sent:?}");
+        }
+    }
+    Ok(())
+}

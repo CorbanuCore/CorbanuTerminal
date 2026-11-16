@@ -306,6 +306,7 @@ pub(crate) async fn request_thread_start_with_history_fallback(
     mut request_id: RequestId,
     mut params: ThreadStartParams,
 ) -> std::result::Result<(ThreadStartResponse, ThreadHistorySupport, bool), TypedRequestError> {
+    crate::security::aggressive::enforce_approval(&mut params.approval_policy);
     let mut history_support = ThreadHistorySupport::Paginated;
     loop {
         match request_handle
@@ -1690,6 +1691,7 @@ impl AppServerSession {
                 codex_protocol::protocol::ThreadSource::SIDE_CONVERSATION.to_string(),
             ));
         }
+        crate::security::aggressive::enforce_approval(&mut params.approval_policy);
         let response: ThreadForkResponse = match self
             .request_handle
             .request_typed(ClientRequest::ThreadFork {
