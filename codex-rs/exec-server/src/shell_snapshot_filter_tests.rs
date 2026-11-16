@@ -175,6 +175,23 @@ mod shells {
         shell: &str,
         profile: &str,
     ) -> anyhow::Result<Option<(Vec<String>, HashMap<String, String>)>> {
+        Ok(prepare_command(shell, profile, "true")
+            .await?
+            .map(|prepared| (prepared.command, prepared.env)))
+    }
+
+    struct Prepared {
+        command: Vec<String>,
+        env: HashMap<String, String>,
+        reader: Option<std::fs::File>,
+        home: tempfile::TempDir,
+    }
+
+    async fn prepare_command(
+        shell: &str,
+        profile: &str,
+        script: &str,
+    ) -> anyhow::Result<Option<Prepared>> {
         let path = format!("/bin/{shell}");
         if !std::path::Path::new(&path).exists() {
             eprintln!("skipping: {path} is unavailable");
@@ -198,7 +215,7 @@ mod shells {
         let params = ExecParams {
             metadata: Default::default(),
             process_id: ProcessId::from("snapshot-filter"),
-            argv: vec![path.clone(), "-lc".to_string(), "true".to_string()],
+            argv: vec![path.clone(), "-lc".to_string(), script.to_string()],
             cwd: codex_utils_path_uri::PathUri::from_host_native_path(home.path())?,
             env,
             env_policy: None,
@@ -228,7 +245,7 @@ mod shells {
         )
         .await
         .map_err(|error| anyhow::anyhow!("prepare: {error:?}"))?;
-        let _reader = ShellSnapshotCache::default()
+        let reader = ShellSnapshotCache::default()
             .prepare(
                 &params,
                 &mut prepared,
@@ -238,7 +255,12 @@ mod shells {
             )
             .await
             .map_err(|error| anyhow::anyhow!("snapshot: {error:?}"))?;
-        Ok(Some((prepared.command, prepared.env)))
+        Ok(Some(Prepared {
+            command: prepared.command,
+            env: prepared.env,
+            reader,
+            home,
+        }))
     }
 
     fn uses_snapshot(command: &[String]) -> bool {
@@ -289,17 +311,93 @@ mod shells {
         let Some((command, env)) = prepare(shell, &profile).await? else {
             return Ok(());
         };
-        // Normal startup instead: nothing captured is replayed.
-        assert_eq!(
-            command,
-            vec![
-                format!("/bin/{shell}"),
-                "-lc".to_string(),
-                "true".to_string()
-            ]
-        );
-        assert_eq!(env.get("ORDINARY_SETTING"), None);
         assert!(env.values().all(|value| !value.contains(TOKEN)));
+        assert!(command.iter().all(|arg| !arg.contains(TOKEN)));
+        // A POSIX sh without typeset/declare (dash) captures no functions, so
+        // its snapshot has nothing to refuse; the assertions above still hold.
+        let captures_functions = shell != "sh"
+            || std::process::Command::new("/bin/sh")
+                .args([
+                    "-c",
+                    "command -v typeset >/dev/null 2>&1 || command -v declare >/dev/null 2>&1",
+                ])
+                .status()?
+                .success();
+        if captures_functions {
+            // Normal startup instead: nothing captured is replayed.
+            assert_eq!(
+                command,
+                vec![
+                    format!("/bin/{shell}"),
+                    "-lc".to_string(),
+                    "true".to_string()
+                ]
+            );
+            assert_eq!(env.get("ORDINARY_SETTING"), None);
+        }
+        Ok(())
+    }
+
+    /// Bash sources ~/.bashrc for `bash -c` when stdin is a socket (as under
+    /// the Linux sandbox) or SSH_CLIENT is set, privileged mode or not. Replay
+    /// must not rerun startup: it would reintroduce exports the snapshot filtered.
+    #[tokio::test]
+    async fn bash_replay_never_reruns_startup_files() -> anyhow::Result<()> {
+        use std::os::unix::process::CommandExt;
+
+        let profile = format!(
+            "printf x >> \"$HOME/rc-runs\"\nGH_TOKEN={TOKEN}\nexport HIDDEN_HEADER=\"Bearer $GH_TOKEN\"\nexport ORDINARY_SETTING=kept\n"
+        );
+        let Some(prepared) = prepare_command(
+            "bash",
+            &profile,
+            "printf '%s|%s' \"$ORDINARY_SETTING\" \"${HIDDEN_HEADER-missing}\"",
+        )
+        .await?
+        else {
+            return Ok(());
+        };
+        assert!(uses_snapshot(&prepared.command), "{:?}", prepared.command);
+        let fd = prepared
+            .reader
+            .as_ref()
+            .map(std::os::fd::AsRawFd::as_raw_fd);
+        let (stdin, _peer) = std::os::unix::net::UnixStream::pair()?;
+        let mut command = std::process::Command::new(&prepared.command[0]);
+        command
+            .args(&prepared.command[1..])
+            .env_clear()
+            .envs(&prepared.env)
+            // A top-level shell, as when the policy does not pass SHLVL.
+            .env_remove("SHLVL")
+            .env("SSH_CLIENT", "192.0.2.1 22 22")
+            .stdin(std::process::Stdio::from(std::os::fd::OwnedFd::from(stdin)));
+        if let Some(fd) = fd {
+            // SAFETY: only clears CLOEXEC on the reader this test keeps open.
+            unsafe {
+                command.pre_exec(move || {
+                    if libc::fcntl(fd, libc::F_SETFD, 0) == -1 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    Ok(())
+                });
+            }
+        }
+        let output = command.output()?;
+        assert_eq!(
+            (
+                String::from_utf8_lossy(&output.stdout).into_owned(),
+                output.status.success(),
+            ),
+            ("kept|missing".to_string(), true),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        // Captured once; the replay did not run the startup file again.
+        assert_eq!(
+            std::fs::read_to_string(prepared.home.path().join("rc-runs"))?,
+            "x"
+        );
         Ok(())
     }
 }

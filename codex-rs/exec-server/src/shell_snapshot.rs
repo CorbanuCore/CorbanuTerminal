@@ -374,6 +374,15 @@ impl ShellSnapshotCache {
                 params.argv[2]
             )
         };
+        if shell_type == ShellType::Bash {
+            // Corbanu #2356: privileged mode skips BASH_ENV but not bash's
+            // remote-shell rule, which sources ~/.bashrc when stdin is a socket
+            // (as under the Linux sandbox) or SSH_CLIENT is set. That would rerun
+            // startup and reintroduce exports the snapshot filtered.
+            prepared
+                .command
+                .insert(shell_start + 1, "--norc".to_string());
+        }
 
         telemetry.shell_snapshot_command(wait, availability, "used");
         Ok(reader)
