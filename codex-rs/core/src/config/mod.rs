@@ -157,6 +157,7 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::permissions::DenyReadValidator;
 use codex_protocol::permissions::DenyReadViolation;
 use codex_protocol::permissions::FileSystemPath;
+use codex_protocol::permissions::FileSystemSandboxKind;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::FileSystemSandboxPolicyContext;
 use codex_protocol::permissions::NetworkSandboxPolicy;
@@ -715,6 +716,23 @@ fn has_materialized_path_entries(profile: &PermissionProfile) -> bool {
                     FileSystemPath::Path { .. } | FileSystemPath::GlobPattern { .. }
                 )
         })
+}
+
+/// #2376: a conservative containment check for when the two profiles cannot be
+/// intersected. `current` is within `saved` if it grants no write at all, reads
+/// no more than `saved` (which must read everything, with no denials) and has
+/// network only when `saved` does.
+fn is_read_only_within(current: &PermissionProfile, saved: &PermissionProfile) -> bool {
+    let (current_file_system, current_network) = current.to_runtime_permissions();
+    let (saved_file_system, saved_network) = saved.to_runtime_permissions();
+    matches!(current, PermissionProfile::Managed { .. })
+        && current_file_system.kind == FileSystemSandboxKind::Restricted
+        && !current_file_system
+            .entries
+            .iter()
+            .any(|entry| entry.access.can_write())
+        && saved_file_system.has_full_disk_read_access()
+        && (!current_network.is_enabled() || saved_network.is_enabled())
 }
 
 // A profile override only inherits the selected profile's proxy/allowlist config
@@ -4864,7 +4882,8 @@ impl Config {
         // workspace roots, so callers can narrow the roots. Bound that re-derived
         // profile by the saved one, so a broader default (e.g. full access) cannot
         // replace a restricted thread. If the two cannot be intersected safely, keep
-        // the saved profile exactly.
+        // the current profile only when it is provably no broader (it writes nothing),
+        // and otherwise the saved profile exactly.
         let persisted_permission_profile = persisted_permission_profile.and_then(|saved| {
             if !has_materialized_path_entries(&saved) {
                 return Some(saved);
@@ -4881,6 +4900,7 @@ impl Config {
             {
                 Ok(bounded) if bounded == current => None,
                 Ok(bounded) => Some(bounded),
+                Err(_) if is_read_only_within(&current, &saved) => None,
                 Err(err) => {
                     tracing::warn!(
                         error = %err,
