@@ -338,8 +338,9 @@ async fn provider_credentials_and_tool_env_never_reach_trace_logs() -> anyhow::R
         .assert_clean(
             guard,
             // The model's command runs through `exec_command` (unified exec),
-            // whose spawn logs no command line or environment; the call itself
-            // is recorded by its ID.
+            // whose spawn logs no command line or environment. The call ID
+            // reaches both sinks with the model's stream; the tool run's own
+            // span is checked in the trace log below.
             &[call_id, "experimental_bearer_token: Some(\"<redacted>\")"],
             &[
                 PROVIDER_KEY,
@@ -355,6 +356,12 @@ async fn provider_credentials_and_tool_env_never_reach_trace_logs() -> anyhow::R
             && log_text.contains("key=REDACTED")
             && log_text.contains("\"set-cookie\": \"REDACTED\""),
         "the provider headers, the request URL and the response headers should be logged with values redacted"
+    );
+    // The tool run itself reached the trace log (its span; the log DB keeps
+    // no span names), so the scan above also covered what it logged.
+    assert!(
+        log_text.contains("unified_exec.exec_command"),
+        "the tool run should be traced"
     );
     Ok(())
 }
@@ -509,7 +516,8 @@ async fn http_api_key_never_reaches_trace_logs() -> anyhow::Result<()> {
 /// header, an API-key header, password options and an API-key query
 /// parameter) never reach the log sinks when the command runs under the
 /// platform sandbox (Seatbelt on macOS, the Linux sandbox helper on Linux).
-/// The command is still logged, with the values redacted.
+/// The model's stream line that carries the command is logged with the values
+/// redacted; `exec_command` itself logs no command line.
 #[tokio::test]
 async fn sandboxed_command_line_credentials_never_reach_trace_logs() -> anyhow::Result<()> {
     core_test_support::skip_if_sandbox!(Ok(()));
@@ -561,8 +569,14 @@ async fn sandboxed_command_line_credentials_never_reach_trace_logs() -> anyhow::
     // Main ran this through `shell_command`, whose `spawn_child_async` trace
     // logged the (redacted) command line. Upstream removed that tool: the
     // command now runs through `exec_command` (unified exec), whose spawn logs
-    // no command line. The call is recorded by its ID, and no sink may hold
-    // any of the credentials.
-    sinks.assert_clean(guard, &[call_id], &SECRETS).await?;
+    // no command line. The call ID reaches both sinks with the model's stream
+    // (which carries the credentials), and no sink may hold any of them.
+    let log_text = sinks.assert_clean(guard, &[call_id], &SECRETS).await?;
+    // The tool run itself reached the trace log (its span; the log DB keeps
+    // no span names).
+    assert!(
+        log_text.contains("unified_exec.exec_command"),
+        "the tool run should be traced"
+    );
     Ok(())
 }
