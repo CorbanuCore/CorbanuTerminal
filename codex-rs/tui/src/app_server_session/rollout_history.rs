@@ -184,9 +184,11 @@ impl AppServerSession {
             model_settings,
             permission_overrides,
         );
-        // D636: thread_resume_params_from_config carries the effective provider for an
-        // explicit runtime restore, including saved crew runtimes. Invocation-only provider
-        // selection must not erase that choice when no CLI/profile override exists.
+        if self.thread_params_mode().settings_owner() == ThreadSettingsOwner::Client
+            && model_settings == ResumeModelSettings::OverrideFromCurrentConfig
+        {
+            params.model_provider = self.explicit_model_provider(&config);
+        }
         if self.thread_params_mode().settings_owner() == ThreadSettingsOwner::Client {
             self.thread_tool_transport()
                 .configure_mcp(&mut params.config);
