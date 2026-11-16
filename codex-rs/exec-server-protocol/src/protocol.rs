@@ -206,6 +206,11 @@ pub struct EnvironmentCapabilities {
     /// a policy-bearing request to an executor without it.
     #[serde(default)]
     pub http_address_policy: bool,
+    /// Whether `exec` honours [`ExecEnvPolicy::drop_url_password_values`]
+    /// (#2324). Clients must not send a policy that sets it to an executor
+    /// without this capability: an older executor ignores the field.
+    #[serde(default)]
+    pub env_url_password_filter: bool,
 }
 
 impl EnvironmentCapabilities {
@@ -346,6 +351,7 @@ impl EnvironmentInfo {
                 linux_root_write_preserves_devices: cfg!(target_os = "linux"),
                 linux_approved_root_write_preserves_restrictions: cfg!(target_os = "linux"),
                 http_address_policy: true,
+                env_url_password_filter: true,
             },
             // Filled in by the executor, which knows its Windows sandbox state.
             host_sandbox: None,
@@ -497,6 +503,30 @@ pub struct ExecEnvPolicy {
     pub exclude: Vec<String>,
     pub r#set: HashMap<String, String>,
     pub include_only: Vec<String>,
+    /// PF-27-S02 (#2324): drop every inherited variable whose value embeds a
+    /// URL password (`scheme://user:pass@host`), as Corbanu's own protected
+    /// launches do: like `retain_launch_env`, this applies to every value the
+    /// policy produces, `set` included. The request's `env` overlay is kept.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub drop_url_password_values: bool,
+}
+
+/// Error message when an `exec` request asking for URL-password filtering is
+/// not sent because the executor would ignore it.
+pub const EXEC_ENV_URL_PASSWORD_FILTER_UNSUPPORTED: &str = "the remote executor does not filter \
+     URL passwords from inherited environment values, which protected agent launch requires; \
+     update it to a version that does";
+
+impl ExecEnvPolicy {
+    /// Applies [`Self::drop_url_password_values`] to an environment built from
+    /// this policy, before the request's `env` overlay is added.
+    pub fn retain_inherited_values(&self, env: &mut HashMap<String, String>) {
+        if self.drop_url_password_values {
+            env.retain(|_, value| {
+                !codex_protocol::secretless_launch::value_has_url_password(value)
+            });
+        }
+    }
 }
 
 /// Identifies shell state owned by one attachment within an executor session.
@@ -1310,6 +1340,10 @@ mod base64_bytes {
 }
 
 #[cfg(test)]
+#[path = "env_policy_tests.rs"]
+mod env_policy_tests;
+
+#[cfg(test)]
 mod tests {
     use super::CapabilityRootDiscoverRequest;
     use super::WireExecParams;
@@ -1603,6 +1637,7 @@ mod tests {
                 linux_root_write_preserves_devices: false,
                 linux_approved_root_write_preserves_restrictions: false,
                 http_address_policy: false,
+                env_url_password_filter: false,
             }
         );
 
@@ -1680,6 +1715,7 @@ mod tests {
                     "shellSnapshotV2": false,
                     "windowsMxc": false,
                     "httpAddressPolicy": false,
+                    "envUrlPasswordFilter": false,
                 });
                 expected_wire
                     .as_object_mut()
@@ -1746,6 +1782,7 @@ mod tests {
                 "shellSnapshotV2": false,
                 "windowsMxc": false,
                 "httpAddressPolicy": false,
+                "envUrlPasswordFilter": false,
             },
         });
         let info: EnvironmentInfo = serde_json::from_value(expected.clone())

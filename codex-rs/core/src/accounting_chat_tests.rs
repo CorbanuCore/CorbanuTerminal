@@ -735,6 +735,8 @@ impl codex_api::AuthProvider for Mutate {
 
 #[tokio::test]
 async fn accounting_chat_exact_final_endpoint_binding() -> anyhow::Result<()> {
+    // Migrate one database for the matrix, rather than seven under CI load.
+    let mut fixture = Fixture::new().await?;
     for endpoint in [
         "https://127.0.0.1:1/v1/chat/completions",
         "http://localhost:1/v1/chat/completions",
@@ -744,7 +746,10 @@ async fn accounting_chat_exact_final_endpoint_binding() -> anyhow::Result<()> {
         "http://user@127.0.0.1:1/v1/chat/completions",
         "http://127.0.0.1:1/v1/chat/completions#fragment",
     ] {
-        let fixture = Fixture::new().await?;
+        // Each endpoint still gets a fresh sampling and failure latch.
+        fixture.deferred =
+            DeferredChatSampling::new(fixture.deferred.session.clone(), "turn".into(), mode());
+        assert!(fixture.deferred.check().is_ok());
         let sends = Arc::new(AtomicUsize::new(0));
         let transport = AccountingTransport::new(
             Probe(sends.clone()),
@@ -767,6 +772,7 @@ async fn accounting_chat_exact_final_endpoint_binding() -> anyhow::Result<()> {
         );
         assert!(fixture.deferred.check().is_err());
     }
+    fixture.db.close().await;
     Ok(())
 }
 

@@ -253,6 +253,7 @@ impl App {
         initial_prompt: Option<String>,
         initial_images: Vec<PathBuf>,
         session_selection: SessionSelection,
+        resume_fallback_notice: Option<String>,
         startup_resume_model_override: Option<ResumeModelOverride>,
         feedback: codex_feedback::CodexFeedback,
         is_first_run: bool,
@@ -1075,6 +1076,12 @@ impl App {
                 .empty_state_animation
                 .borrow_mut()
                 .continue_from(&mut startup_draft.blossom.borrow_mut());
+        }
+        if let Some(notice) = resume_fallback_notice {
+            app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+                // Sync: plain warnings stay out of the transcript upstream; this one must show.
+                crate::history_cell::new_transcript_warning_event(notice),
+            )));
         }
         chat_widget.remote_connection = remote_connection;
         chat_widget.snapshot_local_images = app_server_target.uses_remote_workspace();

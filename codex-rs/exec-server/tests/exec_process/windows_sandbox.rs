@@ -196,6 +196,7 @@ async fn tmpdir_uses_command_environment_over_rpc(
                 exclude: Vec::new(),
                 r#set: configured_temp,
                 include_only: Vec::new(),
+                drop_url_password_values: false,
             }),
             shell_snapshot: None,
             env,

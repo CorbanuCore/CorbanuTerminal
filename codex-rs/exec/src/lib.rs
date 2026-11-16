@@ -13,6 +13,7 @@ pub(crate) mod event_processor_with_jsonl_output;
 pub(crate) mod exec_events;
 mod json_usage;
 mod panic_watch;
+mod resume_notice;
 mod worktree;
 
 pub use cli::Cli;
@@ -1223,6 +1224,10 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
                     (response.thread.history_mode, session_configured)
                 } else {
                     trace_exec_timing("after_resolve_resume_thread_id", exec_session_started_at);
+                    eprintln!(
+                        "{}",
+                        resume_notice::fallback_notice(&config, args, resume_model_override_requested)
+                    );
                     let response =
                         start_thread(&client, &mut request_ids, &config, &thread_source)
                             .await

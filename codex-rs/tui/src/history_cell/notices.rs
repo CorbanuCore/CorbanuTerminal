@@ -113,6 +113,14 @@ pub(crate) fn new_usage_warning_event(message: String) -> WarningHistoryCell {
     }
 }
 
+/// A warning the user must see in the transcript, not only in the warnings list.
+pub(crate) fn new_transcript_warning_event(message: String) -> WarningHistoryCell {
+    WarningHistoryCell {
+        visible_in_transcript: true,
+        ..new_warning_event(message)
+    }
+}
+
 pub(crate) fn new_server_version_warning(
     notice: crate::status::remote_connection::ServerVersionNotice,
 ) -> WarningHistoryCell {

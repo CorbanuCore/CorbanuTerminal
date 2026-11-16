@@ -47,9 +47,12 @@ use shlex::try_join as shlex_try_join;
 mod executable_identity;
 mod inheritance;
 mod model_policy;
+#[path = "exec_policy_wrappers.rs"]
+mod wrappers;
 
 pub(crate) use inheritance::InheritedExecPolicy;
 pub(crate) use model_policy::AllowPrefixRules;
+pub(crate) use wrappers::check_with_wrappers;
 
 const PROMPT_CONFLICT_REASON: &str =
     "approval required by policy, but AskForApproval is set to Never";
@@ -507,7 +510,12 @@ impl ExecPolicyManager {
             live_aggressive,
         );
         // Avoid reusable approvals when this model does not honor prefix rules.
-        let auto_amendment_allowed = allow_prefix_rules == AllowPrefixRules::Honor;
+        // A wrapper-only amendment cannot approve stricter inner commands,
+        // and an uncertain boundary must never become a remembered bypass.
+        let auto_amendment_allowed = allow_prefix_rules == AllowPrefixRules::Honor
+            && !commands
+                .iter()
+                .any(|command| wrappers::has_wrappers(command));
         let exec_policy_fallback = |cmd: &[String]| {
             render_decision_for_unmatched_command_for_platform(
                 cmd,
@@ -524,8 +532,9 @@ impl ExecPolicyManager {
         let match_options = MatchOptions {
             resolve_host_executables: true,
         };
-        let mut evaluation = exec_policy.check_multiple_with_options(
-            commands.iter(),
+        let mut evaluation = check_with_wrappers(
+            exec_policy.as_ref(),
+            &commands,
             &exec_policy_fallback,
             &match_options,
         );
@@ -579,8 +588,9 @@ impl ExecPolicyManager {
                 let suspended_note = live_aggressive
                     .then(|| {
                         self.aggressive_suspended_note(|policy| {
-                            policy.check_multiple_with_options(
-                                commands.iter(),
+                            check_with_wrappers(
+                                policy,
+                                &commands,
                                 &exec_policy_fallback,
                                 &match_options,
                             )
@@ -633,18 +643,14 @@ impl ExecPolicyManager {
             Decision::Allow => ExecApprovalRequirement::Skip {
                 // Bypass sandbox only when every parsed command segment is
                 // explicitly allowed by execpolicy.
-                bypass_sandbox: commands.iter().all(|command| {
-                    exec_policy
-                        .matches_for_command_with_options(
-                            command,
-                            /*heuristics_fallback*/ None,
-                            &match_options,
-                        )
-                        .iter()
-                        .any(|rule_match| {
-                            is_policy_match(rule_match) && rule_match.decision() == Decision::Allow
-                        })
-                }),
+                bypass_sandbox: check_with_wrappers(
+                    exec_policy.as_ref(),
+                    &commands,
+                    &|_| Decision::Forbidden,
+                    &match_options,
+                )
+                .decision
+                    == Decision::Allow,
                 proposed_execpolicy_amendment: if auto_amendment_allowed {
                     without_credentials(try_derive_execpolicy_amendment_for_allow_rules(
                         &evaluation.matched_rules,
