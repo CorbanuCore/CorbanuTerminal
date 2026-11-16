@@ -440,6 +440,12 @@ impl AccountRequestProcessor {
                             Err(error) => {
                                 let unauthorized = error.is_unauthorized();
                                 if unauthorized && recovery.has_next() {
+                                    // Nor refresh it (its refresh token) then.
+                                    if request.is_none()
+                                        && !self.auth_manager.session_uses_default_login()
+                                    {
+                                        return Err(WorkspaceRoutingError::AccountChanged.into());
+                                    }
                                     let result = recovery.next().await;
                                     let refreshed = *current_auth_changes.borrow();
                                     if refreshed.owner_generation != auth_state.owner_generation {
