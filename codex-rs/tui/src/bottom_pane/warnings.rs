@@ -11,6 +11,7 @@ impl BottomPane {
         transcript: Arc<()>,
         daemon_restart_hint_at: Option<usize>,
     ) {
+        self.cancel_pending_burst_submission();
         let mut view = warnings_view::WarningsView::new(
             entries,
             transcript,

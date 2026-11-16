@@ -5,6 +5,9 @@ use codex_protocol::items::AsyncUserInputQuestion;
 use codex_protocol_test_support::ContentItemTestExt;
 use pretty_assertions::assert_eq;
 
+#[path = "questions_burst_enter_tests.rs"]
+mod burst_enter_tests;
+
 fn questions() -> Vec<AsyncUserInputQuestion> {
     vec![
         question("Which way?", /*options*/ None),

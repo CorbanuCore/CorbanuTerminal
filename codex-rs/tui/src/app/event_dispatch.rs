@@ -7627,6 +7627,9 @@ impl App {
                     self.chat_widget.refresh_config_panel(/*notice*/ None);
                 }
             }
+            AppEvent::AsyncQuestionBurstEnter { token } => {
+                self.chat_widget.handle_async_question_burst_enter(token);
+            }
             AppEvent::TestConfigNotification => self.schedule_config_notification_test(),
             AppEvent::SendConfigTestNotification { generation } => {
                 self.send_config_notification_test(tui, generation)
