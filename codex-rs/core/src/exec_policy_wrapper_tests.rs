@@ -307,6 +307,41 @@ async fn issue2165_option_operands_and_ordinary_arguments_are_not_commands() {
     }
 }
 
+/// #2428: heredoc parsing must not turn a wrapped approval into a reusable rule.
+#[tokio::test]
+async fn wrapped_top_level_heredoc_never_proposes_remembered_amendment() {
+    for script in [
+        "sudo --future-option value git push <<'EOF'\nEOF",
+        "sudo -u root git push <<'EOF'\nEOF",
+        "env FOO=1 sudo git push <<'EOF'\nEOF",
+        "chroot /sandbox git push <<'EOF'\nEOF",
+    ] {
+        for prefix_rule in [None, Some(vec!["bash".to_string()])] {
+            let result = exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+                policy_src: Some(
+                    r#"prefix_rule(pattern=["git", "push"], decision="prompt")"#.to_string(),
+                ),
+                command: vec!["bash".into(), "-lc".into(), script.into()],
+                approval_policy: AskForApproval::OnRequest,
+                permission_profile: PermissionProfile::Disabled,
+                sandbox_permissions: SandboxPermissions::UseDefault,
+                prefix_rule,
+            })
+            .await;
+            assert!(
+                matches!(
+                    result,
+                    ExecApprovalRequirement::NeedsApproval {
+                        proposed_execpolicy_amendment: None,
+                        ..
+                    }
+                ),
+                "{script}: {result:?}"
+            );
+        }
+    }
+}
+
 /// Sync: upstream no longer reduces a top-level heredoc script to its first
 /// command, so the S3b heredoc rule pass must look through wrappers as main's
 /// parser-plus-`check_with_wrappers` path did (sync-main7 review r1).

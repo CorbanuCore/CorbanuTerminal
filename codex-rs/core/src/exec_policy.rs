@@ -515,7 +515,11 @@ impl ExecPolicyManager {
         let auto_amendment_allowed = allow_prefix_rules == AllowPrefixRules::Honor
             && !commands
                 .iter()
-                .any(|command| wrappers::has_wrappers(command));
+                .any(|command| wrappers::has_wrappers(command))
+            // Upstream keeps top-level heredocs as shell argv. The restrictive
+            // heredoc pass still sees wrappers inside that script, as on main.
+            && parse_shell_lc_single_command_prefix(full_command)
+                .is_none_or(|command| !wrappers::has_wrappers(&command));
         let exec_policy_fallback = |cmd: &[String]| {
             render_decision_for_unmatched_command_for_platform(
                 cmd,
