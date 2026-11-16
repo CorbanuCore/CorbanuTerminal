@@ -506,6 +506,11 @@ async fn prepare_managed_network(
             proxy
                 .handle_unmasked_credentials(&mut prepared.env, CREDENTIAL_MASKING_FAILURE_MODE)
                 .map_err(|err| invalid_params(err.to_string()))?;
+        } else if proxy.credential_broker_hardened() {
+            // D641 (a), #2365: main's engine (D353/D354) already gave this child placeholders,
+            // and brokering is one-way (#436), so upstream's fail-open restore below could
+            // not unmask anything. Skipping it keeps the broker markers that nested launches
+            // need to recognise the placeholders and avoids a false "unmasked" warning.
         } else {
             tracing::warn!(
                 "Credential masking is unavailable for this shell startup; preserving shell profiles and snapshots and running with unmasked credentials."

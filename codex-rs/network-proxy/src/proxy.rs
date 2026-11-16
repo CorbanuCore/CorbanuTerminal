@@ -1366,6 +1366,12 @@ impl NetworkProxy {
         self.state.virtualize_brokered_text(text, env)
     }
 
+    /// Whether `main`'s hardened engine owns brokering for this proxy (D353). Callers use it to
+    /// skip upstream's fail-open restore, which cannot unmask credentials that engine brokers.
+    pub fn credential_broker_hardened(&self) -> bool {
+        self.state.credential_broker_hardened()
+    }
+
     /// Applies the selected failure mode to recognized credentials left unmasked after preparation.
     pub fn handle_unmasked_credentials(
         &self,
