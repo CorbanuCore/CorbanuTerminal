@@ -965,8 +965,8 @@ host_executable(name = "git", paths = ["{allowed_git_literal}"])
     ));
 }
 
-/// Under strict rules, an intercepted `env corbanu vault …` is refused by the
-/// `corbanu vault` rule; without them it is not.
+/// D553: an intercepted `env corbanu vault …` is refused by the
+/// `corbanu vault` rule both with and without strict rules.
 #[tokio::test(flavor = "current_thread")]
 async fn strict_rules_refuse_intercepted_wrapped_vault_exec() -> anyhow::Result<()> {
     let mut parser = PolicyParser::new();
@@ -1014,7 +1014,7 @@ async fn strict_rules_refuse_intercepted_wrapped_vault_exec() -> anyhow::Result<
         "{actions:?}"
     );
     assert!(
-        !matches!(
+        matches!(
             actions[1],
             codex_shell_escalation::EscalationDecision::Deny { .. }
         ),

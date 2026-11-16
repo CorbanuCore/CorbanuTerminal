@@ -2700,8 +2700,8 @@ fn strict_forbidden_matches_find_wrapped_vault_commands() {
     }
 }
 
-/// Strict rules (Aggressive) apply `forbidden` rules to wrapped forms;
-/// otherwise the policy behaves exactly as before. Paths resolve by file
+/// D553 applies rules through known wrappers in both modes. Strict rules
+/// (Aggressive) additionally cover loose shell forms. Paths resolve by file
 /// name in both modes, and strict matching never widens an allow.
 #[tokio::test]
 async fn strict_rules_forbid_wrapped_program_forms() -> anyhow::Result<()> {
@@ -2741,15 +2741,22 @@ prefix_rule(pattern = ["rm"], decision = "forbidden")"#,
             "paths resolve in both modes"
         );
     }
-    // The `env` allow rule would run this outside the sandbox without a
-    // prompt; strict rules refuse it instead.
-    assert!(matches!(
-        requirement(&lenient, "env corbanu vault list").await,
-        ExecApprovalRequirement::Skip {
-            bypass_sandbox: true,
-            ..
+    // D553: the outer env allow cannot override the inner forbidden rule,
+    // even without Aggressive's additional loose-text matching.
+    for manager in [&lenient, &strict] {
+        for script in [
+            "env corbanu vault list",
+            "/usr/bin/env -i FOO=1 corbanu vault list",
+        ] {
+            assert!(
+                matches!(
+                    requirement(manager, script).await,
+                    ExecApprovalRequirement::Forbidden { ref reason } if reason.contains("no vault")
+                ),
+                "{script}"
+            );
         }
-    ));
+    }
     let agent_shaped = [
         "env corbanu vault list",
         "/usr/bin/env -i FOO=1 corbanu vault list",
@@ -2814,9 +2821,8 @@ prefix_rule(pattern = ["rm"], decision = "forbidden")"#,
 
 /// #441 (milestone AGG-19): with nested agents set to refuse, the Aggressive
 /// rule file refuses an agent's `corbanu exec` / `review` before any prompt,
-/// through absolute paths and `bash -lc` scripts, under strict rules. Forms
-/// only the launch check sees (`env corbanu exec`) still prompt first. The
-/// nested-launch rules match exactly: text that only mentions them (a commit
+/// through absolute paths, `bash -lc` scripts, and known wrappers (D553).
+/// The nested-launch rules match exactly: text that only mentions them (a commit
 /// message, a search) is not refused, unlike the vault rule.
 #[tokio::test]
 async fn issue_441_nested_launch_rules_refuse_launches_but_not_text() -> anyhow::Result<()> {
@@ -2854,6 +2860,7 @@ async fn issue_441_nested_launch_rules_refuse_launches_but_not_text() -> anyhow:
         "/opt/bin/corbanu exec hi",
         "cd /tmp && corbanu exec hi",
         "codex exec hi",
+        "env corbanu exec hi",
     ] {
         assert!(
             matches!(
@@ -2869,8 +2876,6 @@ async fn issue_441_nested_launch_rules_refuse_launches_but_not_text() -> anyhow:
         "rg \"codex exec\" docs",
         "corbanu --help | grep review",
         "corbanu --version",
-        // Accepted gap: the launch check refuses it after the prompt.
-        "env corbanu exec hi",
     ] {
         assert!(
             !matches!(
