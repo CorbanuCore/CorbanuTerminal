@@ -32,16 +32,18 @@ fn split_values_returns_capture_without_value_section() {
         values,
         vec![
             ("GH_TOKEN", Cow::Borrowed("abc")),
-            ("EMPTY", Cow::Borrowed(""))
+            ("EMPTY", Cow::Borrowed("")),
+            ("A", Cow::Borrowed("1")),
         ]
     );
 }
 
 #[test_case(b"# Snapshot file\n\0\0\0A=1\0" ; "missing_section")]
+#[test_case(b"# Snapshot file\n\0\0\0A=1\0#values\0#end\x000\0" ; "empty_section")]
 #[test_case(b"# Snapshot file\n\0\0\0A=1\0#values\0GH_TOKEN\0abc\0#end\x002\0" ; "count_mismatch")]
 #[test_case(b"# Snapshot file\n\0\0\0A=1\0#values\0GH_TOKEN\0abc\0" ; "truncated")]
 #[test_case(b"# Snapshot file\n\0\0\0A=1\0#values\0BAD NAME\0abc\0#end\x001\0" ; "invalid_name")]
-#[test_case(b"# Snapshot file\n\0\0\0A=1\0stray\0#values\0#end\x000\0" ; "non_environment_record")]
+#[test_case(b"# Snapshot file\n\0\0\0A=1\0stray\0#values\0A\x001\0#end\x001\0" ; "non_environment_record")]
 fn split_values_rejects_malformed_sections(output: &[u8]) {
     let error = split_values(ShellType::Bash, output).expect_err("malformed capture");
     assert_eq!(error.0, "invalid_capture");
@@ -273,7 +275,7 @@ mod shells {
         // The credential is never exported; a startup file copies it into an
         // innocuously named export, alone and inside a header value.
         let profile = format!(
-            "GH_TOKEN={TOKEN}\nexport HIDDEN_HEADER=\"Bearer $GH_TOKEN\"\nexport HIDDEN_COPY=\"$GH_TOKEN\"\nexport ORDINARY_SETTING=kept\n"
+            "GH_TOKEN={TOKEN}\nexport HIDDEN_HEADER=\"Bearer $GH_TOKEN\"\nexport HIDDEN_COPY=\"$GH_TOKEN\"\nexport SERVICE_TOKEN=plain-value-123\nexport ORDINARY_SETTING=kept\n"
         );
         let Some((command, env)) = prepare(shell, &profile).await? else {
             return Ok(());
@@ -285,6 +287,8 @@ mod shells {
         );
         assert_eq!(env.get("HIDDEN_HEADER"), None);
         assert_eq!(env.get("HIDDEN_COPY"), None);
+        // #310: a secret-named export is never replayed, whatever its value.
+        assert_eq!(env.get("SERVICE_TOKEN"), None);
         assert!(env.values().all(|value| !value.contains(TOKEN)));
         assert!(command.iter().all(|arg| !arg.contains(TOKEN)));
         Ok(())

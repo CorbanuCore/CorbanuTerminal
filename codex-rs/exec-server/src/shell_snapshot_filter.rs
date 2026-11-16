@@ -159,9 +159,11 @@ pub(super) fn values_script(shell_type: ShellType) -> String {
 pub(super) type CapturedValues<'a> = Vec<(&'a str, Cow<'a, str>)>;
 
 /// Split the value section from a capture. Returns the capture without it, in
-/// the format `CapturedSnapshot::parse` expects, and the decoded values. A
-/// missing or malformed section rejects the capture: it is a failed capture,
-/// not an older one. Output after the section (an EXIT trap) is ignored.
+/// the format `CapturedSnapshot::parse` expects, and the decoded values
+/// followed by the exported environment (a second source for the filter). A
+/// missing, empty or malformed section rejects the capture: it is a failed
+/// capture (every real shell has variables), not an older one. Output after
+/// the section (an EXIT trap) is ignored.
 pub(super) fn split_values(
     shell_type: ShellType,
     output: &[u8],
@@ -174,14 +176,19 @@ pub(super) fn split_values(
     };
     let captured = CapturedSnapshot::parse(shell_type, output).ok_or_else(invalid)?;
     let mut remaining = &output[output.len() - captured.environment.len()..];
+    let mut environment = Vec::new();
     loop {
         let record = take_record(&mut remaining).ok_or_else(invalid)?;
         if record == VALUES_MARKER {
             break;
         }
         // Every `env -0` entry has a `=`; anything else is not the environment.
-        if !record.contains(&b'=') {
-            return Err(invalid());
+        let equals = record
+            .iter()
+            .position(|byte| *byte == b'=')
+            .ok_or_else(invalid)?;
+        if let Ok(name) = std::str::from_utf8(&record[..equals]) {
+            environment.push((name, String::from_utf8_lossy(&record[equals + 1..])));
         }
     }
     let values_start = output.len() - remaining.len() - VALUES_MARKER.len() - 1;
@@ -194,9 +201,10 @@ pub(super) fn split_values(
                 .ok()
                 .and_then(|count| count.parse().ok())
                 .ok_or_else(invalid)?;
-            if count != values.len() {
+            if count == 0 || count != values.len() {
                 return Err(invalid());
             }
+            values.extend(environment);
             return Ok((&output[..values_start], values));
         }
         let name = std::str::from_utf8(name).map_err(|_| invalid())?;
