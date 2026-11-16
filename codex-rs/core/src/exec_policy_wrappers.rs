@@ -16,11 +16,14 @@ pub(super) fn has_wrappers(command: &[String]) -> bool {
     wrappers.uncertain || wrappers.starts.len() > 1
 }
 
+/// `platform` is the one the outer command was parsed for (sync: it may be a
+/// remote executor's), so scripts behind a wrapper are split the same way.
 pub(crate) fn check_with_wrappers(
     policy: &Policy,
     commands: &[Vec<String>],
     fallback: &impl Fn(&[String]) -> Decision,
     options: &MatchOptions,
+    platform: DangerousCommandPlatform,
 ) -> Evaluation {
     let mut matches = Vec::new();
     // Inner shell scripts can themselves contain wrapped commands. Use a work
@@ -62,8 +65,7 @@ pub(crate) fn check_with_wrappers(
             && start > 0
         {
             let inner = &command[start..];
-            let parsed =
-                commands_for_exec_policy_for_platform(inner, DangerousCommandPlatform::host());
+            let parsed = commands_for_exec_policy_for_platform(inner, platform);
             if parsed.commands.len() != 1 || parsed.commands[0] != inner {
                 pending.extend(parsed.commands);
             } else if let Some(single) = parse_shell_lc_single_command_prefix(inner) {

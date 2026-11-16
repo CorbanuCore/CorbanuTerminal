@@ -537,6 +537,7 @@ impl ExecPolicyManager {
             &commands,
             &exec_policy_fallback,
             &match_options,
+            command_platform,
         );
         // S3b: upstream no longer matches rules against a heredoc script's
         // command; main did. Keep its prompt and forbidden rules at every level.
@@ -545,6 +546,7 @@ impl ExecPolicyManager {
             exec_policy.as_ref(),
             full_command,
             &match_options,
+            command_platform,
         );
         if self.strict_rules_for(live_aggressive) {
             // The original command, not the parsed one: parsing keeps only
@@ -593,6 +595,7 @@ impl ExecPolicyManager {
                                 &commands,
                                 &exec_policy_fallback,
                                 &match_options,
+                                command_platform,
                             )
                         })
                     })
@@ -648,6 +651,7 @@ impl ExecPolicyManager {
                     &commands,
                     &|_| Decision::Forbidden,
                     &match_options,
+                    command_platform,
                 )
                 .decision
                     == Decision::Allow,
@@ -1275,19 +1279,25 @@ fn apply_heredoc_restrictive_matches(
     policy: &Policy,
     command: &[String],
     match_options: &MatchOptions,
+    command_platform: DangerousCommandPlatform,
 ) {
     let Some(heredoc_command) = parse_shell_lc_single_command_prefix(command) else {
         return;
     };
-    let found = policy.check_multiple_with_options(
-        std::iter::once(&heredoc_command),
+    // #2396: through wrappers too (`sudo python3 <<EOF`). With an Allow
+    // fallback, a heuristic above Allow can only come from the wrapper
+    // checks (an uncertain wrapper or a wrapped heredoc), so it is kept.
+    let found = check_with_wrappers(
+        policy,
+        std::slice::from_ref(&heredoc_command),
         &|_: &[String]| Decision::Allow,
         match_options,
+        command_platform,
     );
     let restrictive = found
         .matched_rules
         .into_iter()
-        .filter(|rule_match| is_policy_match(rule_match) && rule_match.decision() > Decision::Allow)
+        .filter(|rule_match| rule_match.decision() > Decision::Allow)
         .filter(|rule_match| !evaluation.matched_rules.contains(rule_match))
         .collect::<Vec<_>>();
     let Some(decision) = restrictive.iter().map(RuleMatch::decision).max() else {
