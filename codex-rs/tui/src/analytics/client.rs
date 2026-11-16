@@ -70,8 +70,11 @@ impl Live {
     pub(super) async fn session(&self) -> Result<&Session, String> {
         self.session
             .get_or_try_init(|| async {
+                // D562 (#2381): the session's own account, never the
+                // default login while the session runs on a named one.
                 let session = AnalyticsSession::from_config(
                     self.config.as_ref(),
+                    codex_model_provider::named_sign_in_account(&self.config.model_provider),
                     self.config.http_client_factory(),
                 )
                 .await?;
@@ -280,3 +283,7 @@ mod connection_tests;
 #[cfg(test)]
 #[path = "account_plan_tests.rs"]
 mod account_plan_tests;
+
+#[cfg(test)]
+#[path = "session_account_tests.rs"]
+mod session_account_tests;

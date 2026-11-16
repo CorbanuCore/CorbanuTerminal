@@ -8,6 +8,10 @@
 //! runs only while the session is on the default login. Each test reads the
 //! account, so a check sent with the default login fails it deterministically
 //! rather than depending on the background refresh's timing.
+//!
+//! #2381 (D649 option (a)): `accountSession/list` and `accountSession/switch`
+//! act on the default login, so they are refused with the reason unless the
+//! session runs on it.
 
 use anyhow::Result;
 use app_test_support::ChatGptAuthFixture;
@@ -485,6 +489,175 @@ async fn an_account_enrolled_while_the_server_runs_holds_after_its_thread() -> R
     assert!(
         !usage.is_empty() && usage.iter().all(|token| token == WORK_TOKEN),
         "{usage:?}"
+    );
+    Ok(())
+}
+
+/// D649 (#2381): rewrites the default login with a user identity, which makes
+/// it a managed account session (`accountSession/list` and `/switch` act on
+/// it).
+fn give_default_login_a_session(home: &Path) -> Result<()> {
+    write_chatgpt_auth(
+        home,
+        ChatGptAuthFixture::new(DEFAULT_TOKEN)
+            .account_id("acct-default")
+            .chatgpt_user_id("user-default")
+            .plan_type("pro"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    Ok(())
+}
+
+/// Sends an `accountSession/*` request; returns its error message, or `None`
+/// when it succeeded.
+async fn account_session_refusal(
+    app: &mut TestAppServer,
+    method: &str,
+    params: serde_json::Value,
+) -> Result<Option<String>> {
+    let request = app.send_request(method, Some(params)).await?;
+    Ok(timeout(
+        DEFAULT_TIMEOUT,
+        app.read_stream_until_result(RequestId::Integer(request)),
+    )
+    .await??
+    .err()
+    .map(|error| error.error.message))
+}
+
+/// The three account-session requests that would act on the default login.
+fn account_session_requests() -> [(&'static str, serde_json::Value); 3] {
+    [
+        (
+            "accountSession/list",
+            json!({"refreshWorkspaceMetadata": true}),
+        ),
+        (
+            "accountSession/list",
+            json!({"refreshWorkspaceMetadata": false}),
+        ),
+        (
+            "accountSession/switch",
+            json!({"sessionId": "user-default", "accountId": "acct-other"}),
+        ),
+    ]
+}
+
+/// D649 (#2381): while the session runs on a named account, listing and
+/// switching the default login's account sessions are refused with the reason
+/// and send nothing (no workspace-membership check, no token exchange).
+#[tokio::test]
+async fn account_sessions_are_refused_while_the_session_runs_on_a_named_account() -> Result<()> {
+    let server = MockServer::start().await;
+    mount_usage(&server).await;
+    let home = TempDir::new()?;
+    write_home(
+        home.path(),
+        &server,
+        "[provider_accounts]\nopenai = \"work\"\n",
+    )?;
+    give_default_login_a_session(home.path())?;
+
+    let mut app = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .without_auto_env()
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(DEFAULT_TIMEOUT)
+        .await?;
+    for (method, params) in account_session_requests() {
+        let refusal = account_session_refusal(&mut app, method, params.clone())
+            .await?
+            .unwrap_or_else(|| panic!("{method} {params} was served"));
+        assert!(
+            refusal.contains("would use the default login")
+                && refusal.contains("the session runs on a named account"),
+            "{method}: {refusal}"
+        );
+    }
+
+    assert_eq!(
+        tokens_for(&server, ROUTING_CHECK).await,
+        Vec::<String>::new()
+    );
+    assert!(!default_login_was_sent(&server).await);
+    Ok(())
+}
+
+/// D649 (#2381): with sessions on different accounts open they are refused
+/// too, naming the reason.
+#[tokio::test]
+async fn account_sessions_are_refused_while_sessions_on_different_accounts_are_open() -> Result<()>
+{
+    let server = MockServer::start().await;
+    mount_usage(&server).await;
+    let home = TempDir::new()?;
+    write_home(home.path(), &server, "")?;
+    give_default_login_a_session(home.path())?;
+
+    let mut app = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .without_auto_env()
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(DEFAULT_TIMEOUT)
+        .await?;
+    start_thread(&mut app, Some("work")).await?;
+    start_thread(&mut app, /*account*/ None).await?;
+    for (method, params) in account_session_requests() {
+        let refusal = account_session_refusal(&mut app, method, params.clone())
+            .await?
+            .unwrap_or_else(|| panic!("{method} {params} was served"));
+        assert!(
+            refusal.contains("would use the default login")
+                && refusal.contains("sessions on different accounts are open"),
+            "{method}: {refusal}"
+        );
+    }
+    Ok(())
+}
+
+/// D649 (#2381): a session on the default login (named accounts on) still
+/// lists its account sessions, refreshing workspace metadata with it.
+#[tokio::test]
+async fn account_sessions_still_serve_a_session_on_the_default_login() -> Result<()> {
+    let server = MockServer::start().await;
+    mount_usage(&server).await;
+    let home = TempDir::new()?;
+    write_home(home.path(), &server, "")?;
+    give_default_login_a_session(home.path())?;
+
+    let mut app = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .without_auto_env()
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(DEFAULT_TIMEOUT)
+        .await?;
+    start_thread(&mut app, /*account*/ None).await?;
+    let request = app
+        .send_request(
+            "accountSession/list",
+            Some(json!({"refreshWorkspaceMetadata": true})),
+        )
+        .await?;
+    let listed: codex_app_server_protocol::AccountSessionsResponse = to_response(
+        timeout(
+            DEFAULT_TIMEOUT,
+            app.read_stream_until_response_message(RequestId::Integer(request)),
+        )
+        .await??,
+    )?;
+    assert_eq!(listed.active_session_id.as_deref(), Some("user-default"));
+    assert_eq!(
+        listed.sessions[0]
+            .workspaces
+            .iter()
+            .map(|workspace| workspace.account_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["acct-default"]
+    );
+    let checks = tokens_for(&server, ROUTING_CHECK).await;
+    assert!(
+        !checks.is_empty() && checks.iter().all(|token| token == DEFAULT_TOKEN),
+        "{checks:?}"
     );
     Ok(())
 }
