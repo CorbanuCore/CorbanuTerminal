@@ -264,6 +264,13 @@ impl AuthManager {
         }
     }
 
+    /// Whether [`AuthManager::for_session`] is the default login: no session
+    /// runs on a named account, none is pending and none conflicts (D562,
+    /// #2378). Cheap: it builds no named account's manager.
+    pub fn session_uses_default_login(&self) -> bool {
+        matches!(resolve(&self.codex_home), Resolved::Default)
+    }
+
     /// The auth of [`AuthManager::for_session`].
     pub async fn session_auth(self: &Arc<Self>) -> Option<CodexAuth> {
         match self.for_session() {

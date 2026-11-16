@@ -56,6 +56,22 @@ fn main() -> Result<()> {
             | "oversized-stdout-legacy"
     ));
     assert!(std::env::var_os("CODEX_MCP_PROTOCOL_VERSION").is_none());
+    // Windows tests have no `sh` and `tee` wrapper to record the PID and the requests.
+    if let Some(path) = std::env::var_os("MCP_TEST_PID_LOG") {
+        let mut log = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
+        writeln!(log, "{}", std::process::id())?;
+    }
+    let mut request_log = std::env::var_os("MCP_TEST_REQUEST_LOG")
+        .map(|path| {
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+        })
+        .transpose()?;
     let is_legacy = mode.starts_with("legacy") || mode.ends_with("-legacy");
     let oversized = mode.starts_with("oversized-stdout");
     let mut stdout = io::stdout().lock();
@@ -64,7 +80,11 @@ fn main() -> Result<()> {
     let mut late_discovery_id = None;
 
     for (index, line) in io::stdin().lock().lines().enumerate() {
-        let message: Value = serde_json::from_str(&line?)?;
+        let line = line?;
+        if let Some(log) = request_log.as_mut() {
+            writeln!(log, "{line}")?;
+        }
+        let message: Value = serde_json::from_str(&line)?;
         let Some(method) = message.get("method").and_then(Value::as_str) else {
             let pending_call = pending_legacy_call
                 .take()

@@ -145,6 +145,7 @@ use codex_protocol::config_types::Verbosity;
 use codex_protocol::config_types::WebSearchConfig;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::config_types::WindowsSandboxLevel;
+use codex_protocol::intersect_effective_permission_profiles;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::BaseInstructionsProvenance;
 use codex_protocol::models::PermissionProfile;
@@ -156,6 +157,7 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::permissions::DenyReadValidator;
 use codex_protocol::permissions::DenyReadViolation;
 use codex_protocol::permissions::FileSystemPath;
+use codex_protocol::permissions::FileSystemSandboxKind;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::FileSystemSandboxPolicyContext;
 use codex_protocol::permissions::NetworkSandboxPolicy;
@@ -698,6 +700,39 @@ impl Permissions {
             network_policy,
         )
     }
+}
+
+/// Upstream's test for saved profiles holding materialized filesystem grants:
+/// concrete readable path or glob entries rather than symbolic workspace roots.
+fn has_materialized_path_entries(profile: &PermissionProfile) -> bool {
+    profile
+        .file_system_sandbox_policy()
+        .entries
+        .iter()
+        .any(|entry| {
+            entry.access.can_read()
+                && matches!(
+                    entry.path,
+                    FileSystemPath::Path { .. } | FileSystemPath::GlobPattern { .. }
+                )
+        })
+}
+
+/// #2376: a conservative containment check for when the two profiles cannot be
+/// intersected. `current` is within `saved` if it grants no write at all, reads
+/// no more than `saved` (which must read everything, with no denials) and has
+/// network only when `saved` does.
+fn is_read_only_within(current: &PermissionProfile, saved: &PermissionProfile) -> bool {
+    let (current_file_system, current_network) = current.to_runtime_permissions();
+    let (saved_file_system, saved_network) = saved.to_runtime_permissions();
+    matches!(current, PermissionProfile::Managed { .. })
+        && current_file_system.kind == FileSystemSandboxKind::Restricted
+        && !current_file_system
+            .entries
+            .iter()
+            .any(|entry| entry.access.can_write())
+        && saved_file_system.has_full_disk_read_access()
+        && (!current_network.is_enabled() || saved_network.is_enabled())
 }
 
 // A profile override only inherits the selected profile's proxy/allowlist config
@@ -4570,13 +4605,10 @@ impl Config {
                 && default_permissions_override.is_none()
                 && persisted_permission_profile_id.is_none()
                 && requirements_toml.allowed_permission_profiles.is_none()
-                // Executor-owned enforcement and materialized grants are not portable
-                // thread defaults. Reject the original mode before preserving denials.
+                // Executor-owned enforcement is not a portable thread default. Reject
+                // the original mode before preserving denials. Saved profiles with
+                // materialized grants are bounded below instead of rejected (#2376).
                 && !matches!(profile, PermissionProfile::External { .. })
-                && !profile.file_system_sandbox_policy().entries.iter().any(|entry| {
-                    entry.access.can_read()
-                        && matches!(entry.path, FileSystemPath::Path { .. } | FileSystemPath::GlobPattern { .. })
-                })
                 && permission_profile_catalog::permission_profile_satisfies_requirements(
                     &config_layer_stack,
                     profile,
@@ -4843,6 +4875,41 @@ impl Config {
                 Vec::new(),
             )
         };
+        // #2376 (Corbanu): a resumed thread never gets broader permissions than it
+        // persisted. Saved profiles with materialized grants (workspace roots stored
+        // as concrete paths, `.git`/`.codex` protections, extra writable roots) are
+        // not restored as-is: upstream re-derives them from the current defaults and
+        // workspace roots, so callers can narrow the roots. Bound that re-derived
+        // profile by the saved one, so a broader default (e.g. full access) cannot
+        // replace a restricted thread. If the two cannot be intersected safely, keep
+        // the current profile only when it is provably no broader (it writes nothing),
+        // and otherwise the saved profile exactly.
+        let persisted_permission_profile = persisted_permission_profile.and_then(|saved| {
+            if !has_materialized_path_entries(&saved) {
+                return Some(saved);
+            }
+            let roots = workspace_roots
+                .iter()
+                .map(PathUri::from_abs_path)
+                .chain(profile_workspace_roots.iter().cloned())
+                .collect::<Vec<_>>();
+            let current = permission_profile
+                .clone()
+                .materialize_project_roots_with_path_uris(&roots);
+            match intersect_effective_permission_profiles(&current, &saved, resolved_cwd.as_path())
+            {
+                Ok(bounded) if bounded == current => None,
+                Ok(bounded) => Some(bounded),
+                Err(_) if is_read_only_within(&current, &saved) => None,
+                Err(err) => {
+                    tracing::warn!(
+                        error = %err,
+                        "saved thread permissions cannot be bounded by the current defaults; restoring them unchanged"
+                    );
+                    Some(saved)
+                }
+            }
+        });
         if let Some(saved) = persisted_permission_profile {
             let (mut saved_file_system, saved_network) = saved.to_runtime_permissions();
             saved_file_system.preserve_deny_read_restrictions_from(&file_system_sandbox_policy);
@@ -6762,3 +6829,7 @@ mod project_security_startup_tests;
 #[cfg(test)]
 #[path = "windows_unsandboxed_startup_tests.rs"]
 mod windows_unsandboxed_startup_tests;
+
+#[cfg(test)]
+#[path = "persisted_permissions_tests.rs"]
+mod persisted_permissions_tests;

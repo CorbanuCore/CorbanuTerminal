@@ -40,11 +40,13 @@ async fn the_session_manager_follows_the_sessions_and_never_falls_back_to_the_de
         key(base.for_session()).await.as_deref(),
         Some("sk-canary-default")
     );
+    assert!(base.session_uses_default_login());
 
     // A launch whose account is known only when its thread starts: nothing.
     base.register_configured_sign_in(SessionSignIn::Unknown);
     assert!(base.for_session().is_none());
     assert!(base.session_account_conflict().is_some());
+    assert!(!base.session_uses_default_login());
 
     // Before any session: the configured account.
     base.register_configured_sign_in(SessionSignIn::Named(account("work")));
@@ -52,6 +54,7 @@ async fn the_session_manager_follows_the_sessions_and_never_falls_back_to_the_de
         key(base.for_session()).await.as_deref(),
         Some("sk-canary-work")
     );
+    assert!(!base.session_uses_default_login());
 
     // A session overrides the configured stand-in; a Z.AI pane does not count.
     let main = work_manager.register_session_sign_in(SessionSignIn::Named(account("work")));
@@ -91,6 +94,7 @@ async fn the_session_manager_follows_the_sessions_and_never_falls_back_to_the_de
     let default_pane = base.register_session_sign_in(SessionSignIn::Default);
     assert!(base.for_session().is_none());
     assert_eq!(base.session_auth().await.map(|_| ()), None);
+    assert!(!base.session_uses_default_login());
     assert!(base.session_account_conflict().is_some_and(
         |reason| reason.contains("openai:work") && reason.contains("the default login")
     ));
@@ -110,6 +114,7 @@ async fn the_session_manager_follows_the_sessions_and_never_falls_back_to_the_de
     // configured stand-in counts again.
     main.update(SessionSignIn::Default);
     assert!(Arc::ptr_eq(&base.for_session().expect("default"), &base));
+    assert!(base.session_uses_default_login() && work_manager.session_uses_default_login());
     drop((main, zai));
     assert!(base.session_account_unknown());
     base.register_configured_sign_in(SessionSignIn::Default);
