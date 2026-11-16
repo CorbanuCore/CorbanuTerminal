@@ -38,7 +38,10 @@ fn run_isolated(test_name: &str, mode: &str) -> anyhow::Result<()> {
                 0
             );
             let mut mask: libc::sigset_t = std::mem::zeroed();
-            assert_eq!(libc::sigprocmask(/*how*/ 0, std::ptr::null(), &mut mask), 0);
+            assert_eq!(
+                libc::sigprocmask(libc::SIG_BLOCK, std::ptr::null(), &mut mask),
+                0
+            );
             if mode == "ignored" {
                 assert_eq!(action.sa_sigaction, libc::SIG_IGN);
             } else {
@@ -85,7 +88,7 @@ fn run_isolated(test_name: &str, mode: &str) -> anyhow::Result<()> {
     }
     let output = command.output()?;
     assert!(
-        output.status.success(),
+        output.status.success() && String::from_utf8_lossy(&output.stdout).contains("1 passed;"),
         "{mode} helper failed: {}\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
