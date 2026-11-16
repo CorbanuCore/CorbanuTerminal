@@ -617,6 +617,40 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
 }
 
 #[test]
+fn issue2165_intercepted_exec_checks_nested_wrapper_rules() {
+    let mut parser = PolicyParser::new();
+    parser
+        .parse(
+            "test.rules",
+            r#"
+prefix_rule(pattern=["/usr/bin/sudo"], decision="allow")
+prefix_rule(pattern=["git", "push"], decision="forbidden")
+"#,
+        )
+        .unwrap();
+    let policy = parser.build();
+    let program = AbsolutePathBuf::try_from("/usr/bin/sudo").unwrap();
+    for enable_shell_wrapper_parsing in [false, true] {
+        let evaluation = evaluate_intercepted_exec_policy(
+            &policy,
+            &program,
+            &[
+                "sudo", "-u", "root", "chroot", "/", "env", "FOO=1", "git", "push",
+            ]
+            .map(str::to_string),
+            InterceptedExecPolicyContext {
+                approval_policy: AskForApproval::OnRequest,
+                permission_profile: PermissionProfile::Disabled,
+                windows_sandbox_level: WindowsSandboxLevel::Disabled,
+                sandbox_permissions: SandboxPermissions::UseDefault,
+                enable_shell_wrapper_parsing,
+            },
+        );
+        assert_eq!(evaluation.decision, Decision::Forbidden);
+    }
+}
+
+#[test]
 fn evaluate_intercepted_exec_policy_uses_wrapper_command_when_shell_wrapper_parsing_disabled() {
     let policy_src = r#"prefix_rule(pattern = ["npm", "publish"], decision = "prompt")"#;
     let mut parser = PolicyParser::new();
@@ -931,8 +965,8 @@ host_executable(name = "git", paths = ["{allowed_git_literal}"])
     ));
 }
 
-/// Under strict rules, an intercepted `env corbanu vault …` is refused by the
-/// `corbanu vault` rule; without them it is not.
+/// D553: an intercepted `env corbanu vault …` is refused by the
+/// `corbanu vault` rule both with and without strict rules.
 #[tokio::test(flavor = "current_thread")]
 async fn strict_rules_refuse_intercepted_wrapped_vault_exec() -> anyhow::Result<()> {
     let mut parser = PolicyParser::new();
@@ -980,7 +1014,7 @@ async fn strict_rules_refuse_intercepted_wrapped_vault_exec() -> anyhow::Result<
         "{actions:?}"
     );
     assert!(
-        !matches!(
+        matches!(
             actions[1],
             codex_shell_escalation::EscalationDecision::Deny { .. }
         ),

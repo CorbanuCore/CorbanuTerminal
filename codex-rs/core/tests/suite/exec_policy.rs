@@ -30,6 +30,9 @@ use serde_json::Value;
 use serde_json::json;
 use std::fs;
 
+#[path = "exec_policy_wrappers.rs"]
+mod wrapper_tests;
+
 const COMPLEX_FORCED_RM_COMMAND: &str = "for target in \"\"; do rm -rf \"$target\"; done";
 
 fn collaboration_mode_for_model(model: String) -> CollaborationMode {
