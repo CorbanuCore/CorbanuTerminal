@@ -306,3 +306,36 @@ async fn issue2165_option_operands_and_ordinary_arguments_are_not_commands() {
         );
     }
 }
+
+/// Sync: upstream no longer reduces a top-level heredoc script to its first
+/// command, so the S3b heredoc rule pass must look through wrappers as main's
+/// parser-plus-`check_with_wrappers` path did (sync-main7 review r1).
+#[tokio::test]
+async fn issue2165_top_level_heredoc_checks_wrapped_rules() {
+    let rules = r#"prefix_rule(pattern=["env"], decision="allow")
+prefix_rule(pattern=["sudo"], decision="allow")
+prefix_rule(pattern=["rm"], decision="forbidden")
+prefix_rule(pattern=["git", "push"], decision="allow")"#;
+    let heredoc = |script: &str| format!("bash -lc {}", shlex::try_quote(script).unwrap());
+    for script in [
+        "env FOO=1 rm -rf x <<'EOF'\nEOF",
+        "sudo -u root rm -rf x <<'EOF'\nEOF",
+        "sudo env FOO=1 rm -rf x <<'EOF'\nEOF",
+    ] {
+        assert!(
+            matches!(
+                requirement(&heredoc(script), rules).await,
+                ExecApprovalRequirement::Forbidden { .. }
+            ),
+            "{script}"
+        );
+    }
+    let uncertain = heredoc("sudo --future-option value git push <<'EOF'\nEOF");
+    assert!(
+        matches!(
+            requirement(&uncertain, rules).await,
+            ExecApprovalRequirement::NeedsApproval { .. }
+        ),
+        "{uncertain}"
+    );
+}
