@@ -89,6 +89,12 @@ impl ComposerInput {
         self.inner.cancel_pending_burst_submission();
     }
 
+    /// Whether `key` continues a paste, keeping a held Enter; any other key
+    /// should cancel it with [`Self::cancel_pending_burst_submission`].
+    pub fn key_continues_paste(key: &KeyEvent) -> bool {
+        crate::bottom_pane::key_continues_paste(key.code, key.modifiers)
+    }
+
     /// Poll before input and on redraw ticks for a long burst's delayed Enter.
     pub fn take_burst_submission(&mut self) -> ComposerAction {
         let result = self.inner.take_burst_submission(Instant::now());

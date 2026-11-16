@@ -656,3 +656,32 @@ fn oversized_question_ids_keep_questions_answerable_without_echoing_the_id() {
     };
     assert_eq!(reply, "> Question\n\nAnswer");
 }
+
+/// sync-main7 review r1: a long keystroke burst ending in Enter in the notes
+/// field is answered once the D642 lookahead ends, through the same path a
+/// typed Enter takes; nothing is left held.
+#[test]
+fn held_burst_enter_answers_after_the_lookahead() {
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    let mut editor = AsyncQuestions::new(
+        AppEventSender::new(tx),
+        /*has_input_focus*/ true,
+        /*enhanced_keys_supported*/ true,
+        /*disable_paste_burst*/ false,
+        RuntimeKeymap::defaults(),
+    );
+    editor.append("message", &[question("First", /*options*/ None)]);
+    editor.set_expanded(/*expanded*/ true);
+    // Back-to-back keys are a burst; the Enter right after it is held.
+    for ch in "0123456789abcdef".chars() {
+        editor.handle_key_event(KeyEvent::from(KeyCode::Char(ch)));
+    }
+    editor.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    assert!(editor.submission.is_none());
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    assert!(editor.flush_paste_burst_if_due());
+    assert!(matches!(
+        &editor.submission,
+        Some(QuestionSubmission::Submit(text)) if text.contains("0123456789abcdef")
+    ));
+}

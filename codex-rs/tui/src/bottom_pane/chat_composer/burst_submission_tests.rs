@@ -265,3 +265,28 @@ fn long_multiline_keystroke_paste_stays_one_draft() {
     composer.handle_paste_burst_flush(now + Duration::from_millis(200));
     assert_eq!(composer.current_text(), payload);
 }
+
+/// sync-main7 review r1: upstream pastes a Tab during a burst, so a Tab after a
+/// held Enter continues the paste instead of submitting its first line.
+#[test]
+fn tab_after_held_enter_continues_the_paste() {
+    let mut composer = composer();
+    let mut now = Instant::now();
+    type_burst(&mut composer, "0123456789abcdef", &mut now);
+    assert_eq!(
+        composer
+            .handle_submission_with_time(/*should_queue*/ false, now)
+            .0,
+        InputResult::None
+    );
+    assert_eq!(
+        composer
+            .handle_key_event(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE))
+            .0,
+        InputResult::None
+    );
+    let later = Instant::now() + Duration::from_secs(1);
+    assert!(composer.take_burst_submission(later).is_none());
+    assert!(composer.handle_paste_burst_flush(later));
+    assert_eq!(composer.current_text(), "0123456789abcdef\n\t");
+}

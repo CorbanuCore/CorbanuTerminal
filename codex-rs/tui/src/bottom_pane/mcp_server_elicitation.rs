@@ -1773,11 +1773,7 @@ impl BottomPaneView for McpServerElicitationOverlay {
                 return;
             }
         }
-        if !matches!(key_event.code, KeyCode::Char(_) | KeyCode::Enter)
-            || key_event
-                .modifiers
-                .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
-        {
+        if !crate::bottom_pane::key_continues_paste(key_event.code, key_event.modifiers) {
             self.composer.cancel_pending_burst_submission();
         }
 

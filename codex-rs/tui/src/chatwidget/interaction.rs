@@ -102,10 +102,7 @@ impl ChatWidget {
             self.handle_composer_input_result(result, /*had_modal_or_popup*/ false);
         }
         if key_event.kind != KeyEventKind::Release
-            && (!matches!(key_event.code, KeyCode::Char(_) | KeyCode::Enter)
-                || key_event
-                    .modifiers
-                    .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT))
+            && !crate::bottom_pane::key_continues_paste(key_event.code, key_event.modifiers)
         {
             self.bottom_pane.cancel_pending_burst_submission();
         }

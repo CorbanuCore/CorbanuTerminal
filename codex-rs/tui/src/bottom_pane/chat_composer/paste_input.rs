@@ -234,6 +234,8 @@ impl ChatComposer {
             return false;
         }
 
+        // D642: a Tab after a held burst Enter proves the Enter was pasted too.
+        self.draft.paste_burst.continue_after_enter(now);
         self.handle_paste_burst_flush(now);
         if self
             .draft

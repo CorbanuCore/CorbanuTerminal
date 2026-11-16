@@ -45,8 +45,10 @@ should parse that JSON rather than relying on human-readable text. Lifecycle
 responses report the resolved backend, socket path, local CLI version, and
 running app-server version when applicable.
 
-Eligible managed daemons check for updates after five minutes, then hourly by
-default. Edit `CODEX_HOME/app-server-daemon/settings.json` to change this:
+While D564 holds (see "Installation and update cases" below), no updater runs
+and `daemon update` refuses; this and the next two paragraphs describe
+upstream's updater. Eligible managed daemons check for updates after five
+minutes, then hourly by default. Edit `CODEX_HOME/app-server-daemon/settings.json` to change this:
 
 ```json
 {

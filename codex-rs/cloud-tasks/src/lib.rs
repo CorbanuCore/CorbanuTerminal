@@ -1404,8 +1404,7 @@ pub async fn run_main(cli: Cli, _codex_linux_sandbox_exe: Option<PathBuf>) -> an
                         }
                     }
                     Some(Ok(Event::Key(key))) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
-                        if (!matches!(key.code, KeyCode::Char(_) | KeyCode::Enter)
-                            || key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT))
+                        if !codex_tui::ComposerInput::key_continues_paste(&key)
                             && let Some(page) = app.new_task.as_mut()
                         {
                             page.composer.cancel_pending_burst_submission();

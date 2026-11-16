@@ -170,6 +170,24 @@ const SINGLE_LINE_SUBMIT_MIN_CHARS: usize = 16;
 // automated single-line submission below a perceptible typing pause.
 pub(super) const BURST_ENTER_LOOKAHEAD: Duration = Duration::from_millis(32);
 
+/// D642: a key that continues a paste keeps a held burst Enter: text, Enter,
+/// and (sync: upstream's `handle_paste_tab` pastes a Tab during a burst) a
+/// plain Tab. Any other key cancels it.
+pub(crate) fn key_continues_paste(
+    code: crossterm::event::KeyCode,
+    modifiers: crossterm::event::KeyModifiers,
+) -> bool {
+    use crossterm::event::KeyCode;
+    use crossterm::event::KeyModifiers;
+    match code {
+        KeyCode::Char(_) | KeyCode::Enter => {
+            !modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+        }
+        KeyCode::Tab => modifiers.is_empty(),
+        _ => false,
+    }
+}
+
 // Maximum delay between consecutive chars to be considered part of a paste burst.
 const PASTE_BURST_CHAR_INTERVAL: Duration = Duration::from_millis(8);
 

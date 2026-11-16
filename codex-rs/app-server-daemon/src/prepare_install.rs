@@ -74,7 +74,7 @@ pub async fn update_from_cli(
             .ok()
             .map(|info| info.app_server_version),
         managed_codex_path,
-        message: "The CLI package is selected and pinned. Run `codex app-server daemon update` to return to production updates.".to_string(),
+        message: "The CLI package is selected and pinned. Daemon self-update is disabled in Corbanu Terminal (D564); after updating Corbanu Terminal manually, select its package the same way.".to_string(),
     }))
 }
 

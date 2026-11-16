@@ -2030,8 +2030,7 @@ impl ChatComposer {
     /// Handle a key event coming from the main UI.
     pub fn handle_key_event(&mut self, key_event: KeyEvent) -> (InputResult, bool) {
         if !matches!(key_event.kind, KeyEventKind::Release)
-            && (!matches!(key_event.code, KeyCode::Char(_) | KeyCode::Enter)
-                || has_ctrl_or_alt(key_event.modifiers))
+            && !crate::bottom_pane::key_continues_paste(key_event.code, key_event.modifiers)
         {
             self.cancel_pending_burst_submission();
         }
@@ -3793,9 +3792,7 @@ impl ChatComposer {
         input: KeyEvent,
         now: Instant,
     ) -> (InputResult, bool) {
-        if matches!(input.code, KeyCode::Char(_) | KeyCode::Enter)
-            && !has_ctrl_or_alt(input.modifiers)
-        {
+        if crate::bottom_pane::key_continues_paste(input.code, input.modifiers) {
             self.draft.paste_burst.continue_after_enter(now);
         } else {
             self.cancel_pending_burst_submission();

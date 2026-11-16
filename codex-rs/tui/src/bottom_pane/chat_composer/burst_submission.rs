@@ -38,6 +38,19 @@ impl ChatComposer {
         Some(result)
     }
 
+    /// For editors that submit through their own key path (async questions):
+    /// when a held Enter is due, materialize the burst text and report that the
+    /// caller should now apply that Enter.
+    pub(crate) fn take_due_burst_enter(&mut self, now: Instant) -> bool {
+        if !self.draft.input_enabled || !self.draft.paste_burst.take_due_enter(now) {
+            return false;
+        }
+        if let Some(pasted) = self.draft.paste_burst.flush_before_modified_input() {
+            self.apply_paste(pasted);
+        }
+        true
+    }
+
     pub(crate) fn cancel_pending_burst_submission(&mut self) {
         if self.draft.paste_burst.cancel_pending_enter()
             && let Some(pasted) = self.draft.paste_burst.flush_before_modified_input()

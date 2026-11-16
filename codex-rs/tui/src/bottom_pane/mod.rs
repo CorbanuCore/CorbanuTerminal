@@ -223,6 +223,7 @@ pub(crate) use title_setup::TerminalTitleSetupView;
 #[cfg(test)]
 pub(crate) use title_setup::preview_line_for_title_items;
 mod paste_burst;
+pub(crate) use paste_burst::key_continues_paste;
 mod pending_input_preview;
 mod pending_thread_approvals;
 mod picker_option;
@@ -2713,7 +2714,8 @@ impl BottomPane {
     }
 
     pub(crate) fn take_burst_submission(&mut self, now: Instant) -> Option<InputResult> {
-        if self.has_active_view() {
+        // Expanded async questions own input too (sync: upstream-only view).
+        if self.has_active_view() || self.questions.as_ref().is_some_and(|q| q.expanded) {
             self.composer.cancel_pending_burst_submission();
             return None;
         }
