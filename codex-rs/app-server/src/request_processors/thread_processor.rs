@@ -552,9 +552,12 @@ fn apply_persisted_permission_profile(
             key == "sandbox_workspace_write" || key.starts_with("sandbox_workspace_write.")
         })
     }) {
-        config_overrides
-            .persisted_permission_profile
-            .clone_from(&settings.unnamed_permission_profile);
+        // #2384: a named profile's snapshot travels with its id so core can cap the
+        // fallback if the id no longer resolves.
+        config_overrides.persisted_permission_profile = settings
+            .unnamed_permission_profile
+            .clone()
+            .or_else(|| settings.named_profile_snapshot.clone());
     }
 }
 

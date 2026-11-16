@@ -96,6 +96,7 @@ fn latest_settings_snapshot_wins() {
         approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
         active_permission_profile: Some(ActivePermissionProfile::new("dev")),
         unnamed_permission_profile: None,
+        named_profile_snapshot: None,
     };
     let history = vec![
         settings_item(
@@ -122,6 +123,7 @@ fn latest_turn_context_wins_over_earlier_settings_update() {
         approvals_reviewer: Some(ApprovalsReviewer::User),
         active_permission_profile: Some(ActivePermissionProfile::read_only()),
         unnamed_permission_profile: None,
+        named_profile_snapshot: None,
     };
     let history = vec![
         settings_item(
@@ -183,6 +185,7 @@ fn newer_legacy_permissions_only_supersede_their_own_threads_checkpoint() {
         approvals_reviewer: Some(ApprovalsReviewer::User),
         active_permission_profile: Some(read_only),
         unnamed_permission_profile: None,
+        named_profile_snapshot: Some(PermissionProfile::read_only()),
     });
     assert_eq!(
         PersistedResumeSettings::from_history(&history, thread_id),
@@ -200,6 +203,7 @@ fn newer_legacy_permissions_only_supersede_their_own_threads_checkpoint() {
             approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
             active_permission_profile: Some(workspace),
             unnamed_permission_profile: None,
+            named_profile_snapshot: Some(PermissionProfile::read_only()),
         })
     );
 }
@@ -228,6 +232,7 @@ fn older_reviewer_is_used_when_latest_turn_context_omits_it() {
             approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
             active_permission_profile: None,
             unnamed_permission_profile: None,
+            named_profile_snapshot: None,
         })
     );
 }

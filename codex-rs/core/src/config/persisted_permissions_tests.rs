@@ -2,10 +2,15 @@
 //! Concrete path entries in a saved profile (Corbanu's `.git`/`.codex` read-only
 //! protections, extra writable roots) must not make the loader discard it in
 //! favour of a broader configured default.
+//!
+//! #2384 (D650): a saved `External` profile and the snapshot of a removed named
+//! profile also cap the resumed permissions; managed `allowed_permission_profiles`
+//! keep choosing the profile.
 
 use super::ConfigBuilder;
 use super::ConfigOverrides;
 use codex_config::CONFIG_TOML_FILE;
+use codex_config::test_support::CloudConfigBundleFixture;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::FileSystemAccessMode;
 use codex_protocol::permissions::FileSystemPath;
@@ -257,5 +262,229 @@ async fn unintersectable_saved_profile_does_not_regain_cleared_roots() -> anyhow
     let file_system = resume_with_workspace_roots(&cwd, saved, Vec::new()).await?;
 
     assert!(!file_system.can_write_local_path_with_cwd(&cwd, &cwd));
+    Ok(())
+}
+
+// #2384 / D650: the remaining resume paths. A saved executor-enforced (`External`)
+// profile and the snapshot of a removed named profile cap the resumed permissions;
+// managed `allowed_permission_profiles` still pick the profile (admin policy wins).
+
+async fn resume_with_config(
+    config_toml: &str,
+    cwd: &Path,
+    overrides: ConfigOverrides,
+) -> anyhow::Result<super::Config> {
+    let codex_home = TempDir::new()?;
+    std::fs::write(codex_home.path().join(CONFIG_TOML_FILE), config_toml)?;
+    Ok(ConfigBuilder::without_managed_config_for_tests()
+        .codex_home(codex_home.path().to_path_buf())
+        .fallback_cwd(Some(cwd.to_path_buf()))
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(cwd.to_path_buf()),
+            ..overrides
+        })
+        .build()
+        .await?)
+}
+
+const WORKSPACE_WRITE_WITH_NETWORK: &str = "sandbox_mode = \"workspace-write\"\n\n\
+    [sandbox_workspace_write]\nnetwork_access = true\n";
+
+#[tokio::test]
+async fn saved_external_profile_without_network_removes_current_network() -> anyhow::Result<()> {
+    let workspace = TempDir::new()?;
+    let cwd = dunce::canonicalize(workspace.path())?;
+
+    let config = resume_with_config(
+        WORKSPACE_WRITE_WITH_NETWORK,
+        &cwd,
+        ConfigOverrides {
+            persisted_permission_profile: Some(PermissionProfile::External {
+                network: NetworkSandboxPolicy::Restricted,
+            }),
+            ..Default::default()
+        },
+    )
+    .await?;
+
+    let profile = config.permissions.permission_profile();
+    // Codex keeps enforcing the current workspace-write sandbox, without network.
+    assert!(
+        matches!(profile, PermissionProfile::Managed { .. }),
+        "{profile:?}"
+    );
+    assert_eq!(
+        profile.network_sandbox_policy(),
+        NetworkSandboxPolicy::Restricted
+    );
+    assert!(
+        profile
+            .file_system_sandbox_policy()
+            .can_write_local_path_with_cwd(&cwd, &cwd)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn saved_external_profile_is_never_restored() -> anyhow::Result<()> {
+    let workspace = TempDir::new()?;
+    let cwd = dunce::canonicalize(workspace.path())?;
+    let saved = PermissionProfile::External {
+        network: NetworkSandboxPolicy::Restricted,
+    };
+
+    // Over full access: `External` would switch off Corbanu's own protections.
+    let config = resume_over_full_access_default(&cwd, &saved).await?;
+    assert_eq!(
+        config.permissions.permission_profile(),
+        &PermissionProfile::Disabled
+    );
+
+    // Over a sandbox that already has no network: nothing to narrow.
+    let config = resume_with_config(
+        "sandbox_mode = \"read-only\"\n",
+        &cwd,
+        ConfigOverrides {
+            persisted_permission_profile: Some(saved),
+            ..Default::default()
+        },
+    )
+    .await?;
+    assert_eq!(
+        config.permissions.permission_profile(),
+        &PermissionProfile::read_only()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn removed_named_profile_falls_back_no_broader_than_its_snapshot() -> anyhow::Result<()> {
+    let workspace = TempDir::new()?;
+    let cwd = dunce::canonicalize(workspace.path())?;
+    std::fs::create_dir(cwd.join(".git"))?;
+    let snapshot = saved_workspace_profile(&SandboxPolicy::new_workspace_write_policy(), &cwd);
+
+    let config = resume_with_config(
+        "default_permissions = \":danger-full-access\"\n",
+        &cwd,
+        ConfigOverrides {
+            persisted_permission_profile_id: Some("removed-profile".to_string()),
+            persisted_permission_profile: Some(snapshot),
+            ..Default::default()
+        },
+    )
+    .await?;
+
+    // The snapshot comes back with its workspace roots materialized.
+    let profile = config.permissions.permission_profile();
+    let file_system = profile.file_system_sandbox_policy();
+    assert_eq!(
+        [cwd.as_path(), &cwd.join(".git"), Path::new("/")]
+            .map(|path| file_system.can_write_local_path_with_cwd(path, &cwd)),
+        [true, false, false]
+    );
+    assert_eq!(
+        profile.network_sandbox_policy(),
+        NetworkSandboxPolicy::Restricted
+    );
+    assert!(matches!(
+        config.legacy_sandbox_policy(),
+        SandboxPolicy::WorkspaceWrite { .. }
+    ));
+    assert_eq!(config.permissions.active_permission_profile(), None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn removed_named_profile_snapshot_is_not_restored_when_broader() -> anyhow::Result<()> {
+    let workspace = TempDir::new()?;
+    let cwd = dunce::canonicalize(workspace.path())?;
+
+    let config = resume_with_config(
+        "default_permissions = \":read-only\"\n",
+        &cwd,
+        ConfigOverrides {
+            persisted_permission_profile_id: Some("removed-profile".to_string()),
+            persisted_permission_profile: Some(PermissionProfile::Disabled),
+            ..Default::default()
+        },
+    )
+    .await?;
+
+    assert_eq!(
+        config.permissions.permission_profile(),
+        &PermissionProfile::read_only()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn resolvable_named_profile_follows_its_current_definition() -> anyhow::Result<()> {
+    let workspace = TempDir::new()?;
+    let cwd = dunce::canonicalize(workspace.path())?;
+
+    // The id still resolves, so the snapshot is ignored (upstream behaviour): the
+    // user's edit to the profile applies to the resumed thread.
+    let config = resume_with_config(
+        "default_permissions = \":read-only\"\n\n[permissions.dev]\nextends = \":workspace\"\n",
+        &cwd,
+        ConfigOverrides {
+            persisted_permission_profile_id: Some("dev".to_string()),
+            persisted_permission_profile: Some(PermissionProfile::read_only()),
+            ..Default::default()
+        },
+    )
+    .await?;
+
+    assert!(
+        config
+            .permissions
+            .permission_profile()
+            .clone()
+            .materialize_project_roots_with_workspace_roots(&config.workspace_roots)
+            .file_system_sandbox_policy()
+            .can_write_local_path_with_cwd(&cwd, &cwd)
+    );
+    assert_eq!(
+        config
+            .permissions
+            .active_permission_profile()
+            .map(|profile| profile.id),
+        Some("dev".to_string())
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn managed_allowed_permission_profiles_still_choose_the_profile() -> anyhow::Result<()> {
+    let workspace = TempDir::new()?;
+    let cwd = dunce::canonicalize(workspace.path())?;
+    let requirements = "default_permissions = \":workspace\"\n\n\
+        [allowed_permission_profiles]\n\":workspace\" = true\n\":read-only\" = true\n";
+    let codex_home = TempDir::new()?;
+
+    let config = ConfigBuilder::without_managed_config_for_tests()
+        .codex_home(codex_home.path().to_path_buf())
+        .fallback_cwd(Some(cwd.clone()))
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(cwd.clone()),
+            persisted_permission_profile: Some(PermissionProfile::read_only()),
+            ..Default::default()
+        })
+        .cloud_config_bundle(
+            CloudConfigBundleFixture::loader_with_enterprise_requirement(requirements),
+        )
+        .build()
+        .await?;
+
+    // Documented D650 exception: the administrator's default wins over the saved
+    // read-only profile even though it can write.
+    assert!(
+        config
+            .permissions
+            .permission_profile()
+            .file_system_sandbox_policy()
+            .can_write_local_path_with_cwd(&cwd, &cwd)
+    );
     Ok(())
 }
