@@ -2603,8 +2603,10 @@ async fn responses_websocket_creates_when_instructions_change() {
                 ["full", "no_previous_request", "generation", "none", "none"],
                 1,
             ),
+            // The instructions field changed, not the input (Corbanu keeps
+            // base instructions out of the input).
             (
-                ["full", "input_mismatch", "generation", "message", "message"],
+                ["full", "instructions_changed", "generation", "none", "none"],
                 1,
             ),
         ],
