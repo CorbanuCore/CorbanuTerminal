@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Step A of #2137: check a runner-only merge; report main without policy changes."""
+"""Check PR regressions against current main; keep full checks and reporting on main."""
 
 import argparse
 import json
@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import tomllib
 
 LABEL = "cargo-deny-main"
 TITLE = "cargo-deny dependency check on main"
@@ -151,6 +152,137 @@ def check(repo: Path, output: Path) -> int:
     return result.returncode if result.returncode >= 0 else 1
 
 
+def advisory_errors(text: str, status: int, lock: Path) -> set[tuple]:
+    """Accept only complete advisory results; never waive infrastructure/errors."""
+    records = [json.loads(line) for line in text.splitlines() if line.strip()]
+    summaries = [r["fields"] for r in records if r.get("type") == "summary"]
+    errors = [
+        r["fields"]
+        for r in records
+        if r.get("type") == "diagnostic" and r["fields"]["severity"] == "error"
+    ]
+    if (
+        status not in (0, 1)
+        or len(summaries) != 1
+        or "advisories" not in summaries[0]
+        or sum(s["errors"] for s in summaries[0].values()) != len(errors)
+        or bool(errors) != bool(status)
+        or any(
+            r.get("type") == "log" and r["fields"]["level"] == "ERROR" for r in records
+        )
+    ):
+        raise ValueError("Incomplete or failed cargo-deny advisory check")
+    packages = tomllib.loads(lock.read_text())["package"]
+    keys = set()
+    for fields in errors:
+        # Reuse the strict parser; unknown error codes produce no items and fail.
+        items = advisories(json.dumps({"type": "diagnostic", "fields": fields}))
+        if not items:
+            raise ValueError("Non-advisory error cannot be downgraded")
+        for item in items:
+            sources = {
+                p.get("source", "path")
+                for p in packages
+                if (p["name"], p["version"]) == (item["crate"], item["locked"])
+            }
+            # Graphs omit sources. Ambiguous identities must not inherit a waiver.
+            if len(sources) != 1:
+                raise ValueError("Missing or ambiguous advisory package source")
+            keys.add((item["id"], item["crate"], item["locked"], sources.pop()))
+    return keys
+
+
+def check_pr(repo: Path, output: Path, base: str) -> int:
+    """Use the exact fetched base and one frozen DB for both advisory checks."""
+    if not re.fullmatch(r"[0-9a-f]{40}", base):
+        raise ValueError("Expected the full SHA from merge-base")
+    repo = repo.resolve()
+    config = repo / "codex-rs/deny.toml"
+
+    def run(root: Path, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [
+                "cargo-deny",
+                "--log-level",
+                "warn",
+                "--format",
+                "json",
+                "--manifest-path",
+                "./Cargo.toml",
+                "--all-features",
+                "--locked",
+                *args,
+                "--config",
+                str(config),
+            ],
+            cwd=root / "codex-rs",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+
+    fetched = run(repo, "fetch", "db")
+    if fetched.returncode:
+        print(fetched.stdout, end="")
+        return 1
+    # A separate checkout preserves manifests, features and patches on the base.
+    # It lives outside the PR checkout and never changes its head or approvals.
+    with tempfile.TemporaryDirectory(prefix="cargo-deny-base-") as temp:
+        baseline = Path(temp) / "base"
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "worktree",
+                "add",
+                "--detach",
+                str(baseline),
+                base,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        try:
+            before = run(baseline, "check", "--disable-fetch", "advisories")
+            output.with_suffix(".base.jsonl").write_text(before.stdout)
+            known = advisory_errors(
+                before.stdout, before.returncode, baseline / "codex-rs/Cargo.lock"
+            )
+        finally:
+            subprocess.run(
+                ["git", "-C", str(repo), "worktree", "remove", str(baseline)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+    # Preserve the full licenses/bans/sources check and its original exit status.
+    result = run(repo, "check", "--disable-fetch")
+    output.write_text(result.stdout)
+    print(result.stdout, end="")
+    status = result.returncode if result.returncode >= 0 else 1
+    if result.returncode in (0, 1):
+        current = advisory_errors(result.stdout, status, repo / "codex-rs/Cargo.lock")
+        introduced = current - known
+        inherited = current & known
+        # Link to the persistent main tracker, including before its first report.
+        tracker = (
+            f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/issues"
+            f"?q=is%3Aissue+label%3A{LABEL}"
+        )
+        for advisory, crate, version, _source in sorted(inherited):
+            print(
+                f"::warning::Already on base {base}: {advisory} {crate} {version}; "
+                f"main dependency tracker: {tracker}"
+            )
+        for advisory, crate, version, _source in sorted(introduced):
+            print(f"::error::PR introduces {advisory} {crate} {version}")
+        status = int(bool(introduced))
+    output.with_suffix(".status").write_text(str(status))
+    return status
+
+
 def marker(data: dict) -> str:
     return f"<!-- cargo-deny-report {json.dumps(data, sort_keys=True)} -->"
 
@@ -181,7 +313,8 @@ def render(data: dict, status: int, items: list[dict], url: str) -> str:
         + ("passed." if status == 0 else f"failed (exit {status})."),
         f"Run: {url}",
         "",
-        "All dependency checks remain blocking on PRs.",
+        "PRs block new advisories; advisories already on main warn. "
+        "Licenses, bans and sources remain blocking.",
         "",
     ]
     if not items:
@@ -344,13 +477,22 @@ def main() -> int:
     parser.add_argument("mode", choices=("merge-base", "check", "report"))
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--base", help="Full base SHA captured by merge-base (PRs only)"
+    )
     args = parser.parse_args()
     if args.mode == "merge-base":
-        merge_base(args.repo, os.environ["PR_BASE_REF"])
+        sha = merge_base(args.repo, os.environ["PR_BASE_REF"])
+        with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+            output.write(f"base={sha}\n")
         return 0
     if args.output is None:
         parser.error("--output is required for check/report")
     if args.mode == "check":
+        if args.base:
+            return check_pr(args.repo, args.output, args.base)
+        if os.environ.get("GITHUB_EVENT_NAME") == "pull_request":
+            parser.error("PR checks require --base from merge-base")
         return check(args.repo, args.output)
     print(report(args.output))
     return 0

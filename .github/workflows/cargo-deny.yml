@@ -22,6 +22,7 @@ jobs:
           fetch-depth: 0
 
       - name: Merge current base into PR checkout
+        id: merge-base
         if: github.event_name == 'pull_request'
         working-directory: .
         env:
@@ -55,9 +56,18 @@ jobs:
           echo "${install_dir}" >> "${GITHUB_PATH}"
 
       - name: Run cargo-deny
-        # Same full check and exit status; JSON also feeds the main-only report.
+        # Only PR advisories already on the current base become warnings.
+        # Main retains the full blocking check and its issue report.
         working-directory: .
-        run: python3 .github/scripts/cargo_deny.py check --output "${RUNNER_TEMP}/cargo-deny.jsonl"
+        env:
+          DENY_BASE_SHA: ${{ steps.merge-base.outputs.base }}
+        run: |
+          args=()
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            test -n "${DENY_BASE_SHA}"
+            args+=(--base "${DENY_BASE_SHA}")
+          fi
+          python3 .github/scripts/cargo_deny.py check --output "${RUNNER_TEMP}/cargo-deny.jsonl" "${args[@]}"
 
       - name: Save main report
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule') }}
