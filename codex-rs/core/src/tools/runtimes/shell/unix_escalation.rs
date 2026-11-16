@@ -879,8 +879,9 @@ fn evaluate_intercepted_exec_policy(
         )
     };
 
-    policy.check_multiple_with_options(
-        commands.iter(),
+    crate::exec_policy::check_with_wrappers(
+        policy,
+        &commands,
         &fallback,
         &MatchOptions {
             resolve_host_executables: true,

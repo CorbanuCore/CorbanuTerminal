@@ -35,6 +35,9 @@ use tempfile::TempDir;
 use tempfile::tempdir;
 use toml::Value as TomlValue;
 
+#[path = "exec_policy_wrapper_tests.rs"]
+mod wrapper_tests;
+
 #[cfg(windows)]
 #[path = "exec_policy_windows_tests.rs"]
 mod windows_tests;

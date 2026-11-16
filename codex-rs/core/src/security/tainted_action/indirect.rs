@@ -12,6 +12,9 @@ use super::work;
 use base64::Engine;
 use std::cell::Cell;
 
+#[path = "indirect_exec_policy.rs"]
+pub(super) mod indirect_exec_policy;
+
 thread_local! {
     /// Whether an actual sudo option reader consumed a word differently from
     /// the pre-#1773 reader during this judgment.
