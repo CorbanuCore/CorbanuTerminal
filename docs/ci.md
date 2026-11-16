@@ -48,8 +48,8 @@ doesn't change (through a dependency) shows up on `main`.
   target-platform Python that Bazel lacks there, so no Bazel job runs them on
   Windows (#1856). The `app-server` group therefore runs app-server's unit-test
   targets only; core's and app-server's integration tests run in the
-  non-blocking Cargo job below. code-mode-host and code-mode-runtime run no
-  tests on Windows at all, unit tests included.
+  non-blocking Cargo job below, along with code-mode-host and code-mode-runtime's
+  unit and integration tests.
   Other PRs skip it; a change to its workflow
   (`rust-ci-windows-native-tests.yml`) runs every group, but changes to
   `.bazelrc`, other Bazel files or the crates these depend on don't (nightly
@@ -66,20 +66,22 @@ doesn't change (through a dependency) shows up on `main`.
   one re-run (`--flaky_test_attempts`) for the intermittent #691 test. If that
   test fails both attempts again, add it to the skip list in `.bazelrc`'s
   `windows-native-tests` config.
-- Windows integration tests for codex-core and codex-app-server
-  (`windows-integration-tests / codex-core` and `... / codex-app-server`,
-  #1856), on PRs that change one of those crates; a change to the workflow
-  (`windows-integration-tests.yml`), its known-failure list or script, or
-  `codex-rs/.config/nextest.toml` runs both. They run
-  `cargo nextest run -p <crate> --test '*'` on windows-2022 (msvc). The first
-  native runs found 13 codex-core and 19 codex-app-server failures (#1967,
-  #1968, #1969); they are listed in
-  `.github/windows-integration-known-failures.txt`, excluded, and named in the
-  job summary, so any other failure turns the job red. It is a separate
-  workflow, not part of `CI required` (which neither waits for it nor fails
-  with it), until those are fixed. It has no compile cache: about 22 minutes to
-  build, then about 5 (core) or 13 (app-server) minutes of tests (60-minute
-  timeout).
+- Windows integration tests for codex-core and codex-app-server, plus unit and
+  integration tests for codex-code-mode-host and codex-code-mode-runtime
+  (`windows-integration-tests`, #1856), on PRs that change those crates.
+  Runtime changes also select the host. Changes to the workflow, its
+  known-failure list or selector, setup-ci action, nextest configuration,
+  workspace manifest, lockfile or Rust toolchain run all four packages.
+  Core and app-server run `cargo nextest run -p <crate> --test '*'` on
+  windows-2022 (msvc); the code-mode crates use `--lib --tests` and do not
+  build core's helper binaries. The known-failure list is now empty after
+  #1977, #2007, #2017 and #2341: the final #2341 run passed all 994 core and
+  806 app-server integration tests. Any future native-reproduced exclusions
+  must name an issue in `.github/windows-integration-known-failures.txt`
+  and are shown in the job summary. This remains a separate non-blocking
+  workflow: `CI required` neither waits for it nor fails with it. It has no
+  compile cache; core/app-server take about 22 minutes to build and 5/13
+  minutes to test (60-minute timeout per package).
 - Windows gnullvm cross shards
   (`Bazel test on windows-latest for x86_64-pc-windows-gnullvm shard N/4`,
   `bazel.yml` `test-windows-shard`), meant to run the `*-windows-cross`
