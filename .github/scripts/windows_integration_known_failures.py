@@ -24,12 +24,22 @@ LINE = re.compile(
 
 # Cargo package -> its directory. A change to one of the job's own files runs
 # every package.
-PACKAGES = {"codex-core": "codex-rs/core/", "codex-app-server": "codex-rs/app-server/"}
+PACKAGES = {
+    "codex-core": "codex-rs/core/",
+    "codex-app-server": "codex-rs/app-server/",
+    "codex-code-mode-host": "codex-rs/code-mode-host/",
+    "codex-code-mode-runtime": "codex-rs/code-mode-runtime/",
+}
+CODE_MODE_PACKAGES = ("codex-code-mode-host", "codex-code-mode-runtime")
 JOB_FILES = (
     ".github/workflows/windows-integration-tests.yml",
     ".github/windows-integration-known-failures.txt",
     ".github/scripts/windows_integration_known_failures.py",
+    ".github/actions/setup-ci/",
     "codex-rs/.config/nextest.toml",
+    "codex-rs/Cargo.toml",
+    "codex-rs/Cargo.lock",
+    "codex-rs/rust-toolchain.toml",
 )
 
 
@@ -64,8 +74,13 @@ def nextest_filter(entries: list[KnownFailure], package: str) -> str:
 
 def summary(entries: list[KnownFailure], package: str) -> str:
     excluded = [entry for entry in entries if entry.package == package]
+    scope = (
+        "unit and integration tests"
+        if package in CODE_MODE_PACKAGES
+        else "integration tests (`tests/*.rs`)"
+    )
     lines = [
-        f"### {package}: integration tests (`tests/*.rs`) on native Windows (#1856)",
+        f"### {package}: {scope} on native Windows (#1856)",
         "",
         "Non-blocking: blocking-ci.yml does not call this workflow, so `CI required`"
         " neither waits for nor depends on it.",
@@ -82,12 +97,22 @@ def summary(entries: list[KnownFailure], package: str) -> str:
 
 
 def changed_packages(paths: list[str]) -> list[str]:
-    if any(path in JOB_FILES for path in paths):
+    if any(
+        path == job or (job.endswith("/") and path.startswith(job))
+        for path in paths
+        for job in JOB_FILES
+    ):
         return list(PACKAGES)
     return [
         package
         for package, directory in PACKAGES.items()
         if any(path.startswith(directory) for path in paths)
+        or (
+            package == "codex-code-mode-host"
+            and any(
+                path.startswith(PACKAGES["codex-code-mode-runtime"]) for path in paths
+            )
+        )
     ]
 
 

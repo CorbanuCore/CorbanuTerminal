@@ -17,7 +17,10 @@ import windows_integration_known_failures as known  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 WORKFLOW = "windows-integration-tests.yml"
-PACKAGE_DIRS = {"codex-core": "core", "codex-app-server": "app-server"}
+PACKAGE_DIRS = {
+    package: directory.removeprefix("codex-rs/").rstrip("/")
+    for package, directory in known.PACKAGES.items()
+}
 
 
 class KnownFailureListTest(unittest.TestCase):
@@ -132,6 +135,21 @@ class PackageSelectionTest(unittest.TestCase):
         self.assertEqual(select(["codex-rs/core-api/src/lib.rs", "README.md"]), [])
         self.assertEqual(select([]), [])
 
+    def test_code_mode_selection_includes_runtime_dependents(self) -> None:
+        self.assertEqual(
+            known.changed_packages(["codex-rs/code-mode-host/tests/stdio.rs"]),
+            ["codex-code-mode-host"],
+        )
+        self.assertEqual(
+            known.changed_packages(["codex-rs/code-mode-runtime/src/lib.rs"]),
+            ["codex-code-mode-host", "codex-code-mode-runtime"],
+        )
+        self.assertEqual(
+            known.changed_packages([".github/actions/setup-ci/action.yml"]),
+            list(known.PACKAGES),
+        )
+        self.assertEqual(known.changed_packages(["codex-rs/Cargo.lock.backup"]), [])
+
     def test_job_files_run_every_package(self) -> None:
         for path in known.JOB_FILES:
             with self.subTest(path=path):
@@ -155,7 +173,8 @@ class WorkflowTest(unittest.TestCase):
     def test_pull_request_paths_match_the_package_selection(self) -> None:
         triggers = self.workflow().split("\njobs:")[0]
         paths = re.findall(r'(?m)^      - "([^"]+)"$', triggers)
-        expected = list(known.JOB_FILES) + [d + "**" for d in known.PACKAGES.values()]
+        expected = [p + "**" if p.endswith("/") else p for p in known.JOB_FILES]
+        expected += [d + "**" for d in known.PACKAGES.values()]
         self.assertEqual(sorted(paths), sorted(expected))
         self.assertRegex(triggers, r"(?m)^  pull_request:\n    paths:$")
         self.assertNotRegex(triggers, r"(?m)^  (push|schedule|pull_request_target):")
@@ -175,7 +194,12 @@ class WorkflowTest(unittest.TestCase):
         )
         self.assertIn("if: ${{ needs.packages.outputs.packages != '[]' }}", workflow)
         self.assertIn(
-            "cargo nextest run --cargo-profile ci-test -p \"$PACKAGE\" --test '*'",
+            'cargo nextest run --cargo-profile ci-test -p "$PACKAGE" "${targets[@]}"',
+            workflow,
+        )
+        self.assertIn("targets=(--test '*')", workflow)
+        self.assertIn(
+            "codex-code-mode-host|codex-code-mode-runtime) targets=(--lib --tests)",
             workflow,
         )
         self.assertIn('-E "$filter"', workflow)
