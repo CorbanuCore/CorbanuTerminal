@@ -74,9 +74,10 @@ async fn replayed_command_completion_preserves_tracking_without_duplicate_starts
         .iter()
         .map(|lines| lines_to_single_string(lines))
         .collect::<Vec<_>>();
+    // Main: a completion without an exit code never claims the command ran.
     assert_eq!(
         history,
-        vec!["• Ran cat replay\n  └ (no output)\n".to_string()]
+        vec!["✗ Execution unconfirmed cat replay\n  └ No exit status received\n".to_string()]
     );
 }
 

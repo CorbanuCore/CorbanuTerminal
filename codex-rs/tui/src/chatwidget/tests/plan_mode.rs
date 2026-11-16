@@ -665,7 +665,14 @@ async fn plan_reasoning_scope_popup_mentions_built_in_plan_default_when_no_overr
     );
 
     let popup = render_bottom_popup(&chat, /*width*/ 100);
-    assert!(popup.contains("built-in Plan default"));
+    // The row may wrap inside the phrase.
+    assert!(
+        popup
+            .split_whitespace()
+            .collect::<String>()
+            .contains("built-inPlandefault"),
+        "{popup}"
+    );
 }
 
 #[tokio::test]
@@ -1403,7 +1410,7 @@ async fn mode_switch_surfaces_reasoning_change_notification_when_model_stays_sam
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        plan_messages.contains("Model changed to gpt-5.6-terra medium for Plan mode."),
+        plan_messages.contains("Model changed to GPT-5.6-Terra medium for Plan mode."),
         "expected reasoning-change notice in Plan mode, got: {plan_messages:?}"
     );
 }

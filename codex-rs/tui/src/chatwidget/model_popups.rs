@@ -763,7 +763,7 @@ impl ChatWidget {
                 Vec::new(),
                 tabs,
                 initial_tab_id,
-                Some(Self::model_picker_tabbed_footer_hint_line()),
+                Some(self.model_picker_tabbed_footer_hint_line()),
             )
         } else {
             let items = provider_items
@@ -886,8 +886,23 @@ impl ChatWidget {
         }
     }
 
-    fn model_picker_tabbed_footer_hint_line() -> Line<'static> {
-        Line::from("Use Left/Right to switch providers. Press Enter to confirm or Esc to go back")
+    /// Main's provider-tab hint, unless accept/cancel are remapped: then upstream's
+    /// configured-binding hint, so the footer never names keys that do nothing.
+    fn model_picker_tabbed_footer_hint_line(&self) -> Line<'static> {
+        let keymap = self.bottom_pane.list_keymap();
+        let default_keys = keymap.accept.first()
+            == Some(&crate::key_hint::plain(crossterm::event::KeyCode::Enter))
+            && keymap.cancel.first()
+                == Some(&crate::key_hint::plain(crossterm::event::KeyCode::Esc));
+        if default_keys {
+            return Line::from(
+                "Use Left/Right to switch providers. Press Enter to confirm or Esc to go back",
+            );
+        }
+        let mut hint = Line::from("Left/Right providers · ");
+        hint.spans
+            .extend(crate::bottom_pane::popup_consts::picker_hint_line_for_keymap(&keymap).spans);
+        hint
     }
 
     pub(crate) fn show_in_pfterminal_model_picker(preset: &ModelPreset) -> bool {

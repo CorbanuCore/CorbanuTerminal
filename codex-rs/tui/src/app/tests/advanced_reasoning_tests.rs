@@ -11,6 +11,13 @@ async fn fork_current_session_preserves_conversation_ultra() -> Result<()> {
     let codex_home = tempdir()?;
     app.config.codex_home = codex_home.path().to_path_buf().abs();
     app.config.sqlite = codex_state::SqliteConfig::new_for_testing(codex_home.path().abs());
+    // The saved chat is OpenAI's; main refuses to resume it under Corbanu's Z.AI test provider.
+    app.config.model_provider_id = codex_model_provider_info::OPENAI_PROVIDER_ID.to_string();
+    app.config.model_provider =
+        codex_model_provider_info::ModelProviderInfo::create_openai_provider(
+            /*base_url*/ None,
+        );
+    app.config.model = Some("gpt-5.4".to_string());
     let source_thread_id = ThreadId::from_string(
         &create_fake_rollout(
             codex_home.path(),

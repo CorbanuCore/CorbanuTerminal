@@ -1,6 +1,6 @@
 ---
 source: tui/src/bottom_pane/selection_picker_tests.rs
-assertion_line: 79
+assertion_line: 153
 expression: text
 ---
 
@@ -19,5 +19,5 @@ expression: text
   Action 06  Ctrl+6
   Action 07  Ctrl+7
 › Action 08  Ctrl+8
-↓
+↓                                                   9 / 30
   left/right group · enter edit · esc close

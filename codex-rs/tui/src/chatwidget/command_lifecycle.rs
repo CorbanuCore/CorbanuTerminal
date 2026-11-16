@@ -356,11 +356,12 @@ impl ChatWidget {
             .collect();
         let duration = Duration::from_millis(duration_ms.unwrap_or_default().max(0) as u64);
         // Upstream: a command that did not complete never reads as a success. Declined and
-        // refused commands get their own rows below; a completed one without a code is unknown.
+        // refused commands get their own rows below. Main: a command without an exit code is
+        // unknown, completed or not, so it never claims it ran.
         let exit_code = if status == CommandExecutionStatus::Completed {
             exit_code
         } else {
-            Some(exit_code.filter(|code| *code != 0).unwrap_or(1))
+            exit_code.map(|code| if code == 0 { 1 } else { code })
         };
         let aggregated_output = aggregated_output.unwrap_or_default();
 
