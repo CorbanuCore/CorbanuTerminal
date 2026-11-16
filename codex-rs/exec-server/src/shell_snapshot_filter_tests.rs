@@ -18,11 +18,7 @@ fn filter<'g>(
     env_policy: Option<&ExecEnvPolicy>,
     process: &'g OutputGate,
 ) -> SnapshotCredentialFilter<'g> {
-    let values = values
-        .iter()
-        .map(|(name, value)| (*name, Cow::Borrowed(*value)))
-        .collect::<Vec<_>>();
-    SnapshotCredentialFilter::with_gate(&values, env_policy, &HashMap::new(), process)
+    SnapshotCredentialFilter::with_gate(values.iter().copied(), env_policy, process)
         .expect("filter")
 }
 

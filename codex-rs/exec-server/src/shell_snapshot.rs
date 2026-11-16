@@ -580,26 +580,30 @@ done
     // Corbanu #2356: #310's names and #2314's credential values, as for core's
     // snapshot file, before anything is cached or replayed.
     let (captured, values) = filter::split_values(shell_type, captured)?;
-    let credential_filter =
-        SnapshotCredentialFilter::new(&values, params.env_policy.as_ref(), &prepared.env)?;
-    drop(values);
+    let launch_values = prepared
+        .env
+        .iter()
+        .map(|(name, value)| (name.as_str(), value.as_str()))
+        .chain(values.iter().map(|(name, value)| (*name, value.as_ref())));
     let snapshot = if let Some(proxy) = proxy {
         credentials::prepare(
             params,
             captured,
+            launch_values,
             replay,
             proxy,
             credential_brokers,
-            &credential_filter,
         )
         .await?
     } else {
+        let credential_filter =
+            SnapshotCredentialFilter::new(launch_values, params.env_policy.as_ref())?;
         parse_snapshot(
             shell_type,
             captured,
             params.env_policy.as_ref(),
             replay,
-            &credential_filter,
+            Some(&credential_filter),
         )?
     };
     child.preserve_helpers();
@@ -611,7 +615,8 @@ fn parse_snapshot(
     output: &[u8],
     env_policy: Option<&ExecEnvPolicy>,
     replay: SnapshotReplay,
-    credential_filter: &SnapshotCredentialFilter<'_>,
+    // `None` on the broker path, which checks its own replay script.
+    credential_filter: Option<&SnapshotCredentialFilter<'_>>,
 ) -> CaptureResult {
     let captured = CapturedSnapshot::parse(shell_type, output).ok_or_else(|| {
         (
@@ -647,9 +652,11 @@ fn parse_snapshot(
             let (name, value) = std::str::from_utf8(entry).ok()?.split_once('=')?;
             Some((name.to_string(), value.to_string()))
         })
-        .filter(|(name, value)| credential_filter.keep(name, value))
+        .filter(|(name, value)| credential_filter.is_none_or(|filter| filter.keep(name, value)))
         .collect::<HashMap<_, _>>();
-    credential_filter.ensure_clean(&state)?;
+    if let Some(filter) = credential_filter {
+        filter.ensure_clean(&state)?;
+    }
     if environment.contains_key(PROXY_ACTIVE_ENV_KEY) {
         strip_managed_proxy_env(&mut environment);
     }

@@ -4,12 +4,16 @@
 //! are not replayed, and functions or aliases that still contain one refuse the
 //! snapshot. Raw values travel only over the capture pipe and stay in memory.
 //!
+//! On the credential-broker path (masking on, zsh) exports are the broker's;
+//! only functions, aliases and the final replay script are checked there, after
+//! restoring placeholders. Omitting exports on that path awaits the owner's
+//! broker-path decision for core's snapshot (#2355, D640).
+//!
 //! Core-only helpers cannot be shared from here: the secret-name list mirrors
 //! core's `SECRET_EXPORT_NAME_PATTERNS` and the value rules mirror
 //! `security::disclosure_gate::env_values`. Keep them in step.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::path::Path;
 
 use codex_exec_server_protocol::JSONRPCErrorError;
@@ -219,23 +223,22 @@ pub(super) struct SnapshotCredentialFilter<'g> {
 }
 
 impl SnapshotCredentialFilter<'static> {
-    /// `launch_env` is the environment the capture shell started with.
-    pub(super) fn new(
-        values: &[(&str, Cow<'_, str>)],
+    /// `variables` are the capture shell's launch environment and captured
+    /// values, with any broker placeholders already restored to real values.
+    pub(super) fn new<'a>(
+        variables: impl IntoIterator<Item = (&'a str, &'a str)>,
         env_policy: Option<&ExecEnvPolicy>,
-        launch_env: &HashMap<String, String>,
     ) -> Result<Self, FilterError> {
-        Self::with_gate(values, env_policy, launch_env, output_gate::global())
+        Self::with_gate(variables, env_policy, output_gate::global())
     }
 }
 
 impl<'g> SnapshotCredentialFilter<'g> {
     /// Never arm or add startup values to the process gate: snapshot hygiene
     /// must not alter what commands receive or what other sinks mask.
-    pub(super) fn with_gate(
-        values: &[(&str, Cow<'_, str>)],
+    pub(super) fn with_gate<'a>(
+        variables: impl IntoIterator<Item = (&'a str, &'a str)>,
         env_policy: Option<&ExecEnvPolicy>,
-        launch_env: &HashMap<String, String>,
         process: &'g OutputGate,
     ) -> Result<Self, FilterError> {
         let refuse = || {
@@ -262,38 +265,33 @@ impl<'g> SnapshotCredentialFilter<'g> {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        let inherited = std::env::vars_os()
-            .filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?)))
-            .map(|(name, value)| (name, Zeroizing::new(value)))
-            .collect::<Vec<_>>();
-        let sources = inherited
-            .iter()
-            .map(|(name, value)| (name.as_str(), value.as_str()))
-            .chain(
-                launch_env
-                    .iter()
-                    .map(|(name, value)| (name.as_str(), value.as_str())),
-            )
-            .chain(values.iter().map(|(name, value)| (*name, value.as_ref())));
         let mut managed = Vec::new();
-        for (name, value) in sources {
+        let mut protect = |name: &str, value: &str| {
             // The marker's credential-looking name must not register its
             // placeholders: every brokered replay script would then be refused.
             if name.eq_ignore_ascii_case(BROKERED_CREDENTIALS_ENV_KEY) {
-                continue;
+                return;
             }
             push_env_values(name, value, &mut managed);
-            if value.is_empty() {
-                continue;
-            }
-            if secret_names.iter().any(|pattern| pattern.matches(name))
-                || excluded
-                    .iter()
-                    .any(|excluded| excluded.eq_ignore_ascii_case(name))
-                    && is_plausible_secret(value.trim())
+            if !value.is_empty()
+                && (secret_names.iter().any(|pattern| pattern.matches(name))
+                    || excluded
+                        .iter()
+                        .any(|excluded| excluded.eq_ignore_ascii_case(name))
+                        && is_plausible_secret(value.trim()))
             {
                 managed.push((name.to_string(), Zeroizing::new(value.to_string())));
             }
+        };
+        // The executor's own environment holds the credentials #310 keeps from
+        // commands; startup files could still copy them by other means.
+        for (name, value) in std::env::vars_os() {
+            if let (Some(name), Some(value)) = (name.to_str(), value.to_str()) {
+                protect(name, value);
+            }
+        }
+        for (name, value) in variables {
+            protect(name, value);
         }
         let local = OutputGate::new();
         let entries = managed
@@ -309,7 +307,7 @@ impl<'g> SnapshotCredentialFilter<'g> {
         })
     }
 
-    fn sensitive(&self, value: &str) -> bool {
+    pub(super) fn sensitive(&self, value: &str) -> bool {
         self.local.contains_snapshot_secret(value) || self.process.contains_snapshot_secret(value)
     }
 
