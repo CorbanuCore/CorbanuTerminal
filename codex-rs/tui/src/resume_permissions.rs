@@ -11,6 +11,10 @@ pub(crate) struct ResumePermissions {
     pub approvals_reviewer: bool,
     pub profile: bool,
     pub workspace_roots: bool,
+    /// D621 (#2310): Aggressive's launch approval override, sent with every
+    /// local resume, including a rejoin that otherwise keeps the thread's
+    /// settings (see `security::aggressive::is_launch_override`).
+    pub aggressive_approval: bool,
 }
 
 impl ResumePermissions {
@@ -40,6 +44,18 @@ impl ResumePermissions {
                 || overrides.workspace_roots.is_some()
                 || !overrides.additional_writable_roots.is_empty()
                 || has("sandbox_workspace_write.writable_roots"),
+            aggressive_approval: crate::security::aggressive::is_launch_override(overrides),
+        }
+    }
+
+    /// For resumes that otherwise restore or keep the thread's saved
+    /// settings (thread routing, live attach, reconnect, Claude panes): only
+    /// Aggressive's launch approval override, which must never be left to the
+    /// server (D621, #2310).
+    pub(crate) fn launch_approval_only(overrides: &ConfigOverrides) -> Self {
+        Self {
+            aggressive_approval: crate::security::aggressive::is_launch_override(overrides),
+            ..Self::default()
         }
     }
 
@@ -49,6 +65,7 @@ impl ResumePermissions {
         approvals_reviewer: true,
         profile: true,
         workspace_roots: true,
+        aggressive_approval: false,
     };
 }
 

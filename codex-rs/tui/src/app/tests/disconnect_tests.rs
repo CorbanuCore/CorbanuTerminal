@@ -613,6 +613,7 @@ async fn rejected_initial_thread_start_reconnects_and_submits_prompt_once() -> R
             AppServerTarget::Remote { endpoint },
             app.config.clone(),
             app.local_settings.clone(),
+            app.launch_approval_resume_permissions(),
             /*thread_id*/ None,
             /*remote_cwd*/ None,
             crate::dynamic_tools_mcp::ThreadToolTransport::Dynamic,

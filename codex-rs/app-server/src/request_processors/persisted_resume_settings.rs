@@ -14,6 +14,10 @@ pub(super) struct PersistedResumeSettings {
     pub(super) approvals_reviewer: Option<ApprovalsReviewer>,
     pub(super) active_permission_profile: Option<ActivePermissionProfile>,
     pub(super) unnamed_permission_profile: Option<PermissionProfile>,
+    /// #2384: the effective permissions an owned snapshot recorded for its named
+    /// profile. Core uses them only to cap the fallback when that profile id no
+    /// longer resolves; while it resolves, the thread follows its current definition.
+    pub(super) named_profile_snapshot: Option<PermissionProfile>,
 }
 
 impl PersistedResumeSettings {
@@ -48,6 +52,10 @@ impl From<&ThreadSettingsSnapshot> for PersistedResumeSettings {
             unnamed_permission_profile: settings
                 .active_permission_profile
                 .is_none()
+                .then(|| settings.permission_profile.clone()),
+            named_profile_snapshot: settings
+                .active_permission_profile
+                .is_some()
                 .then(|| settings.permission_profile.clone()),
         }
     }
@@ -86,6 +94,7 @@ fn latest_persisted_resume_settings(history: &[RolloutItem]) -> Option<Persisted
                 }),
                 active_permission_profile: turn_context.active_permission_profile.clone(),
                 unnamed_permission_profile: None,
+                named_profile_snapshot: None,
             }),
             RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) => {
                 // History without an identifiable owner can supply a profile ID, but
@@ -96,6 +105,7 @@ fn latest_persisted_resume_settings(history: &[RolloutItem]) -> Option<Persisted
                     approvals_reviewer: Some(settings.approvals_reviewer),
                     active_permission_profile: settings.active_permission_profile.clone(),
                     unnamed_permission_profile: None,
+                    named_profile_snapshot: None,
                 })
             }
             _ => None,

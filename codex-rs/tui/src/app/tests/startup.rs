@@ -955,6 +955,7 @@ async fn unattended_modals_survive_unfinished_terminal_input() -> Result<()> {
         app.app_server_target.clone(),
         app.config.clone(),
         app.local_settings.clone(),
+        app.launch_approval_resume_permissions(),
         /*thread_id*/ None,
         /*remote_cwd*/ None,
         app_server.thread_tool_transport(),

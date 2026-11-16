@@ -156,6 +156,7 @@ use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::permissions::DenyReadValidator;
 use codex_protocol::permissions::DenyReadViolation;
+use codex_protocol::permissions::FileSystemAccessMode;
 use codex_protocol::permissions::FileSystemPath;
 use codex_protocol::permissions::FileSystemSandboxKind;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
@@ -733,6 +734,60 @@ fn is_read_only_within(current: &PermissionProfile, saved: &PermissionProfile) -
             .any(|entry| entry.access.can_write())
         && saved_file_system.has_full_disk_read_access()
         && (!current_network.is_enabled() || saved_network.is_enabled())
+}
+
+/// #2384 / D650: fail-closed fallback when a removed named profile's snapshot
+/// cannot bound the current profile: the current profile with every write
+/// downgraded to read and no network. It is never broader than the current
+/// profile and grants no write or network access the snapshot might lack.
+fn without_writes_or_network(current: &PermissionProfile) -> PermissionProfile {
+    let (mut file_system, _) = current.to_runtime_permissions();
+    if !matches!(current, PermissionProfile::Managed { .. })
+        || file_system.kind != FileSystemSandboxKind::Restricted
+    {
+        return PermissionProfile::read_only();
+    }
+    for entry in &mut file_system.entries {
+        if entry.access.can_write() {
+            entry.access = FileSystemAccessMode::Read;
+        }
+    }
+    PermissionProfile::from_runtime_permissions(&file_system, NetworkSandboxPolicy::Restricted)
+}
+
+/// #2384 / D650: caps the current profile by a saved executor-enforced
+/// (`External`) profile. `None` keeps `current`.
+///
+/// The saved profile is never restored: under `External` Codex applies no sandbox
+/// and Corbanu's own protections (protected reads, the macOS keychain denial) are
+/// off, and the executor that enforced it may be gone on resume. The only grant
+/// Codex can still withhold is network access the saved thread did not have.
+/// `Disabled` stays as it is: Codex enforces no filesystem or network limits under
+/// either profile, and only `Disabled` keeps Corbanu's protections.
+fn bound_by_saved_external_network(
+    current: PermissionProfile,
+    saved_network: NetworkSandboxPolicy,
+) -> Option<PermissionProfile> {
+    if saved_network.is_enabled() {
+        return None;
+    }
+    match current {
+        PermissionProfile::Managed {
+            file_system,
+            network: NetworkSandboxPolicy::Enabled,
+        } => Some(PermissionProfile::Managed {
+            file_system,
+            network: NetworkSandboxPolicy::Restricted,
+        }),
+        PermissionProfile::External {
+            network: NetworkSandboxPolicy::Enabled,
+        } => Some(PermissionProfile::External {
+            network: NetworkSandboxPolicy::Restricted,
+        }),
+        PermissionProfile::Managed { .. }
+        | PermissionProfile::External { .. }
+        | PermissionProfile::Disabled => None,
+    }
 }
 
 // A profile override only inherits the selected profile's proxy/allowlist config
@@ -4603,16 +4658,21 @@ impl Config {
             sandbox_mode.is_none()
                 && permission_profile.is_none()
                 && default_permissions_override.is_none()
-                && persisted_permission_profile_id.is_none()
+                // #2384 / D650: managed `allowed_permission_profiles` keep upstream's
+                // behaviour on purpose: the administrator's policy picks the profile
+                // (the managed default or the allowed saved profile id), even where
+                // that is broader than the thread's saved permissions.
                 && requirements_toml.allowed_permission_profiles.is_none()
-                // Executor-owned enforcement is not a portable thread default. Reject
-                // the original mode before preserving denials. Saved profiles with
-                // materialized grants are bounded below instead of rejected (#2376).
-                && !matches!(profile, PermissionProfile::External { .. })
-                && permission_profile_catalog::permission_profile_satisfies_requirements(
-                    &config_layer_stack,
-                    profile,
-                )
+                // Executor-owned enforcement is not a portable thread default: a saved
+                // `External` profile is never restored, it only narrows the current
+                // profile below (#2384), and that result is checked when applied.
+                // Saved profiles with materialized grants are bounded below instead
+                // of rejected (#2376).
+                && (matches!(profile, PermissionProfile::External { .. })
+                    || permission_profile_catalog::permission_profile_satisfies_requirements(
+                        &config_layer_stack,
+                        profile,
+                    ))
         });
         let persisted_permission_profile_id = if sandbox_mode.is_some()
             || permission_profile.is_some()
@@ -4636,6 +4696,14 @@ impl Config {
             requirements_toml,
             &mut startup_warnings,
         )?;
+        // #2384 / D650: a thread saved under a named profile also carries that
+        // profile's snapshot. While the id still resolves, the thread follows the
+        // profile's current definition (upstream); once the id is gone or invalid,
+        // the configured default it falls back to is capped by the snapshot below.
+        let persisted_profile_id_unresolved = persisted_permission_profile_id.is_some()
+            && !effective_permission_selection.persisted_profile_id_was_provided;
+        let persisted_permission_profile = persisted_permission_profile
+            .filter(|_| persisted_permission_profile_id.is_none() || persisted_profile_id_unresolved);
         if effective_permission_selection.has_profiles()
             && !matches!(
                 permission_config_syntax,
@@ -4884,10 +4952,12 @@ impl Config {
         // replace a restricted thread. If the two cannot be intersected safely, keep
         // the current profile only when it is provably no broader (it writes nothing),
         // and otherwise the saved profile exactly.
+        // #2384 / D650: a saved `External` profile is never restored; it only removes
+        // network access the thread did not have. The snapshot of a removed or
+        // invalid named profile always bounds the fallback default, even without
+        // materialized grants, and is never restored as-is: if the two cannot be
+        // intersected, the default loses its writes and network instead.
         let persisted_permission_profile = persisted_permission_profile.and_then(|saved| {
-            if !has_materialized_path_entries(&saved) {
-                return Some(saved);
-            }
             let roots = workspace_roots
                 .iter()
                 .map(PathUri::from_abs_path)
@@ -4896,11 +4966,29 @@ impl Config {
             let current = permission_profile
                 .clone()
                 .materialize_project_roots_with_path_uris(&roots);
+            if let PermissionProfile::External { network } = saved {
+                return bound_by_saved_external_network(current, network);
+            }
+            let saved = if persisted_profile_id_unresolved {
+                saved.materialize_project_roots_with_path_uris(&roots)
+            } else if !has_materialized_path_entries(&saved) {
+                return Some(saved);
+            } else {
+                saved
+            };
             match intersect_effective_permission_profiles(&current, &saved, resolved_cwd.as_path())
             {
                 Ok(bounded) if bounded == current => None,
                 Ok(bounded) => Some(bounded),
                 Err(_) if is_read_only_within(&current, &saved) => None,
+                // #2384: removing a profile must not bring its grants back.
+                Err(err) if persisted_profile_id_unresolved => {
+                    tracing::warn!(
+                        error = %err,
+                        "removed permission profile's snapshot cannot bound the current defaults; resuming without writes or network"
+                    );
+                    Some(without_writes_or_network(&current))
+                }
                 Err(err) => {
                     tracing::warn!(
                         error = %err,

@@ -220,7 +220,7 @@ async fn permission_confirmation_f07_conflicts_are_refused_and_old_completion_ca
 async fn permission_confirmation_f10_request_does_not_optimistically_apply_or_persist() {
     Box::pin(async {
         for (initial, policy, requested) in [
-            (":read-only", "untrusted", ":danger-full-access"),
+            (":read-only", "on-request", ":danger-full-access"),
             (":danger-full-access", "never", ":read-only"),
         ] {
             let home = tempfile::tempdir().unwrap();

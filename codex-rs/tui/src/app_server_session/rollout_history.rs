@@ -132,6 +132,10 @@ impl AppServerSession {
             .history_mode = history_mode;
     }
 
+    /// Test shorthand for a resume that sends no permission choice. Product
+    /// paths name theirs, so Aggressive's launch approval override is never
+    /// dropped by omission (D621, #2310).
+    #[cfg(test)]
     pub(crate) async fn resume_thread(
         &mut self,
         local_settings: &crate::local_settings::LocalSettings,
@@ -217,6 +221,7 @@ impl AppServerSession {
         if params.exclude_turns {
             rollout_maintenance_guard = None;
         }
+        crate::security::aggressive::enforce_approval(&mut params.approval_policy);
         let request_id = self.next_request_id();
         let resume_response = self
             .request_handle

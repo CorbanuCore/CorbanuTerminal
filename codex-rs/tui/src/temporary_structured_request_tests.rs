@@ -315,3 +315,68 @@ async fn rejects_oversized_assistant_message() {
         "temporary structured response exceeds 8192 bytes"
     );
 }
+
+/// D621 (#2310): under Aggressive the throwaway thread takes `untrusted`,
+/// never the user's own policy; otherwise it keeps inheriting the server's.
+#[tokio::test]
+async fn aggressive_temporary_thread_sends_untrusted() -> color_eyre::Result<()> {
+    use crate::security::level::ChosenLevel;
+
+    for aggressive in [false, true] {
+        let _levels = aggressive.then(|| {
+            crate::security::level::test_levels::set(
+                ChosenLevel::Aggressive,
+                ChosenLevel::Aggressive,
+            )
+        });
+        let codex_home = tempdir()?;
+        std::fs::write(
+            codex_home.path().join("config.toml"),
+            "approval_policy = \"never\"\n",
+        )?;
+        let loader_overrides = LoaderOverrides {
+            ignore_project_config: true,
+            ..LoaderOverrides::without_managed_config_for_tests()
+        };
+        let config = ConfigBuilder::default()
+            .codex_home(codex_home.path().to_path_buf())
+            .fallback_cwd(Some(codex_home.path().to_path_buf()))
+            .loader_overrides(loader_overrides.clone())
+            .build()
+            .await?;
+        let options = TemporaryStructuredThreadOptions {
+            thread_source: ThreadSource::Feature("thread_title".to_string()),
+            model: "gpt-5.2".to_string(),
+            model_provider: config.model_provider_id.clone(),
+            cwd: config.cwd.to_string_lossy().into_owned(),
+            active_permission_profile: None,
+            mcp_server_names: Vec::new(),
+        };
+        let client = crate::start_embedded_app_server(
+            Default::default(),
+            config,
+            Vec::new(),
+            loader_overrides,
+            /*strict_config*/ false,
+            Default::default(),
+            codex_feedback::CodexFeedback::new(),
+            /*log_db*/ None,
+            /*state_db*/ None,
+            Arc::new(EnvironmentManager::default_for_tests()),
+            Default::default(),
+        )
+        .await?;
+        let app_server = AppServerClient::InProcess(client);
+        let response = start_temporary_thread(&app_server.request_handle(), options).await?;
+        app_server.shutdown().await?;
+        assert_eq!(
+            response.approval_policy,
+            if aggressive {
+                AskForApproval::UnlessTrusted
+            } else {
+                AskForApproval::Never
+            }
+        );
+    }
+    Ok(())
+}

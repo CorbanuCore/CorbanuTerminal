@@ -1211,6 +1211,38 @@ mod thread_processor_behavior_tests {
     }
 
     #[test]
+    fn resume_passes_named_profile_snapshot_with_its_id() {
+        // #2384: core caps the fallback with this snapshot if the id is removed.
+        let thread_id = ThreadId::new();
+        let mut history = persisted_workspace_permission_history();
+        let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &mut history[0] else {
+            panic!("fixture")
+        };
+        event.thread_id = Some(thread_id);
+        event.thread_settings.active_permission_profile = Some(
+            codex_protocol::models::ActivePermissionProfile::new("removed-profile"),
+        );
+        let settings =
+            PersistedResumeSettings::from_history(&history, thread_id).expect("owned settings");
+        let mut typesafe_overrides = ConfigOverrides::default();
+        apply_persisted_permission_profile(
+            &settings,
+            /*request_overrides*/ None,
+            &mut typesafe_overrides,
+        );
+        assert_eq!(
+            typesafe_overrides
+                .persisted_permission_profile_id
+                .as_deref(),
+            Some("removed-profile")
+        );
+        assert_eq!(
+            typesafe_overrides.persisted_permission_profile,
+            Some(codex_protocol::models::PermissionProfile::workspace_write())
+        );
+    }
+
+    #[test]
     fn resume_permission_restore_preserves_explicit_override() {
         let thread_id = ThreadId::new();
         let mut history = persisted_workspace_permission_history();
