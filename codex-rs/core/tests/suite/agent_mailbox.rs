@@ -3,6 +3,7 @@
 use super::*;
 use crate::suite::settings_commits::COMMITTED_MODEL;
 use crate::suite::settings_commits::PauseAfterCommit;
+use codex_core::ThreadEvictionOutcome;
 use codex_core::config::Config;
 use codex_extension_api::ExtensionRegistryBuilder;
 use codex_extension_api::MessageLifecycleContributor;
@@ -11,6 +12,7 @@ use codex_protocol::ResponseItemId;
 use codex_protocol::ThreadId;
 use codex_protocol::protocol::AgentStatus;
 use codex_protocol::protocol::Op;
+use codex_state::AgentMailboxPhase;
 use core_test_support::ThreadIdle;
 use pretty_assertions::assert_eq;
 use std::collections::HashSet;
@@ -63,6 +65,7 @@ async fn idle_mail_survives_eviction_and_preserves_followup_order() -> Result<()
         .with_config(|config| {
             config.features.enable(Feature::Collab).unwrap();
             config.features.enable(Feature::MultiAgentV2).unwrap();
+            config.features.enable(Feature::Sqlite).unwrap();
             config.multi_agent_v2.max_concurrent_threads_per_session = 2;
             config.multi_agent_v2.hide_spawn_agent_metadata = true;
         })
@@ -92,6 +95,15 @@ async fn idle_mail_survives_eviction_and_preserves_followup_order() -> Result<()
         first.agent_status().await,
         AgentStatus::Completed(Some("worker completed".into()))
     );
+    let state_db = first.state_db().expect("durable mailbox enabled");
+    let queued = state_db
+        .list_recoverable_agent_messages(first_id)
+        .await?
+        .into_iter()
+        .find(|message| message.communication.content == MAIL)
+        .expect("queued note has a durable row");
+    assert_eq!(queued.phase, AgentMailboxPhase::Submitted);
+    let message_id = queued.communication.message_id.as_deref().unwrap();
     drop(first);
 
     mount_root_collaboration_call(
@@ -117,6 +129,11 @@ async fn idle_mail_survives_eviction_and_preserves_followup_order() -> Result<()
     ThreadIdle::wait(&replacement).await;
     assert!(test.thread_manager.get_thread(first_id).await.is_err());
     assert_eq!(test.thread_manager.list_thread_ids().await.len(), 2);
+    assert_eq!(
+        state_db.get_agent_message(message_id).await?,
+        Some(queued.clone()),
+        "eviction must preserve the durable row for reload recovery"
+    );
     mount_root_collaboration_call(
         &server,
         "send while unloaded",
@@ -133,6 +150,22 @@ async fn idle_mail_survives_eviction_and_preserves_followup_order() -> Result<()
     assert_eq!(retained.len(), 2);
     // Reload without starting a turn, then hold dispatch while both tools submit.
     // The older queued notes must precede the follow-up, and the newer note must follow it.
+    test.thread_manager
+        .ensure_multi_agent_v2_child_loaded(first_id)
+        .await?;
+    let resumed = test.thread_manager.get_thread(first_id).await?;
+    submit_thread_settings(&resumed, ThreadSettingsOverrides::default()).await?;
+    let recovered = state_db.get_agent_message(message_id).await?.unwrap();
+    assert_eq!(recovered.communication, queued.communication);
+    assert_eq!(recovered.phase, AgentMailboxPhase::Submitted);
+    assert_ne!(recovered.attempt_id, queued.attempt_id);
+
+    // A second eviction before consumption must retain the same publications and leave
+    // recovery as the sole owner of message content again.
+    assert_eq!(
+        test.thread_manager.try_evict_v2_thread(resumed).await?,
+        ThreadEvictionOutcome::Evicted
+    );
     test.thread_manager
         .ensure_multi_agent_v2_child_loaded(first_id)
         .await?;

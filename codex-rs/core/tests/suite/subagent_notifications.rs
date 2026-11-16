@@ -458,12 +458,13 @@ async fn wait_for_requests(
     }
 }
 
-/// The child's spawned-task request: it carries the child's prompt but not the
-/// parent's spawn call. A `ResponseMock` records every request that reaches it
+/// The child's spawned-task request is identified by its agent identity; a full
+/// fork also carries the parent's spawn call. A `ResponseMock` records every request that reaches it
 /// before its own matcher runs, so it can also hold parent requests; wait for
 /// this one rather than for any request.
 fn is_child_task_request(request: &ResponsesRequest) -> bool {
-    request.body_contains_text(CHILD_PROMPT) && !request.body_contains_text(SPAWN_CALL_ID)
+    request.body_contains_text(CHILD_PROMPT)
+        && request.body_contains_text(r#""agent_name":"/root/worker""#)
 }
 
 async fn wait_for_child_task_request(
@@ -563,7 +564,8 @@ async fn setup_turn_one_with_custom_spawned_child(
         mount_response_once_match(
             server,
             |req: &wiremock::Request| {
-                body_contains(req, CHILD_PROMPT) && !body_contains(req, SPAWN_CALL_ID)
+                body_contains(req, CHILD_PROMPT)
+                    && body_contains(req, r#"\"agent_name\":\"/root/worker\""#)
             },
             sse_response(child_sse).set_delay(delay),
         )
@@ -572,7 +574,8 @@ async fn setup_turn_one_with_custom_spawned_child(
         mount_sse_once_match(
             server,
             |req: &wiremock::Request| {
-                body_contains(req, CHILD_PROMPT) && !body_contains(req, SPAWN_CALL_ID)
+                body_contains(req, CHILD_PROMPT)
+                    && body_contains(req, r#"\"agent_name\":\"/root/worker\""#)
             },
             child_sse,
         )
@@ -581,7 +584,9 @@ async fn setup_turn_one_with_custom_spawned_child(
 
     let _turn1_followup = mount_sse_once_match(
         server,
-        |req: &wiremock::Request| body_contains(req, SPAWN_CALL_ID),
+        |req: &wiremock::Request| {
+            body_contains(req, SPAWN_CALL_ID) && body_contains(req, r#"\"agent_name\":\"/root\""#)
+        },
         sse(vec![
             ev_response_created("resp-turn1-2"),
             ev_assistant_message("msg-turn1-2", "parent done"),
@@ -1258,7 +1263,8 @@ async fn spawned_child_receives_forked_parent_context(
     let child_request_log = mount_sse_once_match(
         &server,
         |req: &wiremock::Request| {
-            body_contains(req, CHILD_PROMPT) && !body_contains(req, SPAWN_CALL_ID)
+            body_contains(req, CHILD_PROMPT)
+                && body_contains(req, r#"\"agent_name\":\"/root/worker\""#)
         },
         sse(vec![
             ev_response_created("resp-child-1"),
@@ -1270,7 +1276,9 @@ async fn spawned_child_receives_forked_parent_context(
 
     let _turn1_followup = mount_sse_once_match(
         &server,
-        |req: &wiremock::Request| body_contains(req, SPAWN_CALL_ID),
+        |req: &wiremock::Request| {
+            body_contains(req, SPAWN_CALL_ID) && body_contains(req, r#"\"agent_name\":\"/root\""#)
+        },
         sse(vec![
             ev_response_created("resp-turn1-2"),
             ev_assistant_message("msg-turn1-2", "parent done"),
@@ -1306,6 +1314,15 @@ async fn spawned_child_receives_forked_parent_context(
 
     let child_request = wait_for_request_with_model(&child_request_log, REQUESTED_MODEL).await?;
     assert!(child_request.body_contains_text(TURN_0_FORK_PROMPT));
+    // A full fork retains the in-flight parent spawn call as well as its messages.
+    assert_eq!(
+        child_request
+            .input()
+            .iter()
+            .filter(|item| { item["type"] == "function_call" && item["call_id"] == SPAWN_CALL_ID })
+            .count(),
+        1,
+    );
     let child_body = child_request.body_json();
     let child_metadata: serde_json::Value = serde_json::from_str(
         child_body["client_metadata"]["x-codex-turn-metadata"]

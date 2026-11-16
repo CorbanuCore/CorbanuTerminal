@@ -607,6 +607,13 @@ impl LocalAgentControl {
                 let submission_id = self
                     .admit_for_unloaded_recipient(agent_id, state_db, communication)
                     .await?;
+                if let Some(delivery) = delivery {
+                    self.runtime.mailboxes.retain_durable_delivery(
+                        agent_id,
+                        submission_id.clone(),
+                        delivery,
+                    )?;
+                }
                 drop(threads);
                 crate::agent_communication::emit_agent_communication_send(
                     &submission_id,

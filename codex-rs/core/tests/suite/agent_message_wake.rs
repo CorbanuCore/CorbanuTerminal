@@ -95,6 +95,7 @@ impl ExternalAuth for WakeBarriers {
 #[derive(Clone, Copy)]
 enum WakeBoundary {
     Interrupt,
+    KillSwitch,
     Plan,
 }
 
@@ -105,6 +106,7 @@ enum AgentMessageWake {
 }
 
 #[test_case(WakeBoundary::Interrupt, AgentMessageWake::Enabled; "interrupt_during_discovery")]
+#[test_case(WakeBoundary::KillSwitch, AgentMessageWake::Enabled; "kill_switch_during_discovery")]
 #[test_case(WakeBoundary::Plan, AgentMessageWake::Enabled; "plan_mode_during_discovery")]
 #[test_case(WakeBoundary::Interrupt, AgentMessageWake::Disabled; "disabled_interrupt_preserves_status_and_explicit_followup")]
 #[test_case(WakeBoundary::Plan, AgentMessageWake::Disabled; "disabled_plan_allows_explicit_followup")]
@@ -132,6 +134,10 @@ async fn pending_agent_message_wake_respects_control_changes(
     let test = test_codex()
         .with_extensions(Arc::new(extensions.build()))
         .with_config(move |config| {
+            if matches!(boundary, WakeBoundary::KillSwitch) {
+                config.security_level = codex_security_policy::SecurityLevel::Aggressive;
+                config.features.enable(Feature::SourceEnvelopes).unwrap();
+            }
             for feature in [Feature::Collab, Feature::MultiAgentV2] {
                 config.features.enable(feature).expect("enable agent mail");
             }
@@ -202,8 +208,28 @@ async fn pending_agent_message_wake_respects_control_changes(
         ThreadIdle::wait(&test.codex).await;
     }
 
+    let switch = |choice| {
+        use codex_core::security_level_change::LevelBasis;
+        use codex_core::security_revocation::commit_human_revocation;
+        use codex_security_policy::SecurityLevel;
+        let home = test.codex_home_path();
+        let thread = Some(test.session_configured.thread_id);
+        let basis = LevelBasis::read(home, SecurityLevel::Aggressive, thread);
+        assert!(basis.live);
+        commit_human_revocation(
+            home,
+            SecurityLevel::Aggressive,
+            thread,
+            &basis,
+            choice,
+            /*now_unix_seconds*/ 1_000,
+        )
+    };
     let expected_mail = match boundary {
-        WakeBoundary::Interrupt => {
+        WakeBoundary::Interrupt | WakeBoundary::KillSwitch => {
+            if matches!(boundary, WakeBoundary::KillSwitch) {
+                switch(codex_core::security_revocation::HumanRevocation::KillSwitchOn)?;
+            }
             let previous_status = test.codex.agent_status().await;
             test.codex.submit(Op::Interrupt).await?;
             if !wakes_on_agent_messages {
@@ -237,6 +263,17 @@ async fn pending_agent_message_wake_respects_control_changes(
     release_discovery
         .send(())
         .expect("control change must complete while wake discovery is paused");
+
+    if matches!(boundary, WakeBoundary::KillSwitch) {
+        // The refusal completes after discovery. It must not send a model request or
+        // consume the mail; switching off alone must not revive the cancelled wake.
+        wait_for_event(&test.codex, |event| {
+            matches!(event, EventMsg::Warning(warning) if warning.message.contains("Agent messages remain queued"))
+        })
+        .await;
+        assert_eq!(mock.requests().len(), 1);
+        switch(codex_core::security_revocation::HumanRevocation::KillSwitchOff)?;
+    }
 
     let (mail_request_index, final_turn_id) = if wakes_on_agent_messages {
         // StartIfIdle cannot replace the reserved wake. Acceptance is the barrier

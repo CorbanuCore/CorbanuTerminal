@@ -9,7 +9,9 @@ use codex_features::Feature;
 use codex_login::CodexAuth;
 use codex_protocol::ThreadId;
 use codex_protocol::error::CodexErrorDetails;
+use codex_protocol::protocol::AgentPath;
 use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::ThreadSource;
@@ -20,9 +22,10 @@ use pretty_assertions::assert_eq;
 use std::sync::Arc;
 
 #[tokio::test]
-async fn residency_slot_reservation_unloads_oldest_idle_v2_agent() {
+async fn residency_slot_reservation_unloads_oldest_idle_v2_agent_with_volatile_mail() {
     let mut config = test_config().await;
     let _ = config.features.enable(Feature::MultiAgentV2);
+    let _ = config.features.disable(Feature::Sqlite);
     config.multi_agent_v2.max_concurrent_threads_per_session = 2;
     let temp_home = tempfile::tempdir().expect("create temp home");
     config.codex_home = temp_home.path().to_path_buf().try_into().unwrap();
@@ -57,6 +60,20 @@ async fn residency_slot_reservation_unloads_oldest_idle_v2_agent() {
         spawn_v2_subagent(&control, &state, config.clone(), root.thread_id, "worker-1").await;
     first_slot.commit(first.thread_id);
     mark_thread_completed(first.thread.as_ref()).await;
+    assert!(first.thread.state_db().is_none());
+    let queued = InterAgentCommunication::new(
+        AgentPath::root(),
+        AgentPath::try_from("/root/worker-1").unwrap(),
+        Vec::new(),
+        "keep this note without a durable mailbox".to_string(),
+        /*trigger_turn*/ false,
+    );
+    first
+        .thread
+        .session
+        .input_queue
+        .enqueue_mailbox_communication(queued.clone().into(), Default::default())
+        .await;
 
     let second_slot = control
         .reserve_v2_residency_slot(
@@ -74,6 +91,15 @@ async fn residency_slot_reservation_unloads_oldest_idle_v2_agent() {
         },
         Ok(_) => panic!("expected evicted thread to be missing"),
     }
+    assert_eq!(
+        control.runtime.mailboxes.take(first.thread_id),
+        vec![queued.into()],
+        "mail without a durable row is handed back to the controller"
+    );
+    assert!(
+        control.runtime.mailboxes.take(first.thread_id).is_empty(),
+        "the stored message can be taken only once"
+    );
     let second = spawn_v2_subagent(&control, &state, config, root.thread_id, "worker-2").await;
     second_slot.commit(second.thread_id);
 

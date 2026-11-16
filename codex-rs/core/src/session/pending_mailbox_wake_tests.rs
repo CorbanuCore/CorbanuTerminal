@@ -52,8 +52,8 @@ async fn pending_mailbox_wake_checks_idle_before_preparing_a_turn() {
             let active_turn = session.active_turn.lock().await;
             match (active_turn.as_ref(), original_turn_state.as_ref()) {
                 (Some(turn), Some(original)) => assert!(Arc::ptr_eq(&turn.turn_state, original)),
-                (None, None) => {}
-                _ => panic!("the wake changed the active turn before preparing a new one"),
+                (Some(turn), None) => assert!(turn.task.is_none()),
+                _ => panic!("a busy wake must preserve its turn; an idle wake must reserve one"),
             }
         }
         // Upstream's `TurnStartOptions` (which now carries the parent turn) has

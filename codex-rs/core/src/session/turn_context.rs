@@ -552,6 +552,8 @@ pub struct TurnContext {
     /// Direct operator turns in a managed child pane must not report their result to the
     /// child's structural parent.
     pub(crate) parent_completion_expected: Arc<AtomicBool>,
+    /// A pre-turn kill-switch or sign-in refusal keeps the existing input-rejection path.
+    pub(crate) turn_refused: Arc<AtomicBool>,
     pub(crate) terminal_error: Arc<Mutex<Option<ErrorEvent>>>,
     pub(crate) model_edit_protocol_state: Arc<ModelEditProtocolState>,
     pub(crate) explicit_tool_budget_state: Arc<ExplicitToolBudgetState>,
@@ -651,6 +653,7 @@ impl TurnContext {
             extension_data,
             turn_timing_state: Arc::new(TurnTimingState::default()),
             parent_completion_expected: Arc::new(AtomicBool::new(false)),
+            turn_refused: Arc::new(AtomicBool::new(false)),
             terminal_error: Arc::new(Mutex::new(None)),
             model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
             explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
@@ -1157,6 +1160,7 @@ impl TurnContext {
             extension_data: Arc::clone(&self.extension_data),
             turn_timing_state: Arc::clone(&self.turn_timing_state),
             parent_completion_expected: Arc::clone(&self.parent_completion_expected),
+            turn_refused: Arc::clone(&self.turn_refused),
             terminal_error: Arc::clone(&self.terminal_error),
             model_edit_protocol_state: Arc::clone(&self.model_edit_protocol_state),
             explicit_tool_budget_state: Arc::clone(&self.explicit_tool_budget_state),
@@ -1600,6 +1604,7 @@ impl Session {
             extension_data,
             turn_timing_state: Arc::new(TurnTimingState::default()),
             parent_completion_expected: Arc::new(AtomicBool::new(false)),
+            turn_refused: Arc::new(AtomicBool::new(false)),
             terminal_error: Arc::new(Mutex::new(None)),
             model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
             explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
