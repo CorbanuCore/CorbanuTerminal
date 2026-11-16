@@ -2,13 +2,22 @@
 //! rate limits here; plugin listings, settings and analytics go through the
 //! same sign-in) use the account the user's session runs on. A session on a
 //! named ChatGPT account never sends the default login's token.
+//!
+//! #2378 (D562): that includes upstream's workspace-routing check
+//! (`accounts/check`) behind `account/read` and its background refresh: it
+//! runs only while the session is on the default login. Each test reads the
+//! account, so a check sent with the default login fails it deterministically
+//! rather than depending on the background refresh's timing.
 
 use anyhow::Result;
 use app_test_support::ChatGptAuthFixture;
 use app_test_support::TestAppServer;
+use app_test_support::mount_workspace_routing;
 use app_test_support::to_response;
 use app_test_support::write_chatgpt_auth;
 use app_test_support::write_named_chatgpt_auth;
+use codex_app_server_protocol::GetAccountParams;
+use codex_app_server_protocol::GetAccountResponse;
 use codex_app_server_protocol::JSONRPCError;
 use codex_app_server_protocol::JSONRPCResponse;
 use codex_app_server_protocol::RequestId;
@@ -31,6 +40,7 @@ use wiremock::matchers::path;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_TOKEN: &str = "pf84-658-default-login-token";
 const WORK_TOKEN: &str = "pf84-658-work-account-token";
+const ROUTING_CHECK: &str = "/api/codex/accounts/check";
 
 /// A home with a default ChatGPT login and a named ChatGPT account `work`,
 /// both pointing at `server` for the ChatGPT backend and model requests.
@@ -98,6 +108,25 @@ async fn mount_usage(server: &MockServer) {
         })))
         .mount(server)
         .await;
+    mount_workspace_routing(server).await;
+}
+
+/// `account/read`, which runs the workspace-routing check on the session's
+/// account; returns whether it reported workspace routing.
+async fn read_account_routing(app: &mut TestAppServer) -> Result<bool> {
+    let request = app
+        .send_get_account_request(GetAccountParams {
+            refresh_token: false,
+        })
+        .await?;
+    let response = timeout(
+        DEFAULT_TIMEOUT,
+        app.read_stream_until_response_message(RequestId::Integer(request)),
+    )
+    .await??;
+    Ok(to_response::<GetAccountResponse>(response)?
+        .workspace_routing
+        .is_some())
 }
 
 async fn start_thread(app: &mut TestAppServer, account: Option<&str>) -> Result<String> {
@@ -192,10 +221,15 @@ async fn a_session_started_on_a_named_account_never_sends_the_default_login() ->
         .build_initialized_with_timeout(DEFAULT_TIMEOUT)
         .await?;
     read_rate_limits(&mut app).await?;
+    assert!(!read_account_routing(&mut app).await?);
 
     assert_eq!(
         tokens_for(&server, "/api/codex/usage").await,
         vec![WORK_TOKEN.to_string()]
+    );
+    assert_eq!(
+        tokens_for(&server, ROUTING_CHECK).await,
+        Vec::<String>::new()
     );
     assert!(!default_login_was_sent(&server).await);
     Ok(())
@@ -221,12 +255,18 @@ async fn backend_requests_follow_a_thread_started_on_a_named_account() -> Result
         refusal.contains("not known until its conversation starts"),
         "{refusal}"
     );
+    assert!(!read_account_routing(&mut app).await?);
     start_thread(&mut app, Some("work")).await?;
     read_rate_limits(&mut app).await?;
+    assert!(!read_account_routing(&mut app).await?);
 
     assert_eq!(
         tokens_for(&server, "/api/codex/usage").await,
         vec![WORK_TOKEN.to_string()]
+    );
+    assert_eq!(
+        tokens_for(&server, ROUTING_CHECK).await,
+        Vec::<String>::new()
     );
     assert!(!default_login_was_sent(&server).await);
     Ok(())
@@ -256,6 +296,9 @@ async fn sessions_on_different_accounts_send_neither_login() -> Result<()> {
         refusal.contains("sessions on different accounts are open"),
         "{refusal}"
     );
+    // Not checked on either account (the default-login pane's own model
+    // requests may still run the check with its login).
+    assert!(!read_account_routing(&mut app).await?);
     // (The pane on the default login sends its own requests with it.)
     assert_eq!(
         tokens_for(&server, "/api/codex/usage").await,
@@ -280,10 +323,17 @@ async fn a_session_on_the_default_login_still_uses_it() -> Result<()> {
         .await?;
     start_thread(&mut app, /*account*/ None).await?;
     read_rate_limits(&mut app).await?;
+    // The routing check runs, on the default login (the mock is reachable).
+    assert!(read_account_routing(&mut app).await?);
 
     assert_eq!(
         tokens_for(&server, "/api/codex/usage").await,
         vec![DEFAULT_TOKEN.to_string()]
+    );
+    let checks = tokens_for(&server, ROUTING_CHECK).await;
+    assert!(
+        !checks.is_empty() && checks.iter().all(|token| token == DEFAULT_TOKEN),
+        "{checks:?}"
     );
     Ok(())
 }
