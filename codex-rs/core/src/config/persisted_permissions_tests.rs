@@ -488,3 +488,62 @@ async fn managed_allowed_permission_profiles_still_choose_the_profile() -> anyho
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn unintersectable_removed_profile_snapshot_is_not_restored() -> anyhow::Result<()> {
+    let workspace = TempDir::new()?;
+    let root = dunce::canonicalize(workspace.path())?;
+    let cwd = root.join("project");
+    let gone = root.join("gone");
+    std::fs::create_dir_all(&cwd)?;
+    // The snapshot's writable `gone` no longer exists, so it cannot be
+    // canonicalized and the intersection fails. Its network and `gone` grants must
+    // not come back; the fallback default loses its writes and network instead.
+    let snapshot = PermissionProfile::from_runtime_permissions(
+        &FileSystemSandboxPolicy::restricted(vec![
+            FileSystemSandboxEntry::new(
+                FileSystemPath::Special {
+                    value: FileSystemSpecialPath::Root,
+                },
+                FileSystemAccessMode::Read,
+            ),
+            FileSystemSandboxEntry::new(
+                AbsolutePathBuf::from_absolute_path_checked(&cwd)?.into(),
+                FileSystemAccessMode::Write,
+            ),
+            FileSystemSandboxEntry::new(
+                AbsolutePathBuf::from_absolute_path_checked(&gone)?.into(),
+                FileSystemAccessMode::Write,
+            ),
+        ]),
+        NetworkSandboxPolicy::Enabled,
+    );
+
+    let config = resume_with_config(
+        "default_permissions = \":workspace\"\n",
+        &cwd,
+        ConfigOverrides {
+            persisted_permission_profile_id: Some("removed-profile".to_string()),
+            persisted_permission_profile: Some(snapshot),
+            ..Default::default()
+        },
+    )
+    .await?;
+
+    let profile = config
+        .permissions
+        .permission_profile()
+        .clone()
+        .materialize_project_roots_with_workspace_roots(&config.workspace_roots);
+    let file_system = profile.file_system_sandbox_policy();
+    assert_eq!(
+        [cwd.as_path(), gone.as_path()]
+            .map(|path| file_system.can_write_local_path_with_cwd(path, &cwd)),
+        [false, false]
+    );
+    assert_eq!(
+        profile.network_sandbox_policy(),
+        NetworkSandboxPolicy::Restricted
+    );
+    Ok(())
+}

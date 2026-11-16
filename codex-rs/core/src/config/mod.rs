@@ -156,6 +156,7 @@ use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::permissions::DenyReadValidator;
 use codex_protocol::permissions::DenyReadViolation;
+use codex_protocol::permissions::FileSystemAccessMode;
 use codex_protocol::permissions::FileSystemPath;
 use codex_protocol::permissions::FileSystemSandboxKind;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
@@ -733,6 +734,25 @@ fn is_read_only_within(current: &PermissionProfile, saved: &PermissionProfile) -
             .any(|entry| entry.access.can_write())
         && saved_file_system.has_full_disk_read_access()
         && (!current_network.is_enabled() || saved_network.is_enabled())
+}
+
+/// #2384 / D650: fail-closed fallback when a removed named profile's snapshot
+/// cannot bound the current profile: the current profile with every write
+/// downgraded to read and no network. It is never broader than the current
+/// profile and grants no write or network access the snapshot might lack.
+fn without_writes_or_network(current: &PermissionProfile) -> PermissionProfile {
+    let (mut file_system, _) = current.to_runtime_permissions();
+    if !matches!(current, PermissionProfile::Managed { .. })
+        || file_system.kind != FileSystemSandboxKind::Restricted
+    {
+        return PermissionProfile::read_only();
+    }
+    for entry in &mut file_system.entries {
+        if entry.access.can_write() {
+            entry.access = FileSystemAccessMode::Read;
+        }
+    }
+    PermissionProfile::from_runtime_permissions(&file_system, NetworkSandboxPolicy::Restricted)
 }
 
 /// #2384 / D650: caps the current profile by a saved executor-enforced
@@ -4935,7 +4955,8 @@ impl Config {
         // #2384 / D650: a saved `External` profile is never restored; it only removes
         // network access the thread did not have. The snapshot of a removed or
         // invalid named profile always bounds the fallback default, even without
-        // materialized grants, since restoring it as-is could be broader.
+        // materialized grants, and is never restored as-is: if the two cannot be
+        // intersected, the default loses its writes and network instead.
         let persisted_permission_profile = persisted_permission_profile.and_then(|saved| {
             let roots = workspace_roots
                 .iter()
@@ -4960,6 +4981,14 @@ impl Config {
                 Ok(bounded) if bounded == current => None,
                 Ok(bounded) => Some(bounded),
                 Err(_) if is_read_only_within(&current, &saved) => None,
+                // #2384: removing a profile must not bring its grants back.
+                Err(err) if persisted_profile_id_unresolved => {
+                    tracing::warn!(
+                        error = %err,
+                        "removed permission profile's snapshot cannot bound the current defaults; resuming without writes or network"
+                    );
+                    Some(without_writes_or_network(&current))
+                }
                 Err(err) => {
                     tracing::warn!(
                         error = %err,
