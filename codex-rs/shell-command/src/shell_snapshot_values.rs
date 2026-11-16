@@ -7,14 +7,15 @@ use std::borrow::Cow;
 
 /// Record that opens the value section. It is not a shell identifier, so it
 /// cannot be mistaken for the first export record of a capture without values.
-pub(super) const VALUES_MARKER: &[u8] = b"#values";
+pub const VALUES_MARKER: &[u8] = b"#values";
 const VALUES_END: &[u8] = b"#end";
 
 /// `#values NUL (name NUL value NUL)* #end NUL count NUL`. A non-identifier
 /// end record, not an empty one, so a lost or merged byte cannot end the
 /// section early at an empty value; the record count catches a dropped record. The subshell keeps the loop variables out of later sections;
-/// a failed subshell fails the whole capture.
-pub(super) fn script(shell_type: ShellType) -> String {
+/// a failed subshell fails the whole capture. Shared by Core's snapshot file
+/// and the executor's in-memory snapshot (#2392).
+pub fn script(shell_type: ShellType) -> String {
     let body = match shell_type {
         ShellType::Bash => {
             r#"(
@@ -39,9 +40,11 @@ pub(super) fn script(shell_type: ShellType) -> String {
         }
         ShellType::Zsh => {
             r#"(
-  unsetopt nounset 2>/dev/null
+  # Native options, whatever startup set or argv[0] selected (`c*` is csh).
+  emulate zsh 2>/dev/null || exit 1
   __codex_snapshot_value_count=0
-  for __codex_snapshot_value_name in "${(@f)$(builtin typeset +)}"; do
+  # `typeset` is a reserved word: unlike `builtin`, a startup function cannot shadow it.
+  for __codex_snapshot_value_name in "${(@f)$(typeset +)}"; do
     __codex_snapshot_value_name=${__codex_snapshot_value_name##* }
     case "$__codex_snapshot_value_name" in
       ""|[0-9]*|*[!A-Za-z0-9_]*|__codex_snapshot_*) continue ;;
@@ -103,7 +106,7 @@ pub(super) fn script(shell_type: ShellType) -> String {
 }
 
 /// Decode the value section after its marker. Any malformed record rejects the capture.
-pub(super) fn parse<'a>(remaining: &mut &'a [u8]) -> Option<Vec<(&'a str, Cow<'a, str>)>> {
+pub fn parse<'a>(remaining: &mut &'a [u8]) -> Option<Vec<(&'a str, Cow<'a, str>)>> {
     let mut values = Vec::new();
     loop {
         let name = super::capture::take_record(remaining)?;
