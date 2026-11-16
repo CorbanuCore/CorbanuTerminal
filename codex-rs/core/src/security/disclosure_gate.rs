@@ -20,6 +20,8 @@
 
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::secretless_launch;
+use codex_protocol::secretless_launch::is_plausible_secret;
+use codex_protocol::secretless_launch::is_secret_key;
 use codex_secret_broker::output_gate;
 use codex_secret_broker::output_gate::OutputGate;
 use codex_secret_broker::output_gate::OutputSink;
@@ -39,57 +41,9 @@ use std::time::Duration;
 use std::time::SystemTime;
 use zeroize::Zeroizing;
 
-/// Environment values shorter than this are flags, not credentials.
-const MIN_ENV_VALUE_BYTES: usize = 8;
 /// Open streams tracked at once; the oldest is dropped (its held-back tail is
 /// simply not shown; the completed item carries the full gated text).
 const MAX_OPEN_STREAMS: usize = 512;
-
-/// Secret-looking names whose values are session plumbing, not credentials.
-const NON_CREDENTIAL_ENV_PREFIXES: &[&str] = &["XDG_", "GNOME_KEYRING_", "DBUS_"];
-const NON_CREDENTIAL_ENV_NAMES: &[&str] = &[
-    "DESKTOP_SESSION",
-    "SESSION_MANAGER",
-    "XAUTHORITY",
-    "KEYTIMEOUT",
-];
-const NON_CREDENTIAL_ENV_SUFFIXES: &[&str] = &[
-    "_SOCK",
-    "_PID",
-    "_ADDR",
-    "_PATH",
-    "_DIR",
-    "_FILE",
-    "_URL",
-    "_URI",
-    "_HOST",
-    "_USER",
-    "_USERNAME",
-    "_NAME",
-    "_EMAIL",
-    "_REGION",
-    "_ENDPOINT",
-];
-/// Fragments that make a secret-looking name ordinary (`GIT_AUTHOR_NAME`
-/// contains `AUTH`; `KEYBOARD` contains `KEY`).
-const NON_CREDENTIAL_ENV_FRAGMENTS: &[&str] = &["AUTHOR", "KEYBOARD", "KEYMAP", "KEYCHAIN"];
-/// Values at least this long need no mix of character classes.
-const LONG_SECRET_BYTES: usize = 16;
-
-/// Key fragments that mark a value in a sign-in or config file as secret.
-const SECRET_KEY_FRAGMENTS: &[&str] = &[
-    "TOKEN",
-    "SECRET",
-    "PASSWORD",
-    "PASSWD",
-    "API_KEY",
-    "APIKEY",
-    "AUTHORIZATION",
-    "CREDENTIAL",
-    "PRIVATE_KEY",
-    "ACCESS_KEY",
-    "COOKIE",
-];
 
 /// Sign-in files under `CODEX_HOME` whose secret-named values are managed.
 const SIGN_IN_FILES: &[&str] = &["auth.json", "provider_auth.json", ".credentials.json"];
@@ -858,49 +812,10 @@ fn finish_streams(gate: &OutputGate, select: impl Fn(&str, &OpenStream) -> bool)
     out
 }
 
-fn is_credential_env_name(name: &str) -> bool {
-    let upper = name.to_ascii_uppercase();
-    secretless_launch::is_secret_looking_name(&upper)
-        && !NON_CREDENTIAL_ENV_NAMES.contains(&upper.as_str())
-        && !NON_CREDENTIAL_ENV_FRAGMENTS
-            .iter()
-            .any(|fragment| upper.contains(fragment))
-        && !NON_CREDENTIAL_ENV_PREFIXES
-            .iter()
-            .any(|prefix| upper.starts_with(prefix))
-        && !NON_CREDENTIAL_ENV_SUFFIXES
-            .iter()
-            .any(|suffix| upper.ends_with(suffix))
-}
-
-/// Long enough, shaped like a credential rather than a word, not an
-/// existing path, and not a variable name (`GITHUB_TOKEN` as a config value
-/// names where the secret lives). Redacting ordinary text would corrupt what
-/// the model reads and edits, so seeding errs towards real credentials.
-fn is_plausible_secret(value: &str) -> bool {
-    let names_a_variable = value.contains('_')
-        && value.starts_with(|ch: char| ch.is_ascii_uppercase())
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_');
-    value.len() >= MIN_ENV_VALUE_BYTES
-        && (value.len() >= LONG_SECRET_BYTES || character_classes(value) >= 2)
-        && !(value.starts_with('/') && Path::new(value).exists())
-        && !names_a_variable
-}
-
-/// Lowercase, uppercase, digit and other: how many appear.
-fn character_classes(value: &str) -> usize {
-    let has = |test: fn(&u8) -> bool| usize::from(value.bytes().any(|byte| test(&byte)));
-    has(u8::is_ascii_lowercase)
-        + has(u8::is_ascii_uppercase)
-        + has(u8::is_ascii_digit)
-        + has(|byte| !byte.is_ascii_alphanumeric())
-}
-
 type Labeled = Vec<(String, Zeroizing<String>)>;
 
-/// Secret-looking environment values and passwords embedded in URLs.
+/// Secret-looking environment values and passwords embedded in URLs
+/// (`secretless_launch::env_credential_values`, shared with the snapshot writers).
 pub(crate) fn env_values<I>(vars: I) -> Labeled
 where
     I: IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
@@ -910,65 +825,13 @@ where
         let (Some(name), Some(value)) = (name.to_str(), value.to_str()) else {
             continue;
         };
-        let value = value.trim();
-        if is_credential_env_name(name)
-            && !value.contains(char::is_whitespace)
-            && is_plausible_secret(value)
-        {
-            values.push((format!("env:{name}"), Zeroizing::new(value.to_string())));
-        }
-        if let Some(password) = url_password(value) {
-            values.push((format!("env:{name}:password"), password));
-        }
-        for (param, secret) in url_query_secrets(value) {
-            values.push((format!("env:{name}:{param}"), secret));
-        }
+        values.extend(
+            secretless_launch::env_credential_values(name, value)
+                .into_iter()
+                .map(|(label, secret)| (label, Zeroizing::new(secret.to_string()))),
+        );
     }
     values
-}
-
-fn url_password(value: &str) -> Option<Zeroizing<String>> {
-    if !secretless_launch::value_has_url_password(value) {
-        return None;
-    }
-    let (_, rest) = value.split_once("://")?;
-    let authority = rest.split(['/', '?', '#']).next()?;
-    let (userinfo, _) = authority.rsplit_once('@')?;
-    let (_, password) = userinfo.split_once(':')?;
-    let password = password.trim();
-    is_plausible_secret(password).then(|| Zeroizing::new(password.to_string()))
-}
-
-/// Secret-named query parameters of a URL (`?token=`, `?api_key=`, `?sig=`).
-fn url_query_secrets(value: &str) -> Vec<(String, Zeroizing<String>)> {
-    if !value.contains("://") {
-        return Vec::new();
-    }
-    let Some((_, query)) = value.split_once('?') else {
-        return Vec::new();
-    };
-    let query = query.split('#').next().unwrap_or_default();
-    query
-        .split('&')
-        .filter_map(|pair| pair.split_once('='))
-        .filter(|(name, secret)| {
-            let lower = name.to_ascii_lowercase();
-            (is_secret_key(name) || matches!(lower.as_str(), "key" | "sig" | "signature"))
-                && is_plausible_secret(secret)
-        })
-        .map(|(name, secret)| (name.to_string(), Zeroizing::new(secret.to_string())))
-        .collect()
-}
-
-fn is_secret_key(key: &str) -> bool {
-    let upper = key.to_ascii_uppercase().replace('-', "_");
-    // `bearer_token_env_var = "GITHUB_TOKEN"` names a variable; it is not one.
-    if upper.ends_with("_ENV_VAR") || upper.ends_with("ENV_KEY") || upper.ends_with("_ENV") {
-        return false;
-    }
-    SECRET_KEY_FRAGMENTS
-        .iter()
-        .any(|fragment| upper.contains(fragment))
 }
 
 /// Secret-named string values in a JSON sign-in file. Everything under a

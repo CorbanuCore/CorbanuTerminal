@@ -212,6 +212,166 @@ pub fn retain_launch_env(env: &mut HashMap<String, String>, exempt: impl Fn(&str
     });
 }
 
+// Credential-value heuristics shared by Core's disclosure gate and both shell
+// snapshot writers (Core's snapshot file and the executor's in-memory
+// snapshot, #2392). Moved here unchanged from Core's `security::disclosure_gate`.
+
+/// Environment values shorter than this are flags, not credentials.
+const MIN_ENV_VALUE_BYTES: usize = 8;
+/// Values at least this long need no mix of character classes.
+const LONG_SECRET_BYTES: usize = 16;
+
+/// Secret-looking names whose values are session plumbing, not credentials.
+const NON_CREDENTIAL_ENV_PREFIXES: &[&str] = &["XDG_", "GNOME_KEYRING_", "DBUS_"];
+const NON_CREDENTIAL_ENV_NAMES: &[&str] = &[
+    "DESKTOP_SESSION",
+    "SESSION_MANAGER",
+    "XAUTHORITY",
+    "KEYTIMEOUT",
+];
+const NON_CREDENTIAL_ENV_SUFFIXES: &[&str] = &[
+    "_SOCK",
+    "_PID",
+    "_ADDR",
+    "_PATH",
+    "_DIR",
+    "_FILE",
+    "_URL",
+    "_URI",
+    "_HOST",
+    "_USER",
+    "_USERNAME",
+    "_NAME",
+    "_EMAIL",
+    "_REGION",
+    "_ENDPOINT",
+];
+/// Fragments that make a secret-looking name ordinary (`GIT_AUTHOR_NAME`
+/// contains `AUTH`; `KEYBOARD` contains `KEY`).
+const NON_CREDENTIAL_ENV_FRAGMENTS: &[&str] = &["AUTHOR", "KEYBOARD", "KEYMAP", "KEYCHAIN"];
+
+/// Key fragments that mark a value in a sign-in or config file as secret.
+const SECRET_KEY_FRAGMENTS: &[&str] = &[
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "API_KEY",
+    "APIKEY",
+    "AUTHORIZATION",
+    "CREDENTIAL",
+    "PRIVATE_KEY",
+    "ACCESS_KEY",
+    "COOKIE",
+];
+
+/// The credentials one environment variable carries, labelled for a secret
+/// registry: its whole (trimmed) value when the name is credential-bearing and
+/// the value looks like a credential, a password embedded in a URL, and
+/// secret-named URL query parameters. Every secret is a slice of `value`, so
+/// callers decide how to hold copies (for example in `Zeroizing`).
+pub fn env_credential_values<'a>(name: &str, value: &'a str) -> Vec<(String, &'a str)> {
+    let mut values = Vec::new();
+    let value = value.trim();
+    if is_credential_env_name(name)
+        && !value.contains(char::is_whitespace)
+        && is_plausible_secret(value)
+    {
+        values.push((format!("env:{name}"), value));
+    }
+    if let Some(password) = url_password(value) {
+        values.push((format!("env:{name}:password"), password));
+    }
+    for (param, secret) in url_query_secrets(value) {
+        values.push((format!("env:{name}:{param}"), secret));
+    }
+    values
+}
+
+fn is_credential_env_name(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    is_secret_looking_name(&upper)
+        && !NON_CREDENTIAL_ENV_NAMES.contains(&upper.as_str())
+        && !NON_CREDENTIAL_ENV_FRAGMENTS
+            .iter()
+            .any(|fragment| upper.contains(fragment))
+        && !NON_CREDENTIAL_ENV_PREFIXES
+            .iter()
+            .any(|prefix| upper.starts_with(prefix))
+        && !NON_CREDENTIAL_ENV_SUFFIXES
+            .iter()
+            .any(|suffix| upper.ends_with(suffix))
+}
+
+/// Long enough, shaped like a credential rather than a word, not an
+/// existing path, and not a variable name (`GITHUB_TOKEN` as a config value
+/// names where the secret lives). Redacting ordinary text would corrupt what
+/// the model reads and edits, so seeding errs towards real credentials.
+pub fn is_plausible_secret(value: &str) -> bool {
+    let names_a_variable = value.contains('_')
+        && value.starts_with(|ch: char| ch.is_ascii_uppercase())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_');
+    value.len() >= MIN_ENV_VALUE_BYTES
+        && (value.len() >= LONG_SECRET_BYTES || character_classes(value) >= 2)
+        && !(value.starts_with('/') && std::path::Path::new(value).exists())
+        && !names_a_variable
+}
+
+/// Lowercase, uppercase, digit and other: how many appear.
+fn character_classes(value: &str) -> usize {
+    let has = |test: fn(&u8) -> bool| usize::from(value.bytes().any(|byte| test(&byte)));
+    has(u8::is_ascii_lowercase)
+        + has(u8::is_ascii_uppercase)
+        + has(u8::is_ascii_digit)
+        + has(|byte| !byte.is_ascii_alphanumeric())
+}
+
+fn url_password(value: &str) -> Option<&str> {
+    if !value_has_url_password(value) {
+        return None;
+    }
+    let (_, rest) = value.split_once("://")?;
+    let authority = rest.split(['/', '?', '#']).next()?;
+    let (userinfo, _) = authority.rsplit_once('@')?;
+    let (_, password) = userinfo.split_once(':')?;
+    let password = password.trim();
+    is_plausible_secret(password).then_some(password)
+}
+
+/// Secret-named query parameters of a URL (`?token=`, `?api_key=`, `?sig=`).
+fn url_query_secrets(value: &str) -> Vec<(&str, &str)> {
+    if !value.contains("://") {
+        return Vec::new();
+    }
+    let Some((_, query)) = value.split_once('?') else {
+        return Vec::new();
+    };
+    let query = query.split('#').next().unwrap_or_default();
+    query
+        .split('&')
+        .filter_map(|pair| pair.split_once('='))
+        .filter(|(name, secret)| {
+            let lower = name.to_ascii_lowercase();
+            (is_secret_key(name) || matches!(lower.as_str(), "key" | "sig" | "signature"))
+                && is_plausible_secret(secret)
+        })
+        .collect()
+}
+
+/// True when a config or sign-in key names a secret (`api_key`, `token`, ...).
+pub fn is_secret_key(key: &str) -> bool {
+    let upper = key.to_ascii_uppercase().replace('-', "_");
+    // `bearer_token_env_var = "GITHUB_TOKEN"` names a variable; it is not one.
+    if upper.ends_with("_ENV_VAR") || upper.ends_with("ENV_KEY") || upper.ends_with("_ENV") {
+        return false;
+    }
+    SECRET_KEY_FRAGMENTS
+        .iter()
+        .any(|fragment| upper.contains(fragment))
+}
+
 #[cfg(test)]
 #[path = "secretless_launch_tests.rs"]
 mod tests;
