@@ -74,6 +74,156 @@ fn pf_27_s02_url_passwords_are_detected() {
 }
 
 #[test]
+fn pf_27_s02_password_in_a_later_url_is_detected() {
+    for value in [
+        "a=http://x http://u:p@y",
+        "http://a.example,http://u:p@b.example",
+        "localhost;https://u:p@proxy:3128",
+        "https://example.com/next?to=http://u:p@other.example",
+    ] {
+        assert!(value_has_url_password(value), "{value} must be detected");
+    }
+}
+
+#[test]
+fn pf_27_s02_schemeless_proxy_password_is_detected() {
+    for value in [
+        "user:pass@proxy:3128",
+        "user:pass@proxy",
+        "user:p%40ss@10.0.0.1:8080",
+        "user:p@ss@proxy:3128",
+        "alice@corp.example:pass@proxy:3128",
+        "user:pass@[::1]:3128",
+        "user:pass@proxy.example.com/",
+        "--proxy=user:pass@proxy.example.com:3128",
+        "localhost, user:pass@proxy:3128",
+        r"DOMAIN\user:pass@proxy:8080",
+        "user:p^ss{x}|y@proxy:3128",
+        "\"user:pass@proxy:3128\"",
+        "(user:pass@proxy.example.com.:3128)",
+    ] {
+        assert!(value_has_url_password(value), "{value} must be detected");
+    }
+}
+
+fn assert_kept(class: &str, values: &[&str]) {
+    for value in values {
+        assert!(
+            !value_has_url_password(value),
+            "{class}: {value} has no password and must be kept"
+        );
+    }
+}
+
+#[test]
+fn pf_27_s02_user_without_password_is_kept() {
+    assert_kept(
+        "user only",
+        &[
+            "user@host",
+            "user@proxy:3128",
+            "http://user@proxy:3128/ user@other:8080",
+            // Empty password: kept here, while `http://user:@proxy` stays
+            // flagged by the original `://` rule (stricter-only).
+            "user:@proxy:3128",
+        ],
+    );
+}
+
+#[test]
+fn pf_27_s02_host_and_port_lists_are_kept() {
+    assert_kept(
+        "host:port",
+        &[
+            "proxy:3128",
+            "proxy.example.com:3128",
+            "10.0.0.1:8080",
+            "localhost,127.0.0.1,.example.com",
+            "http://a.example:80,http://b.example:8080",
+        ],
+    );
+}
+
+#[test]
+fn pf_27_s02_ipv6_literals_are_kept() {
+    assert_kept(
+        "IPv6",
+        &[
+            "[::1]:3128",
+            "::1",
+            "user@[::1]:3128",
+            "http://[::1]:3128",
+            "[fe80::1%25en0]:80",
+        ],
+    );
+}
+
+#[test]
+fn pf_27_s02_email_addresses_are_kept() {
+    assert_kept(
+        "email",
+        &[
+            "alice@example.com",
+            "alice@example.com, bob@example.org",
+            "Alice <alice@example.com>",
+        ],
+    );
+}
+
+#[test]
+fn pf_27_s02_scp_style_git_remotes_are_kept() {
+    assert_kept(
+        "scp-style remote",
+        &[
+            "git@github.com:org/repo.git",
+            "git@gitlab.example.com:group/sub/repo",
+        ],
+    );
+}
+
+#[test]
+fn pf_27_s02_opaque_scheme_uris_are_kept() {
+    assert_kept(
+        "scheme:user@host URI",
+        &[
+            "mailto:alice@example.com",
+            "MAILTO:alice@example.com",
+            "sip:alice@example.com",
+            "xmpp:alice@example.com",
+            "npm:lodash@latest",
+            "group:devs@example.com",
+            "serviceAccount:sa@proj.iam.gserviceaccount.com",
+        ],
+    );
+}
+
+#[test]
+fn pf_27_s02_image_digests_and_package_specs_are_kept() {
+    assert_kept(
+        "image digest / package spec",
+        &[
+            "ubuntu:22.04@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "registry.example.com/team/app:1.2@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "npm:lodash@4.17.21",
+            "python@3.12",
+        ],
+    );
+}
+
+#[test]
+fn pf_27_s02_paths_and_prompts_are_kept() {
+    assert_kept(
+        "path / prompt",
+        &[
+            "/opt/homebrew/opt/node@20/bin:/opt/homebrew/opt/python@3.12/bin:/usr/bin",
+            r"C:\Users\a:b@c",
+            r"\t:\u@\h \w$ ",
+            "https://example.com/a:b@c",
+        ],
+    );
+}
+
+#[test]
 fn pf_27_s02_retain_keeps_exempt_names_but_drops_url_passwords() {
     let mut env = HashMap::from([
         ("PATH".to_string(), "/usr/bin".to_string()),

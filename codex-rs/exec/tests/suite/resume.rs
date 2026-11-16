@@ -156,6 +156,137 @@ async fn exec_falls_back_to_legacy_history_when_thread_store_cannot_paginate() -
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn exec_resume_provider_mismatch_reports_fresh_start() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let test = test_codex_exec();
+    let server = MockServer::start().await;
+    let _mock = responses::mount_sse_sequence(
+        &server,
+        vec![
+            exec_sse_response(/*index*/ 0),
+            exec_sse_response(/*index*/ 1),
+        ],
+    )
+    .await;
+    let marker = format!("original-provider-{}", Uuid::new_v4());
+    test.cmd_with_server(&server)
+        .arg("--skip-git-repo-check")
+        .arg(&marker)
+        .assert()
+        .success();
+    let sessions = test.home_path().join("sessions");
+    let original = find_session_file_containing_marker(&sessions, &marker).unwrap();
+    let next_marker = format!("new-provider-{}", Uuid::new_v4());
+    let output = test
+        .cmd()
+        .arg("--skip-git-repo-check")
+        .arg("--json")
+        .arg("-c")
+        .arg("model_provider=\"other\"")
+        .arg("-c")
+        .arg(format!(
+            "model_providers.other={{name=\"Other\",base_url=\"{}/v1\",wire_api=\"responses\"}}",
+            server.uri()
+        ))
+        .arg("resume")
+        .arg("--last")
+        .arg(&next_marker)
+        .output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert_eq!(
+        stderr.matches("Starting a new conversation.").count(),
+        1,
+        "{stderr}"
+    );
+    assert!(stderr.contains("model provider `other`"), "{stderr}");
+    assert!(stderr.contains("current directory"), "{stderr}");
+    let fresh = find_session_file_containing_marker(&sessions, &next_marker).unwrap();
+    assert_ne!(
+        extract_conversation_id(&fresh),
+        extract_conversation_id(&original)
+    );
+    assert!(!std::fs::read_to_string(&original)?.contains(&next_marker));
+    for line in String::from_utf8(output.stdout)?.lines() {
+        let _: Value = serde_json::from_str(line)?;
+        assert!(!line.contains("Starting a new conversation."));
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn exec_resume_empty_home_reports_only_active_filters() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    for args in [vec!["--last"], vec!["--last", "--all"], vec![]] {
+        let test = test_codex_exec();
+        let server = MockServer::start().await;
+        let _mock =
+            responses::mount_sse_sequence(&server, vec![exec_sse_response(/*index*/ 0)]).await;
+        let output = test
+            .cmd()
+            .arg("--skip-git-repo-check")
+            .arg("-c")
+            .arg(format!("openai_base_url=\"{}/v1\"", server.uri()))
+            .arg("hello")
+            .arg("resume")
+            .args(&args)
+            .output()?;
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stderr}");
+        assert_eq!(
+            stderr.matches("Starting a new conversation.").count(),
+            1,
+            "{stderr}"
+        );
+        assert!(!stderr.contains("model provider"), "{stderr}");
+        if args.is_empty() {
+            assert!(
+                stderr.contains("No conversation was selected to resume"),
+                "{stderr}"
+            );
+        } else {
+            assert!(
+                stderr.contains("No resumable conversation found"),
+                "{stderr}"
+            );
+            assert_eq!(
+                stderr.contains("current directory"),
+                !args.contains(&"--all"),
+                "{stderr}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn exec_resume_missing_name_reports_fresh_start() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let test = test_codex_exec();
+    let server = MockServer::start().await;
+    let _mock = responses::mount_sse_sequence(&server, vec![exec_sse_response(/*index*/ 0)]).await;
+    let output = test
+        .cmd_with_server(&server)
+        .arg("--skip-git-repo-check")
+        .arg("resume")
+        .arg("missing-conversation")
+        .arg("hello")
+        .output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("No saved conversation named `missing-conversation`"),
+        "{stderr}"
+    );
+    assert_eq!(
+        stderr.matches("Starting a new conversation.").count(),
+        1,
+        "{stderr}"
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn exec_resume_last_appends_to_existing_file() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -218,6 +349,7 @@ async fn exec_resume_last_appends_to_existing_file() -> anyhow::Result<()> {
         .context("resume run should succeed")?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "resume failed: {stderr}");
+    assert!(!stderr.contains("Starting a new conversation."), "{stderr}");
     assert_eq!(
         stderr
             .matches("app-server event: thread/tokenUsage/updated")

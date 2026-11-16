@@ -954,13 +954,16 @@ async fn guardian_session_prewarms_and_is_reused_for_first_review(
 
     let credits_enabled = auth.uses_codex_backend();
     let requests_parent_credits = credits_enabled && auth.is_chatgpt_auth();
-    let bundled_models = codex_models_manager::bundled_models_response()?.models;
-    let catalog_auto_review = bundled_models
-        .iter()
-        .find(|model| model.slug == expected_model)
-        .and_then(|model| model.model_messages.as_ref())
+    // D593(b)/D604: exercise routing with a synthetic review policy, without
+    // requiring the product catalog to enable background Guardian scoring.
+    let mut review_model = core_test_support::model_catalog::guardian_test_model();
+    review_model.slug = expected_model.to_string();
+    review_model.use_responses_lite = expected_model == "gpt-5.6-luna";
+    let catalog_auto_review = review_model
+        .model_messages
+        .as_ref()
         .and_then(|messages| messages.auto_review.as_ref())
-        .expect("bundled auto-review model Guardian policy");
+        .expect("synthetic review model Guardian policy");
     let catalog_policy = catalog_auto_review
         .policy
         .as_deref()
@@ -971,10 +974,6 @@ async fn guardian_session_prewarms_and_is_reused_for_first_review(
         .expect("catalog Guardian policy template");
     let expected_guardian_policy =
         catalog_template.replace("{{ tenant_policy_config }}", catalog_policy.trim());
-    let review_model = bundled_models
-        .into_iter()
-        .find(|model| model.slug == expected_model)
-        .expect("bundled Guardian review model");
     let use_responses_lite = review_model.use_responses_lite;
     if expected_model == "gpt-5.6-luna" {
         assert!(use_responses_lite, "Luna must use Responses Lite");
@@ -1163,7 +1162,8 @@ async fn guardian_session_prewarms_and_is_reused_for_first_review(
             .as_str()
             .expect("Responses Lite Guardian developer instructions")
     } else {
-        guardian_prewarm["input"][0]["content"][0]["text"]
+        // Corbanu keeps non-Lite base instructions in the dedicated field.
+        guardian_prewarm["instructions"]
             .as_str()
             .expect("Guardian instructions")
     };
@@ -1747,6 +1747,7 @@ async fn guardian_reviews_delayed_and_new_actions_after_catalog_refresh() -> Res
     preferred.slug = "codex-auto-review".to_string();
     catalog.models.push(preferred);
     mount_models_once(&server, catalog.clone()).await;
+    let catalog_url = format!("{}/v1/models", server.uri());
     let pause = Arc::new(PauseFirstAction::default());
     let mut extensions = ExtensionRegistryBuilder::<Config>::new();
     extensions.tool_lifecycle_contributor(pause.clone());
@@ -1754,7 +1755,9 @@ async fn guardian_reviews_delayed_and_new_actions_after_catalog_refresh() -> Res
         .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model("guardian-parent-a")
         .with_extensions(Arc::new(extensions.build()))
-        .with_config(|config| {
+        .with_config(move |config| {
+            // Pin this refresh fixture to its supplied catalog, without bundled overlays.
+            config.model_provider.model_catalog_url = Some(catalog_url.into());
             config.features.enable(Feature::StepModelSwitching).unwrap();
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
             config.approvals_reviewer = ApprovalsReviewer::AutoReview;

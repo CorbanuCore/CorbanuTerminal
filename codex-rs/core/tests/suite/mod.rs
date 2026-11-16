@@ -120,6 +120,7 @@ mod guardian_checkpoint_migration;
 // Uses the same command-approval harness as guardian_review below.
 mod builtin_model_catalog;
 mod canonical_plugin_connectors;
+mod corbanu_astra;
 mod critical_path_runtime;
 mod gateway_auth;
 mod guardian_connector_trust;
@@ -157,6 +158,7 @@ mod issue_1139;
 mod issue_1355;
 mod issue_1976;
 mod issue_2000;
+mod issue_2049;
 mod issue_2050;
 mod issue_443;
 mod issue_445;

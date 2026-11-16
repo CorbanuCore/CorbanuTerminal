@@ -73,6 +73,7 @@ impl AsyncQuestions {
     }
 
     pub(crate) fn navigate(&mut self, forward: bool) -> bool {
+        self.cancel_pending_burst_enter();
         let next = if forward {
             self.state.current_idx.checked_add(1)
         } else {
@@ -168,6 +169,7 @@ impl AsyncQuestions {
         if !self.state.pending.iter().any(answered) {
             return false;
         }
+        self.cancel_pending_burst_enter();
         let current_answered = self.current_answer().is_some_and(answered);
         let displayed_answer_changed = self.expanded && current_answered;
         if current_answered {

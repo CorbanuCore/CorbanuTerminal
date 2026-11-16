@@ -1269,7 +1269,7 @@ impl ModelClient {
     /// Issue #445: whether the security kill switch a person turned on in
     /// `/security` is on for this session. Only that switch: a session
     /// started from unreadable state or a cold-resumed child agent is denied
-    /// protected actions too, but its turns still run.
+    /// protected actions too. A detached child also receives a parent-task refusal.
     pub(crate) fn kill_switch_on(&self) -> bool {
         self.ingress_policy.as_ref().is_some_and(|policy| {
             policy
@@ -1284,6 +1284,15 @@ impl ModelClient {
     /// refused before its input is recorded (`session::turn`). A policy that
     /// cannot be read is refused by the source admission check instead.
     pub(crate) fn refuse_under_kill_switch(&self) -> Result<()> {
+        if self
+            .ingress_policy
+            .as_ref()
+            .is_some_and(|policy| policy.0.parent_unavailable(self.state.thread_id))
+        {
+            return Err(CodexErr::InvalidRequest(
+                "Not sent: this sub-agent is locked down because its parent task is not open. Open the parent task, then reopen this sub-agent before trying again. This message was not kept.".to_string(),
+            ));
+        }
         if self.kill_switch_on() {
             Err(CodexErr::InvalidRequest(KILL_SWITCH_REFUSAL.to_string()))
         } else {

@@ -30,11 +30,28 @@ async fn pin_action_updates_shared_section_state() -> Result<()> {
         ))
         .await?;
         assert!(app.agents_overview.pending_pin_change.is_some());
-        let completed = rx.recv().await.expect("pin request completes");
-        assert!(matches!(
-            &completed,
-            AppEvent::AgentsOverviewPinToggled { .. }
-        ));
+        // Overview refresh events may arrive before this request's completion.
+        let completed = tokio::time::timeout(std::time::Duration::from_secs(/*secs*/ 10), async {
+            loop {
+                let event = rx.recv().await.expect("pin request completes");
+                if matches!(&event, AppEvent::AgentsOverviewPinToggled { .. }) {
+                    return event;
+                }
+            }
+        })
+        .await?;
+        let AppEvent::AgentsOverviewPinToggled {
+            request_id,
+            thread_id: completed_thread,
+            pinned: completed_pinned,
+            result,
+        } = &completed
+        else {
+            unreachable!()
+        };
+        assert_eq!(Some(*request_id), app.agents_overview.pending_pin_change);
+        assert_eq!((*completed_thread, *completed_pinned), (thread_id, pinned));
+        assert!(result.is_ok(), "{result:?}");
         app.agents_overview
             .refresh_notifications
             .insert(thread_id, Vec::new());
@@ -722,6 +739,88 @@ async fn rejected_delete_preserves_a_live_attachment_and_draft() -> Result<()> {
 }
 
 #[tokio::test]
+async fn detached_child_refusal_explains_that_the_parent_task_must_be_opened() -> Result<()> {
+    let mut app = Box::pin(make_test_app()).await;
+    let mock = wiremock::MockServer::start().await;
+    app.config.model = Some("gpt-5.2".into());
+    app.config.model_provider_id = "lifecycle-test".into();
+    app.config.model_provider = ModelProviderInfo {
+        name: "Lifecycle test".into(),
+        base_url: Some(format!("{}/v1", mock.uri())),
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        ..ModelProviderInfo::default()
+    };
+    app_test_support::MockResponsesConfig::new(&mock.uri())
+        .with_model("gpt-5.2")
+        .with_model_provider("lifecycle-test")
+        .with_provider_name("Lifecycle test")
+        .write(app.config.codex_home.as_path())?;
+    let parent = ThreadId::new();
+    let child = ThreadId::from_string(
+        &app_test_support::create_fake_parented_rollout_with_source(
+            &app.config.codex_home,
+            "2025-01-05T12-01-00",
+            "2025-01-05T12:01:00Z",
+            "Detached child",
+            Some(&app.config.model_provider_id),
+            /*git_info*/ None,
+            codex_protocol::protocol::SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id: parent,
+                depth: 1,
+                agent_path: None,
+                agent_nickname: None,
+                agent_role: None,
+                agent_class: None,
+            }),
+            codex_protocol::SessionId::from(parent),
+            parent,
+        )
+        .expect("materialize child"),
+    )?;
+    let mut server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
+    Box::pin(server.resume_thread(
+        &app.local_settings,
+        app.config.clone(),
+        child,
+        crate::app_server_session::ResumeModelSettings::PreserveExistingThread,
+    ))
+    .await?;
+    server
+        .request_handle()
+        .request_typed::<TurnStartResponse>(ClientRequest::TurnStart {
+            request_id: RequestId::String(Uuid::new_v4().to_string()),
+            params: TurnStartParams {
+                thread_id: child.to_string(),
+                input: vec![codex_app_server_protocol::UserInput::Text {
+                    text: "Do not send this detached task".into(),
+                    text_elements: Vec::new(),
+                }],
+                ..Default::default()
+            },
+        })
+        .await?;
+    let message = tokio::time::timeout(std::time::Duration::from_secs(/*secs*/ 10), async {
+        loop {
+            let event = server.next_event().await.expect("server stays connected");
+            if let codex_app_server_client::AppServerEvent::ServerNotification(notification) =
+                event.event
+                && let codex_app_server_protocol::ServerNotification::Error(error) =
+                    notification.as_ref()
+                && error.thread_id == child.to_string()
+            {
+                break error.error.message.clone();
+            }
+        }
+    })
+    .await?;
+    insta::assert_snapshot!(message, @"Not sent: this sub-agent is locked down because its parent task is not open. Open the parent task, then reopen this sub-agent before trying again. This message was not kept.");
+    assert!(mock.received_requests().await.unwrap().is_empty());
+    server.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn lifecycle_removes_background_and_current_tasks_without_losing_the_dashboard() -> Result<()>
 {
     for (action, snapshot, attach_child) in [
@@ -776,6 +875,15 @@ async fn lifecycle_removes_background_and_current_tasks_without_losing_the_dashb
             .expect("materialize session"),
         )?;
         let primary = if attach_child {
+            // D651: a detached child remains locked down. Load its parent before
+            // exercising the lifecycle of a running child.
+            Box::pin(app_server.resume_thread(
+                &app.local_settings,
+                app.config.clone(),
+                id,
+                crate::app_server_session::ResumeModelSettings::PreserveExistingThread,
+            ))
+            .await?;
             let child = ThreadId::from_string(
                 &app_test_support::create_fake_parented_rollout_with_source(
                     &app.config.codex_home,
@@ -888,6 +996,16 @@ async fn lifecycle_removes_background_and_current_tasks_without_losing_the_dashb
                     .is_some()
             );
             std::fs::remove_dir(&blocked_archive)?;
+            if attach_child {
+                // The failed archive unloaded the whole tree, including the parent.
+                Box::pin(app_server.resume_thread(
+                    &app.local_settings,
+                    app.config.clone(),
+                    id,
+                    crate::app_server_session::ResumeModelSettings::PreserveExistingThread,
+                ))
+                .await?;
+            }
             let resumed = Box::pin(app_server.resume_thread(
                 &app.local_settings,
                 app.config.clone(),

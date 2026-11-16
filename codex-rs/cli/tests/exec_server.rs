@@ -665,6 +665,7 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{collector_url}/v1/metrics", pr
                 exclude: Vec::new(),
                 r#set: HashMap::new(),
                 include_only: Vec::new(),
+                drop_url_password_values: false,
             }),
             env: HashMap::new(),
             tty: false,

@@ -2174,13 +2174,20 @@ async fn pending_attachment_installs_configuration_before_waiting_turn_resumes()
     for tool in [
         "exec_command",
         "write_stdin",
-        "apply_patch",
         "view_image",
         "request_permissions",
     ] {
         assert!(
             first_tool_names.contains(&tool.to_string()),
             "missing tool: {tool}"
+        );
+    }
+    // No environment means no edit tools. D647 / main #709 also hides them once
+    // the ready owner's read-only profile overrides the waiting thread's broader setting.
+    for tool in ["apply_patch", "structured_edit", "structured_write"] {
+        assert!(
+            !first_tool_names.contains(&tool.to_string()),
+            "read-only session exposed edit tool: {tool}"
         );
     }
     for call_id in [EXEC_CALL_ID, STDIN_CALL_ID] {
@@ -2198,8 +2205,22 @@ async fn pending_attachment_installs_configuration_before_waiting_turn_resumes()
         .await?;
     wait_for_response_request_count(&response_mock, /*expected_count*/ 4).await;
     let pending_requests = response_mock.requests();
+    let pending_tool_names = tool_names(&pending_requests[2].body_json());
+    let edit_tools = ["apply_patch", "structured_edit", "structured_write"];
     assert_eq!(
-        tool_names(&pending_requests[2].body_json()),
+        pending_tool_names
+            .iter()
+            .filter(|name| edit_tools.contains(&name.as_str()))
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        edit_tools,
+        "the pending thread still uses its own workspace-write profile",
+    );
+    assert_eq!(
+        pending_tool_names
+            .into_iter()
+            .filter(|name| !edit_tools.contains(&name.as_str()))
+            .collect::<Vec<_>>(),
         first_tool_names
     );
     assert!(first_tool_names.contains(&"wait_for_environment".to_string()));

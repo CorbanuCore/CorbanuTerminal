@@ -379,6 +379,8 @@ async fn vertex_guardian_requests_use_luna() -> Result<()> {
     let test = test_codex()
         .with_model("gpt-6.1-sol")
         .with_config(move |config| {
+            // D644: keep upstream routing/picker expectations on its catalog.
+            config.model_catalog = Some(core_test_support::model_catalog::upstream_model_catalog());
             config.model_provider_id = GCP_PROVIDER_ID.to_string();
             config.model_provider = provider;
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);

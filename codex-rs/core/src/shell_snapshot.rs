@@ -112,30 +112,6 @@ struct FailOpenAlias {
 const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(10);
 const SNAPSHOT_RETENTION: Duration = Duration::from_secs(60 * 60 * 24 * 3); // 3 days retention.
 const SNAPSHOT_DIR: &str = "shell_snapshots";
-/// #310: shell snapshots are replayable files under the session home. Never
-/// persist conventional credential-bearing variables into them, whatever the
-/// shell environment policy admits. A name-based safeguard; runtime auth should
-/// still prefer the vault so provider secrets do not enter the process
-/// environment in the first place. Matched case-insensitively.
-const SECRET_EXPORT_NAME_PATTERNS: &[&str] = &[
-    "*_API_KEY",
-    "*_TOKEN",
-    "*_SECRET",
-    "*_PASSWORD",
-    "*_PASSWD",
-    "*_PRIVATE_KEY",
-    "*_CREDENTIAL",
-    "*_CREDENTIALS",
-    "*_SECRET_*",
-    "API_KEY",
-    "TOKEN",
-    "SECRET",
-    "PASSWORD",
-    "PASSWD",
-    "PRIVATE_KEY",
-    "CREDENTIAL",
-    "CREDENTIALS",
-];
 
 impl ShellSnapshot {
     pub(crate) fn new(
@@ -1089,7 +1065,7 @@ async fn validate_snapshot(
 /// configured name that is not a plain identifier is skipped, so it cannot act
 /// as a wildcard.
 fn secret_export_patterns(removed_env_vars: &[String]) -> Vec<EnvironmentVariablePattern> {
-    SECRET_EXPORT_NAME_PATTERNS
+    codex_shell_command::shell_snapshot::SECRET_EXPORT_NAME_PATTERNS
         .iter()
         .copied()
         .chain(

@@ -191,15 +191,130 @@ pub fn is_launch_env_name_allowed(name: &str) -> bool {
             .any(|suffix| upper.ends_with(suffix))
 }
 
-/// True when the value is a URL that carries a password (`scheme://user:pass@host`).
+/// True when the value carries a URL password: `scheme://user:pass@host`
+/// anywhere in the value (not only in its first URL), or a scheme-less proxy
+/// form such as `user:pass@proxy:3128` as one of its whitespace-, comma- or
+/// semicolon-separated items (#2395).
 pub fn value_has_url_password(value: &str) -> bool {
-    let Some((_, rest)) = value.split_once("://") else {
-        return false;
-    };
+    value
+        .match_indices("://")
+        .any(|(index, _)| authority_has_password(&value[index + 3..]))
+        || value
+            .split(|c: char| c.is_whitespace() || c == ',' || c == ';')
+            .any(is_schemeless_url_with_password)
+}
+
+/// The original PF-27-S02 rule, applied to the text after one `://`.
+fn authority_has_password(rest: &str) -> bool {
     let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
     authority
         .rsplit_once('@')
         .is_some_and(|(userinfo, _)| userinfo.contains(':'))
+}
+
+/// Prefixes written `prefix:name@host` that are not a user name: URI schemes
+/// with no `//` (`mailto:a@b.example`, `sip:alice@host`, the npm alias
+/// `npm:pkg@latest`) and cloud IAM member kinds (`group:devs@example.com`,
+/// `serviceAccount:sa@proj.iam.gserviceaccount.com`). `user:` is deliberately
+/// absent: `user:alice@example.com` has the same shape as `user:pass@proxy`.
+const OPAQUE_USER_SCHEMES: &[&str] = &[
+    "mailto",
+    "sip",
+    "sips",
+    "xmpp",
+    "im",
+    "pres", // codespell:ignore pres
+    "tel",
+    "acct",
+    "news",
+    "npm",
+    "group",
+    "serviceaccount",
+    "deleted",
+];
+
+/// `user:pass@host[:port][/path]` with no scheme, as curl accepts for proxies.
+/// The shape is strict so that values without a password, emails, `git@host:repo`,
+/// image digests (`img:tag@sha256:...`) and package specs (`npm:pkg@1.2.3`) pass.
+fn is_schemeless_url_with_password(token: &str) -> bool {
+    let token = token.trim_matches(|c| matches!(c, '"' | '\'' | '(' | ')' | '<' | '>'));
+    let authority = token.split(['/', '?', '#']).next().unwrap_or_default();
+    let Some((userinfo, host_port)) = authority.rsplit_once('@') else {
+        return false;
+    };
+    let Some((user, password)) = userinfo.split_once(':') else {
+        return false;
+    };
+    !user.is_empty()
+        && !password.is_empty()
+        && user
+            .chars()
+            .all(|c| c == '@' || c == '\\' || is_userinfo_char(c))
+        && password
+            .chars()
+            .all(|c| c.is_ascii_graphic() && !matches!(c, '\\' | '"' | '`'))
+        && !OPAQUE_USER_SCHEMES
+            .iter()
+            .any(|scheme| user.eq_ignore_ascii_case(scheme))
+        && is_host_and_port(host_port)
+}
+
+/// RFC 3986 unreserved characters, sub-delims and `%` escapes, minus the
+/// item separators `,` and `;`. The user part also accepts a raw `@` (an email
+/// user name) and `\` (`DOMAIN\user`); the password accepts any printable ASCII
+/// except `\`, `"` and `` ` `` so that Windows paths and shell prompts pass.
+fn is_userinfo_char(c: char) -> bool {
+    c.is_ascii_alphanumeric()
+        || matches!(
+            c,
+            '-' | '.' | '_' | '~' | '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | '=' | '%'
+        )
+}
+
+/// `host`, `host:port`, `[ipv6]` or `[ipv6]:port`, where the port is 1–5 digits
+/// and a dotted all-numeric host must be a four-part IPv4 address.
+fn is_host_and_port(host_port: &str) -> bool {
+    let (host_ok, port) = match host_port.strip_prefix('[') {
+        Some(bracketed) => {
+            let Some((inside, after)) = bracketed.split_once(']') else {
+                return false;
+            };
+            let ipv6_ok = !inside.is_empty()
+                && inside
+                    .chars()
+                    .all(|c| c.is_ascii_hexdigit() || matches!(c, ':' | '.' | '%'));
+            match after {
+                "" => (ipv6_ok, None),
+                _ => match after.strip_prefix(':') {
+                    Some(port) => (ipv6_ok, Some(port)),
+                    None => return false,
+                },
+            }
+        }
+        None => match host_port.split_once(':') {
+            Some((host, port)) => (is_dns_name_or_ipv4(host), Some(port)),
+            None => (is_dns_name_or_ipv4(host_port), None),
+        },
+    };
+    host_ok
+        && port.is_none_or(|port| {
+            (1..=5).contains(&port.len()) && port.bytes().all(|b| b.is_ascii_digit())
+        })
+}
+
+fn is_dns_name_or_ipv4(host: &str) -> bool {
+    let host = host.strip_suffix('.').unwrap_or(host);
+    let labels: Vec<&str> = host.split('.').collect();
+    let labels_ok = labels.iter().all(|label| {
+        label.starts_with(|c: char| c.is_ascii_alphanumeric())
+            && label
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    });
+    let numeric = |label: &&str| label.bytes().all(|b| b.is_ascii_digit());
+    labels_ok
+        && (!labels.last().is_some_and(numeric)
+            || (labels.len() == 4 && labels.iter().all(numeric)))
 }
 
 /// Applies the launch allowlist to an environment map. `exempt` names (for
@@ -210,6 +325,166 @@ pub fn retain_launch_env(env: &mut HashMap<String, String>, exempt: impl Fn(&str
     env.retain(|name, value| {
         (exempt(name) || is_launch_env_name_allowed(name)) && !value_has_url_password(value)
     });
+}
+
+// Credential-value heuristics shared by Core's disclosure gate and both shell
+// snapshot writers (Core's snapshot file and the executor's in-memory
+// snapshot, #2392). Moved here unchanged from Core's `security::disclosure_gate`.
+
+/// Environment values shorter than this are flags, not credentials.
+const MIN_ENV_VALUE_BYTES: usize = 8;
+/// Values at least this long need no mix of character classes.
+const LONG_SECRET_BYTES: usize = 16;
+
+/// Secret-looking names whose values are session plumbing, not credentials.
+const NON_CREDENTIAL_ENV_PREFIXES: &[&str] = &["XDG_", "GNOME_KEYRING_", "DBUS_"];
+const NON_CREDENTIAL_ENV_NAMES: &[&str] = &[
+    "DESKTOP_SESSION",
+    "SESSION_MANAGER",
+    "XAUTHORITY",
+    "KEYTIMEOUT",
+];
+const NON_CREDENTIAL_ENV_SUFFIXES: &[&str] = &[
+    "_SOCK",
+    "_PID",
+    "_ADDR",
+    "_PATH",
+    "_DIR",
+    "_FILE",
+    "_URL",
+    "_URI",
+    "_HOST",
+    "_USER",
+    "_USERNAME",
+    "_NAME",
+    "_EMAIL",
+    "_REGION",
+    "_ENDPOINT",
+];
+/// Fragments that make a secret-looking name ordinary (`GIT_AUTHOR_NAME`
+/// contains `AUTH`; `KEYBOARD` contains `KEY`).
+const NON_CREDENTIAL_ENV_FRAGMENTS: &[&str] = &["AUTHOR", "KEYBOARD", "KEYMAP", "KEYCHAIN"];
+
+/// Key fragments that mark a value in a sign-in or config file as secret.
+const SECRET_KEY_FRAGMENTS: &[&str] = &[
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "API_KEY",
+    "APIKEY",
+    "AUTHORIZATION",
+    "CREDENTIAL",
+    "PRIVATE_KEY",
+    "ACCESS_KEY",
+    "COOKIE",
+];
+
+/// The credentials one environment variable carries, labelled for a secret
+/// registry: its whole (trimmed) value when the name is credential-bearing and
+/// the value looks like a credential, a password embedded in a URL, and
+/// secret-named URL query parameters. Every secret is a slice of `value`, so
+/// callers decide how to hold copies (for example in `Zeroizing`).
+pub fn env_credential_values<'a>(name: &str, value: &'a str) -> Vec<(String, &'a str)> {
+    let mut values = Vec::new();
+    let value = value.trim();
+    if is_credential_env_name(name)
+        && !value.contains(char::is_whitespace)
+        && is_plausible_secret(value)
+    {
+        values.push((format!("env:{name}"), value));
+    }
+    if let Some(password) = url_password(value) {
+        values.push((format!("env:{name}:password"), password));
+    }
+    for (param, secret) in url_query_secrets(value) {
+        values.push((format!("env:{name}:{param}"), secret));
+    }
+    values
+}
+
+fn is_credential_env_name(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    is_secret_looking_name(&upper)
+        && !NON_CREDENTIAL_ENV_NAMES.contains(&upper.as_str())
+        && !NON_CREDENTIAL_ENV_FRAGMENTS
+            .iter()
+            .any(|fragment| upper.contains(fragment))
+        && !NON_CREDENTIAL_ENV_PREFIXES
+            .iter()
+            .any(|prefix| upper.starts_with(prefix))
+        && !NON_CREDENTIAL_ENV_SUFFIXES
+            .iter()
+            .any(|suffix| upper.ends_with(suffix))
+}
+
+/// Long enough, shaped like a credential rather than a word, not an
+/// existing path, and not a variable name (`GITHUB_TOKEN` as a config value
+/// names where the secret lives). Redacting ordinary text would corrupt what
+/// the model reads and edits, so seeding errs towards real credentials.
+pub fn is_plausible_secret(value: &str) -> bool {
+    let names_a_variable = value.contains('_')
+        && value.starts_with(|ch: char| ch.is_ascii_uppercase())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_');
+    value.len() >= MIN_ENV_VALUE_BYTES
+        && (value.len() >= LONG_SECRET_BYTES || character_classes(value) >= 2)
+        && !(value.starts_with('/') && std::path::Path::new(value).exists())
+        && !names_a_variable
+}
+
+/// Lowercase, uppercase, digit and other: how many appear.
+fn character_classes(value: &str) -> usize {
+    let has = |test: fn(&u8) -> bool| usize::from(value.bytes().any(|byte| test(&byte)));
+    has(u8::is_ascii_lowercase)
+        + has(u8::is_ascii_uppercase)
+        + has(u8::is_ascii_digit)
+        + has(|byte| !byte.is_ascii_alphanumeric())
+}
+
+fn url_password(value: &str) -> Option<&str> {
+    if !value_has_url_password(value) {
+        return None;
+    }
+    let (_, rest) = value.split_once("://")?;
+    let authority = rest.split(['/', '?', '#']).next()?;
+    let (userinfo, _) = authority.rsplit_once('@')?;
+    let (_, password) = userinfo.split_once(':')?;
+    let password = password.trim();
+    is_plausible_secret(password).then_some(password)
+}
+
+/// Secret-named query parameters of a URL (`?token=`, `?api_key=`, `?sig=`).
+fn url_query_secrets(value: &str) -> Vec<(&str, &str)> {
+    if !value.contains("://") {
+        return Vec::new();
+    }
+    let Some((_, query)) = value.split_once('?') else {
+        return Vec::new();
+    };
+    let query = query.split('#').next().unwrap_or_default();
+    query
+        .split('&')
+        .filter_map(|pair| pair.split_once('='))
+        .filter(|(name, secret)| {
+            let lower = name.to_ascii_lowercase();
+            (is_secret_key(name) || matches!(lower.as_str(), "key" | "sig" | "signature"))
+                && is_plausible_secret(secret)
+        })
+        .collect()
+}
+
+/// True when a config or sign-in key names a secret (`api_key`, `token`, ...).
+pub fn is_secret_key(key: &str) -> bool {
+    let upper = key.to_ascii_uppercase().replace('-', "_");
+    // `bearer_token_env_var = "GITHUB_TOKEN"` names a variable; it is not one.
+    if upper.ends_with("_ENV_VAR") || upper.ends_with("ENV_KEY") || upper.ends_with("_ENV") {
+        return false;
+    }
+    SECRET_KEY_FRAGMENTS
+        .iter()
+        .any(|fragment| upper.contains(fragment))
 }
 
 #[cfg(test)]

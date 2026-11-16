@@ -656,3 +656,40 @@ fn oversized_question_ids_keep_questions_answerable_without_echoing_the_id() {
     };
     assert_eq!(reply, "> Question\n\nAnswer");
 }
+
+/// #2433: retain the answer until the held Enter returns through the key path.
+#[tokio::test(start_paused = true)]
+async fn burst_enter_answers_through_key_path_and_holds_nothing_afterward() {
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    let mut editor = AsyncQuestions::new(
+        AppEventSender::new(tx),
+        /*has_input_focus*/ true,
+        /*enhanced_keys_supported*/ true,
+        /*disable_paste_burst*/ false,
+        RuntimeKeymap::defaults(),
+    );
+    editor.append("message", &[question("First", /*options*/ None)]);
+    editor.set_expanded(/*expanded*/ true);
+    // Back-to-back keys are a burst; the Enter right after it ends it.
+    for ch in "0123456789abcdef".chars() {
+        editor.handle_key_event(KeyEvent::from(KeyCode::Char(ch)));
+    }
+    editor.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    assert!(editor.submission.is_none());
+    let token = editor.pending_burst_enter.unwrap();
+    tokio::time::advance(Duration::from_millis(100)).await;
+    assert!(!editor.flush_paste_burst_if_due());
+    assert!(editor.submission.is_none());
+    assert!(editor.prepare_burst_enter_key(token));
+    editor.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    assert!(matches!(
+        &editor.submission,
+        Some(QuestionSubmission::Submit(text)) if text.contains("0123456789abcdef")
+    ));
+    assert!(
+        editor
+            .composer
+            .take_burst_submission(std::time::Instant::now() + std::time::Duration::from_secs(1))
+            .is_none()
+    );
+}

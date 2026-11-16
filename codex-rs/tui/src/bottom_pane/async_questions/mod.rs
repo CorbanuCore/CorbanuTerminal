@@ -29,6 +29,7 @@ use std::time::Duration;
 use std::time::Instant;
 use unicode_width::UnicodeWidthStr;
 
+mod burst_enter;
 mod input;
 mod layout;
 mod render;
@@ -70,6 +71,7 @@ pub(crate) struct AsyncQuestions {
     pub(crate) has_queued_messages: bool,
     pub(crate) delivery_enabled: bool,
     pub(crate) submission: Option<QuestionSubmission>,
+    pending_burst_enter: Option<u64>,
     visible_options: std::cell::Cell<(usize, usize)>,
     keymap: RuntimeKeymap,
     // Ignore autorepeat from the number key that opened Other.
@@ -122,6 +124,7 @@ impl AsyncQuestions {
             has_queued_messages: false,
             delivery_enabled: true,
             submission: None,
+            pending_burst_enter: None,
             visible_options: std::cell::Cell::new((0, 0)),
             keymap,
             other_selector: None,
@@ -282,6 +285,7 @@ impl AsyncQuestions {
     }
 
     fn save_current_draft(&mut self) {
+        self.cancel_pending_burst_enter();
         self.composer.flush_pending_input();
         if self.focus_is_notes() {
             let draft = self.composer.snapshot_draft();
@@ -292,6 +296,7 @@ impl AsyncQuestions {
     }
 
     fn restore_current_draft(&mut self) {
+        self.cancel_pending_burst_enter();
         self.sync_composer_placeholder();
         let draft = self
             .current_answer()

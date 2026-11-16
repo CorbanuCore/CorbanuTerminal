@@ -225,6 +225,7 @@ mod quit_thread_record;
 mod render;
 mod resize_reflow_cap;
 mod resume_launch;
+mod resume_notice;
 mod resume_permissions;
 mod resume_picker;
 mod screen_reader;
@@ -2245,6 +2246,18 @@ async fn run_ratatui_app(
         resume_picker::SessionSelection::StartFresh
     };
 
+    let resume_fallback_notice = resume_notice::resume_fallback_notice(
+        &cli,
+        &session_selection,
+        (!uses_remote_workspace).then_some(config.model_provider_id.as_str()),
+        latest_session_cwd_filter(
+            uses_remote_workspace,
+            remote_cwd_override.as_deref(),
+            &config,
+            cli.resume_show_all,
+        ),
+    );
+
     // PF-29-S01: a resume or fork the security level refuses never opens.
     if let resume_picker::SessionSelection::Resume(target)
     | resume_picker::SessionSelection::Fork(target) = &session_selection
@@ -2762,6 +2775,7 @@ async fn run_ratatui_app(
         prompt,
         images,
         session_selection,
+        resume_fallback_notice,
         startup_resume_model_override,
         feedback,
         is_first_run,

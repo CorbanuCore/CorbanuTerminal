@@ -17,7 +17,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use codex_features::Feature;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::WireApi;
 use codex_protocol::protocol::EventMsg;
@@ -28,6 +27,7 @@ use core_test_support::responses::chat_completions_tool_call_sse;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
+use core_test_support::responses::sse;
 use core_test_support::responses::start_websocket_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::TestCodex;
@@ -116,6 +116,22 @@ impl MockHost {
                     Some(_) => {}
                 }
             }
+        }
+        if body["input"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|item| item["type"] == "compaction_trigger")
+        {
+            // V2 compaction streams a sealed item on the ordinary Responses route.
+            return Self::sse(sse(vec![
+                ev_response_created(&format!("compact_{turn}")),
+                json!({"type": "response.output_item.done", "item": {
+                    "type": "compaction",
+                    "encrypted_content": format!("{}:summary", self.seal),
+                }}),
+                ev_completed(&format!("compact_{turn}")),
+            ]));
         }
         let events = [
             json!({"type": "response.created", "response": {"id": format!("resp_{turn}")}}),
@@ -253,17 +269,6 @@ async fn mount(mock: &MockHost) -> MockServer {
         .respond_with(mock.clone())
         .mount(&server)
         .await;
-    if let Host::Responses = mock.host {
-        // Remote compaction: a summary sealed for this host.
-        Mock::given(method("POST"))
-            .and(path_regex(".*/responses/compact$"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"output": [{
-                "type": "compaction",
-                "encrypted_content": format!("{}:summary", mock.seal),
-            }]})))
-            .mount(&server)
-            .await;
-    }
     server
 }
 
@@ -326,11 +331,6 @@ async fn session_named(
             config.model_catalog = Some(
                 codex_models_manager::bundled_models_response().expect("bundled model catalog"),
             );
-            // The `/responses/compact` endpoint.
-            config
-                .features
-                .disable(Feature::RemoteCompactionV2)
-                .expect("remote compaction v1");
         })
         .build(&servers[0])
         .await?;

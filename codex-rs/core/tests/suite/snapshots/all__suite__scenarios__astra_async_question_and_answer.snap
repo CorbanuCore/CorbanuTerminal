@@ -6,15 +6,18 @@ Scenario: Astra uses the catalog question schema to ask who a launch update is f
 
 ## Window 1
 -- request 1 (request) --
-00:additional_tools/developer (3; hash=f181967456befa67):
-        - namespace/functions; hash=7e611b8ddd5621cf
+00:additional_tools/developer (3; hash=3014bc2fe7284f56):
+        - namespace/functions; hash=cac692238c6363ff
           - custom/exec
           - function/wait
           - function/request_user_input
           - function/request_user_input_async
+          - function/spawn_agent_plaintext
+          - function/send_message_plaintext
+          - function/followup_task_plaintext
         - namespace/clock: Tools for reading and waiting on time.; hash=f402e8c5e9b5e317
           - function/sleep
-        - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=2c8d6295978dbe63
+        - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=a702926d7b2ec538
           - function/followup_task
           - function/interrupt_agent
           - function/list_agents

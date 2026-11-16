@@ -182,6 +182,7 @@ pub(crate) fn exec_env_policy_from_shell_policy(
             .iter()
             .map(std::string::ToString::to_string)
             .collect(),
+        drop_url_password_values: false,
     }
 }
 

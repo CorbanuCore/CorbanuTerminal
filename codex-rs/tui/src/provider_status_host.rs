@@ -123,6 +123,8 @@ fn claude_credential_metadata(status: ClaudeCodePlanStatus) -> ClaudeCredentialM
 #[derive(Clone, Debug)]
 pub(crate) struct ProviderStatusHost {
     catalog: ProviderCatalog,
+    /// Cloud runtimes are offered during onboarding only with their setup feature enabled.
+    onboarding_hidden_providers: Vec<&'static str>,
     codex_home: PathBuf,
     current: Arc<RwLock<CurrentProviderSelection>>,
     account: Arc<RwLock<ProviderAccountMetadata>>,
@@ -428,6 +430,21 @@ impl ProviderStatusHost {
             // third-party session provider implies (#571).
             forced_login_method: config.configured_forced_login_method,
             environment: environment_metadata,
+            onboarding_hidden_providers: [
+                (
+                    codex_features::Feature::BedrockSetupWizard,
+                    codex_model_provider_info::AMAZON_BEDROCK_RUNTIME_PROVIDER_ID,
+                ),
+                (
+                    codex_features::Feature::GcpSetupWizard,
+                    codex_model_provider_info::GCP_PROVIDER_ID,
+                ),
+            ]
+            .into_iter()
+            .filter_map(|(feature, provider)| {
+                (!config.features.enabled(feature)).then_some(provider)
+            })
+            .collect(),
             catalog,
             codex_home: config.codex_home.to_path_buf(),
             current: Arc::new(RwLock::new(CurrentProviderSelection::runtime_id(
@@ -452,6 +469,11 @@ impl ProviderStatusHost {
     }
     pub(crate) fn catalog(&self) -> &ProviderCatalog {
         &self.catalog
+    }
+    pub(crate) fn onboarding_provider_visible(&self, entry: &ProviderCatalogEntry) -> bool {
+        !self
+            .onboarding_hidden_providers
+            .contains(&entry.id.as_str())
     }
     pub(crate) fn update_account_metadata(&self, account: ProviderAccountMetadata) {
         *self

@@ -47,9 +47,12 @@ use shlex::try_join as shlex_try_join;
 mod executable_identity;
 mod inheritance;
 mod model_policy;
+#[path = "exec_policy_wrappers.rs"]
+mod wrappers;
 
 pub(crate) use inheritance::InheritedExecPolicy;
 pub(crate) use model_policy::AllowPrefixRules;
+pub(crate) use wrappers::check_with_wrappers;
 
 const PROMPT_CONFLICT_REASON: &str =
     "approval required by policy, but AskForApproval is set to Never";
@@ -507,7 +510,16 @@ impl ExecPolicyManager {
             live_aggressive,
         );
         // Avoid reusable approvals when this model does not honor prefix rules.
-        let auto_amendment_allowed = allow_prefix_rules == AllowPrefixRules::Honor;
+        // A wrapper-only amendment cannot approve stricter inner commands,
+        // and an uncertain boundary must never become a remembered bypass.
+        let auto_amendment_allowed = allow_prefix_rules == AllowPrefixRules::Honor
+            && !commands
+                .iter()
+                .any(|command| wrappers::has_wrappers(command))
+            // Upstream keeps top-level heredocs as shell argv. The restrictive
+            // heredoc pass still sees wrappers inside that script, as on main.
+            && parse_shell_lc_single_command_prefix(full_command)
+                .is_none_or(|command| !wrappers::has_wrappers(&command));
         let exec_policy_fallback = |cmd: &[String]| {
             render_decision_for_unmatched_command_for_platform(
                 cmd,
@@ -524,10 +536,12 @@ impl ExecPolicyManager {
         let match_options = MatchOptions {
             resolve_host_executables: true,
         };
-        let mut evaluation = exec_policy.check_multiple_with_options(
-            commands.iter(),
+        let mut evaluation = check_with_wrappers(
+            exec_policy.as_ref(),
+            &commands,
             &exec_policy_fallback,
             &match_options,
+            command_platform,
         );
         // S3b: upstream no longer matches rules against a heredoc script's
         // command; main did. Keep its prompt and forbidden rules at every level.
@@ -536,6 +550,7 @@ impl ExecPolicyManager {
             exec_policy.as_ref(),
             full_command,
             &match_options,
+            command_platform,
         );
         if self.strict_rules_for(live_aggressive) {
             // The original command, not the parsed one: parsing keeps only
@@ -579,10 +594,12 @@ impl ExecPolicyManager {
                 let suspended_note = live_aggressive
                     .then(|| {
                         self.aggressive_suspended_note(|policy| {
-                            policy.check_multiple_with_options(
-                                commands.iter(),
+                            check_with_wrappers(
+                                policy,
+                                &commands,
                                 &exec_policy_fallback,
                                 &match_options,
+                                command_platform,
                             )
                         })
                     })
@@ -633,18 +650,15 @@ impl ExecPolicyManager {
             Decision::Allow => ExecApprovalRequirement::Skip {
                 // Bypass sandbox only when every parsed command segment is
                 // explicitly allowed by execpolicy.
-                bypass_sandbox: commands.iter().all(|command| {
-                    exec_policy
-                        .matches_for_command_with_options(
-                            command,
-                            /*heuristics_fallback*/ None,
-                            &match_options,
-                        )
-                        .iter()
-                        .any(|rule_match| {
-                            is_policy_match(rule_match) && rule_match.decision() == Decision::Allow
-                        })
-                }),
+                bypass_sandbox: check_with_wrappers(
+                    exec_policy.as_ref(),
+                    &commands,
+                    &|_| Decision::Forbidden,
+                    &match_options,
+                    command_platform,
+                )
+                .decision
+                    == Decision::Allow,
                 proposed_execpolicy_amendment: if auto_amendment_allowed {
                     without_credentials(try_derive_execpolicy_amendment_for_allow_rules(
                         &evaluation.matched_rules,
@@ -1269,19 +1283,25 @@ fn apply_heredoc_restrictive_matches(
     policy: &Policy,
     command: &[String],
     match_options: &MatchOptions,
+    command_platform: DangerousCommandPlatform,
 ) {
     let Some(heredoc_command) = parse_shell_lc_single_command_prefix(command) else {
         return;
     };
-    let found = policy.check_multiple_with_options(
-        std::iter::once(&heredoc_command),
+    // #2396: through wrappers too (`sudo python3 <<EOF`). With an Allow
+    // fallback, a heuristic above Allow can only come from the wrapper
+    // checks (an uncertain wrapper or a wrapped heredoc), so it is kept.
+    let found = check_with_wrappers(
+        policy,
+        std::slice::from_ref(&heredoc_command),
         &|_: &[String]| Decision::Allow,
         match_options,
+        command_platform,
     );
     let restrictive = found
         .matched_rules
         .into_iter()
-        .filter(|rule_match| is_policy_match(rule_match) && rule_match.decision() > Decision::Allow)
+        .filter(|rule_match| rule_match.decision() > Decision::Allow)
         .filter(|rule_match| !evaluation.matched_rules.contains(rule_match))
         .collect::<Vec<_>>();
     let Some(decision) = restrictive.iter().map(RuleMatch::decision).max() else {

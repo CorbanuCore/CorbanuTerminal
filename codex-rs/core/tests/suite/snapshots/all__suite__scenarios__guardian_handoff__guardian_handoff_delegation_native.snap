@@ -1,6 +1,6 @@
 ---
 source: core/tests/suite/scenarios_guardian_handoff.rs
-assertion_line: 40
+assertion_line: 49
 expression: snapshot
 ---
 Scenario: Complete Guardian request history: root delegates through alpha to leaf and separately to beta. Root handoffs to alpha update leaf immediately. Every branch keeps genuine root user messages, including cancellation followed by unrelated status questions. Handoff windows and the latest three root messages select assistant context. If compaction removes the handoff calls, the existing root context is used instead. The assessment is mocked.
@@ -57,7 +57,7 @@ Scenario: Complete Guardian request history: root delegates through alpha to lea
 07:function_call_output:This call is review evidence, not a request to execute it. This is not its execution result.
 08:message/user[2]:
     [01]
-        [3] tool spawn_agent result: {"task_name":"/root/alpha/leaf"}
+        [3] tool spawn_agent result: {"task_name":"/root/alpha/leaf","nickname":"Worker the 2nd","model_provider...5.5","reasoning_effort":"medium","service_tier":null} [hash=fd250b7b5ead8380]
 
     [02]
         [4] assistant: Agent message from /root/alpha/leaf:

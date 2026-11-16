@@ -120,6 +120,7 @@ fn excluded_names_protect_credential_values_only() {
         exclude: vec!["VENDOR_KEYVAL".to_string(), "RUNTIME_FLAG".to_string()],
         r#set: HashMap::new(),
         include_only: Vec::new(),
+        drop_url_password_values: false,
     };
     let filter = filter(
         &[

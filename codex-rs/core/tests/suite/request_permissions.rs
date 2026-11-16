@@ -2007,6 +2007,46 @@ async fn request_permissions_session_grants_carry_across_turns() -> Result<()> {
 const SENTINEL_PATH: &str = "denied-child-permissions/secrets/nested/sentinel.txt";
 const SENTINEL_CONTENT: &str = "untouched\n";
 const PERMISSIONS_CALL_ID: &str = "denied-child-permissions-grant";
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn read_only_does_not_offer_apply_patch() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = start_mock_server().await;
+    let test = test_codex()
+        .with_config(|config| {
+            config
+                .permissions
+                .set_permission_profile(CorePermissionProfile::read_only())
+                .expect("read-only profile");
+            config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
+            config.approvals_reviewer = ApprovalsReviewer::User;
+            config
+                .features
+                .enable(Feature::RequestPermissionsTool)
+                .expect("request_permissions feature");
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    let mock = mount_sse_once(&server, sse(vec![ev_completed("done")])).await;
+    test.submit_text_turn("inspect the available tools").await?;
+    let request = mock.single_request();
+    let tools = request.body_json()["tools"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let names = tools
+        .iter()
+        .filter_map(|tool| tool["name"].as_str())
+        .collect::<Vec<_>>();
+    assert!(names.contains(&"request_permissions"), "{names:?}");
+    for edit_tool in ["apply_patch", "structured_edit", "structured_write"] {
+        assert!(
+            !names.contains(&edit_tool),
+            "{edit_tool} must not be offered: {names:?}"
+        );
+    }
+    Ok(())
+}
+
 const WRITE_CALL_ID: &str = "denied-child-permissions-write";
 
 #[derive(Clone, Copy, Debug)]
@@ -2040,26 +2080,42 @@ async fn denied_child_permissions_require_fresh_approval(
         Ok(()),
         "this regression exercises POSIX split-policy enforcement; a disabled Windows sandbox can independently prompt for the command"
     );
-    let harness =
-        TestCodexHarness::with_auto_env_builder(test_codex().with_config(move |config| {
-            config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
-            config.approvals_reviewer = ApprovalsReviewer::User;
-            config
-                .permissions
-                .set_permission_profile(CorePermissionProfile::read_only())
-                .expect("set permission profile");
-            let inline_permissions = if mode == ApprovalMode::InlineFeatureDisabled {
-                config.features.disable(Feature::ExecPermissionApprovals)
-            } else {
-                config.features.enable(Feature::ExecPermissionApprovals)
-            };
-            inline_permissions.expect("configure inline permissions");
-            config
-                .features
-                .enable(Feature::RequestPermissionsTool)
-                .expect("enable request_permissions");
-        }))
-        .await?;
+    // The patch tool is intentionally absent in read-only sessions. Give its
+    // fixture a writable workspace while keeping the attempted target outside it.
+    let workspace_root = tempfile::tempdir()?;
+    let harness = TestCodexHarness::with_auto_env_builder(
+        test_codex()
+            .with_config_folder(workspace_root.path())
+            .with_config(move |config| {
+                config.permissions.approval_policy =
+                    Constrained::allow_any(AskForApproval::OnRequest);
+                config.approvals_reviewer = ApprovalsReviewer::User;
+                let profile = match tool {
+                    WriteTool::ExecCommand => CorePermissionProfile::read_only(),
+                    WriteTool::ApplyPatch => CorePermissionProfile::workspace_write_with(
+                        &[],
+                        NetworkSandboxPolicy::Restricted,
+                        /*exclude_tmpdir_env_var*/ true,
+                        /*exclude_slash_tmp*/ true,
+                    ),
+                };
+                config
+                    .permissions
+                    .set_permission_profile(profile)
+                    .expect("set permission profile");
+                let inline_permissions = if mode == ApprovalMode::InlineFeatureDisabled {
+                    config.features.disable(Feature::ExecPermissionApprovals)
+                } else {
+                    config.features.enable(Feature::ExecPermissionApprovals)
+                };
+                inline_permissions.expect("configure inline permissions");
+                config
+                    .features
+                    .enable(Feature::RequestPermissionsTool)
+                    .expect("enable request_permissions");
+            }),
+    )
+    .await?;
     harness.write_file(SENTINEL_PATH, SENTINEL_CONTENT).await?;
     let test = harness.test();
     let root = test
@@ -2072,6 +2128,14 @@ async fn denied_child_permissions_require_fresh_approval(
         .to_abs_path()?;
     let denied_root = root.join("secrets");
     let target = denied_root.join("nested/sentinel.txt");
+    assert!(
+        !test
+            .config
+            .permissions
+            .file_system_sandbox_policy()
+            .can_write_path_with_cwd(target.as_path(), test.config.cwd.as_path()),
+        "the target must be outside the session writable roots before the grant",
+    );
     let requested_permissions = requested_directory_write_permissions(root.as_path());
     let constrained_permissions = RequestPermissionProfile {
         file_system: Some(FileSystemPermissions {

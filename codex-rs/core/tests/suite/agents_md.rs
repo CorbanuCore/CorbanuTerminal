@@ -867,16 +867,17 @@ async fn denied_project_instructions_fail_thread_creation() -> Result<()> {
 
 #[cfg(target_os = "macos")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn symlinked_writable_root_reports_sandbox_failure_instead_of_session_corruption()
--> Result<()> {
+async fn symlinked_writable_root_grants_its_real_location_without_session_corruption() -> Result<()>
+{
+    use codex_exec_server::FileSystemSandboxContext;
+
     let server = start_mock_server().await;
     let home = Arc::new(TempDir::new()?);
-    let home_path = home.path().display().to_string();
-    let canonical_home_path = home.path().canonicalize()?.display().to_string();
     let visualization_target = home.path().join("visualization-target");
     std::fs::create_dir(&visualization_target)?;
     let visualization_root = home.path().join("visualizations");
     create_directory_symlink(&visualization_target, &visualization_root);
+    let granted_root = visualization_root.clone();
 
     let mut builder = test_codex().with_home(home).with_config(move |config| {
         config.project_doc_max_bytes = 1;
@@ -886,7 +887,7 @@ async fn symlinked_writable_root_reports_sandbox_failure_instead_of_session_corr
             FileSystemAccessMode::Deny,
         ));
         file_system_policy.entries.push(FileSystemSandboxEntry::new(
-            visualization_root.abs().into(),
+            granted_root.abs().into(),
             FileSystemAccessMode::Write,
         ));
         config
@@ -898,31 +899,41 @@ async fn symlinked_writable_root_reports_sandbox_failure_instead_of_session_corr
             .expect("test config should allow the restricted filesystem policy");
     });
 
-    let error = match builder.build(&server).await {
-        Ok(_) => anyhow::bail!("thread creation must reject the symlinked writable root"),
-        Err(error) => format!("{error:#}"),
-    };
+    // Main grants symlinked writable roots at their real location (#2143).
+    // Instruction discovery must start the session with that same policy.
+    let test = builder.build(&server).await?;
+    let sandbox = FileSystemSandboxContext::from_permission_profile(
+        test.config.permissions.permission_profile().clone(),
+        PathUri::from_abs_path(&test.config.cwd),
+    );
+    for (root, name) in [
+        (&visualization_root, "through-link.txt"),
+        (&visualization_target, "through-real-path.txt"),
+    ] {
+        test.fs()
+            .write_file(
+                &PathUri::from_host_native_path(root.join(name))?,
+                b"written".to_vec(),
+                Default::default(),
+                Some(&sandbox),
+            )
+            .await?;
+        assert_eq!(std::fs::read(visualization_target.join(name))?, b"written");
+    }
 
+    let private_file = test.config.cwd.join("private.txt");
+    std::fs::write(private_file.as_path(), "private")?;
     assert!(
-        error.contains("failed to prepare fs sandbox"),
-        "thread creation should report the sandbox preparation failure: {error}"
+        test.fs()
+            .read_file(
+                &PathUri::from_abs_path(&private_file),
+                Default::default(),
+                Some(&sandbox),
+            )
+            .await
+            .is_err(),
+        "granting the real writable root must preserve the explicit read denial"
     );
-    assert!(
-        error.contains("symlinked writable roots are not supported"),
-        "thread creation should preserve the rejected writable root: {error}"
-    );
-    assert!(
-        !error.contains("Session data under"),
-        "sandbox preparation failure should not be diagnosed as session corruption: {error}"
-    );
-    let error = error
-        .replace(&canonical_home_path, "$CODEX_HOME")
-        .replace(&home_path, "$CODEX_HOME");
-    insta::assert_snapshot!(error, @"
-    failed to load AGENTS.md instructions for environment `local`: failed to prepare fs sandbox: failed to prepare Seatbelt sandbox: writable root $CODEX_HOME/visualizations contains symlink component $CODEX_HOME/visualizations; symlinked writable roots are not supported.
-    If this writable root is at or beneath CODEX_HOME and you trust its symlink targets, set `allow_symlinked_codex_home = true` at the top level of `$CODEX_HOME/config.toml` (normally `~/.codex/config.toml`) on the execution host, then restart Codex or its executor. This opt-out trusts targets outside CODEX_HOME and targets changed between commands. It does not apply to other writable roots.
-    ");
-
     Ok(())
 }
 

@@ -205,6 +205,8 @@ impl ChatWidget {
     }
 
     pub(crate) fn handle_restricted_key(&mut self, key: KeyEvent, mode: RestrictedInputMode) {
+        // D642: restricted input never delivers a held burst Enter.
+        self.bottom_pane.cancel_pending_burst_submission();
         if self.external_writer_view {
             return;
         }

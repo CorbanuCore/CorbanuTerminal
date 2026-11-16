@@ -3096,7 +3096,8 @@ fn thread_resume_params_from_config(
     let (model, model_provider) = match model_settings {
         ResumeModelSettings::OverrideFromCurrentConfig => (
             config.model.clone(),
-            provider_selection::explicit_provider(&config),
+            // D636: a current-config resume always carries its effective provider.
+            Some(config.model_provider_id.clone()),
         ),
         ResumeModelSettings::RestoreFromThread | ResumeModelSettings::PreserveExistingThread => {
             (None, None)
@@ -4704,7 +4705,7 @@ mod tests {
             crate::resume_permissions::ResumePermissions::CURRENT_CONFIG,
         );
         let fork = thread_fork_params_from_config(
-            config,
+            config.clone(),
             thread_id,
             ThreadParamsMode::Remote,
             /*remote_cwd_override*/ None,
@@ -4717,7 +4718,7 @@ mod tests {
         assert_eq!(resume.runtime_workspace_roots, None);
         assert_eq!(fork.runtime_workspace_roots, None);
         assert_eq!(start.model_provider, None);
-        assert_eq!(resume.model_provider, None);
+        assert_eq!(resume.model_provider, Some(config.model_provider_id));
         assert_eq!(fork.model_provider, None);
         assert_eq!(start.sandbox, expected_sandbox);
         assert_eq!(resume.sandbox, None);
@@ -4847,7 +4848,7 @@ mod tests {
             crate::resume_permissions::ResumePermissions::CURRENT_CONFIG,
         );
         let fork = thread_fork_params_from_config(
-            config,
+            config.clone(),
             thread_id,
             ThreadParamsMode::Remote,
             Some(remote_cwd.as_path()),
@@ -4860,7 +4861,7 @@ mod tests {
         assert_eq!(resume.runtime_workspace_roots, None);
         assert_eq!(fork.runtime_workspace_roots, None);
         assert_eq!(start.model_provider, None);
-        assert_eq!(resume.model_provider, None);
+        assert_eq!(resume.model_provider, Some(config.model_provider_id));
         assert_eq!(fork.model_provider, None);
         assert_eq!(start.sandbox, expected_sandbox);
         assert_eq!(resume.sandbox, None);
@@ -5219,7 +5220,9 @@ requires_openai_auth = false
             )
             .await?;
 
-        assert_eq!(resumed.session.service_tier.as_deref(), Some("default"));
+        // The retained custom provider has no catalog default tier. Its saved
+        // settings must not acquire the current config or picker-only Fast tier.
+        assert_eq!(resumed.session.service_tier, None);
         app_server.shutdown().await?;
         Ok(())
     }

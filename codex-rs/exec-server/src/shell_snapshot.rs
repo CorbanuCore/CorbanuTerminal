@@ -435,7 +435,7 @@ done
         );
     }
     // Corbanu #2356: every variable's raw value, for the credential filter.
-    script.push_str(&filter::values_script(shell_type));
+    script.push_str(&codex_shell_command::shell_snapshot::snapshot_values_script(shell_type));
     // Probe under the exact capture sandbox, including its /proc fallback and
     // read policy. Keep cached env replay when descriptor paths cannot be opened.
     let probe = if shell_type == ShellType::Sh {

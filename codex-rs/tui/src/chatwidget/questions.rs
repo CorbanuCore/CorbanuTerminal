@@ -53,6 +53,27 @@ impl ChatWidget {
         self.refresh_pending_input_preview();
     }
 
+    pub(crate) fn cancel_question_burst_enter(&mut self) {
+        if let Some(questions) = &mut self.bottom_pane.questions {
+            questions.cancel_pending_burst_enter();
+        }
+    }
+
+    pub(crate) fn handle_async_question_burst_enter(&mut self, token: u64) {
+        if self.bottom_pane.has_active_view() {
+            self.bottom_pane.cancel_pending_burst_submission();
+            return;
+        }
+        if self
+            .bottom_pane
+            .questions
+            .as_mut()
+            .is_some_and(|questions| questions.prepare_burst_enter_key(token))
+        {
+            self.handle_question_key(KeyEvent::from(KeyCode::Enter));
+        }
+    }
+
     pub(super) fn handle_question_key(&mut self, key: KeyEvent) -> bool {
         if self.bottom_pane.has_active_view() {
             return false;

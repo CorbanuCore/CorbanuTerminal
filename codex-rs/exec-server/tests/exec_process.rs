@@ -310,6 +310,7 @@ async fn shell_snapshot_v2_filters_profile_exports_and_stays_in_memory(
             "PATH".to_string(),
             "PROFILE_*".to_string(),
         ],
+        drop_url_password_values: false,
     };
     let (command_prefix, expected_prefix) = if shell_name == "sh" {
         ("", "")
@@ -418,6 +419,7 @@ async fn exec_metadata_overrides_policy_and_cached_snapshot(
             ("CODEX_TOOL_CALL_ID".into(), "policy-call".into()),
         ]),
         include_only: Vec::new(),
+        drop_url_password_values: false,
     };
     let thread_id = codex_protocol::ThreadId::from_string("019d25f0-6728-7ce2-908f-c3c187323e5b")?;
     let later_thread_id =
@@ -671,6 +673,7 @@ async fn shell_snapshot_v2_remote_managed_proxy_uses_prepared_execution_context(
             "PROFILE_*".to_string(),
             "OPENAI_API_KEY".to_string(),
         ],
+        drop_url_password_values: false,
     };
     if credential_masking {
         policy.include_only.extend(
@@ -1018,6 +1021,7 @@ async fn shell_snapshot_v2_capture_failure_falls_back_and_retries(
             home.path().to_string_lossy().into_owned(),
         )]),
         include_only: vec!["HOME".to_string(), "PATH".to_string()],
+        drop_url_password_values: false,
     };
     let mut params = ExecParams {
         metadata: Default::default(),

@@ -51,6 +51,73 @@ async fn installer_fetch_rejects_non_success_status() {
     assert_eq!(http.requested_urls(), vec![INSTALL_URL.to_string()]);
 }
 
+/// D564 (#2197): main's production-gate tests. The tests above exercise the
+/// update mechanism, which unit tests keep enabled; these apply the gate.
+const DISABLED_MESSAGE: &str = "Corbanu Terminal daemon self-install/update is disabled until the managed installer supports Corbanu Terminal. Install or update Corbanu Terminal manually using the instructions at https://github.com/CorbanuCore/CorbanuTerminal#install. Then restart the daemon.";
+
+#[tokio::test]
+async fn managed_installer_neither_fetches_nor_executes_script() {
+    let _gate = super::ProductionGateForTest::enter();
+    let temp = tempfile::tempdir().expect("temporary directory");
+    let marker = temp.path().join("installer-ran");
+    let quoted_marker = marker.display().to_string().replace('\'', "'\\''");
+    let script = format!("#!/bin/sh\ntouch '{quoted_marker}'\n").into_bytes();
+    let http = FakeInstallerHttp::new(InstallerResponse::Success(script));
+
+    // Sync: update, restore and migration all fetch the installer here
+    // before running it; main's `install_latest_standalone` is gone upstream.
+    let result = fetch_installer_script(&http).await;
+
+    assert_eq!(
+        (
+            http.requested_urls(),
+            marker.exists(),
+            result.err().map(|error| error.to_string()),
+        ),
+        (
+            Vec::<String>::new(),
+            false,
+            Some(DISABLED_MESSAGE.to_string())
+        )
+    );
+}
+
+#[tokio::test]
+async fn disabled_installer_does_not_request_even_an_error_response() {
+    let _gate = super::ProductionGateForTest::enter();
+    let http = FakeInstallerHttp::new(InstallerResponse::Unsuccessful { status: 503 });
+
+    let error = fetch_installer_script(&http)
+        .await
+        .expect_err("managed installer is disabled");
+
+    assert_eq!(
+        (http.requested_urls(), error.to_string()),
+        (Vec::<String>::new(), DISABLED_MESSAGE.to_string())
+    );
+}
+
+#[tokio::test]
+async fn updater_entry_point_refuses_before_waiting_or_fetching() {
+    let _gate = super::ProductionGateForTest::enter();
+    let factory = codex_http_client::HttpClientFactory::new(
+        codex_http_client::OutboundProxyPolicy::ReqwestDefault,
+    );
+    // The old loop waits five minutes before fetching. Bound this regression
+    // test well below that delay so fail-before cannot reach the real network.
+    let result = tokio::time::timeout(
+        std::time::Duration::from_millis(100),
+        crate::run_pid_update_loop(factory, /*restore_release*/ None),
+    )
+    .await
+    .expect("disabled updater must return immediately");
+
+    assert_eq!(
+        result.expect_err("managed updater is disabled").to_string(),
+        DISABLED_MESSAGE
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn updater_reexec_preserves_paths_and_recovers_deleted_working_directory() {
@@ -1399,10 +1466,7 @@ fn d564_self_update_gate_skips_scheduled_and_refuses_requested_updates() {
         let error = super::self_update_gate(/*enabled*/ false, trigger)
             .err()
             .expect("a requested update is refused");
-        assert!(
-            error.to_string().contains("does not update itself"),
-            "{error}"
-        );
+        assert_eq!(error.to_string(), DISABLED_MESSAGE);
     }
     assert!(matches!(
         super::self_update_gate(/*enabled*/ true, super::UpdateTrigger::Manual),

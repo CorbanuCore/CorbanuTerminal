@@ -962,9 +962,13 @@ async fn sample_configured_conversation_history_with_delivery(
         extensions.mcp_server_contributor(Arc::new(HostedMessagingServer(url)));
     }
     let builder = test_codex()
+        .with_config(|config| {
+            config.model_catalog = Some(core_test_support::model_catalog::upstream_model_catalog());
+        })
         .with_extensions(Arc::new(extensions.build()))
         .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
-        .with_model_info_override("codex-auto-review", |model_info| {
+        .with_model_info_override("test-guardian-review", |model_info| {
+            *model_info = core_test_support::model_catalog::guardian_test_model();
             model_info
                 .model_messages
                 .as_mut()
@@ -974,7 +978,9 @@ async fn sample_configured_conversation_history_with_delivery(
                 .expect("reviewer model should have Guardian policy")
                 .policy = Some(TEST_CATALOG_GUARDIAN_POLICY.to_owned());
         })
-        .with_model("gpt-5.5")
+        .with_model_info_override("gpt-5.5", |model| {
+            model.auto_review_model_override = Some("test-guardian-review".into());
+        })
         .with_config(move |config| {
             config.approvals_reviewer = ApprovalsReviewer::AutoReview;
             config.guardian_policy_config = guardian_policy;
@@ -3249,9 +3255,17 @@ async fn assert_parent_compaction_reuse(parent_context_for_review: bool) -> Resu
 
     let thread_server = responses::start_mock_server().await;
     let test = test_codex()
+        .with_config(|config| {
+            config.model_catalog = Some(core_test_support::model_catalog::upstream_model_catalog());
+        })
+        .with_model_info_override("test-guardian-review", |model| {
+            *model = core_test_support::model_catalog::guardian_test_model();
+        })
+        .with_model_info_override("gpt-5.5", |model| {
+            model.auto_review_model_override = Some("test-guardian-review".into());
+        })
         .with_config(move |config| {
             config.approvals_reviewer = ApprovalsReviewer::AutoReview;
-
         })
         .with_pre_build_hook(|home| {
             std::fs::write(

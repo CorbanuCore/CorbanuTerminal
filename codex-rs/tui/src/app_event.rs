@@ -2766,13 +2766,6 @@ pub(crate) enum AppEvent {
     },
 
     /// Update the current approvals reviewer in the running app and widget.
-    // Sync S4a (sync-s4a2): a preset chosen with no task now goes through upstream's
-    // `select_permission_profile`, so nothing sends this outside tests; kept with its handler
-    // until #2308 decides whether that path should persist the reviewer as main did.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "only tests send it since the S4a preset change")
-    )]
     UpdateApprovalsReviewer(ApprovalsReviewer),
 
     /// Discover experimental features for the requesting popup only.
@@ -2978,6 +2971,11 @@ pub(crate) enum AppEvent {
 
     /// Open an existing editor above the configuration panel.
     OpenConfigEditor(crate::config_panel::ConfigEditorHandoff),
+
+    /// Replay a held Enter only if the same question editor still owns it.
+    AsyncQuestionBurstEnter {
+        token: u64,
+    },
 
     /// Schedule a notification preview with time to switch away from the terminal.
     TestConfigNotification,

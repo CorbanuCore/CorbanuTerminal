@@ -341,6 +341,7 @@ pub(super) async fn model_catalog_refresh_requests(
     )
     .await;
 
+    let catalog_url = format!("{}/v1/models", server.uri());
     let mut builder = test_codex()
         .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model("visible-model")
@@ -362,6 +363,8 @@ pub(super) async fn model_catalog_refresh_requests(
                     .enable(Feature::ModelCatalogInContext)
                     .expect("enable context catalogs");
             }
+            // D644: exercise the fixture catalog independently of bundled growth and caps.
+            config.model_provider.model_catalog_url = Some(catalog_url.into());
             config.multi_agent_v2.hide_spawn_agent_metadata = false;
             config.base_instructions = Some("Test model instructions.".to_string());
             config.include_environment_context = false;
@@ -378,8 +381,22 @@ pub(super) async fn model_catalog_refresh_requests(
         MultiAgentVersion::V2 => MULTI_AGENT_V2_NAMESPACE,
         MultiAgentVersion::Disabled => unreachable!("this scenario requires spawning"),
     };
-    let description = spawn_agent_description(&body, namespace)
-        .expect("spawn_agent description should be present");
+    let description = if multi_agent_version == MultiAgentVersion::V2 {
+        // The reserved native OpenAI schema has no runtime overrides. Its plaintext
+        // adapter carries the catalog and model-selection guidance being tested.
+        body["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == "spawn_agent_plaintext")
+            .expect("plaintext spawn adapter")["description"]
+            .as_str()
+            .expect("adapter description")
+            .to_string()
+    } else {
+        spawn_agent_description(&body, namespace)
+            .expect("spawn_agent description should be present")
+    };
     let catalog = request.message_input_texts("developer").join("\n");
     let listing = if model_catalog_in_context {
         &catalog
@@ -404,7 +421,7 @@ pub(super) async fn model_catalog_refresh_requests(
         // Corbanu: without the in-context catalogue, the spawn description carries the
         // exact provider/model runtime catalogue.
         assert!(
-            description.contains("- `openai` / `gpt-5.6-terra`"),
+            description.contains("- `openai` / `visible-model`"),
             "expected an eligible exact provider route in spawn_agent description: {description:?}"
         );
         assert!(
@@ -683,6 +700,19 @@ async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaul
                 .enable(Feature::MultiAgentV2)
                 .expect("feature update");
             config.agent_provider_allowlist = allowlist;
+            // Keep every route under test inside the 32-entry display cap, while
+            // retaining both engine preferences and an authorized external provider.
+            config
+                .model_catalog
+                .as_mut()
+                .unwrap()
+                .models
+                .retain(|model| {
+                    matches!(
+                        model.slug.as_str(),
+                        "gpt-5.4" | "gpt-5.6-luna" | "gpt-6-astra" | "glm-5.3-flash"
+                    )
+                });
             config.multi_agent_v2.expose_spawn_agent_model_overrides = true;
         })
         .build_with_auto_env(&server)

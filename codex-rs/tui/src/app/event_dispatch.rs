@@ -943,6 +943,9 @@ impl App {
         app_server: &mut AppServerSession,
         event: AppEvent,
     ) -> Result<AppRunControl> {
+        // Observe routing changes before a closing event can hide them from a
+        // delayed question key (for example, opening then closing an overlay).
+        self.cancel_question_burst_if_unfocused();
         let event = match event {
             AppEvent::TaskNodeScopedResult {
                 label,
@@ -5826,9 +5829,11 @@ impl App {
                         approvals_reviewer: reviewer.map(Into::into),
                         ..Default::default()
                     }, selection.display_label, reviewer);
-                } else {
-                    // Without a connected task, the server-owned selection reports that it waits.
-                    crate::boxed_future!(self.select_permission_profile(app_server, selection)).await;
+                } else if crate::boxed_future!(self.apply_permission_profile_selection(app_server, selection)).await {
+                    if let Some(reviewer) = reviewer {
+                        self.app_event_tx.send(AppEvent::UpdateApprovalsReviewer(reviewer));
+                    }
+                    self.chat_widget.submit_initial_user_message_if_pending();
                 }
             }
             AppEvent::UpdateApprovalsReviewer(policy) => {
@@ -7624,6 +7629,9 @@ impl App {
                         .open_config_editor(handoff, resume_current_availability);
                     self.chat_widget.refresh_config_panel(/*notice*/ None);
                 }
+            }
+            AppEvent::AsyncQuestionBurstEnter { token } => {
+                self.chat_widget.handle_async_question_burst_enter(token);
             }
             AppEvent::TestConfigNotification => self.schedule_config_notification_test(),
             AppEvent::SendConfigTestNotification { generation } => {

@@ -53,7 +53,8 @@ pub(crate) struct AccountModelsManager {
     /// The default handle's originator handles, one per originator.
     originators: std::sync::Mutex<HashMap<ModelCatalogOriginator, SharedModelsManager>>,
     current: ArcSwap<Current>,
-    switching: std::sync::Mutex<()>,
+    // Serializes startup discovery-policy updates with account and originator changes.
+    api_key_model_discovery_enabled: std::sync::Mutex<bool>,
 }
 
 struct Current {
@@ -102,7 +103,7 @@ impl AccountModelsManager {
             originator: None,
             originators: std::sync::Mutex::new(HashMap::new()),
             current: ArcSwap::from_pointee(current),
-            switching: std::sync::Mutex::new(()),
+            api_key_model_discovery_enabled: std::sync::Mutex::new(false),
         })
     }
 
@@ -137,6 +138,10 @@ impl ModelsManager for AccountModelsManager {
             return None;
         }
         let originator = ModelCatalogOriginator::from_originator(originator)?;
+        let discovery_enabled = self
+            .api_key_model_discovery_enabled
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut originators = self
             .originators
             .lock()
@@ -157,10 +162,27 @@ impl ModelsManager for AccountModelsManager {
                 account: current.account.clone(),
                 manager,
             }),
-            switching: std::sync::Mutex::new(()),
+            api_key_model_discovery_enabled: std::sync::Mutex::new(*discovery_enabled),
         });
         originators.insert(originator, Arc::clone(&handle));
         Some(handle)
+    }
+
+    fn set_api_key_model_discovery_enabled(&self, enabled: bool) {
+        let mut discovery_enabled = self
+            .api_key_model_discovery_enabled
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *discovery_enabled = enabled;
+        self.inner().set_api_key_model_discovery_enabled(enabled);
+        for originator in self
+            .originators
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .values()
+        {
+            originator.set_api_key_model_discovery_enabled(enabled);
+        }
     }
 
     fn list_models(
@@ -311,21 +333,25 @@ impl ModelsManager for AccountModelsManager {
 
     fn follow_sign_in_account(&self, account: Option<&NamedChatgptAccount>) -> bool {
         // Sessions starting together rebuild (and refetch) once.
-        let _switching = self
-            .switching
+        let discovery_enabled = self
+            .api_key_model_discovery_enabled
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if self.current.load().account.as_ref() == account {
             return false;
         }
-        self.current.store(Arc::new(build(
+        let current = build(
             &self.provider,
             &self.default_auth,
             &self.codex_home,
             &self.model_catalog,
             account.cloned(),
             self.originator,
-        )));
+        );
+        current
+            .manager
+            .set_api_key_model_discovery_enabled(*discovery_enabled);
+        self.current.store(Arc::new(current));
         true
     }
 }

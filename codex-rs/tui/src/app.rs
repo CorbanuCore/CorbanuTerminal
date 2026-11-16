@@ -250,6 +250,7 @@ mod managed_worktree_creation;
 mod misalignment_policy;
 mod model_defaults;
 mod new_session;
+mod question_burst;
 mod quick_dials;
 mod turn_tips;
 pub(crate) use new_session::has_launch_setting;
@@ -1078,6 +1079,14 @@ impl App {
         app_server: &mut AppServerSession,
         event: TuiEvent,
     ) -> Result<AppRunControl> {
+        self.cancel_question_burst_if_unfocused();
+        if let TuiEvent::Key(key) = &event
+            && key.kind != KeyEventKind::Release
+            && !crate::bottom_pane::key_continues_paste(key.code, key.modifiers)
+        {
+            // Global shortcuts can consume a key before ChatWidget sees it.
+            self.chat_widget.cancel_question_burst_enter();
+        }
         self.transcript_view
             .sync_patch_approval(self.chat_widget.current_patch_approval());
         tui.link_hover.observe(&event);

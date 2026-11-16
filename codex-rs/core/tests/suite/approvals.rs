@@ -4113,7 +4113,9 @@ allow_local_binding = true
                 .set_legacy_sandbox_policy(sandbox_policy_for_config)
                 .expect("set sandbox policy");
         });
-    let test = builder.build(&server).await?;
+    // Keep session construction off this large test future's stack. These
+    // approval cases must fit the normal 8 MiB test stack without enlarging it.
+    let test = Box::pin(builder.build(&server)).await?;
     assert!(
         test.config.managed_network_requirements_enabled(),
         "expected managed network requirements to be enabled"
@@ -4400,7 +4402,9 @@ allow_local_binding = true
         .with_config(move |config| {
             config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         });
-    let test = builder.build(&server).await?;
+    // Keep session construction off this large test future's stack. These
+    // approval cases must fit the normal 8 MiB test stack without enlarging it.
+    let test = Box::pin(builder.build(&server)).await?;
     assert!(
         test.config.managed_network_requirements_enabled(),
         "expected managed network requirements to be enabled"
@@ -4608,7 +4612,9 @@ allow_local_binding = true
                 .set_legacy_sandbox_policy(SandboxPolicy::DangerFullAccess, cwd.as_path())
                 .expect("test setup should allow sandbox policy");
         });
-    let test = builder.build(&server).await?;
+    // Keep session construction off this large test future's stack. These
+    // approval cases must fit the normal 8 MiB test stack without enlarging it.
+    let test = Box::pin(builder.build(&server)).await?;
     assert!(
         !test.config.managed_network_requirements_enabled(),
         "expected managed network requirements to stay inactive in danger-full-access"

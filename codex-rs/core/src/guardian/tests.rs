@@ -2248,12 +2248,13 @@ async fn guardian_review_request_layout_matches_model_visible_request_snapshot()
         .enable(Feature::MemoryTool)
         .expect("memory tool feature is configurable");
     let config = Arc::new(config);
-    let models_manager = test_support::models_manager_with_provider(
-        config.codex_home.to_path_buf(),
-        session.services.auth_manager(),
-        config.model_provider.clone(),
-    );
-    session.services.models_manager = models_manager;
+    session.services.models_manager = Arc::new(StaticModelsManager::new(
+        Some(session.services.auth_manager()),
+        ModelsResponse {
+            models: vec![core_test_support::model_catalog::guardian_test_model()],
+        },
+        codex_models_manager::ModelOrigin::ExplicitConfig,
+    ));
     crate::guardian::test_host::install(&session, &config);
     let memory_extension = Arc::new(GuardianMemoryContextProbe);
     let mut extensions = codex_extension_api::ExtensionRegistryBuilder::<Config>::new();
@@ -2277,7 +2278,7 @@ async fn guardian_review_request_layout_matches_model_visible_request_snapshot()
     apply_guardian_mock_turn_config(&mut turn, Arc::clone(&config));
     update_turn_settings_for_test(&mut turn, |settings| {
         Arc::make_mut(&mut settings.model_info).auto_review_model_override =
-            Some("codex-auto-review".to_string());
+            Some("test-guardian-review".to_string());
     });
     let session = Arc::new(session);
     let turn = Arc::new(turn);
@@ -2523,11 +2524,7 @@ async fn guardian_reuses_prompt_cache_key_and_appends_prior_reviews() -> anyhow:
     .await;
 
     let (mut session, mut turn) = guardian_test_session_and_turn(&server).await;
-    let mut reviewer_model = session
-        .services
-        .models_manager
-        .get_model_info("codex-auto-review", &turn.config.to_models_manager_config())
-        .await;
+    let mut reviewer_model = core_test_support::model_catalog::guardian_test_model();
     reviewer_model.comp_hash = Some("test-checkpoint".to_owned());
     let auth_manager = Arc::clone(&session.services.auth_manager());
     Arc::get_mut(&mut session)
@@ -2536,14 +2533,15 @@ async fn guardian_reuses_prompt_cache_key_and_appends_prior_reviews() -> anyhow:
         .models_manager = Arc::new(StaticModelsManager::new(
         Some(auth_manager),
         ModelsResponse {
-            models: vec![Arc::unwrap_or_clone(reviewer_model.model)],
+            models: vec![reviewer_model],
         },
         codex_models_manager::ModelOrigin::ExplicitConfig,
     ));
+    crate::guardian::test_host::install(&session, &turn.config);
     let turn_mut = Arc::get_mut(&mut turn).expect("turn should be unique");
     update_turn_settings_for_test(turn_mut, |settings| {
         Arc::make_mut(&mut settings.model_info).auto_review_model_override =
-            Some("codex-auto-review".to_string());
+            Some("test-guardian-review".to_string());
     });
     seed_guardian_parent_history(&session, &turn).await;
 

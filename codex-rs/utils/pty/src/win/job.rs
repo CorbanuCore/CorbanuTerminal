@@ -110,6 +110,7 @@ impl JobObject {
     }
 
     fn open_process(process_id: u32, access: u32) -> io::Result<ProcessHandle> {
+        // SAFETY: OpenProcess takes no pointers; it returns a new handle or null on failure.
         let handle = unsafe {
             OpenProcess(access, /*bInheritHandle*/ 0, process_id)
         };
@@ -117,11 +118,15 @@ impl JobObject {
             return Err(io::Error::last_os_error());
         }
 
+        // SAFETY: The handle is non-null and was just opened here, so this takes sole ownership
+        // and closes it exactly once on drop.
         Ok(unsafe { ProcessHandle::from_raw_handle(handle.cast()) })
     }
 
     /// Terminates the exact process identified by a previously captured handle.
     pub fn terminate_process_handle(handle: &ProcessHandle) -> io::Result<()> {
+        // SAFETY: The borrowed `OwnedHandle` keeps the process handle open for this call, and
+        // TerminateProcess takes no pointers. A handle without PROCESS_TERMINATE fails cleanly.
         let terminated = unsafe {
             TerminateProcess(handle.as_raw_handle().cast(), /*uExitCode*/ 1)
         };

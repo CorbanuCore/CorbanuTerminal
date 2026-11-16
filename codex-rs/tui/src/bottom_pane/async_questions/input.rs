@@ -74,11 +74,21 @@ impl AsyncQuestions {
             return;
         }
 
-        if self.keymap.composer.submit.is_pressed(key) && !self.composer.is_in_paste_burst() {
+        // Materialize expired text before retaining the draft for a possible send.
+        // A held Enter is deliberately not resolved by this text-only flush.
+        self.composer.flush_paste_burst_if_due();
+        // Preserve the full draft around immediate submissions, but let a plain
+        // burst Enter wait for following paste input (D642).
+        if self.keymap.composer.submit.is_pressed(key)
+            && (!self.composer.is_in_paste_burst()
+                || (self.composer.burst_enter_would_submit()
+                    && (key.code != KeyCode::Enter || !key.modifiers.is_empty())))
+        {
             self.composer.flush_pending_input();
         }
         let before = self.composer.snapshot_draft();
         let (result, _) = self.composer.handle_key_event(key);
+        self.schedule_burst_enter();
         let queued = matches!(result, InputResult::Queued { .. });
         if matches!(
             result,
@@ -360,7 +370,6 @@ impl BottomPaneView for AsyncQuestions {
         if !self.focus_is_notes() {
             self.focus_other();
         }
-        self.composer.flush_pending_input();
         self.composer.handle_paste(text)
     }
     fn flush_paste_burst_if_due(&mut self) -> bool {

@@ -4458,15 +4458,17 @@ async fn manual_compact_retries_after_context_window_error() {
         compact_input.len(),
         retry_input.len()
     );
-    assert_eq!(compact_input.first(), retry_input.first());
-    if let (Some(first_before), Some(first_after)) = (compact_input.get(1), retry_input.get(1)) {
-        assert_ne!(
-            first_before, first_after,
-            "retry should drop the oldest conversation item"
-        );
-    } else {
-        panic!("expected non-empty compact inputs");
-    }
+    // Base instructions are a request field, outside the history being trimmed.
+    assert!(!requests[1].instructions_text().is_empty());
+    assert_eq!(
+        requests[1].instructions_text(),
+        requests[2].instructions_text()
+    );
+    assert_eq!(
+        retry_input,
+        &compact_input[1..],
+        "retry should drop only the oldest conversation item"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

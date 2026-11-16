@@ -1213,17 +1213,34 @@ mod tests {
         let mut client = spawn_streaming_test_process(
             dir.path(),
             "download",
-            concat!(
-                "p=$$; (while kill -0 $p 2>/dev/null; do sleep 0.05; done; touch exited) ",
-                "</dev/null >/dev/null 2>&1 & exec cat input",
-            ),
+            r#"printf '%s\n' "$$" > pid; exec cat input"#,
         )
         .await;
 
         timeout(Duration::from_secs(10), async {
-            // The pipe readers can hold this payload while delivery is stalled.
-            while !dir.path().join("exited").exists() {
+            // Observe exit from outside the child's process group. A background
+            // shell watcher can be killed by ProcessHandle cleanup before it writes
+            // its marker, even though the download has already completed.
+            let pid = loop {
+                if let Ok(contents) = std::fs::read_to_string(dir.path().join("pid"))
+                    && let Ok(pid) = contents.trim().parse::<libc::pid_t>()
+                {
+                    assert!(pid > 0);
+                    break pid;
+                }
                 tokio::task::yield_now().await;
+            };
+            loop {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                // SAFETY: the fixture supplied a positive PID; signal 0 only
+                // checks whether that process exists, without sending a signal.
+                if unsafe { libc::kill(pid, 0) } == -1 {
+                    assert_eq!(
+                        std::io::Error::last_os_error().raw_os_error(),
+                        Some(libc::ESRCH)
+                    );
+                    break;
+                }
             }
             let error = client
                 .request(ClientRequest::ProcessKill {
@@ -1235,7 +1252,19 @@ mod tests {
                 .await
                 .unwrap()
                 .unwrap_err();
-            assert_eq!(error.message, "process \"download\" is no longer running");
+            assert_eq!(error.code, crate::error_code::INVALID_REQUEST_ERROR_CODE);
+            // Like main, the in-process event channel is unbounded: the exit
+            // notification can already be buffered and the handle removed while
+            // the client has not consumed any events yet. Both terminal states
+            // must refuse kill; neither may lose the queued output or exit.
+            assert!(
+                matches!(
+                    error.message.as_str(),
+                    "process \"download\" is no longer running"
+                        | "no active process for process handle \"download\""
+                ),
+                "unexpected process/kill error: {error:?}"
+            );
             let mut received = Vec::new();
             loop {
                 if let InProcessServerEvent::ServerNotification(notification) =

@@ -36,6 +36,7 @@ pub(super) async fn run_startup_for_test(
         /*initial_prompt*/ None,
         Vec::new(),
         selection,
+        /*resume_fallback_notice*/ None,
         /*startup_resume_model_override*/ None,
         codex_feedback::CodexFeedback::new(),
         /*is_first_run*/ false,

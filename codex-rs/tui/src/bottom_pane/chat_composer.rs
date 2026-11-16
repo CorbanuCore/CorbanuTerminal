@@ -132,7 +132,10 @@
 //! # Submission and Prompt Expansion
 //!
 //! Multiline pastes continue blockquote prefixes.
-//! `Enter` submits immediately. `Tab` requests queuing while a task is running; if no task is
+//! Async-question editors replay a quiet held Enter through their normal key path using a
+//! cancellable event token; their redraw ticks never create or dispatch answers.
+//! `Enter` submits immediately except after a long raw-key burst: a 32ms lookahead distinguishes
+//! a submit from a pasted newline. `Tab` requests queuing while a task is running; if no task is
 //! running, `Tab` submits just like Enter so input is never dropped.
 //! Submit and queue bindings act only on fresh key presses; repeated events are consumed so a held
 //! key cannot dispatch a preserved draft after another input layer closes.
@@ -397,6 +400,7 @@ use codex_protocol::user_input::TextElement;
 
 mod agents_navigation;
 mod attachment_state;
+mod burst_submission;
 mod completion_target;
 mod composer_layout;
 mod draft_state;
@@ -1185,7 +1189,10 @@ impl ChatComposer {
 
     /// Returns true if the composer currently contains no user-entered input.
     pub(crate) fn is_empty(&self) -> bool {
-        self.draft.textarea.is_empty() && !self.draft.is_bash_mode && self.attachments.is_empty()
+        self.draft.textarea.is_empty()
+            && !self.draft.is_bash_mode
+            && self.attachments.is_empty()
+            && !self.draft.paste_burst.has_pending_enter()
     }
 
     /// Record local persistent-history metadata so the composer can navigate
@@ -1309,6 +1316,7 @@ impl ChatComposer {
     /// are renumbered to `[Image #M+1]..[Image #N]` (where `M` is the number of
     /// remote images). Cursor is placed at the end after rebuilding elements.
     pub(crate) fn apply_external_edit(&mut self, text: String) {
+        self.draft.paste_burst.clear_after_explicit_paste();
         self.note_sparkle_replaced_text(&text);
         self.vim_history = VimHistory::default();
         self.draft.pending_pastes.clear();
@@ -1614,6 +1622,7 @@ impl ChatComposer {
             }
         }
         // Clear any existing content, placeholders, and attachments first.
+        self.draft.paste_burst.clear_after_explicit_paste();
         self.footer.flash = None;
         self.vim_history = VimHistory::default();
         self.draft.textarea_state.get_mut().follow_cursor();
@@ -2022,6 +2031,11 @@ impl ChatComposer {
 
     /// Handle a key event coming from the main UI.
     pub fn handle_key_event(&mut self, key_event: KeyEvent) -> (InputResult, bool) {
+        if !matches!(key_event.kind, KeyEventKind::Release)
+            && !crate::bottom_pane::key_continues_paste(key_event.code, key_event.modifiers)
+        {
+            self.cancel_pending_burst_submission();
+        }
         if !self.draft.input_enabled {
             return (InputResult::None, false);
         }
@@ -3289,19 +3303,18 @@ impl ChatComposer {
         {
             self.apply_paste(pasted);
         }
-        // Some terminals and TUI drivers deliver an ordinary single-line prompt as a rapid
-        // character burst followed immediately by the user's real submit Enter. Once the input
-        // is long enough to distinguish that case from a short multiline paste, materialize the
-        // buffered text before running the normal submission path.
+        // D642(c): length alone cannot distinguish a prompt from a pasted first line.
+        // Keep rule #22, but wait briefly for following input before submitting.
+        self.draft.paste_burst.continue_after_enter(now);
         if !should_queue
             && !self.draft.disable_paste_burst
             && self
                 .draft
                 .paste_burst
                 .single_line_burst_enter_should_submit(self.draft.textarea.text())
-            && let Some(pasted) = self.draft.paste_burst.flush_before_modified_input()
         {
-            self.apply_paste(pasted);
+            self.draft.paste_burst.defer_enter(now);
+            return (InputResult::None, true);
         }
 
         if !should_queue && self.handle_paste_enter(now) {
@@ -3684,11 +3697,12 @@ impl ChatComposer {
         if self.queue_keys.is_pressed(key_event)
             && (self.is_task_running || self.queue_submissions || !self.is_bang_shell_command())
         {
-            return self.handle_submission(self.is_task_running || self.queue_submissions);
+            return self
+                .handle_submission_key(key_event, self.is_task_running || self.queue_submissions);
         }
 
         if self.submit_keys.is_pressed(key_event) {
-            return self.handle_submission(self.queue_submissions);
+            return self.handle_submission_key(key_event, self.queue_submissions);
         }
 
         if let KeyEvent {
@@ -3780,6 +3794,11 @@ impl ChatComposer {
         input: KeyEvent,
         now: Instant,
     ) -> (InputResult, bool) {
+        if crate::bottom_pane::key_continues_paste(input.code, input.modifiers) {
+            self.draft.paste_burst.continue_after_enter(now);
+        } else {
+            self.cancel_pending_burst_submission();
+        }
         if !self.draft.textarea.is_vim_normal_mode() {
             self.begin_vim_edit(input);
         }
@@ -4453,6 +4472,9 @@ impl ChatComposer {
 
     #[allow(dead_code)]
     pub(crate) fn set_input_enabled(&mut self, enabled: bool, placeholder: Option<String>) {
+        if !enabled {
+            self.cancel_pending_burst_submission();
+        }
         self.draft.input_enabled = enabled;
         self.draft.input_disabled_placeholder = if enabled { None } else { placeholder };
 
@@ -5193,6 +5215,10 @@ impl ChatComposer {
 #[cfg(test)]
 #[path = "chat_composer/agents_navigation_tests.rs"]
 mod agents_navigation_tests;
+
+#[cfg(test)]
+#[path = "chat_composer/burst_submission_tests.rs"]
+mod burst_submission_tests;
 
 #[cfg(test)]
 #[path = "chat_composer_effort_tests.rs"]

@@ -121,6 +121,13 @@ async fn analytics_menu_reopen_preserves_navigation_and_explicit_view_selects_su
     .unwrap();
     let mut app_server = start_config_write_test_app_server(&app).await?;
     let mut tui = crate::tui::test_support::make_test_tui()?;
+    // Analytics follows the active pane's config (D652), including its backend.
+    let init = app.chatwidget_init_for_forked_or_resumed_thread(
+        &mut tui,
+        app.config.clone(),
+        /*initial_user_message*/ None,
+    );
+    app.chat_widget = ChatWidget::new_with_app_event(init);
     let mut screens = Vec::new();
     for explicit in [
         None,

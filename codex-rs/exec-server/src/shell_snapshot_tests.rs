@@ -295,6 +295,7 @@ fn snapshot_size_limit_counts_state_and_environment_before_filtering() {
         exclude: vec!["FILTERED".to_string()],
         r#set: HashMap::new(),
         include_only: Vec::new(),
+        drop_url_password_values: false,
     };
     assert!(
         parse_snapshot(
@@ -325,6 +326,7 @@ fn snapshot_filters_profile_exports_after_capture() {
             "CODEX_THREAD_ID".to_string(),
             "CODEX_TOOL_CALL_ID".to_string(),
         ],
+        drop_url_password_values: false,
     };
     let snapshot = parse_snapshot(
         ShellType::Bash,
@@ -357,6 +359,7 @@ fn snapshot_preserves_profile_exports_with_restrictive_inheritance() {
             exclude: vec!["PROFILE_DENIED".to_string()],
             r#set: HashMap::new(),
             include_only: Vec::new(),
+            drop_url_password_values: false,
         };
         let snapshot = parse_snapshot(
             ShellType::Bash,

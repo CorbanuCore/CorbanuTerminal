@@ -41,6 +41,7 @@ async fn first_request_item_types_roles_and_content_annotations() -> Result<()> 
             model_info.input_modalities.push(InputModality::Audio);
         })
         .with_config(|config| {
+            config.base_instructions = Some("Context annotation test instructions.".into());
             config.update_plan_enabled = true;
             config.developer_instructions = Some("Keep world-state annotations aligned.".into());
             config.model_context_window = Some(128_000);
@@ -146,12 +147,16 @@ async fn first_request_item_types_roles_and_content_annotations() -> Result<()> 
     .await;
 
     let request = response.single_request();
+    assert_eq!(
+        request.body_json()["instructions"],
+        "Context annotation test instructions."
+    );
     assert!(request.has_content_kinds(&["guardian.approved_action"]));
     let mut guardian_item = request
         .input()
         .into_iter()
-        .nth(1)
-        .expect("guardian approval should follow the base instructions");
+        .next()
+        .expect("guardian approval should lead input after the separate base instructions");
     guardian_item
         .as_object_mut()
         .expect("guardian approval should be an object")
@@ -206,7 +211,6 @@ async fn first_request_item_types_roles_and_content_annotations() -> Result<()> 
         .collect::<Vec<_>>()
         .join("\n");
     insta::assert_snapshot!(items, @r#"
-    message developer ["model.base_instructions"]
     message developer ["guardian.approved_action"]
     message developer ["generic.developer_instructions","token_budget.context_window_guidance","permissions.instructions","environments.instructions"]
     message developer ["token_budget.context_window","token_budget.context_window","token_budget.context_window"]

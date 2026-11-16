@@ -134,6 +134,127 @@ class DiagnosticTests(unittest.TestCase):
                     )
 
 
+class DifferentialTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        (self.root / "codex-rs").mkdir()
+        self.lock = self.root / "codex-rs/Cargo.lock"
+        self.lock.write_text(
+            '[[package]]\nname = "rustls-webpki"\nversion = "0.103.15"\n'
+            'source = "registry+https://github.com/rust-lang/crates.io-index"\n'
+        )
+        self.bad = FIXTURE.read_text()
+        self.clean = json.dumps(
+            {"type": "summary", "fields": {"advisories": {"errors": 0}}}
+        )
+
+    def test_identity_includes_id_crate_version_and_source(self):
+        original = deny.advisory_errors(self.bad, 1, self.lock)
+        for before, after in (
+            ("RUSTSEC-2026-0382", "RUSTSEC-2026-9999"),
+            ("rustls-webpki", "other-crate"),
+            ("0.103.15", "0.103.14"),
+            (
+                "registry+https://github.com/rust-lang/crates.io-index",
+                "git+https://example.test/crate",
+            ),
+        ):
+            with self.subTest(after=after):
+                lock = self.lock.read_text()
+                self.lock.write_text(lock.replace(before, after))
+                changed = deny.advisory_errors(
+                    self.bad.replace(before, after), 1, self.lock
+                )
+                self.assertTrue(changed - original)
+                self.lock.write_text(lock)
+
+    def test_incomplete_unknown_and_infrastructure_results_fail_closed(self):
+        for text, status in (
+            ("", 1),
+            (self.bad, 101),
+            (self.clean, 1),
+            (self.bad, 0),
+            (self.bad.replace('"errors":1', '"errors":2'), 1),
+            (self.bad.replace('"code":"vulnerability"', '"code":"yanked"'), 1),
+            (self.bad + '\n{"type":"log","fields":{"level":"ERROR"}}', 1),
+            ("not json", 1),
+        ):
+            with self.subTest(text=text[:30], status=status):
+                with self.assertRaises(ValueError):
+                    deny.advisory_errors(text, status, self.lock)
+
+    def test_ambiguous_sources_fail_closed(self):
+        self.lock.write_text(
+            self.lock.read_text()
+            + '[[package]]\nname = "rustls-webpki"\nversion = "0.103.15"\n'
+            'source = "git+https://example.test/crate"\n'
+        )
+        with self.assertRaisesRegex(ValueError, "ambiguous"):
+            deny.advisory_errors(self.bad, 1, self.lock)
+
+    def run_pr(self, baseline, current, status=1, fetch_status=0):
+        commands = []
+
+        def run(command, **kwargs):
+            commands.append(command)
+            if command[0] == "git":
+                if "add" in command:
+                    base = Path(command[-2]) / "codex-rs"
+                    base.mkdir(parents=True)
+                    (base / "Cargo.lock").write_text(self.lock.read_text())
+                return subprocess.CompletedProcess(command, 0, "")
+            if "fetch" in command:
+                return subprocess.CompletedProcess(command, fetch_status, "")
+            if "advisories" in command:
+                return subprocess.CompletedProcess(
+                    command, int(baseline == self.bad), baseline
+                )
+            return subprocess.CompletedProcess(command, status, current)
+
+        with (
+            patch.object(deny.subprocess, "run", side_effect=run),
+            patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/repo"}),
+            patch("builtins.print") as printed,
+        ):
+            result = deny.check_pr(self.root, self.root / "deny.jsonl", SHA)
+        return result, commands, " ".join(str(c) for c in printed.call_args_list)
+
+    def test_existing_advisory_warns_and_new_dependency_fails(self):
+        status, commands, text = self.run_pr(self.bad, self.bad)
+        self.assertEqual(status, 0)
+        self.assertIn("::warning::Already on base", text)
+        self.assertIn("label%3Acargo-deny-main", text)
+        checks = [c for c in commands if "check" in c]
+        self.assertEqual(len(checks), 2)
+        self.assertTrue(all("--disable-fetch" in c for c in checks))
+        self.assertTrue(all("--locked" in c for c in checks))
+        self.assertEqual(checks[0][-1], checks[1][-1])
+        self.assertEqual(sum("fetch" in c for c in commands), 1)
+        status, _, text = self.run_pr(self.clean, self.bad)
+        self.assertEqual(status, 1)
+        self.assertIn("::error::PR introduces", text)
+
+    def test_non_advisory_exit_bits_and_fetch_failure_still_block(self):
+        for status in (2, 4, 8, 3, 5, 9, 101, -9):
+            with self.subTest(status=status):
+                result, _, _ = self.run_pr(self.bad, self.bad, status)
+                self.assertNotEqual(result, 0)
+        result, commands, _ = self.run_pr(self.bad, self.bad, fetch_status=1)
+        self.assertEqual(result, 1)
+        self.assertEqual(len(commands), 1)
+
+    def test_fixed_pr_passes_with_advisory_remaining_only_on_main(self):
+        status, _, text = self.run_pr(self.bad, self.clean, status=0)
+        self.assertEqual(status, 0)
+        self.assertNotIn("::warning::", text)
+
+    def test_unknown_base_result_stops_before_pr_check_and_cleans_worktree(self):
+        with self.assertRaises(ValueError):
+            self.run_pr("{}", self.bad)
+
+
 class MergeTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

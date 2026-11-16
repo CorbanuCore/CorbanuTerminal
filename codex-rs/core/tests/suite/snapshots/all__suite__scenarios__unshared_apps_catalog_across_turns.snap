@@ -7,6 +7,7 @@ Scenario: A peer finishes Apps discovery during submit. The thread uses its own 
 ## Window 1
 Settings:
   include: ["reasoning.encrypted_content"]
+  instructions: <MODEL_INSTRUCTIONS>
   model: "gpt-5.5"
   parallel_tool_calls: true
   prompt_cache_key: "<PROMPT_CACHE_KEY 1>"
@@ -15,14 +16,13 @@ Settings:
   stream: true
   text: {"verbosity":"low"}
   tool_choice: "auto"
-  tools (11; hash=b18d58517f1e1d66):
+  tools (10; hash=89143091011bf78d):
     - function/exec_command: Runs a command in a PTY, returning output or a session ID for ongoing interaction.; args=[cmd, justification, login, max_output_tokens, prefix_rule, sandbox_permissions, shell, tty, workdir, yield_time_ms]; hash=c04108e51a8548c5
     - function/write_stdin: Writes characters to an existing unified exec session and returns recent output.; args=[chars, max_output_tokens, session_id, yield_time_ms]; hash=7fb62d8a3e2df4e2
     - function/list_mcp_resources: Lists resources provided by MCP servers. Resources allow servers to share data that provides cont...; args=[cursor, server]; hash=6792edaff13561bd
     - function/list_mcp_resource_templates: Lists resource templates provided by MCP servers. Parameterized resource templates allow servers ...; args=[cursor, server]; hash=60f17c90ef7a4ebb
     - function/read_mcp_resource: Read a specific resource from an MCP server given the server name and resource URI.; args=[server, uri]; hash=24246896b39008ae
     - function/request_user_input: Request user input for one to three short questions and wait for the response. This tool is only ...; args=[questions]; hash=64a729b25c424fc6
-    - custom/apply_patch: The `apply_patch` tool can be used to edit files. This is a FREEFORM tool, so do not wrap the pat...; hash=dea9f12b0111a4ba
     - function/view_image: View a local image file from the filesystem when visual inspection is needed. Use this for images...; args=[detail, path]; hash=3b766d5bdec5d50e
     - namespace/mcp__cached_rmcp: Tools in the mcp__cached_rmcp namespace.; hash=fa6836ec918ed91a
       - function/calendar_list_events
@@ -129,35 +129,34 @@ Settings:
       - function/_timezone_option_99
     - web_search; hash=f103e327c6870a46
 -- request 1 (turn) --
-00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer[2]:
+00:message/developer[2]:
     [01] <PERMISSIONS_INSTRUCTIONS>
     [02] <APPS_INSTRUCTIONS>
-02:message/user:
+01:message/user:
     <ENVIRONMENT_CONTEXT>
-03:message/user:
+02:message/user:
     <NO_TEXT>
 
 ## Window 2 (after request 1)
 Settings: relative to window 1
-  tools (11; hash=ab44f83a0745a3ed):
+  tools (13; hash=56519a43973e6b4a):
+    + custom/apply_patch: The `apply_patch` tool can be used to edit files. This is a FREEFORM tool, so do not wrap the pat...; hash=1e5e006b407e1daa
+    + function/structured_edit: Modify an existing UTF-8 text file by replacing exact text. This is an edit tool only, not a read...; args=[new_string, old_string, path, replace_all]; hash=3a4d88a8d78298ae
+    + function/structured_write: Create or intentionally overwrite a UTF-8 text file. This is a write tool only, not a read or ins...; args=[content, mode, path]; hash=dd17fa676504c92f
     ~ web_search; hash=e214d4db1bc49e89
 -- request 2 (turn) --
-00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer[2]:
+00:message/developer[2]:
     [01] <PERMISSIONS_INSTRUCTIONS>
     [02] <APPS_INSTRUCTIONS>
+01:message/user:
+    <ENVIRONMENT_CONTEXT>
 02:message/user:
-    <ENVIRONMENT_CONTEXT>
-03:message/user:
     <NO_TEXT>
-04:message/assistant:
+03:message/assistant:
     done
-05:message/developer:
+04:message/developer:
     <PERMISSIONS_INSTRUCTIONS>
-06:message/user:
+05:message/user:
     <ENVIRONMENT_CONTEXT>
-07:message/user:
+06:message/user:
     next

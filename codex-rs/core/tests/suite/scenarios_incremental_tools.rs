@@ -52,7 +52,14 @@ async fn prediction_fork_keeps_inherited_tools() -> Result<()> {
         "required": true,
     }))?;
     let mut test = test_codex()
+        .with_config(super::configure_scenario_catalog)
         .with_model_info_override("gpt-5.4", |model| {
+            *model = core_test_support::model_catalog::upstream_model_catalog()
+                .models
+                .into_iter()
+                .find(|entry| entry.slug == "gpt-5.5")
+                .expect("upstream 5.5 model");
+            model.slug = "gpt-5.4".into();
             model.use_responses_lite = true;
             model.supports_search_tool = false;
             model.tool_mode = Some(ToolMode::CodeModeOnly);
@@ -428,6 +435,7 @@ async fn tool_removal_appends_a_standalone_notice_without_rewriting_history(
     let reduced_server = server_config(&["echo"], "Echo service instructions.")?;
     let restored_server = server_config(&["echo", "cwd"], "Echo service instructions.")?;
     let test = test_codex()
+        .with_config(super::configure_scenario_catalog)
         .with_model_info_override("gpt-5.5", move |model| {
             model.use_responses_lite = true;
             model.supports_search_tool = false;
@@ -560,8 +568,8 @@ async fn tool_removal_appends_a_standalone_notice_without_rewriting_history(
         .await?;
 
     if catalog_messages {
-        // The functions namespace preserves empty instructions instead of adding fallback text.
-        // Move the service there, then change and clear instructions with unchanged tool schemas.
+        // Main reserves the functions namespace, so this service remains mcp__functions.
+        // Change and clear its instructions; clearing restores the MCP namespace fallback.
         for (instructions, prompt) in [
             (
                 "Use these echo tools.",
