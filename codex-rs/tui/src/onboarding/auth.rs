@@ -788,7 +788,10 @@ impl AuthModeWidget {
 
     fn activate_highlighted_mode(&mut self, key_event: KeyEvent) {
         let option = self.highlighted_mode;
-        if option == SignInOption::OtherMethods || option.is_alternative() {
+        if option == SignInOption::OtherMethods
+            || option.is_alternative()
+            || matches!(option, SignInOption::ProviderApiKey(_))
+        {
             // Enter and printable shortcuts can repeat as plain presses without a release.
             self.activation_key_guard = Some(ActivationKeyGuard::new_at(
                 KeyBinding::from_event(key_event),
@@ -2818,7 +2821,10 @@ pub(crate) mod tests {
             .build()
             .await
             .unwrap();
-        config.features.disable(Feature::BedrockSetupWizard).unwrap();
+        config
+            .features
+            .disable(Feature::BedrockSetupWizard)
+            .unwrap();
         config.features.disable(Feature::GcpSetupWizard).unwrap();
         if !full_catalog {
             config.model_providers.clear();
@@ -3233,7 +3239,8 @@ pub(crate) mod tests {
             rows.pop();
         }
         insta::assert_snapshot!(rows.join("\n"), @r###"
-          Choose how you want to use Codex.
+          Sign in with ChatGPT to use OpenAI-hosted models
+          or connect an API key for usage-based billing
 
         > 1. Sign in with ChatGPT
              Usage included with Plus, Pro, Business, and Enterprise plans
@@ -3244,7 +3251,13 @@ pub(crate) mod tests {
           3. Sign in another way
              Use an API key or another provider
 
-          Press enter to continue
+
+
+
+
+
+
+          Use ↑/↓ to choose · Press enter to continue
         "###);
 
         widget.auth_config.forced_login_method = Some(ForcedLoginMethod::Chatgpt);

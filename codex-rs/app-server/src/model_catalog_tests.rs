@@ -32,12 +32,15 @@ async fn discovery_config(
 }
 
 fn discovery_manager(config: &Config, auth: Arc<AuthManager>) -> SharedModelsManager {
-    let provider = codex_model_provider::create_model_provider(
-        config.model_provider.clone(),
-        Some(auth),
+    let provider =
+        codex_model_provider::create_model_provider(config.model_provider.clone(), Some(auth));
+    let manager = provider.models_manager(
+        config.codex_home.to_path_buf(),
+        config.model_catalog.clone(),
     );
-    let manager = provider.models_manager(config.codex_home.to_path_buf(), config.model_catalog.clone());
-    manager.set_api_key_model_discovery_enabled(config.features.enabled(Feature::ApiKeyModelDiscovery));
+    manager.set_api_key_model_discovery_enabled(
+        config.features.enabled(Feature::ApiKeyModelDiscovery),
+    );
     manager
 }
 
@@ -159,7 +162,10 @@ async fn api_key_model_discovery_startup_enablement_respects_user_config(
     };
     ModelPreset::mark_default_by_picker_visibility(&mut expected);
     // The product's OpenAI default wins when present in the bundled catalog.
-    if let Some(index) = expected.iter().position(|preset| preset.model == "gpt-6-sol" && preset.show_in_picker) {
+    if let Some(index) = expected
+        .iter()
+        .position(|preset| preset.model == "gpt-6-sol" && preset.show_in_picker)
+    {
         for preset in &mut expected {
             preset.is_default = false;
         }
