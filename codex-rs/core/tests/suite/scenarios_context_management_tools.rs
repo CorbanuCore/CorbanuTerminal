@@ -34,6 +34,8 @@ async fn catalog_context_tool_definitions_follow_captured_models() -> Result<()>
     )
     .await;
     let test = test_codex()
+        // D644/D647: pin the upstream catalog and the writable tool fixture.
+        .with_config(configure_scenario_catalog)
         .with_model_info_override("gpt-5.4", |model| {
             model.use_responses_lite = false;
             model.tool_mode = Some(ToolMode::Direct);

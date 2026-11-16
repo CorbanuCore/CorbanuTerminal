@@ -1756,7 +1756,7 @@ async fn allowing_network_policy_amendment_persists_context_and_bypasses_prompt(
     not(target_os = "linux"),
     ignore = "requires the trusted Linux proxy bridge"
 )]
-async fn denying_network_policy_amendment_persists_and_blocks_request() -> Result<()> {
+async fn unoffered_network_deny_rule_is_not_saved_and_queued_request_prompts() -> Result<()> {
     skip_if_remote!(
         Ok(()),
         "remote executors forward network decisions only to Guardian"
@@ -1778,22 +1778,43 @@ async fn denying_network_policy_amendment_persists_and_blocks_request() -> Resul
     let approval = prompts
         .remove(NETWORK_TEST_TARGET)
         .context("missing prompt")?;
+    let deny_decision = ReviewDecision::NetworkPolicyAmendment {
+        network_policy_amendment: NetworkPolicyAmendment {
+            host: NETWORK_TEST_HOST.to_string(),
+            action: NetworkPolicyRuleAction::Deny,
+        },
+    };
+    assert!(
+        !approval
+            .effective_available_decisions()
+            .contains(&deny_decision)
+    );
     test.codex
         .submit(Op::ExecApproval {
             id: approval.effective_approval_id(),
             turn_id: Some(approval.turn_id),
-            decision: ReviewDecision::NetworkPolicyAmendment {
-                network_policy_amendment: NetworkPolicyAmendment {
-                    host: NETWORK_TEST_HOST.to_string(),
-                    action: NetworkPolicyRuleAction::Deny,
-                },
-            },
+            decision: deny_decision,
+        })
+        .await?;
+    // Main's #2213 offered-answer check refuses the unoffered rule. It must
+    // neither persist that rule nor answer the independently queued request.
+    let queued_approval = expect_network_approval(&test, LOCAL_ENVIRONMENT_ID).await?;
+    test.codex
+        .submit(Op::ExecApproval {
+            id: queued_approval.effective_approval_id(),
+            turn_id: Some(queued_approval.turn_id),
+            decision: ReviewDecision::denied("reject the queued network request"),
         })
         .await?;
     wait_for_completion_without_network_prompt(&test).await;
 
-    let policy = fs::read_to_string(test.home.path().join("rules/default.rules"))?;
-    assert!(policy.contains(
+    let policy_path = test.home.path().join("rules/default.rules");
+    let policy = match fs::read_to_string(policy_path) {
+        Ok(policy) => policy,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error.into()),
+    };
+    assert!(!policy.contains(
         r#"network_rule(host="codex-network-test.invalid", protocol="http", decision="deny""#
     ));
     let outputs = ["network-deny-first", "network-deny-second"].map(|id| {
@@ -1804,14 +1825,13 @@ async fn denying_network_policy_amendment_persists_and_blocks_request() -> Resul
     assert!(
         outputs
             .iter()
-            .any(|output| output.contains("rejected by user")),
+            .any(|output| output.contains("approval answer was not offered by this prompt")),
         "{outputs:?}"
     );
     assert!(
         outputs
             .iter()
-            .any(|output| output.contains(NETWORK_TEST_TARGET)
-                && output.contains("was blocked by policy.")),
+            .any(|output| output.contains("reject the queued network request")),
         "{outputs:?}"
     );
     Ok(())
