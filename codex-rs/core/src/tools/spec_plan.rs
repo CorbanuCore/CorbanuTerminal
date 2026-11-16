@@ -95,7 +95,6 @@ use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelPreset;
-use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ToolMode;
 use codex_protocol::permissions::FileSystemSandboxKind;
 use codex_protocol::protocol::MultiAgentVersion;
@@ -147,11 +146,12 @@ struct CoreToolPlanContext<'a> {
     wait_for_environment_tool_config: Option<&'a Arc<crate::WaitForEnvironmentToolConfig>>,
     default_agent_type_description: &'a str,
     wait_agent_timeouts: WaitAgentTimeoutOptions,
-    /// The context window's request-effort baseline for the step model, when one is pinned.
-    reasoning_effort_baseline: Option<&'a ReasoningEffort>,
+    /// Effort-only changes reach the model as configuration updates (upstream's request-effort
+    /// baseline), so tool descriptions must not name the turn's effort.
+    reasoning_effort_updates: bool,
 }
 
-#[cfg(test)]
+#[instrument(level = "trace", skip_all)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_tool_router(
     session: &Session,
@@ -163,38 +163,6 @@ pub(crate) fn build_tool_router(
     step_store: &ExtensionData,
     tool_suggest_candidates: Option<&crate::tools::router::ToolSuggestCandidates>,
     dynamic_tools: &[DynamicToolSpec],
-) -> CodexResult<ToolRouter> {
-    build_tool_router_with_effort_baseline(
-        session,
-        turn_context,
-        model_info,
-        environments,
-        mcp,
-        apps_enabled,
-        step_store,
-        tool_suggest_candidates,
-        dynamic_tools,
-        /*reasoning_effort_baseline*/ None,
-    )
-}
-
-/// Builds the step's tools. `reasoning_effort_baseline` is the context window's pinned
-/// request effort (see `Session::request_effort_baseline`); `spawn_agent` describes it so
-/// that an effort-only change between turns leaves the tool definitions, and with them the
-/// prompt cache, unchanged.
-#[instrument(level = "trace", skip_all)]
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn build_tool_router_with_effort_baseline(
-    session: &Session,
-    turn_context: &TurnContext,
-    model_info: &ModelInfo,
-    environments: &TurnEnvironmentSnapshot,
-    mcp: &Arc<codex_mcp::McpBinding>,
-    apps_enabled: bool,
-    step_store: &ExtensionData,
-    tool_suggest_candidates: Option<&crate::tools::router::ToolSuggestCandidates>,
-    dynamic_tools: &[DynamicToolSpec],
-    reasoning_effort_baseline: Option<ReasoningEffort>,
 ) -> CodexResult<ToolRouter> {
     let default_agent_type_description =
         crate::agent::role::spawn_tool_spec::build(&std::collections::BTreeMap::new());
@@ -212,7 +180,10 @@ pub(crate) fn build_tool_router_with_effort_baseline(
         wait_for_environment_tool_config: wait_for_environment_tool_config.as_ref(),
         default_agent_type_description: &default_agent_type_description,
         wait_agent_timeouts: wait_agent_timeout_options(turn_context),
-        reasoning_effort_baseline: reasoning_effort_baseline.as_ref(),
+        reasoning_effort_updates: session
+            .services
+            .model_client()
+            .reasoning_effort_override_enabled(model_info),
     };
     let mut registry = ToolRegistry::with_tool_policy(Arc::clone(&session.tool_policy));
     add_core_tool_sources(&context, &mut registry);
@@ -380,7 +351,7 @@ pub(crate) fn build_core_tool_registry(
         wait_for_environment_tool_config,
         default_agent_type_description: &default_agent_type_description,
         wait_agent_timeouts: wait_agent_timeout_options(turn_context),
-        reasoning_effort_baseline: None,
+        reasoning_effort_updates: false,
     };
     let mut registry = ToolRegistry::default();
     add_core_tool_sources(&context, &mut registry);
@@ -1779,7 +1750,7 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 inherited_runtime: spawn_agent_inherited_runtime(
                     turn_context,
                     context.model_info,
-                    context.reasoning_effort_baseline,
+                    context.reasoning_effort_updates,
                 ),
                 agent_type_description,
                 // PF Terminal ships hierarchy roles (Nazgul, Troll, and Orc). They are
@@ -1905,7 +1876,7 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 inherited_runtime: spawn_agent_inherited_runtime(
                     turn_context,
                     context.model_info,
-                    context.reasoning_effort_baseline,
+                    context.reasoning_effort_updates,
                 ),
                 agent_type_description,
                 // Built-in PF hierarchy roles remain selectable even when the operator has not
@@ -2092,7 +2063,7 @@ fn spawn_agent_available_models(
 fn spawn_agent_inherited_runtime(
     turn_context: &TurnContext,
     model_info: &ModelInfo,
-    reasoning_effort_baseline: Option<&ReasoningEffort>,
+    reasoning_effort_updates: bool,
 ) -> Option<SpawnAgentRuntime> {
     let model_provider = turn_context.config.model_provider_id.clone();
     turn_context
@@ -2103,19 +2074,16 @@ fn spawn_agent_inherited_runtime(
         .then(|| SpawnAgentRuntime {
             model_provider,
             model: model_info.slug.clone(),
-            // A pinned request-effort baseline keeps the description stable across
-            // effort-only turn changes (they reach the model as configuration updates).
-            // Otherwise the turn's effort belongs to its first step's model; another step
-            // model starts from that model's default.
-            reasoning_effort: reasoning_effort_baseline
+            // The turn's effort belongs to its first step's model; another step model
+            // starts from that model's default.
+            reasoning_effort: turn_context
+                .reasoning_effort()
+                .filter(|_| turn_context.model_info().slug == model_info.slug)
                 .cloned()
-                .or_else(|| {
-                    turn_context
-                        .reasoning_effort()
-                        .filter(|_| turn_context.model_info().slug == model_info.slug)
-                        .cloned()
-                })
                 .or_else(|| model_info.default_reasoning_level.clone()),
+            // #1532 (`thread_sample`): with effort updates the description must not change
+            // when only the turn's effort does (the child inherits that effort either way).
+            effort_follows_turn: reasoning_effort_updates,
             service_tier: turn_context.config.service_tier.clone(),
         })
 }

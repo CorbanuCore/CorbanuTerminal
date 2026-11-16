@@ -14,7 +14,6 @@ use codex_history::CodexHarnessMetadata;
 use codex_history::ResponseItemEnvelope;
 use codex_protocol::models::ConfigurationReasoning;
 use codex_protocol::models::ResponseItem;
-use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort;
 
 /// Sampling can establish a pin; compaction must not change live state before it succeeds.
@@ -133,27 +132,6 @@ impl Session {
             // Failed compaction and fallback-model lookups must not mutate the live pin.
             RequestEffortUsage::Compaction => effort,
         })
-    }
-
-    /// The request effort pinned for `model_info`'s context window, if any: what its
-    /// requests send while effort-only changes travel as configuration updates. Tool
-    /// descriptions use it so such a change does not rewrite the tool definitions.
-    pub(crate) async fn request_effort_baseline(
-        &self,
-        model_info: &ModelInfo,
-    ) -> Option<ReasoningEffort> {
-        if !self
-            .services
-            .model_client()
-            .reasoning_effort_override_enabled(model_info)
-        {
-            return None;
-        }
-        self.state
-            .lock()
-            .await
-            .reasoning_effort_pin
-            .get(&model_info.slug)
     }
 
     fn effort_for_configuration_update(

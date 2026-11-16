@@ -82,7 +82,7 @@ use crate::tools::registry::ToolArgumentDiffConsumer;
 use crate::tools::router::ToolSuggestCandidates;
 use crate::tools::router::ToolSuggestPresentation;
 use crate::tools::router::record_registration_metrics;
-use crate::tools::spec_plan::build_tool_router_with_effort_baseline;
+use crate::tools::spec_plan::build_tool_router;
 use crate::tools::spec_plan::tool_suggest_enabled;
 use crate::turn_diff_tracker::TurnDiffTracker;
 use crate::turn_timing::now_unix_timestamp_ms;
@@ -2601,8 +2601,7 @@ pub(crate) async fn built_tools(
             .instrument(trace_span!("built_tools.load_discoverable_tools"))
             .await
         };
-    let reasoning_effort_baseline = sess.request_effort_baseline(model_info).await;
-    let tool_router = Arc::new(build_tool_router_with_effort_baseline(
+    let tool_router = Arc::new(build_tool_router(
         sess,
         turn_context,
         model_info,
@@ -2612,7 +2611,6 @@ pub(crate) async fn built_tools(
         step_store,
         tool_suggest_candidates.as_ref(),
         dynamic_tools,
-        reasoning_effort_baseline,
     )?);
     notify_omitted_tools(sess, turn_context, tool_router.omitted_tools()).await;
     Ok(tool_router)

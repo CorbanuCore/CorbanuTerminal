@@ -47,6 +47,9 @@ pub struct SpawnAgentRuntime {
     pub model_provider: String,
     pub model: String,
     pub reasoning_effort: Option<ReasoningEffort>,
+    /// Effort-only turn changes reach the model as configuration updates: describe the
+    /// inherited effort as the current turn's, so the tool definition stays the same.
+    pub effort_follows_turn: bool,
     pub service_tier: Option<String>,
 }
 
@@ -1167,10 +1170,14 @@ fn spawn_agent_models_description(
     let inherited_runtime = inherited_runtime.map_or_else(
         || "Current inherited runtime: unavailable.".to_string(),
         |runtime| {
-            let effort = runtime
-                .reasoning_effort
-                .as_ref()
-                .map_or("provider default", ReasoningEffort::as_str);
+            let effort = if runtime.effort_follows_turn {
+                "as in the current turn"
+            } else {
+                runtime
+                    .reasoning_effort
+                    .as_ref()
+                    .map_or("provider default", ReasoningEffort::as_str)
+            };
             let service_tier = runtime
                 .service_tier
                 .as_deref()

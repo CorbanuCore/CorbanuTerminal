@@ -195,16 +195,29 @@ fn spawn_agent_catalog_exposes_parent_runtime_and_frontier_effort_policy() {
         model_provider: "claude-plan".to_string(),
         model: "claude-opus-5-plan".to_string(),
         reasoning_effort: Some(ReasoningEffort::High),
+        effort_follows_turn: false,
         service_tier: None,
     };
 
-    let description = spawn_agent_models_description(&[sol], Some(&inherited_runtime));
+    let description =
+        spawn_agent_models_description(std::slice::from_ref(&sol), Some(&inherited_runtime));
 
     assert!(
         description.contains(
             "Current inherited runtime: `claude-plan` / `claude-opus-5-plan`; effort high."
         )
     );
+    // #1532 (`thread_sample`): with effort updates the text names no specific effort.
+    let follows_turn = spawn_agent_models_description(
+        std::slice::from_ref(&sol),
+        Some(&SpawnAgentRuntime {
+            effort_follows_turn: true,
+            ..inherited_runtime.clone()
+        }),
+    );
+    assert!(follows_turn.contains(
+        "Current inherited runtime: `claude-plan` / `claude-opus-5-plan`; effort as in the current turn."
+    ));
     assert!(description.contains(
         "Default allocation policy: compare the task with this catalogue before every spawn."
     ));

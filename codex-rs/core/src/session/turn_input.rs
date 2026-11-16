@@ -464,11 +464,16 @@ async fn start_or_steer(
                 // first model request, ahead of the new input. Left queued, it would reach the
                 // model only in a continuation after the input was sampled (#445/#507: mail
                 // held while the kill switch was on goes with the next turn someone starts).
-                // `start_task` notes mail carried in the task input as taken. A turn the kill
-                // switch refuses records no input, so the mail then stays queued.
-                if !session.services.model_client().kill_switch_on() {
+                // `start_task` notes mail carried in the task input as taken. A turn that is
+                // refused (kill switch #445, removed or signed-out account #1331) records no
+                // input, so the mail then stays queued, as on the pending-input path.
+                // Boxed: this submission future is polled on the caller's stack.
+                if Box::pin(crate::session::turn::turn_refusal(session, &turn_context))
+                    .await
+                    .is_none()
+                {
                     let (mailbox_input, _) =
-                        session.input_queue.drain_ready_mailbox_input_items().await;
+                        Box::pin(session.input_queue.drain_ready_mailbox_input_items()).await;
                     task_input.extend(mailbox_input);
                 }
                 task_input.push(

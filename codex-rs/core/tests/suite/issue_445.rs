@@ -177,3 +177,65 @@ async fn issue_445_agent_messages_wait_while_the_kill_switch_is_on() -> anyhow::
     assert!(requests[0].body_contains_text("pf445-mail"));
     Ok(())
 }
+
+/// #1532 (sync-compile17 review M1): a person's turn refused while the switch is
+/// on does not take the waiting agent message with it; the message goes with
+/// the first turn after the switch is turned off.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_445_refused_turn_leaves_agent_messages_queued() -> anyhow::Result<()> {
+    use codex_protocol::AgentPath;
+    use codex_protocol::protocol::InterAgentCommunication;
+    skip_if_no_network!(Ok(()));
+    let server = start_mock_server().await;
+    let captured = mount_sse_sequence(
+        &server,
+        vec![sse(vec![
+            ev_response_created("answer"),
+            ev_assistant_message("msg-answer", "noted"),
+            ev_completed("answer"),
+        ])],
+    )
+    .await;
+    let test = test_codex()
+        .with_model("test-gpt-5.1-codex")
+        .with_config(|config| {
+            config.security_level = SecurityLevel::Aggressive;
+            config
+                .features
+                .enable(Feature::SourceEnvelopes)
+                .expect("enable source envelopes");
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    switch(&test, HumanRevocation::KillSwitchOn)?;
+    test.codex
+        .submit(Op::InterAgentCommunication {
+            communication: InterAgentCommunication::new(
+                AgentPath::try_from("/root/worker").expect("worker path"),
+                AgentPath::root(),
+                Vec::new(),
+                "worker finished: pf445-held-mail".to_string(),
+                /*trigger_turn*/ false,
+            ),
+            start_options: Default::default(),
+        })
+        .await?;
+    let refused = turn(&test, "Anything yet?").await?;
+    assert!(
+        refused.is_some_and(|message| message.contains("kill switch is on")),
+        "the turn is refused"
+    );
+    assert_eq!(captured.requests().len(), 0, "nothing reached the model");
+
+    switch(&test, HumanRevocation::KillSwitchOff)?;
+    assert_eq!(turn(&test, "Anything new?").await?, None);
+    let requests = captured.requests();
+    assert_eq!(
+        requests.len(),
+        1,
+        "one request carries the mail and the prompt"
+    );
+    assert!(requests[0].body_contains_text("pf445-held-mail"));
+    assert!(requests[0].body_contains_text("Anything new?"));
+    Ok(())
+}
