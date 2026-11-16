@@ -9,6 +9,7 @@
 //!   by `exec_policy::render_decision_for_unmatched_command`
 //!   (`windows_managed_fs_restrictions_without_sandbox_backend`), as
 //!   "blocked by policy" when approvals are off.
+//!
 //! On other clients the same commands reach the executor.
 //!
 //! This pins today's behavior so the fix for #2049 has to flip it: once both
