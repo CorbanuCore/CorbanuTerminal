@@ -373,8 +373,13 @@ async fn code_mode_messaging_fixture(
             }
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
             config.approvals_reviewer = ApprovalsReviewer::AutoReview;
-            config.model_catalog =
-                Some(codex_models_manager::bundled_models_response().expect("valid catalog"));
+            // D644: this upstream scenario uses the pinned upstream catalog.
+            config.model_catalog = Some(core_test_support::model_catalog::upstream_model_catalog());
+            config
+                .agent_roles
+                .entry("default".into())
+                .or_default()
+                .nickname_candidates = Some(vec!["Worker".into()]);
             config
                 .permissions
                 .set_permission_profile(PermissionProfile::workspace_write())

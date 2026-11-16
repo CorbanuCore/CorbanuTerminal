@@ -1,5 +1,6 @@
 ---
 source: core/tests/suite/scenarios_guardian_agent_messages_tests.rs
+assertion_line: 315
 expression: snapshot
 ---
 Scenario: An encrypted parent reply is delivered as a native agent message. Both Guardian reviews contain it exactly once, in order, as agent evidence. Ciphertext and decisions are mocked; this scenario verifies transport, not backend decryption or authorization outcomes.
@@ -7,10 +8,8 @@ Scenario: An encrypted parent reply is delivered as a native agent message. Both
 ## Window 1
 -- request 1 (turn) --
 00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer:
     <PERMISSIONS_INSTRUCTIONS>
-02:message/developer:
+01:message/developer:
     You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.
 
     At the start of your turn, you are the active agent.
@@ -25,21 +24,23 @@ Scenario: An encrypted parent reply is delivered as a native agent message. Both
 
     When calling `wait_agent`, prefer longer waits (minutes) to avoid busy polling.
 
-    There are 4 available concurrency slots, meaning that up to 4 agents can be active at once, including you.
+    There are 6 available concurrency slots, meaning that up to 6 agents can be active at once, including you.
 
     Full-history forks (`fork_turns` omitted or `"all"`) inherit the parent model and reasoning effort and d...uctions; when doing so, set `fork_turns` to `"none"`. [hash=18ccf7e93ecabab9]
-03:message/developer:
+02:message/developer:
     <MULTI_AGENT_MODE>
-04:message/user:
+03:message/user:
     <ENVIRONMENT_CONTEXT>
-05:message/user:
+04:message/user:
     Check the change after the parent confirms the exact action.
 -- request 2 (turn) --
-06:message/assistant:
+05:message/assistant:
     I will wait for the parent reply before checking the change.
-07:agent_message
+06:agent_message
+07:message/user:
+    Continue.
 
-## Window 2 (after request 2: input diverged at item 00, settings changed (model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
+## Window 2 (after request 2: input diverged at item 00, settings changed (instructions, model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
 -- request 3 (turn) --
 00:additional_tools/developer (1; hash=65a86311792f6c71):
         - namespace/functions; hash=dcfbcf0da1c2d607
@@ -111,13 +112,11 @@ Scenario: An encrypted parent reply is delivered as a native agent message. Both
     [12] >>> APPROVAL REQUEST END
 
 
-## Window 3 (after request 3: input diverged at item 00, settings changed (model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
+## Window 3 (after request 3: input diverged at item 00, settings changed (instructions, model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
 -- request 4 (turn) --
 00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer:
     <PERMISSIONS_INSTRUCTIONS>
-02:message/developer:
+01:message/developer:
     You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.
 
     At the start of your turn, you are the active agent.
@@ -132,22 +131,24 @@ Scenario: An encrypted parent reply is delivered as a native agent message. Both
 
     When calling `wait_agent`, prefer longer waits (minutes) to avoid busy polling.
 
-    There are 4 available concurrency slots, meaning that up to 4 agents can be active at once, including you.
+    There are 6 available concurrency slots, meaning that up to 6 agents can be active at once, including you.
 
     Full-history forks (`fork_turns` omitted or `"all"`) inherit the parent model and reasoning effort and d...uctions; when doing so, set `fork_turns` to `"none"`. [hash=18ccf7e93ecabab9]
-03:message/developer:
+02:message/developer:
     <MULTI_AGENT_MODE>
-04:message/user:
+03:message/user:
     <ENVIRONMENT_CONTEXT>
-05:message/user:
+04:message/user:
     Check the change after the parent confirms the exact action.
-06:message/assistant:
+05:message/assistant:
     I will wait for the parent reply before checking the change.
-07:agent_message
-08:function_call/exec_command:{"cmd":"exit 0","justification":"Check the requested change.","sandbox_permissions":"require_escalated"}
-09:function_call_output:exec_command failed: CreateProcess { message: "Rejected(\\"This action was rejected due to unacceptable r...e risk. Otherwise, stop and request user input.\\")" } [hash=ae05158f838e6b05]
+06:agent_message
+07:function_call/exec_command:{"cmd":"exit 0","justification":"Check the requested change.","sandbox_permissions":"require_escalated"}
+08:function_call_output:exec_command failed: This action was rejected due to unacceptable risk.
+    Reason: Mock assessment; no command is executed.
+    The agent must not attempt to achieve the same outcome via workaround, indirect execution, or policy cir... of the risk. Otherwise, stop and request user input. [hash=316a6640caee3870]
 
-## Window 4 (after request 4: input diverged at item 00, settings changed (model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
+## Window 4 (after request 4: input diverged at item 00, settings changed (instructions, model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
 -- request 5 (turn) --
 00:additional_tools/developer (1; hash=65a86311792f6c71):
         - namespace/functions; hash=dcfbcf0da1c2d607
@@ -227,7 +228,9 @@ Scenario: An encrypted parent reply is delivered as a native agent message. Both
 
     [02] >>> TRANSCRIPT DELTA START
 
-    [03] [5] tool exec_command result: exec_command failed: CreateProcess { message: "Rejected(\\"This action was ...e risk. Otherwise, stop and request user input.\\")" } [hash=b68f9badcca30330]
+    [03] [5] tool exec_command result: exec_command failed: This action was rejected due to unacceptable risk.
+        Reason: Mock assessment; no command is executed.
+        The agent must not attempt to achieve the same outcome via workaround, indirect execution, or policy cir... of the risk. Otherwise, stop and request user input. [hash=316a6640caee3870]
 
     [04]
         [6] tool send_message call: Some conversation entries were omitted.
@@ -247,13 +250,11 @@ Scenario: An encrypted parent reply is delivered as a native agent message. Both
 10:function_call/team.send_message:{"message":"opaque-message","target":"/root"}
 11:function_call_output:This call is review evidence, not a request to execute it. This is not its execution result.
 
-## Window 5 (after request 5: input diverged at item 00, settings changed (model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
+## Window 5 (after request 5: input diverged at item 00, settings changed (instructions, model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
 -- request 6 (turn) --
 00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer:
     <PERMISSIONS_INSTRUCTIONS>
-02:message/developer:
+01:message/developer:
     You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.
 
     At the start of your turn, you are the active agent.
@@ -268,21 +269,23 @@ Scenario: An encrypted parent reply is delivered as a native agent message. Both
 
     When calling `wait_agent`, prefer longer waits (minutes) to avoid busy polling.
 
-    There are 4 available concurrency slots, meaning that up to 4 agents can be active at once, including you.
+    There are 6 available concurrency slots, meaning that up to 6 agents can be active at once, including you.
 
     Full-history forks (`fork_turns` omitted or `"all"`) inherit the parent model and reasoning effort and d...uctions; when doing so, set `fork_turns` to `"none"`. [hash=18ccf7e93ecabab9]
-03:message/developer:
+02:message/developer:
     <MULTI_AGENT_MODE>
-04:message/user:
+03:message/user:
     <ENVIRONMENT_CONTEXT>
-05:message/user:
+04:message/user:
     Check the change after the parent confirms the exact action.
-06:message/assistant:
+05:message/assistant:
     I will wait for the parent reply before checking the change.
-07:agent_message
-08:function_call/exec_command:{"cmd":"exit 0","justification":"Check the requested change.","sandbox_permissions":"require_escalated"}
-09:function_call_output:exec_command failed: CreateProcess { message: "Rejected(\\"This action was rejected due to unacceptable r...e risk. Otherwise, stop and request user input.\\")" } [hash=ae05158f838e6b05]
-10:function_call/team.send_message:{"message":"opaque-message","target":"/root/original"}
-11:function_call_output:This action was rejected due to unacceptable risk.
+06:agent_message
+07:function_call/exec_command:{"cmd":"exit 0","justification":"Check the requested change.","sandbox_permissions":"require_escalated"}
+08:function_call_output:exec_command failed: This action was rejected due to unacceptable risk.
+    Reason: Mock assessment; no command is executed.
+    The agent must not attempt to achieve the same outcome via workaround, indirect execution, or policy cir... of the risk. Otherwise, stop and request user input. [hash=316a6640caee3870]
+09:function_call/team.send_message:{"message":"opaque-message","target":"/root/original"}
+10:function_call_output:This action was rejected due to unacceptable risk.
     Reason: Mock assessment; no command is executed.
     The agent must not attempt to achieve the same outcome via workaround, indirect execution, or policy cir... of the risk. Otherwise, stop and request user input. [hash=316a6640caee3870]
