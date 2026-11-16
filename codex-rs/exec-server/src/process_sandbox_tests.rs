@@ -592,8 +592,23 @@ async fn native_request_handles_remote_proxy_config_for_platform(
     .expect("prepare request with executor-local proxy");
 
     assert_eq!(prepared.command, params.argv);
-    for key in ["PATH", "OPENAI_API_KEY"].into_iter().chain(startup_env) {
+    for key in ["PATH"].into_iter().chain(startup_env) {
         assert_eq!(prepared.env.get(key), env.get(key), "{key}");
+    }
+    let real_key = env.get("OPENAI_API_KEY").expect("executor key");
+    let child_key = prepared.env.get("OPENAI_API_KEY").expect("child key");
+    // Unsandboxed native Windows launches leave the proxy, and so the broker,
+    // out entirely (see the Windows branch below).
+    if credential_masking && !cfg!(target_os = "windows") {
+        // Corbanu brokers with main's engine (D353): the child gets a
+        // placeholder even when its shell startup is one upstream's engine
+        // would fail open for (BASH_ENV, SSH_CLIENT, extra login options).
+        // Brokering is one-way; the real key never reaches the child (#2270).
+        assert_ne!(child_key, real_key);
+        assert!(child_key.starts_with("sk-proj-"), "{child_key}");
+        assert!(!child_key.contains("executor-only"), "{child_key}");
+    } else {
+        assert_eq!(child_key, real_key);
     }
 
     if cfg!(target_os = "windows") {
