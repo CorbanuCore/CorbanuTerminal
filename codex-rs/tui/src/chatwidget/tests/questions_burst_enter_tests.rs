@@ -180,6 +180,33 @@ async fn question_transitions_cancel_delayed_enter_even_after_returning() {
     }
 }
 
+pub(crate) async fn assert_app_input_handoff_cancels_burst(
+    take_focus: impl FnOnce(&mut crate::app::App),
+    return_focus: impl FnOnce(&mut crate::app::App),
+) {
+    {
+        let mut app = crate::app::test_support::make_test_app().await;
+        let (chat, mut rx, mut ops) = make_chatwidget_manual(/*model_override*/ None).await;
+        app.chat_widget = chat;
+        tokio::time::pause();
+        open_questions(&mut app.chat_widget);
+        type_keys(&mut app.chat_widget, FIRST_LINE);
+        app.chat_widget
+            .handle_key_event(KeyEvent::from(KeyCode::Enter));
+        let token = held_enter_event(&mut rx).await;
+        take_focus(&mut app);
+        app.cancel_question_burst_if_unfocused();
+        return_focus(&mut app);
+        app.chat_widget.handle_async_question_burst_enter(token);
+        assert!(ops.try_recv().is_err());
+        assert_eq!(question_count(&app.chat_widget), 2);
+        app.chat_widget
+            .handle_key_event(KeyEvent::from(KeyCode::Enter));
+        assert_first_answer(ops.try_recv().unwrap(), FIRST_LINE);
+        tokio::time::resume();
+    }
+}
+
 #[tokio::test]
 async fn delayed_enter_preserves_answer_when_delivery_is_restricted() {
     let (mut chat, mut rx, mut ops) = make_chatwidget_manual(/*model_override*/ None).await;

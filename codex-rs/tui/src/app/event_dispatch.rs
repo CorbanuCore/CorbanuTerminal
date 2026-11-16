@@ -943,6 +943,9 @@ impl App {
         app_server: &mut AppServerSession,
         event: AppEvent,
     ) -> Result<AppRunControl> {
+        // Observe routing changes before a closing event can hide them from a
+        // delayed question key (for example, opening then closing an overlay).
+        self.cancel_question_burst_if_unfocused();
         let event = match event {
             AppEvent::TaskNodeScopedResult {
                 label,
