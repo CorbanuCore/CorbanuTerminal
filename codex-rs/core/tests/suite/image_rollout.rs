@@ -728,7 +728,7 @@ async fn resumed_history_only_emits_resize_notices_for_new_images() -> anyhow::R
         );
         assert_eq!(
             image::load_from_memory(&upload.data)?.dimensions(),
-            (2048, 768)
+            (2000, 750)
         );
     }
 
@@ -769,7 +769,7 @@ async fn resumed_history_only_emits_resize_notices_for_new_images() -> anyhow::R
         .split_once(',')
         .context("historical image data URL")?;
     let historical_image = image::load_from_memory(&BASE64_STANDARD.decode(encoded_image)?)?;
-    assert_eq!(historical_image.dimensions(), (2048, 768));
+    assert_eq!(historical_image.dimensions(), (2000, 750));
     assert_eq!(
         input[image_message_indices[1]]
             .get("content")
@@ -782,7 +782,7 @@ async fn resumed_history_only_emits_resize_notices_for_new_images() -> anyhow::R
 
     let expected_notice = concat!(
         "<image_resize_notice>\n",
-        "Image 1 of 1 in the preceding user message was resized from 2304x864 to 2048x768 pixels.\n",
+        "Image 1 of 1 in the preceding user message was resized from 2304x864 to 2000x750 pixels.\n",
         "</image_resize_notice>"
     );
     let resize_notices = request

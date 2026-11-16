@@ -560,7 +560,7 @@ async fn view_image_tool_attaches_local_image() -> anyhow::Result<()> {
         &input[function_output_index + 1],
         concat!(
             "<image_resize_notice>\n",
-            "Image 1 of 1 in the preceding tool output was resized from 2304x864 to 2048x768 pixels.\n",
+            "Image 1 of 1 in the preceding tool output was resized from 2304x864 to 2000x750 pixels.\n",
             "</image_resize_notice>"
         ),
     );

@@ -135,10 +135,26 @@ async fn queued_mail_and_cancelled_eviction_keep_worker_ownership() -> Result<()
     timeout(Duration::from_secs(10), entered_rx).await??;
     test.submit_turn("queue a followup").await?;
     ThreadIdle::wait(&test.codex).await;
-    assert_eq!(
-        delivery.function_call_output_text("queued-mail"),
-        Some(String::new()),
+    let receipt: serde_json::Value = serde_json::from_str(
+        &delivery
+            .function_call_output_text("queued-mail")
+            .expect("followup receipt"),
+    )?;
+    assert_eq!(receipt["target_thread_id"], json!(first_id));
+    assert_eq!(receipt["agent_path"], "/root/first");
+    assert_eq!(receipt["delivery"], "followup_task_sent");
+    assert_eq!(receipt["triggered_turn"], true);
+    assert!(
+        receipt["message_id"]
+            .as_str()
+            .is_some_and(|id| !id.is_empty())
     );
+    assert!(
+        receipt["agent_nickname"]
+            .as_str()
+            .is_some_and(|name| !name.is_empty())
+    );
+    assert_eq!(receipt["agent_role"], serde_json::Value::Null);
     assert_eq!(queued_message_count(), 0);
 
     // The sender has finished, but accepted mail still owns its place in the queue.

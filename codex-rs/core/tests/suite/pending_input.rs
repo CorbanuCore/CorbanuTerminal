@@ -695,6 +695,17 @@ async fn queue_only_agent_mail_wakes_sleeping_root_with_previous_turn_context(
             vec![json!({"cyber": "standard"}); 2],
         );
     }
+    // Main holds queue-only mail for the next human turn after waking a sleeping root.
+    // Preserve the wake-attribution assertions above, then verify delivery and persistence.
+    let acknowledgement =
+        responses::mount_sse_once(&server, responses::sse_completed("resp-acknowledge")).await;
+    test.submit_turn("acknowledge the worker update").await?;
+    assert!(
+        acknowledgement
+            .single_request()
+            .body_contains_text(CHILD_MESSAGE)
+    );
+    test.codex.flush_rollout().await?;
     let history = test
         .codex
         .load_history(/*include_archived*/ true)
