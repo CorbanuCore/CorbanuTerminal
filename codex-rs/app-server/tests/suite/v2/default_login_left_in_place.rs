@@ -179,12 +179,16 @@ async fn read_response(
 #[tokio::test]
 async fn reused_local_daemon_leaves_a_ruled_out_default_login_and_refuses_it() -> Result<()> {
     use futures::SinkExt;
+    use std::os::unix::fs::PermissionsExt;
     use tokio::process::Command;
     use tokio_tungstenite::tungstenite::Message;
 
     let (codex_home, login) = ruled_out_default_login_home(/*named_accounts*/ true)?;
     // Unix socket paths are short (`SUN_LEN`); test temp dirs may not be.
     let socket_dir = TempDir::new_in("/tmp")?;
+    // A host umask such as 0002 otherwise leaves this fixture group-writable,
+    // which the private daemon socket correctly refuses.
+    std::fs::set_permissions(socket_dir.path(), std::fs::Permissions::from_mode(0o700))?;
     let socket_path = socket_dir.path().join("d.sock");
     let program = codex_utils_cargo_bin::cargo_bin("codex-app-server")
         .context("should find app-server binary")?;
