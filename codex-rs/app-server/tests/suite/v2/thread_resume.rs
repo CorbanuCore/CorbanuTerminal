@@ -1296,7 +1296,7 @@ async fn thread_resume_preserves_persisted_permissions_over_broader_current_defa
             thread, sandbox, ..
         } = timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(start_id)).await??;
         assert!(
-            matches!(sandbox, SandboxPolicy::WorkspaceWrite { .. }),
+            matches!(sandbox, AppSandboxPolicy::WorkspaceWrite { .. }),
             "fixture must start with workspace-write, got {sandbox:?}"
         );
 
