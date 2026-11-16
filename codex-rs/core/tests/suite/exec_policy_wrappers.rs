@@ -13,7 +13,9 @@ prefix_rule(pattern=["echo", "blocked"], decision="forbidden")"#,
         )
         .unwrap();
     });
-    let test = builder.build_with_auto_env(&server).await?;
+    // `shell_command` is a local-only tool. Keep exercising its exec-policy path
+    // even when the suite runs with a remote exec-server environment.
+    let test = builder.build(&server).await?;
     let args = json!({
         "command": "env FOO=1 echo blocked",
         "timeout_ms": 1_000,
