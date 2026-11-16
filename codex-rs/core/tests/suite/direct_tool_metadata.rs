@@ -111,11 +111,11 @@ async fn message_budget_sheds_arguments_without_losing_inventory_completeness(
         config.model_provider.stream_max_retries = Some(0);
     });
     let mut batch = vec![ev_response_created("resp-1")];
-    for index in 0..call_count {
+    for (index, arguments) in arguments.iter().enumerate() {
         let mut call = ev_function_call(
             &format!("plan-{index}"),
             "update_plan",
-            &arguments[index].to_string(),
+            &arguments.to_string(),
         );
         // Stable server IDs keep the WebSocket continuation on the delta path.
         call["item"]["id"] = json!(format!("fc_plan_{index}"));
