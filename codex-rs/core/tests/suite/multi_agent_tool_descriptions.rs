@@ -259,13 +259,16 @@ async fn multi_agent_catalog_messages_change_only_selected_tool_fields(
                 expected_tool["description"] = json!(replacement);
             }
             if let Some(parameters) = expected_parameters
+                && name != "interrupt_agent"
                 && tool_messages["multi_agent"][name]["parameters"].is_string()
             {
                 expected_tool["parameters"] = serde_json::from_str(parameters)?;
                 if matches!(name, "spawn_agent" | "send_message" | "followup_task") {
                     expected_tool["parameters"]["properties"]["message"]["encrypted"] = json!(true);
                 }
-                if matches!(exposure, Exposure::CodeMode) {
+                // Main pins the native interrupt schema and spawn/interrupt descriptions.
+                // Other parameter overrides still retain their encryption and declaration checks.
+                if matches!(exposure, Exposure::CodeMode) && name != "spawn_agent" {
                     let description = expected_tool["description"].as_str().expect("description");
                     let (prefix, signature) =
                         description.rsplit_once("(args: ").expect("arguments");

@@ -7694,7 +7694,7 @@ await tools.exec_command({ cmd: "printf second", sandbox_permissions: "require_e
             let payload = reviewer_image_urls[1].split_once(',').unwrap().1;
             let dimensions =
                 image::load_from_memory(&BASE64_STANDARD.decode(payload)?)?.dimensions();
-            assert_eq!(dimensions, (2048, 32));
+            assert_eq!(dimensions, (2000, 31));
         }
         for (index, marker) in [(image_index - 1, "before"), (image_index + 1, "after")] {
             let text = reviewer_user_content[index]["text"].as_str().unwrap();

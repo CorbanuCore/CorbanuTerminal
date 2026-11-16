@@ -66,9 +66,23 @@ async fn message_budget_sheds_arguments_without_losing_inventory_completeness(
     // Each argument fits 8 KiB and all observations fit Direct's 1 MiB budget.
     // Only the final message budget should shed recorded arguments. HTTP includes
     // the original call arguments; a WebSocket delta already has those upstream.
-    let arguments = json!({"plan": [{"step": "x".repeat(7 * 1024), "status": "in_progress"}]});
-    assert!(arguments.to_string().len() < 8 * 1024);
-    assert!(call_count * arguments.to_string().len() < 1024 * 1024);
+    // Keep every payload the same size but distinct: main stops repeated identical calls.
+    let arguments = (0..call_count)
+        .map(|index| {
+            json!({"plan": [{
+                "step": format!("{index:02}{}", "x".repeat(7 * 1024 - 2)),
+                "status": "in_progress"
+            }]})
+        })
+        .collect::<Vec<_>>();
+    let argument_bytes = arguments[0].to_string().len();
+    assert!(argument_bytes < 8 * 1024);
+    assert!(
+        arguments
+            .iter()
+            .all(|args| args.to_string().len() == argument_bytes)
+    );
+    assert!(call_count * argument_bytes < 1024 * 1024);
     let next_arguments = json!({"plan": [{"step": "done", "status": "completed"}]});
     // An output schema stays in every wire request, including WebSocket deltas.
     let padding_bytes = message_limit - if websocket { 64 * 1024 } else { 192 * 1024 };
@@ -101,7 +115,7 @@ async fn message_budget_sheds_arguments_without_losing_inventory_completeness(
         let mut call = ev_function_call(
             &format!("plan-{index}"),
             "update_plan",
-            &arguments.to_string(),
+            &arguments[index].to_string(),
         );
         // Stable server IDs keep the WebSocket continuation on the delta path.
         call["item"]["id"] = json!(format!("fc_plan_{index}"));
@@ -212,7 +226,7 @@ async fn message_budget_sheds_arguments_without_losing_inventory_completeness(
     assert_eq!(outputs.len(), call_count + 1);
     for (index, output) in outputs.iter().enumerate() {
         let (call_id, expected_arguments) = if index < call_count {
-            (format!("plan-{index}"), &arguments)
+            (format!("plan-{index}"), &arguments[index])
         } else {
             ("plan-next".to_string(), &next_arguments)
         };
@@ -237,7 +251,7 @@ async fn message_budget_sheds_arguments_without_losing_inventory_completeness(
     for (index, call) in wire_calls.iter().enumerate() {
         assert_eq!(call["call_id"], format!("plan-{index}"));
         assert_eq!(call["name"], "update_plan");
-        assert_eq!(call["arguments"], arguments.to_string());
+        assert_eq!(call["arguments"], arguments[index].to_string());
     }
     // Inspect the bounded wire copy before rebuilding an unbounded comparison below.
     let wire_outputs = requests[1]["input"]
@@ -247,7 +261,7 @@ async fn message_budget_sheds_arguments_without_losing_inventory_completeness(
         .filter(|item| item["type"] == "function_call_output")
         .collect::<Vec<_>>();
     assert_eq!(wire_outputs.len(), call_count);
-    let argument_bytes = serde_json::to_vec(&arguments)?.len() as u64;
+    let argument_bytes = argument_bytes as u64;
     let mut retained_arguments = 0;
     let mut truncated_arguments = 0;
     for (index, output) in wire_outputs.iter().enumerate() {
@@ -259,11 +273,11 @@ async fn message_budget_sheds_arguments_without_losing_inventory_completeness(
             .expect("wire call inventory");
         assert_eq!(calls.len(), 1);
         let call = &calls[0];
-        if call["arguments"] == arguments {
+        if call["arguments"] == arguments[index] {
             assert_eq!(
                 metadata,
                 json!({
-                    "executed_tool_calls": [{"name": "update_plan", "arguments": arguments}],
+                    "executed_tool_calls": [{"name": "update_plan", "arguments": arguments[index]}],
                     "tool_calls_complete": true,
                 })
             );
@@ -536,11 +550,15 @@ async fn direct_function_and_tool_search_mark_complete_attempts(
     let malformed_arguments = "{malformed";
     let search_arguments = json!({"query": "nonexistent-completeness-proof-tool", "limit": null});
     // These calls exceed the old request budget but stay below Direct's retained-history limit.
-    let budget_arguments =
-        json!({"plan": [{"step": "x".repeat(7 * 1024), "status": "in_progress"}]});
+    let budget_arguments = |index: usize| {
+        json!({"plan": [{
+            "step": format!("{index:02}{}", "x".repeat(7 * 1024 - 2)),
+            "status": "in_progress"
+        }]})
+    };
     let oversized_arguments =
         json!({"plan": [{"step": "x".repeat(9 * 1024), "status": "in_progress"}]});
-    let budget_arguments_json = budget_arguments.to_string();
+    let budget_arguments_json = budget_arguments(0).to_string();
     assert!(budget_arguments_json.len() < 8 * 1024);
     if budget_calls > 0 {
         assert!(budget_calls * budget_arguments_json.len() > 128 * 1024);
@@ -558,7 +576,7 @@ async fn direct_function_and_tool_search_mark_complete_attempts(
         events.push(ev_function_call(
             &format!("plan-budget-{index}"),
             "update_plan",
-            &budget_arguments_json,
+            &budget_arguments(index).to_string(),
         ));
     }
     events.extend([
@@ -596,7 +614,7 @@ async fn direct_function_and_tool_search_mark_complete_attempts(
         malformed_output["output"]
             .as_str()
             .expect("parse error output")
-            .starts_with("failed to parse function arguments:"),
+            .starts_with("malformed tool call arguments for `update_plan`:"),
     );
     assert_eq!(search_output["execution"], json!("client"));
 
@@ -643,7 +661,7 @@ async fn direct_function_and_tool_search_mark_complete_attempts(
         assert_eq!(
             metadata,
             json!({
-                "executed_tool_calls": [{"name": "update_plan", "arguments": budget_arguments}],
+                "executed_tool_calls": [{"name": "update_plan", "arguments": budget_arguments(index)}],
                 "tool_calls_complete": true,
             })
         );
