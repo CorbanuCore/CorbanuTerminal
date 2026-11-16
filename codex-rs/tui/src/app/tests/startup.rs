@@ -1842,6 +1842,7 @@ async fn startup_thread_start_failure_returns_error() {
         &mut tui,
         Box::new(history_cell::StartupWarningsCell::new(vec![
             "Skill manifest is invalid.".to_string(),
+            "Security level Moderate needs the source_envelopes feature.".to_string(),
         ])),
     );
 
@@ -1860,6 +1861,7 @@ async fn startup_thread_start_failure_returns_error() {
 
     Startup warnings:
     Skill manifest is invalid.
+    Security level Moderate needs the source_envelopes feature.
     ");
     assert!(!app.pending_startup_thread_start);
     assert_eq!(app.primary_thread_id, None);

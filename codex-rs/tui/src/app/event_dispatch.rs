@@ -5826,10 +5826,11 @@ impl App {
                         approvals_reviewer: reviewer.map(Into::into),
                         ..Default::default()
                     }, selection.display_label, reviewer);
-                } else if crate::boxed_future!(self.apply_permission_profile_selection(app_server, selection)).await
-                    && let Some(reviewer) = reviewer
-                {
-                    self.app_event_tx.send(AppEvent::UpdateApprovalsReviewer(reviewer));
+                } else if crate::boxed_future!(self.apply_permission_profile_selection(app_server, selection)).await {
+                    if let Some(reviewer) = reviewer {
+                        self.app_event_tx.send(AppEvent::UpdateApprovalsReviewer(reviewer));
+                    }
+                    self.chat_widget.submit_initial_user_message_if_pending();
                 }
             }
             AppEvent::UpdateApprovalsReviewer(policy) => {
