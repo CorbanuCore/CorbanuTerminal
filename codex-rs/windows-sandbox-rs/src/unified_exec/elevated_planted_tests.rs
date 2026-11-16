@@ -4,6 +4,9 @@
 
 use super::*;
 
+#[path = "integrity_records_tests.rs"]
+mod records_ownership;
+
 fn canonical(path: &Path) -> PathBuf {
     dunce::canonicalize(path).expect("canonical")
 }

@@ -87,6 +87,8 @@ mod integrity;
 #[cfg(target_os = "windows")]
 mod integrity_leases;
 #[cfg(target_os = "windows")]
+mod integrity_registry;
+#[cfg(target_os = "windows")]
 mod logging;
 #[cfg(target_os = "windows")]
 mod logon_launch;
