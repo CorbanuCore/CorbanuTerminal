@@ -2585,13 +2585,11 @@ async fn responses_websocket_creates_when_instructions_change() {
 
     assert_eq!(second["type"].as_str(), Some("response.create"));
     assert_eq!(second.get("previous_response_id"), None);
-    assert_eq!(second["input"][0]["role"], "developer");
+    // Corbanu sends base instructions in `instructions` (upstream #51156
+    // moved them to a leading developer message).
+    assert_eq!(second["instructions"], "base instructions two");
     assert_eq!(
-        second["input"][0]["content"][0]["text"],
-        "base instructions two"
-    );
-    assert_eq!(
-        &second["input"].as_array().unwrap()[1..],
+        second["input"].as_array().unwrap(),
         serde_json::to_value(&prompt_two.input)
             .unwrap()
             .as_array()
@@ -2605,8 +2603,10 @@ async fn responses_websocket_creates_when_instructions_change() {
                 ["full", "no_previous_request", "generation", "none", "none"],
                 1,
             ),
+            // The instructions field changed, not the input (Corbanu keeps
+            // base instructions out of the input).
             (
-                ["full", "input_mismatch", "generation", "message", "message"],
+                ["full", "instructions_changed", "generation", "none", "none"],
                 1,
             ),
         ],

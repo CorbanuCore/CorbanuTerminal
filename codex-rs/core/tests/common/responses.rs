@@ -240,7 +240,13 @@ impl ResponsesRequest {
         namespace_child_tool(&self.body_json(), namespace, tool_name).cloned()
     }
 
+    /// The base instructions the request carries. Corbanu sends them in the
+    /// Responses `instructions` field (upstream #51156 moved them to a
+    /// leading developer message); Responses Lite still sends that message.
     pub fn instructions_text(&self) -> String {
+        if let Some(instructions) = self.body_json()["instructions"].as_str() {
+            return instructions.to_string();
+        }
         self.message_input_texts("developer")
             .into_iter()
             .next()
@@ -389,6 +395,30 @@ impl ResponsesRequest {
         item.get("output")
             .and_then(Value::as_str)
             .map(str::to_string)
+    }
+
+    /// The text of the `function_call_output` matching `call_id`, whether its
+    /// `output` is a string or a list of content items (every text item,
+    /// joined by newlines: MCP results arrive as content items). `None` when
+    /// a list holds no text item, so a negative check never passes on
+    /// nothing.
+    pub fn function_call_output_any_text(&self, call_id: &str) -> Option<String> {
+        let binding = self.input();
+        let item = binding.iter().find(|item| {
+            item.get("type").and_then(Value::as_str) == Some("function_call_output")
+                && item.get("call_id").and_then(Value::as_str) == Some(call_id)
+        })?;
+        match item.get("output")? {
+            Value::String(text) => Some(text.clone()),
+            Value::Array(items) => {
+                let texts = items
+                    .iter()
+                    .filter_map(|item| item.get("text").and_then(Value::as_str))
+                    .collect::<Vec<_>>();
+                (!texts.is_empty()).then(|| texts.join("\n"))
+            }
+            _ => None,
+        }
     }
 
     pub fn function_call_output_content_and_success(

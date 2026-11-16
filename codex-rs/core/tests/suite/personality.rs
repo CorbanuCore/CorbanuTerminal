@@ -143,7 +143,12 @@ async fn config_personality_none_preserves_explicit_base_instructions(
 
     let request = resp_mock.single_request();
     let body = request.body_json();
-    assert!(body.get("instructions").is_none());
+    // Corbanu sends base instructions in `instructions` (upstream #51156
+    // moved them to an input item); an empty override sends none.
+    assert_eq!(
+        body.get("instructions").is_some(),
+        !custom_instructions.is_empty()
+    );
     if !custom_instructions.is_empty() {
         assert_eq!(request.instructions_text(), custom_instructions);
     }

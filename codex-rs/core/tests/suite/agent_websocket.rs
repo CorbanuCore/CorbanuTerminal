@@ -370,8 +370,10 @@ async fn websocket_first_turn_uses_startup_prewarm_and_create(
                 .any(|item| item["type"] == "additional_tools")
         );
     } else {
+        // Corbanu sends base instructions in `instructions` (upstream
+        // #51156 moved them to a leading developer message).
         assert_eq!(
-            warmup["input"][0]["content"][0]["text"]
+            warmup["instructions"]
                 .as_str()
                 .expect("warmup base instructions")
                 .contains("update_plan"),

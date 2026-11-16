@@ -301,7 +301,9 @@ async fn issue_584_a_command_writing_only_agent_settings_is_offered_no_grant() -
         .function_call_output_text("call-write")
         .unwrap_or_default();
     assert!(output.contains("agents=1"), "{output}");
-    assert!(output.contains("Exit code: 1"), "{output}");
+    // `exec_command` (unified exec) reports the status this way; main's
+    // `shell_command` said "Exit code: 1".
+    assert!(output.contains("Process exited with code 1"), "{output}");
     assert!(!cwd.join(".codex/issue584.toml").as_path().exists());
     assert!(!cwd.join(".agents/issue584.md").as_path().exists());
     // The denial names the first write it reports (both were denied).
