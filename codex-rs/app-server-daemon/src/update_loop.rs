@@ -65,16 +65,63 @@ pub(crate) async fn request_manual_update(
     manual_update::request(daemon).await
 }
 
+pub(crate) const MANAGED_UPDATES_DISABLED_MESSAGE: &str = "Corbanu Terminal daemon self-install/update is disabled until the managed installer supports Corbanu Terminal. Install or update Corbanu Terminal manually using the instructions at https://github.com/CorbanuCore/CorbanuTerminal#install. Then restart the daemon.";
+
+/// D564 (#2197): the daemon never downloads or runs an installer and never
+/// starts its updater until the installer and managed package layout have been
+/// qualified for Corbanu Terminal. No runtime opt-in. Unit tests keep
+/// upstream's update mechanism covered and opt into this production gate with
+/// [`ProductionGateForTest`].
+#[cfg(not(test))]
+pub(crate) fn self_update_enabled() -> bool {
+    false
+}
+
+#[cfg(test)]
+pub(crate) fn self_update_enabled() -> bool {
+    !PRODUCTION_GATE_FOR_TEST.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+thread_local! {
+    static PRODUCTION_GATE_FOR_TEST: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Applies the production gate on this test thread until dropped. Use it only
+/// in single-threaded (`current_thread`) tests.
+#[cfg(test)]
+pub(crate) struct ProductionGateForTest(());
+
+#[cfg(test)]
+impl ProductionGateForTest {
+    pub(crate) fn enter() -> Self {
+        PRODUCTION_GATE_FOR_TEST.with(|gate| gate.set(true));
+        Self(())
+    }
+}
+
+#[cfg(test)]
+impl Drop for ProductionGateForTest {
+    fn drop(&mut self) {
+        PRODUCTION_GATE_FOR_TEST.with(|gate| gate.set(false));
+    }
+}
+
+pub(crate) fn ensure_managed_updates_enabled() -> Result<()> {
+    if self_update_enabled() {
+        return Ok(());
+    }
+    anyhow::bail!(MANAGED_UPDATES_DISABLED_MESSAGE)
+}
+
 const INITIAL_UPDATE_DELAY: Duration = Duration::from_secs(5 * 60);
 const RESTART_RETRY_INTERVAL: Duration = Duration::from_millis(50);
 // Manual update responses are capped after JSON serialization. This leaves room for the status,
 // envelope, and the worst-case six-byte JSON escape for every captured byte.
 const INSTALLER_STDERR_TAIL_BYTES: usize = 2 * 1024;
 const INSTALLER_STDERR_DRAIN_TIMEOUT: Duration = Duration::from_secs(1);
-/// D564 (provisional, pending Travis): `INSTALL_URL` is upstream's installer,
-/// not Corbanu Terminal's, so the daemon never downloads or runs it until it
-/// points at the Corbanu installer (#2197). Tests keep the mechanism covered.
-const SELF_UPDATE_ENABLED: bool = cfg!(test);
+/// D564: `INSTALL_URL` is upstream's installer, not Corbanu Terminal's; it is
+/// never fetched while `self_update_enabled()` is false (#2197).
 #[cfg(unix)]
 const INSTALL_URL: &str = "https://chatgpt.com/codex/install.sh";
 #[cfg(windows)]
@@ -335,9 +382,9 @@ enum UpdateTrigger<'a> {
     RestoreProduction(&'a str),
 }
 
-/// D564: with self-update off, a scheduled check does nothing and the
-/// updater stays up (it keeps the daemon counted as bootstrapped and answers
-/// requests), and a requested update fails with the reason.
+/// D564: with self-update off, a scheduled check in an updater an earlier
+/// build left running does nothing (lifecycle commands stop that updater), and
+/// a requested update fails with the reason.
 fn self_update_gate(
     enabled: bool,
     trigger: UpdateTrigger<'_>,
@@ -348,9 +395,7 @@ fn self_update_gate(
     if trigger == UpdateTrigger::Scheduled {
         return Ok(Some(UpdateLoopControl::Continue));
     }
-    anyhow::bail!(
-        "the app-server daemon does not update itself in Corbanu Terminal yet; update Corbanu Terminal with its own installer"
-    )
+    anyhow::bail!(MANAGED_UPDATES_DISABLED_MESSAGE)
 }
 
 async fn update_once(
@@ -360,7 +405,7 @@ async fn update_once(
     terminate: &mut Signal,
     trigger: UpdateTrigger<'_>,
 ) -> Result<(UpdateLoopControl, Option<RestartIfRunningOutcome>)> {
-    if let Some(control) = self_update_gate(SELF_UPDATE_ENABLED, trigger)? {
+    if let Some(control) = self_update_gate(self_update_enabled(), trigger)? {
         return Ok((control, None));
     }
     if trigger == UpdateTrigger::Scheduled
@@ -774,7 +819,7 @@ async fn cancel_installer(child: &mut tokio::process::Child, package_root: &Path
 async fn fetch_installer_script(http: &impl InstallerHttp) -> Result<Vec<u8>> {
     // D564: the one place the installer is downloaded (update, restore and
     // migration all come here).
-    self_update_gate(SELF_UPDATE_ENABLED, UpdateTrigger::Manual)?;
+    ensure_managed_updates_enabled()?;
     match http.get(INSTALL_URL).await? {
         InstallerResponse::Success(body) => Ok(body),
         InstallerResponse::Unsuccessful { status } => {

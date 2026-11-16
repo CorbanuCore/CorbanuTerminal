@@ -115,6 +115,10 @@ impl AsyncQuestions {
         );
         composer.set_keymap_bindings(&keymap);
         composer.set_footer_hint_override(Some(Vec::new()));
+        // D642 (sync): answers are dispatched only from this view's key path,
+        // so a held Enter could not be sent when its lookahead ends; keep
+        // rule #22's immediate submission here (follow-up issue in the ledger).
+        composer.set_burst_enter_lookahead(/*enabled*/ false);
         Self {
             app_event_tx,
             state: QuestionState::default(),

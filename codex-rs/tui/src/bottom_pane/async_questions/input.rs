@@ -74,7 +74,12 @@ impl AsyncQuestions {
             return;
         }
 
-        if self.keymap.composer.submit.is_pressed(key) && !self.composer.is_in_paste_burst() {
+        // Sync (D642): this composer doesn't hold a burst Enter, so a long
+        // single-line burst is materialized before the draft snapshot below;
+        // otherwise its text would be dropped when the draft is restored.
+        if self.keymap.composer.submit.is_pressed(key)
+            && (!self.composer.is_in_paste_burst() || self.composer.burst_enter_would_submit())
+        {
             self.composer.flush_pending_input();
         }
         let before = self.composer.snapshot_draft();

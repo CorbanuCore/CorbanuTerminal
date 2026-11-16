@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::path::PathBuf;
+use std::time::Instant;
 
 #[cfg(test)]
 use crate::app_command::AppCommand as Op;
@@ -1766,6 +1767,15 @@ impl BottomPaneView for McpServerElicitationOverlay {
         if key_event.kind == KeyEventKind::Release {
             return;
         }
+        if let Some(result) = self.composer.take_burst_submission(Instant::now()) {
+            self.handle_composer_input_result(result);
+            if self.done {
+                return;
+            }
+        }
+        if !crate::bottom_pane::key_continues_paste(key_event.code, key_event.modifiers) {
+            self.composer.cancel_pending_burst_submission();
+        }
 
         if matches!(key_event.code, KeyCode::Esc)
             || self.current_field_is_select()
@@ -2005,6 +2015,10 @@ impl BottomPaneView for McpServerElicitationOverlay {
     }
 
     fn flush_paste_burst_if_due(&mut self) -> bool {
+        if let Some(result) = self.composer.take_burst_submission(Instant::now()) {
+            self.handle_composer_input_result(result);
+            return true;
+        }
         self.composer.flush_paste_burst_if_due()
     }
 

@@ -158,7 +158,7 @@ async fn cold_chat_can_outlive_normal_request_timeout_without_retry_injection() 
         .and(PromptContains("exactly READY"))
         .respond_with(
             ResponseTemplate::new(200)
-                .set_delay(Duration::from_millis(100))
+                .set_delay(Duration::from_secs(2))
                 .set_body_json(serde_json::json!({
                     "choices": [{"message": {"content": "READY"}}]
                 })),
@@ -169,8 +169,10 @@ async fn cold_chat_can_outlive_normal_request_timeout_without_retry_injection() 
         .await;
     let token = SecretValue::new(TOKEN.to_string()).expect("token");
 
-    let report = GpuEndpointProber::new(Duration::from_millis(50), Duration::from_millis(20))
-        .with_cold_chat_timeout(Duration::from_millis(250))
+    // Leave the preliminary models requests enough time on loaded CI runners while
+    // keeping the cold response slower than the normal request timeout.
+    let report = GpuEndpointProber::new(Duration::from_secs(1), Duration::from_millis(20))
+        .with_cold_chat_timeout(Duration::from_secs(10))
         .probe(
             format!("{}/v1", server.uri()).as_str(),
             "pinned/model",

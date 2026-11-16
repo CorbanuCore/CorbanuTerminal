@@ -3967,6 +3967,17 @@ fn long_single_line_burst_enter_submits() {
     }
 
     let (result, _) = composer.handle_submission_with_time(/*should_queue*/ false, now);
+    assert_eq!(result, InputResult::None);
+    assert!(
+        composer
+            .take_burst_submission(
+                now + crate::bottom_pane::paste_burst::BURST_ENTER_LOOKAHEAD - step
+            )
+            .is_none()
+    );
+    let result = composer
+        .take_burst_submission(now + crate::bottom_pane::paste_burst::BURST_ENTER_LOOKAHEAD)
+        .expect("quiet Enter must submit without another key");
 
     assert_eq!(
         result,

@@ -45,8 +45,10 @@ should parse that JSON rather than relying on human-readable text. Lifecycle
 responses report the resolved backend, socket path, local CLI version, and
 running app-server version when applicable.
 
-Eligible managed daemons check for updates after five minutes, then hourly by
-default. Edit `CODEX_HOME/app-server-daemon/settings.json` to change this:
+While D564 holds (see "Installation and update cases" below), no updater runs
+and `daemon update` refuses; this and the next two paragraphs describe
+upstream's updater. Eligible managed daemons check for updates after five
+minutes, then hourly by default. Edit `CODEX_HOME/app-server-daemon/settings.json` to change this:
 
 ```json
 {
@@ -77,20 +79,14 @@ running.
 
 ## Bootstrap flow
 
-For a new Linux or macOS machine:
+For a Linux or macOS machine with Corbanu Terminal installed:
 
 ```sh
-curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.sh | sh
-$HOME/.codex/packages/standalone/current/codex app-server daemon bootstrap --remote-control
+corbanu app-server daemon bootstrap --remote-control
 ```
 
-On Windows, use a non-elevated PowerShell terminal whose host allows breakaway:
-
-```powershell
-irm https://chatgpt.com/codex/install.ps1 | iex
-$codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
-& "$codexHome\packages\standalone\current\bin\codex.exe" app-server daemon bootstrap --remote-control
-```
+On Windows, run the same command from an installed Corbanu Terminal in a
+non-elevated PowerShell terminal whose host allows breakaway.
 
 `bootstrap` can use any complete CLI package. If no daemon package is installed,
 it copies the invoking package into `CODEX_HOME/packages/app-server-daemon` and
@@ -99,11 +95,29 @@ packages are reused, including legacy installations; a broken selection is not
 silently replaced. A bare executable cannot supply a new installation.
 
 It records the daemon settings under `CODEX_HOME/app-server-daemon/`, starts app-server as a
-pidfile-backed detached process. It launches a detached updater loop when
-automatic updates are enabled, the installer selected the stable `latest`
-channel, and the managed binary supports the updater command.
+pidfile-backed detached process, and stops any previous detached updater loop.
+It starts no updater: daemon self-update is disabled (D564, below), so its JSON
+response reports `autoUpdateEnabled: false`.
 
 ## Installation and update cases
+
+Corbanu Terminal disables daemon-managed updates until the managed installer
+supports Corbanu Terminal (owner decision D564, #2197). The daemon does not
+download or run an installer, `daemon update` and the internal
+`pid-update-loop` command return an error immediately with manual installation
+guidance, and no updater is started. Install or update Corbanu Terminal using
+the platform-specific commands in the
+[installation instructions](../../README.md#install), then explicitly restart
+the daemon. All mutating lifecycle commands (`start`, `restart`, `stop`,
+`bootstrap` and remote-control changes) stop an updater left by an older build,
+even when the managed binary is missing. A running app-server stays on its
+current executable until an explicit restart after a manual update.
+
+The updater and installer behaviour described below is upstream's; it stays
+inactive while D564 holds. Copying the invoking Corbanu Terminal package into
+the daemon package location (`bootstrap` above, and `start` when no daemon
+package is installed) needs no installer
+and stays available.
 
 New daemons use `CODEX_HOME/packages/app-server-daemon/current/bin/codex`
 (`codex.exe` on Windows). The package contains the executable and its helpers.
@@ -177,6 +191,7 @@ eligible; `codex remote-control --no-daemon` runs a separate foreground server.
 remote-control preference.
 `daemon start` and `daemon restart` use that saved preference. `daemon bootstrap`
 sets it according to `--remote-control` (disabled when omitted).
+Every remote-control change first stops an updater left by an older build.
 
 `stop` sends a graceful termination request first, then force-terminates the
 process after the configured grace window if it is still alive.

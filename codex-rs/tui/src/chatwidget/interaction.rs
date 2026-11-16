@@ -97,6 +97,15 @@ impl ChatWidget {
         key_event: KeyEvent,
         activation_key: Option<crate::key_hint::KeyBinding>,
     ) -> KeyEventAction {
+        // D642: resolve a held burst Enter before this key, and drop it on navigation.
+        if let Some(result) = self.bottom_pane.take_burst_submission(Instant::now()) {
+            self.handle_composer_input_result(result, /*had_modal_or_popup*/ false);
+        }
+        if key_event.kind != KeyEventKind::Release
+            && !crate::bottom_pane::key_continues_paste(key_event.code, key_event.modifiers)
+        {
+            self.bottom_pane.cancel_pending_burst_submission();
+        }
         if self.handle_quick_dial_menu(key_event) {
             return KeyEventAction::None;
         }
@@ -611,6 +620,11 @@ impl ChatWidget {
 
     // Returns true if caller should skip rendering this frame (a future frame is scheduled).
     pub(crate) fn handle_paste_burst_tick(&mut self, frame_requester: FrameRequester) -> bool {
+        if let Some(result) = self.bottom_pane.take_burst_submission(Instant::now()) {
+            self.handle_composer_input_result(result, /*had_modal_or_popup*/ false);
+            self.request_redraw();
+            return true;
+        }
         if self.bottom_pane.flush_paste_burst_if_due() {
             self.refresh_startup_recovery();
             // A paste just flushed; request an immediate redraw and skip this frame.
