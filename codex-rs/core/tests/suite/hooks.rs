@@ -6319,6 +6319,15 @@ async fn model_request_post_hook_orders_tool_dispatch(
         fs_wait::wait_for_path_exists(home.join("post-started"), Duration::from_secs(10)).await?;
     }
     if interrupt {
+        let requests = server.requests().await;
+        let request: Value = serde_json::from_slice(&requests[0])?;
+        assert!(
+            request["tools"]
+                .as_array()
+                .expect("request tools")
+                .iter()
+                .any(|tool| tool["name"] == "apply_patch")
+        );
         test.codex.submit(Op::Interrupt).await?;
         wait_for_event(&test.codex, |event| matches!(event,
             EventMsg::TokenCount(ev) if ev.info.as_ref().is_some_and(|info| info.total_token_usage.total_tokens == 42)

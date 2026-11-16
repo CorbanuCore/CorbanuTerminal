@@ -727,7 +727,10 @@ async fn queue_only_agent_mail_wakes_sleeping_root_with_previous_turn_context(
         .collect::<Vec<_>>();
     assert_eq!(delivered_mail.len(), 1);
     let communication = delivered_mail[0];
-    assert_eq!(communication.author, AgentPath::try_from("/root/worker")?);
+    assert_eq!(
+        communication.author,
+        AgentPath::try_from("/root/worker").expect("worker path")
+    );
     assert_eq!(communication.recipient, AgentPath::root());
     assert!(!communication.trigger_turn);
     assert!(communication.id.is_some());

@@ -2182,8 +2182,8 @@ async fn pending_attachment_installs_configuration_before_waiting_turn_resumes()
             "missing tool: {tool}"
         );
     }
-    // D647 / main #709: the empty session is read-only. Once ready, the
-    // owner's read-only profile must also override the waiting thread's broader setting.
+    // No environment means no edit tools. D647 / main #709 also hides them once
+    // the ready owner's read-only profile overrides the waiting thread's broader setting.
     for tool in ["apply_patch", "structured_edit", "structured_write"] {
         assert!(
             !first_tool_names.contains(&tool.to_string()),

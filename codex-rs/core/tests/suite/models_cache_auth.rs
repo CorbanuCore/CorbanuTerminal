@@ -263,10 +263,14 @@ async fn auth_and_provider_switches_do_not_reuse_chatgpt_catalog() -> Result<()>
         .build_with_auto_env(&server)
         .await?;
     assert!(home.path().join("models_cache.json").exists());
-    // Discovery supplements the bundled catalog; account changes must discard only
-    // the previous account's remote entries and their default billing tier.
+    // Discovery replaces the bundled entry, but cannot unhide a retired model.
+    // Account changes must discard the previous account's default billing tier.
     let mut expected_models = bundled_models_response()?.models;
-    expected_models.push(model.clone());
+    let expected = expected_models
+        .iter_mut()
+        .find(|bundled| bundled.slug == model.slug)
+        .expect("bundled gpt-5.5");
+    expected.default_service_tier = Some("priority".into());
     assert_eq!(
         chatgpt
             .thread_manager
@@ -377,7 +381,12 @@ async fn auth_and_provider_switches_do_not_reuse_chatgpt_catalog() -> Result<()>
         .build_with_auto_env(&other_server)
         .await?;
     let mut expected_models = bundled_models_response()?.models;
-    expected_models.push(model);
+    let expected = expected_models
+        .iter_mut()
+        .find(|bundled| bundled.slug == model.slug)
+        .expect("bundled gpt-5.5");
+    expected.default_service_tier = None;
+    expected.display_name = "Second provider model".into();
     assert_eq!(
         other
             .thread_manager
