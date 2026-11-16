@@ -1270,9 +1270,12 @@ async fn thread_resume_preserves_persisted_permissions_over_broader_current_defa
 {
     let server = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
-    MockResponsesConfig::new(&server.uri())
-        .with_sandbox_mode("danger-full-access")
-        .write(codex_home.path())?;
+    let config = MockResponsesConfig::new(&server.uri()).with_sandbox_mode("danger-full-access");
+    // Without a Windows backend, workspace-write deliberately becomes
+    // read-only. This fixture verifies persistence of an available policy.
+    #[cfg(windows)]
+    let config = config.with_extra_config("[windows]\nsandbox = \"unelevated\"");
+    config.write(codex_home.path())?;
 
     let thread_id = {
         let mut mcp = TestAppServer::builder()
@@ -1289,8 +1292,13 @@ async fn thread_resume_preserves_persisted_permissions_over_broader_current_defa
                 ..Default::default()
             })
             .await?;
-        let ThreadStartResponse { thread, .. } =
-            timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(start_id)).await??;
+        let ThreadStartResponse {
+            thread, sandbox, ..
+        } = timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(start_id)).await??;
+        assert!(
+            matches!(sandbox, SandboxPolicy::WorkspaceWrite { .. }),
+            "fixture must start with workspace-write, got {sandbox:?}"
+        );
 
         let turn_id = mcp
             .send_turn_start_request(TurnStartParams {

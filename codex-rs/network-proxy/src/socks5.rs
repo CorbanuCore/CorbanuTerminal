@@ -1105,6 +1105,8 @@ mod tests {
             enabled: true,
             mode: NetworkMode::Limited,
             mitm: true,
+            // Keep this routing test independent of the live DNS lookup in the local-address check.
+            allow_local_binding: true,
             ..NetworkProxyConfig::default()
         };
         settings.set_allowed_domains(vec!["example.com".to_string()]);
@@ -1179,6 +1181,8 @@ mod tests {
             mode: NetworkMode::Full,
             mitm: true,
             credential_broker: true,
+            // Keep this routing test independent of the live DNS lookup in the local-address check.
+            allow_local_binding: true,
             ..NetworkProxyConfig::default()
         };
         settings.set_allowed_domains(vec!["api.openai.com".to_string()]);
@@ -1210,6 +1214,8 @@ mod tests {
         let mut settings = NetworkProxyConfig {
             enabled: true,
             mode: NetworkMode::Limited,
+            // Keep this routing test independent of the live DNS lookup in the local-address check.
+            allow_local_binding: true,
             ..NetworkProxyConfig::default()
         };
         settings.set_allowed_domains(vec!["example.com".to_string()]);
