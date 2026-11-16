@@ -3705,10 +3705,22 @@ impl AuthManager {
 
     /// Refreshes auth, then captures credentials and their account-bound factory together.
     /// The auth read lock prevents an identity change between the two snapshots.
-    pub async fn auth_with_http_client_factory(&self) -> Option<(CodexAuth, HttpClientFactory)> {
+    pub async fn auth_with_http_client_factory(
+        self: &Arc<Self>,
+    ) -> Option<(CodexAuth, HttpClientFactory)> {
         self.auth().await;
         let cached = self.inner.read().ok()?;
-        Some((cached.auth.clone()?, self.http_client_factory()))
+        let mut factory = self.http_client_factory();
+        if self.named_account.is_some() {
+            // for_session() may return a temporary manager. Its exported clients and
+            // in-flight requests keep that same lifecycle reachable for later logout.
+            let policy = factory
+                .network_policy()
+                .clone()
+                .with_lifetime_guard(self.clone());
+            factory = factory.with_network_policy(policy);
+        }
+        Some((cached.auth.clone()?, factory))
     }
 
     pub async fn agent_identity_auth(

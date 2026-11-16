@@ -126,6 +126,44 @@ async fn dropping_a_named_manager_revokes_retained_clients_before_recreation() {
     );
 }
 
+#[tokio::test]
+async fn named_credential_snapshot_keeps_its_owner_until_the_request_finishes() {
+    use codex_http_client::NetworkPolicyDenied;
+
+    let home = tempfile::tempdir().unwrap();
+    login_named_account_with_api_key(home.path(), &account("work"), "sk-canary-work").unwrap();
+    let base = AuthManager::from_auth_for_testing_with_home(
+        CodexAuth::from_api_key("sk-canary-default"),
+        home.path().to_path_buf(),
+    );
+    let named = base.for_named_account(account("work"));
+    let weak = Arc::downgrade(&named);
+    let (_, factory) = named.auth_with_http_client_factory().await.unwrap();
+    let url = url::Url::parse("https://example.com/").unwrap();
+    let permit = factory.network_policy().acquire(&url).unwrap();
+    drop(named);
+    drop(factory);
+    // A transient backend caller can drop its factory while a response is still in flight.
+    assert_eq!(permit.check(), Ok(()));
+    let next = base.for_named_account(account("work"));
+    assert!(Arc::ptr_eq(&next, &weak.upgrade().unwrap()));
+    next.set_cached_auth(/*new_auth*/ None);
+    assert_eq!(permit.check(), Err(NetworkPolicyDenied::Revoked));
+    drop(next);
+    assert!(weak.upgrade().is_some());
+    drop(permit);
+    assert!(
+        weak.upgrade().is_none(),
+        "the exported lease must not create an ownership cycle"
+    );
+    assert!(
+        base.http_client_factory()
+            .network_policy()
+            .acquire(&url)
+            .is_ok()
+    );
+}
+
 fn account(name: &str) -> NamedChatgptAccount {
     NamedChatgptAccount {
         provider_id: "openai".to_string(),
