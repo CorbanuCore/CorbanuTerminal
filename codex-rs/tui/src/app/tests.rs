@@ -7024,13 +7024,14 @@ async fn clear_header_remains_source_backed_for_model_refresh() -> Result<()> {
     app.chat_widget.set_model("gpt-after-clear");
     app.refresh_session_header(&mut tui)?;
 
-    let rendered = app.transcript_cells[0]
-        .display_lines(/*width*/ 80)
+    // Upstream's header no longer draws the model; its raw text still carries it.
+    let raw = app.transcript_cells[0]
+        .raw_lines()
         .into_iter()
         .map(|line| line.to_string())
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(rendered.contains("gpt-after-clear"));
+    assert!(raw.contains("gpt-after-clear"), "{raw}");
     Ok(())
 }
 

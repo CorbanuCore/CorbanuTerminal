@@ -3472,9 +3472,11 @@ impl App {
             }
             AppEvent::ModelsLoaded { request_id, result }
             | AppEvent::ApiKeyCompatModelsLoaded { request_id, result } => {
-                self.chat_widget.on_models_loaded(request_id, result);
+                // Main's catalog is shared and refreshed in place, so the pointer alone
+                // doesn't show a change; `on_models_loaded` reports it.
+                let refreshed = self.chat_widget.on_models_loaded(request_id, result);
                 let catalog = self.chat_widget.model_catalog();
-                if !Arc::ptr_eq(&self.model_catalog, &catalog) {
+                if refreshed || !Arc::ptr_eq(&self.model_catalog, &catalog) {
                     self.model_catalog = catalog;
                     app_server.set_available_models(self.model_catalog.try_list_models()?);
                     self.sync_active_thread_service_tier_to_cached_session().await;

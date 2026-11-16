@@ -102,11 +102,8 @@ async fn a_claude_style_session_opens_on_its_row_in_the_zai_tab() {
         ZAI_ANTHROPIC_PROVIDER_ID,
     );
     let popup = open_all_models(&mut chat);
-    assert!(popup.contains("[Z.AI]"), "{popup}");
-    assert!(
-        !popup.contains("[Other]") && !popup.contains("Other"),
-        "{popup}"
-    );
+    assert_eq!(active_model_picker_tab(&chat), Some("zai"), "{popup}");
+    assert!(!popup.contains("Other"), "{popup}");
     assert!(
         popup.contains(&format!("{CLAUDE_STYLE} (current)")),
         "{popup}"
