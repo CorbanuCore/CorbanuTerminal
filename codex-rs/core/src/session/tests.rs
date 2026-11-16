@@ -2898,9 +2898,11 @@ async fn inter_agent_communication_waits_for_confirmed_delivery_persistence() {
                 item: ResponseItem::AgentMessage { .. },
                 metadata: Some(metadata),
             }) => Some(("communication", metadata.user_input_order)),
-            // Corbanu (#1545) persists the whole communication; resume replays it in
-            // physical order, between the deliveries around it.
-            RolloutItem::InterAgentCommunication(_) => Some(("communication", None)),
+            // Corbanu (#1545) persists the whole communication with its live input
+            // order (#2339), between the deliveries around it.
+            RolloutItem::InterAgentCommunication(communication) => {
+                Some(("communication", communication.recorded_input_order))
+            }
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -2908,7 +2910,7 @@ async fn inter_agent_communication_waits_for_confirmed_delivery_persistence() {
         boundaries,
         vec![
             ("delivery", Some(0)),
-            ("communication", None),
+            ("communication", Some(1)),
             ("delivery", Some(2)),
         ]
     );
@@ -3040,6 +3042,8 @@ async fn record_inter_agent_communication_sets_turn_id_in_rollout_and_resume() {
         })
         .cloned()
         .collect::<Vec<_>>();
+    // #2339: with the input order it took live.
+    expected_communication.recorded_input_order = Some(0);
     let expected_persisted_items =
         vec![RolloutItem::InterAgentCommunication(expected_communication)];
     assert_eq!(
@@ -3056,6 +3060,71 @@ async fn record_inter_agent_communication_sets_turn_id_in_rollout_and_resume() {
         strip_response_item_ids(std::slice::from_ref(&expected_item))
     );
     assert_eq!(resumed_session.reserve_user_input_order().await, 1);
+}
+
+/// #2339: input accepted before a communication but recorded after it keeps the
+/// order it took at acceptance, and the communication keeps its own, on resume as
+/// live. Replaying the communication in physical order alone would give it the
+/// earlier input's order.
+#[tokio::test]
+async fn resume_keeps_communication_order_when_earlier_input_records_later() {
+    let (mut session, turn_context) = make_session_and_context().await;
+    let rollout_path = attach_thread_persistence(&mut session).await;
+    let accepted_first = session.reserve_user_input_order().await;
+    session
+        .record_inter_agent_communication(
+            &turn_context,
+            turn_context.model_info(),
+            InterAgentCommunication::new(
+                AgentPath::root().join("worker").expect("worker path"),
+                AgentPath::root(),
+                Vec::new(),
+                "child done".to_string(),
+                /*trigger_turn*/ false,
+            ),
+        )
+        .await;
+    let mut accepted = ResponseItemEnvelope::new(user_message("accepted before the mail"));
+    accepted.metadata.get_or_insert_default().user_input_order = Some(accepted_first);
+    session
+        .record_prepared_conversation_items(
+            &turn_context,
+            turn_context.model_info(),
+            vec![accepted],
+            Vec::new(),
+        )
+        .await;
+    session.flush_rollout().await.expect("rollout should flush");
+    let orders = |history: &ContextManager| {
+        history
+            .annotated_items()
+            .iter()
+            .map(|item| {
+                (
+                    matches!(item.item, ResponseItem::AgentMessage { .. }),
+                    item.metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.user_input_order),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let live = orders(&session.clone_history().await);
+    assert_eq!(live, vec![(true, Some(1)), (false, Some(0))]);
+
+    let InitialHistory::Resumed(resumed) = RolloutRecorder::get_rollout_history(&rollout_path)
+        .await
+        .expect("read rollout history")
+    else {
+        panic!("expected resumed rollout history");
+    };
+    let (resumed_session, _resumed_turn_context) = make_session_and_context().await;
+    resumed_session
+        .record_initial_history(InitialHistory::Resumed(resumed))
+        .await;
+    assert_eq!(orders(&resumed_session.clone_history().await), live);
+    assert_eq!(resumed_session.reserve_user_input_order().await, 2);
+    assert_eq!(session.reserve_user_input_order().await, 2);
 }
 
 #[tokio::test]

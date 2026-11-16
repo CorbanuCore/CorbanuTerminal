@@ -24,7 +24,9 @@ async fn security_setup_fetch_with_default_features_uses_authenticated_codex_end
     // The fetch is OpenAI-only; Corbanu's default test provider is not OpenAI.
     app.config.model_provider_id = codex_model_provider_info::OPENAI_PROVIDER_ID.to_string();
     app.config.model_provider =
-        codex_model_provider_info::ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+        codex_model_provider_info::ModelProviderInfo::create_openai_provider(
+            /*base_url*/ None,
+        );
     std::fs::write(
         app.config.codex_home.join("config.toml"),
         format!("chatgpt_base_url = {:?}\n", backend.uri()),
@@ -216,7 +218,9 @@ async fn security_setup_skips_fetch_when_server_auth_does_not_match_saved_login(
         // The fetch is OpenAI-only; Corbanu's default test provider is not OpenAI.
         app.config.model_provider_id = codex_model_provider_info::OPENAI_PROVIDER_ID.to_string();
         app.config.model_provider =
-            codex_model_provider_info::ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+            codex_model_provider_info::ModelProviderInfo::create_openai_provider(
+                /*base_url*/ None,
+            );
         write_chatgpt_auth(
             &app.config.codex_home,
             ChatGptAuthFixture::new("saved-token")

@@ -566,7 +566,15 @@ impl ConnectionIdentity {
             // sign-in. Apply them last, matching websocket handshake
             // precedence. A semantic identity skips them so that a refreshed
             // bearer token keeps the connection.
-            api_auth.add_auth_headers(&mut headers);
+            if api_auth.add_auth_headers(&mut headers).is_err() {
+                // #2259: the sign-in could not be resolved, so fail closed:
+                // the identity is unique and never matches another
+                // connection (the partly written headers are still hashed
+                // but cannot make two identities equal).
+                static AUTH_ERROR: AtomicU64 = AtomicU64::new(0);
+                digest.update(b"auth-error");
+                digest.update(AUTH_ERROR.fetch_add(1, Ordering::Relaxed).to_le_bytes());
+            }
         }
         // Configured headers can carry the sign-in too. Hash bytes rather than
         // an object's address or Debug output. Keep duplicate-value order, but

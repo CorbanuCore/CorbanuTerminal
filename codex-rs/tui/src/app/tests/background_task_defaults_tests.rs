@@ -708,7 +708,11 @@ async fn command_center_new_preserves_only_selected_server_profiles() -> Result<
     let home = tempdir()?;
     std::fs::write(
         home.path().join("config.toml"),
-        "approval_policy = \"never\"\napprovals_reviewer = \"auto_review\"\ndefault_permissions = \":workspace\"\n[permissions.server-only]\nextends = \":read-only\"\n",
+        // Corbanu: turns run on the chat's provider, so the server's default is the app's.
+        format!(
+            "model_provider = \"{}\"\napproval_policy = \"never\"\napprovals_reviewer = \"auto_review\"\ndefault_permissions = \":workspace\"\n[permissions.server-only]\nextends = \":read-only\"\n",
+            app.config.model_provider_id
+        ),
     )?;
     let server_config = ConfigBuilder::default()
         .codex_home(home.path().into())

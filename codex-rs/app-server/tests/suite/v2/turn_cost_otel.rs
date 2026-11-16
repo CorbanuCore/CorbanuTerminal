@@ -268,7 +268,16 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
         }
     }
     assert_eq!(points.len(), 1);
-    assert_eq!(points[0]["asInt"], json!(1250001));
+    // OTLP/JSON allows int64 as a decimal string (the opentelemetry-proto
+    // version in Corbanu's lockfile) or as a number.
+    let as_int = &points[0]["asInt"];
+    assert_eq!(
+        as_int
+            .as_str()
+            .map_or_else(|| as_int.as_i64(), |value| value.parse().ok()),
+        Some(1250001),
+        "{as_int}"
+    );
     let attrs: std::collections::BTreeMap<_, _> = points[0]["attributes"]
         .as_array()
         .expect("attributes")

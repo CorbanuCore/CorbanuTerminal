@@ -144,9 +144,17 @@ fn stage_windows_sandbox_helpers() -> anyhow::Result<()> {
         let destination = resources_dir.join(file_name);
         if let Err(err) = codex_utils_cargo_bin::copy_executable(&helper, &destination) {
             // A sandbox helper can briefly remain alive after the sandboxed
-            // command exits. Bazel may retry the test while that process still
-            // has the staged executable open, so keep the already-staged copy.
-            if err.kind() == std::io::ErrorKind::PermissionDenied && destination.exists() {
+            // command exits, locking its executable across tests or retries.
+            // Windows reports this as access denied or sharing violation (32).
+            // Reuse only an identical copy so a stale helper cannot pass a test.
+            if (err.kind() == std::io::ErrorKind::PermissionDenied
+                || err.raw_os_error() == Some(32))
+                && destination.is_file()
+                && matches!(
+                    (std::fs::read(&helper), std::fs::read(&destination)),
+                    (Ok(source), Ok(staged)) if source == staged
+                )
+            {
                 continue;
             }
             return Err(err).with_context(|| {

@@ -160,6 +160,32 @@ async fn plugins_manager_reads_auth_mode_from_auth_manager() {
     assert_eq!(manager_with_auth.auth_mode(), Some(AuthMode::Chatgpt));
 }
 
+/// #2337 (PF-84): the mode follows the sign-in a session handed over, live,
+/// until another is handed over or that sign-in is dropped.
+#[tokio::test]
+async fn plugins_manager_follows_the_session_sign_in_it_was_handed() {
+    let tmp = TempDir::new().unwrap();
+    let manager = test_plugins_manager_with_auth_manager(
+        tmp.path().to_path_buf(),
+        Some(Product::Codex),
+        test_auth_manager(Some(AuthMode::ApiKey)),
+    );
+    let session_auth = test_auth_manager(Some(AuthMode::Chatgpt));
+
+    assert!(manager.follow_session_auth(&session_auth));
+    assert_eq!(manager.auth_mode(), Some(AuthMode::Chatgpt));
+    assert!(!manager.follow_session_auth(&session_auth));
+    set_test_auth_mode(&session_auth, Some(AuthMode::ChatgptAuthTokens)).await;
+    assert_eq!(manager.auth_mode(), Some(AuthMode::ChatgptAuthTokens));
+
+    let other_session_auth = test_auth_manager(Some(AuthMode::ApiKey));
+    assert!(manager.follow_session_auth(&other_session_auth));
+    assert_eq!(manager.auth_mode(), Some(AuthMode::ApiKey));
+    assert!(manager.follow_session_auth(&session_auth));
+    drop(session_auth);
+    assert_eq!(manager.auth_mode(), Some(AuthMode::ApiKey));
+}
+
 #[test]
 fn curated_repo_sync_stays_deferred_for_remote_chatgpt_catalog() {
     let tmp = TempDir::new().unwrap();

@@ -643,22 +643,9 @@ pub(crate) fn close_inherited_fds_except(preserved_fds: &[RawFd]) {
 /// This also runs in the legacy pre-exec callback, so it must stay async-signal-safe.
 #[cfg(unix)]
 pub(crate) fn configure_child_terminal() -> std::io::Result<()> {
-    // SAFETY: These operations only change the calling child's signal/session state.
+    crate::process_group::reset_child_signals()?;
+    // SAFETY: These operations only change the calling child's session state.
     unsafe {
-        for signo in &[
-            libc::SIGCHLD,
-            libc::SIGHUP,
-            libc::SIGINT,
-            libc::SIGQUIT,
-            libc::SIGTERM,
-            libc::SIGALRM,
-        ] {
-            libc::signal(*signo, libc::SIG_DFL);
-        }
-
-        let empty_set: libc::sigset_t = std::mem::zeroed();
-        libc::sigprocmask(libc::SIG_SETMASK, &empty_set, std::ptr::null_mut());
-
         if libc::setsid() == -1 {
             return Err(std::io::Error::last_os_error());
         }

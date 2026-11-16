@@ -1043,6 +1043,12 @@ pub struct InterAgentCommunication {
     #[ts(optional)]
     pub metadata: Option<ResponseItemMetadata>,
     pub trigger_turn: bool,
+    /// Corbanu (#2339): the input order the recipient reserved when it recorded this
+    /// communication, so a resume replays the live order. Only rollouts carry it, next
+    /// to the payload; the protocol never sends or accepts it.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub recorded_input_order: Option<u64>,
 }
 
 impl InterAgentCommunication {
@@ -1072,6 +1078,7 @@ impl InterAgentCommunication {
             internal_chat_message_metadata_passthrough: None,
             metadata: None,
             trigger_turn,
+            recorded_input_order: None,
         }
     }
 
@@ -1101,6 +1108,7 @@ impl InterAgentCommunication {
             internal_chat_message_metadata_passthrough: None,
             metadata: None,
             trigger_turn,
+            recorded_input_order: None,
         }
     }
 
@@ -5326,6 +5334,7 @@ mod tests {
             internal_chat_message_metadata_passthrough: None,
             metadata: None,
             trigger_turn: true,
+            recorded_input_order: None,
         };
         communication.set_turn_id_if_missing("turn-1");
         let mut serialized_communication = communication.clone();
