@@ -419,6 +419,8 @@ async fn permission_discovery_discards_stale_results_and_preserves_covering_moda
         chat.bottom_pane.active_view_id(),
         Some("permission-profiles")
     );
+    const REQUEST_WAITING: &str = "A request is waiting";
+    assert!(render_bottom_popup(&chat, /*width*/ 80).contains(REQUEST_WAITING));
     while rx.try_recv().is_ok() {}
     chat.dismiss_app_server_request(&ResolvedAppServerRequest::UserInput {
         call_id: "question".into(),
@@ -427,6 +429,7 @@ async fn permission_discovery_discards_stale_results_and_preserves_covering_moda
         chat.bottom_pane.active_view_id(),
         Some("permission-profiles")
     );
+    assert!(!render_bottom_popup(&chat, /*width*/ 80).contains(REQUEST_WAITING));
     assert!(
         !std::iter::from_fn(|| rx.try_recv().ok())
             .any(|event| matches!(event, AppEvent::SettingsSelectionClosed)),
@@ -458,7 +461,11 @@ async fn permission_discovery_discards_stale_results_and_preserves_covering_moda
     chat.on_permission_profiles_loaded(request_id, Ok(Discovery::local(&chat.config)));
     assert!(chat.permission_discovery.is_some());
     assert_eq!(chat.bottom_pane.active_view_id(), Some("covering-view"));
-    while rx.try_recv().is_ok() {}
+    assert!(
+        !std::iter::from_fn(|| rx.try_recv().ok())
+            .any(|event| matches!(event, AppEvent::SettingsSelectionClosed)),
+        "the covering view keeps the permissions hold"
+    );
     chat.handle_key_event(KeyEvent::from(KeyCode::Esc));
     assert!(!chat.bottom_pane.has_active_view());
     assert!(
