@@ -16,6 +16,7 @@ use codex_models_manager::manager::SharedModelsManager;
 use codex_protocol::openai_models::ModelPreset;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use tokio::sync::Mutex;
+use tokio::sync::Notify;
 
 use crate::config_manager::ConfigManager;
 use crate::config_manager::StartupConfig;
@@ -26,6 +27,7 @@ pub(crate) struct ModelCatalog {
     auth_manager: Arc<AuthManager>,
     startup_cwd: Option<PathBuf>,
     state: Mutex<CatalogState>,
+    refresh_requested: Arc<Notify>,
 }
 
 struct CatalogState {
@@ -46,6 +48,7 @@ impl ModelCatalog {
             config_manager,
             auth_manager,
             startup_cwd,
+            refresh_requested: Arc::new(Notify::new()),
             state: Mutex::new(CatalogState {
                 needs_reload: false,
                 config,
@@ -67,6 +70,12 @@ impl ModelCatalog {
     /// Marks catalog configuration stale after an account transition.
     pub(crate) async fn invalidate(&self) {
         self.state.lock().await.needs_reload = true;
+        self.refresh_requested.notify_one();
+    }
+
+    /// Wakes the background worker without making account changes wait for discovery.
+    pub(crate) fn refresh_requests(&self) -> Arc<Notify> {
+        Arc::clone(&self.refresh_requested)
     }
 
     pub(crate) async fn set_api_key_model_discovery_enabled(&self, enabled: bool) {

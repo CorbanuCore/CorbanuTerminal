@@ -1755,6 +1755,16 @@ async fn thread_list_reports_loaded_subagent_direct_input_capability() -> Result
         if should_resume {
             let resume = (thread_id.clone(), source, capability);
             if version == Some(MultiAgentVersion::V2) {
+                // Parent-owned resume restores the child's saved runtime, not request overrides.
+                let context = serde_json::from_value(json!({
+                    "cwd": test_absolute_path("/"),
+                    "approval_policy": "never",
+                    "sandbox_policy": {"type": "read-only"},
+                    "model": "gpt-5.4",
+                    "model_provider": "mock_provider",
+                    "effort": "low",
+                }))?;
+                append_rollout_item_to_path(&path, &RolloutItem::TurnContext(context)).await?;
                 threads_to_resume.push(resume);
             } else {
                 threads_to_resume.insert(/*index*/ 0, resume);
@@ -1764,6 +1774,24 @@ async fn thread_list_reports_loaded_subagent_direct_input_capability() -> Result
     }
 
     let mut mcp = init_mcp(codex_home.path()).await?;
+    // D651: the parent must restore its persisted ownership before loading a V2 child.
+    let state_db = codex_state::StateRuntime::init(
+        codex_state::SqliteConfig::new_for_testing(codex_home.path().abs()),
+        "mock_provider".to_string(),
+    )
+    .await?;
+    for (thread_id, _, _) in expected
+        .iter()
+        .filter(|(thread_id, _, _)| thread_id != &cli_id)
+    {
+        state_db
+            .upsert_thread_spawn_edge(
+                parent_thread_id,
+                ThreadId::from_string(thread_id)?,
+                DirectionalThreadSpawnEdgeStatus::Open,
+            )
+            .await?;
+    }
     let mut loaded_settings = HashMap::new();
     for (thread_id, source, capability) in threads_to_resume {
         let (model, effort) = if thread_id == cli_id {
@@ -1860,20 +1888,6 @@ async fn thread_list_reports_loaded_subagent_direct_input_capability() -> Result
         expected_subagents
     );
 
-    let state_db = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::new_for_testing(codex_home.path().abs()),
-        "mock_provider".to_string(),
-    )
-    .await?;
-    for (thread_id, _, _) in &expected_subagents {
-        state_db
-            .upsert_thread_spawn_edge(
-                parent_thread_id,
-                ThreadId::from_string(thread_id)?,
-                DirectionalThreadSpawnEdgeStatus::Open,
-            )
-            .await?;
-    }
     state_db
         .mark_backfill_complete(/*last_watermark*/ None)
         .await?;

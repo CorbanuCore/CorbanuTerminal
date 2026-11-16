@@ -847,7 +847,8 @@ async fn plugin_list_uses_alternate_discoverable_manifest_and_keeps_undiscoverab
 async fn plugin_list_omitted_cwds_excludes_server_project_config() -> Result<()> {
     let codex_home = TempDir::new()?;
     let project_marketplace = TempDir::new()?;
-    std::fs::create_dir_all(codex_home.path().join(".agents/plugins"))?;
+    let user_home = TempDir::new()?;
+    std::fs::create_dir_all(user_home.path().join(".agents/plugins"))?;
     std::fs::create_dir_all(codex_home.path().join(".git"))?;
     std::fs::create_dir_all(codex_home.path().join(".codex"))?;
     std::fs::create_dir_all(project_marketplace.path().join(".agents/plugins"))?;
@@ -857,7 +858,7 @@ async fn plugin_list_omitted_cwds_excludes_server_project_config() -> Result<()>
         "[features]\nplugins = true\n[plugins.\"home-plugin@home-marketplace\"]\nenabled = true\n",
     )?;
     std::fs::write(
-        codex_home.path().join(".agents/plugins/marketplace.json"),
+        user_home.path().join(".agents/plugins/marketplace.json"),
         r#"{
   "name": "home-marketplace",
   "plugins": [
@@ -885,7 +886,9 @@ async fn plugin_list_omitted_cwds_excludes_server_project_config() -> Result<()>
         ),
     )?;
     set_project_trust_level(codex_home.path(), codex_home.path(), TrustLevel::Trusted)?;
-    let home = codex_home.path().to_string_lossy().into_owned();
+    // The OS home is not a project config root. Keep it separate so the
+    // explicit cwd case actually exercises the trusted project layer.
+    let home = user_home.path().to_string_lossy().into_owned();
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .with_env_overrides(&[

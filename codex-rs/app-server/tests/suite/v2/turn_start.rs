@@ -2123,6 +2123,12 @@ async fn permission_reload_preserves_active_runtime_despite_incompatible_saved_d
     MockResponsesConfig::new(&server.uri()).write(home.path())?;
     let mut app = TestAppServer::builder()
         .with_codex_home(home.path())
+        .with_args(&[
+            "-c",
+            "model_provider=\"mock_provider\"",
+            "-c",
+            "model=\"mock-model\"",
+        ])
         .build_initialized()
         .await?;
     let ThreadStartResponse { thread, .. } = app.start_thread(ThreadStartParams::default()).await?;

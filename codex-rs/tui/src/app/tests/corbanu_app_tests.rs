@@ -1125,7 +1125,7 @@ async fn duplicate_live_native_replacements_are_pruned() {
 
 #[tokio::test]
 async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()> {
-    let mut app = make_test_app().await;
+    let (mut app, mut events, _operations) = make_test_app_with_channels().await;
     let codex_home = tempdir()?;
     app.config.codex_home = codex_home.path().to_path_buf().abs();
     std::fs::write(
@@ -1291,7 +1291,16 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
         app.agent_navigation.ordered_threads(),
         app.spawn_native_endpoint_by_node
     );
-    assert!(app.native_agent_thread_has_loaded_session(troll_thread_id));
+    let mut restore_messages = String::new();
+    while let Ok(event) = events.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            restore_messages.push_str(&lines_to_single_string(&cell.display_lines(/*width*/ 200)));
+        }
+    }
+    assert!(
+        app.native_agent_thread_has_loaded_session(troll_thread_id),
+        "Troll must reattach to its saved thread; restore messages: {restore_messages}"
+    );
     assert_eq!(
         app.agent_navigation
             .get(&troll_thread_id)
