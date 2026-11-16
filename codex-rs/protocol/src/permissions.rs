@@ -4842,6 +4842,40 @@ mod tests {
         assert!(!writable_roots[0].is_path_writable(&dot_aws_config));
     }
 
+    /// #2143: a cwd spelled through a system alias (`/tmp` here; the macOS
+    /// runner's TMPDIR is under `/var`) gets the same carve-outs, in the same
+    /// order, as its real path. The order once followed the spelling.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn writable_root_carveouts_do_not_depend_on_the_cwd_spelling() {
+        let tmp = TempDir::new_in("/tmp").expect("tempdir in /tmp");
+        let aliased_cwd = tmp.path().join("cwd");
+        fs::create_dir(&aliased_cwd).expect("create cwd");
+        let canonical_cwd = aliased_cwd.canonicalize().expect("canonicalize cwd");
+        assert_ne!(aliased_cwd, canonical_cwd, "/tmp should be an alias");
+        let policy = SandboxPolicy::WorkspaceWrite {
+            writable_roots: vec![],
+            network_access: false,
+            exclude_tmpdir_env_var: true,
+            exclude_slash_tmp: true,
+        };
+        let roots_for = |cwd: &Path| {
+            FileSystemSandboxPolicy::from_legacy_sandbox_policy_for_cwd(&policy, cwd)
+                .get_writable_roots_with_cwd(cwd)
+        };
+
+        let canonical = roots_for(&canonical_cwd);
+        let aliased = roots_for(&aliased_cwd);
+
+        let names: Vec<_> = canonical[0]
+            .read_only_subpaths
+            .iter()
+            .map(|path| path.as_path().file_name().expect("file name").to_owned())
+            .collect();
+        assert_eq!(names, [".git", ".agents", ".codex", ".aws"]);
+        assert_eq!(aliased, canonical);
+    }
+
     #[test]
     fn legacy_workspace_write_projection_accepts_relative_cwd() {
         let relative_cwd = Path::new("workspace");
