@@ -47,6 +47,14 @@ use crate::managed_install::executable_identity;
 #[cfg(unix)]
 use crate::managed_install::resolved_managed_codex_bin;
 
+pub(crate) const MANAGED_UPDATES_DISABLED_MESSAGE: &str = "Corbanu Terminal daemon self-install/update is disabled until the managed installer supports Corbanu Terminal. Install or update Corbanu Terminal manually using the instructions at https://github.com/CorbanuCore/CorbanuTerminal#install. Then restart the daemon.";
+
+// D564 (#2197): do not enable this until the installer and managed package
+// layout have been qualified for Corbanu Terminal. No runtime opt-in.
+pub(crate) fn ensure_managed_updates_enabled() -> Result<()> {
+    anyhow::bail!(MANAGED_UPDATES_DISABLED_MESSAGE)
+}
+
 #[cfg(unix)]
 const INITIAL_UPDATE_DELAY: Duration = Duration::from_secs(5 * 60);
 #[cfg(unix)]
@@ -166,7 +174,7 @@ pub(crate) fn reexec_managed_updater(managed_codex_bin: &std::path::Path) -> Res
 }
 
 #[cfg(unix)]
-async fn install_latest_standalone(http: &RouteAwareClientPool) -> Result<()> {
+async fn install_latest_standalone(http: &impl InstallerHttp) -> Result<()> {
     let script = fetch_installer_script(http).await?;
 
     let mut child = Command::new("/bin/sh")
@@ -199,6 +207,7 @@ async fn install_latest_standalone(http: &RouteAwareClientPool) -> Result<()> {
 
 #[cfg(unix)]
 async fn fetch_installer_script(http: &impl InstallerHttp) -> Result<Vec<u8>> {
+    ensure_managed_updates_enabled()?;
     match http.get(INSTALL_URL).await? {
         InstallerResponse::Success(body) => Ok(body),
         InstallerResponse::Unsuccessful { status } => {
