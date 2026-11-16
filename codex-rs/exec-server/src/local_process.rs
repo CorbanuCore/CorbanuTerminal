@@ -1499,7 +1499,10 @@ mod tests {
             .map(|(name, value)| (name.to_string(), value.to_string()))
             .collect();
         expected.insert("CORBANU_TEST_2324_SET".to_string(), with_password.clone());
-        expected.insert("CORBANU_TEST_2324_OVERLAY".to_string(), with_password);
+        expected.insert(
+            "CORBANU_TEST_2324_OVERLAY".to_string(),
+            with_password.clone(),
+        );
         assert_eq!(run(false), expected);
 
         for name in [PASSWORD, ENCODED, IPV6] {
