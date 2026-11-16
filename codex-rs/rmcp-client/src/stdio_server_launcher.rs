@@ -1176,6 +1176,80 @@ mod tests {
         );
     }
 
+    /// A live process stopped the way the launcher stops a discovery-owned Windows server that
+    /// isn't in a job: through `StdioProcessRef::terminate`, which is what `shutdown()` calls.
+    /// The launcher can't be made to skip the job, so the terminator is built here as it builds
+    /// one when containment is unavailable.
+    #[cfg(windows)]
+    async fn stop_an_uncontained_windows_server(reason: StdioTermination) -> io::Result<()> {
+        const TEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+        // Runs for about ten minutes, far past `TEST_TIMEOUT`, unless it is terminated.
+        let mut child = tokio::process::Command::new("ping.exe")
+            .args(["-n", "600", "127.0.0.1"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true)
+            .spawn()?;
+        let process_id = child
+            .id()
+            .ok_or_else(|| io::Error::other("missing test process id"))?;
+        let terminator = LocalProcessTerminator::Process(
+            codex_utils_pty::JobObject::open_process_handle(process_id)?,
+        );
+        let process = StdioServerProcessHandle::local(
+            "ping.exe".to_string(),
+            Some(terminator),
+            /*stderr_reader*/ None,
+        );
+        let process_ref = StdioProcessRef {
+            process: Arc::downgrade(&process),
+            discovery_cleanup: Some(Arc::new(DiscoveryCleanup {
+                process: Arc::downgrade(&process),
+                result: OnceLock::new(),
+            })),
+        };
+        assert_eq!(child.try_wait()?, None, "the test server exited early");
+
+        let result = tokio::time::timeout(TEST_TIMEOUT, process_ref.terminate(reason))
+            .await
+            .map_err(|_| io::Error::other("stopping the uncontained server hung"))?;
+        tokio::time::timeout(TEST_TIMEOUT, child.wait())
+            .await
+            .map_err(|_| io::Error::other("the uncontained server kept running"))??;
+        result
+    }
+
+    // #2196 review: Windows coverage of the `Unsupported` branch of `after_uncontained_terminate`.
+    #[cfg(windows)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn shutdown_of_an_uncontained_windows_server_stops_it_without_an_error() {
+        assert_eq!(
+            stop_an_uncontained_windows_server(StdioTermination::Shutdown)
+                .await
+                .map_err(|error| error.to_string()),
+            Ok(())
+        );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn restart_of_an_uncontained_windows_server_stops_it_and_reports_the_missing_wait() {
+        let result = stop_an_uncontained_windows_server(StdioTermination::Restart).await;
+        assert_eq!(
+            result.as_ref().map_err(io::Error::kind),
+            Err(io::ErrorKind::Other),
+            "{result:?}"
+        );
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cannot wait for an uncontained Windows MCP server to exit")
+        );
+    }
+
     #[test]
     fn remote_env_policy_uses_core_env_without_remote_source_vars() {
         let policy = ExecutorStdioServerLauncher::remote_env_policy(
