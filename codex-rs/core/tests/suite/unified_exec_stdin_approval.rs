@@ -662,7 +662,9 @@ async fn stdin_reviews_current_grants_with_sandbox_prompts_disabled(
     assert_eq!(grant_scopes.next(), None);
     assert_eq!(
         approvals,
-        usize::from(matches!(reviewer, StdinReviewer::User))
+        usize::from(matches!(reviewer, StdinReviewer::User)),
+        "tool outputs: {:?}",
+        ["grant", "extra_grant", "open", "allowed"].map(|id| writes.function_call_output_text(id))
     );
     let output = writes
         .function_call_output_text("allowed")

@@ -2270,8 +2270,10 @@ async fn includes_user_instructions_message_in_request() {
         "expected permissions message to mention sandbox_mode, got {developer_texts:?}"
     );
 
-    assert_message_role(&request_body["input"][2], "user");
-    let user_context_texts = message_input_texts(&request_body["input"][2]);
+    // Corbanu keeps base instructions in `instructions`, so the contextual
+    // user message follows the permissions message directly.
+    assert_message_role(&request_body["input"][1], "user");
+    let user_context_texts = message_input_texts(&request_body["input"][1]);
     assert!(
         user_context_texts
             .iter()
@@ -3309,8 +3311,10 @@ async fn includes_developer_instructions_message_in_request() {
         "expected developer instructions in a developer message, got {developer_texts:?}"
     );
 
-    assert_message_role(&request_body["input"][2], "user");
-    let user_context_texts = message_input_texts(&request_body["input"][2]);
+    // Corbanu keeps base instructions in `instructions`, so the contextual
+    // user message follows the permissions message directly.
+    assert_message_role(&request_body["input"][1], "user");
+    let user_context_texts = message_input_texts(&request_body["input"][1]);
     assert!(
         user_context_texts
             .iter()
@@ -3607,8 +3611,9 @@ async fn azure_responses_request_does_not_store_and_preserves_prefixed_item_ids(
     assert_eq!(body["store"], serde_json::Value::Bool(false));
     assert_eq!(body["stream"], serde_json::Value::Bool(true));
     let input = body["input"].as_array().expect("request input");
-    assert_eq!(input[0]["role"], "developer");
-    let input = &input[1..];
+    // Corbanu sends base instructions in `instructions`, not as a leading
+    // developer message (upstream #51156).
+    assert!(body["instructions"].is_string());
     assert_eq!(input.len(), 10);
     assert_eq!(input[0]["id"].as_str(), Some("rs_reasoning-id"));
     assert_eq!(input[1]["id"].as_str(), Some("msg_message-id"));

@@ -87,7 +87,13 @@ async fn run(
         ),
         Tool::Justified => (
             "exec_command",
-            json!({ "cmd": SCRIPT, "justification": JUSTIFICATION }),
+            // Upstream refuses a justification without an explicit
+            // `sandbox_permissions`; this command stays in the sandbox.
+            json!({
+                "cmd": SCRIPT,
+                "sandbox_permissions": "use_default",
+                "justification": JUSTIFICATION,
+            }),
         ),
     };
     let server = start_mock_server().await;

@@ -534,7 +534,11 @@ async fn issue_789_child_agent_prompt_offers_no_useless_grant() -> anyhow::Resul
                 SPAWN_CALL,
                 "collaboration",
                 "spawn_agent",
-                &json!({ "message": CHILD_PROMPT, "task_name": "worker" }).to_string(),
+                // Upstream's MultiAgentV2 forks the parent's whole history by
+                // default, so the child's request would also carry SPAWN_CALL
+                // and get the parent's reply; this child starts fresh.
+                &json!({ "message": CHILD_PROMPT, "task_name": "worker", "fork_turns": "none" })
+                    .to_string(),
             ),
             ev_completed("parent-1"),
         ]),
