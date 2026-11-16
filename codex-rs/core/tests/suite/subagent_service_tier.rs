@@ -314,6 +314,13 @@ async fn evicted_role_subagent_uses_root_service_tier_after_reload() -> Result<(
             config.service_tier = Some("priority".to_string());
             config.multi_agent_v2.max_concurrent_threads_per_session = 2;
             configure_priority_role(config);
+            // Reloading an evicted child resolves its persisted provider ID from the registry
+            // (#1129). Register this mock provider under the active ID so the reloaded child
+            // reaches the mock server, as a registered provider would in a real session.
+            config.model_providers.insert(
+                config.model_provider_id.clone(),
+                config.model_provider.clone(),
+            );
         });
     let test = builder.build_with_auto_env(&server).await?;
     let mut created_threads = test.thread_manager.subscribe_thread_created();

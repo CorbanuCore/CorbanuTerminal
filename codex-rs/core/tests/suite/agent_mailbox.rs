@@ -105,7 +105,10 @@ async fn idle_mail_survives_eviction_and_preserves_followup_order() -> Result<()
     mount_completed_worker(&server, SECOND_TASK, "replacement-spawn").await;
     test.submit_turn("spawn while child is idle").await?;
     ThreadIdle::wait(&test.codex).await;
-    let replacement_id = created.recv().await?;
+    // Bounded: a spawn the capacity limit holds back must fail this test, not hang the suite.
+    let replacement_id = tokio::time::timeout(Duration::from_secs(30), created.recv())
+        .await
+        .context("the replacement spawn must evict the idle child holding queued mail")??;
     let replacement = test.thread_manager.get_thread(replacement_id).await?;
     wait_for_event(&replacement, |event| {
         matches!(event, EventMsg::TurnComplete(_))

@@ -410,6 +410,13 @@ async fn v2_residency_reload_preserves_inherited_environment_and_tools(
                 .permissions
                 .set_permission_profile(PermissionProfile::workspace_write())
                 .expect("thread permissions should allow workspace writes");
+            // Reloading an evicted child resolves its persisted provider ID from the registry
+            // (#1129). Register this mock provider under the active ID so the reloaded child
+            // reaches the mock server, as a registered provider would in a real session.
+            config.model_providers.insert(
+                config.model_provider_id.clone(),
+                config.model_provider.clone(),
+            );
         });
     let test = builder.build_with_remote_and_local_env(&server).await?;
     let mut child_environment = test.executor_environment().selection().clone();
