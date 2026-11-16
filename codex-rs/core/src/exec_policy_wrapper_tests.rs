@@ -14,6 +14,111 @@ async fn requirement(line: &str, rules: &str) -> ExecApprovalRequirement {
 }
 
 #[tokio::test]
+async fn issue2165_env_dash_assignments_do_not_hide_forbidden_commands() {
+    let rules = r#"prefix_rule(pattern=["env"], decision="allow")
+prefix_rule(pattern=["sudo"], decision="allow")
+prefix_rule(pattern=["git", "push"], decision="forbidden")"#;
+    for command in [
+        "env -- -X=1 git push",
+        "env - -X=1 git push",
+        "env -- - -X=1 git push",
+        "env - -u HOME git push",
+        "env - -u=HOME -i git push",
+        "env - - git push",
+        "sudo env - -u HOME git push",
+        "sudo env -- -X=1 git push",
+        "env FOO=1 -X=1 git push",
+    ] {
+        assert!(
+            matches!(
+                requirement(command, rules).await,
+                ExecApprovalRequirement::Forbidden { .. }
+            ),
+            "{command}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn issue2165_sudo_command_names_containing_equals_are_checked() {
+    for inner in ["/work/a=b", "=script"] {
+        let rules = format!(
+            r#"prefix_rule(pattern=["sudo"], decision="allow")
+prefix_rule(pattern=["{inner}"], decision="forbidden")
+prefix_rule(pattern=["git", "push"], decision="allow")"#
+        );
+        let command = format!("sudo {inner} git push");
+        assert!(
+            matches!(
+                requirement(&command, &rules).await,
+                ExecApprovalRequirement::Forbidden { .. }
+            ),
+            "{command}"
+        );
+    }
+    let rules = r#"prefix_rule(pattern=["sudo"], decision="allow")
+prefix_rule(pattern=["FOO=1"], decision="forbidden")
+prefix_rule(pattern=["git", "push"], decision="allow")"#;
+    for command in ["sudo -- FOO=1 git push", "sudo -u root -- FOO=1 git push"] {
+        assert!(
+            matches!(
+                requirement(command, rules).await,
+                ExecApprovalRequirement::Forbidden { .. }
+            ),
+            "{command}"
+        );
+    }
+    assert!(matches!(
+        requirement(
+            "sudo /work/a=b git push",
+            r#"
+prefix_rule(pattern=["sudo"], decision="allow")
+prefix_rule(pattern=["git", "push"], decision="allow")"#
+        )
+        .await,
+        ExecApprovalRequirement::Skip {
+            bypass_sandbox: false,
+            ..
+        }
+    ));
+}
+
+#[tokio::test]
+async fn issue2165_env_without_command_preserves_ordinary_policy() {
+    for line in [
+        "env",
+        "env -0",
+        "env -i",
+        "env -u HOME",
+        "env FOO=1",
+        "env -- -X=1",
+        "bash -lc 'env | grep PATH'",
+    ] {
+        for approval_policy in [AskForApproval::OnRequest, AskForApproval::Never] {
+            let result = exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+                policy_src: None,
+                command: shlex::split(line).unwrap(),
+                approval_policy,
+                permission_profile: PermissionProfile::read_only(),
+                sandbox_permissions: SandboxPermissions::UseDefault,
+                prefix_rule: None,
+            })
+            .await;
+            assert!(
+                matches!(
+                    result,
+                    ExecApprovalRequirement::Skip {
+                        bypass_sandbox: false,
+                        ..
+                    }
+                ),
+                "{line}: {result:?}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
 async fn issue2165_wrappers_preserve_inner_rule_decisions() {
     let wrappers = [
         "sudo",
@@ -124,6 +229,7 @@ prefix_rule(pattern=["git", "push"], decision="allow")"#;
         "sudo",
         "sudo -s",
         "env -S 'git push'",
+        "env - -S 'git push'",
         "env --future-option git push",
         "env -u",
         "chroot /",
@@ -188,6 +294,8 @@ async fn issue2165_option_operands_and_ordinary_arguments_are_not_commands() {
         "env -u git echo push",
         "sudo -u git echo push",
         "chroot git echo push",
+        "env -- -u HOME git push",
+        "env - -- - git push",
     ] {
         assert!(
             matches!(

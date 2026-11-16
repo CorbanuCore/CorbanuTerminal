@@ -44,17 +44,35 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
                 return result;
             };
             let mut at = start + 1;
+            let mut ended_options = false;
+            let mut env_after_dash = None;
             while let Some(option) = words.get(at) {
                 work::step();
                 if option == "--" {
+                    ended_options = true;
                     at += 1;
                     break;
                 }
                 if name == "env" && option == "-" {
                     at += 1;
-                    break;
+                    // GNU stops option parsing here; BSD keeps reading flags.
+                    // Keep GNU's command as well as the later BSD command.
+                    if env_after_dash.is_none() {
+                        let mut command = at;
+                        while words.get(command).is_some_and(|word| word.contains('=')) {
+                            work::step();
+                            command += 1;
+                        }
+                        env_after_dash = Some(command);
+                        if command < words.len() {
+                            result.starts.push(command);
+                        }
+                    }
+                    continue;
                 }
-                if name == "sudo" && option.contains('=') && !option.starts_with('-') {
+                // sudo's is_envar excludes absolute and equals-leading
+                // command names. This loop stops at -- before assignments.
+                if name == "sudo" && option.contains('=') && !option.starts_with(['-', '/', '=']) {
                     at += 1;
                     continue;
                 }
@@ -63,6 +81,12 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
                 }
                 if !known_option(name, option, value_options) {
                     result.uncertain = true;
+                    if let Some(command) = env_after_dash {
+                        // The BSD option is unknown; retain GNU's command
+                        // as well as the approval floor.
+                        at = command;
+                        break;
+                    }
                     return result;
                 }
                 at += if name == "sudo" {
@@ -71,12 +95,28 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
                     option_words(name, option, value_options)
                 };
             }
-            while words
-                .get(at)
-                .is_some_and(|word| word.contains('=') && !word.starts_with('-'))
-            {
-                work::step();
-                at += 1;
+            // After env's options end, even -NAME=value is an assignment.
+            // sudo has already consumed its assignments, before any --.
+            if name == "env" {
+                // GNU also consumes a lone - after --. Retain the BSD
+                // interpretation (a command named -) before following it.
+                if ended_options
+                    && env_after_dash.is_none()
+                    && words.get(at).is_some_and(|word| word == "-")
+                {
+                    result.starts.push(at);
+                    at += 1;
+                }
+                while words.get(at).is_some_and(|word| word.contains('=')) {
+                    work::step();
+                    at += 1;
+                }
+                // With complete options and no command, env only prints its
+                // environment. A missing option value advances past len and
+                // still fails closed below.
+                if at == words.len() {
+                    return result;
+                }
             }
             (at < words.len()).then_some(at)
         } else {
@@ -86,7 +126,9 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
             result.uncertain = true;
             break;
         };
-        result.starts.push(after);
+        if result.starts.last().copied() != Some(after) {
+            result.starts.push(after);
+        }
         start = after;
     }
     result
