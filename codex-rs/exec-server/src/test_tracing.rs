@@ -1,5 +1,9 @@
 //! Test-only helpers for asserting on spans from a thread-scoped subscriber.
 
+use std::io::Write;
+use std::sync::Arc;
+use std::sync::Mutex;
+
 use tracing::Dispatch;
 use tracing::Subscriber;
 use tracing::subscriber::DefaultGuard;
@@ -36,6 +40,30 @@ impl ScopedTestSubscriber {
             _default: default,
             _second_dispatcher: second_dispatcher,
         }
+    }
+}
+
+/// Collects formatted log lines written by a test's thread-scoped subscriber.
+#[derive(Clone, Default)]
+pub(crate) struct CapturedLogs(Arc<Mutex<Vec<u8>>>);
+
+impl CapturedLogs {
+    pub(crate) fn text(&self) -> String {
+        String::from_utf8_lossy(&self.0.lock().expect("log buffer lock")).into_owned()
+    }
+}
+
+impl Write for CapturedLogs {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        self.0
+            .lock()
+            .expect("log buffer lock")
+            .extend_from_slice(buffer);
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 

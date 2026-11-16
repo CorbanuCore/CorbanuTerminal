@@ -445,3 +445,153 @@ fn snapshot_replay_size_limits(
     );
     assert_eq!(result.err().map(|(reason, _)| reason), expected_failure);
 }
+
+/// D641 (a), #2392: under main's credential engine (D353/D354) a zsh credential
+/// snapshot keeps the child masked and marked. A failed capture falls back to
+/// normal startup without upstream's fail-open restore: no claim (in the log or
+/// on the child's stderr) that it runs with unmasked credentials, and the broker
+/// markers stay. A successful capture is unchanged by keeping those markers.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test_case("exit 7\n", false; "failed_capture_falls_back_masked")]
+#[test_case("export PROFILE_VALUE=from-profile\n", true; "successful_capture_replays_masked")]
+#[tokio::test]
+async fn credential_snapshot_keeps_child_masked_under_main_engine(
+    zshenv: &str,
+    replayed: bool,
+) -> anyhow::Result<()> {
+    use codex_network_proxy::BROKERED_CREDENTIALS_ENV_KEY;
+    use codex_network_proxy::CREDENTIAL_BROKER_ACTIVE_ENV_KEY;
+    use codex_network_proxy::NetworkProxyConfig;
+    use codex_network_proxy::RemoteNetworkProxyConfig;
+    use codex_network_proxy::RemoteNetworkProxyLaunchConfig;
+    use tracing_subscriber::layer::SubscriberExt;
+
+    use crate::test_tracing::CapturedLogs;
+    use crate::test_tracing::ScopedTestSubscriber;
+
+    let Some(zsh) = ["/bin/zsh", "/usr/bin/zsh"]
+        .into_iter()
+        .find(|path| std::path::Path::new(path).is_file())
+    else {
+        eprintln!("skipping: zsh is not installed");
+        return Ok(());
+    };
+    let home = tempfile::TempDir::new()?;
+    std::fs::write(home.path().join(".zshenv"), zshenv)?;
+    let mut config = NetworkProxyConfig {
+        enabled: true,
+        ..NetworkProxyConfig::default()
+    };
+    config.set_allowed_domains(vec!["allowed.example".to_string()]);
+    let mut proxy_config = RemoteNetworkProxyConfig::from_effective_config(&config)?;
+    proxy_config.enable_credential_masking(Default::default());
+    let real_key = "sk-proj-executor-only-0000000000000000000000000000000000";
+    let home_path = home.path().to_string_lossy().into_owned();
+    let env = HashMap::from([
+        ("HOME".to_string(), home_path.clone()),
+        ("ZDOTDIR".to_string(), home_path),
+        ("PATH".to_string(), "/usr/bin:/bin".to_string()),
+        ("OPENAI_API_KEY".to_string(), real_key.to_string()),
+    ]);
+    let params = ExecParams {
+        metadata: Default::default(),
+        process_id: ProcessId::from("snapshot-main-engine"),
+        argv: vec![zsh.to_string(), "-lc".to_string(), "true".to_string()],
+        cwd: codex_utils_path_uri::PathUri::from_host_native_path(home.path())?,
+        env: HashMap::new(),
+        env_policy: None,
+        shell_snapshot: Some(ShellSnapshotRequest {
+            scope_id: "attachment-1".to_string(),
+            shell: ShellInfo {
+                name: "zsh".to_string(),
+                path: zsh.to_string(),
+            },
+        }),
+        tty: false,
+        pipe_stdin: false,
+        arg0: None,
+        sandbox: None,
+        enforce_managed_network: false,
+        managed_network: None,
+        network_proxy: Some(
+            RemoteNetworkProxyLaunchConfig::new(proxy_config)
+                .for_execution("remote".to_string(), "execution-1".to_string()),
+        ),
+    };
+    let telemetry = ExecServerTelemetry::new(MetricsClient::new(
+        MetricsConfig::in_memory(
+            "test",
+            "codex-exec-server",
+            env!("CARGO_PKG_VERSION"),
+            InMemoryMetricExporter::default(),
+        )
+        .with_runtime_reader(),
+    )?);
+    let credential_brokers = codex_network_proxy::RemoteCredentialBrokerCache::default();
+
+    let logs = CapturedLogs::default();
+    let writer = logs.clone();
+    let subscriber_guard = ScopedTestSubscriber::set_default(
+        tracing_subscriber::registry().with(
+            tracing_subscriber::fmt::layer()
+                .with_ansi(false)
+                .with_writer(move || writer.clone()),
+        ),
+    );
+    tracing::warn!("shell snapshot log capture sentinel");
+    let mut prepared = prepare_exec_request_with_telemetry(
+        &params,
+        env,
+        /*runtime_paths*/ None,
+        NetworkPolicyHooks::default(),
+        &credential_brokers,
+        &ProcessTelemetry::default(),
+    )
+    .await
+    .expect("prepare protected snapshot request");
+    assert!(prepared.credential_snapshot_proxy(&params).is_some());
+    let replay = ShellSnapshotCache::default()
+        .prepare(
+            &params,
+            &mut prepared,
+            &telemetry,
+            CapturePurpose::Execution,
+            &credential_brokers,
+        )
+        .await
+        .expect("prepare shell snapshot");
+    drop(subscriber_guard);
+    let logs = logs.text();
+
+    assert_eq!(replay.is_some(), replayed);
+    assert!(
+        logs.contains("shell snapshot log capture sentinel"),
+        "{logs}"
+    );
+    if replayed {
+        assert_eq!(
+            prepared.env.get("PROFILE_VALUE").map(String::as_str),
+            Some("from-profile")
+        );
+    } else {
+        assert!(!logs.contains("unmasked"), "{logs}");
+        assert_eq!(prepared.command, params.argv);
+    }
+    let child_key = prepared.env.get("OPENAI_API_KEY").expect("child key");
+    assert_ne!(child_key, real_key);
+    assert!(!child_key.contains("executor-only"), "{child_key}");
+    assert_eq!(
+        prepared
+            .env
+            .get(CREDENTIAL_BROKER_ACTIVE_ENV_KEY)
+            .map(String::as_str),
+        Some("1")
+    );
+    let brokered = prepared
+        .env
+        .get(BROKERED_CREDENTIALS_ENV_KEY)
+        .expect("brokered credentials marker");
+    assert!(brokered.contains("OPENAI_API_KEY"), "{brokered}");
+    assert!(brokered.contains(child_key.as_str()), "{brokered}");
+    Ok(())
+}
