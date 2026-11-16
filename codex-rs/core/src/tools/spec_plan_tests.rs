@@ -1225,7 +1225,10 @@ async fn edit_tools_follow_the_environment_permission_profile() {
     read_only.assert_visible_lacks(&edit_tools);
     read_only.assert_registered_lacks(&edit_tools);
 
-    for writable in [PermissionProfile::workspace_write(), PermissionProfile::Disabled] {
+    for writable in [
+        PermissionProfile::workspace_write(),
+        PermissionProfile::Disabled,
+    ] {
         let plan = plan_for(writable).await;
         plan.assert_visible_contains(&edit_tools);
     }
