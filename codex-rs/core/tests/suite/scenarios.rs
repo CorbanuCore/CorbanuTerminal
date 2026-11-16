@@ -37,7 +37,6 @@ use codex_extension_api::ExtensionRegistryBuilder;
 use codex_features::Feature;
 use codex_history::RolloutItem;
 use codex_login::CodexAuth;
-use codex_models_manager::bundled_models_response;
 use codex_protocol::capabilities::CapabilityRootLocation;
 use codex_protocol::capabilities::SelectedCapabilityRoot;
 use codex_protocol::dynamic_tools::DynamicToolCallOutputContentItem;
@@ -76,6 +75,7 @@ use codex_utils_path_uri::PathUri;
 use core_test_support::context_snapshot;
 use core_test_support::context_snapshot::ContextSnapshotOptions;
 use core_test_support::context_snapshot::SnapshotEntry;
+use core_test_support::model_catalog::upstream_model_catalog;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_completed_with_tokens;
@@ -329,7 +329,7 @@ fn plugin(name: &str) -> UserInput {
     }
 }
 
-fn configure_scenario_catalog(config: &mut Config) {
+pub(super) fn configure_scenario_catalog(config: &mut Config) {
     // Keep the fixture independent of the checkout's project configuration.
     let stack = &config.config_layer_stack;
     config.config_layer_stack = ConfigLayerStack::new(
@@ -343,7 +343,18 @@ fn configure_scenario_catalog(config: &mut Config) {
     )
     .expect("fixture config layers")
     .with_cloud_config_binding(stack.cloud_config_binding().cloned());
-    config.model_catalog = Some(bundled_models_response().expect("bundled model catalog"));
+    config.model_catalog = Some(upstream_model_catalog());
+    config
+        .permissions
+        .set_permission_profile(
+            codex_protocol::models::PermissionProfile::workspace_write_with(
+                &[],
+                codex_protocol::permissions::NetworkSandboxPolicy::Restricted,
+                /*exclude_tmpdir_env_var*/ true,
+                /*exclude_slash_tmp*/ true,
+            ),
+        )
+        .expect("scenario workspace-write permissions");
     config.cloud_skill_enabled = false;
 }
 
@@ -1584,6 +1595,11 @@ async fn child_completion_wakes_parent_after_final_answer() -> Result<()> {
             configure_scenario_catalog(config);
             config.model_reasoning_effort = Some(ReasoningEffort::Medium);
             config.include_environment_context = false;
+            config
+                .agent_roles
+                .entry("default".into())
+                .or_default()
+                .nickname_candidates = Some(vec!["Worker".into()]);
             for feature in [
                 Feature::Collab,
                 Feature::MultiAgentV2,
@@ -3508,7 +3524,7 @@ async fn astra_async_compaction_keeps_work_added_after_its_snapshot(
     )
     .await?;
     assert_eq!(compaction_events.len(), if over_budget { 4 } else { 2 });
-    for pair in compaction_events.chunks_exact(2) {
+    for pair in compaction_events.as_chunks::<2>().0 {
         assert_eq!((pair[0].0, pair[1].0), ("started", "completed"));
         assert_eq!(pair[0].1, pair[1].1);
     }

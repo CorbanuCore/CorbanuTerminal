@@ -108,6 +108,12 @@ async fn history_images_reach_the_next_model_request() -> Result<(), Box<dyn std
         })
         .with_extensions(Arc::new(extensions.build()))
         .with_config(|config| {
+            config
+                    .permissions
+                    .set_permission_profile(
+                        codex_protocol::models::PermissionProfile::workspace_write(),
+                    )
+                    .expect("writable history fixture");
             config.model_provider.name = "OpenAI".to_string();
             config.token_budget = Some(TokenBudgetConfig {
                 use_history_notes_extension: true,

@@ -244,8 +244,10 @@ async fn strict_tool_collisions_do_not_duplicate_unrelated_compaction_errors() -
     Ok(())
 }
 
+#[test_case::test_case(false; "explicit_empty")]
+#[test_case::test_case(true; "writable_workspace")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn empty_turn_environments_keeps_environment_backed_tools() -> Result<()> {
+async fn turn_environments_keep_tools_and_gate_edits(writable_environment: bool) -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
@@ -260,6 +262,15 @@ async fn empty_turn_environments_keeps_environment_backed_tools() -> Result<()> 
     .await;
 
     let mut builder = test_codex().with_config(|config| {
+        config
+            .permissions
+            .set_permission_profile(PermissionProfile::workspace_write_with(
+                std::slice::from_ref(&config.cwd),
+                codex_protocol::permissions::NetworkSandboxPolicy::Restricted,
+                true,
+                true,
+            ))
+            .expect("writable tool fixture");
         config.update_plan_enabled = true;
         config
             .features
@@ -268,15 +279,55 @@ async fn empty_turn_environments_keeps_environment_backed_tools() -> Result<()> 
     });
     let test = builder.build(&server).await?;
 
-    test.submit_turn_with_environments("which tools are available?", Some(vec![]))
+    test.codex
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
+                text: "which tools are available?".into(),
+                text_elements: Vec::new(),
+            }])
+            .with_thread_settings(ThreadSettingsOverrides {
+                environments: Some(
+                    codex_protocol::protocol::TurnEnvironmentSelections::new(
+                        test.config.cwd.clone(),
+                        if writable_environment {
+                            vec![local(test.config.cwd.clone())]
+                        } else {
+                            vec![]
+                        },
+                    )
+                    .into_requests(),
+                ),
+                // Explicit empty environments cannot supply implicit project roots.
+                permission_profile: Some(PermissionProfile::workspace_write_with(
+                    std::slice::from_ref(&test.config.cwd),
+                    codex_protocol::permissions::NetworkSandboxPolicy::Restricted,
+                    true,
+                    true,
+                )),
+                ..Default::default()
+            }),
+        )
         .await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
 
     let tools = tool_names(&response_mock.single_request().body_json());
     assert!(
         tools.contains(&"update_plan".to_string()),
         "non-environment tool should remain available; got {tools:?}"
     );
-    for environment_tool in ["exec_command", "write_stdin", "apply_patch", "view_image"] {
+    // Shell/image tools keep their legacy empty-selection behavior. Edit tools
+    // require a selected writable environment under Corbanu's existing rule.
+    for edit_tool in ["apply_patch", "structured_edit", "structured_write"] {
+        assert_eq!(
+            tools.iter().any(|name| name == edit_tool),
+            writable_environment,
+            "{edit_tool} availability must follow the writable selection; got {tools:?}"
+        );
+    }
+    for environment_tool in ["exec_command", "write_stdin", "view_image"] {
         assert!(
             tools.contains(&environment_tool.to_string()),
             "{environment_tool} should remain available for explicit empty turn environments; got {tools:?}"

@@ -52,7 +52,14 @@ async fn prediction_fork_keeps_inherited_tools() -> Result<()> {
         "required": true,
     }))?;
     let mut test = test_codex()
+        .with_config(super::configure_scenario_catalog)
         .with_model_info_override("gpt-5.4", |model| {
+            *model = core_test_support::model_catalog::upstream_model_catalog()
+                .models
+                .into_iter()
+                .find(|entry| entry.slug == "gpt-5.5")
+                .expect("upstream 5.5 model");
+            model.slug = "gpt-5.4".into();
             model.use_responses_lite = true;
             model.supports_search_tool = false;
             model.tool_mode = Some(ToolMode::CodeModeOnly);

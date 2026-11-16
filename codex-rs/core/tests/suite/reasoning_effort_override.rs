@@ -94,7 +94,19 @@ pub(super) async fn prediction_fork_requests() -> anyhow::Result<Vec<ResponsesRe
             .await,
         );
     }
-    let mut test = override_builder()
+    let mut test = test_codex()
+        .with_config(super::scenarios::configure_scenario_catalog)
+        .with_model_info_override("gpt-5.4", |model| {
+            // This upstream scenario uses a synthetic slug with the bundled 5.5 capabilities.
+            *model = core_test_support::model_catalog::upstream_model_catalog()
+                .models
+                .into_iter()
+                .find(|entry| entry.slug == "gpt-5.5")
+                .expect("upstream 5.5 model");
+            model.slug = "gpt-5.4".into();
+            model.use_responses_lite = true;
+            model.supports_reasoning_effort_updates = true;
+        })
         .with_config(|config| {
             config.workspace_roots = vec![config.cwd.clone()];
             config.model_reasoning_effort = Some(ReasoningEffort::High);

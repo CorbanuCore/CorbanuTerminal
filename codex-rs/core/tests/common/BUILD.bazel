@@ -2,6 +2,7 @@ load("//:defs.bzl", "codex_rust_crate")
 
 codex_rust_crate(
     name = "common",
+    compile_data = glob(["fixtures/**"]),
     crate_name = "core_test_support",
     crate_srcs = glob([
         "*.rs",

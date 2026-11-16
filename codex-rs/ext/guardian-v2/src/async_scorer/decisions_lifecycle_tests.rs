@@ -106,7 +106,7 @@ async fn decisions_disagreement_failures_and_disabled_flag_preserve_baseline() -
             }
         })
         .await;
-        let score = score?;
+        let score = score.map_err(|error| anyhow::anyhow!("{case}: baseline score: {error}"))?;
         assert_eq!(
             score.scores,
             BTreeMap::from([("action_risk".into(), expected_risk)]),
@@ -120,7 +120,7 @@ async fn decisions_disagreement_failures_and_disabled_flag_preserve_baseline() -
                         RecordedMetric::Counter(name, _, _) if name == "codex.guardian_v2.decisions_comparison.comparison")) { break; }
                     tokio::task::yield_now().await;
                 }
-            }).await?;
+            }).await.map_err(|error| anyhow::anyhow!("{case}: comparison metric: {error}"))?;
             if case == "cannot_escalate" {
                 let requests = decisions_server.received_requests().await.unwrap();
                 let body: serde_json::Value = serde_json::from_slice(&requests[0].body)?;
