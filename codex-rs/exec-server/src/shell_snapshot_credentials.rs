@@ -40,6 +40,13 @@ pub(super) fn restore_fallback(prepared: &mut PreparedExecRequest) {
         .as_ref()
         .and_then(NetworkProxyHandle::proxy)
     {
+        if proxy.credential_broker_hardened() {
+            // D641 (a), #2392: main's engine (D353/D354) already gave this child
+            // placeholders and brokering is one-way (#436), so upstream's fail-open
+            // restore below could not unmask anything. Normal startup keeps the
+            // masked environment and its broker markers, without a false warning.
+            return;
+        }
         for value in prepared.env.values_mut() {
             proxy.restore_brokered_text(value);
         }
