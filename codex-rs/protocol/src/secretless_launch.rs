@@ -223,7 +223,7 @@ const OPAQUE_USER_SCHEMES: &[&str] = &[
     "sips",
     "xmpp",
     "im",
-    "pres",
+    "pres", // codespell:ignore pres
     "tel",
     "acct",
     "news",
