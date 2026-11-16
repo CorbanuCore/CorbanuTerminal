@@ -1184,14 +1184,22 @@ mod tests {
     async fn stop_an_uncontained_windows_server(reason: StdioTermination) -> io::Result<()> {
         const TEST_TIMEOUT: Duration = Duration::from_secs(30);
 
-        // Runs for about ten minutes, far past `TEST_TIMEOUT`, unless it is terminated.
-        let mut child = tokio::process::Command::new("ping.exe")
-            .args(["-n", "600", "127.0.0.1"])
-            .stdin(std::process::Stdio::null())
+        // `JobObject::terminate_process_handle` passes this to `TerminateProcess`.
+        const TERMINATED_EXIT_CODE: i32 = 1;
+
+        // `cmd.exe` reads commands from its stdin, which stays open until the end of the
+        // helper, so it blocks until it is terminated. It exits with 0 if stdin closes.
+        let mut child = tokio::process::Command::new("cmd.exe")
+            .args(["/d", "/q"])
+            .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .kill_on_drop(true)
             .spawn()?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| io::Error::other("missing test process stdin"))?;
         let process_id = child
             .id()
             .ok_or_else(|| io::Error::other("missing test process id"))?;
@@ -1199,7 +1207,7 @@ mod tests {
             codex_utils_pty::JobObject::open_process_handle(process_id)?,
         );
         let process = StdioServerProcessHandle::local(
-            "ping.exe".to_string(),
+            "cmd.exe".to_string(),
             Some(terminator),
             /*stderr_reader*/ None,
         );
@@ -1215,9 +1223,15 @@ mod tests {
         let result = tokio::time::timeout(TEST_TIMEOUT, process_ref.terminate(reason))
             .await
             .map_err(|_| io::Error::other("stopping the uncontained server hung"))?;
-        tokio::time::timeout(TEST_TIMEOUT, child.wait())
+        let status = tokio::time::timeout(TEST_TIMEOUT, child.wait())
             .await
             .map_err(|_| io::Error::other("the uncontained server kept running"))??;
+        drop(stdin);
+        assert_eq!(
+            status.code(),
+            Some(TERMINATED_EXIT_CODE),
+            "the test server was not stopped by TerminateProcess"
+        );
         result
     }
 
