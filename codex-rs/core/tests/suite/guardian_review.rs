@@ -1926,6 +1926,7 @@ async fn guardian_session_is_reused_for_consecutive_tool_reviews_without_prewarm
             file_system_policy.entries.push(FileSystemSandboxEntry::new(
                 FileSystemPath::GlobPattern {
                     pattern: "guardian-*.key".to_string(),
+                    scan: None,
                 },
                 FileSystemAccessMode::Deny,
             ));

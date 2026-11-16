@@ -2,6 +2,7 @@
 //! a call to a flat name runs the namespaced MCP tool through the same
 //! approval prompt as on the Responses wire.
 
+use codex_core::TurnInputRequest;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -62,6 +63,9 @@ fn rmcp_server(approval: AppToolApproval) -> anyhow::Result<McpServerConfig> {
         oauth: None,
         oauth_resource: None,
         tools: HashMap::new(),
+        startup_readiness: Default::default(),
+        tool_input_schema_max_bytes: None,
+        omit_tools_from: None,
     })
 }
 
@@ -128,16 +132,13 @@ async fn mcp_tool_call_round_trips_on_chat_completions() -> anyhow::Result<()> {
     wait_for_mcp_server(&test.codex, "rmcp").await?;
 
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "echo ping with the rmcp tool".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
 
     // The flat call runs the namespaced tool, so the MCP approval prompt asks first.

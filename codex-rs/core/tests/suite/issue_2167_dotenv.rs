@@ -87,7 +87,7 @@ fn output_text(request: &ResponsesRequest, call_id: &str) -> String {
 }
 
 fn read_step() -> Step {
-    call("call-read", "shell_command", json!({"command": "cat .env"}))
+    call("call-read", "exec_command", json!({"cmd": "cat .env"}))
 }
 
 #[test_case(SecurityLevel::Moderate; "moderate")]

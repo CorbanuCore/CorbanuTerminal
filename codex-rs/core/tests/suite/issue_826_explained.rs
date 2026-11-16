@@ -7,6 +7,7 @@
 //! unchanged, and the command still fails (nothing is lifted).
 #![cfg(target_os = "linux")]
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 
 use codex_core::config::Constrained;
@@ -49,9 +50,11 @@ const INSPECTED: &str = "creating a user namespace";
 
 #[derive(Clone, Copy, Debug)]
 enum Tool {
+    /// Formerly `shell_command` (removed upstream): its arguments, sent to
+    /// `exec_command`.
     ShellCommand,
     ExecCommand,
-    /// `shell_command` with the model's justification.
+    /// The same with the model's justification.
     Justified,
 }
 
@@ -77,14 +80,14 @@ async fn run(
     let home = Arc::new(TempDir::new()?);
     let origin = home.path().canonicalize()?.to_string_lossy().into_owned();
     let (name, arguments) = match tool {
-        Tool::ShellCommand => ("shell_command", json!({ "command": SCRIPT })),
+        Tool::ShellCommand => ("exec_command", json!({ "cmd": SCRIPT })),
         Tool::ExecCommand => (
             "exec_command",
             json!({ "cmd": SCRIPT, "yield_time_ms": 5_000 }),
         ),
         Tool::Justified => (
-            "shell_command",
-            json!({ "command": SCRIPT, "justification": JUSTIFICATION }),
+            "exec_command",
+            json!({ "cmd": SCRIPT, "justification": JUSTIFICATION }),
         ),
     };
     let server = start_mock_server().await;
@@ -139,16 +142,13 @@ async fn run(
         .build(&server)
         .await?;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "make a user namespace".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let mut warnings = Vec::new();
     let mut asked = Vec::new();

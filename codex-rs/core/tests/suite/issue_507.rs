@@ -4,6 +4,7 @@
 //! approval never runs, and background terminals end. The person is told why.
 #![cfg(unix)]
 
+use codex_core::TurnInputRequest;
 use std::path::Path;
 use std::time::Duration;
 
@@ -46,7 +47,7 @@ const COMMAND_SECONDS: u64 = 3;
 
 /// The kill-switch tests check host processes and the host sandbox: their
 /// sessions use the local executor on purpose, also in the remote lane (#708).
-fn builder(approval: AskForApproval, unified: bool) -> TestCodexBuilder {
+fn builder(approval: AskForApproval) -> TestCodexBuilder {
     test_codex()
         .with_model("test-gpt-5.1-codex")
         .with_config(move |config| {
@@ -62,13 +63,10 @@ fn builder(approval: AskForApproval, unified: bool) -> TestCodexBuilder {
                 .features
                 .enable(Feature::SourceEnvelopes)
                 .expect("enable source envelopes");
-            if unified {
-                config.use_experimental_unified_exec_tool = true;
-                config
-                    .features
-                    .enable(Feature::UnifiedExec)
-                    .expect("enable unified exec");
-            }
+            config
+                .features
+                .enable(Feature::UnifiedExec)
+                .expect("enable unified exec");
         })
 }
 
@@ -104,16 +102,13 @@ fn kill_switch_on_now(test: &TestCodex) -> anyhow::Result<()> {
 
 async fn submit(test: &TestCodex, text: &str) -> anyhow::Result<()> {
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: text.into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     Ok(())
 }
@@ -150,11 +145,7 @@ async fn assert_never_ran(marker: &Path) {
 fn shell_call(id: &str, command: &str) -> Vec<serde_json::Value> {
     vec![
         ev_response_created(id),
-        ev_function_call(
-            id,
-            "shell_command",
-            &json!({ "command": command }).to_string(),
-        ),
+        ev_function_call(id, "exec_command", &json!({ "cmd": command }).to_string()),
         ev_completed(id),
     ]
 }
@@ -179,9 +170,7 @@ async fn issue_507_kill_switch_stops_the_running_command_and_its_turn() -> anyho
     let command = format!("sleep {COMMAND_SECONDS}; touch '{}'", marker.display());
     let server = start_mock_server().await;
     let captured = mount_sse_sequence(&server, vec![sse(shell_call("call-1", &command))]).await;
-    let test = builder(AskForApproval::Never, /*unified*/ false)
-        .build(&server)
-        .await?;
+    let test = builder(AskForApproval::Never).build(&server).await?;
     submit(&test, "run the slow command").await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::ExecCommandBegin(_))
@@ -248,9 +237,7 @@ async fn issue_507_kill_switch_from_another_process_stops_the_running_command() 
     );
     let server = start_mock_server().await;
     let captured = mount_sse_sequence(&server, vec![sse(shell_call("call-1", &command))]).await;
-    let test = builder(AskForApproval::Never, /*unified*/ false)
-        .build(&server)
-        .await?;
+    let test = builder(AskForApproval::Never).build(&server).await?;
     let home = test.codex_home_path().to_path_buf();
     submit(&test, "run the slow command").await?;
     wait_for_event(&test.codex, |event| {
@@ -306,8 +293,8 @@ async fn issue_507_kill_switch_cancels_a_streaming_reply_and_its_tool_calls() ->
     let rest = core_test_support::responses::sse(vec![
         ev_function_call(
             "call-late",
-            "shell_command",
-            &json!({ "command": format!("touch '{}'", marker.display()) }).to_string(),
+            "exec_command",
+            &json!({ "cmd": format!("touch '{}'", marker.display()) }).to_string(),
         ),
         ev_completed("resp-1"),
     ]);
@@ -322,7 +309,7 @@ async fn issue_507_kill_switch_cancels_a_streaming_reply_and_its_tool_calls() ->
         },
     ]])
     .await;
-    let test = builder(AskForApproval::Never, /*unified*/ false)
+    let test = builder(AskForApproval::Never)
         .build_with_streaming_server(&server)
         .await?;
     submit(&test, "start a reply").await?;
@@ -353,7 +340,7 @@ async fn issue_507_a_command_waiting_for_approval_never_runs() -> anyhow::Result
     let command = format!("touch '{}'", marker.display());
     let server = start_mock_server().await;
     let captured = mount_sse_sequence(&server, vec![sse(shell_call("call-1", &command))]).await;
-    let test = builder(AskForApproval::UnlessTrusted, /*unified*/ false)
+    let test = builder(AskForApproval::UnlessTrusted)
         .build(&server)
         .await?;
     submit(&test, "write the marker").await?;
@@ -407,9 +394,7 @@ async fn issue_507_kill_switch_ends_background_terminals() -> anyhow::Result<()>
         ],
     )
     .await;
-    let test = builder(AskForApproval::Never, /*unified*/ true)
-        .build(&server)
-        .await?;
+    let test = builder(AskForApproval::Never).build(&server).await?;
     submit(&test, "start it in the background").await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnComplete(_))
@@ -451,9 +436,7 @@ async fn issue_507_control_background_command_runs_without_the_kill_switch() -> 
         ],
     )
     .await;
-    let test = builder(AskForApproval::Never, /*unified*/ true)
-        .build(&server)
-        .await?;
+    let test = builder(AskForApproval::Never).build(&server).await?;
     submit(&test, "start it in the background").await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnComplete(_))
@@ -482,9 +465,7 @@ async fn issue_507_revoke_all_leaves_the_running_command_alone() -> anyhow::Resu
         vec![sse(shell_call("call-1", &command)), sse(done())],
     )
     .await;
-    let test = builder(AskForApproval::Never, /*unified*/ false)
-        .build(&server)
-        .await?;
+    let test = builder(AskForApproval::Never).build(&server).await?;
     submit(&test, "run the slow command").await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::ExecCommandBegin(_))

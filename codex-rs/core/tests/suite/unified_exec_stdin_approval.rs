@@ -218,6 +218,7 @@ async fn stdin_reviews_escalated_terminal_with_denied_reads_before_delivering_in
         file_system.entries.push(FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
                 pattern: "**/secret.env".into(),
+                scan: None,
             },
             FileSystemAccessMode::Deny,
         ));

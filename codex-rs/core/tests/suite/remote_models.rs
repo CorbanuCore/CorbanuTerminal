@@ -407,18 +407,10 @@ async fn remote_models_long_model_slug_is_sent_with_supported_reasoning(
     skip_if_sandbox!(Ok(()));
 
     let server = MockServer::start().await;
-<<<<<<< HEAD
     let requested_model = "custom-reasoning-model-long-slug";
     let prefix_model = "custom-reasoning-model";
-||||||| 413492cd6c
-    let requested_model = "gpt-5.3-codex-test";
-    let prefix_model = "gpt-5.3-codex";
-=======
-    let requested_model = "gpt-5.3-codex-test";
-    let prefix_model = "gpt-5.3-codex";
     let base_instructions = "Keep the catalog base instructions.";
     let developer_instructions = "Keep the configured developer instructions.";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut remote_model = test_remote_model_with_policy(
         prefix_model,
         ModelVisibility::List,
@@ -460,12 +452,8 @@ async fn remote_models_long_model_slug_is_sent_with_supported_reasoning(
         .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model = Some(requested_model.to_string());
-<<<<<<< HEAD
             config.model_reasoning_effort = None;
-||||||| 413492cd6c
-=======
             config.developer_instructions = Some(developer_instructions.to_string());
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         })
         .build_with_auto_env(&server)
         .await?;

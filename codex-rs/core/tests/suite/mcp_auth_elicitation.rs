@@ -594,6 +594,7 @@ approvals_reviewer = "user"
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             environments: Some(vec![test.executor_environment().request()]),
             ..StartThreadOptions::new(test.config.clone())

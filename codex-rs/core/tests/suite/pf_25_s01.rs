@@ -10,6 +10,7 @@
 //! grant writes is in a `core.hooksPath` folder (`.husky`), as the docs say.
 #![cfg(target_os = "macos")]
 
+use codex_core::TurnInputRequest;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -48,10 +49,10 @@ const CANARY: &str = "pf25-canary-notes";
 type Step = Vec<Value>;
 
 fn shell_step(call_id: &str, command: &str) -> Step {
-    let arguments = json!({ "command": command }).to_string();
+    let arguments = json!({ "cmd": command }).to_string();
     vec![
         ev_response_created(call_id),
-        ev_function_call(call_id, "shell_command", &arguments),
+        ev_function_call(call_id, "exec_command", &arguments),
         ev_completed(call_id),
     ]
 }
@@ -114,16 +115,13 @@ async fn start_in(
     std::mem::forget(server);
     project(test.cwd_path())?;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "read the notes".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     Ok((test, captured))
 }

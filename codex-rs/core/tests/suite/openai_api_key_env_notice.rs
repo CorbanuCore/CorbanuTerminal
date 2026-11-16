@@ -3,6 +3,7 @@
 use anyhow::Result;
 use codex_core::CodexThread;
 use codex_core::StartThreadOptions;
+use codex_core::TurnInputRequest;
 use codex_login::CodexAuth;
 use codex_login::OPENAI_API_KEY_ENV_FALLBACK_NOTICE;
 use codex_login::OPENAI_API_KEY_ENV_VAR;
@@ -76,16 +77,16 @@ async fn notices_per_step(auth: CodexAuth, openai: bool, steps: &[Step]) -> Resu
     let mut notices = Vec::new();
     for step in steps {
         let op = match step {
-            Step::Turn => user_turn(),
-            Step::Review => Op::Review {
+            Step::Turn => None,
+            Step::Review => Some(Op::Review {
                 review_request: ReviewRequest {
                     target: ReviewTarget::Custom {
                         instructions: "Review my changes".to_string(),
                     },
                     user_facing_hint: None,
                 },
-            },
-            Step::Compact => Op::Compact,
+            }),
+            Step::Compact => Some(Op::Compact),
         };
         notices.push(submit_and_count_notices(&test.codex, op).await?);
     }
@@ -93,21 +94,21 @@ async fn notices_per_step(auth: CodexAuth, openai: bool, steps: &[Step]) -> Resu
     Ok(notices)
 }
 
-fn user_turn() -> Op {
-    Op::UserInput {
-        items: vec![UserInput::Text {
-            text: "say ok".to_string(),
-            text_elements: Vec::new(),
-        }],
-        final_output_json_schema: None,
-        responsesapi_client_metadata: None,
-        additional_context: Default::default(),
-        thread_settings: Default::default(),
+/// Submits `op`, or a user turn when `op` is `None`.
+async fn submit_and_count_notices(codex: &CodexThread, op: Option<Op>) -> Result<usize> {
+    match op {
+        Some(op) => {
+            codex.submit(op).await?;
+        }
+        None => {
+            codex
+                .start_or_steer_turn(TurnInputRequest::user_input(vec![UserInput::Text {
+                    text: "say ok".to_string(),
+                    text_elements: Vec::new(),
+                }]))
+                .await?;
+        }
     }
-}
-
-async fn submit_and_count_notices(codex: &CodexThread, op: Op) -> Result<usize> {
-    codex.submit(op).await?;
     let mut notices = 0;
     wait_for_event(codex, |event| {
         if let EventMsg::Warning(warning) = event
@@ -230,10 +231,10 @@ async fn spawned_agent_on_openai_announces_when_its_root_does_not() -> Result<()
         .await?
         .thread;
 
-    let root_notices = submit_and_count_notices(&test.codex, user_turn()).await?;
+    let root_notices = submit_and_count_notices(&test.codex, /*op*/ None).await?;
     let child_notices = [
-        submit_and_count_notices(&child, user_turn()).await?,
-        submit_and_count_notices(&child, user_turn()).await?,
+        submit_and_count_notices(&child, /*op*/ None).await?,
+        submit_and_count_notices(&child, /*op*/ None).await?,
     ];
 
     assert_eq!(root_notices, 0);

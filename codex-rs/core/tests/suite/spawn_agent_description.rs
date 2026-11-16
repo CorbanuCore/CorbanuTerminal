@@ -21,26 +21,17 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_protocol::openai_models::TruncationPolicyConfig;
 use codex_protocol::openai_models::default_input_modalities;
-<<<<<<< HEAD
-use codex_protocol::protocol::MultiAgentVersion;
-use core_test_support::responses::ev_assistant_message;
-||||||| 413492cd6c
-=======
 use codex_protocol::protocol::MULTI_AGENT_MODE_OPEN_TAG;
 use codex_protocol::protocol::MultiAgentVersion;
 use core_test_support::responses::ResponsesRequest;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_models_once;
 use core_test_support::responses::mount_sse_once;
-<<<<<<< HEAD
 use core_test_support::responses::mount_sse_once_match;
-||||||| 413492cd6c
-=======
 use core_test_support::responses::mount_sse_sequence;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use core_test_support::responses::namespace_child_tool;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
@@ -396,23 +387,55 @@ pub(super) async fn model_catalog_refresh_requests(
         &description
     };
 
-    assert!(
-<<<<<<< HEAD
-        description.contains("- `openai` / `gpt-5.6-terra`"),
-        "expected an eligible exact provider route in spawn_agent description: {description:?}"
-    );
-    assert!(
-        description.contains(
-            "Available authorized exact runtime overrides (optional; omit both fields to inherit the current runtime). Pass the provider as `model_provider` and the model as `model`."
-        ),
-        "expected provider/model choices to be framed as exact runtime pairs: {description:?}"
-||||||| 413492cd6c
-        description.contains("- `visible-model`: Fast and capable"),
-        "expected visible model summary in spawn_agent description: {description:?}"
-=======
-        listing.contains("- `visible-model`: Fast and capable"),
-        "expected visible model summary in model catalog: {catalog:?}"
-    );
+    if model_catalog_in_context {
+        assert!(
+            listing.contains("- `visible-model`: Fast and capable"),
+            "expected visible model summary in model catalog: {catalog:?}"
+        );
+        assert!(
+            listing.contains("Reasoning efforts: low, medium (default), high."),
+            "expected default reasoning effort in model catalog: {catalog:?}"
+        );
+        assert!(
+            listing.contains("Service tiers: priority."),
+            "expected service tier guidance in model catalog: {catalog:?}"
+        );
+    } else {
+        // Corbanu: without the in-context catalogue, the spawn description carries the
+        // exact provider/model runtime catalogue.
+        assert!(
+            description.contains("- `openai` / `gpt-5.6-terra`"),
+            "expected an eligible exact provider route in spawn_agent description: {description:?}"
+        );
+        assert!(
+            description.contains(
+                "Available authorized exact runtime overrides (optional; omit both fields to inherit the current runtime). Pass the provider as `model_provider` and the model as `model`."
+            ),
+            "expected provider/model choices to be framed as exact runtime pairs: {description:?}"
+        );
+        assert!(
+            description
+                .contains("Current inherited runtime: `openai` / `visible-model`; effort medium."),
+            "expected the exact parent runtime in the spawn catalogue: {description:?}"
+        );
+        assert!(
+            description.contains(
+                "Default allocation policy: compare the task with this catalogue before every spawn."
+            ),
+            "expected model-aware default allocation policy: {description:?}"
+        );
+        assert!(
+            description.contains(
+                "`openai` / `visible-model`; explicit-choice only; allocation economics unavailable;"
+            ),
+            "remote models without economics remain explicit choices: {description:?}"
+        );
+        assert!(
+            description.contains("efforts: low, medium (default), high;")
+                && description.contains("tiers: priority"),
+            "expected reasoning efforts and service tiers in the spawn catalogue: {description:?}"
+        );
+    }
     assert_eq!(
         description.contains("Pick model overrides from the latest <model_catalog> listing."),
         model_catalog_in_context
@@ -422,45 +445,17 @@ pub(super) async fn model_catalog_refresh_requests(
         model_catalog_in_context
     );
     assert_eq!(
-        description.contains("- `visible-model`: Fast and capable"),
+        description.contains("`openai` / `visible-model`"),
         !model_catalog_in_context
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     );
-    let expected_inherited_model_guidance = if multi_agent_version == MultiAgentVersion::V2
-        && model_catalog_in_context
-    {
-        "Spawned agents inherit your current model by default. Do not set the `model` field unless the user explicitly asks for a different model."
+    // Corbanu: V2 names `model_provider` too, with or without the in-context catalogue.
+    let expected_inherited_model_guidance = if multi_agent_version == MultiAgentVersion::V2 {
+        "Spawned agents inherit your current provider and model by default. Omit both `model_provider` and `model` to inherit that runtime. To use another runtime, set both fields explicitly."
     } else {
         "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed."
     };
     assert!(
-<<<<<<< HEAD
-        description
-            .contains("Current inherited runtime: `openai` / `visible-model`; effort medium."),
-        "expected the exact parent runtime in the spawn catalogue: {description:?}"
-    );
-    assert!(
-        description.contains(
-            "Default allocation policy: compare the task with this catalogue before every spawn."
-        ),
-        "expected model-aware default allocation policy: {description:?}"
-    );
-    assert!(
-        description.contains(
-            "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed."
-        ),
-||||||| 413492cd6c
-        description
-            .contains("Available model overrides (optional; inherited parent model is preferred):"),
-        "expected model choices to be framed as overrides in spawn_agent description: {description:?}"
-    );
-    assert!(
-        description.contains(
-            "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed."
-        ),
-=======
         description.contains(expected_inherited_model_guidance),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         "expected inherited-model guidance in spawn_agent description: {description:?}"
     );
     assert_eq!(
@@ -469,28 +464,6 @@ pub(super) async fn model_catalog_refresh_requests(
         ),
         multi_agent_version == MultiAgentVersion::V1 || model_catalog_in_context,
         "expected model override usage guidance in spawn_agent description: {description:?}"
-    );
-    assert!(
-<<<<<<< HEAD
-        description.contains(
-            "`openai` / `visible-model`; explicit-choice only; allocation economics unavailable;"
-        ),
-        "remote models without economics remain explicit choices: {description:?}"
-||||||| 413492cd6c
-        description.contains("Reasoning efforts: low, medium (default), high."),
-        "expected default reasoning effort in spawn_agent description: {description:?}"
-    );
-    assert!(
-        description.contains("Service tiers: priority."),
-        "expected service tier guidance in spawn_agent description: {description:?}"
-=======
-        listing.contains("Reasoning efforts: low, medium (default), high."),
-        "expected default reasoning effort in model catalog: {catalog:?}"
-    );
-    assert!(
-        listing.contains("Service tiers: priority."),
-        "expected service tier guidance in model catalog: {catalog:?}"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     );
     assert!(
         !listing.contains("hidden-model"),
@@ -509,6 +482,12 @@ pub(super) async fn model_catalog_refresh_requests(
         ) && description.contains("### When to delegate vs. do the subtask yourself"),
         "expected delegation decision guidance in spawn_agent description: {description:?}"
     );
+        assert!(
+            description.contains(
+                "Agent-role guidance below only helps choose which agent to use after spawning is already authorized; it never authorizes spawning by itself."
+            ),
+            "expected agent-role clarification in spawn_agent description: {description:?}"
+        );
         assert!(
             !description.contains("A mini model can solve many tasks faster than the main model."),
             "spawn_agent description should not encourage choosing a smaller model by default: {description:?}"

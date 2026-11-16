@@ -69,6 +69,7 @@ async fn accounting_plan_identity_zero_usage_and_provider_switch() -> anyhow::Re
                     model_provider: Some("compatible-fixture".into()),
                     ..Default::default()
                 },
+                reply: None,
             })
             .await?;
         tokio::time::timeout(Duration::from_secs(5), async {
@@ -437,12 +438,10 @@ async fn accounting_anthropic_native_spawned_children_role_reload_and_fork_own_o
     let before = attempts(&db).await?;
     let fork = test
         .thread_manager
-        .fork_thread(
+        .fork_legacy_thread(
             codex_core::ForkSnapshot::Interrupted,
-            test.config.clone(),
+            codex_core::StartThreadOptions::new(test.config.clone()),
             test.codex.rollout_path().unwrap(),
-            /*thread_source*/ None,
-            /*parent_trace*/ None,
         )
         .await?;
     assert!(!owned.contains_key(&fork.thread_id));

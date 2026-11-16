@@ -5,6 +5,7 @@
 //! stay usable; Permissive and Moderate sessions keep listing it.
 #![cfg(target_os = "macos")]
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 
 use codex_core::config::Constrained;
@@ -61,12 +62,7 @@ enum Command {
 /// One turn, in a session started at `level`, that runs `command` first
 /// (before any tool output could taint the session); with `confirm`, the
 /// person confirms Aggressive in `/security` first (no restart).
-async fn run(
-    level: SecurityLevel,
-    confirm: bool,
-    unified: bool,
-    command: Command,
-) -> anyhow::Result<Run> {
+async fn run(level: SecurityLevel, confirm: bool, command: Command) -> anyhow::Result<Run> {
     // The home sits in a folder of its own, which #554's commands list.
     let above_dir = TempDir::new()?;
     let home = Arc::new(TempDir::new_in(above_dir.path())?);
@@ -89,19 +85,11 @@ async fn run(
         vec![
             sse(vec![
                 ev_response_created("call-0"),
-                if unified {
-                    ev_function_call(
-                        "call-0",
-                        "exec_command",
-                        &json!({ "cmd": command }).to_string(),
-                    )
-                } else {
-                    ev_function_call(
-                        "call-0",
-                        "shell_command",
-                        &json!({ "command": command }).to_string(),
-                    )
-                },
+                ev_function_call(
+                    "call-0",
+                    "exec_command",
+                    &json!({ "cmd": command }).to_string(),
+                ),
                 ev_completed("call-0"),
             ]),
             sse(vec![
@@ -122,13 +110,10 @@ async fn run(
                 .features
                 .enable(Feature::SourceEnvelopes)
                 .expect("enable source envelopes");
-            if unified {
-                config.use_experimental_unified_exec_tool = true;
-                config
-                    .features
-                    .enable(Feature::UnifiedExec)
-                    .expect("enable unified exec");
-            }
+            config
+                .features
+                .enable(Feature::UnifiedExec)
+                .expect("enable unified exec");
         })
         .build_with_auto_env(&server)
         .await?;
@@ -155,16 +140,13 @@ async fn run(
         assert!(report.live, "Aggressive applies in this session now");
     }
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "look at the Corbanu home".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let mut warnings = Vec::new();
     // #505: once Aggressive is confirmed a person approves every command
@@ -200,13 +182,9 @@ async fn run(
 }
 
 /// Listing is denied and explained; the home's runtime entries still work.
-async fn assert_listing_denied(
-    level: SecurityLevel,
-    confirm: bool,
-    unified: bool,
-) -> anyhow::Result<()> {
-    let context = format!("{level:?} confirm={confirm} unified={unified}");
-    let listed = run(level, confirm, unified, Command::ListHome).await?;
+async fn assert_listing_denied(level: SecurityLevel, confirm: bool) -> anyhow::Result<()> {
+    let context = format!("{level:?} confirm={confirm}");
+    let listed = run(level, confirm, Command::ListHome).await?;
     assert!(
         !listed.output.contains(CANARY),
         "{context}: {}",
@@ -233,7 +211,7 @@ async fn assert_listing_denied(
         listed.output
     );
     // As agents usually spell it.
-    let variable = run(level, confirm, unified, Command::ListHomeVariable).await?;
+    let variable = run(level, confirm, Command::ListHomeVariable).await?;
     assert!(
         !variable.output.contains(CANARY),
         "{context}: {}",
@@ -250,7 +228,7 @@ async fn assert_listing_denied(
     // #554: listed from the folder above, the home is denied and explained
     // the same way.
     for command in [Command::FindAbove, Command::ListAboveRecursively] {
-        let above = run(level, confirm, unified, command).await?;
+        let above = run(level, confirm, command).await?;
         assert!(
             !above.output.contains(CANARY),
             "{context}: {}",
@@ -270,7 +248,7 @@ async fn assert_listing_denied(
             above.warnings
         );
     }
-    let skills = run(level, confirm, unified, Command::UseSkills).await?;
+    let skills = run(level, confirm, Command::UseSkills).await?;
     assert!(
         skills.output.contains("note.md"),
         "{context}: {}",
@@ -288,22 +266,14 @@ async fn assert_listing_denied(
 async fn issue_506_aggressive_sessions_cannot_list_the_corbanu_home() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
-    for unified in [false, true] {
-        assert_listing_denied(SecurityLevel::Aggressive, /*confirm*/ false, unified).await?;
-    }
-    Ok(())
+    assert_listing_denied(SecurityLevel::Aggressive, /*confirm*/ false).await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn issue_506_listing_is_denied_as_soon_as_aggressive_is_confirmed() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
-    assert_listing_denied(
-        SecurityLevel::Permissive,
-        /*confirm*/ true,
-        /*unified*/ false,
-    )
-    .await
+    assert_listing_denied(SecurityLevel::Permissive, /*confirm*/ true).await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -312,10 +282,7 @@ async fn issue_506_permissive_and_moderate_keep_listing_the_home() -> anyhow::Re
     skip_if_sandbox!(Ok(()));
     for level in [SecurityLevel::Permissive, SecurityLevel::Moderate] {
         for command in [Command::ListHome, Command::FindAbove] {
-            let listed = run(
-                level, /*confirm*/ false, /*unified*/ false, command,
-            )
-            .await?;
+            let listed = run(level, /*confirm*/ false, command).await?;
             assert!(
                 listed.output.contains(CANARY),
                 "{level:?}: {}",

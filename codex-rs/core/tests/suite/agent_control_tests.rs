@@ -273,6 +273,7 @@ async fn host_threads_preserve_lineage_settings_and_resume_routing() -> anyhow::
                 agent_path: Some(AgentPath::root().join("worker").expect("valid child path")),
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             ..StartThreadOptions::new(child_config.clone())
         })

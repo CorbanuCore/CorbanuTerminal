@@ -128,25 +128,9 @@ async fn submit_turn(
             TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "run a code-mode tool that needs user input".into(),
                 text_elements: Vec::new(),
-<<<<<<< HEAD
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
-                approval_policy: Some(approval_policy),
-||||||| 413492cd6c
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
-                approval_policy: Some(AskForApproval::OnRequest),
-=======
             }])
             .with_thread_settings(ThreadSettingsOverrides {
-                approval_policy: Some(AskForApproval::OnRequest),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                approval_policy: Some(approval_policy),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
                 collaboration_mode: Some(CollaborationMode {

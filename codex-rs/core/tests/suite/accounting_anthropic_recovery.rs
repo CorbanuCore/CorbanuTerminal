@@ -253,7 +253,9 @@ async fn accounting_anthropic_missing_optional_state_is_never_fatal() -> anyhow:
             .with_config(|config| {
                 let path = config.codex_home.join("unusable-sqlite-home");
                 std::fs::write(&path, b"synthetic non-directory").unwrap();
-                config.sqlite = codex_state::SqliteConfig::from_sqlite_home(path);
+                config.sqlite = codex_state::SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+                    path, /*enforce_delete_on_nfs*/ false,
+                );
             })
             .build_with_auto_env(&server)
             .await?;

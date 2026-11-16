@@ -160,6 +160,7 @@ pub(super) async fn mcp_server_elicitation_scenario(
             agent_path: None,
             agent_nickname: None,
             agent_role: None,
+            agent_class: None,
         })
     };
     let thread = test

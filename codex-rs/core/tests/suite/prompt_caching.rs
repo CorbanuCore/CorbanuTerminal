@@ -217,15 +217,6 @@ async fn prompt_tools_are_consistent_across_requests(
                 .expect("test config should have a model"),
             &config.to_models_manager_config(),
         )
-<<<<<<< HEAD
-        .await
-        .base_instructions;
-    let (first_sandbox_policy, first_permission_profile) =
-        turn_permission_fields(PermissionProfile::Disabled, cwd.path());
-||||||| 413492cd6c
-        .await
-        .base_instructions;
-=======
         .await;
     let base_instructions = if custom_instructions {
         CUSTOM_BASE_INSTRUCTIONS.to_string()
@@ -240,7 +231,8 @@ async fn prompt_tools_are_consistent_across_requests(
             format!("{before}## {after}")
         }
     };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let (first_sandbox_policy, first_permission_profile) =
+        turn_permission_fields(PermissionProfile::Disabled, cwd.path());
 
     let mode_instructions = if custom_instructions {
         "## Plan tool\nPreserve this custom collaboration policy.\n".to_string()
@@ -256,29 +248,12 @@ async fn prompt_tools_are_consistent_across_requests(
             TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "hello 1".into(),
                 text_elements: Vec::new(),
-<<<<<<< HEAD
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
-                environments: Some(local_selections(cwd.abs())),
+            }])
+            .with_thread_settings(ThreadSettingsOverrides {
+                environments: Some(local_requests(cwd.abs())),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(first_sandbox_policy),
                 permission_profile: first_permission_profile,
-                ..Default::default()
-            },
-        })
-||||||| 413492cd6c
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
-=======
-            }])
-            .with_thread_settings(ThreadSettingsOverrides {
                 collaboration_mode: Some(CollaborationMode {
                     mode: ModeKind::Plan,
                     settings: Settings {
@@ -290,47 +265,25 @@ async fn prompt_tools_are_consistent_across_requests(
                 ..Default::default()
             }),
         )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .await?;
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let (second_sandbox_policy, second_permission_profile) =
         turn_permission_fields(PermissionProfile::Disabled, cwd.path());
     codex
-<<<<<<< HEAD
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "hello 2".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
-                environments: Some(local_selections(cwd.abs())),
+            }])
+            .with_thread_settings(ThreadSettingsOverrides {
+                environments: Some(local_requests(cwd.abs())),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(second_sandbox_policy),
                 permission_profile: second_permission_profile,
                 ..Default::default()
-            },
-        })
-||||||| 413492cd6c
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello 2".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
-=======
-        .start_or_steer_turn(TurnInputRequest::user_input(vec![UserInput::Text {
-            text: "hello 2".into(),
-            text_elements: Vec::new(),
-        }]))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            }),
+        )
         .await?;
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
@@ -554,18 +507,7 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
     )
     .await;
 
-<<<<<<< HEAD
     let test = test_codex()
-||||||| 413492cd6c
-    let TestCodex { codex, config, .. } = test_codex()
-=======
-    let TestCodex {
-        home: _home,
-        codex,
-        config,
-        ..
-    } = test_codex()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .with_pre_build_hook(write_global_instructions)
         .with_config(|config| {
             config

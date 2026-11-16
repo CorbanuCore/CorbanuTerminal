@@ -2,13 +2,13 @@
 //! forwards the request body unchanged, so the Plan picker's Standard and Deep
 //! choices must reach the wire as Ambient's `reasoning` object.
 
+use codex_core::TurnInputRequest;
 use codex_login::CodexAuth;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use core_test_support::responses::chat_completions_sse;
 use core_test_support::responses::mount_chat_completions_sequence;
@@ -50,16 +50,13 @@ async fn plan_glm_request_body(effort: ReasoningEffort) -> anyhow::Result<Value>
     // Default thread settings keep the configured effort; `submit_turn` would
     // override it with the collaboration mode's.
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "fixture".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnComplete(_))

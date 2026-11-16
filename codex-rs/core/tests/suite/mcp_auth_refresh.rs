@@ -81,15 +81,17 @@ async fn codex_apps_401_without_challenge_identifies_only_attached_account() -> 
             })
             .build()
             .await?;
-        let plugins = codex_core_plugins::PluginsManager::new(home.path().into());
+        let plugins = plugins_manager_for_config(&config, Arc::clone(&manager));
         let (tx, rx) = async_channel::unbounded();
         let runtime = McpRuntime::new(McpRuntimeInput {
+            network_policy_metadata: None,
+            startup_policy: McpStartupPolicy::Eager,
             config: Arc::new(config.to_mcp_config(&plugins).await),
             plugins_available: false,
             ready_selected_capability_roots: Vec::new(),
             mcp_servers: HashMap::from([(
                 CODEX_APPS_MCP_SERVER_NAME.into(),
-                EffectiveMcpServer::configured(configured),
+                EffectiveMcpServer::from_host_config(configured),
             )]),
             submit_id: "pf58".into(),
             tx_event: Some(tx),
@@ -103,9 +105,9 @@ async fn codex_apps_401_without_challenge_identifies_only_attached_account() -> 
             codex_apps_tools_cache_key: codex_mcp::codex_apps_tools_cache_key(
                 attach_account.then_some(&auth),
             ),
-            supports_openai_form_elicitation: false,
+            client_mcp_extensions: ClientMcpExtensions::default(),
             auth: attach_account.then_some(auth),
-            codex_apps_auth_manager: attach_account.then_some(manager),
+            auth_manager: attach_account.then_some(manager),
             elicitation_reviewer: None,
             elicitation_lifecycle: None,
         })

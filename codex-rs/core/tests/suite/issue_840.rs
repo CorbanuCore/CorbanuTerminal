@@ -6,6 +6,7 @@
 //! a protected action: the person is asked afresh (PF-30-S03).
 #![cfg(target_os = "macos")]
 
+use codex_core::TurnInputRequest;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -36,14 +37,14 @@ use tempfile::TempDir;
 const CANARY: &str = "ISSUE_840_CANARY";
 
 fn step(call_id: &str, command: &str, escalate: bool) -> Vec<Value> {
-    let mut arguments = json!({ "command": command });
+    let mut arguments = json!({ "cmd": command });
     if escalate {
         arguments["sandbox_permissions"] = json!("require_escalated");
         arguments["justification"] = json!("read the notes");
     }
     vec![
         ev_response_created(call_id),
-        ev_function_call(call_id, "shell_command", &arguments.to_string()),
+        ev_function_call(call_id, "exec_command", &arguments.to_string()),
         ev_completed(call_id),
     ]
 }
@@ -112,16 +113,13 @@ async fn with_rule(
         .await?;
     std::mem::forget(server);
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "go on".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let mut asked = 0;
     while let EventMsg::ExecApprovalRequest(approval) = wait_for_event(&test.codex, |event| {
