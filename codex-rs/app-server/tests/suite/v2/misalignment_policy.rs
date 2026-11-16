@@ -22,6 +22,8 @@ use tokio::time::timeout;
 use wiremock::ResponseTemplate;
 
 const MESSAGE: &str = "This request violated the misalignment policy.";
+/// Corbanu (main's 0.1.40 wording): the surfaced error adds why nothing is retried.
+const SURFACED_MESSAGE: &str = "This request violated the misalignment policy. [misalignment_policy_violation] Automatic retries are disabled. Review the conversation's account access, tool actions, and changes before continuing work. This flag does not establish a user policy violation.";
 const EXPLANATION: &str = "The agent attempted to transfer your files externally.";
 const STEER: &str = "Continue without transferring the user's files externally.";
 const REVIEW_TARGET: &str = "RB._~:-opaque";
@@ -221,7 +223,7 @@ async fn assert_policy_violation_completes_turn_with_typed_terminal_error(
         ErrorNotification {
             error: TurnError {
                 misalignment: expected_misalignment.clone(),
-                message: MESSAGE.to_string(),
+                message: SURFACED_MESSAGE.to_string(),
                 codex_error_info: Some(CodexErrorInfo::MisalignmentPolicyViolation),
                 additional_details: None,
             },
@@ -243,7 +245,7 @@ async fn assert_policy_violation_completes_turn_with_typed_terminal_error(
         completed.turn.error,
         Some(TurnError {
             misalignment: expected_misalignment,
-            message: MESSAGE.to_string(),
+            message: SURFACED_MESSAGE.to_string(),
             codex_error_info: Some(CodexErrorInfo::MisalignmentPolicyViolation),
             additional_details: None,
         })
