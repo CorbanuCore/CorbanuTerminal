@@ -3518,6 +3518,9 @@ mod workspace_roots_tests;
 #[cfg(test)]
 #[path = "app_server_session/prompt_history_tests.rs"]
 mod prompt_history_tests;
+#[cfg(test)]
+#[path = "app_server_session/aggressive_reload_matrix_tests.rs"]
+mod aggressive_reload_matrix_tests;
 
 #[cfg(test)]
 mod tests {
