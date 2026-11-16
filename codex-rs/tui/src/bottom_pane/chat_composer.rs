@@ -650,6 +650,9 @@ pub(crate) struct ChatComposer {
     blocks_direct_input: bool,
     is_task_running: bool,
     queue_submissions: bool,
+    /// D642: hold an ambiguous Enter after a long burst. Editors whose
+    /// submissions are dispatched only from their own key path turn this off.
+    burst_enter_lookahead: bool,
     /// Slash-command draft staged for local recall after application-level dispatch.
     ///
     /// This slot is intentionally separate from `ChatComposerHistory` so inline slash commands can
@@ -836,6 +839,7 @@ impl ChatComposer {
             blocks_direct_input: false,
             is_task_running: false,
             queue_submissions: false,
+            burst_enter_lookahead: true,
             pending_slash_command_history: None,
             skills: None,
             plugins: None,
@@ -3311,8 +3315,14 @@ impl ChatComposer {
                 .paste_burst
                 .single_line_burst_enter_should_submit(self.draft.textarea.text())
         {
-            self.draft.paste_burst.defer_enter(now);
-            return (InputResult::None, true);
+            if self.burst_enter_lookahead {
+                self.draft.paste_burst.defer_enter(now);
+                return (InputResult::None, true);
+            }
+            // Pre-D642 rule #22: submit the materialized burst at once.
+            if let Some(pasted) = self.draft.paste_burst.flush_before_modified_input() {
+                self.apply_paste(pasted);
+            }
         }
 
         if !should_queue && self.handle_paste_enter(now) {
@@ -4492,6 +4502,14 @@ impl ChatComposer {
 
     pub fn set_task_running(&mut self, running: bool) {
         self.is_task_running = running;
+    }
+
+    /// See `burst_enter_lookahead`.
+    pub(crate) fn set_burst_enter_lookahead(&mut self, enabled: bool) {
+        self.burst_enter_lookahead = enabled;
+        if !enabled {
+            self.cancel_pending_burst_submission();
+        }
     }
 
     pub(crate) fn set_queue_submissions(&mut self, queue_submissions: bool) {

@@ -69,29 +69,17 @@ impl AsyncQuestions {
         self.sync_composer_placeholder();
     }
 
-    /// D642: apply a held burst Enter whose lookahead ended, through the same
-    /// submit path a typed Enter takes.
-    fn resolve_due_burst_enter(&mut self) -> bool {
-        if self.is_complete()
-            || !self
-                .composer
-                .take_due_burst_enter(std::time::Instant::now())
-        {
-            return false;
-        }
-        self.edit(KeyEvent::new(
-            KeyCode::Enter,
-            crossterm::event::KeyModifiers::NONE,
-        ));
-        true
-    }
-
     pub(super) fn edit(&mut self, key: KeyEvent) {
         if key.kind == KeyEventKind::Repeat && self.keymap.composer.queue.is_pressed(key) {
             return;
         }
 
-        if self.keymap.composer.submit.is_pressed(key) && !self.composer.is_in_paste_burst() {
+        // Sync (D642): this composer doesn't hold a burst Enter, so a long
+        // single-line burst is materialized before the draft snapshot below;
+        // otherwise its text would be dropped when the draft is restored.
+        if self.keymap.composer.submit.is_pressed(key)
+            && (!self.composer.is_in_paste_burst() || self.composer.burst_enter_would_submit())
+        {
             self.composer.flush_pending_input();
         }
         let before = self.composer.snapshot_draft();
@@ -212,14 +200,6 @@ impl BottomPaneView for AsyncQuestions {
             return;
         }
         self.last_input_dropped = false;
-        // D642: a held burst Enter is resolved before this key; a key that
-        // does not continue the paste cancels it.
-        if self.resolve_due_burst_enter() && self.is_complete() {
-            return;
-        }
-        if !crate::bottom_pane::key_continues_paste(key.code, key.modifiers) {
-            self.composer.cancel_pending_burst_submission();
-        }
         self.snooze_auto_resolution();
         if self.shows_early_input_notice() {
             // #787 (main's rule for request prompts, `TypingGuard::on_early_input`): keys were
@@ -389,8 +369,7 @@ impl BottomPaneView for AsyncQuestions {
         self.composer.handle_paste(text)
     }
     fn flush_paste_burst_if_due(&mut self) -> bool {
-        let resolved = self.resolve_due_burst_enter();
-        self.composer.flush_paste_burst_if_due() || resolved
+        self.composer.flush_paste_burst_if_due()
     }
     fn is_in_paste_burst(&self) -> bool {
         self.composer.is_in_paste_burst()

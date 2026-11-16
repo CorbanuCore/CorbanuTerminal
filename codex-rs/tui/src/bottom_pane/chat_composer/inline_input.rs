@@ -118,6 +118,15 @@ impl ChatComposer {
     }
 
     /// Integrate already-classified buffered typing before another answer takes over this editor.
+    /// Rule #22: an Enter now would submit a long single-line burst.
+    pub(crate) fn burst_enter_would_submit(&self) -> bool {
+        !self.draft.disable_paste_burst
+            && self
+                .draft
+                .paste_burst
+                .single_line_burst_enter_should_submit(self.draft.textarea.text())
+    }
+
     pub(crate) fn flush_pending_input(&mut self) {
         if let Some(text) = self.draft.paste_burst.flush_before_modified_input() {
             self.apply_paste(text);
