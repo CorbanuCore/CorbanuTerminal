@@ -142,7 +142,6 @@ impl App {
         Ok(config)
     }
 
-    #[cfg(test)]
     pub(super) async fn rebuild_config_for_permission_profile(
         &self,
         profile_id: &str,
@@ -166,8 +165,8 @@ impl App {
         .await
     }
 
-    // Local setup for startup fixtures; connected selections always use the server below.
-    #[cfg(test)]
+    // Before a task exists, resolve the selection locally. Connected selections
+    // use the server confirmation path.
     pub(super) async fn apply_permission_profile_selection(
         &mut self,
         app_server: &mut AppServerSession,
@@ -263,10 +262,15 @@ impl App {
                 Some(RuntimeApprovalPolicyOverride::Explicit(policy));
             self.chat_widget.set_approval_policy(policy);
         }
-        if let Err(err) = self.chat_widget.set_permission_profile_with_active_profile(
-            permission_profile.clone(),
-            active_permission_profile.clone(),
-        ) {
+        if let Err(err) = self
+            .chat_widget
+            .set_permission_profile_from_session_snapshot(
+                PermissionProfileSnapshot::from_session_snapshot(
+                    permission_profile.clone(),
+                    active_permission_profile.clone(),
+                ),
+            )
+        {
             tracing::warn!(
                 error = %err,
                 profile_id,

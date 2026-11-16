@@ -5826,9 +5826,10 @@ impl App {
                         approvals_reviewer: reviewer.map(Into::into),
                         ..Default::default()
                     }, selection.display_label, reviewer);
-                } else {
-                    // Without a connected task, the server-owned selection reports that it waits.
-                    crate::boxed_future!(self.select_permission_profile(app_server, selection)).await;
+                } else if crate::boxed_future!(self.apply_permission_profile_selection(app_server, selection)).await
+                    && let Some(reviewer) = reviewer
+                {
+                    self.app_event_tx.send(AppEvent::UpdateApprovalsReviewer(reviewer));
                 }
             }
             AppEvent::UpdateApprovalsReviewer(policy) => {

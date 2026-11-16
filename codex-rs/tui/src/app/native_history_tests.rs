@@ -46,6 +46,44 @@ async fn quota_warnings_are_emitted_once_and_survive_native_replay() -> Result<(
 }
 
 #[tokio::test]
+async fn security_startup_warnings_are_visible_once_in_native_and_owned_history() -> Result<()> {
+    for initial_replay in [false, true] {
+        let mut app = crate::app::test_support::make_test_app().await;
+        let mut tui = crate::tui::test_support::make_test_tui()?;
+        if initial_replay {
+            app.begin_initial_history_replay_buffer();
+        }
+        let message = "Security level Moderate needs the source_envelopes feature.";
+        for _ in 0..2 {
+            app.insert_history_cell(
+                &mut tui,
+                Box::new(history_cell::StartupWarningsCell::new(vec![
+                    "Ordinary startup diagnostic".into(),
+                    message.into(),
+                ])),
+            );
+        }
+        app.finish_initial_history_replay_buffer(&mut tui);
+        let inserted = tui.pending_history_lines_for_test();
+        let rendered = inserted
+            .iter()
+            .map(|line| line.line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_eq!(rendered.matches("Security level Moderate").count(), 1);
+        assert!(!rendered.contains("Ordinary startup diagnostic"));
+        assert_eq!(
+            app.render_transcript_lines_for_reflow(/*width*/ 80).lines,
+            inserted
+        );
+        assert_eq!(history_cell::warning_count(&app.transcript_cells), 2);
+        app.flush_native_history(&mut tui);
+        assert_eq!(tui.pending_history_lines_for_test(), inserted);
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn settled_tool_precedes_queued_output_and_is_not_emitted_twice() -> Result<()> {
     let mut app = crate::app::test_support::make_test_app().await;
     let mut tui = crate::tui::test_support::make_test_tui()?;

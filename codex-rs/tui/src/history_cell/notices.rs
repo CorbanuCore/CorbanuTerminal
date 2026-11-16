@@ -95,7 +95,7 @@ pub(crate) fn new_warning_event(message: String) -> WarningHistoryCell {
     let style = crate::style::status_style(crate::style::StatusTone::Attention);
     WarningHistoryCell {
         server_version_notice: false,
-        visible_in_transcript: false,
+        visible_in_transcript: super::warnings::is_security_or_account_warning(&message),
         key: message.clone(),
         diagnostic: message.clone(),
         details: PrefixedWrappedHistoryCell::new(
