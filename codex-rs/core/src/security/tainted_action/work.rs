@@ -205,6 +205,10 @@ mod tests {
         ("grammar.rs", include_str!("grammar.rs")),
         ("git_config.rs", include_str!("git_config.rs")),
         ("indirect.rs", include_str!("indirect.rs")),
+        (
+            "indirect_exec_policy.rs",
+            include_str!("indirect_exec_policy.rs"),
+        ),
         ("invocation.rs", include_str!("invocation.rs")),
         ("launched_git.rs", include_str!("launched_git.rs")),
         ("launched_input.rs", include_str!("launched_input.rs")),
@@ -215,6 +219,7 @@ mod tests {
         ("option_globs.rs", include_str!("option_globs.rs")),
         ("code_tables.rs", include_str!("code_tables.rs")),
         ("code_variables.rs", include_str!("code_variables.rs")),
+        ("expansion_words.rs", include_str!("expansion_words.rs")),
         ("outbound.rs", include_str!("outbound.rs")),
         ("rerun.rs", include_str!("rerun.rs")),
         ("outputs.rs", include_str!("outputs.rs")),
