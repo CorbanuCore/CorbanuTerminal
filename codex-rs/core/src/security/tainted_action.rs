@@ -34,6 +34,7 @@ mod braces;
 mod certain_cd;
 mod code_tables;
 mod code_variables;
+mod expansion_words;
 mod git_config;
 mod git_helpers;
 mod grammar;
