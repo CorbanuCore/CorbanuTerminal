@@ -147,7 +147,8 @@ fn system_bwrap_warning_for_path(
         return Some(warning.to_string());
     };
 
-    if !system_bwrap_has_user_namespace_access(system_bwrap_path, SYSTEM_BWRAP_PROBE_TIMEOUT)
+    if system_bwrap_user_namespace_probe(system_bwrap_path, SYSTEM_BWRAP_PROBE_TIMEOUT)
+        == UserNamespaceProbe::Denied
         && find_apparmor_bwrap_launcher(system_bwrap_path).is_none()
     {
         return Some(USER_NAMESPACE_WARNING.to_string());
@@ -156,10 +157,20 @@ fn system_bwrap_warning_for_path(
     None
 }
 
-fn system_bwrap_has_user_namespace_access(system_bwrap_path: &Path, timeout: Duration) -> bool {
+#[derive(Debug, PartialEq, Eq)]
+enum UserNamespaceProbe {
+    Available,
+    Denied,
+    Unknown,
+}
+
+fn system_bwrap_user_namespace_probe(
+    system_bwrap_path: &Path,
+    timeout: Duration,
+) -> UserNamespaceProbe {
     let mut command = Command::new(system_bwrap_path);
     command.args(bwrap_user_namespace_probe_args());
-    command_has_user_namespace_access(&mut command, timeout)
+    command_user_namespace_probe(&mut command, timeout)
 }
 
 /// Lets `command`'s child inherit `fd` (cleared close-on-exec in the child
@@ -186,7 +197,9 @@ fn inherit_fd(command: &mut Command, fd: RawFd) {
 /// namespace probe as direct bubblewrap. Callers must still pass the absolute bubblewrap path
 /// after `aa-exec --`; this function does not authorize a PATH-resolved replacement binary.
 pub fn find_apparmor_bwrap_launcher(system_bwrap_path: &Path) -> Option<PathBuf> {
-    if system_bwrap_has_user_namespace_access(system_bwrap_path, SYSTEM_BWRAP_PROBE_TIMEOUT) {
+    if system_bwrap_user_namespace_probe(system_bwrap_path, SYSTEM_BWRAP_PROBE_TIMEOUT)
+        == UserNamespaceProbe::Available
+    {
         return None;
     }
 
@@ -196,7 +209,9 @@ pub fn find_apparmor_bwrap_launcher(system_bwrap_path: &Path) -> Option<PathBuf>
         .args(["-p", APPARMOR_BWRAP_USERNS_PROFILE, "--"])
         .arg(system_bwrap_path)
         .args(bwrap_user_namespace_probe_args());
-    command_has_user_namespace_access(&mut command, SYSTEM_BWRAP_PROBE_TIMEOUT).then_some(launcher)
+    (command_user_namespace_probe(&mut command, SYSTEM_BWRAP_PROBE_TIMEOUT)
+        == UserNamespaceProbe::Available)
+        .then_some(launcher)
 }
 
 /// #581: [`find_apparmor_bwrap_launcher`] for the bundled bubblewrap, run as
@@ -210,7 +225,9 @@ pub fn find_apparmor_bwrap_launcher_for_fd(fd: RawFd) -> Option<PathBuf> {
     let mut direct = Command::new(&bwrap);
     direct.args(bwrap_user_namespace_probe_args());
     inherit_fd(&mut direct, fd);
-    if command_has_user_namespace_access(&mut direct, SYSTEM_BWRAP_PROBE_TIMEOUT) {
+    if command_user_namespace_probe(&mut direct, SYSTEM_BWRAP_PROBE_TIMEOUT)
+        == UserNamespaceProbe::Available
+    {
         return None;
     }
     let launcher = find_aa_exec()?;
@@ -261,7 +278,9 @@ fn bwrap_user_namespace_probe_args() -> [&'static str; 7] {
     ]
 }
 
-fn command_has_user_namespace_access(command: &mut Command, timeout: Duration) -> bool {
+// Diagnostics distinguish confirmed namespace denial from an inconclusive probe.
+// Only Available may authorize using an AppArmor launcher.
+fn command_user_namespace_probe(command: &mut Command, timeout: Duration) -> UserNamespaceProbe {
     let deadline = Instant::now() + timeout;
     command.stdout(Stdio::null()).stderr(Stdio::piped());
     let mut child = loop {
@@ -277,7 +296,7 @@ fn command_has_user_namespace_access(command: &mut Command, timeout: Duration) -
             {
                 thread::sleep(Duration::from_millis(5));
             }
-            Err(_) => return true,
+            Err(_) => return UserNamespaceProbe::Unknown,
         }
     };
     loop {
@@ -306,20 +325,26 @@ fn command_has_user_namespace_access(command: &mut Command, timeout: Duration) -
                     stdout: Vec::new(),
                     stderr,
                 };
-                return output.status.success() || !is_user_namespace_failure(&output);
+                return if output.status.success() {
+                    UserNamespaceProbe::Available
+                } else if is_user_namespace_failure(&output) {
+                    UserNamespaceProbe::Denied
+                } else {
+                    UserNamespaceProbe::Unknown
+                };
             }
             Ok(None) => {
                 if Instant::now() >= deadline {
                     let _ = child.kill();
                     let _ = child.wait();
-                    return true;
+                    return UserNamespaceProbe::Unknown;
                 }
                 thread::sleep(SYSTEM_BWRAP_PROBE_POLL_INTERVAL);
             }
             Err(_) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return true;
+                return UserNamespaceProbe::Unknown;
             }
         }
     }
