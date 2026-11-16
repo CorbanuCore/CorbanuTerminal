@@ -711,21 +711,30 @@ async fn queue_only_agent_mail_wakes_sleeping_root_with_previous_turn_context(
         .load_history(/*include_archived*/ true)
         .await
         .expect("load persisted thread history");
-    assert!(history.items.iter().any(|item| {
-        matches!(
-            item,
-            RolloutItem::ResponseItem(envelope)
-                if matches!(
-                    &envelope.item,
-                    codex_protocol::models::ResponseItem::AgentMessage { content, .. }
-                        if content.iter().any(|content| matches!(
-                            content,
-                            codex_protocol::models::AgentMessageInputContent::InputText { text }
-                                if text == CHILD_MESSAGE
-                        ))
-                )
-        )
-    }));
+    // Main's #1545 contract persists the communication, including delivery bookkeeping,
+    // then reconstructs its AgentMessage on resume.
+    let delivered_mail = history
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            RolloutItem::InterAgentCommunication(communication)
+                if communication.content == CHILD_MESSAGE =>
+            {
+                Some(communication)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(delivered_mail.len(), 1);
+    let communication = delivered_mail[0];
+    assert_eq!(
+        communication.author,
+        AgentPath::try_from("/root/worker").expect("worker path")
+    );
+    assert_eq!(communication.recipient, AgentPath::root());
+    assert!(!communication.trigger_turn);
+    assert!(communication.id.is_some());
+    assert!(communication.recorded_input_order.is_some());
 
     if parent.is_none() {
         return Ok(());

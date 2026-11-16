@@ -396,10 +396,23 @@ async fn account_switch_during_cache_store_preserves_new_catalog_for_next_turn()
             codex_core::test_support::default_http_client_factory(),
         )
         .await;
-    assert_eq!(manager.get_remote_models().await, vec![new_model.clone()]);
+    // Discovery replaces a bundled entry while retaining its authorization metadata.
+    let mut expected_models = codex_models_manager::bundled_models_response()?.models;
+    let expected = expected_models
+        .iter_mut()
+        .find(|model| model.slug == new_model.slug)
+        .expect("bundled gpt-5.4");
+    new_model.visibility = expected.visibility;
+    new_model.default_reasoning_level = expected.default_reasoning_level.clone();
+    new_model.supported_reasoning_levels = expected.supported_reasoning_levels.clone();
+    new_model.max_output_tokens = expected.max_output_tokens;
+    new_model.orchestration = expected.orchestration.clone();
+    new_model.chat_completions = expected.chat_completions.clone();
+    *expected = new_model;
+    assert_eq!(manager.get_remote_models().await, expected_models);
     release_store.send(()).unwrap();
     timeout(Duration::from_secs(10), old_refresh).await??;
-    assert_eq!(manager.get_remote_models().await, vec![new_model]);
+    assert_eq!(manager.get_remote_models().await, expected_models);
     for (mock, account) in [(old_request, "account_id"), (new_request, "second-account")] {
         let requests = mock.requests();
         assert_eq!(requests.len(), 1);
