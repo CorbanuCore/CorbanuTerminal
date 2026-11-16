@@ -47,7 +47,11 @@ fn live_attach_and_snapshot_refresh_send_the_aggressive_approval() -> Result<()>
                 /*failed_thread_name*/ None,
             )
             .await?;
-            let thread_id = app_server.start_thread(&app.config).await?.session.thread_id;
+            let thread_id = app_server
+                .start_thread(&app.config)
+                .await?
+                .session
+                .thread_id;
             if aggressive {
                 crate::security::aggressive::apply_launch_overrides(&mut app.harness_overrides);
             }
@@ -119,7 +123,10 @@ fn saved_pane_restore_sends_the_aggressive_approval() -> Result<()> {
                 /*agent_role*/ None,
                 /*is_closed*/ false,
             );
-            assert_eq!(app.restorable_operator_owned_codex_user_pane_ids(), vec![pane]);
+            assert_eq!(
+                app.restorable_operator_owned_codex_user_pane_ids(),
+                vec![pane]
+            );
             requests.lock().expect("request recorder lock").clear();
 
             // The thread has no rollout, so the restore fails after the request.
@@ -165,7 +172,9 @@ async fn reconnect_sends_the_aggressive_approval() -> Result<()> {
                                 .push(request.params.clone().unwrap_or_default());
                             json!({"error": {"code": -32600, "message": "thread no longer exists"}})
                         }
-                        _ => json!({"error": {"code": -32600, "message": "thread no longer exists"}}),
+                        _ => {
+                            json!({"error": {"code": -32600, "message": "thread no longer exists"}})
+                        }
                     };
                     std::future::ready(Some(response))
                 },
