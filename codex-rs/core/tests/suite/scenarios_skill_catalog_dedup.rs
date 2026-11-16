@@ -193,6 +193,10 @@ async fn skill_catalog_deltas_survive_resume_and_rebuild_after_compaction() -> R
             .rand_bytes(186_usize.saturating_sub(temp_root.to_string_lossy().len()))
             .tempdir_in(temp_root)?,
     );
+    std::fs::write(
+        home.path().join("config.toml"),
+        "[skills.bundled]\nenabled = false\n",
+    )?;
     for (name, description) in [
         ("code-review", "Review code changes for correctness."),
         ("release-notes", "Draft release notes from recent commits."),
@@ -225,10 +229,6 @@ async fn skill_catalog_deltas_survive_resume_and_rebuild_after_compaction() -> R
             .with_home(Arc::clone(&home))
             .with_extensions(Arc::clone(&extensions))
             .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
-            .with_model_info_override("gpt-6-astra", |model| {
-                model.use_responses_lite = true;
-                model.include_skills_usage_instructions = false;
-            })
             .with_config(|config| {
                 super::configure_scenario_catalog(config);
                 config.workspace_roots = vec![config.cwd.clone()];
@@ -236,6 +236,10 @@ async fn skill_catalog_deltas_survive_resume_and_rebuild_after_compaction() -> R
                     .features
                     .enable(Feature::SkillCatalogDeltas)
                     .expect("enable skill catalog deltas");
+            })
+            .with_model_info_override("gpt-6-astra", |model| {
+                model.use_responses_lite = true;
+                model.include_skills_usage_instructions = false;
             })
     };
     let mock = responses::mount_sse_sequence(
@@ -296,20 +300,21 @@ async fn skill_catalog_deltas_survive_resume_and_rebuild_after_compaction() -> R
 
     let limited = builder()
         .with_config(|config| {
-            super::configure_scenario_catalog(config);
-            config.workspace_roots = vec![config.cwd.clone()];
-            config
-                .features
-                .enable(Feature::SkillCatalogDeltas)
-                .expect("enable skill catalog deltas");
-            config.skill_max_context_tokens = NonZeroUsize::new(172);
+            // Corbanu's aliases shorten metadata: keep the allowance small
+            // enough that retained history leaves no room for a fresh skill.
+            config.skill_max_context_tokens = NonZeroUsize::new(100);
         })
         .restart_with_auto_env(&server, &resumed)
         .await?;
     limited
         .submit_turn("Continue with a smaller skills list budget.")
         .await?;
-    let translation = home.path().join("skills/translation");
+    // Keep this source too large for the bounded catalog even with Corbanu's
+    // shared-root aliases and shortened descriptions. Its logical name remains
+    // translation; the nested source path makes omission deterministic.
+    let translation = (0..4).fold(home.path().join("skills/translation"), |path, _| {
+        path.join("source-path-padding-".repeat(10))
+    });
     std::fs::create_dir_all(&translation)?;
     std::fs::write(
         translation.join("SKILL.md"),
@@ -363,7 +368,12 @@ async fn skill_catalog_deltas_survive_resume_and_rebuild_after_compaction() -> R
     limited
         .submit_turn("Continue after removing more skills.")
         .await?;
-    let documentation = home.path().join("skills/documentation");
+    // Its source fits a fresh allowance, but not the remainder already used
+    // by the retained catalog. Keep this distinction despite root aliases.
+    let documentation = home
+        .path()
+        .join("skills/documentation")
+        .join("source-path-padding-".repeat(5));
     std::fs::create_dir_all(&documentation)?;
     std::fs::write(
         documentation.join("SKILL.md"),

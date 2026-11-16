@@ -16,8 +16,8 @@ Settings:
   text: {"verbosity":"low"}
   tool_choice: "auto"
 -- request 1 (turn) --
-00:additional_tools/developer (2; hash=d56ea226c3637559):
-        - namespace/functions; hash=fada4a476a3754dd
+00:additional_tools/developer (2; hash=934525ddff205cb4):
+        - namespace/functions; hash=24afdd3209d0512e
           - custom/exec
           - function/wait
           - function/request_user_input
@@ -78,7 +78,7 @@ Settings:
 
     When calling `wait_agent`, prefer longer waits (minutes) to avoid busy polling.
 
-    There are 4 available concurrency slots, meaning that up to 4 agents can be active at once, including you.
+    There are 6 available concurrency slots, meaning that up to 6 agents can be active at once, including you.
 
     Full-history forks (`fork_turns` omitted or `"all"`) inherit the parent model and reasoning effort and d... so, set `fork_turns` to `"none"`.</multi_agent_role> [hash=d5928243dc643bcc]
 04:message/developer:

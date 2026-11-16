@@ -7,6 +7,7 @@ Scenario: Enterprise access disappears after revocation. Prior calls remain in h
 ## Window 1
 Settings:
   include: ["reasoning.encrypted_content"]
+  instructions: <MODEL_INSTRUCTIONS>
   model: "gpt-6-astra"
   parallel_tool_calls: true
   prompt_cache_key: "<PROMPT_CACHE_KEY 1>"
@@ -15,7 +16,7 @@ Settings:
   stream: true
   text: {"verbosity":"low"}
   tool_choice: "auto"
-  tools (14; hash=c23674e45d0ff686):
+  tools (19; hash=3ac47cfd022c0b7f):
     - function/exec_command: Runs a command in a PTY, returning output or a session ID for ongoing interaction.; args=[cmd, justification, login, max_output_tokens, prefix_rule, sandbox_permissions, shell, tty, workdir, yield_time_ms]; hash=c04108e51a8548c5
     - function/write_stdin: Writes characters to an existing unified exec session and returns recent output.; args=[chars, max_output_tokens, session_id, yield_time_ms]; hash=7fb62d8a3e2df4e2
     - function/list_mcp_resources: Lists resources provided by MCP servers. Resources allow servers to share data that provides cont...; args=[cursor, server]; hash=6792edaff13561bd
@@ -26,15 +27,20 @@ Settings:
     - namespace/clock: Tools for reading and waiting on time.; hash=a80435c7a3a3943f
       - function/curr_time
       - function/sleep
-    - custom/apply_patch: The `apply_patch` tool can be used to edit files. This is a FREEFORM tool, so do not wrap the pat...; hash=dea9f12b0111a4ba
+    - custom/apply_patch: The `apply_patch` tool can be used to edit files. This is a FREEFORM tool, so do not wrap the pat...; hash=1e5e006b407e1daa
+    - function/structured_edit: Modify an existing UTF-8 text file by replacing exact text. This is an edit tool only, not a read...; args=[new_string, old_string, path, replace_all]; hash=3a4d88a8d78298ae
+    - function/structured_write: Create or intentionally overwrite a UTF-8 text file. This is a write tool only, not a read or ins...; args=[content, mode, path]; hash=dd17fa676504c92f
     - function/view_image: View a local image file from the filesystem when visual inspection is needed. Use this for images...; args=[detail, path]; hash=3b766d5bdec5d50e
-    - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=2c8d6295978dbe63
+    - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=a702926d7b2ec538
       - function/followup_task
       - function/interrupt_agent
       - function/list_agents
       - function/send_message
       - function/spawn_agent
       - function/wait_agent
+    - function/spawn_agent_plaintext: Plaintext adapter for `spawn_agent`. Use this for explicit provider/model selection (the native O...; args=[agent_type, fork_turns, message, model, model_provider, reasoning_effort, task_name]; hash=ff273d5a4490a438
+    - function/send_message_plaintext: Plaintext adapter for `send_message`. Use this for explicit provider/model selection (the native ...; args=[message, target]; hash=51fec614a0c4ea4f
+    - function/followup_task_plaintext: Plaintext adapter for `followup_task`. Use this for explicit provider/model selection (the native...; args=[message, target]; hash=10207826fa954415
     - namespace/mcp__enterprise: Tools in the mcp__enterprise namespace.; hash=b12dd185b8ee8c88
       - function/calendar_create_event
       - function/calendar_extract_text
@@ -45,55 +51,51 @@ Settings:
       - function/calendar_list_events
     - web_search; hash=f103e327c6870a46
 -- request 1 (turn) --
-00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer[2]:
+00:message/developer[2]:
     [01] <PERMISSIONS_INSTRUCTIONS>
     [02] <COLLABORATION_MODE>
-02:message/developer:
+01:message/developer:
     <MULTI_AGENT_ROLE>
-03:message/developer:
+02:message/developer:
     <MULTI_AGENT_MODE>
-04:message/user:
+03:message/user:
     <ENVIRONMENT_CONTEXT>
-05:message/user:
+04:message/user:
     List my work events.
-06:configuration_update:reasoning={"effort":"low"}
+05:configuration_update:reasoning={"effort":"low"}
 -- request 2 (turn) --
-07:function_call/mcp__enterprise.calendar_list_events:{}
-08:function_call_output:Wall time: <DURATION> seconds
+06:function_call/mcp__enterprise.calendar_list_events:{}
+07:function_call_output:Wall time: <DURATION> seconds
     Output:
     {"_codex_apps":null}
 
 ## Window 2 (after request 2)
 Settings: relative to window 1
-  tools (13; hash=75ef17d8adc1b3db):
+  tools (18; hash=520fe3239a342130):
     - removed namespace/mcp__enterprise
 -- request 3 (turn) --
-00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer[2]:
+00:message/developer[2]:
     [01] <PERMISSIONS_INSTRUCTIONS>
     [02] <COLLABORATION_MODE>
-02:message/developer:
+01:message/developer:
     <MULTI_AGENT_ROLE>
-03:message/developer:
+02:message/developer:
     <MULTI_AGENT_MODE>
-04:message/user:
+03:message/user:
     <ENVIRONMENT_CONTEXT>
-05:message/user:
+04:message/user:
     List my work events.
-06:configuration_update:reasoning={"effort":"low"}
-07:function_call/mcp__enterprise.calendar_list_events:{}
-08:function_call_output:Wall time: <DURATION> seconds
+05:configuration_update:reasoning={"effort":"low"}
+06:function_call/mcp__enterprise.calendar_list_events:{}
+07:function_call_output:Wall time: <DURATION> seconds
     Output:
     {"_codex_apps":null}
-09:message/assistant:
+08:message/assistant:
     Here are your work events.
-10:message/user:
+09:message/user:
     List my other calendar events.
 -- request 4 (turn) --
-11:function_call/mcp__ordinary.calendar_list_events:{}
-12:function_call_output:Wall time: <DURATION> seconds
+10:function_call/mcp__ordinary.calendar_list_events:{}
+11:function_call_output:Wall time: <DURATION> seconds
     Output:
     {"_codex_apps":null}

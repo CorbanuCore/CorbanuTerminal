@@ -6,15 +6,18 @@ Scenario: Astra reads code-mode timings and the collector notice even at zero to
 
 ## Window 1
 -- request 1 (turn) --
-00:additional_tools/developer (3; hash=bf2e30605ff5dc17):
-        - namespace/functions; hash=fada4a476a3754dd
+00:additional_tools/developer (3; hash=470cdba07bb052d4):
+        - namespace/functions; hash=519613face70a46f
           - custom/exec
           - function/wait
           - function/request_user_input
           - function/request_user_input_async
+          - function/spawn_agent_plaintext
+          - function/send_message_plaintext
+          - function/followup_task_plaintext
         - namespace/clock: Tools for reading and waiting on time.; hash=f402e8c5e9b5e317
           - function/sleep
-        - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=2c8d6295978dbe63
+        - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=a702926d7b2ec538
           - function/followup_task
           - function/interrupt_agent
           - function/list_agents
@@ -75,7 +78,7 @@ Scenario: Astra reads code-mode timings and the collector notice even at zero to
 
     When calling `wait_agent`, prefer longer waits (minutes) to avoid busy polling.
 
-    There are 4 available concurrency slots, meaning that up to 4 agents can be active at once, including you.
+    There are 6 available concurrency slots, meaning that up to 6 agents can be active at once, including you.
 
     Full-history forks (`fork_turns` omitted or `"all"`) inherit the parent model and reasoning effort and d... so, set `fork_turns` to `"none"`.</multi_agent_role> [hash=d5928243dc643bcc]
 04:message/developer:

@@ -534,6 +534,7 @@ pub(super) fn is_bundled_model_instructions(text: &str) -> bool {
                     .expect("bundled model catalog")
                     .models
                     .into_iter()
+                    .chain(crate::model_catalog::upstream_model_catalog().models)
                     .filter_map(|model| model.model_messages?.instructions_template)
                     .collect()
             })

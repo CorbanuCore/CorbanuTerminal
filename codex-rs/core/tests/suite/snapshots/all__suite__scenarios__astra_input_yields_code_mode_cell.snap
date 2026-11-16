@@ -6,15 +6,18 @@ Scenario: Astra continues after new user input yields a running code cell, then 
 
 ## Window 1
 -- request 1 (turn) --
-00:additional_tools/developer (3; hash=69c8f596545517aa):
-        - namespace/functions; hash=13a36c9bc9ada856
+00:additional_tools/developer (3; hash=a96e33808e87449d):
+        - namespace/functions; hash=008ae279b8b9f4a6
           - custom/exec
           - function/wait
           - function/request_user_input
           - function/request_user_input_async
+          - function/spawn_agent_plaintext
+          - function/send_message_plaintext
+          - function/followup_task_plaintext
         - namespace/clock: Tools for reading and waiting on time.; hash=f402e8c5e9b5e317
           - function/sleep
-        - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=2c8d6295978dbe63
+        - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=a702926d7b2ec538
           - function/followup_task
           - function/interrupt_agent
           - function/list_agents
@@ -41,21 +44,21 @@ Scenario: Astra continues after new user input yields a running code cell, then 
 
 02:message/developer[2]:
     [01] <permissions instructions>
-        Filesystem sandboxing defines which files can be read or written. `sandbox_mode` is `read-only`: The san... permits reading files. Network access is restricted. [hash=be7da4425f89053c]
+        Filesystem sandboxing defines which files can be read or written. `sandbox_mode` is `workspace-write`: T...ries requires approval. Network access is restricted. [hash=99963de5837f6638]
         # Escalation Requests
 
         Commands are run outside the sandbox if they are approved by the user, or match an existing rule that al...hell control operators, including but not limited to: [hash=d24ebf5fa4e4b9bb]
 
         - Pipes: |
         - Logical operators: &&, ||
-        <OMITTED 44 LINES; ~790 TOKENS; hash=3a8900343e968d61>
-        NEVER provide a prefix_rule if your command uses a heredoc or herestring.
+        <OMITTED 45 LINES; ~808 TOKENS; hash=587bea404c7facc4>
 
         ### Examples
         Good examples of prefixes:
         - ["npm", "run", "dev"]
         - ["gh", "pr", "check"]
         - ["cargo", "test"]
+         The writable root is `<CWD>`.
         </permissions instructions>
     [02] <collaboration_mode># Collaboration Mode: Default
 
@@ -88,7 +91,7 @@ Scenario: Astra continues after new user input yields a running code cell, then 
 
     When calling `wait_agent`, prefer longer waits (minutes) to avoid busy polling.
 
-    There are 4 available concurrency slots, meaning that up to 4 agents can be active at once, including you.
+    There are 6 available concurrency slots, meaning that up to 6 agents can be active at once, including you.
 
     Full-history forks (`fork_turns` omitted or `"all"`) inherit the parent model and reasoning effort and d... so, set `fork_turns` to `"none"`.</multi_agent_role> [hash=d5928243dc643bcc]
 04:message/developer:
@@ -99,7 +102,7 @@ Scenario: Astra continues after new user input yields a running code cell, then 
       <shell><HOST_SHELL></shell>
       <current_date><CURRENT_DATE></current_date>
       <timezone><HOST_TIMEZONE></timezone>
-      <filesystem><workspace_roots><root><CWD></root></workspace_roots><permission_profile type="managed"><f...ntry></file_system></permission_profile></filesystem> [hash=e8c1de60307d0a3d]
+      <filesystem><workspace_roots><root><CWD></root></workspace_roots><permission_profile type="managed"><f...ntry></file_system></permission_profile></filesystem> [hash=8d38f7686fcb5f7d]
     </environment_context>
 06:message/user:
     Check the release status.
