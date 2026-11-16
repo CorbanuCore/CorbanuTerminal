@@ -700,6 +700,9 @@ impl ExecutorStdioServerLauncher {
             exclude: Vec::new(),
             r#set: HashMap::new(),
             include_only,
+            // #2324: values are read on the executor, so it drops inherited
+            // URL passwords itself; an executor that cannot is refused.
+            drop_url_password_values: armed,
         }
     }
 }
