@@ -1,4 +1,5 @@
 use super::*;
+use codex_protocol::protocol::ErrorEvent;
 use pretty_assertions::assert_eq;
 
 #[derive(Clone, Copy)]
