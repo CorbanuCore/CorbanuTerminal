@@ -339,15 +339,42 @@ more than 20,000 entries or 64 MiB of files, with a subfolder that can't be
 listed, or with a name that isn't valid Unicode, is flagged after every
 command. A link inside one is recorded by its target only: a change to the
 file or folder it points to isn't flagged (the non-admin sandbox doesn't
-protect those either). And the records themselves (in
-`%LOCALAPPDATA%\CorbanuTerminalSandbox`) aren't protected from a command
-whose writable folder contains them, such as your whole user folder.
+protect those either). The records folder
+(`%LOCALAPPDATA%\CorbanuTerminalSandbox`) is denied to elevated commands
+whose writable folder contains it (D453). D598 also refuses existing
+records owned by a sandbox account; see recovery below.
 Its commands run as their own Windows account, so what they create is owned
 by that account, and git refuses such a repository ("dubious ownership")
 unless a `safe.directory` setting trusts it. Corbanu Terminal flags these
 anyway: many git setups trust every folder (`safe.directory = *`), and a
 change inside one of your own repositories (a hook, `core.hooksPath`) is
 never refused.
+
+### Untrusted Windows sandbox records
+
+D598 (#1953), under the product specification's **P0 `/security` levels**
+requirement to enforce controls outside the model, refuses sandbox launches
+that need records owned by an account other than the host user,
+Administrators or SYSTEM. Reparse-point entries and Low-integrity registry
+folders are refused too. Ownership is checked before using existing records,
+including the registry lock, session files and temporary files. The elevated
+watch cannot silently turn off because those records are untrusted.
+
+If you see this refusal, stop all Corbanu sessions and their sandbox commands.
+Preserve the reported records for inspection. Do not take ownership of them
+or copy their contents into new trusted files: an untrusted account may have
+changed the recorded paths or omitted changes.
+
+Restore the records from a known-good backup, if available, after checking
+any project metadata changed since that backup. Otherwise have an
+administrator review the affected writable roots and their `.git`, `.codex`
+and `.agents` contents before retiring the untrusted records. Restore the
+Medium integrity labels on roots used by the legacy sandbox, and remove only
+its verified stale delete-child denies; do not derive that repair list from
+the untrusted JSON. Preserve or reconstruct the pending project-metadata
+confirmations before resuming. The sandbox intentionally stays blocked until
+trusted records are restored; automatically clearing the registry could lose
+those confirmations and leave old labels or denies behind.
 
 **Bare repositories a command plants.** Git also uses a folder that holds
 `HEAD`, `objects` and `refs` as a repository (a bare repository), and reads
