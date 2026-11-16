@@ -1526,14 +1526,14 @@ mod tests {
         );
         let mut unfiltered = expected.clone();
         unfiltered.insert("CORBANU_TEST_2324_SET".to_string(), with_password.clone());
-        assert_eq!(run(false), unfiltered);
+        assert_eq!(run(/*drop_url_password_values*/ false), unfiltered);
 
         expected.retain(|name, _| {
             !inherited
                 .iter()
                 .any(|(dropped, _, has_password)| *has_password && dropped == name)
         });
-        assert_eq!(run(true), expected);
+        assert_eq!(run(/*drop_url_password_values*/ true), expected);
     }
 
     #[tokio::test]

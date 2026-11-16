@@ -66,7 +66,7 @@ fn inherited() -> HashMap<String, String> {
 #[test]
 fn drops_only_inherited_url_passwords() {
     let mut env = inherited();
-    policy(true).retain_inherited_values(&mut env);
+    policy(/*drop_url_password_values*/ true).retain_inherited_values(&mut env);
     // As `retain_launch_env`, names the policy sets are filtered too.
     let expected: HashMap<String, String> = URL_CASES
         .iter()
@@ -79,16 +79,17 @@ fn drops_only_inherited_url_passwords() {
 #[test]
 fn unset_flag_keeps_every_value() {
     let mut env = inherited();
-    policy(false).retain_inherited_values(&mut env);
+    policy(/*drop_url_password_values*/ false).retain_inherited_values(&mut env);
     assert_eq!(env, inherited());
 }
 
 #[test]
 fn flag_is_compatible_with_older_peers() {
     // Omitted when unset, so older executors see an unchanged request ...
-    let unset = serde_json::to_value(policy(false)).expect("serialize");
+    let unset =
+        serde_json::to_value(policy(/*drop_url_password_values*/ false)).expect("serialize");
     assert_eq!(unset.get("dropUrlPasswordValues"), None);
-    let set = serde_json::to_value(policy(true)).expect("serialize");
+    let set = serde_json::to_value(policy(/*drop_url_password_values*/ true)).expect("serialize");
     assert_eq!(set["dropUrlPasswordValues"], true);
     // ... and a request from an older client means "unset".
     let mut old = unset;

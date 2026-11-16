@@ -124,7 +124,11 @@ async fn start_against(
 
 #[tokio::test]
 async fn url_password_filter_is_refused_by_executors_without_it() {
-    let (result, exec) = start_against(/*supported*/ false, params(true)).await;
+    let (result, exec) = start_against(
+        /*supported*/ false,
+        params(/*drop_url_password_values*/ true),
+    )
+    .await;
     let error = result.expect_err("an executor that would ignore the filter is refused");
     assert!(
         error
@@ -137,7 +141,11 @@ async fn url_password_filter_is_refused_by_executors_without_it() {
 
 #[tokio::test]
 async fn url_password_filter_reaches_executors_with_it() {
-    let (result, exec) = start_against(/*supported*/ true, params(true)).await;
+    let (result, exec) = start_against(
+        /*supported*/ true,
+        params(/*drop_url_password_values*/ true),
+    )
+    .await;
     result.expect("supported executor starts the process");
     let exec = exec.expect("exec request sent");
     assert_eq!(exec["envPolicy"]["dropUrlPasswordValues"], true);
@@ -145,7 +153,11 @@ async fn url_password_filter_reaches_executors_with_it() {
 
 #[tokio::test]
 async fn unfiltered_launches_keep_working_with_older_executors() {
-    let (result, exec) = start_against(/*supported*/ false, params(false)).await;
+    let (result, exec) = start_against(
+        /*supported*/ false,
+        params(/*drop_url_password_values*/ false),
+    )
+    .await;
     result.expect("a launch without the filter needs no capability");
     // Older executors never see the new field.
     let exec = exec.expect("exec request sent");
