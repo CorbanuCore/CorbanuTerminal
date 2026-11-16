@@ -782,9 +782,12 @@ async fn session_info_availability_nux_tooltip_snapshot() {
 #[tokio::test]
 async fn session_info_preserves_styled_tooltip_links() {
     let config = test_config().await;
+    // Corbanu turns startup tooltips off by default.
+    let mut local_settings = crate::local_settings::LocalSettings::from(&config);
+    local_settings.tui.show_tooltips = true;
     let cell = new_session_info(
         &config,
-        &crate::local_settings::LocalSettings::from(&config),
+        &local_settings,
         "gpt-5",
         "gpt-5",
         &session_configured_event("gpt-5"),

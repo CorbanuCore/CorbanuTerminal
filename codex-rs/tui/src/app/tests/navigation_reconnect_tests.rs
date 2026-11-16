@@ -239,6 +239,8 @@ async fn reconnect_daemon_command_center_after_socket_replacement_without_a_conv
                         } else if server_available.load(std::sync::atomic::Ordering::SeqCst) { json!({"result": {"thread": restored_previous}}) } else { json!({"error": {"code": -32600, "message": "thread no longer exists"}}) }),
                         "thread/read" if request.params.as_ref().unwrap()["threadId"] == vanished.to_string() => Some(json!({"error": {"code": -32600, "message": "thread no longer exists"}})),
                         "thread/read" => Some(json!({"result": {"thread": fresh.iter().find(|thread| request.params.as_ref().unwrap()["threadId"] == thread.id).unwrap()}})),
+                        // Corbanu's bootstrap also reads the auth status.
+                        "getAuthStatus" => Some(json!({"result": {}})),
                         method => panic!("unexpected daemon reconnect request: {method}"),
                     }
                 })).await?);

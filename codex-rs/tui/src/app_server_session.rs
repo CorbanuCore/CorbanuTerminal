@@ -3790,7 +3790,8 @@ mod tests {
 
         let bootstrap = app_server.bootstrap_with_account(&config, account).await?;
 
-        assert_eq!(app_server.next_request_id, next_request_id + 2);
+        // Corbanu's bootstrap also reads the auth status (one more request).
+        assert_eq!(app_server.next_request_id, next_request_id + 3);
         assert_eq!(
             (
                 bootstrap.account_email.as_deref(),
@@ -3878,7 +3879,8 @@ mod tests {
 
         app_server.bootstrap(&config).await?;
 
-        assert_eq!(app_server.next_request_id, next_request_id + 3);
+        // Corbanu's bootstrap also reads the auth status (one more request).
+        assert_eq!(app_server.next_request_id, next_request_id + 4);
         app_server.shutdown().await?;
         Ok(())
     }
@@ -3906,7 +3908,8 @@ mod tests {
 
         let (bootstrap, ()) =
             tokio::join!(app_server.bootstrap_with_account(&config, account), async {
-                for _ in 0..3 {
+                // Corbanu's bootstrap also reads the auth status first.
+                for _ in 0..4 {
                     let command = commands.recv().await.expect("bootstrap request");
                     let codex_app_server_client::CloudOperation::Request(request) =
                         command.operation
@@ -3931,6 +3934,7 @@ mod tests {
                         ClientRequest::CollaborationModeList { .. } => {
                             Ok(serde_json::json!({"data": []}))
                         }
+                        ClientRequest::GetAuthStatus { .. } => Ok(serde_json::json!({})),
                         request => panic!("unexpected bootstrap request: {request:?}"),
                     };
                     command.response.send(Ok(result)).unwrap();

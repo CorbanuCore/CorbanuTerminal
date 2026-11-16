@@ -103,6 +103,25 @@ pub fn sync_openai_plugins_repo(
     )
 }
 
+/// Unit tests only: the sync with a given `git` and unreachable loopback
+/// fallbacks, so a test can never reach the network.
+#[cfg(test)]
+pub(crate) fn sync_openai_plugins_repo_offline_for_test(
+    codex_home: &Path,
+    git_binary: &Path,
+    http_client_factory: &HttpClientFactory,
+    cancel: &AtomicBool,
+) -> Result<String, String> {
+    sync_openai_plugins_repo_with_transport_overrides(
+        codex_home,
+        Some(git_binary),
+        "http://127.0.0.1:9",
+        "http://127.0.0.1:9/backend-api/plugins/export/curated",
+        http_client_factory,
+        cancel,
+    )
+}
+
 fn sync_openai_plugins_repo_with_transport_overrides(
     codex_home: &Path,
     git_binary: Option<&Path>,
@@ -1282,7 +1301,7 @@ fn checked_zip_path(destination: &Path, relative: &Path) -> Result<PathBuf, Stri
 
 #[cfg(test)]
 #[path = "startup_sync_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 #[cfg(test)]
 #[path = "archive_migration_tests.rs"]

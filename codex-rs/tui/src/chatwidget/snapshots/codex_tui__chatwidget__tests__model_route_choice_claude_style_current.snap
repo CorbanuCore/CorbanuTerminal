@@ -1,14 +1,14 @@
 ---
 source: tui/src/chatwidget/tests/model_route_choice.rs
+assertion_line: 116
 expression: popup
 ---
   Select Model and Effort
   Z.AI API key
 
-  OpenAI  Ambient  Corbanu API  Kimi Code  [Z.AI]  DeepSeek  Claude Plan  Anthropic  Meta  Vercel  Baseten
-  OpenRouter
+   OpenAI   Ambient   Corbanu API   Kimi Code   Z.AI   DeepSeek   Claude Plan   Anthropic   Meta   Vercel  ›
 
-  1. GLM 5.3 Flash · Z.AI (OpenAI-style) (default)  Model: glm-5.3-flash. Native multimodal GLM 5.3 Flash
+  1. GLM 5.3 Flash · Z.AI (OpenAI-style)            Model: glm-5.3-flash. Native multimodal GLM 5.3 Flash
                                                     through the Z.AI API, billed per token; mandatory
                                                     thinking, with low/high/max effort.
 › 2. GLM 5.3 Flash · Z.AI (Claude-style) (current)  Model: glm-5.3-flash. The same model over Z.AI's

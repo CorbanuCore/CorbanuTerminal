@@ -229,12 +229,15 @@ pub(super) fn test_session_telemetry(config: &Config, model: &str) -> SessionTel
 }
 
 pub(super) fn test_model_catalog(_config: &Config) -> Arc<ModelCatalog> {
-    Arc::new(
+    let catalog = Arc::new(
         ModelCatalog::new(crate::test_support::TEST_MODEL_PRESETS.clone())
             .with_collaboration_modes(
             codex_models_manager::collaboration_mode_presets::builtin_collaboration_mode_presets(),
         ),
-    )
+    );
+    // As at startup, the bundled models stand in for `model/list`, so a refresh replaces them.
+    catalog.mark_listed(&crate::test_support::TEST_MODEL_PRESETS);
+    catalog
 }
 
 fn set_config_provider_for_test_model(config: &mut Config, model: &str) {
@@ -434,6 +437,9 @@ pub(crate) fn set_chatgpt_auth(chat: &mut ChatWidget) {
         codex_model_provider_info::ModelProviderInfo::create_openai_provider(
             /*base_url*/ None,
         );
+    // Upstream gates usage reads on the server's requirement, which the
+    // OpenAI provider selected above always has.
+    chat.requires_openai_auth = true;
     chat.model_catalog = test_model_catalog(&chat.config);
 }
 
@@ -1473,6 +1479,13 @@ pub(super) fn render_bottom_first_row(chat: &ChatWidget, width: u16) -> String {
         }
     }
     String::new()
+}
+
+/// The model picker's active provider tab id. Upstream's filled tab strip marks
+/// the active tab by style only (main rendered it as `[Label]`), so tests ask
+/// the view instead of searching the rendered text for brackets.
+pub(crate) fn active_model_picker_tab(chat: &ChatWidget) -> Option<&str> {
+    chat.bottom_pane.active_view_tab_id()
 }
 
 pub(crate) fn render_bottom_popup(chat: &ChatWidget, width: u16) -> String {

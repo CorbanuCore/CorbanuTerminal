@@ -6896,7 +6896,8 @@ async fn ctrl_l_preserves_the_transcript_and_draft_after_clearing_the_screen() -
     let compact = transcript_composer::buffer_text(
         crate::custom_terminal::test_support::last_rendered_buffer(&tui.terminal),
     );
-    assert!(compact.contains("OpenAI Codex"));
+    // Corbanu's session header names the product.
+    assert!(compact.contains("Corbanu Terminal"));
     assert!(compact.contains("New exchange"));
     assert!(!compact.contains("Earlier exchange"));
     let ctrl_t = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL);
@@ -7023,13 +7024,14 @@ async fn clear_header_remains_source_backed_for_model_refresh() -> Result<()> {
     app.chat_widget.set_model("gpt-after-clear");
     app.refresh_session_header(&mut tui)?;
 
-    let rendered = app.transcript_cells[0]
-        .display_lines(/*width*/ 80)
+    // Upstream's header no longer draws the model; its raw text still carries it.
+    let raw = app.transcript_cells[0]
+        .raw_lines()
         .into_iter()
         .map(|line| line.to_string())
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(rendered.contains("gpt-after-clear"));
+    assert!(raw.contains("gpt-after-clear"), "{raw}");
     Ok(())
 }
 

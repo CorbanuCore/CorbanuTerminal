@@ -91,7 +91,9 @@ host_pattern = '^github[.]com$'
         manager.maybe_start_curated_repo_sync_for_config(
             &blocked, /*on_effective_plugins_changed*/ None,
         );
-        assert!(!CURATED_REPO_SYNC_STARTED.load(std::sync::atomic::Ordering::SeqCst));
+        // This manager's own slot: the process-wide flag also reflects other
+        // tests' syncs.
+        assert!(manager.curated_repo_sync.lock().unwrap().is_none());
     }
 }
 

@@ -13,6 +13,7 @@ use tokio::sync::mpsc;
 
 use super::HttpResponseBodyStream;
 use super::response_body_stream::HttpBodyStreamRegistration;
+use super::route_aware_http_client::armed_header_env_var_error;
 use crate::HttpClient;
 use crate::client::ExecServerClient;
 use crate::client::ExecServerError;
@@ -45,11 +46,27 @@ impl ExecServerClient {
         Ok(())
     }
 
+    /// PF-27-S02: refuses, before anything is sent, a header that would read
+    /// an executor variable outside the launch allowlist while this process
+    /// has armed protected launch. The executor need not arm itself.
+    fn ensure_header_env_vars_allowed(params: &HttpRequestParams) -> Result<(), ExecServerError> {
+        let armed = codex_protocol::secretless_launch::is_armed();
+        match params
+            .headers
+            .iter()
+            .find_map(|header| armed_header_env_var_error(header, armed))
+        {
+            Some(message) => Err(ExecServerError::RequestNotSent(message)),
+            None => Ok(()),
+        }
+    }
+
     /// Performs an HTTP request and buffers the response body.
     pub async fn http_request(
         &self,
         mut params: HttpRequestParams,
     ) -> Result<HttpRequestResponse, ExecServerError> {
+        Self::ensure_header_env_vars_allowed(&params)?;
         self.ensure_address_policy_supported(&params).await?;
         params.stream_response = false;
         self.call(HTTP_REQUEST_METHOD, &params).await
@@ -64,6 +81,7 @@ impl ExecServerClient {
         &self,
         mut params: HttpRequestParams,
     ) -> Result<(HttpRequestResponse, HttpResponseBodyStream), ExecServerError> {
+        Self::ensure_header_env_vars_allowed(&params)?;
         self.ensure_address_policy_supported(&params).await?;
         let rpc_client = self.rpc_client().await?;
         params.stream_response = true;

@@ -188,7 +188,8 @@ async fn preserves_custom_permissions_and_disables_required_mcp_servers() -> col
         &app_server.request_handle(),
         TemporaryStructuredThreadOptions {
             thread_source: ThreadSource::Feature("thread_title".to_string()),
-            model: "gpt-5.2".to_string(),
+            // Corbanu's test provider is Z.AI, which refuses a GPT model; use its own.
+            model: chat_widget.current_model().to_string(),
             model_provider: config.model_provider_id.clone(),
             cwd: config.cwd.display().to_string(),
             active_permission_profile: Some("title-restricted".to_string()),

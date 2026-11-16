@@ -1,11 +1,13 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 3777
 expression: reasoning_popup
 ---
   Select Reasoning Level for Kimi Code K3
+
 
 › 1. Low              Low. Faster, lighter reasoning.
   2. High             High. Stronger reasoning with more latency.
   3. More reasoning…  Max consumes usage limits faster
 
-  Press enter to confirm or esc to go back
+  enter default · s session · esc back
