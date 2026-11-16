@@ -1139,7 +1139,7 @@ impl Classifier {
         found: &mut Found,
     ) {
         self.judge_git_words(texts, words, loops, found);
-        // #1661: quoted anchored replacements can also create options.
+        // #1661: quoted pattern replacements can also create options.
         // Keep the original reading above even when this adds a finding.
         if let Some(made) = super::expansion_words::git_options(words) {
             let made_texts: Vec<String> = made.iter().map(|word| word.text.clone()).collect();

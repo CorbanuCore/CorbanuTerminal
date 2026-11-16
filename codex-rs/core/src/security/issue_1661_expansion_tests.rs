@@ -52,8 +52,32 @@ fn issue1661_generated_git_options_ask(line: &str, shell: &str) {
     assert!(kind(&[shell, "-lc", line]).is_some(), "{shell}: {line}");
 }
 
+#[test_case(r#"N=; git clone "${N/%/--upload-pack=./x}" r d"#; "suffix_anchor")]
+#[test_case(r#"N=; git clone "${N/#/--upload-pack=}./x" r d"#; "literal_suffix")]
+#[test_case(r#"N=; git clone "${N/#/-}-upload-pack=./x" r d"#; "option_suffix")]
+#[test_case(r#"N=; git clone "${N/#*/--upload-pack=./x}" r d"#; "prefix_pattern")]
+#[test_case(r#"N=; git clone "${N/*/--upload-pack=./x}" r d"#; "pattern")]
+#[test_case(r#"N=; git clone "${N//#/--upload-pack=./x}" r d"#; "global")]
+#[test_case(r#"N=; git clone "${N/%*/--upload-pack=./x}" r d"#; "suffix_pattern")]
+#[test_case(r#"N=; git clone "${N[0]/#/--upload-pack=./x}" r d"#; "subscript")]
+#[test_case(r#"N=; git clone "${N/#""/--upload-pack=./x}" r d"#; "quoted_pattern")]
+#[test_case(r#"N=; git clone "--${N/#/upload-pack=./x}" r d"#; "literal_prefix")]
+#[test_case("tee -a ${nope:-=mytool}"; "default_writer")]
+#[test_case("print x >> ${nope:-=ls}"; "default_redirect")]
+#[test_case("sort -o ${nope:-=mytool} input"; "default_output")]
+#[test_case("tee -a ${x:-${y:-=mytool}}"; "nested_default")]
+fn issue1661_review1_generated_values_ask(line: &str) {
+    for shell in ["bash", "zsh"] {
+        assert!(kind(&[shell, "-lc", line]).is_some(), "{shell}: {line}");
+    }
+}
+
 #[test]
 fn issue1661_expansion_checks_are_linear() {
+    work::assert_linear("many empty prefixes", |scale| {
+        let line = format!("tee {}=mytool", "${N}".repeat(100 * scale));
+        assert!(script(&line).is_some());
+    });
     work::assert_linear("long generated target", |scale| {
         let line = format!("sort -o {}=mytool input", "{,}".repeat(100 * scale));
         assert!(script(&line).is_some());
@@ -64,6 +88,8 @@ fn issue1661_expansion_checks_are_linear() {
         ("git clone ", "[-]-quiet "),
         ("git clone ", "{,--quiet} "),
         ("git log ", "${N/#/--oneline} "),
+        ("git log ", "${N/%/--oneline} "),
+        ("tee ", "${x:-${y:-=mytool}} "),
     ] {
         work::assert_linear(prefix, |scale| {
             let line = format!("{prefix}{}", unit.repeat(100 * scale));
@@ -117,6 +143,22 @@ fn issue1661_bash_and_zsh_expansion_semantics() {
             continue;
         }
         let expanded = format!("<{}>\n", tool.display());
+        let run = |line: &str| {
+            Command::new(shell)
+                .args(&flags)
+                .args(["-c", line])
+                .env_clear()
+                .env("HOME", temp.path())
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .env("LC_ALL", "C")
+                .env("CORBANU_TEST_NO_NATIVE_KEYRING", "1")
+                .current_dir(temp.path())
+                .output()
+                .unwrap()
+        };
+        // Bash 5 replaces empty scalar/array values in more pattern forms
+        // than macOS's Bash 3.2; both still differ from zsh's global form.
+        let modern_bash = !zsh && run(r#"test "${BASH_VERSINFO[0]}" -ge 5"#).status.success();
         for (line, expected) in [
             (
                 r#"printf '<%s>\n' {,--upload-pack=./x}"#,
@@ -140,6 +182,44 @@ fn issue1661_bash_and_zsh_expansion_semantics() {
                 "<--upload-pack=./x>\n".to_string(),
             ),
             (
+                r#"N=; printf '<%s>\n' "${N/%/--upload-pack=./x}""#,
+                "<--upload-pack=./x>\n".to_string(),
+            ),
+            (
+                r#"N=; printf '<%s>\n' "${N/#/--upload-pack=}./x""#,
+                "<--upload-pack=./x>\n".to_string(),
+            ),
+            (
+                r#"N=; printf '<%s>\n' "${N/#/-}-upload-pack=./x""#,
+                "<--upload-pack=./x>\n".to_string(),
+            ),
+            (
+                r#"N=; printf '<%s>\n' "--${N/#/upload-pack=./x}""#,
+                "<--upload-pack=./x>\n".to_string(),
+            ),
+            (
+                r#"N=; printf '<%s>\n' "${N/#""/--upload-pack=./x}""#,
+                "<--upload-pack=./x>\n".to_string(),
+            ),
+            (
+                r#"N=; printf '<%s>\n' "${N/#*/--upload-pack=./x}" "${N/*/--upload-pack=./x}" "${N//#/--upload-pack=./x}" "${N/%*/--upload-pack=./x}" "${N[0]/#/--upload-pack=./x}""#,
+                if zsh {
+                    "<--upload-pack=./x>\n".repeat(5)
+                } else if modern_bash {
+                    "<--upload-pack=./x>\n<--upload-pack=./x>\n<>\n<--upload-pack=./x>\n<--upload-pack=./x>\n".to_string()
+                } else {
+                    "<>\n".repeat(5)
+                },
+            ),
+            (
+                r#"N=; printf '<%s>\n' ${N:-=mytool}"#,
+                if zsh {
+                    expanded.clone()
+                } else {
+                    "<=mytool>\n".to_string()
+                },
+            ),
+            (
                 r#"N=; printf '<%s>\n' ${N:h}"#,
                 if zsh { "<.>\n" } else { "<>\n" }.to_string(),
             ),
@@ -160,17 +240,7 @@ fn issue1661_bash_and_zsh_expansion_semantics() {
                 },
             ),
         ] {
-            let output = Command::new(shell)
-                .args(&flags)
-                .args(["-c", line])
-                .env_clear()
-                .env("HOME", temp.path())
-                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
-                .env("LC_ALL", "C")
-                .env("CORBANU_TEST_NO_NATIVE_KEYRING", "1")
-                .current_dir(temp.path())
-                .output()
-                .unwrap();
+            let output = run(line);
             assert!(
                 output.status.success(),
                 "{shell}: {line}: {:?}",
