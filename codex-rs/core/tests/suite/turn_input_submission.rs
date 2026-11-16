@@ -1273,6 +1273,11 @@ async fn turn_input_submission_applies_thread_settings_only_after_accepted_input
     .await
     .expect("started turn should reach its first model request");
 
+    // Corbanu (D532 (a), PF-13): a running turn keeps the permissions it was
+    // admitted under, so a steer whose settings would change the turn's
+    // authority (here the approval policy) is returned to the client and none of
+    // its settings are committed. Upstream steers and applies them.
+    let original_environments = codex.environment_selections().await;
     let steered_cwd = test.config.cwd.join("steered-environment");
     let steered_environments =
         TurnEnvironmentSelections::new(steered_cwd.clone(), vec![local(steered_cwd)]);
@@ -1281,28 +1286,24 @@ async fn turn_input_submission_applies_thread_settings_only_after_accepted_input
             user_message_request("steer active turn").with_thread_settings(
                 ThreadSettingsOverrides {
                     approval_policy: Some(AskForApproval::Never),
-                    environments: Some(steered_environments.clone().into_requests()),
+                    environments: Some(steered_environments.into_requests()),
                     ..Default::default()
                 },
             ),
         )
         .await
-        .expect("persistent settings should not reject a steer");
+        .expect("an authority-changing steer should return a typed refusal");
     assert_eq!(
         steered,
-        TurnInputSubmission::Steered {
-            root_turn_id: turn_id.clone(),
-            turn_id
+        TurnInputSubmission::NotSubmitted {
+            reason: NotSubmittedReason::AuthorizationChanged,
         }
     );
     assert_eq!(
         codex.config_snapshot().await.approval_policy,
-        AskForApproval::Never
+        AskForApproval::OnRequest
     );
-    assert_eq!(
-        codex.environment_selections().await,
-        steered_environments.environments
-    );
+    assert_eq!(codex.environment_selections().await, original_environments);
 
     release_response
         .send(())
@@ -1332,12 +1333,9 @@ async fn turn_input_submission_applies_thread_settings_only_after_accepted_input
     );
     assert_eq!(
         codex.config_snapshot().await.approval_policy,
-        AskForApproval::Never
+        AskForApproval::OnRequest
     );
-    assert_eq!(
-        codex.environment_selections().await,
-        steered_environments.environments
-    );
+    assert_eq!(codex.environment_selections().await, original_environments);
     server.shutdown().await;
 }
 
