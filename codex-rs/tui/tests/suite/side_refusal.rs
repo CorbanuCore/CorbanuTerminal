@@ -107,14 +107,6 @@ async fn tmux_review_refusal_in_side_conversation_stays_visible() -> Result<()> 
         .count();
     assert_eq!(model_requests, 1, "only the first turn reached the model");
 
-    // Upstream keeps a refused `/review` in the composer (it needs dispatch validation), so
-    // the first Ctrl+C clears that draft and the second returns to the main thread.
-    pane.send_key(TmuxKey::CtrlC)?;
-    pane.wait_stable_until(
-        "the refused draft is cleared",
-        Duration::from_secs(/*secs*/ 15),
-        |screen| !screen.contains("› /review") && screen.contains("Side from main thread"),
-    )?;
     pane.send_key(TmuxKey::CtrlC)?;
     pane.wait_stable_until(
         "back on the main thread",

@@ -1826,6 +1826,18 @@ impl ChatWidget {
             "'/{}' is unavailable in side conversations. {SIDE_SLASH_COMMAND_UNAVAILABLE_HINT}",
             cmd.command()
         ));
+        // #1039: the hint says Ctrl+C returns to the main thread, so a refused command that the
+        // composer kept for dispatch validation must not stay behind as a draft (Ctrl+C would
+        // only clear it).
+        if cmd.requires_dispatch_validation() {
+            let draft = self.bottom_pane.composer_text();
+            let command = format!("/{}", cmd.command());
+            let first_line = draft.lines().next().unwrap_or_default().trim();
+            if first_line == command || first_line.starts_with(&format!("{command} ")) {
+                self.bottom_pane
+                    .set_composer_text(String::new(), Vec::new(), Vec::new());
+            }
+        }
         self.bottom_pane.drain_pending_submission_state();
         false
     }
