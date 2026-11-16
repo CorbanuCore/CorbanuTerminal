@@ -59,6 +59,8 @@ pub struct NetworkPolicy {
     account: Option<u64>,
     // An account lifecycle can revoke its requests without mutating shared administrator rules.
     lifecycle: Option<Box<NetworkPolicy>>,
+    // Keep lifecycle owners alive through credential snapshots without changing policy equality.
+    owners: Vec<Arc<dyn Send + Sync>>,
 }
 
 impl fmt::Debug for NetworkPolicy {
@@ -149,6 +151,7 @@ impl NetworkPolicyController {
             endpoints: None,
             account: None,
             lifecycle: None,
+            owners: Vec::new(),
         }
     }
 
@@ -200,6 +203,7 @@ impl NetworkPolicy {
             endpoints: None,
             account: None,
             lifecycle: None,
+            owners: Vec::new(),
         }
     }
 
@@ -221,6 +225,19 @@ impl NetworkPolicy {
             None => lifecycle,
         }));
         (self, controller)
+    }
+
+    /// Keeps a credential lifecycle owner alive through this snapshot and its requests.
+    /// Attach only to exported snapshots, never to a policy stored by the owner itself.
+    pub fn with_lifetime_guard(mut self, owner: Arc<dyn Send + Sync>) -> Self {
+        if !self
+            .owners
+            .iter()
+            .any(|existing| Arc::ptr_eq(existing, &owner))
+        {
+            self.owners.push(owner);
+        }
+        self
     }
 
     /// Narrows a bootstrap client's existing local policy to exact endpoint URLs.
@@ -267,6 +284,15 @@ impl NetworkPolicy {
             (Some(caller), None) => Some(caller),
             (None, credentials) => credentials.clone(),
         };
+        for owner in &credentials.owners {
+            if !self
+                .owners
+                .iter()
+                .any(|existing| Arc::ptr_eq(existing, owner))
+            {
+                self.owners.push(Arc::clone(owner));
+            }
+        }
         self.account = self.account.or(credentials.account);
         if let Some(endpoints) = &credentials.endpoints {
             self = self.restrict_to_endpoints(endpoints.as_ref().clone());
@@ -366,6 +392,7 @@ impl NetworkPolicy {
             return Ok(NetworkPermit {
                 inner: None,
                 lifecycle,
+                _owners: self.owners.clone(),
             });
         };
         let mut state = lock_state(state);
@@ -392,6 +419,7 @@ impl NetworkPolicy {
         Ok(NetworkPermit {
             inner: Some(permit),
             lifecycle,
+            _owners: self.owners.clone(),
         })
     }
 }
@@ -401,6 +429,7 @@ impl NetworkPolicy {
 pub struct NetworkPermit {
     inner: Option<Arc<Permit>>,
     lifecycle: Option<Box<NetworkPermit>>,
+    _owners: Vec<Arc<dyn Send + Sync>>,
 }
 
 impl fmt::Debug for NetworkPermit {
