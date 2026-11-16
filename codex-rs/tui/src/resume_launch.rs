@@ -11,6 +11,7 @@ use crate::Cli;
 use crate::app_server_session::AppServerSession;
 use crate::app_server_session::ResumeModelSettings;
 use crate::legacy_core::config::Config;
+use crate::resume_notice::resume_fallback_notice;
 use crate::resume_picker;
 use crate::session_resume::RecordedProviderAccount;
 use crate::startup_provider::StartupProviderResolution;
@@ -73,7 +74,8 @@ pub(crate) fn chosen_thread_account_error(
 }
 
 /// Resolves the session `corbanu resume` names. The picker consumes the app
-/// server, as it always has; a later step starts a new one.
+/// server, as it always has; a later step starts a new one. The fallback
+/// notice uses the lookup scope before onboarding can change the config.
 pub(crate) async fn select_resume_launch_session(
     tui: &mut Tui,
     cli: &Cli,
@@ -82,14 +84,14 @@ pub(crate) async fn select_resume_launch_session(
     uses_remote_workspace: bool,
     remote_cwd_override: Option<&Path>,
     picker_context: resume_picker::SessionPickerLaunchContext,
-) -> color_eyre::Result<ResumeLaunchSelection> {
+) -> color_eyre::Result<(ResumeLaunchSelection, Option<String>)> {
     if let Some(id_str) = cli.resume_session_id.as_deref() {
         let Some(startup_app_server) = app_server.as_mut() else {
             unreachable!("app server should be initialized for --resume <id>");
         };
         let target =
             crate::lookup_session_target_with_app_server(startup_app_server, id_str).await?;
-        return Ok(
+        return Ok((
             match crate::explicit_resume_selection(
                 config.codex_home.as_ref(),
                 id_str,
@@ -99,7 +101,8 @@ pub(crate) async fn select_resume_launch_session(
                 Some(selection) => ResumeLaunchSelection::Selected(selection),
                 None => ResumeLaunchSelection::Missing(id_str.to_string()),
             },
-        );
+            None,
+        ));
     }
     if cli.resume_last {
         let filter_cwd = crate::latest_session_cwd_filter(
@@ -118,25 +121,31 @@ pub(crate) async fn select_resume_launch_session(
             cli.resume_include_non_interactive,
         )
         .await?;
-        return Ok(ResumeLaunchSelection::Selected(match target {
+        let selection = match target {
             Some(target_session) => resume_picker::SessionSelection::Resume(target_session),
             None => resume_picker::SessionSelection::StartFresh,
-        }));
+        };
+        let notice = resume_fallback_notice(
+            cli,
+            &selection,
+            (!uses_remote_workspace).then_some(config.model_provider_id.as_str()),
+            filter_cwd,
+        );
+        return Ok((ResumeLaunchSelection::Selected(selection), notice));
     }
     let Some(app_server) = app_server.take() else {
         unreachable!("app server should be initialized for --resume picker");
     };
-    Ok(ResumeLaunchSelection::Selected(
-        resume_picker::run_resume_picker_with_app_server(
-            tui,
-            config,
-            cli.resume_show_all,
-            cli.resume_include_non_interactive,
-            app_server,
-            picker_context,
-        )
-        .await?,
-    ))
+    let selection = resume_picker::run_resume_picker_with_app_server(
+        tui,
+        config,
+        cli.resume_show_all,
+        cli.resume_include_non_interactive,
+        app_server,
+        picker_context,
+    )
+    .await?;
+    Ok((ResumeLaunchSelection::Selected(selection), None))
 }
 
 /// PF-84 (#545): the named account the selected thread ran on, which the app

@@ -302,6 +302,57 @@ async fn tmux_configure_many_preserves_first_default_restart_and_request() -> Re
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_resume_last_notice_keeps_provider_searched_before_onboarding() -> Result<()> {
+    if !TmuxServer::should_run("#2389 resume notice after switching providers")? {
+        return Ok(());
+    }
+    let repo_root = codex_utils_cargo_bin::repo_root()?;
+    let binary = codex_binary(&repo_root)?;
+    let home = tempdir()?;
+    let server = MockServer::start().await;
+    write_config(home.path(), &repo_root, &server.uri())?;
+    let config_path = home.path().join("config.toml");
+    let mut config = fs::read_to_string(&config_path)?;
+    config.push_str("\n[features]\nnamed_accounts = true\n");
+    fs::write(&config_path, config)?;
+
+    let tmux = TmuxServer::start("resume_last_before_onboarding")?;
+    register_evidence(&tmux, home.path(), &binary)?;
+    let session = tmux.new_session(super::resume_recorded_account::resume_spec(
+        "resume-last-before-onboarding",
+        &binary,
+        &repo_root,
+        home.path(),
+        &["--last".to_string()],
+    ))?;
+    let pane = session.primary_pane();
+    pane.wait_stable_contains("Provider: OpenAI Codex Account", READY_TIMEOUT)?;
+    configure_api_key(
+        pane,
+        "Provider: PF53 Loopback PF53_LOOPBACK_API_KEY",
+        &synthetic_canary("resume-notice"),
+    )?;
+    wait_provider_ready(pane, "Provider: PF53 Loopback")?;
+    select_label(pane, "Done")?;
+    wait_chat_ready(pane)?;
+
+    ensure!(
+        fs::read_to_string(config_path)?.contains("model_provider = \"pf53-loopback\""),
+        "onboarding did not switch providers"
+    );
+    let screen = pane.capture_scrollback_tail(/*lines*/ 100)?;
+    let screen = screen.split_whitespace().collect::<Vec<_>>().join(" ");
+    let notice_scope = screen
+        .split_once("No resumable ")
+        .and_then(|(_, notice)| notice.split_once(". Starting a new conversation."))
+        .map(|(scope, _)| scope)
+        .context("chat did not show the resume fallback notice")?;
+    insta::assert_snapshot!(notice_scope, @"interactive conversation found for model provider `openai` in the current directory");
+    super::resume_recorded_account::exit_tui(pane)?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tmux_deferred_corbanu_api_cancel_with_fallback_continues_to_chat() -> Result<()> {
     if !TmuxServer::should_run("PF-53 deferred Corbanu API fallback cancellation")? {
         return Ok(());
