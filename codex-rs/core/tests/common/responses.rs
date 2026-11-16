@@ -399,7 +399,9 @@ impl ResponsesRequest {
 
     /// The text of the `function_call_output` matching `call_id`, whether its
     /// `output` is a string or a list of content items (every text item,
-    /// joined by newlines: MCP results arrive as content items).
+    /// joined by newlines: MCP results arrive as content items). `None` when
+    /// a list holds no text item, so a negative check never passes on
+    /// nothing.
     pub fn function_call_output_any_text(&self, call_id: &str) -> Option<String> {
         let binding = self.input();
         let item = binding.iter().find(|item| {
@@ -408,13 +410,13 @@ impl ResponsesRequest {
         })?;
         match item.get("output")? {
             Value::String(text) => Some(text.clone()),
-            Value::Array(items) => Some(
-                items
+            Value::Array(items) => {
+                let texts = items
                     .iter()
                     .filter_map(|item| item.get("text").and_then(Value::as_str))
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            ),
+                    .collect::<Vec<_>>();
+                (!texts.is_empty()).then(|| texts.join("\n"))
+            }
             _ => None,
         }
     }
