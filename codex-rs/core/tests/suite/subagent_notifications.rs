@@ -181,24 +181,14 @@ fn log_field<'a>(line: &'a str, name: &str) -> Option<&'a str> {
         .map(|value| value.trim_matches('"'))
 }
 
-/// Whether the agent-communication log shows `parent_thread_id` receiving a
-/// subagent result: a `kind="result"` send to it and the receive event with the
-/// same communication ID.
-fn parent_received_subagent_result(logs: &str, parent_thread_id: ThreadId) -> bool {
-    let receiver = format!("receiver_thread_id={parent_thread_id}");
-    logs.lines()
-        .filter(|line| {
-            line.contains("state=\"send\"")
-                && line.contains("kind=\"result\"")
-                && line.contains(&receiver)
-        })
-        .filter_map(|line| log_field(line, "communication_id"))
-        .any(|communication_id| {
-            logs.lines().any(|line| {
-                line.contains("state=\"receive\"")
-                    && log_field(line, "communication_id") == Some(communication_id)
-            })
-        })
+/// Whether AgentControl has finished submitting a subagent result to the parent.
+fn parent_result_submission_finished(logs: &str, parent_thread_id: ThreadId) -> bool {
+    let receiver = parent_thread_id.to_string();
+    logs.lines().any(|line| {
+        log_field(line, "state") == Some("send")
+            && log_field(line, "kind") == Some("result")
+            && log_field(line, "receiver_thread_id") == Some(receiver.as_str())
+    })
 }
 
 fn tool_parameter_description(tool: &Value, parameter_name: &str) -> Option<String> {
@@ -1077,6 +1067,11 @@ async fn subagent_notification_is_included_without_wait() -> Result<()> {
         .with_writer(MockWriter::new(output))
         .finish();
     let _guard = tracing::subscriber::set_default(subscriber);
+    // #1177: keep two dispatchers alive so registration on another test's thread
+    // cannot globally disable a communication callsite for this subscriber.
+    let _parallel_dispatch = tracing::Dispatch::new(
+        tracing_subscriber::registry().with(tracing_subscriber::filter::LevelFilter::OFF),
+    );
 
     let server = start_mock_server().await;
     let (test, spawned_id) = setup_turn_one_with_spawned_child(
@@ -1094,24 +1089,29 @@ async fn subagent_notification_is_included_without_wait() -> Result<()> {
         }
     })
     .await?;
-    // #1177, #1058: submit turn 2 only after the parent session has queued the
-    // notification. The mailbox phase is no signal for that: the row is marked
-    // `Submitted` before the hand-off. AgentControl logs `state="send"` once the
-    // hand-off has returned, and the parent logs `state="receive"` with the same
-    // communication ID once the notification is in its mailbox. Turn 2 then
-    // finds it there.
+    // #1177, #1058: Completed and the durable Submitted phase both precede
+    // hand-off. AgentControl logs the result send after enqueueing the parent's
+    // operation. A subsequent settings roundtrip through that same FIFO waits
+    // until the parent has handled it and admitted the notification to its mailbox.
+    // This also works when mail is queued without automatically continuing a turn.
     let parent_thread_id = test.session_configured.thread_id;
     tokio::time::timeout(POSITIVE_WAIT, async {
         loop {
             let logs = String::from_utf8(output.lock().expect("buffer lock").clone())
                 .expect("logs should be UTF-8");
-            if parent_received_subagent_result(&logs, parent_thread_id) {
+            if parent_result_submission_finished(&logs, parent_thread_id) {
                 break;
             }
             sleep(Duration::from_millis(10)).await;
         }
     })
     .await?;
+    timeout(
+        POSITIVE_WAIT,
+        test.codex
+            .update_thread_settings(ThreadSettingsOverrides::default()),
+    )
+    .await??;
 
     let turn2 = mount_sse_once_match(
         &server,
