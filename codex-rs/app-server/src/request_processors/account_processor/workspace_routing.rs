@@ -341,7 +341,20 @@ impl AccountRequestProcessor {
                     .into());
                 }
             };
-            let auth = self.auth_manager.auth_cached();
+            // D562 (#2378): outside a model request (account/read and the
+            // background refresh) discovery is the server's own backend call,
+            // so it runs on the session's account. It is skipped unless that
+            // is the default login, which is never sent while a session runs
+            // on a named account, its account is not known yet, or sessions
+            // on different accounts are open. A model request's routing
+            // (`request`) comes from a provider on this default-login
+            // manager; named accounts' managers have no resolver.
+            let session_on_default_login =
+                request.is_some() || self.auth_manager.session_uses_default_login();
+            let auth = self
+                .auth_manager
+                .auth_cached()
+                .filter(|_| session_on_default_login);
             let provider = create_model_provider(
                 config.model_provider.clone(),
                 Some(self.auth_manager.clone()),
@@ -417,6 +430,11 @@ impl AccountRequestProcessor {
                             &discovery_auth,
                             config.http_client_factory(),
                         );
+                        // The session may have moved to a named account
+                        // since; never send the default login then.
+                        if request.is_none() && !self.auth_manager.session_uses_default_login() {
+                            return Err(WorkspaceRoutingError::AccountChanged.into());
+                        }
                         match client.get_accounts_check().await {
                             Ok(response) => break response,
                             Err(error) => {
@@ -515,7 +533,10 @@ impl AccountRequestProcessor {
                 *fetch.routing.lock().await = Some(routing.clone());
                 Some(routing)
             } else {
-                *self.workspace_routing.lock().await = None;
+                // A skipped discovery leaves the default login's cache alone.
+                if session_on_default_login {
+                    *self.workspace_routing.lock().await = None;
+                }
                 None
             };
             if let Some(request) = request.filter(|_| workspace_routing.is_some()) {
