@@ -1512,6 +1512,19 @@ impl BottomPaneView for RequestUserInputOverlay {
         if key_event.kind == KeyEventKind::Release {
             return;
         }
+        if let Some(result) = self.composer.take_burst_submission(Instant::now()) {
+            self.handle_composer_input_result(result);
+            if self.done {
+                return;
+            }
+        }
+        if !matches!(key_event.code, KeyCode::Char(_) | KeyCode::Enter)
+            || key_event
+                .modifiers
+                .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+        {
+            self.composer.cancel_pending_burst_submission();
+        }
 
         self.snooze_auto_resolution();
 
@@ -1751,6 +1764,10 @@ impl BottomPaneView for RequestUserInputOverlay {
     }
 
     fn flush_paste_burst_if_due(&mut self) -> bool {
+        if let Some(result) = self.composer.take_burst_submission(Instant::now()) {
+            self.handle_composer_input_result(result);
+            return true;
+        }
         self.composer.flush_paste_burst_if_due()
     }
 

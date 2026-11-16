@@ -8,6 +8,7 @@ use crossterm::event::KeyEvent;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use std::time::Duration;
+use std::time::Instant;
 
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
@@ -81,6 +82,21 @@ impl ComposerInput {
         let handled = self.inner.handle_paste(pasted);
         self.drain_app_events();
         handled
+    }
+
+    /// Cancel a held Enter when the embedding UI handles navigation or a shortcut.
+    pub fn cancel_pending_burst_submission(&mut self) {
+        self.inner.cancel_pending_burst_submission();
+    }
+
+    /// Poll before input and on redraw ticks for a long burst's delayed Enter.
+    pub fn take_burst_submission(&mut self) -> ComposerAction {
+        let result = self.inner.take_burst_submission(Instant::now());
+        self.drain_app_events();
+        match result {
+            Some(InputResult::Submitted { text, .. }) => ComposerAction::Submitted(text),
+            _ => ComposerAction::None,
+        }
     }
 
     /// Override the footer hint items displayed under the composer.

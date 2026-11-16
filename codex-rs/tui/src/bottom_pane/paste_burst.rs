@@ -58,7 +58,14 @@
 //!
 //! # Timing Model
 //!
-//! There are two timeouts:
+//! The character and idle timeouts classify bursts; an additional Enter lookahead preserves
+//! rule #22 (submit a long single-line burst) without sending pasted lines separately:
+//!
+//! - `BURST_ENTER_LOOKAHEAD`: hold an ambiguous Enter for 32ms. More text/Enter turns it into
+//!   a newline; silence allows the caller to take and submit it. Normal flushing waits until
+//!   this decision is resolved. Explicit paste and draft replacement cancel the held Enter.
+//!
+//! Burst timeouts:
 //!
 //! - `PASTE_BURST_CHAR_INTERVAL`: maximum delay between consecutive "plain" chars for them to be
 //!   considered part of a single burst. It also bounds how long `pending_first_char` is held.
@@ -159,6 +166,9 @@ use std::time::Instant;
 const PASTE_BURST_MIN_CHARS: u16 = 3;
 const PASTE_ENTER_SUPPRESS_WINDOW: Duration = Duration::from_millis(120);
 const SINGLE_LINE_SUBMIT_MIN_CHARS: usize = 16;
+// Four 8ms character intervals cover short terminal delivery gaps while keeping
+// automated single-line submission below a perceptible typing pause.
+pub(super) const BURST_ENTER_LOOKAHEAD: Duration = Duration::from_millis(32);
 
 // Maximum delay between consecutive chars to be considered part of a paste burst.
 const PASTE_BURST_CHAR_INTERVAL: Duration = Duration::from_millis(8);
@@ -179,6 +189,7 @@ pub(crate) struct PasteBurst {
     active: bool,
     // Hold first fast char briefly to avoid rendering flicker
     pending_first_char: Option<(char, Instant)>,
+    pending_enter: Option<Instant>,
 }
 
 pub(crate) enum CharDecision {
@@ -297,6 +308,9 @@ impl PasteBurst {
     ///   suppression) and no burst followed before the timeout elapsed.
     /// - [`FlushResult::None`] when the timeout has not elapsed, or there is nothing to flush.
     pub fn flush_if_due(&mut self, now: Instant) -> FlushResult {
+        if self.pending_enter.is_some() {
+            return FlushResult::None;
+        }
         let timeout = if self.is_active_internal() {
             PASTE_BURST_ACTIVE_IDLE_TIMEOUT
         } else {
@@ -351,10 +365,10 @@ impl PasteBurst {
         self.is_active() || in_burst_window
     }
 
-    /// Decide if an Enter during a burst should submit a long single-line input.
+    /// Decide if an Enter during a burst is a candidate for delayed single-line submission.
     ///
     /// The normal burst rule treats Enter as a pasted newline. That is correct for
-    /// short/multiline paste streams, but automated terminal drivers and some
+    /// multiline paste streams, but automated terminal drivers and some
     /// shells emit a long single-line prompt as rapid chars followed by a real
     /// submit Enter. Without this escape hatch the prompt remains in the
     /// composer until Ctrl+C clears it into history without dispatching a turn.
@@ -368,6 +382,45 @@ impl PasteBurst {
         let buffered_chars =
             self.buffer.chars().count() + usize::from(self.pending_first_char.is_some());
         visible_text.chars().count() + buffered_chars >= SINGLE_LINE_SUBMIT_MIN_CHARS
+    }
+
+    /// Hold a possible submit Enter until a short quiet interval confirms it.
+    pub fn defer_enter(&mut self, now: Instant) {
+        self.pending_enter = Some(now + BURST_ENTER_LOOKAHEAD);
+    }
+
+    /// Take an Enter whose lookahead ended without more paste input.
+    pub fn take_due_enter(&mut self, now: Instant) -> bool {
+        if self.pending_enter.is_some_and(|deadline| now >= deadline) {
+            self.pending_enter = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// More text (or another Enter) proves the held Enter belonged to the paste.
+    pub fn continue_after_enter(&mut self, now: Instant) {
+        if self.pending_enter.take().is_some() {
+            self.append_control_char_if_active('\n', now);
+            self.last_plain_char_time = Some(now);
+        }
+    }
+
+    /// A bracketed paste following a held Enter continues the same draft.
+    pub fn flush_pending_enter_before_paste(&mut self, now: Instant) -> Option<String> {
+        self.pending_enter?;
+        self.continue_after_enter(now);
+        self.flush_before_modified_input()
+    }
+
+    pub fn has_pending_enter(&self) -> bool {
+        self.pending_enter.is_some()
+    }
+
+    /// Navigation/cancellation must not leave an automatic submission armed.
+    pub fn cancel_pending_enter(&mut self) -> bool {
+        self.pending_enter.take().is_some()
     }
 
     /// Whether the not-yet-materialized burst begins with the supplied character.
@@ -455,6 +508,7 @@ impl PasteBurst {
 
     /// Before applying modified/non-char input: flush buffered burst immediately.
     pub fn flush_before_modified_input(&mut self) -> Option<String> {
+        self.pending_enter = None;
         if !self.is_active() {
             return None;
         }
@@ -471,6 +525,7 @@ impl PasteBurst {
     /// Does not emit or clear the buffered text itself; callers should have
     /// already flushed (if needed) via one of the flush methods above.
     pub fn clear_window_after_non_char(&mut self) {
+        self.pending_enter = None;
         self.consecutive_plain_char_burst = 0;
         self.last_plain_char_time = None;
         self.burst_window_until = None;
@@ -490,6 +545,7 @@ impl PasteBurst {
     }
 
     pub fn clear_after_explicit_paste(&mut self) {
+        self.pending_enter = None;
         self.last_plain_char_time = None;
         self.consecutive_plain_char_burst = 0;
         self.burst_window_until = None;
