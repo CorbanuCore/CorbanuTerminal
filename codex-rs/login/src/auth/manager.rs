@@ -3200,6 +3200,18 @@ pub struct AuthRuntimeConfig {
     pub auth_route_config: AuthRouteConfig,
 }
 
+impl Drop for AuthManager {
+    fn drop(&mut self) {
+        if self.named_account.is_some() {
+            // Retained clients must not outlive the lifecycle owner. A later manager
+            // for the same account has a new controller and cannot revoke this one.
+            self.auth_route_config
+                .application_network_policy()
+                .invalidate();
+        }
+    }
+}
+
 impl Debug for AuthManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AuthManager")
@@ -3693,10 +3705,22 @@ impl AuthManager {
 
     /// Refreshes auth, then captures credentials and their account-bound factory together.
     /// The auth read lock prevents an identity change between the two snapshots.
-    pub async fn auth_with_http_client_factory(&self) -> Option<(CodexAuth, HttpClientFactory)> {
+    pub async fn auth_with_http_client_factory(
+        self: &Arc<Self>,
+    ) -> Option<(CodexAuth, HttpClientFactory)> {
         self.auth().await;
         let cached = self.inner.read().ok()?;
-        Some((cached.auth.clone()?, self.http_client_factory()))
+        let mut factory = self.http_client_factory();
+        if self.named_account.is_some() {
+            // for_session() may return a temporary manager. Its exported clients and
+            // in-flight requests keep that same lifecycle reachable for later logout.
+            let policy = factory
+                .network_policy()
+                .clone()
+                .with_lifetime_guard(self.clone());
+            factory = factory.with_network_policy(policy);
+        }
+        Some((cached.auth.clone()?, factory))
     }
 
     pub async fn agent_identity_auth(
@@ -4226,9 +4250,7 @@ impl AuthManager {
             auth_changed_for_refresh && !super::source::same_source(previous, new_auth.as_ref());
         let login_changed = auth_changed_for_refresh && !same_login(previous, new_auth.as_ref());
         if owner_changed {
-            self.auth_route_config
-                .application_network_policy()
-                .invalidate();
+            self.auth_route_config.owner_changed(new_auth.is_some());
         }
         self.clear_provider_api_key_cache();
         if auth_changed_for_refresh {

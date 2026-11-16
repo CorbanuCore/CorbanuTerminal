@@ -7,6 +7,103 @@ use reqwest::Url;
 
 use super::*;
 
+#[tokio::test]
+async fn independent_account_lifecycle_keeps_live_administrator_restrictions() {
+    let admin = NetworkPolicyController::default();
+    let shared = admin.policy();
+    let allowed = Url::parse("https://example.com/allowed").unwrap();
+    let denied = Url::parse("https://other.example/denied").unwrap();
+    let (named, owner) = shared.clone().with_independent_account_lifecycle();
+    assert!(owner.publish(owner.policy().revision(), DestinationPolicy::Unrestricted));
+    assert!(matches!(
+        named.acquire(&allowed),
+        Err(NetworkPolicyDenied::Unavailable)
+    ));
+    assert!(admin.publish(
+        shared.revision(),
+        DestinationPolicy::Restricted {
+            allowed_hosts: BTreeSet::from(["example.com".to_string()]),
+        }
+    ));
+    assert!(matches!(
+        named.acquire(&denied),
+        Err(NetworkPolicyDenied::Destination)
+    ));
+    assert!(matches!(
+        named.acquire_for_unsupported_sdk(),
+        Err(NetworkPolicyDenied::UnsupportedTransport)
+    ));
+    let captured = named.clone().for_current_account();
+    let named_permit = captured.acquire(&allowed).unwrap();
+    let base_permit = shared.acquire(&allowed).unwrap();
+    named.invalidate();
+    assert_eq!(named_permit.check(), Err(NetworkPolicyDenied::Revoked));
+    assert_eq!(base_permit.check(), Ok(()));
+    assert!(shared.acquire(&allowed).is_ok());
+    assert!(matches!(
+        named.acquire(&allowed),
+        Err(NetworkPolicyDenied::Unavailable)
+    ));
+    assert!(owner.publish(owner.policy().revision(), DestinationPolicy::Unrestricted));
+    assert!(matches!(
+        captured.acquire(&allowed),
+        Err(NetworkPolicyDenied::Revoked)
+    ));
+    let permit = named.acquire(&allowed).unwrap();
+    admin.unavailable(shared.revision());
+    assert_eq!(permit.check(), Err(NetworkPolicyDenied::Revoked));
+    tokio::time::timeout(std::time::Duration::from_secs(1), permit.revoked())
+        .await
+        .unwrap();
+    assert!(matches!(
+        named.acquire(&allowed),
+        Err(NetworkPolicyDenied::Unavailable)
+    ));
+    assert!(admin.publish(
+        shared.revision(),
+        DestinationPolicy::Restricted {
+            allowed_hosts: BTreeSet::new(),
+        }
+    ));
+    assert!(matches!(
+        named.acquire(&allowed),
+        Err(NetworkPolicyDenied::Destination)
+    ));
+}
+
+#[test]
+fn independent_account_binding_cannot_cross_named_accounts_or_drop_caller_limits() {
+    let admin = NetworkPolicyController::default();
+    let shared = admin.policy();
+    assert!(admin.publish(shared.revision(), DestinationPolicy::Unrestricted));
+    let (work, work_owner) = shared.clone().with_independent_account_lifecycle();
+    let (personal, personal_owner) = shared.clone().with_independent_account_lifecycle();
+    for owner in [&work_owner, &personal_owner] {
+        assert!(owner.publish(owner.policy().revision(), DestinationPolicy::Unrestricted));
+    }
+    let allowed = Url::parse("https://example.com/allowed").unwrap();
+    let credentials = work.clone().for_current_account();
+    let caller = shared.restrict_to_endpoints(BTreeSet::from([allowed.clone()]));
+    let bound = caller.with_account_binding(&credentials).unwrap();
+    assert!(bound.acquire(&allowed).is_ok());
+    assert!(matches!(
+        bound.acquire(&Url::parse("https://example.com/other").unwrap()),
+        Err(NetworkPolicyDenied::Destination)
+    ));
+    assert!(personal.with_account_binding(&credentials).is_none());
+    let permit = bound.acquire(&allowed).unwrap();
+    work.invalidate();
+    assert_eq!(permit.check(), Err(NetworkPolicyDenied::Revoked));
+    assert!(work_owner.publish(
+        work_owner.policy().revision(),
+        DestinationPolicy::Unrestricted
+    ));
+    assert!(matches!(
+        bound.acquire(&allowed),
+        Err(NetworkPolicyDenied::Revoked)
+    ));
+}
+
 #[test]
 fn credential_binding_keeps_both_endpoint_restrictions_and_account_revocation() {
     let controller = NetworkPolicyController::default();

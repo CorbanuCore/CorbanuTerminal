@@ -8,6 +8,162 @@ use pretty_assertions::assert_eq;
 use super::*;
 use crate::auth::named_chatgpt::login_named_account_with_api_key;
 
+#[tokio::test]
+async fn named_account_policy_is_independent_but_administrator_revocation_is_shared() {
+    use codex_http_client::DestinationPolicy;
+    use codex_http_client::NetworkPolicyController;
+    use codex_http_client::NetworkPolicyDenied;
+
+    let home = tempfile::tempdir().expect("home");
+    login_named_account_with_api_key(home.path(), &account("work"), "sk-canary-work")
+        .expect("sign-in");
+    login_named_account_with_api_key(home.path(), &account("personal"), "sk-canary-personal")
+        .expect("sign-in");
+    let controller = NetworkPolicyController::default();
+    let policy = controller.policy();
+    assert!(controller.publish(
+        policy.revision(),
+        DestinationPolicy::Restricted {
+            allowed_hosts: std::collections::BTreeSet::from(["example.com".to_string()]),
+        }
+    ));
+    let base = Arc::new(
+        AuthManager::new(
+            home.path().to_path_buf(),
+            /*enable_codex_api_key_env*/ false,
+            crate::AuthCredentialsStoreMode::File,
+            /*forced_chatgpt_workspace_id*/ None,
+            /*chatgpt_base_url*/ None,
+            crate::AuthKeyringBackendKind::default(),
+            crate::test_support::transport_default_auth_route_config()
+                .with_application_network_policy(policy.clone()),
+        )
+        .await,
+    );
+    let allowed = url::Url::parse("https://example.com/").unwrap();
+    let blocked = url::Url::parse("https://blocked.example/").unwrap();
+    let base_permit = policy.acquire(&allowed).unwrap();
+    let work = base.for_named_account_loaded(account("work")).await;
+    let personal = base.for_named_account_loaded(account("personal")).await;
+    assert!(Arc::ptr_eq(&work, &base.for_named_account(account("work"))));
+    let captured = work.http_client_factory();
+    let work_permit = captured.network_policy().acquire(&allowed).unwrap();
+    let personal_permit = personal
+        .http_client_factory()
+        .network_policy()
+        .acquire(&allowed)
+        .unwrap();
+    assert_eq!(base_permit.check(), Ok(()));
+    assert!(matches!(
+        captured.network_policy().acquire(&blocked),
+        Err(NetworkPolicyDenied::Destination)
+    ));
+    work.set_cached_auth(Some(CodexAuth::from_api_key("sk-canary-replaced")));
+    assert_eq!(work_permit.check(), Err(NetworkPolicyDenied::Revoked));
+    assert_eq!(personal_permit.check(), Ok(()));
+    assert_eq!(base_permit.check(), Ok(()));
+    assert!(matches!(
+        captured.network_policy().acquire(&allowed),
+        Err(NetworkPolicyDenied::Revoked)
+    ));
+    let fresh = work
+        .http_client_factory()
+        .network_policy()
+        .acquire(&allowed)
+        .unwrap();
+    policy.invalidate();
+    assert_eq!(fresh.check(), Err(NetworkPolicyDenied::Revoked));
+    assert_eq!(personal_permit.check(), Err(NetworkPolicyDenied::Revoked));
+    assert!(matches!(
+        work.http_client_factory()
+            .network_policy()
+            .acquire(&allowed),
+        Err(NetworkPolicyDenied::Unavailable)
+    ));
+}
+
+#[tokio::test]
+async fn dropping_a_named_manager_revokes_retained_clients_before_recreation() {
+    use codex_http_client::NetworkPolicyDenied;
+
+    let home = tempfile::tempdir().unwrap();
+    login_named_account_with_api_key(home.path(), &account("work"), "sk-canary-work").unwrap();
+    let base = AuthManager::from_auth_for_testing_with_home(
+        CodexAuth::from_api_key("sk-canary-default"),
+        home.path().to_path_buf(),
+    );
+    let url = url::Url::parse("https://example.com/").unwrap();
+    let named = base.for_named_account(account("work"));
+    let retained = named.http_client_factory();
+    let permit = retained.network_policy().acquire(&url).unwrap();
+    drop(named);
+    assert_eq!(permit.check(), Err(NetworkPolicyDenied::Revoked));
+    assert!(matches!(
+        retained.network_policy().acquire(&url),
+        Err(NetworkPolicyDenied::Revoked)
+    ));
+    let recreated = base.for_named_account(account("work"));
+    let current = recreated.http_client_factory();
+    let current_permit = current.network_policy().acquire(&url).unwrap();
+    recreated.set_cached_auth(/*new_auth*/ None);
+    assert_eq!(current_permit.check(), Err(NetworkPolicyDenied::Revoked));
+    assert!(matches!(
+        retained.network_policy().acquire(&url),
+        Err(NetworkPolicyDenied::Revoked)
+    ));
+    assert!(matches!(
+        recreated
+            .http_client_factory()
+            .network_policy()
+            .acquire(&url),
+        Err(NetworkPolicyDenied::Unavailable)
+    ));
+    assert!(
+        base.http_client_factory()
+            .network_policy()
+            .acquire(&url)
+            .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn named_credential_snapshot_keeps_its_owner_until_the_request_finishes() {
+    use codex_http_client::NetworkPolicyDenied;
+
+    let home = tempfile::tempdir().unwrap();
+    login_named_account_with_api_key(home.path(), &account("work"), "sk-canary-work").unwrap();
+    let base = AuthManager::from_auth_for_testing_with_home(
+        CodexAuth::from_api_key("sk-canary-default"),
+        home.path().to_path_buf(),
+    );
+    let named = base.for_named_account(account("work"));
+    let weak = Arc::downgrade(&named);
+    let (_, factory) = named.auth_with_http_client_factory().await.unwrap();
+    let url = url::Url::parse("https://example.com/").unwrap();
+    let permit = factory.network_policy().acquire(&url).unwrap();
+    drop(named);
+    drop(factory);
+    // A transient backend caller can drop its factory while a response is still in flight.
+    assert_eq!(permit.check(), Ok(()));
+    let next = base.for_named_account(account("work"));
+    assert!(Arc::ptr_eq(&next, &weak.upgrade().unwrap()));
+    next.set_cached_auth(/*new_auth*/ None);
+    assert_eq!(permit.check(), Err(NetworkPolicyDenied::Revoked));
+    drop(next);
+    assert!(weak.upgrade().is_some());
+    drop(permit);
+    assert!(
+        weak.upgrade().is_none(),
+        "the exported lease must not create an ownership cycle"
+    );
+    assert!(
+        base.http_client_factory()
+            .network_policy()
+            .acquire(&url)
+            .is_ok()
+    );
+}
+
 fn account(name: &str) -> NamedChatgptAccount {
     NamedChatgptAccount {
         provider_id: "openai".to_string(),

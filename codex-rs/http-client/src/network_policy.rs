@@ -57,6 +57,10 @@ pub struct NetworkPolicy {
     state: Option<Arc<Mutex<State>>>,
     endpoints: Option<Arc<BTreeSet<Url>>>,
     account: Option<u64>,
+    // An account lifecycle can revoke its requests without mutating shared administrator rules.
+    lifecycle: Option<Box<NetworkPolicy>>,
+    // Keep lifecycle owners alive through credential snapshots without changing policy equality.
+    owners: Vec<Arc<dyn Send + Sync>>,
 }
 
 impl fmt::Debug for NetworkPolicy {
@@ -71,6 +75,7 @@ impl PartialEq for NetworkPolicy {
     fn eq(&self, other: &Self) -> bool {
         self.endpoints == other.endpoints
             && self.account == other.account
+            && self.lifecycle == other.lifecycle
             && match (&self.state, &other.state) {
                 (Some(left), Some(right)) => Arc::ptr_eq(left, right),
                 (None, None) => true,
@@ -94,6 +99,7 @@ struct Permit {
     revoked: watch::Sender<bool>,
 }
 
+#[derive(Clone)]
 enum PermitDestination {
     Url(Url),
     UnrestrictedSdk,
@@ -144,6 +150,8 @@ impl NetworkPolicyController {
             state: Some(self.state.clone()),
             endpoints: None,
             account: None,
+            lifecycle: None,
+            owners: Vec::new(),
         }
     }
 
@@ -194,7 +202,42 @@ impl NetworkPolicy {
             state: None,
             endpoints: None,
             account: None,
+            lifecycle: None,
+            owners: Vec::new(),
         }
+    }
+
+    /// Adds independent account revocation while retaining every live restriction of this policy.
+    /// The returned controller publishes only the additional lifecycle; it cannot relax this policy.
+    pub fn with_independent_account_lifecycle(mut self) -> (Self, NetworkPolicyController) {
+        let controller = NetworkPolicyController::default();
+        if let Some(state) = &self.state {
+            // All gates notify the same watchers; publication and revocation state stay separate.
+            lock_state(&controller.state).changes = lock_state(state).changes.clone();
+        }
+        let lifecycle = controller.policy();
+        // Preserve any existing lifecycle as a constraint, including captured account bindings.
+        self.lifecycle = Some(Box::new(match self.lifecycle.take() {
+            Some(existing) => NetworkPolicy {
+                lifecycle: Some(existing),
+                ..lifecycle
+            },
+            None => lifecycle,
+        }));
+        (self, controller)
+    }
+
+    /// Keeps a credential lifecycle owner alive through this snapshot and its requests.
+    /// Attach only to exported snapshots, never to a policy stored by the owner itself.
+    pub fn with_lifetime_guard(mut self, owner: Arc<dyn Send + Sync>) -> Self {
+        if !self
+            .owners
+            .iter()
+            .any(|existing| Arc::ptr_eq(existing, &owner))
+        {
+            self.owners.push(owner);
+        }
+        self
     }
 
     /// Narrows a bootstrap client's existing local policy to exact endpoint URLs.
@@ -211,6 +254,9 @@ impl NetworkPolicy {
     /// be used after another workspace's policy has been installed.
     pub fn for_current_account(mut self) -> Self {
         self.account = self.state.as_ref().map(|state| lock_state(state).account);
+        self.lifecycle = self
+            .lifecycle
+            .map(|policy| Box::new(policy.for_current_account()));
         self
     }
 
@@ -231,6 +277,22 @@ impl NetworkPolicy {
         {
             return None;
         }
+        self.lifecycle = match (self.lifecycle.take(), &credentials.lifecycle) {
+            (Some(caller), Some(credentials)) => {
+                Some(Box::new(caller.with_account_binding(credentials)?))
+            }
+            (Some(caller), None) => Some(caller),
+            (None, credentials) => credentials.clone(),
+        };
+        for owner in &credentials.owners {
+            if !self
+                .owners
+                .iter()
+                .any(|existing| Arc::ptr_eq(existing, owner))
+            {
+                self.owners.push(Arc::clone(owner));
+            }
+        }
         self.account = self.account.or(credentials.account);
         if let Some(endpoints) = &credentials.endpoints {
             self = self.restrict_to_endpoints(endpoints.as_ref().clone());
@@ -240,13 +302,13 @@ impl NetworkPolicy {
 
     /// Whether this transport participates in the application policy lifecycle.
     pub fn is_managed(&self) -> bool {
-        self.state.is_some()
+        self.state.is_some() || self.lifecycle.is_some()
     }
 
     /// Whether `acquire` can deny a destination: a managed policy, or one
     /// narrowed to exact endpoints.
     pub(crate) fn restricts_destinations(&self) -> bool {
-        self.state.is_some() || self.endpoints.is_some()
+        self.is_managed() || self.endpoints.is_some()
     }
 
     /// Watches effective changes; unmanaged callers have no application policy owner.
@@ -254,6 +316,7 @@ impl NetworkPolicy {
         self.state
             .as_ref()
             .map(|state| lock_state(state).changes.subscribe())
+            .or_else(|| self.lifecycle.as_ref().and_then(|policy| policy.changes()))
     }
 
     pub fn revision(&self) -> NetworkPolicyRevision {
@@ -267,6 +330,14 @@ impl NetworkPolicy {
     /// Revokes outstanding operations before an account change or a failed requirements load.
     /// This read-side operation can only remove access; publication stays with the controller.
     pub fn invalidate(&self) {
+        if let Some(lifecycle) = &self.lifecycle {
+            lifecycle.invalidate_state();
+            return;
+        }
+        self.invalidate_state();
+    }
+
+    fn invalidate_state(&self) {
         if let Some(state) = &self.state {
             let mut state = lock_state(state);
             state.revision += 1;
@@ -308,8 +379,21 @@ impl NetworkPolicy {
         &self,
         destination: PermitDestination,
     ) -> Result<NetworkPermit, NetworkPolicyDenied> {
+        let lifecycle = self
+            .lifecycle
+            .as_ref()
+            .map(|policy| {
+                policy
+                    .acquire_destination(destination.clone())
+                    .map(Box::new)
+            })
+            .transpose()?;
         let Some(state) = &self.state else {
-            return Ok(NetworkPermit { inner: None });
+            return Ok(NetworkPermit {
+                inner: None,
+                lifecycle,
+                _owners: self.owners.clone(),
+            });
         };
         let mut state = lock_state(state);
         if self.account.is_some_and(|account| account != state.account) {
@@ -334,6 +418,8 @@ impl NetworkPolicy {
         state.permits.push(Arc::downgrade(&permit));
         Ok(NetworkPermit {
             inner: Some(permit),
+            lifecycle,
+            _owners: self.owners.clone(),
         })
     }
 }
@@ -342,6 +428,8 @@ impl NetworkPolicy {
 #[derive(Clone)]
 pub struct NetworkPermit {
     inner: Option<Arc<Permit>>,
+    lifecycle: Option<Box<NetworkPermit>>,
+    _owners: Vec<Arc<dyn Send + Sync>>,
 }
 
 impl fmt::Debug for NetworkPermit {
@@ -352,6 +440,9 @@ impl fmt::Debug for NetworkPermit {
 
 impl NetworkPermit {
     pub fn check(&self) -> Result<(), NetworkPolicyDenied> {
+        if let Some(lifecycle) = &self.lifecycle {
+            lifecycle.check()?;
+        }
         if self
             .inner
             .as_ref()
@@ -364,6 +455,18 @@ impl NetworkPermit {
     }
 
     pub async fn revoked(&self) {
+        let own_revocation = self.own_revocation();
+        if let Some(lifecycle) = &self.lifecycle {
+            tokio::select! {
+                _ = own_revocation => {},
+                _ = Box::pin(lifecycle.revoked()) => {},
+            }
+        } else {
+            own_revocation.await;
+        }
+    }
+
+    async fn own_revocation(&self) {
         match &self.inner {
             Some(permit) => {
                 let _ = permit
