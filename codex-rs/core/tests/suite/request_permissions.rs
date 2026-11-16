@@ -2229,7 +2229,24 @@ async fn denied_child_permissions_require_fresh_approval(
                 approval.reason,
             )
         }
-        (_, event) => panic!("expected fresh {tool:?} permission approval, got {event:?}"),
+        (_, event) => {
+            // Say what the write did instead, and whether the denied child
+            // changed (sync-compile15 triage, #2296).
+            let output = responses.requests().iter().find_map(|request| {
+                request.input().into_iter().find(|item| {
+                    item.get("call_id").and_then(serde_json::Value::as_str) == Some(WRITE_CALL_ID)
+                        && item.get("type").and_then(serde_json::Value::as_str)
+                            != Some("custom_tool_call")
+                        && item.get("type").and_then(serde_json::Value::as_str)
+                            != Some("function_call")
+                })
+            });
+            let sentinel = harness.read_file_text(SENTINEL_PATH).await;
+            panic!(
+                "expected fresh {tool:?} permission approval, got {event:?}; \
+                 write output: {output:?}; denied child file: {sentinel:?}"
+            )
+        }
     };
     let content_before_denial = harness.read_file_text(SENTINEL_PATH).await?;
     test.codex.submit(decision).await?;

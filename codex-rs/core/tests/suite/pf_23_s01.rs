@@ -293,8 +293,9 @@ async fn answer(test: &TestCodex, request: &RequestUserInputEvent, label: &str) 
 }
 
 fn output_text(request: &ResponsesRequest, call_id: &str) -> String {
+    // MCP results are content items upstream, not one string.
     request
-        .function_call_output_text(call_id)
+        .function_call_output_any_text(call_id)
         .or_else(|| {
             request
                 .custom_tool_call_output(call_id)
@@ -682,6 +683,9 @@ async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_hum
 -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
+    // The injected step now runs through `exec_command` too (main used the
+    // removed `shell_command`), and its process takes the first deterministic
+    // session ID (1000), so the shell opened next is 1001.
     let stdin_turn = |approval, chars: &str| {
         start_turn(
             SecurityLevel::Moderate,
@@ -696,7 +700,7 @@ async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_hum
                 call(
                     "call-stdin",
                     "write_stdin",
-                    json!({ "session_id": 1000, "chars": chars, "yield_time_ms": 500 }),
+                    json!({ "session_id": 1001, "chars": chars, "yield_time_ms": 500 }),
                 ),
                 done_step(),
             ],
@@ -746,12 +750,12 @@ async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_hum
             call(
                 "call-half",
                 "write_stdin",
-                json!({ "session_id": 1000, "chars": "corban", "yield_time_ms": 200 }),
+                json!({ "session_id": 1001, "chars": "corban", "yield_time_ms": 200 }),
             ),
             call(
                 "call-stdin",
                 "write_stdin",
-                json!({ "session_id": 1000, "chars": "u vault list\n", "yield_time_ms": 200 }),
+                json!({ "session_id": 1001, "chars": "u vault list\n", "yield_time_ms": 200 }),
             ),
             done_step(),
         ],

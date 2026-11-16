@@ -47,6 +47,8 @@ const UNSHARE: &str = "unshare -Ur sh -c 'echo NAMESPACE-MADE-D$((40+8))'";
 /// in D48's own fresh prompt.
 const PLAIN: &str = "unshare -Ur printf NAMESPACE-MADE-%s D48";
 const NAMESPACE_MADE: &str = "NAMESPACE-MADE-D48";
+/// What the model's own shell prints if it runs (it never should).
+const OWN_SHELL_RAN: &str = "OWN-SHELL-RAN-D48";
 /// What `unshare` prints when a namespace is refused.
 const REFUSED: &str = "unshare failed: Operation not permitted";
 /// The #826 explanation added where the rule refused it.
@@ -70,7 +72,9 @@ enum Kind {
     /// The same with `exec_command`'s own arguments.
     EscalatedExec,
     /// The same through `exec_command` with a shell the model chose: a
-    /// copy of bash outside the system folders.
+    /// program named `bash` outside the system folders. Upstream only takes
+    /// the shell's type from the path the model names and runs the user's
+    /// own bash, so this program never runs.
     EscalatedExecOwnShell,
     /// `exec_command` in the sandbox.
     Sandboxed,
@@ -179,10 +183,17 @@ async fn run(
         ev_completed("call-first"),
     ]];
     // A shell the model may name for `exec_command`, outside the system
-    // folders.
+    // folders: it says so in the output if it ever runs.
     let own_shell_dir = TempDir::new()?;
     let own_shell = own_shell_dir.path().join("bash");
-    std::os::unix::fs::symlink("/bin/bash", &own_shell)?;
+    std::fs::write(
+        &own_shell,
+        format!("#!/bin/sh\necho {OWN_SHELL_RAN}\nexec /bin/bash \"$@\"\n"),
+    )?;
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&own_shell, std::fs::Permissions::from_mode(0o755))?;
+    }
     let own_shell = own_shell.to_string_lossy().into_owned();
     let ids: Vec<String> = (0..calls.len()).map(|n| format!("call-d48-{n}")).collect();
     for (id, (kind, command, _)) in ids.iter().zip(calls) {
@@ -318,6 +329,9 @@ async fn d48_after_untrusted_content_only_known_tools_are_offered() -> anyhow::R
             ReviewDecision::denied("no"),
         ),
         (Kind::EscalatedExec, bwrap, ReviewDecision::denied("no")),
+        // A shell the model chose: only its type counts, the user's own bash
+        // runs the script (main ran the model's file, so it was not offered).
+        (Kind::EscalatedExecOwnShell, PLAIN, ReviewDecision::Approved),
     ];
     let not_offered: &[(Kind, &str, ReviewDecision)] = &[
         // An arbitrary command.
@@ -359,8 +373,6 @@ async fn d48_after_untrusted_content_only_known_tools_are_offered() -> anyhow::R
             "unshare -Ur true; unshare -Ur sh -c 'echo NAMESPACE-MADE-D$((40+8))'",
             ReviewDecision::Approved,
         ),
-        // A shell the model chose (the prompt shows only the script).
-        (Kind::EscalatedExecOwnShell, PLAIN, ReviewDecision::Approved),
         // A known tool that stays in the sandbox.
         (Kind::Sandboxed, UNSHARE, ReviewDecision::Approved),
     ];
@@ -402,6 +414,15 @@ async fn d48_after_untrusted_content_only_known_tools_are_offered() -> anyhow::R
             }
             // Podman and bwrap offered, declined: nothing ran.
             5 | 6 => call.asked.len() == 1 && call.warned() && !call.made,
+            // The model's shell named: offered as the plain command, and the
+            // model's program never ran.
+            7 => {
+                call.asked.len() == 1
+                    && call.warned()
+                    && call.allowed()
+                    && call.asked[0].contains(JUSTIFICATION)
+                    && !call.output.contains(OWN_SHELL_RAN)
+            }
             // Whether the shell expands the alias decides whether it runs.
             _ if call.command.contains("alias") => {
                 call.unwarned() && !call.made && (call.explained || !call.refused)

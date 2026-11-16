@@ -124,40 +124,48 @@ async fn base_instructions_use_input_items(responses_lite: bool) -> Result<()> {
     test.submit_turn("hello").await?;
 
     let body = response_mock.single_request().body_json();
-    assert!(body.get("instructions").is_none());
-
     let input = body["input"]
         .as_array()
         .context("Responses request input should be an array")?;
-    let instructions_index = usize::from(responses_lite);
-    let instructions = &input[instructions_index];
-    assert!(
-        instructions["id"]
-            .as_str()
-            .is_some_and(|id| id.starts_with("msg_"))
-    );
-    let mut expected_instructions = serde_json::json!({
-        "id": instructions["id"],
-        "type": "message",
-        "role": "developer",
-        "content": [{
-            "type": "input_text",
-            "text": "test instructions",
-        }],
-        "internal_chat_message_metadata_passthrough": {
-            "content_item_kinds": ["model.base_instructions"],
-        },
-    });
-    let mut actual_instructions = instructions.clone();
+    // Corbanu sends base instructions in the `instructions` field for
+    // standard Responses (upstream #51156 moved them to an input item);
+    // Responses Lite has no such field and keeps the item.
     if responses_lite {
+        assert!(body.get("instructions").is_none());
+        let instructions = &input[1];
+        assert!(
+            instructions["id"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("msg_"))
+        );
+        let mut expected_instructions = serde_json::json!({
+            "id": instructions["id"],
+            "type": "message",
+            "role": "developer",
+            "content": [{
+                "type": "input_text",
+                "text": "test instructions",
+            }],
+            "internal_chat_message_metadata_passthrough": {
+                "content_item_kinds": ["model.base_instructions"],
+            },
+        });
+        let mut actual_instructions = instructions.clone();
         expected_instructions["internal_chat_message_metadata_passthrough"]["content_item_metadata"] =
             serde_json::json!([{"provenance": {"type": "harness", "hook": false}}]);
         actual_instructions["internal_chat_message_metadata_passthrough"]
             .as_object_mut()
             .context("base instructions should carry content metadata")?
             .retain(|key, _| !matches!(key.as_str(), "turn_id" | "create_time"));
+        assert_eq!(actual_instructions, expected_instructions);
+    } else {
+        assert_eq!(body["instructions"], "test instructions");
+        assert!(
+            !body["input"]
+                .to_string()
+                .contains("model.base_instructions")
+        );
     }
-    assert_eq!(actual_instructions, expected_instructions);
 
     let tools = if responses_lite {
         assert!(body.get("tools").is_none());
@@ -210,10 +218,15 @@ async fn base_instructions_use_input_items(responses_lite: bool) -> Result<()> {
     .await;
     let resumed = builder().restart(&server, &test).await?;
     resumed.submit_turn("continue").await?;
-    assert_eq!(
-        &followup.single_request().input()[..=instructions_index],
-        &input[..=instructions_index]
-    );
+    // The resumed thread sends the same base instructions.
+    if responses_lite {
+        assert_eq!(&followup.single_request().input()[..=1], &input[..=1]);
+    } else {
+        assert_eq!(
+            followup.single_request().body_json()["instructions"],
+            body["instructions"]
+        );
+    }
     assert_eq!(
         followup.single_request().body_json()["tools"],
         body["tools"]

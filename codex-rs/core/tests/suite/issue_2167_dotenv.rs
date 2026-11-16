@@ -78,11 +78,15 @@ async fn exec_question(
     }
 }
 
-// Image errors use structured content items; shell/MCP outputs may be strings.
+/// `view_image`'s answer when the file was read but is not an image (main
+/// said "image content omitted because it could not be processed").
+const IMAGE_NOT_DECODED: &str = "unable to process image: invalid or unsupported image data";
+
+// Image errors and MCP results use structured content items; shell outputs
+// are strings.
 fn output_text(request: &ResponsesRequest, call_id: &str) -> String {
     request
-        .function_call_output_content_and_success(call_id)
-        .and_then(|(content, _)| content)
+        .function_call_output_any_text(call_id)
         .expect("tool output text")
 }
 
@@ -217,7 +221,7 @@ async fn issue_2167_mcp_file_path_asks_before_dispatch(level: SecurityLevel) -> 
 
 #[test_case(SecurityLevel::Moderate, "Cancel", "you declined credential access"; "moderate_cancel")]
 #[test_case(SecurityLevel::Aggressive, "Cancel", "you declined credential access"; "aggressive_cancel")]
-#[test_case(SecurityLevel::Moderate, "Allow once", "image content omitted because it could not be processed"; "moderate_allow")]
+#[test_case(SecurityLevel::Moderate, "Allow once", IMAGE_NOT_DECODED; "moderate_allow")]
 #[test_case(SecurityLevel::Aggressive, "Allow once", "unable to"; "aggressive_still_denies")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg_attr(windows, serial_test::serial(codex_home))]
@@ -247,6 +251,10 @@ async fn issue_2167_builtin_file_read_asks_before_open(
     let output = output_text(captured.requests().last().expect("result"), "call-image");
     assert!(output.contains(expected), "{level:?} {decision}: {output}");
     assert!(!output.contains(SECRET), "{output}");
+    // Aggressive never opens the file: no decoding was tried.
+    if level == SecurityLevel::Aggressive {
+        assert!(!output.contains(IMAGE_NOT_DECODED), "{output}");
+    }
     Ok(())
 }
 
@@ -280,10 +288,7 @@ async fn issue_2167_permissive_file_routes_are_unchanged(route: &str) -> anyhow:
         assert!(output.contains(".env"), "{output}");
     } else {
         // The read succeeds; the synthetic dotenv text is not an image.
-        assert!(
-            output.contains("image content omitted because it could not be processed"),
-            "{output}"
-        );
+        assert!(output.contains(IMAGE_NOT_DECODED), "{output}");
     }
     Ok(())
 }
