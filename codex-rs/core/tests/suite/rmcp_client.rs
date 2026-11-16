@@ -4787,7 +4787,9 @@ async fn streamable_http_with_oauth_round_trip_impl() -> anyhow::Result<()> {
                                 assert!(refreshed_starting);
                                 refreshed_failure = Some((error, reason));
                             }
-                            McpStartupStatus::Ready | McpStartupStatus::Cancelled => {}
+                            McpStartupStatus::Ready
+                            | McpStartupStatus::Cancelled
+                            | McpStartupStatus::Stopped => {}
                         }
                     }
                     EventMsg::McpStartupComplete(startup) => {

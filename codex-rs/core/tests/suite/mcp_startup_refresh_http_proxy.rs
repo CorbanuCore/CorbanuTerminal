@@ -22,6 +22,7 @@ use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EnvironmentConfigState;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ThreadSettingsOverrides;
+use codex_protocol::protocol::TurnEnvironmentSelections;
 use codex_protocol::user_input::UserInput;
 use codex_utils_path_uri::PathUri;
 use core_test_support::apps_test_server::AppsTestServer;
@@ -241,20 +242,16 @@ async fn skill_mcp_dependency_oauth_uses_configured_http_client() -> Result<()> 
             .mount(&proxy)
             .await;
 
-<<<<<<< HEAD
         // The remote exec-server host stays out of the test proxy too.
         let no_proxy = core_test_support::test_codex::no_proxy_with_remote_exec_server(
             codex_network_proxy::DEFAULT_NO_PROXY_VALUE,
         );
-||||||| 413492cd6c
-=======
         let skill_callback_listener = TcpListener::bind("127.0.0.1:0").await?;
         let skill_callback_port = skill_callback_listener.local_addr()?.port();
         let global_callback_listener = TcpListener::bind("127.0.0.1:0").await?;
         let global_callback_port = global_callback_listener.local_addr()?.port();
         drop(skill_callback_listener);
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let mut command = Command::new(std::env::current_exe()?);
         command.arg("--exact").arg(SKILL_TEST_NAME);
         for &key in codex_network_proxy::PROXY_ENV_KEYS {
@@ -377,7 +374,12 @@ async fn skill_mcp_dependency_oauth_uses_configured_http_client() -> Result<()> 
         });
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(PermissionProfile::Disabled, fixture.config.cwd.as_path());
-    let mut environments = local_selections(fixture.config.cwd.clone());
+    // The test's default environment (remote in the remote lane), with the
+    // skill's MCP policy attached.
+    let mut environments = TurnEnvironmentSelections::new(
+        fixture.config.cwd.clone(),
+        vec![fixture.executor_environment().selection().clone()],
+    );
     environments.environments[0].config = EnvironmentConfigState::Ready(EnvironmentConfig {
         environment_hooks: Default::default(),
         allow_login_shell: fixture.config.permissions.allow_login_shell,
@@ -414,26 +416,9 @@ async fn skill_mcp_dependency_oauth_uses_configured_http_client() -> Result<()> 
                     name: "proxy-skill".to_string(),
                     path: skill_path.to_path_buf(),
                 },
-<<<<<<< HEAD
-            ],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
-                // The test's default environment: remote in the remote lane.
-                environments: None,
-||||||| 413492cd6c
-            ],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
-                environments: Some(local_selections(fixture.config.cwd.clone())),
-=======
             ])
             .with_thread_settings(ThreadSettingsOverrides {
                 environments: Some(environments.into_requests()),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,

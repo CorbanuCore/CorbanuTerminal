@@ -4,6 +4,7 @@
 //! "Set up default sandbox", the next turn's command is no longer refused for
 //! the missing sandbox, without a new session. Other platforms are unchanged.
 
+use codex_core::TurnInputRequest;
 use codex_core::config::Constrained;
 use codex_features::Feature;
 use codex_protocol::config_types::WindowsSandboxLevel;
@@ -35,11 +36,11 @@ const UNELEVATED: &str = "this Windows sandbox mode (unelevated) can't";
 
 /// The model runs `echo` once in a turn, then finishes it.
 fn command_turn(call_id: &str) -> Vec<String> {
-    let arguments = json!({ "command": format!("echo {RAN}") }).to_string();
+    let arguments = json!({ "cmd": format!("echo {RAN}") }).to_string();
     vec![
         sse(vec![
             ev_response_created(call_id),
-            ev_function_call(call_id, "shell_command", &arguments),
+            ev_function_call(call_id, "exec_command", &arguments),
             ev_completed(call_id),
         ]),
         sse(vec![
@@ -52,16 +53,13 @@ fn command_turn(call_id: &str) -> Vec<String> {
 
 async fn turn(test: &TestCodex) -> anyhow::Result<()> {
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "go".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnComplete(_))
@@ -126,6 +124,7 @@ async fn issue_2000_a_windows_sandbox_set_up_mid_session_applies_to_it() -> anyh
                 windows_sandbox_level: Some(WindowsSandboxLevel::RestrictedToken),
                 ..Default::default()
             },
+            reply: None,
         })
         .await?;
     wait_for_event(&test.codex, |event| {

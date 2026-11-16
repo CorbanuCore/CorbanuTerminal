@@ -20,7 +20,10 @@ async fn accounting_inspect_usability_child_watcher_keeps_input_blocked() {
             .set_composer_text(command.into(), Vec::new(), Vec::new());
         let draft = chat.bottom_pane.composer_draft_snapshot();
         chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-        assert_eq!(chat.bottom_pane.composer_draft_snapshot(), draft);
+        // Upstream's composer records the key press as activity; the draft itself is kept.
+        let mut kept = chat.bottom_pane.composer_draft_snapshot();
+        kept.last_composer_activity_at = draft.last_composer_activity_at;
+        assert_eq!(kept, draft);
         assert!(chat.accounting_inspector.is_none());
         assert!(ops.try_recv().is_err());
         let mut messages = Vec::new();
@@ -1477,7 +1480,8 @@ async fn slash_rename_requests_and_prefills_an_editable_title_suggestion() {
 
     assert_matches!(
         rx.try_recv(),
-        Ok(AppEvent::CodexOp(Op::SetThreadName { name })) if name == "Fix login timeout"
+        // Main's /rename names the pane (and its thread) through the app.
+        Ok(AppEvent::RenameCurrentPane { name }) if name == "Fix login timeout"
     );
 }
 
@@ -1512,7 +1516,8 @@ async fn slash_rename_preserves_manual_edits_when_suggestion_arrives() {
 
     assert_matches!(
         rx.try_recv(),
-        Ok(AppEvent::CodexOp(Op::SetThreadName { name })) if name == "My own title"
+        // Main's /rename names the pane (and its thread) through the app.
+        Ok(AppEvent::RenameCurrentPane { name }) if name == "My own title"
     );
 }
 

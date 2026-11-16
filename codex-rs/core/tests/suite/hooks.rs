@@ -3171,16 +3171,9 @@ async fn permission_request_hook_allow_bypasses_strict_auto_review() -> Result<(
                 .enable(Feature::RequestPermissionsTool)
                 .expect("test config should allow feature update");
         });
-<<<<<<< HEAD
     // Local executor only: `shell_command` and command hooks run on the Codex
     // host, never in a remote environment (#708, #721, #722).
     let test = builder.build(&server).await?;
-||||||| 413492cd6c
-    let test = builder.build_with_auto_env(&server).await?;
-=======
-    // Command hooks currently need a local executor even when the tool executor is remote.
-    let test = builder.build_with_remote_and_local_env(&server).await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let marker = test
         .executor_environment()

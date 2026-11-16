@@ -3,6 +3,7 @@
 //! as shell commands: after untrusted content, a protected action needs a
 //! fresh human answer and is refused when approvals are off.
 
+use codex_core::TurnInputRequest;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -79,11 +80,7 @@ fn call(call_id: &str, name: &str, arguments: Value) -> Step {
 }
 
 fn injected_step() -> Step {
-    call(
-        "call-first",
-        "shell_command",
-        json!({ "command": INJECTED }),
-    )
+    call("call-first", "exec_command", json!({ "cmd": INJECTED }))
 }
 
 fn mcp_step(message: &str) -> Step {
@@ -136,6 +133,9 @@ fn insert_rmcp_server(config: &mut Config) -> anyhow::Result<()> {
             oauth: None,
             oauth_resource: None,
             tools: HashMap::new(),
+            startup_readiness: Default::default(),
+            tool_input_schema_max_bytes: None,
+            omit_tools_from: None,
         },
     );
     config
@@ -248,16 +248,13 @@ async fn start_turn_with(
     }
     before_turn(&test);
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "check the notes, then continue".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     Ok((test, captured))
 }
@@ -704,7 +701,6 @@ async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_hum
                 done_step(),
             ],
             |config| {
-                config.use_experimental_unified_exec_tool = true;
                 config
                     .features
                     .enable(Feature::UnifiedExec)
@@ -760,7 +756,6 @@ async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_hum
             done_step(),
         ],
         |config| {
-            config.use_experimental_unified_exec_tool = true;
             config
                 .features
                 .enable(Feature::UnifiedExec)
@@ -906,7 +901,7 @@ fn canary_home() -> anyhow::Result<(Arc<TempDir>, String, String)> {
 
 #[cfg(target_os = "macos")]
 fn shell_step(call_id: &str, command: &str) -> Step {
-    call(call_id, "shell_command", json!({ "command": command }))
+    call(call_id, "exec_command", json!({ "cmd": command }))
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -1040,7 +1035,7 @@ async fn issue_239_moderate_escalation_before_untrusted_content_needs_the_human(
         (false, true, ask, None, false),
     ] {
         let (home, evading, _) = canary_home()?;
-        let mut arguments = json!({ "command": evading });
+        let mut arguments = json!({ "cmd": evading });
         if escalate {
             arguments["sandbox_permissions"] = json!("require_escalated");
             arguments["justification"] = json!("read the notes");
@@ -1049,7 +1044,7 @@ async fn issue_239_moderate_escalation_before_untrusted_content_needs_the_human(
             Some(home),
             SecurityLevel::Moderate,
             approval,
-            vec![call("call-read", "shell_command", arguments), done_step()],
+            vec![call("call-read", "exec_command", arguments), done_step()],
             move |config| {
                 if full_access {
                     config
@@ -1109,8 +1104,8 @@ async fn pf_23_s01_working_folder_inside_a_denied_path_keeps_the_denial() -> any
     let workdir = wallet.to_string_lossy().into_owned();
     let read = call(
         "call-read",
-        "shell_command",
-        json!({ "command": "cat pf23-notes.txt", "workdir": workdir }),
+        "exec_command",
+        json!({ "cmd": "cat pf23-notes.txt", "workdir": workdir }),
     );
     let (test, captured) = start_turn_in(
         Some(home),
@@ -1354,9 +1349,9 @@ async fn issue_442_permissive_is_unchanged() -> anyhow::Result<()> {
             ),
             call(
                 "call-approved",
-                "shell_command",
+                "exec_command",
                 json!({
-                    "command": write,
+                    "cmd": write,
                     "sandbox_permissions": "require_escalated",
                     "justification": "write the agent settings",
                 }),
@@ -1456,9 +1451,9 @@ async fn issue_245_additional_permissions_never_reopen_a_protected_read() -> any
         };
         let read = call(
             "call-read",
-            "shell_command",
+            "exec_command",
             json!({
-                "command": command,
+                "cmd": command,
                 "sandbox_permissions": "with_additional_permissions",
                 "additional_permissions": {
                     "file_system": { "read": [dummy.to_string_lossy()] },
@@ -1697,9 +1692,9 @@ async fn issue_513_additional_writes_never_reopen_a_write_protection() -> anyhow
         };
         let write = call(
             "call-write",
-            "shell_command",
+            "exec_command",
             json!({
-                "command": format!("{command} && echo wrote-513"),
+                "cmd": format!("{command} && echo wrote-513"),
                 "sandbox_permissions": "with_additional_permissions",
                 "additional_permissions": {
                     "file_system": { "write": [entry] },
@@ -1789,9 +1784,9 @@ async fn issue_513_moderate_only_a_persons_fresh_approval_lifts_a_write_protecti
     let write = |call_id: &str| {
         call(
             call_id,
-            "shell_command",
+            "exec_command",
             json!({
-                "command": "mkdir -p .agents && printf x >> .agents/issue513.md && echo wrote-513",
+                "cmd": "mkdir -p .agents && printf x >> .agents/issue513.md && echo wrote-513",
                 "sandbox_permissions": "with_additional_permissions",
                 "additional_permissions": { "file_system": { "write": [".agents"] } },
                 "justification": "update the agent notes",
@@ -2024,7 +2019,7 @@ async fn issue_540_runtime_entries_stay_read_only_when_a_person_lifts_the_rules(
             )?;
         }
         let mut arguments = json!({
-            "command": format!(
+            "cmd": format!(
                 "cat '{}'; cp '{}' '{}'",
                 root.join("auth.json").display(),
                 root.join("issue540-new").display(),
@@ -2041,7 +2036,7 @@ async fn issue_540_runtime_entries_stay_read_only_when_a_person_lifts_the_rules(
             AskForApproval::OnRequest,
             vec![
                 injected_step(),
-                call("call-write", "shell_command", arguments),
+                call("call-write", "exec_command", arguments),
                 done_step(),
             ],
             |config| {
@@ -2131,7 +2126,7 @@ async fn issue_838_security_state_and_keys_stay_denied_after_a_fresh_approval() 
             AskForApproval::OnRequest,
             vec![
                 injected_step(),
-                call("call-read", "shell_command", json!({ "command": command })),
+                call("call-read", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -2215,11 +2210,7 @@ async fn issue_562_missing_runtime_entries_cannot_be_created() -> anyhow::Result
             level,
             AskForApproval::Never,
             vec![
-                call(
-                    "call-create",
-                    "shell_command",
-                    json!({ "command": command }),
-                ),
+                call("call-create", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             |config| {
@@ -2296,7 +2287,7 @@ async fn issue_587_the_corbanu_home_cannot_be_moved_aside() -> anyhow::Result<()
             level,
             AskForApproval::Never,
             vec![
-                call("call-move", "shell_command", json!({ "command": command })),
+                call("call-move", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -2498,8 +2489,8 @@ async fn issue_594_a_linked_corbanu_home_cannot_be_replaced() -> anyhow::Result<
             vec![
                 call(
                     "call-replace",
-                    "shell_command",
-                    json!({ "command": home.command(/*read*/ false) }),
+                    "exec_command",
+                    json!({ "cmd": home.command(/*read*/ false) }),
                 ),
                 done_step(),
             ],
@@ -2553,8 +2544,8 @@ async fn issue_598_an_approved_command_cannot_move_the_corbanu_home() -> anyhow:
                 injected_step(),
                 call(
                     "call-replace",
-                    "shell_command",
-                    json!({ "command": home.command(/*read*/ true) }),
+                    "exec_command",
+                    json!({ "cmd": home.command(/*read*/ true) }),
                 ),
                 done_step(),
             ],
@@ -2652,7 +2643,7 @@ async fn issue_1472_a_home_below_the_working_folder_cannot_be_moved_aside() -> a
             level,
             AskForApproval::Never,
             vec![
-                call("call-1472", "shell_command", json!({ "command": command })),
+                call("call-1472", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -2671,7 +2662,7 @@ async fn issue_1472_a_home_below_the_working_folder_cannot_be_moved_aside() -> a
                             ),
                             FileSystemSandboxEntry::new(
                                 FileSystemPath::Path {
-                                    path: cwd_abs.clone(),
+                                    path: cwd_abs.clone().into(),
                                 },
                                 FileSystemAccessMode::Write,
                             ),
@@ -2747,11 +2738,7 @@ async fn issue_583_missing_corbanu_home_entries_cannot_be_created() -> anyhow::R
             level,
             AskForApproval::Never,
             vec![
-                call(
-                    "call-create",
-                    "shell_command",
-                    json!({ "command": command }),
-                ),
+                call("call-create", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             |config| {
@@ -2836,11 +2823,7 @@ async fn issue_583_git_still_commits_in_a_corbanu_home_worktree() -> anyhow::Res
         SecurityLevel::Moderate,
         AskForApproval::Never,
         vec![
-            call(
-                "call-commit",
-                "shell_command",
-                json!({ "command": command }),
-            ),
+            call("call-commit", "exec_command", json!({ "cmd": command })),
             done_step(),
         ],
         move |config| {
@@ -2919,11 +2902,7 @@ async fn issue_603_a_command_in_the_corbanu_home_cannot_create_names_corbanu_rea
                 level,
                 AskForApproval::Never,
                 vec![
-                    call(
-                        "call-create",
-                        "shell_command",
-                        json!({ "command": command }),
-                    ),
+                    call("call-create", "exec_command", json!({ "cmd": command })),
                     done_step(),
                 ],
                 move |config| {
@@ -3022,7 +3001,7 @@ async fn issue_586_missing_db_init_lock_cannot_be_created_or_held() -> anyhow::R
                 level,
                 AskForApproval::Never,
                 vec![
-                    call("call-lock", "shell_command", json!({ "command": command })),
+                    call("call-lock", "exec_command", json!({ "cmd": command })),
                     done_step(),
                 ],
                 move |config| {
@@ -3110,11 +3089,14 @@ async fn issue_611_a_separate_database_folder_is_protected() -> anyhow::Result<(
             level,
             AskForApproval::Never,
             vec![
-                call("call-db", "shell_command", json!({ "command": command })),
+                call("call-db", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
-                config.sqlite = codex_state::SqliteConfig::from_sqlite_home(sqlite_home.clone());
+                config.sqlite = codex_state::SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+                    sqlite_home.clone(),
+                    /*enforce_delete_on_nfs*/ false,
+                );
                 config
                     .permissions
                     .set_permission_profile(PermissionProfile::Disabled)
@@ -3205,7 +3187,7 @@ async fn issue_650_other_worktrees_git_folders_stay_read_only() -> anyhow::Resul
             level,
             AskForApproval::Never,
             vec![
-                call("call-650", "shell_command", json!({ "command": command })),
+                call("call-650", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -3300,7 +3282,7 @@ async fn issue_675_other_worktrees_dot_git_files_stay_read_only() -> anyhow::Res
             level,
             AskForApproval::Never,
             vec![
-                call("call-675", "shell_command", json!({ "command": command })),
+                call("call-675", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -3359,12 +3341,15 @@ async fn issue_651_a_database_folder_with_glob_syntax_is_protected() -> anyhow::
             level,
             AskForApproval::Never,
             vec![
-                call("call-651", "shell_command", json!({ "command": command })),
+                call("call-651", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
                 config.cwd = cwd.clone();
-                config.sqlite = codex_state::SqliteConfig::from_sqlite_home(sqlite_home.clone());
+                config.sqlite = codex_state::SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+                    sqlite_home.clone(),
+                    /*enforce_delete_on_nfs*/ false,
+                );
                 config
                     .permissions
                     .set_permission_profile(PermissionProfile::Disabled)
@@ -3436,12 +3421,15 @@ async fn issue_732_database_folder_outputs(
             level,
             AskForApproval::Never,
             vec![
-                call("call-732", "shell_command", json!({ "command": command })),
+                call("call-732", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
                 config.cwd = cwd.clone();
-                config.sqlite = codex_state::SqliteConfig::from_sqlite_home(sqlite_home.clone());
+                config.sqlite = codex_state::SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+                    sqlite_home.clone(),
+                    /*enforce_delete_on_nfs*/ false,
+                );
                 config
                     .permissions
                     .set_permission_profile(PermissionProfile::Disabled)
@@ -3565,11 +3553,14 @@ async fn issue_651_a_missing_database_folder_is_protected() -> anyhow::Result<()
             level,
             AskForApproval::Never,
             vec![
-                call("call-651m", "shell_command", json!({ "command": command })),
+                call("call-651m", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
-                config.sqlite = codex_state::SqliteConfig::from_sqlite_home(sqlite_home.clone());
+                config.sqlite = codex_state::SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+                    sqlite_home.clone(),
+                    /*enforce_delete_on_nfs*/ false,
+                );
                 config
                     .permissions
                     .set_permission_profile(PermissionProfile::Disabled)
@@ -3690,14 +3681,17 @@ async fn shared_database_folder_scenario() -> anyhow::Result<()> {
             level,
             AskForApproval::Never,
             vec![
-                call("call-651s", "shell_command", json!({ "command": command })),
+                call("call-651s", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             {
                 let command_tmpdir = command_tmpdir.clone();
                 move |config| {
                     config.sqlite =
-                        codex_state::SqliteConfig::from_sqlite_home(sqlite_home.clone());
+                        codex_state::SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+                            sqlite_home.clone(),
+                            /*enforce_delete_on_nfs*/ false,
+                        );
                     config
                         .permissions
                         .set_permission_profile(PermissionProfile::Disabled)
@@ -3820,7 +3814,7 @@ async fn issue_652_home_below_a_root_reached_through_a_nested_link_stays_protect
             level,
             AskForApproval::Never,
             vec![
-                call("call-652", "shell_command", json!({ "command": command })),
+                call("call-652", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -3833,7 +3827,9 @@ async fn issue_652_home_below_a_root_reached_through_a_nested_link_stays_protect
                         FileSystemAccessMode::Read,
                     ),
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::Path { path: root.clone() },
+                        FileSystemPath::Path {
+                            path: root.clone().into(),
+                        },
                         FileSystemAccessMode::Write,
                     ),
                 ]);
@@ -3916,7 +3912,7 @@ async fn issue_605_minimal_reads_keep_git_below_tmp_read_only() -> anyhow::Resul
             level,
             AskForApproval::Never,
             vec![
-                call("call-605", "shell_command", json!({ "command": command })),
+                call("call-605", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -4002,7 +3998,7 @@ async fn issue_649_minimal_reads_keep_denied_paths_below_tmp_unreadable() -> any
             level,
             AskForApproval::Never,
             vec![
-                call("call-649", "shell_command", json!({ "command": command })),
+                call("call-649", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -4167,7 +4163,6 @@ async fn pf_23_s02_typing_into_a_shell_started_before_untrusted_content_is_confi
         ]
     };
     let unified_exec = |config: &mut Config| {
-        config.use_experimental_unified_exec_tool = true;
         config
             .features
             .enable(Feature::UnifiedExec)

@@ -12,6 +12,7 @@
 //!   writes a git hook keeps the offer (`pf_25_s01`).
 #![cfg(any(target_os = "macos", target_os = "linux"))]
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 
 use codex_core::config::Constrained;
@@ -108,16 +109,13 @@ async fn start(
         .await?;
     std::mem::forget(server);
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "update the agent settings".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     Ok((test, captured))
 }
@@ -266,7 +264,7 @@ async fn issue_584_a_command_writing_only_agent_settings_is_offered_no_grant() -
     let (test, captured) = start(
         &cwd,
         vec![
-            tool_step("call-write", "shell_command", json!({ "command": write })),
+            tool_step("call-write", "exec_command", json!({ "cmd": write })),
             done_step(),
         ],
     )

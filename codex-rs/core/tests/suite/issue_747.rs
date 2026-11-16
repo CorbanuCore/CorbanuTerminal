@@ -7,6 +7,7 @@
 //! Permissive is unchanged.
 #![cfg(any(target_os = "macos", target_os = "linux"))]
 
+use codex_core::TurnInputRequest;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -48,8 +49,6 @@ const INSTRUCTED: &str = "a command never leaves the sandbox it runs in";
 /// How the command asks to leave the sandbox, if it does.
 #[derive(Clone, Copy, Debug)]
 enum Route {
-    /// `sandbox_permissions: require_escalated`, approved by the person.
-    Escalated,
     /// An ordinary command under `untrusted`, approved by the person; after
     /// the sandbox denies it, the retry without the sandbox needs no new
     /// answer.
@@ -58,10 +57,8 @@ enum Route {
     Rule,
     /// #840 (D6): such a rule, for a command that asks to run outside the
     /// sandbox (as the rule was saved under Permissive).
-    RuleEscalated,
-    /// #840: the same through `exec_command` (unified exec).
     RuleEscalatedExec,
-    /// `exec_command` (unified exec) with `require_escalated`, approved.
+    /// `sandbox_permissions: require_escalated`, approved by the person.
     EscalatedExec,
     /// `apply_patch` adding a file outside the writable folder, approved: it
     /// is applied inside the sandbox with that one extra write, under every
@@ -89,16 +86,6 @@ async fn run(level: SecurityLevel, route: Route) -> anyhow::Result<Run> {
     // parse.
     let command = format!("touch '{}'", target.display());
     let call = match route {
-        Route::Escalated | Route::RuleEscalated => ev_function_call(
-            "call-0",
-            "shell_command",
-            &json!({
-                "command": command,
-                "sandbox_permissions": "require_escalated",
-                "justification": "write the notes",
-            })
-            .to_string(),
-        ),
         Route::EscalatedExec | Route::RuleEscalatedExec => ev_function_call(
             "call-0",
             "exec_command",
@@ -118,15 +105,12 @@ async fn run(level: SecurityLevel, route: Route) -> anyhow::Result<Run> {
         ),
         Route::Retry | Route::Rule => ev_function_call(
             "call-0",
-            "shell_command",
-            &json!({ "command": command }).to_string(),
+            "exec_command",
+            &json!({ "cmd": command }).to_string(),
         ),
     };
     let home = Arc::new(TempDir::new()?);
-    if matches!(
-        route,
-        Route::Rule | Route::RuleEscalated | Route::RuleEscalatedExec
-    ) {
+    if matches!(route, Route::Rule | Route::RuleEscalatedExec) {
         std::fs::create_dir_all(home.path().join("rules"))?;
         std::fs::write(
             home.path().join("rules/policy.rules"),
@@ -152,12 +136,9 @@ async fn run(level: SecurityLevel, route: Route) -> anyhow::Result<Run> {
     .await;
     let approval = match route {
         Route::Retry => AskForApproval::UnlessTrusted,
-        Route::Escalated
-        | Route::Rule
-        | Route::RuleEscalated
-        | Route::RuleEscalatedExec
-        | Route::EscalatedExec
-        | Route::Patch => AskForApproval::OnRequest,
+        Route::Rule | Route::RuleEscalatedExec | Route::EscalatedExec | Route::Patch => {
+            AskForApproval::OnRequest
+        }
     };
     let test = test_codex()
         .with_home(home)
@@ -182,13 +163,10 @@ async fn run(level: SecurityLevel, route: Route) -> anyhow::Result<Run> {
                 .features
                 .enable(Feature::SourceEnvelopes)
                 .expect("enable source envelopes");
-            if matches!(route, Route::EscalatedExec | Route::RuleEscalatedExec) {
-                config.use_experimental_unified_exec_tool = true;
-                config
-                    .features
-                    .enable(Feature::UnifiedExec)
-                    .expect("enable unified exec");
-            }
+            config
+                .features
+                .enable(Feature::UnifiedExec)
+                .expect("enable unified exec");
         })
         // Host-sandbox security test: local executor on purpose, also in the
         // remote lane (#708).
@@ -196,16 +174,13 @@ async fn run(level: SecurityLevel, route: Route) -> anyhow::Result<Run> {
         .await?;
     std::mem::forget(server);
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "write the notes".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let mut asked = 0;
     let mut reasons = Vec::new();
@@ -286,12 +261,10 @@ async fn issue_747_moderate_never_runs_a_command_outside_the_sandbox() -> anyhow
     let mut wrong = Vec::new();
     // (level, route, prompts expected, writes outside)
     for (level, route, asks, writes) in [
-        (SecurityLevel::Moderate, Route::Escalated, 1, false),
         // The sandbox denies the write; no retry outside it is offered.
         (SecurityLevel::Moderate, Route::Retry, 1, false),
         // D6: the remembered rule still skips the prompt, inside the sandbox.
         (SecurityLevel::Moderate, Route::Rule, 0, false),
-        (SecurityLevel::Permissive, Route::Escalated, 1, true),
         // Approved once, its retry outside the sandbox runs unasked.
         (SecurityLevel::Permissive, Route::Retry, 1, true),
         (SecurityLevel::Permissive, Route::Rule, 0, true),
@@ -304,17 +277,13 @@ async fn issue_747_moderate_never_runs_a_command_outside_the_sandbox() -> anyhow
         // unreadable policy counts as Aggressive) keeps every command in the
         // sandbox already: its protected-path rules apply from the start and
         // no approval lifts them, so their denied reads keep the run in it.
-        (SecurityLevel::Aggressive, Route::Escalated, 1, false),
         (SecurityLevel::Aggressive, Route::EscalatedExec, 1, false),
         (SecurityLevel::Aggressive, Route::Rule, 0, false),
         // #840 (D6): a rule saved under Permissive still skips the prompt of
         // a command that asks to leave the sandbox; it runs inside it.
-        (SecurityLevel::Moderate, Route::RuleEscalated, 0, false),
         (SecurityLevel::Moderate, Route::RuleEscalatedExec, 0, false),
-        (SecurityLevel::Permissive, Route::RuleEscalated, 0, true),
         (SecurityLevel::Permissive, Route::RuleEscalatedExec, 0, true),
         // Aggressive suspends rules not saved under it (#626): it asks.
-        (SecurityLevel::Aggressive, Route::RuleEscalated, 1, false),
         (
             SecurityLevel::Aggressive,
             Route::RuleEscalatedExec,
@@ -326,7 +295,7 @@ async fn issue_747_moderate_never_runs_a_command_outside_the_sandbox() -> anyhow
         let moderate = level == SecurityLevel::Moderate;
         // The prompt note and the model instruction are Moderate's only.
         // Only a request to leave the sandbox gets the note on its prompt.
-        let noted = moderate && matches!(route, Route::Escalated | Route::EscalatedExec);
+        let noted = moderate && matches!(route, Route::EscalatedExec);
         if run.asked != asks
             || run.wrote != writes
             || run.reasons.iter().any(|reason| reason.contains(STAYS)) != noted

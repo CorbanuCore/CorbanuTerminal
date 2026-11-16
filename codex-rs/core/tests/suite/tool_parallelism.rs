@@ -6,7 +6,6 @@ use codex_features::Feature;
 use core_test_support::test_codex::local_requests;
 use std::fs;
 use std::time::Duration;
-use std::time::Instant;
 
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ModeKind;
@@ -18,7 +17,6 @@ use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
-use core_test_support::responses::ev_exec_command_call_with_args;
 use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_sse_once;
@@ -125,23 +123,11 @@ async fn shell_tools_run_in_parallel() -> anyhow::Result<()> {
     let mut builder = test_codex().with_model("gpt-5.4");
     let test = builder.build(&server).await?;
 
-<<<<<<< HEAD
     // Unified exec is on by default off Windows, so `exec_command` is the
     // model-visible shell tool. The legacy `shell_command` stays registered
     // hidden, and hidden tools run serially, so the old wall-clock check on
     // it only passed because two short sleeps fit inside the bound (#1448).
     // Assert the overlap directly, as upstream does (openai/codex#56006).
-||||||| 413492cd6c
-    let shell_args = json!({
-        "command": "sleep 0.25",
-        // Avoid user-specific shell startup cost (e.g. zsh profile scripts) in timing assertions.
-        "login": false,
-        "timeout_ms": 1_000,
-    });
-    let args_one = serde_json::to_string(&shell_args)?;
-    let args_two = serde_json::to_string(&shell_args)?;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let shell_args = |call_id: &str| {
         json!({
             "cmd": format!(": > {call_id}.started; while [ ! -f release ]; do sleep 0.01; done; echo {call_id}"),
@@ -166,7 +152,6 @@ async fn shell_tools_run_in_parallel() -> anyhow::Result<()> {
     let responses = mount_sse_sequence(&server, vec![first_response, second_response]).await;
 
     let release_commands = async {
-<<<<<<< HEAD
         // Longer than upstream's 5 s: a loaded runner can be slow to start
         // both shells, and the wait ends as soon as both have.
         let overlap = tokio::time::timeout(Duration::from_secs(20), async {
@@ -232,34 +217,6 @@ async fn run_mixed_turn_and_assert_overlap(test: &TestCodex) -> anyhow::Result<(
     let (turn_result, overlap_result) = tokio::join!(run_turn(test, "mix tools"), release_commands);
     overlap_result?;
     turn_result?;
-||||||| 413492cd6c
-    let duration = run_turn_and_measure(&test, "run shell_command twice").await?;
-    assert_parallel_duration(duration);
-=======
-        let overlap = tokio::time::timeout(Duration::from_secs(5), async {
-            while !test.cwd.path().join("call-1.started").exists()
-                || !test.cwd.path().join("call-2.started").exists()
-            {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await;
-        fs::write(test.cwd.path().join("release"), "")?;
-        overlap.map_err(|_| anyhow::anyhow!("shell commands did not overlap"))
-    };
-    let (turn_result, overlap_result) =
-        tokio::join!(run_turn(&test, "run exec_command twice"), release_commands);
-    overlap_result?;
-    turn_result?;
-
-    for call_id in ["call-1", "call-2"] {
-        let output = responses
-            .function_call_output_text(call_id)
-            .expect("missing exec output");
-        assert!(output.contains("Process exited with code 0"), "{output}");
-        assert!(output.contains(&format!("Output:\n{call_id}")), "{output}");
-    }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     Ok(())
 }
@@ -286,24 +243,12 @@ async fn mixed_parallel_tools_run_in_parallel() -> anyhow::Result<()> {
     // The shell marks its start and blocks until the test releases it, so the
     // test observes both tools alive at the same instant.
     let shell_args = serde_json::to_string(&json!({
-<<<<<<< HEAD
         "cmd": ": > call-2.started; while [ ! -f release ]; do sleep 0.01; done; echo call-2",
-||||||| 413492cd6c
-        "command": "sleep 0.25",
-=======
-        "cmd": "sleep 0.25",
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         // Avoid user-specific shell startup cost in timing assertions.
         "login": false,
-<<<<<<< HEAD
         // The call returns when the process exits; a short yield could
         // return "still running" under load and fail the exit-code check.
         "yield_time_ms": 10_000,
-||||||| 413492cd6c
-        "timeout_ms": 1_000,
-=======
-        "yield_time_ms": 1_000,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }))?;
 
     let first_response = sse(vec![
@@ -318,7 +263,6 @@ async fn mixed_parallel_tools_run_in_parallel() -> anyhow::Result<()> {
     ]);
     let responses = mount_sse_sequence(&server, vec![first_response, second_response]).await;
 
-<<<<<<< HEAD
     run_mixed_turn_and_assert_overlap(&test).await?;
     let sync_output = responses
         .function_call_output_text("call-1")
@@ -384,17 +328,6 @@ async fn mixed_parallel_tools_run_serially_fails_overlap_check() -> anyhow::Resu
         err.to_string()
             .contains("test_sync_tool and exec_command did not overlap"),
         "{err}"
-||||||| 413492cd6c
-    let duration = run_turn_and_measure(&test, "mix tools").await?;
-    assert_parallel_duration(duration);
-=======
-    let start = Instant::now();
-    run_turn(&test, "mix tools").await?;
-    let elapsed = start.elapsed();
-    assert!(
-        elapsed < Duration::from_millis(1_600),
-        "expected parallel execution to finish quickly, got {elapsed:?}"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     );
 
     Ok(())
@@ -495,25 +428,8 @@ async fn shell_tools_start_before_response_completed_when_stream_delayed() -> an
     };
     // Use a non-login shell to avoid slow, user-specific shell init (e.g. zsh profiles)
     // from making this timing-based test flaky.
-<<<<<<< HEAD
-||||||| 413492cd6c
-    let args = json!({
-        "command": command,
-        "login": false,
-        "timeout_ms": 5_000,
-    });
-
-=======
-    let args = json!({
-        "cmd": command,
-        "login": false,
-        "yield_time_ms": 5_000,
-    });
-
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let first_chunk = sse(vec![
         ev_response_created(first_response_id),
-<<<<<<< HEAD
         ev_function_call(
             "call-1",
             "exec_command",
@@ -534,17 +450,6 @@ async fn shell_tools_start_before_response_completed_when_stream_delayed() -> an
             "exec_command",
             &serde_json::to_string(&json!({"cmd": command(4), "login": false}))?,
         ),
-||||||| 413492cd6c
-        ev_shell_command_call_with_args("call-1", &args),
-        ev_shell_command_call_with_args("call-2", &args),
-        ev_shell_command_call_with_args("call-3", &args),
-        ev_shell_command_call_with_args("call-4", &args),
-=======
-        ev_exec_command_call_with_args("call-1", &args),
-        ev_exec_command_call_with_args("call-2", &args),
-        ev_exec_command_call_with_args("call-3", &args),
-        ev_exec_command_call_with_args("call-4", &args),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     ]);
     let second_chunk = sse(vec![ev_completed(first_response_id)]);
     let follow_up = sse(vec![

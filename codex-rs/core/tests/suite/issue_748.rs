@@ -5,6 +5,7 @@
 //! project, or to `.codex`, which workspace-write keeps read-only itself) is
 //! not attributed to it, and Permissive is unchanged.
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 
 use codex_core::config::Constrained;
@@ -58,7 +59,8 @@ struct Outcome {
 /// would follow untrusted content, the first call's output).
 #[derive(Clone, Copy, Debug)]
 enum Command {
-    /// `cat` of the Corbanu home's `auth.json`, through `shell_command`.
+    /// `cat` of the Corbanu home's `auth.json`, through `exec_command` (formerly `shell_command`,
+    /// which upstream removed).
     Read,
     /// The same through `exec_command`.
     ReadExec,
@@ -80,18 +82,18 @@ async fn run(level: SecurityLevel, command: Command, approved: bool) -> anyhow::
     std::fs::write(&auth, CANARY)?;
     let read = format!("cat '{}'", auth.display());
     let (name, arguments) = match command {
-        Command::Read => ("shell_command", json!({ "command": read })),
+        Command::Read => ("exec_command", json!({ "cmd": read })),
         Command::ReadExec => (
             "exec_command",
             json!({ "cmd": read, "yield_time_ms": 5_000 }),
         ),
         Command::WriteCodex | Command::WriteCodexFullAccess => (
-            "shell_command",
-            json!({ "command": "printf x > .codex/p748.toml" }),
+            "exec_command",
+            json!({ "cmd": "printf x > .codex/p748.toml" }),
         ),
         Command::WriteOutside => (
-            "shell_command",
-            json!({ "command": "printf x > ../outside-748.txt" }),
+            "exec_command",
+            json!({ "cmd": "printf x > ../outside-748.txt" }),
         ),
     };
     let server = start_mock_server().await;
@@ -108,8 +110,8 @@ async fn run(level: SecurityLevel, command: Command, approved: bool) -> anyhow::
             0,
             call(
                 "call-untrusted",
-                "shell_command",
-                json!({ "command": "printf 'notes'" }),
+                "exec_command",
+                json!({ "cmd": "printf 'notes'" }),
             ),
         );
         AskForApproval::OnRequest
@@ -150,16 +152,13 @@ async fn run(level: SecurityLevel, command: Command, approved: bool) -> anyhow::
         .build(&server)
         .await?;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "check the notes".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let mut warnings = Vec::new();
     loop {

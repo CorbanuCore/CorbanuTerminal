@@ -528,8 +528,8 @@ async fn accounting_chat_native_finish_reason_and_tool_parity() -> anyhow::Resul
                     .disable(codex_features::Feature::CodeModeOnly)
                     .unwrap();
             })
-            // Local executor only: `shell_command` runs commands on the Codex
-            // host, never in a remote environment (#708, #721).
+            // Local executor only, as when this ran through the host-only
+            // `shell_command` tool (#708, #721).
             .build(&server)
             .await?;
         submit(&test).await?;
@@ -537,7 +537,7 @@ async fn accounting_chat_native_finish_reason_and_tool_parity() -> anyhow::Resul
         let payload = if reason == "tool_calls" {
             data(
                 json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"safe-call",
-                "type":"function","function":{"name":"shell_command","arguments":"{\"command\":\"echo fixture\"}"}}]},
+                "type":"function","function":{"name":"exec_command","arguments":"{\"cmd\":\"echo fixture\"}"}}]},
                 "finish_reason":"tool_calls"}],"usage":usage()}),
             ) + "data: [DONE]\n\n"
         } else {
@@ -594,13 +594,13 @@ async fn accounting_chat_native_sampling_auxiliary_scope() -> anyhow::Result<()>
                 .disable(codex_features::Feature::RemoteCompactionV2)
                 .unwrap();
         })
-        // Local executor only: `shell_command` runs commands on the Codex
-        // host, never in a remote environment (#708, #721).
+        // Local executor only, as when this ran through the host-only
+        // `shell_command` tool (#708, #721).
         .build(&server)
         .await?;
     submit(&test).await?;
     gate.next().await?.chunks.send(data(json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"safe-call",
-        "type":"function","function":{"name":"shell_command","arguments":"{\"command\":\"echo fixture\"}"}}]},
+        "type":"function","function":{"name":"exec_command","arguments":"{\"cmd\":\"echo fixture\"}"}}]},
         "finish_reason":"tool_calls"}],"usage":usage()})) + "data: [DONE]\n\n").await?;
     gate.next().await?.chunks.send(success(usage())).await?;
     let events = terminal(&test).await?;

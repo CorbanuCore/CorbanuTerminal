@@ -913,9 +913,10 @@ impl ProviderAuthCommandFixture {
         let tempdir = tempfile::tempdir()?;
         let tokens_file = tempdir.path().join("tokens.txt");
         let mut token_file_contents = String::new();
+        let line_ending = if cfg!(windows) { "\r\n" } else { "\n" };
         for token in tokens {
             token_file_contents.push_str(token);
-            token_file_contents.push('\n');
+            token_file_contents.push_str(line_ending);
         }
         std::fs::write(&tokens_file, token_file_contents)?;
 
@@ -952,12 +953,18 @@ endlocal
 if exist fail-until-401 exit /b 1
 
 set "first_line="
-<tokens.txt set /p first_line=
+<tokens.txt set /p "first_line="
 if not defined first_line exit /b 1
 
-echo(%first_line%
-if defined PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH (echo %PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH%>>refresh-signals.txt) else (echo 0>>refresh-signals.txt)
-more +1 tokens.txt > tokens.next
+setlocal EnableDelayedExpansion
+echo(!first_line!
+endlocal
+set "refresh_signal=0"
+if defined PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH set "refresh_signal=%PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH%"
+>>refresh-signals.txt echo(%refresh_signal%
+rem Match the login fixture: more.com fails in batched Windows test runs.
+type nul > tokens.next
+for /f "usebackq skip=1 delims=" %%L in ("tokens.txt") do >>tokens.next echo(%%L
 move /y tokens.next tokens.txt >nul
 "#,
             )?;
@@ -1032,6 +1039,26 @@ fn provider_auth_command_logs_credential_paths_with_cmd_metacharacters() -> anyh
         std::fs::read_to_string(auth_fixture.tempdir.path().join("credential-env.txt"))?,
         format!("{}\r\n\r\n", credential_file.display()),
     );
+    Ok(())
+}
+
+#[test]
+fn provider_auth_command_fixture_records_refresh_signals() -> anyhow::Result<()> {
+    let fixture = ProviderAuthCommandFixture::new(&["first-token", "second-token"])?;
+    for (refresh, expected) in [(false, "first-token"), (true, "second-token")] {
+        let mut command = std::process::Command::new(&fixture.command);
+        command
+            .args(&fixture.args)
+            .current_dir(fixture.tempdir.path())
+            .env_remove("PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH");
+        if refresh {
+            command.env("PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH", "1");
+        }
+        let output = command.output()?;
+        assert!(output.status.success(), "synthetic auth fixture failed");
+        assert_eq!(String::from_utf8(output.stdout)?.trim(), expected);
+    }
+    assert_eq!(fixture.refresh_signals(), ["0", "1"]);
     Ok(())
 }
 
@@ -1745,6 +1772,58 @@ async fn provider_auth_command_recovers_after_initial_resolution_failure() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn provider_auth_command_does_not_refresh_plan_entitlement_401() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = MockServer::start().await;
+    let auth_fixture = ProviderAuthCommandFixture::new(&["first-token", "second-token"])?;
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .and(header("authorization", "Bearer first-token"))
+        .respond_with(ResponseTemplate::new(401).set_body_json(json!({
+            "error": {"type": "invalid_request_error", "message": "context tokens exceed this plan"}
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let provider = ModelProviderInfo {
+        base_url: Some(format!("{}/v1", server.uri())),
+        auth: Some(auth_fixture.auth()),
+        env_key: None,
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        ..ModelProviderInfo::create_anthropic_provider()
+    };
+    let test = test_codex()
+        .with_config(move |config| {
+            config.model = Some("claude-opus-5".to_owned());
+            config.model_provider_id = "anthropic".to_owned();
+            config.model_provider = provider;
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    test.codex
+        .start_or_steer_turn(TurnInputRequest::user_input(vec![UserInput::Text {
+            text: "hello".to_owned(),
+            text_elements: vec![],
+        }]))
+        .await?;
+    let mut saw_entitlement_error = false;
+    loop {
+        match test.codex.next_event().await?.msg {
+            EventMsg::Error(error) => {
+                assert!(error.message.contains("plan"), "expected plan guidance");
+                saw_entitlement_error = true;
+            }
+            EventMsg::TurnComplete(_) => break,
+            _ => {}
+        }
+    }
+    assert!(saw_entitlement_error);
+    assert_eq!(auth_fixture.refresh_signals(), ["0"]);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn amazon_bedrock_proxy_uses_command_auth_and_custom_headers() {
     skip_if_no_network!();
 
@@ -1815,16 +1894,12 @@ async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuth
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
-<<<<<<< HEAD
         billing: None,
-||||||| 413492cd6c
-=======
         capabilities: None,
         project_id: None,
         location: None,
         credential_file: None,
         include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     send_request_with_provider(provider).await;
@@ -2564,228 +2639,6 @@ async fn powershell_shell_version_is_model_visible_only_when_enabled() -> anyhow
         );
     }
 
-<<<<<<< HEAD
-    let codex_home_path = codex_home.path().to_path_buf();
-    let mut builder = test_codex()
-        .with_home(codex_home.clone())
-        .with_auth(CodexAuth::from_api_key("Test API Key"))
-        .with_config(move |config| {
-            config.cwd = codex_home_path.abs();
-            let user_config_path = codex_home_path.join("config.toml").abs();
-            config.config_layer_stack = ConfigLayerStack::default()
-                .with_user_config(
-                    &user_config_path,
-                    toml! { skills = { bundled = { enabled = false } } }.into(),
-                )
-                .expect("skills user config should be valid");
-            config.model_context_window = Some(12_000);
-        });
-    let codex = builder
-        .build(&server)
-        .await
-        .expect("create new conversation")
-        .codex;
-
-    codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
-        .await
-        .unwrap();
-
-    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
-
-    let request = resp_mock.single_request();
-    let developer_messages = request.message_input_texts("developer");
-    let developer_text = developer_messages.join("\n\n");
-    let expected_root = normalize_path(skill_root).unwrap();
-    let expected_root_str = expected_root.to_string_lossy().replace('\\', "/");
-    assert!(
-        developer_text.contains("### Skill roots"),
-        "expected aliased skills root section: {developer_messages:?}"
-    );
-    assert!(
-        developer_text.contains(&format!("- `r0` = `{expected_root_str}`")),
-        "expected root alias for {expected_root_str}: {developer_messages:?}"
-    );
-    assert!(
-        developer_text.contains("- s00: d (file: r0/s00/SKILL.md)"),
-        "expected skill path to use root alias: {developer_messages:?}"
-    );
-    assert!(
-        developer_text.contains(
-            "a short path that can be expanded into an absolute path using the skill roots table"
-        ),
-        "expected alias-specific skill instructions: {developer_messages:?}"
-    );
-    let _codex_home_guard = codex_home;
-    let _codex_home_parent_guard = codex_home_parent;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn includes_configured_max_effort_in_request() -> anyhow::Result<()> {
-    skip_if_no_network!(Ok(()));
-    let server = MockServer::start().await;
-
-    let resp_mock = mount_sse_once(
-        &server,
-        sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
-    )
-    .await;
-    let TestCodex { codex, .. } = test_codex()
-        .with_model("gpt-5.4")
-        .with_config(|config| {
-            config.model_reasoning_effort = Some(ReasoningEffort::Max);
-        })
-        .build(&server)
-        .await?;
-
-    codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
-        .await
-        .unwrap();
-
-    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
-
-    let request = resp_mock.single_request();
-    let request_body = request.body_json();
-
-    assert_eq!(
-        request_body
-            .get("reasoning")
-            .and_then(|t| t.get("effort"))
-            .and_then(|v| v.as_str()),
-        Some("max")
-    );
-
-||||||| 413492cd6c
-    let codex_home_path = codex_home.path().to_path_buf();
-    let mut builder = test_codex()
-        .with_home(codex_home.clone())
-        .with_auth(CodexAuth::from_api_key("Test API Key"))
-        .with_config(move |config| {
-            config.cwd = codex_home_path.abs();
-            let user_config_path = codex_home_path.join("config.toml").abs();
-            config.config_layer_stack = ConfigLayerStack::default()
-                .with_user_config(
-                    &user_config_path,
-                    toml! { skills = { bundled = { enabled = false } } }.into(),
-                )
-                .expect("skills user config should be valid");
-            config.model_context_window = Some(12_000);
-        });
-    let codex = builder
-        .build(&server)
-        .await
-        .expect("create new conversation")
-        .codex;
-
-    codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
-        .await
-        .unwrap();
-
-    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
-
-    let request = resp_mock.single_request();
-    let developer_messages = request.message_input_texts("developer");
-    let developer_text = developer_messages.join("\n\n");
-    let expected_root = normalize_path(skill_root).unwrap();
-    let expected_root_str = expected_root.to_string_lossy().replace('\\', "/");
-    assert!(
-        developer_text.contains("### Skill roots"),
-        "expected aliased skills root section: {developer_messages:?}"
-    );
-    assert!(
-        developer_text.contains(&format!("- `r0` = `{expected_root_str}`")),
-        "expected root alias for {expected_root_str}: {developer_messages:?}"
-    );
-    assert!(
-        developer_text.contains("- s00: d (file: r0/s00/SKILL.md)"),
-        "expected skill path to use root alias: {developer_messages:?}"
-    );
-    assert!(
-        developer_text.contains(
-            "expand the listed short `path` with the matching alias from `### Skill roots`"
-        ),
-        "expected alias-specific skill instructions: {developer_messages:?}"
-    );
-    let _codex_home_guard = codex_home;
-    let _codex_home_parent_guard = codex_home_parent;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn includes_configured_max_effort_in_request() -> anyhow::Result<()> {
-    skip_if_no_network!(Ok(()));
-    let server = MockServer::start().await;
-
-    let resp_mock = mount_sse_once(
-        &server,
-        sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
-    )
-    .await;
-    let TestCodex { codex, .. } = test_codex()
-        .with_model("gpt-5.4")
-        .with_config(|config| {
-            config.model_reasoning_effort = Some(ReasoningEffort::Max);
-        })
-        .build(&server)
-        .await?;
-
-    codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
-        .await
-        .unwrap();
-
-    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
-
-    let request = resp_mock.single_request();
-    let request_body = request.body_json();
-
-    assert_eq!(
-        request_body
-            .get("reasoning")
-            .and_then(|t| t.get("effort"))
-            .and_then(|v| v.as_str()),
-        Some("max")
-    );
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     Ok(())
 }
 
@@ -3561,16 +3414,12 @@ async fn azure_responses_request_does_not_store_and_preserves_prefixed_item_ids(
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
-<<<<<<< HEAD
         billing: None,
-||||||| 413492cd6c
-=======
         capabilities: None,
         project_id: None,
         location: None,
         credential_file: None,
         include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     let codex_home = TempDir::new().unwrap();
@@ -4428,16 +4277,12 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
-<<<<<<< HEAD
         billing: None,
-||||||| 413492cd6c
-=======
         capabilities: None,
         project_id: None,
         location: None,
         credential_file: None,
         include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     // Init session
@@ -4497,14 +4342,8 @@ async fn env_var_overrides_loaded_auth() {
         .await;
 
     let provider = ModelProviderInfo {
-<<<<<<< HEAD
         account: None,
-        name: "custom".to_string(),
-||||||| 413492cd6c
-        name: "custom".to_string(),
-=======
         name: ModelProviderInfo::create_openai_provider(/*base_url*/ None).name,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         base_url: Some(format!("{}/openai", server.uri())),
         model_catalog_url: None,
         // Reuse the existing environment variable to avoid using unsafe code
@@ -4536,16 +4375,12 @@ async fn env_var_overrides_loaded_auth() {
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
-<<<<<<< HEAD
         billing: None,
-||||||| 413492cd6c
-=======
         capabilities: None,
         project_id: None,
         location: None,
         credential_file: None,
         include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     // Init session
@@ -4769,16 +4604,10 @@ async fn other_rate_limits_are_not_retried() -> anyhow::Result<()> {
     let mut builder = test_codex();
     let test = builder.build(&server).await?;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+        .start_or_steer_turn(TurnInputRequest::user_input(vec![UserInput::Text {
+            text: "hello".into(),
+            text_elements: Vec::new(),
+        }]))
         .await?;
     wait_for_event(&test.codex, |event| matches!(event, EventMsg::Error(_))).await;
 

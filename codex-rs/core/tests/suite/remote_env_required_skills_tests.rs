@@ -134,6 +134,7 @@ async fn required_environment_skill_gates_inference(availability: Availability) 
         "Review the workspace.",
         vec![primary.clone(), required],
         AskForApproval::Never,
+        codex_protocol::protocol::SandboxPolicy::new_read_only_policy(),
     )
     .await?;
     let mut errors = Vec::new();

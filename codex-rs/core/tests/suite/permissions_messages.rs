@@ -1000,6 +1000,7 @@ async fn permissions_message_includes_writable_roots(
         file_system.entries.push(FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
                 pattern: denied_glob.clone(),
+                scan: None,
             },
             FileSystemAccessMode::Deny,
         ));
@@ -1169,6 +1170,7 @@ pub(super) async fn catalog_permission_paths_model_change_requests(
                                 .join("catalog-secrets/*.key")
                                 .expect("executor denied glob URI")
                                 .inferred_native_path_string(),
+                            scan: None,
                         },
                         FileSystemAccessMode::Deny,
                     ),

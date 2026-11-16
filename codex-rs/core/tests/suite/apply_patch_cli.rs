@@ -1204,25 +1204,15 @@ async fn apply_patch_cli_does_not_write_through_symlink_escape_outside_workspace
     // The folder that holds `work` and `outside` is the workspace root.
     let config_folder = test_root.path().to_path_buf();
     let harness = apply_patch_harness_with(move |builder| {
-<<<<<<< HEAD
         builder
             .with_config_folder(config_folder)
             .with_config(move |config| {
+                config.workspace_roots = vec![harness_work_dir.clone()];
+                config
+                    .permissions
+                    .set_workspace_roots(config.workspace_roots.clone());
                 config.cwd = harness_work_dir;
             })
-||||||| 413492cd6c
-        builder.with_config(move |config| {
-            config.cwd = harness_work_dir;
-        })
-=======
-        builder.with_config(move |config| {
-            config.workspace_roots = vec![harness_work_dir.clone()];
-            config
-                .permissions
-                .set_workspace_roots(config.workspace_roots.clone());
-            config.cwd = harness_work_dir;
-        })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     })
     .await?;
     let original_contents = "original outside content\n";
@@ -1354,25 +1344,15 @@ async fn apply_patch_cli_preserves_existing_hard_link_outside_workspace() -> Res
     // The folder that holds `work` and `outside` is the workspace root.
     let config_folder = test_root.path().to_path_buf();
     let harness = apply_patch_harness_with(move |builder| {
-<<<<<<< HEAD
         builder
             .with_config_folder(config_folder)
             .with_config(move |config| {
+                config.workspace_roots = vec![harness_work_dir.clone()];
+                config
+                    .permissions
+                    .set_workspace_roots(config.workspace_roots.clone());
                 config.cwd = harness_work_dir;
             })
-||||||| 413492cd6c
-        builder.with_config(move |config| {
-            config.cwd = harness_work_dir;
-        })
-=======
-        builder.with_config(move |config| {
-            config.workspace_roots = vec![harness_work_dir.clone()];
-            config
-                .permissions
-                .set_workspace_roots(config.workspace_roots.clone());
-            config.cwd = harness_work_dir;
-        })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     })
     .await?;
     let outside_file = outside_dir.join("victim.txt");

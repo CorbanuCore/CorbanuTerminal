@@ -1,23 +1,12 @@
 #![allow(clippy::unwrap_used)]
 
 use anyhow::Result;
-<<<<<<< HEAD
-use codex_config::ConfigLayerStack;
-use codex_core_skills::SkillsLoadInput;
-use codex_core_skills::SkillsService;
-||||||| 413492cd6c
-=======
 use codex_core::StartIfIdleSubmission;
 use codex_core::TurnInput;
 use codex_core::TurnInputRequest;
 use codex_core::config::Config;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_exec_server::CreateDirectoryOptions;
 use codex_exec_server::ExecutorFileSystem;
-<<<<<<< HEAD
-use codex_exec_server::LOCAL_FS;
-||||||| 413492cd6c
-=======
 use codex_extension_api::ExtensionFuture;
 use codex_extension_api::ExtensionRegistryBuilder;
 use codex_extension_api::SkillInvocationContributor;
@@ -27,7 +16,6 @@ use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::Settings;
 use codex_protocol::models::ContentItem;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::AskForApproval;
@@ -46,24 +34,12 @@ use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-<<<<<<< HEAD
-use core_test_support::skip_if_target_windows;
-||||||| 413492cd6c
-use core_test_support::skip_if_target_windows;
-use core_test_support::test_codex::local_selections;
-=======
 use core_test_support::skip_if_remote;
 use core_test_support::skip_if_wine_exec;
-use core_test_support::test_codex::local_requests;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
-<<<<<<< HEAD
-use toml::toml;
-||||||| 413492cd6c
-=======
 use std::sync::Mutex;
 use tracing::Level;
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -85,7 +61,6 @@ impl SkillInvocationContributor for SkillInvocationRecorder {
         })
     }
 }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 async fn write_repo_skill(
     cwd: AbsolutePathBuf,
@@ -170,26 +145,10 @@ async fn user_turn_includes_skill_instructions() -> Result<()> {
                     name: "demo".to_string(),
                     path: skill_path.clone(),
                 },
-<<<<<<< HEAD
-            ],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
-                // The test's default environment: remote in the remote lane.
-                environments: None,
-||||||| 413492cd6c
-            ],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
-                environments: Some(local_selections(test.config.cwd.clone())),
-=======
             ])
             .with_thread_settings(ThreadSettingsOverrides {
-                environments: Some(local_requests(test.config.cwd.clone())),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                // The test's default environment: remote in the remote lane.
+                environments: None,
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
@@ -535,41 +494,88 @@ async fn idle_user_turn_includes_skill_instructions_in_the_first_request() -> Re
     Ok(())
 }
 
+const HOME_SKILLS_SUBPROCESS_ENV_VAR: &str = "CODEX_HARNESS_HOME_SKILLS_SUBPROCESS";
+const HOME_SKILLS_TEST_NAME: &str = "suite::skills::harness_skips_the_user_home_skills_root";
+
 /// #888: the test harness never reads the developer's own `$HOME/.agents/skills`.
-/// The root is listed whether or not the folder exists, so this fails without
-/// the harness setting on every machine, not only on a developer's Mac.
+///
+/// Upstream no longer exposes the resolved skill roots, so this runs itself again
+/// with `HOME` pointing at a temporary folder whose `.agents/skills` holds a skill,
+/// and checks that the harness loads `$CODEX_HOME/skills` but not that skill.
+/// Unix only: elsewhere the home folder does not come from `HOME`.
+#[cfg(unix)]
 #[tokio::test]
 async fn harness_skips_the_user_home_skills_root() -> Result<()> {
-    let home = tempfile::tempdir()?;
-    let codex_home = AbsolutePathBuf::from_absolute_path_checked(home.path())?;
-    let config_layer_stack = ConfigLayerStack::default().with_user_config(
-        &codex_home.join("config.toml"),
-        toml! { skills = { bundled = { enabled = false } } }.into(),
+    fn write_skill(root: &std::path::Path, name: &str) -> Result<()> {
+        let dir = root.join(name);
+        std::fs::create_dir_all(&dir)?;
+        std::fs::write(
+            dir.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: {name} skill\n---\n"),
+        )?;
+        Ok(())
+    }
+
+    if std::env::var_os(HOME_SKILLS_SUBPROCESS_ENV_VAR).is_none() {
+        let fake_home = tempfile::tempdir()?;
+        write_skill(
+            &fake_home.path().join(".agents").join("skills"),
+            "home-probe",
+        )?;
+        let output = std::process::Command::new(std::env::current_exe()?)
+            .args(["--exact", HOME_SKILLS_TEST_NAME, "--nocapture"])
+            .env(HOME_SKILLS_SUBPROCESS_ENV_VAR, "1")
+            .env("HOME", fake_home.path())
+            .output()?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            output.status.success() && stdout.contains("1 passed"),
+            "subprocess test failed or did not run\nstdout:\n{stdout}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr),
+        );
+        return Ok(());
+    }
+
+    let home = dirs::home_dir().expect("a home folder");
+    assert!(
+        home.join(".agents/skills/home-probe/SKILL.md").exists(),
+        "the parent test points HOME at a folder with a home skill"
+    );
+    let codex_home_dir = tempfile::tempdir()?;
+    let codex_home = AbsolutePathBuf::from_absolute_path_checked(codex_home_dir.path())?;
+    write_skill(
+        &codex_home.join("skills").to_path_buf(),
+        "codex-home-control",
     )?;
-    let service = SkillsService::new(codex_home.clone(), /*bundled_skills_enabled*/ false);
-    let input = SkillsLoadInput::new(
-        codex_home.clone(),
+    let cwd_dir = tempfile::tempdir()?;
+    let cwd = AbsolutePathBuf::from_absolute_path_checked(cwd_dir.path())?;
+    let config_layer_stack = codex_config::ConfigLayerStack::default().with_user_config(
+        &codex_home.join("config.toml"),
+        toml::toml! { skills = { bundled = { enabled = false } } }.into(),
+    )?;
+    let service = codex_skills_extension::HostSkillsService::new(
+        codex_home, /*bundled_skills_enabled*/ false,
+    );
+    let input = codex_skills_extension::HostSkillsLoadInput::new(
+        cwd,
         /*effective_skill_roots*/ Vec::new(),
         config_layer_stack,
-        /*bundled_skills_enabled*/ false,
     );
-
-    let roots: Vec<_> = service
-        .skill_roots_for_config(&input, Some(Arc::clone(&LOCAL_FS)))
-        .await
-        .into_iter()
-        .map(|root| root.path.to_path_buf())
+    let snapshot = service
+        .snapshot_for_config(&input, Some(Arc::clone(&codex_exec_server::LOCAL_FS)))
+        .await;
+    let names: Vec<_> = snapshot
+        .outcome()
+        .skills
+        .iter()
+        .map(|skill| skill.name.clone())
         .collect();
 
-    // The user layer was read: its `$CODEX_HOME/skills` root is listed.
+    // The user layer was read: its `$CODEX_HOME/skills` skill is loaded.
     assert!(
-        roots.contains(&codex_home.join("skills").to_path_buf()),
-        "{roots:?}"
+        names.contains(&"codex-home-control".to_string()),
+        "{names:?}"
     );
-    let user_home_skills = dirs::home_dir()
-        .expect("a home folder")
-        .join(".agents")
-        .join("skills");
-    assert!(!roots.contains(&user_home_skills), "{roots:?}");
+    assert!(!names.contains(&"home-probe".to_string()), "{names:?}");
     Ok(())
 }

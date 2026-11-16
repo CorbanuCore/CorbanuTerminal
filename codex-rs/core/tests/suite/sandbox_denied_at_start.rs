@@ -2,6 +2,7 @@
 //! stopped as it started ran without ever appearing on screen.
 #![cfg(target_os = "macos")]
 
+use codex_core::TurnInputRequest;
 use codex_core::config::Constrained;
 use codex_features::Feature;
 use codex_protocol::protocol::AskForApproval;
@@ -34,7 +35,6 @@ async fn issue_443_a_command_the_sandbox_stops_at_start_is_shown() -> anyhow::Re
         .with_model("test-gpt-5.1-codex")
         .with_config(|config| {
             config.security_level = SecurityLevel::Aggressive;
-            config.use_experimental_unified_exec_tool = true;
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::Never);
             for feature in [Feature::SourceEnvelopes, Feature::UnifiedExec] {
                 config
@@ -70,16 +70,13 @@ async fn issue_443_a_command_the_sandbox_stops_at_start_is_shown() -> anyhow::Re
     )
     .await;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "read the Corbanu home file".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let mut began = false;
     let mut ended = None;

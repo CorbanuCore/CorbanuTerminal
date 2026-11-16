@@ -3635,10 +3635,11 @@ async fn remote_limited_mode_method_block_ends_command_as_failed() -> Result<()>
 
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "S3b: configured credential providers are inert while main's broker engine brokers \
-            every proxy (network-proxy/src/credential_broker.rs ledger row); the real value \
-            reaches the command unmasked, as on main"]
-async fn agent_started_proxy_denies_brokered_provider_alias() -> Result<()> {
+/// #2269 (S3b, `network-proxy/src/credential_broker/configured.rs` row): main's broker
+/// engine does not broker configured `credential_providers`, so their source values are
+/// withheld from the command instead of reaching it unmasked. D612 (withhold or refuse
+/// at config load) is the owner's open choice; this pins the current withholding.
+async fn agent_started_proxy_withholds_unbrokered_provider_credential() -> Result<()> {
     const REAL_CREDENTIAL: &str = "alias_aaaaaaaaaaaaaaaaaaaaaaaa";
     let upstream = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = upstream.local_addr()?.port();
@@ -3715,12 +3716,11 @@ async fn agent_started_proxy_denies_brokered_provider_alias() -> Result<()> {
         // Credential brokerage currently runs only in the local environment.
         .build(&server)
         .await?;
-    let proxy = test
-        .session_configured
+    test.session_configured
         .network_proxy
         .as_ref()
         .context("agent did not start its managed network proxy")?;
-    let command = r#"printf 'BROKERED:%s\nACTIVE:%s\n' "$ALIAS_TEST_TOKEN" "$CODEX_NETWORK_PROXY_CREDENTIAL_BROKER_ACTIVE""#;
+    let command = r#"printf 'BROKERED:%s\n' "$ALIAS_TEST_TOKEN""#;
     let call_id = "exec-brokered-provider-alias";
     let mut args = network_exec_args(command);
     args["yield_time_ms"] = json!(30_000);
@@ -3731,36 +3731,12 @@ async fn agent_started_proxy_denies_brokered_provider_alias() -> Result<()> {
     let output = responses
         .function_call_output_text(call_id)
         .context("agent did not return command output")?;
-    assert!(output.contains("ACTIVE:1"), "{output}");
-    assert!(!output.contains(REAL_CREDENTIAL));
-    let token = output
-        .lines()
-        .find_map(|line| line.strip_prefix("BROKERED:"))
-        .context("agent did not expose its brokered dummy")?;
-    assert!(token.starts_with("alias_"));
-
-    // Probe after the command exits so the denial cannot interrupt the tool call.
-    let response = tokio::time::timeout(Duration::from_secs(/*secs*/ 5), async {
-        let mut connection = tokio::net::TcpStream::connect(&proxy.http_addr).await?;
-        connection
-            .write_all(
-                format!(
-                    "GET http://127.0.0.1:{port}/v2/resource HTTP/1.1\r\n\
-                     Host: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\n\
-                     Connection: close\r\n\r\n"
-                )
-                .as_bytes(),
-            )
-            .await?;
-        let mut response = String::new();
-        connection.read_to_string(&mut response).await?;
-        Ok::<_, std::io::Error>(response)
-    })
-    .await
-    .context("alias denial did not finish")??;
-    assert!(response.starts_with("HTTP/1.1 403"), "{response}");
-    assert!(response.contains("blocked-by-mitm-hook"), "{response}");
-    assert!(!response.contains(REAL_CREDENTIAL));
+    assert!(!output.contains(REAL_CREDENTIAL), "{output}");
+    // The command ran (its `printf` reached the model) and saw no value.
+    assert!(
+        output.lines().any(|line| line == "BROKERED:"),
+        "the configured provider's source must be withheld: {output}"
+    );
     Ok(())
 }
 

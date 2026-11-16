@@ -218,17 +218,19 @@ fn default_owned_screen_entry_paints_before_sync_ends_and_exit_clears_inline_dra
     first_frame.process(&terminal.output[..end]);
     let first_contents = first_frame.screen().contents();
     ensure!(
-        first_contents.contains("OpenAI Codex")
-            && first_contents.contains("Ask Codex to do anything"),
+        first_contents.contains("Corbanu Terminal")
+            && first_contents.contains("Ask Corbanu Terminal to do anything"),
         "owned-screen synchronization ended before its first complete loading frame:\n{first_contents}"
     );
     let composer_row = first_contents
         .lines()
-        .position(|line| line.contains("Ask Codex to do anything"))
+        .position(|line| line.contains("Ask Corbanu Terminal to do anything"))
         .context("missing composer in first owned-screen frame")?;
     assert_eq!(
         (
-            first_contents.matches("Ask Codex to do anything").count(),
+            first_contents
+                .matches("Ask Corbanu Terminal to do anything")
+                .count(),
             first_frame.screen().cursor_position(),
             first_frame.screen().hide_cursor(),
         ),
@@ -274,7 +276,7 @@ fn default_owned_screen_entry_paints_before_sync_ends_and_exit_clears_inline_dra
     ensure!(
         !terminal
             .screen_contents()
-            .contains("Ask Codex to do anything"),
+            .contains("Ask Corbanu Terminal to do anything"),
         "owned-screen exit left the inline composer visible"
     );
     Ok(())

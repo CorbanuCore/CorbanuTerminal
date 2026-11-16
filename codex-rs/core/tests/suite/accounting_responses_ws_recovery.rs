@@ -98,6 +98,7 @@ async fn live_binding_denial(prime_denial: bool) -> anyhow::Result<()> {
                     model_provider: Some("changed-fixture".into()),
                     ..Default::default()
                 },
+                reply: None,
             })
             .await?;
         tokio::time::timeout(Duration::from_secs(2), async {
@@ -423,12 +424,10 @@ async fn accounting_responses_ws_native_spawned_role_children_and_fork() -> anyh
     wait_observations(&db, /*count*/ 4).await?;
     let before = turn_attempts(&db).await?;
     test.thread_manager
-        .fork_thread(
+        .fork_legacy_thread(
             codex_core::ForkSnapshot::Interrupted,
-            test.config.clone(),
+            codex_core::StartThreadOptions::new(test.config.clone()),
             test.codex.rollout_path().unwrap(),
-            /*thread_source*/ None,
-            /*parent_trace*/ None,
         )
         .await?;
     assert_eq!(turn_attempts(&db).await?, before);

@@ -182,9 +182,13 @@ fn assert_unconfirmed_command_history(
         lines_to_single_string(&display),
         format!("✗ Execution unconfirmed {command}\n  └ No exit status received\n")
     );
-    assert_eq!(
-        lines_to_single_string(&transcript),
-        format!("$ {command}\n✗ Execution unconfirmed (no exit status received)\n")
+    // #2221 (carried by #2328): a completed item keeps its job record, as for a declined
+    // command; it reports no process.
+    let transcript = lines_to_single_string(&transcript);
+    let head = format!("$ {command}\n✗ Execution unconfirmed (no exit status received)\n");
+    assert!(
+        transcript == head || transcript.starts_with(&format!("{head}\njob: pid=not reported · ")),
+        "{transcript}"
     );
 }
 

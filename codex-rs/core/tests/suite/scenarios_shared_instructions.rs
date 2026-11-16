@@ -53,6 +53,7 @@ async fn running_descendants_refresh_only_shared_thread_instructions(shared: boo
                     agent_path: None,
                     agent_nickname: None,
                     agent_role: None,
+                    agent_class: None,
                 })),
                 ..StartThreadOptions::new(test.config.clone())
             })
@@ -244,6 +245,7 @@ async fn guardian_tracks_shared_instruction_updates_in_running_descendants() -> 
                     agent_path: None,
                     agent_nickname: None,
                     agent_role: None,
+                    agent_class: None,
                 })),
                 ..StartThreadOptions::new(test.config.clone())
             })

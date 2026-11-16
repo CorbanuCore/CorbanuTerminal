@@ -8,6 +8,7 @@
 //! a session with untrusted content keep the #826 rule.
 #![cfg(target_os = "linux")]
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 
 use codex_core::config::Constrained;
@@ -54,12 +55,13 @@ const PAST_THE_PROTECTIONS: &str = "this command can get past the file protectio
 /// How a call runs its command.
 #[derive(Clone, Copy, Debug)]
 enum Kind {
-    /// `shell_command` asking to run outside the sandbox
-    /// (`require_escalated`), with a justification.
+    /// `exec_command` asking to run outside the sandbox
+    /// (`require_escalated`), with a justification (formerly `shell_command`,
+    /// which upstream removed).
     Escalated,
-    /// The same through `exec_command`.
+    /// The same with `exec_command`'s own arguments.
     EscalatedExec,
-    /// `shell_command` in the sandbox.
+    /// `exec_command` in the sandbox.
     Sandboxed,
 }
 
@@ -70,7 +72,7 @@ fn step(call_id: &str, command: &str, kind: Kind) -> Vec<Value> {
         "justification": JUSTIFICATION,
     });
     let (tool, mut arguments) = match kind {
-        Kind::Escalated | Kind::Sandboxed => ("shell_command", json!({ "command": command })),
+        Kind::Escalated | Kind::Sandboxed => ("exec_command", json!({ "cmd": command })),
         Kind::EscalatedExec => (
             "exec_command",
             json!({ "cmd": command, "yield_time_ms": 5_000 }),
@@ -146,8 +148,8 @@ async fn run(
             ev_response_created("call-first"),
             ev_function_call(
                 "call-first",
-                "shell_command",
-                &json!({ "command": "echo first" }).to_string(),
+                "exec_command",
+                &json!({ "cmd": "echo first" }).to_string(),
             ),
             ev_completed("call-first"),
         ]);
@@ -204,16 +206,13 @@ async fn run(
         .build(&server)
         .await?;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "make a user namespace".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let mut asked: Vec<Vec<String>> = vec![Vec::new(); calls.len()];
     let mut warnings = Vec::new();

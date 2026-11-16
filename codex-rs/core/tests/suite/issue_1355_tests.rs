@@ -3,6 +3,7 @@
 //! synthetic named sign-in uses the isolated test vault, never a native keyring.
 
 use codex_core::StartThreadOptions;
+use codex_core::TurnInputRequest;
 use codex_features::Feature;
 use codex_login::NamedChatgptAccount;
 use codex_login::login_named_account_with_api_key;
@@ -88,16 +89,13 @@ async fn held_child_mail_warns_the_parent_and_survives_account_recovery() -> any
     // separate default sign-in remains available throughout the test.
     child
         .thread
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "Before removal".to_string(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(&child.thread, |event| {
         assert!(!matches!(event, EventMsg::Error(_)), "{event:?}");
@@ -123,6 +121,7 @@ async fn held_child_mail_warns_the_parent_and_survives_account_recovery() -> any
                 MAIL.to_string(),
                 /*trigger_turn*/ true,
             ),
+            start_options: Default::default(),
         })
         .await?;
     // Consume only the parent's stream: the person does not have to open the
@@ -155,16 +154,13 @@ async fn held_child_mail_warns_the_parent_and_survives_account_recovery() -> any
     login_named_account_with_api_key(test.codex_home_path(), &account, KEY)?;
     child
         .thread
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "Continue after signing in".to_string(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(&child.thread, |event| {
         assert!(!matches!(event, EventMsg::Error(_)), "{event:?}");

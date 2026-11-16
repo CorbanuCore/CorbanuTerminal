@@ -2,13 +2,13 @@
 //! "function_call" and goes on in prose is one assistant message: the turn
 //! completes on the first request, with no stream error and no retry.
 
+use codex_core::TurnInputRequest;
 use std::time::Duration;
 
 use codex_login::CodexAuth;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::WireApi;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use core_test_support::responses::chat_completions_sse;
 use core_test_support::responses::sse_response;
@@ -59,16 +59,13 @@ async fn chat_answer_opening_with_function_call_json_is_one_message() -> anyhow:
         .await?;
 
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "What did the legacy function_call parameter do?".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
 
     let mut errors = Vec::new();

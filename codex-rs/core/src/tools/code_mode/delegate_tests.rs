@@ -258,3 +258,106 @@ async fn dropped_tool_callbacks_release_the_origin_before_dispatch() {
         Err("code mode nested tool call cancelled".to_string()),
     );
 }
+
+/// Keeps a regular turn running until it is aborted.
+struct PendingTurnTask;
+
+impl crate::tasks::SessionTask for PendingTurnTask {
+    fn kind(&self) -> crate::state::TaskKind {
+        crate::state::TaskKind::Regular
+    }
+
+    fn span_name(&self) -> &'static str {
+        "session_task.pending_turn"
+    }
+
+    async fn run(
+        self: Arc<Self>,
+        _session: Arc<crate::session::session::Session>,
+        _ctx: Arc<crate::session::turn_context::TurnContext>,
+        _input: Vec<crate::session::TurnInput>,
+        cancellation_token: CancellationToken,
+    ) -> crate::tasks::SessionTaskResult {
+        cancellation_token.cancelled().await;
+        Ok(None)
+    }
+}
+
+/// Main's `authorization_changed_turn_receives_code_mode_notify_and_user_shell_output`, code-mode
+/// notify half (PF-83; the user-shell half is in `session/tests/steering_authority_tests.rs`):
+/// after the running turn's permissions changed, a notification from the turn's own code-mode
+/// cell still reaches that turn. It is output of work the turn already started, not new input
+/// steered into it, so the changed authorization does not defer it to the next turn.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn authorization_changed_turn_receives_code_mode_notify() {
+    let (session, turn, _rx) = crate::session::tests::make_session_and_context_with_rx().await;
+    session
+        .spawn_task(Arc::clone(&turn), Vec::new(), PendingTurnTask)
+        .await;
+    session
+        .update_settings(crate::session::SessionSettingsUpdate {
+            step_settings: crate::session::step_settings::StepSettingsUpdate {
+                approval_policy: Some(codex_protocol::protocol::AskForApproval::UnlessTrusted),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .await
+        .expect("update approval policy");
+    assert_ne!(
+        turn.approval_policy(),
+        codex_protocol::protocol::AskForApproval::UnlessTrusted,
+        "the running turn must keep the permissions it was admitted under"
+    );
+
+    let broker = Arc::new(CodeModeDispatchBroker::new(
+        session.thread_id,
+        /*executed_tool_calls*/ Default::default(),
+    ));
+    let delegate = CodeModeCellDelegate {
+        broker: Arc::clone(&broker),
+        step_context: StepContext::for_test(Arc::clone(&turn)),
+    };
+    let cell_id = CellId::new("notify-cell".to_string());
+    broker.mark_cell_ready_for_dispatch(&cell_id, /*originating_call*/ None);
+    let _worker = broker.start_turn_worker(
+        Arc::clone(&session),
+        StepContext::for_test(Arc::clone(&turn)),
+        Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new())),
+    );
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        delegate.notify(
+            "notify-call".to_string(),
+            cell_id,
+            "pf83-notify-output".to_string(),
+            CancellationToken::new(),
+        ),
+    )
+    .await
+    .expect("notify should finish")
+    .expect("notify should reach the running turn");
+
+    let (pending, _) = session
+        .input_queue
+        .get_pending_input_for_running_task(&session, &turn.sub_id)
+        .await;
+    let [crate::session::TurnInput::ResponseItem(notify_output)] = pending.as_slice() else {
+        panic!("expected the notify output as the turn's input, got {pending:?}");
+    };
+    assert_eq!(
+        notify_output.clone().into_item(),
+        codex_protocol::models::ResponseItem::CustomToolCallOutput {
+            id: None,
+            call_id: "notify-call".to_string(),
+            name: Some("exec".to_string()),
+            output: codex_protocol::models::FunctionCallOutputPayload::from_text(
+                "pf83-notify-output".to_string()
+            ),
+            internal_chat_message_metadata_passthrough: None,
+        }
+    );
+    session
+        .abort_all_tasks(codex_protocol::protocol::TurnAbortReason::Interrupted)
+        .await;
+}
