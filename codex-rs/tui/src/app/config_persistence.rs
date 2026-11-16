@@ -100,6 +100,14 @@ impl App {
         permission_overrides
     }
 
+    /// D621 (#2310): what a resume that keeps or restores the thread's saved
+    /// settings still sends: Aggressive's launch approval override.
+    pub(crate) fn launch_approval_resume_permissions(
+        &self,
+    ) -> crate::resume_permissions::ResumePermissions {
+        crate::resume_permissions::ResumePermissions::launch_approval_only(&self.harness_overrides)
+    }
+
     pub(super) async fn rebuild_config_for_cwd(&self, cwd: PathBuf) -> Result<Config> {
         self.rebuild_config_for_cwd_from(&self.config, cwd).await
     }

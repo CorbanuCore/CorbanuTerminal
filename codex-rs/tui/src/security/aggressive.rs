@@ -124,6 +124,11 @@ fn string(value: &str) -> toml::Value {
 /// `-c`-level overrides; they also reach the embedded app server, so every
 /// thread it starts (and every child it spawns) is built from them.
 ///
+/// D621 (#2310): the approval policy is not among them. Upstream rejects
+/// `approval_policy = "untrusted"` in any config layer, so `untrusted` comes
+/// only from [`apply_launch_overrides`] and is sent with every thread
+/// request ([`is_launch_override`]).
+///
 /// `origin` is the Corbanu home whose stored level chose Aggressive: this
 /// home, or for a nested launch the home of the session that started it.
 /// Both paths must be valid UTF-8 (checked by the launch path) so the
@@ -194,7 +199,6 @@ pub(crate) fn base_overrides_with_registry(
         }
     }
     vec![
-        ("approval_policy".to_string(), string("untrusted")),
         ("approvals_reviewer".to_string(), string("user")),
         (format!("permissions.{PROFILE_ID}"), profile),
         ("default_permissions".to_string(), string(PROFILE_ID)),
@@ -333,6 +337,16 @@ pub(crate) fn apply_launch_overrides(overrides: &mut ConfigOverrides) -> Vec<&'s
     overrides.workspace_roots = None;
     overrides.tools_web_search_request = None;
     replaced
+}
+
+/// D621 (#2310): whether `overrides` carry Aggressive's launch approval
+/// override. The embedded app server never loads the launch overrides and
+/// the session flags no longer hold the policy, so every thread request,
+/// including a resume that otherwise keeps the thread's saved settings, must
+/// send it; otherwise the server resolves the user's own policy.
+pub(crate) fn is_launch_override(overrides: &ConfigOverrides) -> bool {
+    overrides.approval_policy == Some(AskForApproval::UnlessTrusted)
+        && overrides.default_permissions.as_deref() == Some(PROFILE_ID)
 }
 
 /// Every row must be observed in the loaded config; otherwise the failing

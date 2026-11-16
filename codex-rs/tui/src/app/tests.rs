@@ -17,6 +17,8 @@ mod math_interruption_tests;
 #[path = "tests/security_setup_tests.rs"]
 mod security_setup_tests;
 
+#[path = "tests/aggressive_resume_tests.rs"]
+mod aggressive_resume_tests;
 #[path = "tests/advanced_reasoning_tests.rs"]
 mod advanced_reasoning_tests;
 #[path = "tests/agents_navigation_tests.rs"]
