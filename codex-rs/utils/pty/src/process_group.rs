@@ -19,6 +19,41 @@ use std::io;
 
 use tokio::process::Child;
 
+/// Restore command signal handling in a forked child before exec.
+///
+/// Ignored dispositions and blocked signals survive exec. In particular, a
+/// shell cannot trap SIGINT/SIGQUIT if they were ignored when it started.
+/// Keep pipe and PTY children consistent, using only async-signal-safe calls.
+#[cfg(unix)]
+pub(crate) fn reset_child_signals() -> io::Result<()> {
+    // SAFETY: all pointers refer to initialized stack storage. sigemptyset,
+    // sigaction and sigprocmask are async-signal-safe; no allocation or locks
+    // are used in this pre_exec helper.
+    unsafe {
+        let mut action: libc::sigaction = std::mem::zeroed();
+        action.sa_sigaction = libc::SIG_DFL;
+        if libc::sigemptyset(&mut action.sa_mask) == -1 {
+            return Err(io::Error::last_os_error());
+        }
+        for signal in [
+            libc::SIGCHLD,
+            libc::SIGHUP,
+            libc::SIGINT,
+            libc::SIGQUIT,
+            libc::SIGTERM,
+            libc::SIGALRM,
+        ] {
+            if libc::sigaction(signal, &action, std::ptr::null_mut()) == -1 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        if libc::sigprocmask(libc::SIG_SETMASK, &action.sa_mask, std::ptr::null_mut()) == -1 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    Ok(())
+}
+
 #[cfg(target_os = "linux")]
 /// Ensure the child receives SIGTERM when the original parent dies.
 ///
