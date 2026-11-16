@@ -676,8 +676,13 @@ async fn responses_websocket_resume_prewarm_reuses_and_repairs_connection() -> a
     let connection = server.single_connection();
     assert_eq!(connection.len(), 3);
     let prewarm = connection[0].body_json();
-    assert_eq!(prewarm["input"].as_array().unwrap().len(), 1);
-    assert_eq!(prewarm["input"][0]["role"], "developer");
+    // Corbanu keeps base instructions in the dedicated request field.
+    assert_eq!(prewarm["input"], json!([]));
+    assert_eq!(
+        prewarm["instructions"],
+        connection[1].body_json()["instructions"]
+    );
+    assert!(!prewarm["instructions"].as_str().unwrap().is_empty());
     assert_eq!(connection[2].body_json()["previous_response_id"], "resp-1");
     let mut expected_history = connection
         .iter()
@@ -1051,8 +1056,11 @@ async fn responses_websocket_reconnects_when_the_sign_in_is_replaced() {
         )
         .await,
     );
+    let mut provider = websocket_provider(&server);
+    // This test exercises login replacement, so the provider must use that login.
+    provider.requires_openai_auth = true;
     let harness = websocket_harness_with_client_auth(
-        websocket_provider(&server),
+        provider,
         /*runtime_metrics_enabled*/ false,
         /*concurrent_reasoning_summaries_enabled*/ false,
         /*enabled_features*/ &[],
@@ -3023,7 +3031,10 @@ async fn websocket_harness(server: &WebSocketTestServer) -> WebsocketTestHarness
 }
 
 async fn websocket_harness_for_codex_backend(server: &WebSocketTestServer) -> WebsocketTestHarness {
-    let provider = ModelProviderInfo::create_openai_provider(Some(format!("{}/v1", server.uri())));
+    let mut provider =
+        ModelProviderInfo::create_openai_provider(Some(format!("{}/v1", server.uri())));
+    // Custom endpoints opt out by default; this fixture explicitly exercises WebSockets.
+    provider.supports_websockets = true;
     websocket_harness_with_provider_options_and_auth(
         provider,
         /*runtime_metrics_enabled*/ false,

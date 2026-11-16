@@ -1747,6 +1747,7 @@ async fn guardian_reviews_delayed_and_new_actions_after_catalog_refresh() -> Res
     preferred.slug = "codex-auto-review".to_string();
     catalog.models.push(preferred);
     mount_models_once(&server, catalog.clone()).await;
+    let catalog_url = format!("{}/v1/models", server.uri());
     let pause = Arc::new(PauseFirstAction::default());
     let mut extensions = ExtensionRegistryBuilder::<Config>::new();
     extensions.tool_lifecycle_contributor(pause.clone());
@@ -1754,7 +1755,9 @@ async fn guardian_reviews_delayed_and_new_actions_after_catalog_refresh() -> Res
         .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model("guardian-parent-a")
         .with_extensions(Arc::new(extensions.build()))
-        .with_config(|config| {
+        .with_config(move |config| {
+            // Pin this refresh fixture to its supplied catalog, without bundled overlays.
+            config.model_provider.model_catalog_url = Some(catalog_url.into());
             config.features.enable(Feature::StepModelSwitching).unwrap();
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
             config.approvals_reviewer = ApprovalsReviewer::AutoReview;

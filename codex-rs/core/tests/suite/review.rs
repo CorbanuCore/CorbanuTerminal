@@ -1072,6 +1072,13 @@ async fn review_uses_session_model_when_review_model_unset() {
             config.model = Some("gpt-5.4".to_string());
             config.review_model = None;
             config.model_reasoning_effort = Some(ReasoningEffort::Persistent);
+            // This case asserts disabled tools, not the product default (sleep is enabled).
+            config.features.disable(Feature::SleepTool).unwrap();
+            config
+                .features
+                .disable(Feature::CurrentTimeReminder)
+                .unwrap();
+            config.current_time_reminder = None;
         })
         .build_with_auto_env(&server)
         .await
