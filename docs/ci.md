@@ -60,6 +60,11 @@ doesn't change (through a dependency) shows up on `main`.
   as long as the Windows argument comment lint that already runs on PRs
   (90-minute timeout); every group together took about 51 minutes on #1852
   (37 minutes before `utils/pty` and `app-server` were added).
+  Native Windows and cross-built Windows tests share a budget of eight local
+  Bazel test actions and one libtest thread per action. This avoids multiplying
+  shard concurrency by a CPU-sized test thread pool, which puts pressure on
+  SQLite fixture setup in otherwise isolated temporary homes (#1448). Product
+  database pool sizes and timeouts are unchanged.
   Bazel gives the sharded core, tui and app-server unit tests its usual three
   attempts.
   This job and the nightly one also give `//codex-rs/login:login-unit-tests`
