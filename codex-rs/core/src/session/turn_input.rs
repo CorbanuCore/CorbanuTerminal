@@ -464,18 +464,8 @@ async fn start_or_steer(
                 // first model request, ahead of the new input. Left queued, it would reach the
                 // model only in a continuation after the input was sampled (#445/#507: mail
                 // held while the kill switch was on goes with the next turn someone starts).
-                // `start_task` notes mail carried in the task input as taken. A turn that is
-                // refused (kill switch #445, removed or signed-out account #1331) records no
-                // input, so the mail then stays queued, as on the pending-input path.
-                // Boxed: this submission future is polled on the caller's stack.
-                if Box::pin(crate::session::turn::turn_refusal(session, &turn_context))
-                    .await
-                    .is_none()
-                {
-                    let (mailbox_input, _) =
-                        Box::pin(session.input_queue.drain_ready_mailbox_input_items()).await;
-                    task_input.extend(mailbox_input);
-                }
+                // `start_task` notes mail carried in the task input as taken.
+                task_input.extend(Box::pin(ready_mail_for_new_turn(session, &turn_context)).await);
                 task_input.push(
                     pending_turn_input(
                         session,
@@ -497,6 +487,24 @@ async fn start_or_steer(
         }
         Err(reason) => Ok(TurnInputSubmission::NotSubmitted { reason }),
     }
+}
+
+/// Ready agent mail that joins a person's newly admitted turn (main's
+/// `spawn_regular_turn_for_no_active_input`). A turn that will be refused (kill switch #445,
+/// removed or signed-out account #1331) records no input, so the mail then stays queued.
+///
+/// Kept out of `start_or_steer`, with its own awaits boxed, so their temporaries do not
+/// enlarge the submission path's stack frame (a debug-build stack overflow otherwise).
+async fn ready_mail_for_new_turn(session: &Session, turn_context: &TurnContext) -> Vec<TurnInput> {
+    if Box::pin(crate::session::turn::turn_refusal(session, turn_context))
+        .await
+        .is_some()
+    {
+        return Vec::new();
+    }
+    Box::pin(session.input_queue.drain_ready_mailbox_input_items())
+        .await
+        .0
 }
 
 #[expect(
