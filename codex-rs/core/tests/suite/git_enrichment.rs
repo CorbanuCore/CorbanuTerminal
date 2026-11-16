@@ -112,6 +112,8 @@ async fn startup_prewarm_skips_git_enrichment_and_user_turn_observes_fresh_state
     }
     let server = start_websocket_server(vec![vec![
         vec![ev_response_created("warm-1"), ev_completed("warm-1")],
+        // Enrichment runs in the background; the initial request need not
+        // contain Git metadata. Keep this turn alive for a follow-up request.
         vec![
             ev_response_created("resp-1"),
             ev_function_call(

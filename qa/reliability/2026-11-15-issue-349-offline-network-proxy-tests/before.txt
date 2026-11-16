@@ -1,0 +1,360 @@
+=== http_proxy::tests::http_connect_accept_blocks_in_limited_mode
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test http_proxy::tests::http_connect_accept_blocks_in_limited_mode ... FAILED
+
+failures:
+
+---- http_proxy::tests::http_connect_accept_blocks_in_limited_mode stdout ----
+
+thread 'http_proxy::tests::http_connect_accept_blocks_in_limited_mode' (30154) panicked at network-proxy/src/http_proxy.rs:1218:9:
+assertion failed: `(left == right)`
+
+[1mDiff[0m [31m< left[0m / [32mright >[0m :
+[31m<"blocked-by-[0m[1;48;5;52;31mallowl[0m[31mi[0m[1;48;5;52;31ms[0m[31mt"[0m
+[32m>"blocked-by-[0m[1;48;5;22;32mm[0m[32mit[0m[1;48;5;22;32mm-required[0m[32m"[0m
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    http_proxy::tests::http_connect_accept_blocks_in_limited_mode
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p codex-network-proxy --lib`
+=== mitm::tests::mitm_policy_allows_matching_hooked_write_in_full_mode
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test mitm::tests::mitm_policy_allows_matching_hooked_write_in_full_mode ... FAILED
+
+failures:
+
+---- mitm::tests::mitm_policy_allows_matching_hooked_write_in_full_mode stdout ----
+
+thread 'mitm::tests::mitm_policy_allows_matching_hooked_write_in_full_mode' (30169) panicked at network-proxy/src/mitm_tests.rs:273:5:
+matching hook should bypass method clamp
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    mitm::tests::mitm_policy_allows_matching_hooked_write_in_full_mode
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p codex-network-proxy --lib`
+=== mitm::tests::mitm_policy_blocks_disallowed_method_and_records_telemetry
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.38s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test mitm::tests::mitm_policy_blocks_disallowed_method_and_records_telemetry ... FAILED
+
+failures:
+
+---- mitm::tests::mitm_policy_blocks_disallowed_method_and_records_telemetry stdout ----
+
+thread 'mitm::tests::mitm_policy_blocks_disallowed_method_and_records_telemetry' (30184) panicked at network-proxy/src/mitm_tests.rs:165:5:
+assertion failed: `(left == right)`
+
+[1mDiff[0m [31m< left[0m / [32mright >[0m :
+[31m<"blocked-by-[0m[1;48;5;52;31mall[0m[31mo[0m[1;48;5;52;31mw[0m[31mli[0m[1;48;5;52;31mst[0m[31m"[0m
+[32m>"blocked-by-[0m[1;48;5;22;32mmeth[0m[32mo[0m[1;48;5;22;32md-po[0m[32mli[0m[1;48;5;22;32mcy[0m[32m"[0m
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    mitm::tests::mitm_policy_blocks_disallowed_method_and_records_telemetry
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p codex-network-proxy --lib`
+=== mitm::tests::mitm_policy_blocks_hook_miss_for_hooked_host_and_records_telemetry_in_full_mode
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.39s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test mitm::tests::mitm_policy_blocks_hook_miss_for_hooked_host_and_records_telemetry_in_full_mode ... FAILED
+
+failures:
+
+---- mitm::tests::mitm_policy_blocks_hook_miss_for_hooked_host_and_records_telemetry_in_full_mode stdout ----
+
+thread 'mitm::tests::mitm_policy_blocks_hook_miss_for_hooked_host_and_records_telemetry_in_full_mode' (30199) panicked at network-proxy/src/mitm_tests.rs:363:5:
+assertion failed: `(left == right)`
+
+[1mDiff[0m [31m< left[0m / [32mright >[0m :
+[31m<"blocked-by-[0m[1;48;5;52;31mallowl[0m[31mi[0m[1;48;5;52;31ms[0m[31mt"[0m
+[32m>"blocked-by-[0m[1;48;5;22;32mm[0m[32mit[0m[1;48;5;22;32mm-hook[0m[32m"[0m
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    mitm::tests::mitm_policy_blocks_hook_miss_for_hooked_host_and_records_telemetry_in_full_mode
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p codex-network-proxy --lib`
+=== network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_allow_override
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_allow_override ... FAILED
+
+failures:
+
+---- network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_allow_override stdout ----
+
+thread 'network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_allow_override' (30218) panicked at network-proxy/src/network_policy.rs:659:9:
+assertion failed: `(left == right)`
+
+[1mDiff[0m [31m< left[0m / [32mright >[0m :
+[31m<Deny {[0m
+[31m<    reason: "not_allowed_local",[0m
+[31m<    source: BaselinePolicy,[0m
+[31m<    decision: Deny,[0m
+[31m<}[0m
+[32m>Allow[0m
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_allow_override
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p codex-network-proxy --lib`
+=== network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_ask
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_ask ... FAILED
+
+failures:
+
+---- network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_ask stdout ----
+
+thread 'network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_ask' (30233) panicked at network-proxy/src/network_policy.rs:811:9:
+assertion failed: `(left == right)`
+
+[1mDiff[0m [31m< left[0m / [32mright >[0m :
+ Deny {
+[31m<    reason: "not_allowed_local",[0m
+[31m<    source: BaselinePolicy,[0m
+[31m<    decision: Deny,[0m
+[32m>    reason: "not_allowed",[0m
+[32m>    source: Decider,[0m
+[32m>    decision: Ask,[0m
+ }
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_ask
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p codex-network-proxy --lib`
+=== network_policy::tests::evaluate_host_policy_emits_execution_id_for_baseline_allow
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test network_policy::tests::evaluate_host_policy_emits_execution_id_for_baseline_allow ... FAILED
+
+failures:
+
+---- network_policy::tests::evaluate_host_policy_emits_execution_id_for_baseline_allow stdout ----
+
+thread 'network_policy::tests::evaluate_host_policy_emits_execution_id_for_baseline_allow' (30248) panicked at network-proxy/src/network_policy.rs:724:9:
+assertion failed: `(left == right)`
+
+[1mDiff[0m [31m< left[0m / [32mright >[0m :
+[31m<Deny {[0m
+[31m<    reason: "not_allowed_local",[0m
+[31m<    source: BaselinePolicy,[0m
+[31m<    decision: Deny,[0m
+[31m<}[0m
+[32m>Allow[0m
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    network_policy::tests::evaluate_host_policy_emits_execution_id_for_baseline_allow
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p codex-network-proxy --lib`
+=== runtime::tests::add_allowed_domain_removes_matching_deny_entry
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test runtime::tests::add_allowed_domain_removes_matching_deny_entry ... FAILED
+
+failures:
+
+---- runtime::tests::add_allowed_domain_removes_matching_deny_entry stdout ----
+
+thread 'runtime::tests::add_allowed_domain_removes_matching_deny_entry' (30263) panicked at network-proxy/src/runtime.rs:1326:9:
+assertion failed: `(left == right)`
+
+[1mDiff[0m [31m< left[0m / [32mright >[0m :
+[31m<Blocked([0m
+[31m<    NotAllowedLocal,[0m
+[31m<)[0m
+[32m>Allowed[0m
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    runtime::tests::add_allowed_domain_removes_matching_deny_entry
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p codex-network-proxy --lib`
+=== runtime::tests::host_blocked_global_wildcard_allowlist_allows_public_hosts_except_denylist
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test runtime::tests::host_blocked_global_wildcard_allowlist_allows_public_hosts_except_denylist ... FAILED
+
+failures:
+
+---- runtime::tests::host_blocked_global_wildcard_allowlist_allows_public_hosts_except_denylist stdout ----
+
+thread 'runtime::tests::host_blocked_global_wildcard_allowlist_allows_public_hosts_except_denylist' (30278) panicked at network-proxy/src/runtime.rs:1591:9:
+assertion failed: `(left == right)`
+
+[1mDiff[0m [31m< left[0m / [32mright >[0m :
+[31m<Blocked([0m
+[31m<    NotAllowedLocal,[0m
+[31m<)[0m
+[32m>Allowed[0m
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    runtime::tests::host_blocked_global_wildcard_allowlist_allows_public_hosts_except_denylist
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p codex-network-proxy --lib`
+=== runtime::tests::host_blocked_requires_allowlist_match
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test runtime::tests::host_blocked_requires_allowlist_match ... FAILED
+
+failures:
+
+---- runtime::tests::host_blocked_requires_allowlist_match stdout ----
+
+thread 'runtime::tests::host_blocked_requires_allowlist_match' (30293) panicked at network-proxy/src/runtime.rs:1302:9:
+assertion failed: `(left == right)`
+
+[1mDiff[0m [31m< left[0m / [32mright >[0m :
+[31m<Blocked([0m
+[31m<    NotAllowedLocal,[0m
+[31m<)[0m
+[32m>Allowed[0m
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    runtime::tests::host_blocked_requires_allowlist_match
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p codex-network-proxy --lib`
+=== socks5::tests::handle_socks5_tcp_blocks_limited_mode_without_mitm_state
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test socks5::tests::handle_socks5_tcp_blocks_limited_mode_without_mitm_state ... FAILED
+
+failures:
+
+---- socks5::tests::handle_socks5_tcp_blocks_limited_mode_without_mitm_state stdout ----
+
+thread 'socks5::tests::handle_socks5_tcp_blocks_limited_mode_without_mitm_state' (30308) panicked at network-proxy/src/socks5.rs:1186:9:
+unexpected error: Custom { kind: PermissionDenied, error: "Sandbox policy blocks local/private network addresses." }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    socks5::tests::handle_socks5_tcp_blocks_limited_mode_without_mitm_state
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p codex-network-proxy --lib`
+=== socks5::tests::handle_socks5_tcp_detects_tls_for_brokered_nonstandard_port_in_full_mode
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test socks5::tests::handle_socks5_tcp_detects_tls_for_brokered_nonstandard_port_in_full_mode ... FAILED
+
+failures:
+
+---- socks5::tests::handle_socks5_tcp_detects_tls_for_brokered_nonstandard_port_in_full_mode stdout ----
+
+thread 'socks5::tests::handle_socks5_tcp_detects_tls_for_brokered_nonstandard_port_in_full_mode' (30323) panicked at network-proxy/src/socks5.rs:1159:10:
+brokered TLS should defer MITM until protocol detection: Custom { kind: PermissionDenied, error: "Sandbox policy blocks local/private network addresses." }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    socks5::tests::handle_socks5_tcp_detects_tls_for_brokered_nonstandard_port_in_full_mode
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.10s
+
+error: test failed, to rerun pass `-p codex-network-proxy --lib`
+=== socks5::tests::handle_socks5_tcp_uses_mitm_in_limited_mode
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test socks5::tests::handle_socks5_tcp_uses_mitm_in_limited_mode ... FAILED
+
+failures:
+
+---- socks5::tests::handle_socks5_tcp_uses_mitm_in_limited_mode stdout ----
+
+thread 'socks5::tests::handle_socks5_tcp_uses_mitm_in_limited_mode' (30350) panicked at network-proxy/src/socks5.rs:1082:10:
+limited-mode HTTPS should use MITM: Custom { kind: PermissionDenied, error: "Sandbox policy blocks local/private network addresses." }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    socks5::tests::handle_socks5_tcp_uses_mitm_in_limited_mode
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.10s
+
+error: test failed, to rerun pass `-p codex-network-proxy --lib`
