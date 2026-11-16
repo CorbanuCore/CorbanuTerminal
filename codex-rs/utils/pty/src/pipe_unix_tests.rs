@@ -140,6 +140,10 @@ async fn descriptor_capture_pressure_falls_back_to_direct_spawn() -> anyhow::Res
         );
         for fd in &descriptors {
             assert_eq!(unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_GETFD) }, 0);
+        }
+    }
+    Ok(())
+}
 
 const HELPER_MODE: &str = "CODEX_PTY_SIGNAL_TEST_HELPER";
 
@@ -273,3 +277,7 @@ async fn assert_pipe_children_interruptible() -> anyhow::Result<()> {
                 let _ = tokio::time::timeout(Duration::from_secs(5), &mut child.exit_rx).await;
             }
             result??;
+        }
+    }
+    Ok(())
+}
