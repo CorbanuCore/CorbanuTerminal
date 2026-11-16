@@ -3,6 +3,7 @@
 //! Command metrics exclude prewarm and measure lookup/capture wait before replay.
 //! File replay admits larger shell state while environment replay keeps its launch budget.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::fs::File;
@@ -401,6 +402,14 @@ async fn capture_snapshot(
     credential_brokers: &RemoteCredentialBrokerCache,
 ) -> CaptureResult {
     let proxy = prepared.credential_snapshot_proxy(params);
+    // D641 (a), #2392: under main's engine the launch keeps its broker markers so a
+    // failed capture falls back still marked. Upstream's capture expects them restored
+    // and removed, so it runs with that environment, exactly as before.
+    let capture_env = proxy.map_or(Cow::Borrowed(&prepared.env), |proxy| {
+        let mut env = prepared.env.clone();
+        proxy.restore_and_disable_brokered_credentials(&mut env, &mut []);
+        Cow::Owned(env)
+    });
     let mut script = snapshot_source_capture_script(
         shell_type,
         SnapshotCaptureOptions {
@@ -468,7 +477,7 @@ done
         .args(args)
         .current_dir(prepared.cwd.as_path())
         .env_clear()
-        .envs(&prepared.env)
+        .envs(capture_env.iter())
         .env_remove(CODEX_TOOL_CALL_ID_ENV_VAR)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -580,8 +589,7 @@ done
     // Corbanu #2356: #310's names and #2314's credential values, as for core's
     // snapshot file, before anything is cached or replayed.
     let (captured, values) = filter::split_values(shell_type, captured)?;
-    let launch_values = prepared
-        .env
+    let launch_values = capture_env
         .iter()
         .map(|(name, value)| (name.as_str(), value.as_str()))
         .chain(values.iter().map(|(name, value)| (*name, value.as_ref())));

@@ -1,8 +1,6 @@
 use std::collections::HashMap;
-use std::io::Write;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::time::Duration;
 
 use codex_exec_server_protocol::JSONRPCErrorError;
@@ -51,31 +49,8 @@ use crate::ExecServerRuntimeOptions;
 use crate::FileSystemSandboxContext;
 use crate::ProcessId;
 use crate::process_telemetry::ProcessTelemetry;
+use crate::test_tracing::CapturedLogs;
 use crate::test_tracing::ScopedTestSubscriber;
-
-/// Collects formatted log lines written by a test's thread-scoped subscriber.
-#[derive(Clone, Default)]
-struct CapturedLogs(Arc<Mutex<Vec<u8>>>);
-
-impl CapturedLogs {
-    fn text(&self) -> String {
-        String::from_utf8_lossy(&self.0.lock().expect("log buffer lock")).into_owned()
-    }
-}
-
-impl Write for CapturedLogs {
-    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
-        self.0
-            .lock()
-            .expect("log buffer lock")
-            .extend_from_slice(buffer);
-        Ok(buffer.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
 
 async fn prepare_exec_request(
     params: &ExecParams,
