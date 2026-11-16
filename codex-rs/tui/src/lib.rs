@@ -1850,7 +1850,7 @@ async fn run_ratatui_app(
             .enabled(codex_features::Feature::NamedAccounts)
     {
         // Esc leaves this picker: a new session would need onboarding (#555).
-        let selection = select_resume_launch_session(
+        let (selection, fallback_notice) = select_resume_launch_session(
             &mut tui,
             &cli,
             &initial_config,
@@ -1919,7 +1919,7 @@ async fn run_ratatui_app(
             session_log::log_session_end();
             return Ok(fatal_exit_info(message));
         }
-        early_resume_selection = Some(selection);
+        early_resume_selection = Some((selection, fallback_notice));
     }
     let requires_provider_onboarding = startup_provider.requires_provider_onboarding;
     let default_login_forced_method =
@@ -2066,6 +2066,7 @@ async fn run_ratatui_app(
         shutdown_app_server_if_present(app_server.take()).await;
     }
 
+    let mut resume_fallback_notice = None;
     let session_selection = if use_fork {
         if let Some(id_str) = cli.fork_session_id.as_deref() {
             let Some(startup_app_server) = app_server.as_mut() else {
@@ -2131,7 +2132,7 @@ async fn run_ratatui_app(
             resume_picker::SessionSelection::StartFresh
         }
     } else if is_resume_launch(&cli) {
-        let selection = match early_resume_selection.take() {
+        let (selection, fallback_notice) = match early_resume_selection.take() {
             Some(selection) => selection,
             None => {
                 select_resume_launch_session(
@@ -2146,6 +2147,7 @@ async fn run_ratatui_app(
                 .await?
             }
         };
+        resume_fallback_notice = fallback_notice;
         match selection {
             ResumeLaunchSelection::Missing(id_str) => {
                 shutdown_app_server_if_present(app_server.take()).await;
@@ -2167,17 +2169,6 @@ async fn run_ratatui_app(
         resume_picker::SessionSelection::StartFresh
     };
 
-    let resume_fallback_notice = resume_notice::resume_fallback_notice(
-        &cli,
-        &session_selection,
-        (!uses_remote_workspace).then_some(config.model_provider_id.as_str()),
-        latest_session_cwd_filter(
-            uses_remote_workspace,
-            remote_cwd_override.as_deref(),
-            &config,
-            cli.resume_show_all,
-        ),
-    );
     let current_cwd = config.cwd.clone();
     let fallback_cwd = match resolve_startup_resume_or_fork_cwd(
         &mut tui,
