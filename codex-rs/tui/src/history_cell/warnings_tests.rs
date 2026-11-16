@@ -44,6 +44,42 @@ fn usage_warnings_render_in_both_transcripts_including_composites() {
 }
 
 #[test]
+fn security_and_account_warnings_keep_chat_footer_and_viewer_details() {
+    let messages = [
+        crate::legacy_core::security_revocation::KILL_SWITCH_STOPPED.to_string(),
+        "`[provider_accounts]` is ignored because the `named_accounts` feature is off".to_string(),
+        "Security level Moderate blocked writing `.git/hooks/pre-commit`.".to_string(),
+        "Security level Moderate: your Corbanu home is reached through a link.".to_string(),
+        "Security level Moderate needs the source_envelopes feature.".to_string(),
+        "Moderate needs the untrusted-content labels (the source_envelopes feature).".to_string(),
+        "No provider is allowed for spawned agents: project restrictions leave the allowlist empty.".to_string(),
+        codex_sandboxing::LEGACY_WINDOWS_SANDBOX_WARNING.to_string(),
+        codex_login::OPENAI_API_KEY_ENV_FALLBACK_NOTICE.to_string(),
+        "OpenAI (openai) credential was rejected. Open /providers.".to_string(),
+        codex_model_provider_info::named_account_rejection_message(
+            "OpenAI", "openai", "work", /*provider*/ None,
+        ),
+    ];
+    for message in messages {
+        let warning = new_warning_event(message.clone());
+        assert!(warning.visible_in_transcript, "{message}");
+        let startup =
+            StartupWarningsCell::new(vec!["Ordinary startup diagnostic".into(), message.clone()]);
+        for mode in [HistoryRenderMode::Rich, HistoryRenderMode::Raw] {
+            let visible = warning.display_lines_for_mode(/*width*/ 80, mode);
+            assert!(!visible.is_empty(), "{message}");
+            assert_eq!(startup.display_lines_for_mode(/*width*/ 80, mode), visible);
+        }
+        let cells: Vec<Arc<dyn HistoryCell>> = vec![Arc::new(warning), Arc::new(startup)];
+        assert_eq!(warning_count(&cells), 2);
+        let entries = warning_entries(&cells);
+        assert_eq!(entries[0].details, message);
+        assert_eq!(entries[1].details, "Ordinary startup diagnostic");
+        assert!(!cells[1].transcript_lines(/*width*/ 80).is_empty());
+    }
+}
+
+#[test]
 fn warning_count_deduplicates_messages_mcp_summaries_and_composites() {
     let cells: Vec<Arc<dyn HistoryCell>> = vec![
         Arc::new(new_warning_event("Repeated warning".into())),

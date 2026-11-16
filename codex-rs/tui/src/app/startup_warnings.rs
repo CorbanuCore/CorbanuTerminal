@@ -9,6 +9,24 @@ impl App {
         tui: &mut tui::Tui,
         incoming: &StartupWarningsCell,
     ) {
+        // Native terminal history must emit these notices too. Give visible
+        // startup messages ordinary cells; the hidden diagnostics still coalesce.
+        let mut incoming = incoming.clone();
+        incoming.messages.retain(|message| {
+            let warning = history_cell::new_warning_event(message.clone());
+            if warning.live_raw_lines().is_empty() {
+                return true;
+            }
+            incoming.other_sources.remove(message);
+            let already_shown = self.transcript_cells.iter().any(|cell| {
+                cell.warning_keys()
+                    .contains(&history_cell::WarningKey::Message(message))
+            });
+            if !already_shown {
+                self.insert_history_cell(tui, Box::new(warning));
+            }
+            false
+        });
         let existing = self
             .transcript_cells
             .iter()

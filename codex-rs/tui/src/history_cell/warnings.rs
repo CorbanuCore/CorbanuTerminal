@@ -13,6 +13,20 @@ pub(crate) enum WarningId {
     McpServer(String),
 }
 
+// Warning notifications and startup config warnings carry text, not a category. Keep
+// Corbanu's security/account notices visible without promoting ordinary diagnostics.
+pub(super) fn is_security_or_account_warning(message: &str) -> bool {
+    message.starts_with("Security level ")
+        || message == crate::legacy_core::security_revocation::KILL_SWITCH_STOPPED
+        || message.starts_with("`[provider_accounts]` is ignored because")
+        || message.starts_with("Moderate needs ")
+        || message.starts_with("No provider is allowed for spawned agents:")
+        || message == codex_sandboxing::LEGACY_WINDOWS_SANDBOX_WARNING
+        || message == codex_login::OPENAI_API_KEY_ENV_FALLBACK_NOTICE
+        || message.contains(" credential was rejected. ")
+        || (message.contains(") account `") && message.contains("` was rejected. "))
+}
+
 /// A retained diagnostic. Identity is independent of wrapping and duplicate delivery.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct WarningEntry {

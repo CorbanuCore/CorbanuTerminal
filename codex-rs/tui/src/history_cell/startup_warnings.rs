@@ -80,11 +80,17 @@ impl HistoryCell for StartupWarningsCell {
     }
 
     fn live_raw_lines(&self) -> Vec<Line<'static>> {
-        Vec::new()
+        self.messages
+            .iter()
+            .flat_map(|message| new_warning_event(message.clone()).live_raw_lines())
+            .collect()
     }
 
-    fn display_lines(&self, _width: u16) -> Vec<Line<'static>> {
-        Vec::new()
+    fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
+        self.messages
+            .iter()
+            .flat_map(|message| new_warning_event(message.clone()).display_lines(width))
+            .collect()
     }
 
     fn warning_keys(&self) -> Vec<WarningKey<'_>> {
