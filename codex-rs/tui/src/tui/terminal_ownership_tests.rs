@@ -63,8 +63,9 @@ fn run_child(mode: &str) {
     super::set_panic_hook();
 
     super::set_modes().expect("acquire terminal modes");
-    // As `crate::TerminalRestoreGuard::new` does on the thread that runs the TUI.
-    super::mark_terminal_owner_thread();
+    // Production's guard marks this thread as the terminal owner, and its drop during a fatal
+    // unwind classifies the pending panic before handing the terminal back.
+    let mut restore_guard = crate::TerminalRestoreGuard::new();
     assert_raw_no_echo();
     let _stderr_guard = super::terminal_stderr::TerminalStderrGuard::install()
         .expect("install terminal stderr guard");
@@ -87,8 +88,9 @@ fn run_child(mode: &str) {
             );
             assert_raw_no_echo();
             panic_diagnostics::record_tui_survived();
-            super::mark_terminal_released();
-            super::restore_after_exit().expect("restore after contained panic");
+            restore_guard
+                .restore()
+                .expect("restore after contained panic");
             assert_canonical_echo();
         }
         "fatal" => panic!("{FATAL_PANIC_PAYLOAD}"),

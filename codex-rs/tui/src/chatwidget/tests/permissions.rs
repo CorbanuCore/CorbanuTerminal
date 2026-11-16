@@ -254,8 +254,10 @@ async fn permissions_command_preserves_full_access_confirmation() {
     chat.open_full_access_confirmation(preset, return_to_permissions, profile_selection);
 
     // Cancel returns to the picker; closing that picker must still recover the queue.
-    chat.handle_key_event(KeyEvent::from(KeyCode::Down));
+    // Corbanu's confirmation starts on Cancel.
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    // Corbanu says that full access was not enabled before returning to the picker.
+    assert_matches!(events.try_recv(), Ok(AppEvent::InsertHistoryCell(_)));
     assert_matches!(events.try_recv(), Ok(AppEvent::OpenPermissionsPopup));
     chat.open_permissions_popup();
     assert_matches!(events.try_recv(), Ok(AppEvent::SettingsSelectionClosed));

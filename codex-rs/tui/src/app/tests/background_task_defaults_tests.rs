@@ -154,7 +154,12 @@ async fn review_regression_agents_overview_creation_is_fresh_but_returning_is_no
             ("tui.effects.starfield".into(), TomlValue::Boolean(true)),
         ]);
         app.harness_overrides.model = Some(model.into());
+        // Corbanu's test provider is Z.AI. These OpenAI models use the OpenAI connection, the
+        // default when a model has more than one (owner rule 2026-10-13).
+        app.harness_overrides.model_provider = Some("openai".into());
         let mut server = start_config_write_test_app_server(&app).await?;
+        // As startup does for a launch provider override.
+        server.model_provider_override = app.harness_overrides.model_provider.clone();
         let mut tui = make_test_tui()?;
         tui.pause_events();
         app.new_agents_overview_session(&mut tui, &mut server, /*cwd*/ None)
@@ -185,7 +190,7 @@ async fn review_regression_agents_overview_creation_is_fresh_but_returning_is_no
             let before_footer = |output: &str| {
                 output
                     .lines()
-                    .take_while(|line| !line.contains("GPT-6-Astra"))
+                    .take_while(|line| !line.contains("GPT-6 Astra"))
                     .collect::<Vec<_>>()
                     .join("\n")
             };
@@ -398,7 +403,15 @@ async fn command_center_new_reads_server_defaults_for_actual_destination() -> Re
                     serde_json::Value::Null
                 },
                 &serde_json::json!("high"),
-                &serde_json::json!(if explicit_cwd { "flex" } else { "priority" }),
+                // Corbanu's catalog gives the server default (gpt-6-sol) no service tiers, so
+                // the carried-over priority tier falls back to default.
+                &serde_json::json!(if explicit_cwd {
+                    "flex"
+                } else if mode == "remote-null-fast" {
+                    "default"
+                } else {
+                    "priority"
+                }),
             ),
             "{mode} {expected_cwd}"
         );
@@ -852,7 +865,8 @@ async fn command_center_new_preserves_only_selected_server_profiles() -> Result<
                 }),
                 &PermissionProfile::read_only(),
                 codex_protocol::protocol::AskForApproval::OnRequest,
-            )
+            ),
+            "attempt {attempt}"
         );
         if attempt == 1 {
             app.agents_overview
@@ -1024,7 +1038,8 @@ async fn command_center_new_restores_blank_drafts_and_builtin_permissions() -> R
                 approval_policy: Some(AskForApproval::OnRequest),
                 approvals_reviewer: Some(codex_app_server_protocol::ApprovalsReviewer::User),
                 permissions: Some(":read-only".into()),
-                model: Some("gpt-5.5".into()),
+                // Corbanu's test provider is Z.AI, which refuses OpenAI-only models.
+                model: Some("glm-5.2".into()),
                 ..Default::default()
             })
             .await?
@@ -1043,7 +1058,7 @@ async fn command_center_new_restores_blank_drafts_and_builtin_permissions() -> R
         app.chat_widget.composer_text_with_pending(),
         "Background draft"
     );
-    assert_eq!(app.chat_widget.current_model(), "gpt-5.5");
+    assert_eq!(app.chat_widget.current_model(), "glm-5.2");
     let op = app
         .chat_widget
         .submit_user_message_as_plain_user_turn(crate::chatwidget::UserMessage::from("Hello"))
@@ -1060,7 +1075,7 @@ async fn command_center_new_restores_blank_drafts_and_builtin_permissions() -> R
         (
             &serde_json::Value::Null,
             &serde_json::json!("on-request"),
-            &serde_json::json!("gpt-5.5")
+            &serde_json::json!("glm-5.2")
         )
     );
     server.shutdown().await?;

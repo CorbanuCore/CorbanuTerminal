@@ -16,7 +16,8 @@ use std::time::Duration;
 use tempfile::TempDir;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn codex_home_symlink_opt_out_uses_loaded_user_config() -> anyhow::Result<()> {
+async fn symlinked_codex_home_is_writable_at_its_real_location_with_any_opt_out()
+-> anyhow::Result<()> {
     use core_test_support::responses;
     use core_test_support::test_codex_exec::test_codex_exec;
     use serde_json::json;

@@ -3524,6 +3524,9 @@ async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()
     app.enqueue_primary_thread_session(started.session, started.turns)
         .await?;
     while app_event_rx.try_recv().is_ok() {}
+    // The fake rollouts record `/` as their folder, so a cold switch would open the folder
+    // prompt, which reads the terminal; stay in the launch folder, as `--cd` does.
+    app.harness_overrides.cwd = Some(app.config.cwd.to_path_buf());
     let mut tui = crate::tui::test_support::make_test_tui()?;
 
     app.runtime_permission_profile_override = Some(RuntimePermissionProfileOverride::from_config(
@@ -10424,6 +10427,8 @@ async fn override_turn_context_sends_thread_settings_update() {
             crate::start_embedded_app_server_for_picker(app.chat_widget.config_ref())
                 .await
                 .expect("embedded app server");
+        // thread/start sends only an explicit (launch) provider, as `-c model_provider=openai`.
+        app_server.model_provider_override = Some(OPENAI_PROVIDER_ID.to_string());
         let started = app_server
             .start_thread(app.chat_widget.config_ref())
             .await
@@ -10566,11 +10571,23 @@ async fn selecting_cyber_model_defaults_active_thread_to_auto_review() {
             .expect("gpt-5.5 model");
         model.model_specialty = Some(MODEL_SPECIALTY_CYBER.to_string());
         app.model_catalog = Arc::new(ModelCatalog::new(vec![model]));
+        // gpt-5.5 runs on OpenAI; Corbanu's test default provider (Z.AI) refuses it.
+        let openai_provider = app
+            .chat_widget
+            .config_ref()
+            .model_providers
+            .get(OPENAI_PROVIDER_ID)
+            .cloned()
+            .expect("OpenAI provider");
+        app.chat_widget
+            .set_model_provider(OPENAI_PROVIDER_ID.to_string(), openai_provider);
 
         let mut app_server =
             crate::start_embedded_app_server_for_picker(app.chat_widget.config_ref())
                 .await
                 .expect("embedded app server");
+        // thread/start sends only an explicit (launch) provider, as `-c model_provider=openai`.
+        app_server.model_provider_override = Some(OPENAI_PROVIDER_ID.to_string());
         let started = app_server
             .start_thread(app.chat_widget.config_ref())
             .await

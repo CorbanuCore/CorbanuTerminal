@@ -35,7 +35,9 @@ async fn session_status_follows_existing_lifecycle_state() {
     );
     states.push(chat.desired_program_status());
 
+    // Corbanu's approval prompt: a decision key highlights its option and Enter confirms it.
     chat.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     states.push(chat.desired_program_status());
 
     chat.bottom_pane.set_task_running(/*running*/ false);

@@ -909,13 +909,16 @@ async fn unattended_modals_survive_unfinished_terminal_input() -> Result<()> {
         );
     }
 
-    // After the drain has settled a fresh explicit decision works normally.
-    app.handle_tui_event(
-        &mut tui,
-        &mut app_server,
-        TuiEvent::Key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE)),
-    )
-    .await?;
+    // After the drain has settled a fresh explicit decision works normally. In Corbanu's
+    // approval prompt the decision key highlights its option and Enter confirms it.
+    for key in [KeyCode::Char('y'), KeyCode::Enter] {
+        app.handle_tui_event(
+            &mut tui,
+            &mut app_server,
+            TuiEvent::Key(KeyEvent::new(key, KeyModifiers::NONE)),
+        )
+        .await?;
+    }
     assert!(!app.chat_widget.has_active_modal());
 
     // Overview can open before the first real input, and survives a server reconnect.
@@ -934,6 +937,8 @@ async fn unattended_modals_survive_unfinished_terminal_input() -> Result<()> {
                     "thread/list" | "thread/loaded/list" => {
                         serde_json::json!({"result": {"data": [], "nextCursor": null}})
                     }
+                    // Corbanu's reconnect also rereads the sign-in state.
+                    "getAuthStatus" => serde_json::json!({"result": {}}),
                     method => panic!("unexpected overview reconnect request: {method}"),
                 }))
             },

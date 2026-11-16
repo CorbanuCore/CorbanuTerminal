@@ -393,7 +393,8 @@ requires_openai_auth = false
         let mut server_config = config.clone();
         server_config.codex_home = server_home.path().to_path_buf().abs();
         server_config.sqlite = SqliteConfig::new_for_testing(server_home.path().abs());
-        server_config.model_catalog = Some(Default::default());
+        // Corbanu's server replaces a default model that its catalog does not list with the
+        // catalog's default, so the server keeps its bundled catalog rather than an empty one.
         let (mut server, requests, proxy) = start_recording_app_server_with_history(
             &server_config,
             HistoryCapabilities::Current,
@@ -778,7 +779,9 @@ async fn fresh_startup_falls_back_only_for_unsupported_config_read() -> Result<(
             ),
             (&serde_json::Value::Null, &serde_json::Value::Null)
         );
-        tokio::time::timeout(Duration::from_secs(/*secs*/ 15), proxy).await???;
+        // The startup future is dropped at thread/start, but Corbanu's startup keeps the
+        // connection open after that, so the proxy is stopped as in the trust test above.
+        proxy.abort();
     }
     Ok(())
 }
@@ -844,7 +847,8 @@ async fn startup_reads_server_defaults_before_starting_thread() -> Result<()> {
         ),
         (&serde_json::Value::Null, &serde_json::Value::Null),
     );
-    tokio::time::timeout(Duration::from_secs(/*secs*/ 15), proxy).await???;
+    // As above: Corbanu's dropped startup keeps the connection open.
+    proxy.abort();
     Ok(())
 }
 

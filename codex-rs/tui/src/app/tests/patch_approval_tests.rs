@@ -255,12 +255,15 @@ async fn active_patch_approval_pager_preserves_changes_and_accepts_once() -> Res
     next_patch.id = "next-patch".into();
     app.chat_widget
         .push_approval_request(ApprovalRequest::ApplyPatch(next_patch));
-    app.handle_tui_event(
-        &mut tui,
-        &mut app_server,
-        TuiEvent::Key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE)),
-    )
-    .await?;
+    // Corbanu's approval prompt: a decision key highlights its option and Enter confirms it.
+    for key in [KeyCode::Char('y'), KeyCode::Enter] {
+        app.handle_tui_event(
+            &mut tui,
+            &mut app_server,
+            TuiEvent::Key(KeyEvent::new(key, KeyModifiers::NONE)),
+        )
+        .await?;
+    }
     assert_decision(
         &mut app,
         &mut rx,

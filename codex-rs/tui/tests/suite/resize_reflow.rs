@@ -62,7 +62,10 @@ async fn tmux_smoke_split_preserves_fresh_session_composer_row_after_resize_refl
     let codex_pane = session.primary_pane();
 
     codex_pane.wait_stable_contains("resize reflow sentinel", Duration::from_secs(/*secs*/ 15))?;
-    codex_pane.wait_stable_contains("gpt-5.4 default", Duration::from_secs(/*secs*/ 15))?;
+    codex_pane.wait_stable_contains(
+        "gpt-5.4 via resize_mock default",
+        Duration::from_secs(/*secs*/ 15),
+    )?;
     let draft = "Notice where we are here in terms of y location.";
     codex_pane.send_literal(draft)?;
     let baseline_capture =
@@ -172,7 +175,10 @@ async fn tmux03_width_resize_restore_keeps_visible_content_anchored() -> Result<
     let codex_pane = session.primary_pane();
 
     codex_pane.wait_stable_contains("resize reflow sentinel", Duration::from_secs(/*secs*/ 15))?;
-    codex_pane.wait_stable_contains("gpt-5.4 default", Duration::from_secs(/*secs*/ 15))?;
+    codex_pane.wait_stable_contains(
+        "gpt-5.4 via resize_mock default",
+        Duration::from_secs(/*secs*/ 15),
+    )?;
     let draft = "Notice where we are here in terms of y location.";
     codex_pane.send_literal(draft)?;
     let baseline_capture =
@@ -403,7 +409,7 @@ async fn run_repeated_resize_smoke() -> Result<()> {
     )?;
     wait_for_capture_contains(
         &codex_pane,
-        "gpt-5.4 default",
+        "gpt-5.4 via resize_mock default",
         Duration::from_secs(/*secs*/ 15),
     )?;
     let draft = "Notice where we are here in terms of y location.";
