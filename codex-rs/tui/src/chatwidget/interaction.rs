@@ -4,6 +4,17 @@ use super::*;
 
 impl ChatWidget {
     pub(crate) fn handle_key_event(&mut self, key_event: KeyEvent) {
+        if let Some(result) = self.bottom_pane.take_burst_submission(Instant::now()) {
+            self.handle_composer_input_result(result, /*had_modal_or_popup*/ false);
+        }
+        if key_event.kind != KeyEventKind::Release
+            && (!matches!(key_event.code, KeyCode::Char(_) | KeyCode::Enter)
+                || key_event
+                    .modifiers
+                    .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT))
+        {
+            self.bottom_pane.cancel_pending_burst_submission();
+        }
         if self.bottom_pane.has_active_view()
             && !matches!(
                 key_event,
@@ -404,6 +415,11 @@ impl ChatWidget {
 
     // Returns true if caller should skip rendering this frame (a future frame is scheduled).
     pub(crate) fn handle_paste_burst_tick(&mut self, frame_requester: FrameRequester) -> bool {
+        if let Some(result) = self.bottom_pane.take_burst_submission(Instant::now()) {
+            self.handle_composer_input_result(result, /*had_modal_or_popup*/ false);
+            self.request_redraw();
+            return true;
+        }
         if self.bottom_pane.flush_paste_burst_if_due() {
             self.refresh_plan_mode_nudge();
             // A paste just flushed; request an immediate redraw and skip this frame.

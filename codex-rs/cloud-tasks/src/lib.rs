@@ -939,12 +939,50 @@ pub async fn run_main(cli: Cli, _codex_linux_sandbox_exe: Option<PathBuf>) -> an
         Ok(())
     };
 
+    let submit_new_task = |page: &mut new_task::NewTaskPage, status: &mut String, text: String| {
+        if let Some(env) = page.env_id.clone() {
+            append_error_log(format!(
+                "new-task: submit env={} size={}",
+                env,
+                text.chars().count()
+            ));
+            page.submitting = true;
+            *status = "Submitting new task…".to_string();
+            let tx = tx.clone();
+            let backend = Arc::clone(&backend);
+            let best_of_n = page.best_of_n;
+            tokio::spawn(async move {
+                let git_ref = resolve_git_ref(/*branch_override*/ None).await;
+                let result = codex_cloud_tasks_client::CloudBackend::create_task(
+                    &*backend, &env, &text, &git_ref, /*qa_mode*/ false, best_of_n,
+                )
+                .await;
+                let evt = match result {
+                    Ok(ok) => app::AppEvent::NewTaskSubmitted(Ok(ok)),
+                    Err(e) => app::AppEvent::NewTaskSubmitted(Err(format!("{e}"))),
+                };
+                let _ = tx.send(evt);
+            });
+        } else {
+            *status = "No environment selected".to_string();
+        }
+    };
+
     let exit_code = loop {
         tokio::select! {
             // Coalesced redraw requests: spinner animation and paste-burst micro‑flush.
             Some(()) = redraw_rx.recv() => {
                 // Micro‑flush pending first key held by paste‑burst.
                 if let Some(page) = app.new_task.as_mut() {
+                    if !page.submitting
+                        && app.env_modal.is_none()
+                        && app.best_of_modal.is_none()
+                        && let codex_tui::ComposerAction::Submitted(text) =
+                            page.composer.take_burst_submission()
+                    {
+                        submit_new_task(page, &mut app.status, text);
+                        needs_redraw = true;
+                    }
                     if page.composer.flush_paste_burst_if_due() { needs_redraw = true; }
                     if page.composer.is_in_paste_burst() {
                         let _ = frame_tx
@@ -1352,6 +1390,12 @@ pub async fn run_main(cli: Cli, _codex_linux_sandbox_exe: Option<PathBuf>) -> an
                         }
                     }
                     Some(Ok(Event::Key(key))) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
+                        if (!matches!(key.code, KeyCode::Char(_) | KeyCode::Enter)
+                            || key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT))
+                            && let Some(page) = app.new_task.as_mut()
+                        {
+                            page.composer.cancel_pending_burst_submission();
+                        }
                         // Treat Ctrl-C like pressing 'q' in the current context.
                         if key.modifiers.contains(KeyModifiers::CONTROL)
                             && matches!(key.code, KeyCode::Char('c') | KeyCode::Char('C'))
@@ -1491,6 +1535,12 @@ pub async fn run_main(cli: Cli, _codex_linux_sandbox_exe: Option<PathBuf>) -> an
                             if app.env_modal.is_some() {
                                 // Defer handling to env-modal branch below.
                             } else {
+                            if !page.submitting
+                                && let codex_tui::ComposerAction::Submitted(text) =
+                                    page.composer.take_burst_submission()
+                            {
+                                submit_new_task(page, &mut app.status, text);
+                            }
                             match key.code {
                                 KeyCode::Esc => {
                                     app.new_task = None;
@@ -1503,31 +1553,7 @@ pub async fn run_main(cli: Cli, _codex_linux_sandbox_exe: Option<PathBuf>) -> an
                                     } else if let codex_tui::ComposerAction::Submitted(text) =
                                         page.composer.input(key)
                                     {
-                                            // Submit only if we have an env id
-                                            if let Some(env) = page.env_id.clone() {
-                                                append_error_log(format!(
-                                                    "new-task: submit env={} size={}",
-                                                    env,
-                                                    text.chars().count()
-                                                ));
-                                                page.submitting = true;
-                                                app.status = "Submitting new task…".to_string();
-                                                let tx = tx.clone();
-                                                let backend = Arc::clone(&backend);
-                                                let best_of_n = page.best_of_n;
-                                                tokio::spawn(async move {
-                                                    let git_ref = resolve_git_ref(/*branch_override*/ None).await;
-
-                                                    let result = codex_cloud_tasks_client::CloudBackend::create_task(&*backend, &env, &text, &git_ref, /*qa_mode*/ false, best_of_n).await;
-                                                    let evt = match result {
-                                                        Ok(ok) => app::AppEvent::NewTaskSubmitted(Ok(ok)),
-                                                        Err(e) => app::AppEvent::NewTaskSubmitted(Err(format!("{e}"))),
-                                                    };
-                                                    let _ = tx.send(evt);
-                                                });
-                                            } else {
-                                                app.status = "No environment selected".to_string();
-                                            }
+                                        submit_new_task(page, &mut app.status, text);
                                     }
                                     needs_redraw = true;
                                     // If paste‑burst is active, schedule a micro‑flush frame.

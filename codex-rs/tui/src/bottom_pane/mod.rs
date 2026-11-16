@@ -589,6 +589,7 @@ impl BottomPane {
     }
 
     fn push_view(&mut self, view: Box<dyn BottomPaneView>) {
+        self.composer.cancel_pending_burst_submission();
         self.view_stack.push(view);
         self.schedule_active_view_frame();
         self.request_redraw();
@@ -878,6 +879,7 @@ impl BottomPane {
     /// was received, but it does not decide whether the process should exit; `ChatWidget` owns the
     /// quit/interrupt state machine and uses the result to decide what happens next.
     pub(crate) fn on_ctrl_c(&mut self) -> CancellationEvent {
+        self.composer.cancel_pending_burst_submission();
         if let Some(view) = self.view_stack.last_mut() {
             let event = view.on_ctrl_c();
             let view_complete = view.is_complete();
@@ -2006,6 +2008,18 @@ impl BottomPane {
         self.thread_id = Some(thread_id);
         self.composer
             .set_history_metadata(thread_id, log_id, entry_count);
+    }
+
+    pub(crate) fn cancel_pending_burst_submission(&mut self) {
+        self.composer.cancel_pending_burst_submission();
+    }
+
+    pub(crate) fn take_burst_submission(&mut self, now: Instant) -> Option<InputResult> {
+        if self.has_active_view() {
+            self.composer.cancel_pending_burst_submission();
+            return None;
+        }
+        self.composer.take_burst_submission(now)
     }
 
     pub(crate) fn flush_paste_burst_if_due(&mut self) -> bool {
