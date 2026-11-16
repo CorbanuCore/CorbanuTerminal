@@ -1,5 +1,6 @@
 ---
 source: core/tests/suite/scenarios_guardian_sender_context.rs
+assertion_line: 194
 expression: snapshot
 ---
 Scenario: Two workers share a thread store. The receiver reads the sender's original instructions and preceding assistant question after compaction and rollback, without loading the sender. Only Guardian receives the evidence.
@@ -7,6 +8,7 @@ Scenario: Two workers share a thread store. The receiver reads the sender's orig
 ## Window 1
 Settings:
   include: ["reasoning.encrypted_content"]
+  instructions: <MODEL_INSTRUCTIONS>
   model: "gpt-5.5"
   parallel_tool_calls: true
   prompt_cache_key: "<PROMPT_CACHE_KEY 1>"
@@ -15,17 +17,42 @@ Settings:
   stream: true
   text: {"verbosity":"low"}
   tool_choice: "auto"
-  tools (7; hash=994c9baf5d9a36a0):
+  tools (9; hash=23df073f78262d6d):
     - function/exec_command: Runs a command in a PTY, returning output or a session ID for ongoing interaction.; args=[cmd, justification, login, max_output_tokens, prefix_rule, sandbox_permissions, shell, tty, workdir, yield_time_ms]; hash=c04108e51a8548c5
     - function/write_stdin: Writes characters to an existing unified exec session and returns recent output.; args=[chars, max_output_tokens, session_id, yield_time_ms]; hash=7fb62d8a3e2df4e2
     - function/request_user_input: Request user input for one to three short questions and wait for the response. This tool is only ...; args=[questions]; hash=64a729b25c424fc6
-    - custom/apply_patch: The `apply_patch` tool can be used to edit files. This is a FREEFORM tool, so do not wrap the pat...; hash=dea9f12b0111a4ba
+    - custom/apply_patch: The `apply_patch` tool can be used to edit files. This is a FREEFORM tool, so do not wrap the pat...; hash=1e5e006b407e1daa
+    - function/structured_edit: Modify an existing UTF-8 text file by replacing exact text. This is an edit tool only, not a read...; args=[new_string, old_string, path, replace_all]; hash=3a4d88a8d78298ae
+    - function/structured_write: Create or intentionally overwrite a UTF-8 text file. This is a write tool only, not a read or ins...; args=[content, mode, path]; hash=dd17fa676504c92f
     - function/view_image: View a local image file from the filesystem when visual inspection is needed. Use this for images...; args=[detail, path]; hash=3b766d5bdec5d50e
     - tool_search: # Tool discovery  Searches over deferred tool metadata with BM25 and exposes matching tools for t...; args=[limit, query]; hash=b573ed69c0b0e6c7
     - web_search; hash=f103e327c6870a46
 -- request 1 (turn) --
-00:message/developer:
-    <MODEL_INSTRUCTIONS>
+00:message/developer[2]:
+    [01] <PERMISSIONS_INSTRUCTIONS>
+    [02] <tools>
+        Deferred tool namespaces:
+        - multi_agent_v1: Tools for spawning and managing sub-agents.
+        </tools>
+01:message/user:
+    <ENVIRONMENT_CONTEXT>
+02:message/user:
+    Inspect the staging job.
+-- request 2 (turn) --
+03:message/assistant:
+    Rerun only staging, preserving checkpoints?
+04:message/user:
+    Yes. Staging only; never production.
+-- request 3 (compaction) --
+05:message/assistant:
+    I will ask the helper.
+06:compaction_trigger
+
+## Window 2 (after request 3: input diverged at item 00)
+Settings: same as window 1
+-- request 4 (turn) --
+00:message/user:
+    Inspect the staging job.
 01:message/developer[2]:
     [01] <PERMISSIONS_INSTRUCTIONS>
     [02] <tools>
@@ -35,56 +62,28 @@ Settings:
 02:message/user:
     <ENVIRONMENT_CONTEXT>
 03:message/user:
-    Inspect the staging job.
--- request 2 (turn) --
-04:message/assistant:
-    Rerun only staging, preserving checkpoints?
+    Yes. Staging only; never production.
+04:compaction:encrypted=true; chars=21; hash=d9647c6ec5d04e6b
 05:message/user:
-    Yes. Staging only; never production.
--- request 3 (compaction) --
-06:message/assistant:
-    I will ask the helper.
-07:compaction_trigger
-
-## Window 2 (after request 3: input diverged at item 01)
-Settings: same as window 1
--- request 4 (turn) --
-00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/user:
-    Inspect the staging job.
-02:message/developer[2]:
-    [01] <PERMISSIONS_INSTRUCTIONS>
-    [02] <tools>
-        Deferred tool namespaces:
-        - multi_agent_v1: Tools for spawning and managing sub-agents.
-        </tools>
-03:message/user:
-    <ENVIRONMENT_CONTEXT>
-04:message/user:
-    Yes. Staging only; never production.
-05:compaction:encrypted=true; chars=21; hash=d9647c6ec5d04e6b
-06:message/user:
     Production is also allowed.
 
-## Window 3 (after request 4: input diverged at item 01)
+## Window 3 (after request 4: input diverged at item 00)
 Settings: relative to window 2
   prompt_cache_key: "<PROMPT_CACHE_KEY 2>"
 -- request 5 (turn) --
-00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer[2]:
+00:message/developer[2]:
     [01] <PERMISSIONS_INSTRUCTIONS>
     [02] <tools>
         Deferred tool namespaces:
         - multi_agent_v1: Tools for spawning and managing sub-agents.
         </tools>
-02:message/user:
+01:message/user:
     <ENVIRONMENT_CONTEXT>
-03:function_call_output/cloud_threads.send_message:<codex_delegation><source_thread_id><UUID 1></source_thread_id><input>Inspect.</input></codex_delegation>
+02:function_call_output/cloud_threads.send_message:<codex_delegation><source_thread_id><UUID 1></source_thread_id><input>Inspect.</input></codex_delegation>
 
 ## Window 4 (after request 5: input diverged at item 00)
 Settings: relative to window 3
+  instructions: <removed>
   model: "gpt-5.6-luna"
   parallel_tool_calls: false
   prompt_cache_key: "<PROMPT_CACHE_KEY 3>"
@@ -156,16 +155,16 @@ Settings: relative to window 3
 ## Window 5 (after request 6: input diverged at item 00)
 Settings: same as window 3
 -- request 7 (turn) --
-00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer[2]:
+00:message/developer[2]:
     [01] <PERMISSIONS_INSTRUCTIONS>
     [02] <tools>
         Deferred tool namespaces:
         - multi_agent_v1: Tools for spawning and managing sub-agents.
         </tools>
-02:message/user:
+01:message/user:
     <ENVIRONMENT_CONTEXT>
-03:function_call_output/cloud_threads.send_message:<codex_delegation><source_thread_id><UUID 1></source_thread_id><input>Inspect.</input></codex_delegation>
-04:function_call/exec_command:{"cmd":"exit 0","sandbox_permissions":"require_escalated"}
-05:function_call_output:exec_command failed: CreateProcess { message: "Rejected(\\"This action was rejected due to unacceptable r...e risk. Otherwise, stop and request user input.\\")" } [hash=099c82d6bbb0d161]
+02:function_call_output/cloud_threads.send_message:<codex_delegation><source_thread_id><UUID 1></source_thread_id><input>Inspect.</input></codex_delegation>
+03:function_call/exec_command:{"cmd":"exit 0","sandbox_permissions":"require_escalated"}
+04:function_call_output:exec_command failed: This action was rejected due to unacceptable risk.
+    Reason: Auto-review returned a deny decision without a rationale.
+    The agent must not attempt to achieve the same outcome via workaround, indirect execution, or policy cir... of the risk. Otherwise, stop and request user input. [hash=316a6640caee3870]
