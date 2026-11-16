@@ -158,7 +158,9 @@ async fn model_picker_refresh_updates_app_catalog_from_app_server() -> Result<()
     let mut config = app.config.clone();
     config.service_tier = None;
     config.features.enable(Feature::FastMode)?;
-    for (model, expected_tier) in [(None, fast), (Some("gpt-5.6-terra"), Some("default"))] {
+    // The server picks the default from its own catalog. Corbanu's bundled default models
+    // (Z.AI's, and OpenAI's gpt-6-sol) list no default service tier, unlike upstream's.
+    for (model, expected_tier) in [(None, None), (Some("gpt-5.6-terra"), Some("default"))] {
         config.model = model.map(str::to_string);
         let started = app_server.start_thread(&config).await?;
         assert_eq!(started.session.service_tier.as_deref(), expected_tier);

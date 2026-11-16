@@ -749,8 +749,10 @@ mod tests {
         assert_eq!(composer.draft.textarea.text(), "/agents ");
     }
 
+    /// Corbanu keeps Tab as the explicit queue key while a task runs: every slash-led prompt,
+    /// an unavailable match included, is queued and validated when it is dequeued.
     #[test]
-    fn side_conversation_tab_does_not_queue_unavailable_match_while_task_running() {
+    fn side_conversation_tab_queues_unavailable_match_for_deferred_validation_while_task_running() {
         let mut composer = test_composer();
         composer.set_side_conversation_active(/*active*/ true);
         composer.set_task_running(/*running*/ true);
@@ -758,8 +760,16 @@ mod tests {
         composer.draft.textarea.set_cursor(/*pos*/ 5);
         composer.sync_popups();
 
-        assert_eq!(press(&mut composer, KeyCode::Tab), InputResult::None);
-        assert_eq!(composer.draft.textarea.text(), "/arch");
+        assert_eq!(
+            press(&mut composer, KeyCode::Tab),
+            InputResult::Queued {
+                text: "/arch".to_string(),
+                text_elements: Vec::new(),
+                action: QueuedInputAction::ParseSlash,
+                pending_pastes: Vec::new(),
+            }
+        );
+        assert!(composer.draft.textarea.is_empty());
     }
 
     #[test]

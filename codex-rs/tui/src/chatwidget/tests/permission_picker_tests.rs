@@ -85,8 +85,10 @@ async fn permission_picker_retry_and_confirmation_follow_configured_bindings() {
     chat.open_full_access_confirmation(
         preset, /*return_to_permissions*/ true, /*profile_selection*/ None,
     );
-    chat.handle_key_event(KeyEvent::from(KeyCode::Down));
+    // Corbanu's full-access confirmation starts on Cancel, so accept picks it directly.
     chat.handle_key_event(KeyEvent::from(KeyCode::F(/*n*/ 3)));
+    // Corbanu says that full access was not enabled before returning to the picker.
+    assert_matches!(rx.try_recv(), Ok(AppEvent::InsertHistoryCell(_)));
     assert_matches!(rx.try_recv(), Ok(AppEvent::OpenPermissionsPopup));
     assert!(rx.try_recv().is_err(), "cancel must not apply permissions");
 

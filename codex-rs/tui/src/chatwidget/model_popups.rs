@@ -899,9 +899,13 @@ impl ChatWidget {
                 "Use Left/Right to switch providers. Press Enter to confirm or Esc to go back",
             );
         }
-        let mut hint = Line::from("Left/Right providers · ");
-        hint.spans
-            .extend(crate::bottom_pane::popup_consts::picker_hint_line_for_keymap(&keymap).spans);
+        let keys = crate::bottom_pane::popup_consts::picker_hint_line_for_keymap(&keymap);
+        let mut hint = Line::from("Left/Right providers");
+        // With accept and cancel both unbound there is nothing to separate.
+        if !keys.spans.is_empty() {
+            hint.spans.push(" · ".into());
+            hint.spans.extend(keys.spans);
+        }
         hint
     }
 

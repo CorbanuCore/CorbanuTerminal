@@ -91,9 +91,11 @@ async fn daybreak_command_persists_and_confirms_each_selection() -> Result<()> {
     assert_eq!(starts[0]["daybreakEnabled"], true);
     assert!(starts[1]["daybreakEnabled"].is_null());
 
-    let started = server.start_thread(&app.config).await?;
+    let mut started = server.start_thread(&app.config).await?;
     let thread_id = started.session.thread_id;
     app.active_thread_id = Some(thread_id);
+    // Daybreak needs the OpenAI provider; Corbanu's test default is Z.AI.
+    started.session.model_provider_id = "openai".into();
     app.chat_widget.handle_thread_session_quiet(started.session);
     app.chat_widget.update_account_state(
         /*status_account_display*/ None, /*plan_type*/ None,
@@ -1979,6 +1981,9 @@ async fn check_dynamic_tool_requests(
     let backend = wiremock::MockServer::start().await;
     let backend_url = format!("{}/backend-api", backend.uri());
     let api_url = format!("{}/v1", backend.uri());
+    // Daybreak needs the OpenAI provider; Corbanu's built-in default is Z.AI.
+    app.config.model_provider_id = "openai".into();
+    app.config.model_provider = app.config.model_providers["openai"].clone();
     app.config.model_provider.base_url = Some(api_url.clone());
     app.config.codex_home = codex_home.path().to_path_buf().abs();
     app.config.sqlite = SqliteConfig::new_for_testing(codex_home.path().abs());
@@ -1995,7 +2000,7 @@ async fn check_dynamic_tool_requests(
     std::fs::write(
         codex_home.path().join("config.toml"),
         format!(
-            "daybreak = true\nmodel_catalog_json = {:?}\nchatgpt_base_url = {backend_url:?}\ncli_auth_credentials_store = \"file\"\nopenai_base_url = {api_url:?}\nfeatures.cli_daybreak = {rollout_enabled}\nfeatures.api_key_cyber_access_programs = {api_key_cyber_access_programs}\n",
+            "model_provider = \"openai\"\ndaybreak = true\nmodel_catalog_json = {:?}\nchatgpt_base_url = {backend_url:?}\ncli_auth_credentials_store = \"file\"\nopenai_base_url = {api_url:?}\nfeatures.cli_daybreak = {rollout_enabled}\nfeatures.api_key_cyber_access_programs = {api_key_cyber_access_programs}\n",
             catalog_path.display().to_string()
         ),
     )?;

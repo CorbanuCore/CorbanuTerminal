@@ -810,8 +810,10 @@ async fn retained_thread_and_settings_project_complete_pane_local_provider() {
         }
         other => panic!("expected pane-local status output, got {other:?}"),
     };
+    // As upstream, the line names the thread's provider ID, without the base URL.
     assert!(
-        rendered.contains("OpenRouter - https://openrouter.ai/api/v1"),
+        rendered.lines().any(|line| line.contains("Model provider:")
+            && line.trim_end().ends_with(OPENROUTER_PROVIDER_ID)),
         "expected /status to use the selected pane provider, got: {rendered}"
     );
     assert!(

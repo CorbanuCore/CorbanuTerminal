@@ -76,12 +76,16 @@ async fn web_search_overrides_preserve_explicit_legacy_choices() -> Result<()> {
             .loader_overrides(codex_config::LoaderOverrides::without_managed_config_for_tests())
             .build()
             .await?;
+        // Corbanu always forwards the effective `agents.max_depth`.
         assert_eq!(
             config_request_overrides_from_config(&config, ThreadParamsMode::Remote),
-            Some(std::collections::HashMap::from([(
-                "web_search".to_string(),
-                serde_json::json!(expected),
-            )])),
+            Some(std::collections::HashMap::from([
+                ("web_search".to_string(), serde_json::json!(expected)),
+                (
+                    "agents.max_depth".to_string(),
+                    serde_json::json!(config.agent_max_depth),
+                ),
+            ])),
             "{settings}",
         );
     }

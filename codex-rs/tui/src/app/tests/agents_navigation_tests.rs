@@ -110,7 +110,9 @@ async fn externally_archived_thread_keeps_advertised_agents_navigation() -> Resu
             .await?;
     }
     assert!(app.chat_widget.composer_is_empty());
-    assert!(render_bottom_popup(&app.chat_widget, /*width*/ 96).contains("for agents"));
+    // Wide enough for Corbanu's longer footer (provider and TPS) to keep the hint.
+    let footer = render_bottom_popup(&app.chat_widget, /*width*/ 140);
+    assert!(footer.contains("for agents"), "{footer}");
     app.handle_tui_event(
         &mut tui,
         &mut app_server,

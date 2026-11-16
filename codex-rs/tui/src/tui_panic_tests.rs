@@ -144,6 +144,9 @@ async fn caught_panic_pty_child() {
     }
     super::set_modes().expect("set terminal modes");
     super::set_panic_hook();
+    // Corbanu's hook restores the terminal only for panics on the terminal owner's thread
+    // (#616/#638); production's `TerminalRestoreGuard::new` marks the thread that runs the TUI.
+    super::mark_terminal_owner_thread();
     let mut tui = super::test_support::make_test_tui().expect("create TUI");
     tui.terminal.set_viewport_area(Rect::new(
         /*x*/ 0, /*y*/ 0, /*width*/ 12, /*height*/ 2,
@@ -160,7 +163,9 @@ async fn caught_panic_pty_child() {
     mark(BEFORE_VISIBLE_FRAME).expect("mark before visible frame");
     draw(&mut tui, "after panic", Some((4, 1))).expect("draw recovered visible cursor");
     mark(AFTER_VISIBLE_FRAME).expect("mark after visible frame");
-    assert!(super::terminal_input_is_readable().expect("caught panic preserves pending input"));
+    // Corbanu's restore discards input the TUI never read, so typeahead cannot reach the shell
+    // (#461). A caught panic therefore drops the queued report, unlike upstream.
+    assert!(!super::terminal_input_is_readable().expect("caught panic discards unread input"));
     let events = tui.event_broker.clone();
     let unwind = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
         let _guard = crate::TerminalRestoreGuard {

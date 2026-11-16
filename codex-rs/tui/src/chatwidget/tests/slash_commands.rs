@@ -3277,6 +3277,8 @@ async fn slash_archive_cancellation_keeps_task_running() {
 
     assert!(!chat.bottom_pane.has_active_view());
     assert!(chat.bottom_pane.is_task_running());
+    // Submitting a slash command from the composer follows the transcript (#46910).
+    assert_matches!(rx.try_recv(), Ok(AppEvent::FollowTranscript));
     assert_matches!(rx.try_recv(), Err(TryRecvError::Empty));
     assert_matches!(op_rx.try_recv(), Err(TryRecvError::Empty));
 }
@@ -3462,10 +3464,13 @@ async fn slash_delete_confirms_while_task_running() {
     chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert!(chat.bottom_pane.has_active_view());
+    // Submitting a slash command from the composer follows the transcript (#46910).
+    assert_matches!(rx.try_recv(), Ok(AppEvent::FollowTranscript));
     assert_matches!(rx.try_recv(), Err(TryRecvError::Empty));
     let popup = render_bottom_popup(&chat, /*width*/ 80);
     assert!(popup.contains("Delete this session?"));
-    assert!(popup.contains("Permanently delete this session now"));
+    // Corbanu's wider option label wraps this description at 80 columns.
+    assert!(popup.contains("Permanently delete this"));
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Down));
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
