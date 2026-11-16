@@ -301,7 +301,8 @@ fn snapshot_size_limit_counts_state_and_environment_before_filtering() {
             ShellType::Bash,
             oversized.as_bytes(),
             Some(&policy),
-            SnapshotReplay::Environment
+            SnapshotReplay::Environment,
+            &no_credentials(),
         )
         .is_err()
     );
@@ -330,6 +331,7 @@ fn snapshot_filters_profile_exports_after_capture() {
         b"profile \xff noise\n# Snapshot file\nfunction profile_helper() { :; }\n\0alias profile_alias='profile_helper'\n\0PROFILE_DENIED\0export PROFILE_DENIED=denied\n\0NON_UTF8\0export NON_UTF8='\xff'\n\0\0PROFILE_ALLOWED=profile\0PROFILE_DENIED=denied\0PROFILE_SECRET=secret\0PWD=/tmp\0NON_UTF8=\xff\0CODEX_THREAD_ID=capture-thread\0CODEX_TOOL_CALL_ID=profile-call\0",
         Some(&policy),
         SnapshotReplay::Environment,
+        &no_credentials(),
     )
     .expect("snapshot should parse");
 
@@ -361,6 +363,7 @@ fn snapshot_preserves_profile_exports_with_restrictive_inheritance() {
             b"# Snapshot file\n\0\0\0PROFILE_ALLOWED=profile\0SDKROOT=/sdk\0PROFILE_SECRET=secret\0PROFILE_DENIED=denied\0",
             Some(&policy),
             SnapshotReplay::Environment,
+            &no_credentials(),
         )
         .expect("snapshot should parse");
 
@@ -400,6 +403,7 @@ fn snapshot_caches_only_unmanaged_proxy_state() {
             output.as_bytes(),
             /*env_policy*/ None,
             SnapshotReplay::Environment,
+            &no_credentials(),
         )
         .expect("snapshot should parse");
 
@@ -408,6 +412,11 @@ fn snapshot_caches_only_unmanaged_proxy_state() {
 }
 
 use codex_shell_command::shell_detect::ShellType;
+
+/// A filter with no startup values, for parser tests.
+fn no_credentials() -> super::SnapshotCredentialFilter<'static> {
+    super::SnapshotCredentialFilter::new(&[], None, &HashMap::new()).expect("empty filter")
+}
 
 #[test_case(SnapshotReplay::File, 1024 * 1024, 0, None; "file_accepts_large_state")]
 #[test_case(SnapshotReplay::Environment, 1024 * 1024, 0, Some("state_too_large"); "fallback_rejects_large_state")]
@@ -429,6 +438,7 @@ fn snapshot_replay_size_limits(
         output.as_bytes(),
         /*env_policy*/ None,
         replay,
+        &no_credentials(),
     );
     assert_eq!(result.err().map(|(reason, _)| reason), expected_failure);
 }

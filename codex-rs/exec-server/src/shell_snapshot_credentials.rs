@@ -24,6 +24,7 @@ use codex_shell_command::shell_snapshot::prepare_snapshot_credentials;
 use super::CaptureResult;
 use super::MAX_FILE_SNAPSHOT_BYTES;
 use super::MAX_SNAPSHOT_BYTES;
+use super::SnapshotCredentialFilter;
 use super::SnapshotReplay;
 use super::parse_snapshot;
 use crate::local_process::shell_environment_policy;
@@ -57,6 +58,7 @@ pub(super) async fn prepare(
     replay: SnapshotReplay,
     proxy: &NetworkProxy,
     credential_brokers: &RemoteCredentialBrokerCache,
+    credential_filter: &SnapshotCredentialFilter<'_>,
 ) -> CaptureResult {
     let unsupported = || {
         (
@@ -75,7 +77,13 @@ pub(super) async fn prepare(
         })
         .collect::<Option<HashMap<_, _>>>()
         .ok_or_else(unsupported)?;
-    let mut snapshot = parse_snapshot(ShellType::Zsh, output, params.env_policy.as_ref(), replay)?;
+    let mut snapshot = parse_snapshot(
+        ShellType::Zsh,
+        output,
+        params.env_policy.as_ref(),
+        replay,
+        credential_filter,
+    )?;
     let mut policy = params
         .env_policy
         .as_ref()
@@ -297,5 +305,7 @@ pub(super) async fn prepare(
     if environment_bytes > MAX_SNAPSHOT_BYTES || snapshot.state.len() > state_limit {
         return Err(unsupported());
     }
+    // Corbanu #2356: the replay script must carry placeholders only.
+    credential_filter.ensure_clean(&snapshot.state)?;
     Ok(snapshot)
 }

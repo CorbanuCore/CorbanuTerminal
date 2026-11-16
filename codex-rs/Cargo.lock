@@ -3265,6 +3265,7 @@ dependencies = [
  "codex-otel",
  "codex-protocol",
  "codex-sandboxing",
+ "codex-secret-broker",
  "codex-shell-command",
  "codex-skills",
  "codex-test-binary-support",
@@ -3311,6 +3312,7 @@ dependencies = [
  "which 8.0.0",
  "windows-sys 0.61.2",
  "wiremock",
+ "zeroize",
 ]
 
 [[package]]

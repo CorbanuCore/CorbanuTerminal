@@ -57,6 +57,10 @@ const MAX_SNAPSHOT_ATTEMPTS: usize = 3;
 
 #[path = "shell_snapshot_credentials.rs"]
 mod credentials;
+#[path = "shell_snapshot_filter.rs"]
+mod filter;
+
+use filter::SnapshotCredentialFilter;
 
 #[derive(Clone, Copy)]
 enum SnapshotReplay {
@@ -412,6 +416,8 @@ done
 "#,
         );
     }
+    // Corbanu #2356: every variable's raw value, for the credential filter.
+    script.push_str(&filter::values_script(shell_type));
     // Probe under the exact capture sandbox, including its /proc fallback and
     // read policy. Keep cached env replay when descriptor paths cannot be opened.
     let probe = if shell_type == ShellType::Sh {
@@ -529,6 +535,8 @@ done
                 internal_error("shell snapshot capture timed out".to_string()),
             )
         })??;
+    // Raw startup values, credentials included, stay only in executor memory.
+    let output = zeroize::Zeroizing::new(output);
 
     let marker = format!("\0{SOURCE_MARKER}\0");
     let marker_end = output
@@ -560,10 +568,30 @@ done
         }
         SnapshotReplay::Environment
     };
+    // Corbanu #2356: #310's names and #2314's credential values, as for core's
+    // snapshot file, before anything is cached or replayed.
+    let (captured, values) = filter::split_values(shell_type, captured)?;
+    let credential_filter =
+        SnapshotCredentialFilter::new(&values, params.env_policy.as_ref(), &prepared.env)?;
+    drop(values);
     let snapshot = if let Some(proxy) = proxy {
-        credentials::prepare(params, captured, replay, proxy, credential_brokers).await?
+        credentials::prepare(
+            params,
+            captured,
+            replay,
+            proxy,
+            credential_brokers,
+            &credential_filter,
+        )
+        .await?
     } else {
-        parse_snapshot(shell_type, captured, params.env_policy.as_ref(), replay)?
+        parse_snapshot(
+            shell_type,
+            captured,
+            params.env_policy.as_ref(),
+            replay,
+            &credential_filter,
+        )?
     };
     child.preserve_helpers();
     Ok(snapshot)
@@ -574,6 +602,7 @@ fn parse_snapshot(
     output: &[u8],
     env_policy: Option<&ExecEnvPolicy>,
     replay: SnapshotReplay,
+    credential_filter: &SnapshotCredentialFilter<'_>,
 ) -> CaptureResult {
     let captured = CapturedSnapshot::parse(shell_type, output).ok_or_else(|| {
         (
@@ -609,7 +638,9 @@ fn parse_snapshot(
             let (name, value) = std::str::from_utf8(entry).ok()?.split_once('=')?;
             Some((name.to_string(), value.to_string()))
         })
+        .filter(|(name, value)| credential_filter.keep(name, value))
         .collect::<HashMap<_, _>>();
+    credential_filter.ensure_clean(&state)?;
     if environment.contains_key(PROXY_ACTIVE_ENV_KEY) {
         strip_managed_proxy_env(&mut environment);
     }
