@@ -184,6 +184,7 @@ mod quit_thread_record;
 mod render;
 mod resize_reflow_cap;
 mod resume_launch;
+mod resume_notice;
 mod resume_picker;
 mod security;
 mod selection_list;
@@ -2166,6 +2167,17 @@ async fn run_ratatui_app(
         resume_picker::SessionSelection::StartFresh
     };
 
+    let resume_fallback_notice = resume_notice::resume_fallback_notice(
+        &cli,
+        &session_selection,
+        (!uses_remote_workspace).then_some(config.model_provider_id.as_str()),
+        latest_session_cwd_filter(
+            uses_remote_workspace,
+            remote_cwd_override.as_deref(),
+            &config,
+            cli.resume_show_all,
+        ),
+    );
     let current_cwd = config.cwd.clone();
     let fallback_cwd = match resolve_startup_resume_or_fork_cwd(
         &mut tui,
@@ -2385,6 +2397,7 @@ async fn run_ratatui_app(
         prompt,
         images,
         session_selection,
+        resume_fallback_notice,
         startup_resume_model_override,
         feedback,
         should_show_trust_screen, // Proxy to: is it a first run in this directory?

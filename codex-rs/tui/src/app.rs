@@ -1200,6 +1200,7 @@ impl App {
         initial_prompt: Option<String>,
         initial_images: Vec<PathBuf>,
         session_selection: SessionSelection,
+        resume_fallback_notice: Option<String>,
         startup_resume_model_override: Option<ResumeModelOverride>,
         feedback: codex_feedback::CodexFeedback,
         is_first_run: bool,
@@ -1555,6 +1556,11 @@ impl App {
                 (ChatWidget::new_with_app_event(init), Some(forked))
             }
         };
+        if let Some(notice) = resume_fallback_notice {
+            app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+                crate::history_cell::new_warning_event(notice),
+            )));
+        }
         chat_widget.remote_connection = remote_connection;
         let thread_and_widget_ms = thread_and_widget_started_at.elapsed().as_millis();
         chat_widget
