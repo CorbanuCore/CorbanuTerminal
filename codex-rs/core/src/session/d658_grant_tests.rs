@@ -1,10 +1,15 @@
 use codex_protocol::models::AdditionalPermissionProfile;
+use codex_protocol::models::FileSystemPermissions;
 use codex_protocol::models::NetworkPermissions;
+use codex_protocol::permissions::FileSystemAccessMode;
+use codex_protocol::permissions::FileSystemPath;
+use codex_protocol::permissions::FileSystemSandboxEntry;
 use codex_security_policy::PolicyPrincipal;
 use codex_security_policy::PrincipalKind;
 use codex_security_policy::RevocationState;
 use codex_security_policy::SecurityLevel;
 use codex_security_policy::SecuritySettings;
+use codex_utils_path_uri::PathUri;
 use pretty_assertions::assert_eq;
 
 use crate::session::tests::make_session_and_context;
@@ -56,15 +61,34 @@ async fn captured_turn_grants_survive_a_new_turn_but_not_security_revocation() {
         read_granted_permissions(&session, &new_turn, &environment_id).await,
         None
     );
+    let new_grant = AdditionalPermissionProfile {
+        network: None,
+        file_system: Some(FileSystemPermissions {
+            entries: vec![FileSystemSandboxEntry::new(
+                FileSystemPath::Path {
+                    path: PathUri::from_abs_path(&old_turn.config.cwd)
+                        .join("d658-new-only.txt")
+                        .unwrap(),
+                },
+                FileSystemAccessMode::Write,
+            )],
+            glob_scan_max_depth: None,
+        }),
+    };
     assert!(new_turn.record_granted_permissions(
         &environment_id,
-        grant.clone(),
+        new_grant.clone(),
         /*strict_auto_review*/ false,
         session.services.authority_marker(),
     ));
     assert_eq!(
         read_granted_permissions(&session, &new_turn, &environment_id).await,
-        Some(grant)
+        Some(new_grant)
+    );
+    assert_eq!(
+        read_granted_permissions(&session, &old_turn, &environment_id).await,
+        Some(grant),
+        "the old cell must not acquire the new turn's different grant",
     );
 
     let change = controller
