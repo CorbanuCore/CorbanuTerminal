@@ -3174,6 +3174,19 @@ fn selected_and_resumed_threads_use_server_capability_for_v1_and_v2_children() -
                 "type": "session_meta",
                 "payload": serde_json::to_value(session_meta)?,
             });
+            // Corbanu (#1129): a child resumes only on the runtime it last ran on.
+            let turn_context = serde_json::json!({
+                "timestamp": timestamp,
+                "type": "turn_context",
+                "payload": {
+                    "cwd": app.config.cwd.to_path_buf(),
+                    "approval_policy": "never",
+                    "sandbox_policy": {"type": "read-only"},
+                    "model": app.config.model.clone(),
+                    "model_provider": app.config.model_provider_id.clone(),
+                    "summary": "auto",
+                }
+            });
             let saved_message = format!("Saved work from child-{index}");
             let response_item = serde_json::json!({
                 "timestamp": timestamp,
@@ -3190,7 +3203,7 @@ fn selected_and_resumed_threads_use_server_capability_for_v1_and_v2_children() -
             });
             std::fs::write(
                 rollout_path,
-                format!("{session_meta_line}\n{response_item}\n{user_message}\n"),
+                format!("{session_meta_line}\n{turn_context}\n{response_item}\n{user_message}\n"),
             )?;
             child_thread_ids.push(child_thread_id);
         }
@@ -3841,9 +3854,14 @@ async fn server_only_profile_selection_keeps_turns_on_the_selected_profile() -> 
     let (mut app, mut events, mut ops) = make_test_app_with_channels().await;
     app.config.ephemeral = false;
     let home = tempdir()?;
+    // Corbanu: a turn must run on the chat's provider (modelProviderMismatch),
+    // so the server's default provider is the test app's.
     std::fs::write(
         home.path().join("config.toml"),
-        "default_permissions = \":workspace\"\n[permissions.server-only]\nextends = \":read-only\"\n",
+        format!(
+            "model_provider = \"{}\"\ndefault_permissions = \":workspace\"\n[permissions.server-only]\nextends = \":read-only\"\n",
+            app.config.model_provider_id
+        ),
     )?;
     let server_config = ConfigBuilder::default()
         .codex_home(home.path().into())
