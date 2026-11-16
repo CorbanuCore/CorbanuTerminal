@@ -1,5 +1,6 @@
 ---
 source: core/tests/suite/scenarios_incremental_tools_resume.rs
+assertion_line: 206
 expression: "context_snapshot::format_request_history_snapshot(\"Disabling incremental tools preserves updates in the existing window; after compaction the generated catalog survives resume.\",\n&requests,\n&ContextSnapshotOptions::default().rewrite_known_segments().include_request_settings(),)"
 ---
 Scenario: Disabling incremental tools preserves updates in the existing window; after compaction the generated catalog survives resume.
@@ -16,12 +17,14 @@ Settings:
   text: {"verbosity":"low"}
   tool_choice: "auto"
 -- request 1 (turn) --
-00:additional_tools/developer (2; hash=7b4c6a992fd91f91):
-        - namespace/functions; hash=101d32aa59ea258b
+00:additional_tools/developer (2; hash=282623b945191bdc):
+        - namespace/functions; hash=1c36c2122d7b2e96
           - function/exec_command
           - function/write_stdin
           - function/request_user_input
           - custom/apply_patch
+          - function/structured_edit
+          - function/structured_write
           - function/view_image
         - tool_search: # Tool discovery  Searches over deferred tool metadata with BM25 and exposes matching tools for t...; args=[limit, query]; hash=b573ed69c0b0e6c7
 01:message/developer:
@@ -56,11 +59,13 @@ Settings:
 ## Window 2 (after request 3: input diverged at item 00)
 Settings: same as window 1
 -- request 4 (turn) --
-00:additional_tools/developer (2; hash=3b0da5c6c5e4fd8e):
-        - namespace/functions; hash=36c9912d971c5be8
+00:additional_tools/developer (2; hash=d53fd108765f23c5):
+        - namespace/functions; hash=61b282991cb9a81b
           - function/update_plan
           - function/request_user_input
           - custom/apply_patch
+          - function/structured_edit
+          - function/structured_write
           - function/view_image
         - tool_search: # Tool discovery  Searches over deferred tool metadata with BM25 and exposes matching tools for t...; args=[limit, query]; hash=b573ed69c0b0e6c7
 01:message/developer:
