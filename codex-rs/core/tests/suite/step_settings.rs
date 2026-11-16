@@ -1177,13 +1177,27 @@ async fn active_model_switch_updates_core_context_from_captured_settings(
     ] {
         assert!(requests[0].body_contains_text(&text));
     }
+    let mut switched_tools = requests[0].body_json()["tools"].clone();
+    let spawn = switched_tools
+        .as_array_mut()
+        .expect("tool catalog")
+        .iter_mut()
+        .find(|tool| tool["name"] == "spawn_agent_plaintext")
+        .expect("Corbanu plaintext spawn adapter");
+    let description = spawn["description"].as_str().expect("spawn description");
+    let initial_runtime = format!("Current inherited runtime: `openai` / `{MODEL_A}`; effort low.");
+    let switched_runtime =
+        format!("Current inherited runtime: `openai` / `{MODEL_B}`; effort medium.");
+    assert!(description.contains(&initial_runtime));
+    // Main advertises the current runtime in the adapter. Only that text changes.
+    spawn["description"] = json!(description.replace(&initial_runtime, &switched_runtime));
     for pair in requests.windows(/*size*/ 2) {
         assert!(
             pair[1].input().starts_with(&pair[0].input()),
             "context updates must be append-only"
         );
         assert_eq!(pair[1].instructions_text(), initial_instructions);
-        assert_eq!(pair[1].body_json()["tools"], pair[0].body_json()["tools"]);
+        assert_eq!(pair[1].body_json()["tools"], switched_tools);
         assert_eq!(
             pair[1].message_input_texts("user"),
             pair[0].message_input_texts("user")
@@ -2303,6 +2317,8 @@ async fn tool_messages_follow_mid_turn_model_changes() -> Result<()> {
                 .enable(Feature::AgentMessageBoard)
                 .expect("test config should allow channel tools");
             config.ephemeral = false;
+            // Exercise catalog-driven descriptions without the pinned first-party wire schema.
+            config.model_provider.name = "Catalog fixture".into();
             config.multi_agent_v2.expose_spawn_agent_model_overrides = false;
             config.multi_agent_v2.non_code_mode_only = true;
             config.code_mode.disable_in_process_fallback = true;

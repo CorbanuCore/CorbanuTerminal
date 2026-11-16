@@ -678,7 +678,7 @@ async fn spawn_child_and_capture_snapshot(
 
 #[test_case(
     ReasoningEffort::Ultra,
-    ReasoningEffort::XHigh;
+    ReasoningEffort::Max;
     "absent catalog override uses highest non-ultra"
 )]
 #[test_case(
@@ -2727,11 +2727,15 @@ async fn multi_agent_v2_spawn_sends_agent_message_to_child(
                     .any(|tool| tool["name"] == MULTI_AGENT_V2_NAMESPACE)
             })
         };
-        assert!(
-            !declares_collaboration(&child_body["tools"]),
-            "leaf workers must not receive top-level collaboration tools",
-        );
         let input = child_request.input();
+        // D648(a): every V2 thread keeps manager tools unless explicitly disabled.
+        assert!(
+            declares_collaboration(&child_body["tools"])
+                || input.iter().any(|item| {
+                    item["type"] == "additional_tools" && declares_collaboration(&item["tools"])
+                }),
+            "V2 children retain direct or inherited collaboration tools",
+        );
         if let Some(last_declaration) = input.iter().rposition(|item| {
             item["type"] == "additional_tools" && declares_collaboration(&item["tools"])
         }) {
@@ -2750,8 +2754,8 @@ async fn multi_agent_v2_spawn_sends_agent_message_to_child(
                 })
                 .any(|text| text.lines().any(|line| line == removed_namespace));
             assert!(
-                collaboration_removed,
-                "leaf workers must mark inherited collaboration tools unavailable",
+                !collaboration_removed,
+                "V2 children must not remove inherited collaboration tools",
             );
         }
     }
@@ -3375,7 +3379,22 @@ async fn multi_agent_v2_peer_followup_completion_notifies_initiating_turn(
     let followup_output = collaboration_responses[1]
         .function_call_output_text(FOLLOWUP_CALL_ID)
         .expect("requester follow-up tool output");
-    assert_eq!(followup_output, "");
+    let followup: Value = serde_json::from_str(&followup_output)?;
+    assert_eq!(followup["target_thread_id"], json!(worker_thread_id));
+    assert_eq!(followup["agent_path"], "/root/worker");
+    assert_eq!(followup["delivery"], "followup_task_sent");
+    assert_eq!(followup["triggered_turn"], true);
+    assert!(
+        followup["message_id"]
+            .as_str()
+            .is_some_and(|id| !id.is_empty())
+    );
+    assert!(
+        followup["agent_nickname"]
+            .as_str()
+            .is_some_and(|name| !name.is_empty())
+    );
+    assert_eq!(followup["agent_role"], Value::Null);
     wait_for_event(worker_thread.as_ref(), |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
@@ -3845,7 +3864,9 @@ async fn failed_spawn_edge_leaves_no_child_history(fork_context: bool) -> Result
         tool_output
             .function_call_output_text(SPAWN_CALL_ID)
             .as_deref(),
-        Some("collab spawn failed: Fatal error: failed to persist spawned agent relationship")
+        Some(format!(
+            "collab spawn failed: Fatal error: failed to persist native agent edge {parent_id} -> {child_id}: agent graph store internal error: injected edge publication failure"
+        ).as_str())
     );
     assert!(
         child_requests.requests().is_empty(),

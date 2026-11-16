@@ -1,17 +1,21 @@
 ---
 source: core/tests/suite/scenarios_partial_answers.rs
+assertion_line: 325
 expression: "context_snapshot::format_request_history_snapshot(\"A worker inherits the parent prefix unchanged and receives its own instructions. Requests are grouped by parent, then child.\",\n&requests, &ContextSnapshotOptions::default().rewrite_known_segments())"
 ---
 Scenario: A worker inherits the parent prefix unchanged and receives its own instructions. Requests are grouped by parent, then child.
 
 ## Window 1
 -- request 1 (turn) --
-00:additional_tools/developer (2; hash=cefa72e421dc276f):
-        - namespace/functions; hash=125a3a92f05f72e9
+00:additional_tools/developer (2; hash=ceb83db62452d329):
+        - namespace/functions; hash=1353daa42c5ab74a
           - custom/exec
           - function/wait
           - function/request_user_input
-        - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=2c8d6295978dbe63
+          - function/spawn_agent_plaintext
+          - function/send_message_plaintext
+          - function/followup_task_plaintext
+        - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=a702926d7b2ec538
           - function/followup_task
           - function/interrupt_agent
           - function/list_agents
@@ -42,16 +46,19 @@ Scenario: A worker inherits the parent prefix unchanged and receives its own ins
     Have a worker check both results.
 -- request 3 (turn) --
 11:function_call/collaboration.spawn_agent:{"fork_turns":"all","message":"Check both inherited results.","task_name":"worker"}
-12:function_call_output:{"task_name":"/root/worker"}
+12:function_call_output:{"task_name":"/root/worker","nickname":"Worker","model_provider":"openai","model":"gpt-5.6-sol","reasoning_effort":"low","service_tier":null}
 
 ## Window 2 (after request 3: input diverged at item 12)
 -- request 4 (turn) --
-00:additional_tools/developer (2; hash=cefa72e421dc276f):
-        - namespace/functions; hash=125a3a92f05f72e9
+00:additional_tools/developer (2; hash=ceb83db62452d329):
+        - namespace/functions; hash=1353daa42c5ab74a
           - custom/exec
           - function/wait
           - function/request_user_input
-        - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=2c8d6295978dbe63
+          - function/spawn_agent_plaintext
+          - function/send_message_plaintext
+          - function/followup_task_plaintext
+        - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=a702926d7b2ec538
           - function/followup_task
           - function/interrupt_agent
           - function/list_agents
@@ -90,3 +97,5 @@ Scenario: A worker inherits the parent prefix unchanged and receives its own ins
 16:message/developer:
     <MULTI_AGENT_MODE>
 17:agent_message
+18:message/user:
+    Continue.

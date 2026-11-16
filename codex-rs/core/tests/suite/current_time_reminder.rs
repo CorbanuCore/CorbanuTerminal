@@ -468,7 +468,7 @@ async fn system_time_source_adds_current_time_reminder(clock_setup: ClockSetup) 
 #[test_case(ReasoningEffort::Persistent, true; "persistent_enabled")]
 #[test_case(ReasoningEffort::Persistent, false; "persistent_disabled")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn client_feature_map_can_disable_sleep_tool(
+async fn client_feature_map_preserves_legacy_sleep_opt_in(
     reasoning_effort: ReasoningEffort,
     sleep_tool_enabled: bool,
 ) -> Result<()> {
@@ -507,7 +507,9 @@ async fn client_feature_map_can_disable_sleep_tool(
     let request = responses.single_request();
     assert_eq!(
         ["curr_time", "sleep"].map(|name| request.tool_by_name("clock", name).is_some()),
-        [true, sleep_tool_enabled]
+        // Main's legacy reminder opt-in also enables sleep independently of
+        // the client feature map; persistent effort supplies that reminder.
+        [true, sleep_tool_enabled || reminders_enabled]
     );
     assert_eq!(
         current_time_reminders(&request).is_empty(),
@@ -517,9 +519,9 @@ async fn client_feature_map_can_disable_sleep_tool(
 }
 
 #[test_case("[features]\nsleep_tool = true", Some(true), [true, true]; "boolean_enabled")]
-#[test_case("[features]\nsleep_tool = false", Some(true), [true, false]; "boolean_disabled")]
+#[test_case("[features]\nsleep_tool = false", Some(true), [true, true]; "legacy_opt_in_with_boolean_disabled")]
 #[test_case("[features.sleep_tool]\nmode = 'always_on'", None, [false, true]; "always_on_without_model_clock")]
-#[test_case("[features.sleep_tool]\nenabled = false\nmode = 'always_on'", Some(true), [true, false]; "disabled_overrides_always_on")]
+#[test_case("[features.sleep_tool]\nenabled = false\nmode = 'always_on'", Some(true), [true, true]; "legacy_opt_in_with_disabled_always_on")]
 #[test_case("[features.sleep_tool]\nmode = 'model_driven'", None, [false, false]; "model_driven_without_model_clock")]
 #[test_case("[features.sleep_tool]\nmode = 'model_driven'", Some(false), [true, false]; "model_driven_preserves_legacy_disable")]
 #[test_case("[features.sleep_tool]\nmode = 'always_on'", Some(false), [true, true]; "always_on_overrides_legacy_disable")]
