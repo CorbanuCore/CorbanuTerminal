@@ -229,7 +229,8 @@ pub struct ExecEnvPolicy {
     pub include_only: Vec<String>,
     /// PF-27-S02 (#2324): drop every inherited variable whose value embeds a
     /// URL password (`scheme://user:pass@host`), as Corbanu's own protected
-    /// launches do. Names in `set` and the request's `env` overlay are kept.
+    /// launches do: like `retain_launch_env`, this applies to every value the
+    /// policy produces, `set` included. The request's `env` overlay is kept.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub drop_url_password_values: bool,
 }
@@ -245,9 +246,8 @@ impl ExecEnvPolicy {
     /// this policy, before the request's `env` overlay is added.
     pub fn retain_inherited_values(&self, env: &mut HashMap<String, String>) {
         if self.drop_url_password_values {
-            env.retain(|name, value| {
-                self.r#set.contains_key(name)
-                    || !codex_protocol::secretless_launch::value_has_url_password(value)
+            env.retain(|_, value| {
+                !codex_protocol::secretless_launch::value_has_url_password(value)
             });
         }
     }

@@ -1436,39 +1436,60 @@ mod tests {
     }
 
     /// #2324: the executor drops inherited values embedding a URL password
-    /// when asked to; names the policy sets and the request's overlay stay.
+    /// when asked to (policy `set` values too, as `retain_launch_env`); the
+    /// request's overlay stays. Runs in a child test process so the synthetic
+    /// variables never reach the other tests' environment.
     #[test]
     fn child_env_drops_inherited_url_passwords_on_request() {
-        const PASSWORD: &str = "CORBANU_TEST_2324_URL_WITH_PASSWORD";
-        const ENCODED: &str = "CORBANU_TEST_2324_URL_PERCENT_ENCODED";
-        const IPV6: &str = "CORBANU_TEST_2324_URL_IPV6";
-        const NO_PASSWORD: &str = "CORBANU_TEST_2324_URL_NO_PASSWORD";
-        const IPV6_NO_PASSWORD: &str = "CORBANU_TEST_2324_URL_IPV6_NO_PASSWORD";
+        const CHILD: &str = "CORBANU_TEST_2324_CHILD";
+        const TEST: &str =
+            "local_process::tests::child_env_drops_inherited_url_passwords_on_request";
         let inherited = [
             (
-                PASSWORD,
+                "CORBANU_TEST_2324_URL_WITH_PASSWORD",
                 "http://fixture-user:synthetic-password@proxy.invalid:3128",
+                true,
             ),
             (
-                ENCODED,
+                "CORBANU_TEST_2324_URL_PERCENT_ENCODED",
                 "http://fixture%40user:synthetic%3Apass%40x@proxy.invalid",
+                true,
             ),
             (
-                IPV6,
+                "CORBANU_TEST_2324_URL_IPV6",
                 "socks5://fixture-user:synthetic-password@[2001:db8::1]:1080",
+                true,
             ),
             (
-                NO_PASSWORD,
+                "CORBANU_TEST_2324_URL_NO_PASSWORD",
                 "https://fixture-user@proxy.invalid/path?q=a:b@c",
+                false,
             ),
-            (IPV6_NO_PASSWORD, "http://[2001:db8::1]:3128"),
+            (
+                "CORBANU_TEST_2324_URL_IPV6_NO_PASSWORD",
+                "http://[2001:db8::1]:3128",
+                false,
+            ),
         ];
-        // SAFETY: names are unique to this test; nothing else reads them.
-        unsafe {
-            for (name, value) in inherited {
-                std::env::set_var(name, value);
+        if std::env::var_os(CHILD).is_none() {
+            let mut command = std::process::Command::new(std::env::current_exe().expect("binary"));
+            command
+                .args(["--exact", TEST, "--nocapture"])
+                .env(CHILD, "1");
+            for (name, value, _) in inherited {
+                command.env(name, value);
             }
+            let output = command.output().expect("child test");
+            assert!(
+                output.status.success()
+                    && String::from_utf8_lossy(&output.stdout).contains("1 passed"),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
         }
+
         let with_password = "http://fixture-user:synthetic-password@kept.invalid".to_string();
         let run = |drop_url_password_values| {
             let mut params = test_exec_params(HashMap::from([(
@@ -1490,24 +1511,28 @@ mod tests {
             if let Some((name, _)) = shell_environment::keyring_isolation_env_var() {
                 env.remove(name);
             }
+            env.remove(CHILD);
             env.remove("PATHEXT");
             env
         };
 
         let mut expected: HashMap<String, String> = inherited
             .iter()
-            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .map(|(name, value, _)| (name.to_string(), value.to_string()))
             .collect();
-        expected.insert("CORBANU_TEST_2324_SET".to_string(), with_password.clone());
         expected.insert(
             "CORBANU_TEST_2324_OVERLAY".to_string(),
             with_password.clone(),
         );
-        assert_eq!(run(false), expected);
+        let mut unfiltered = expected.clone();
+        unfiltered.insert("CORBANU_TEST_2324_SET".to_string(), with_password.clone());
+        assert_eq!(run(false), unfiltered);
 
-        for name in [PASSWORD, ENCODED, IPV6] {
-            expected.remove(name);
-        }
+        expected.retain(|name, _| {
+            !inherited
+                .iter()
+                .any(|(dropped, _, has_password)| *has_password && dropped == name)
+        });
         assert_eq!(run(true), expected);
     }
 

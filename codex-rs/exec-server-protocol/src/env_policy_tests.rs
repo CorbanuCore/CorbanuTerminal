@@ -67,16 +67,12 @@ fn inherited() -> HashMap<String, String> {
 fn drops_only_inherited_url_passwords() {
     let mut env = inherited();
     policy(true).retain_inherited_values(&mut env);
-    let mut expected: HashMap<String, String> = URL_CASES
+    // As `retain_launch_env`, names the policy sets are filtered too.
+    let expected: HashMap<String, String> = URL_CASES
         .iter()
         .filter(|(_, _, has_password)| !has_password)
         .map(|(name, value, _)| (name.to_string(), value.to_string()))
         .collect();
-    // Names the policy sets explicitly are kept, as `retain_launch_env` keeps them.
-    expected.insert(
-        "SET_BY_POLICY".to_string(),
-        "http://fixture-user:synthetic-password@set.invalid".to_string(),
-    );
     assert_eq!(env, expected);
 }
 
