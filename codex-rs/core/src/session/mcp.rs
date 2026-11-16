@@ -243,10 +243,16 @@ impl Session {
                 self.mark_mcp_runtime_dirty();
             }
             let auth = self.services.auth_manager().auth_cached();
-            if !self
+            // #2337: the plugins follow the sign-in this session uses now
+            // (PF-84), before the pending check, as on main.
+            if self
                 .services
-                .mcp_runtime
-                .current_auth_matches(auth.as_ref())
+                .plugins_manager
+                .follow_session_auth(&self.services.auth_manager())
+                || !self
+                    .services
+                    .mcp_runtime
+                    .current_auth_matches(auth.as_ref())
             {
                 self.mark_mcp_runtime_dirty();
             }
@@ -339,6 +345,10 @@ impl Session {
             refresh: &self.mcp_refresh,
             published: false,
         };
+        // #2337: as main's `set_auth_mode` here.
+        self.services
+            .plugins_manager
+            .follow_session_auth(&self.services.auth_manager());
         let auth = self.services.auth_manager().auth().await;
         let environments = self.services.turn_environments.snapshot().await;
         let environment_selections = environments.all_selections();
@@ -933,6 +943,10 @@ impl Session {
             refresh: &self.mcp_refresh,
             published: false,
         };
+        // #2337: as main's `set_auth_mode` here.
+        self.services
+            .plugins_manager
+            .follow_session_auth(&self.services.auth_manager());
         let auth = self.services.auth_manager().auth().await;
         let ready_selected_capability_roots = self
             .services

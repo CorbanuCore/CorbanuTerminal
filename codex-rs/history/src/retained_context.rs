@@ -275,6 +275,12 @@ impl RetainedContext {
         order
     }
 
+    /// Restores an order reserved before a resume, or reserves the next one when
+    /// none was recorded; later reservations stay above it.
+    pub fn restore_order(&mut self, recorded_order: Option<u64>) -> u64 {
+        self.record_order(recorded_order)
+    }
+
     fn record_order(&mut self, acceptance_order: Option<u64>) -> u64 {
         let order = acceptance_order.unwrap_or(self.next_order);
         self.next_order = self.next_order.max(order.saturating_add(1));
