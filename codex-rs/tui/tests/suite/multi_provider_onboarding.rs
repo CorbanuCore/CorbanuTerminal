@@ -340,13 +340,21 @@ async fn tmux_resume_last_notice_keeps_provider_searched_before_onboarding() -> 
         fs::read_to_string(config_path)?.contains("model_provider = \"pf53-loopback\""),
         "onboarding did not switch providers"
     );
-    let screen = pane.capture_scrollback_tail(/*lines*/ 100)?;
-    let screen = screen.split_whitespace().collect::<Vec<_>>().join(" ");
-    let notice_scope = screen
-        .split_once("No resumable ")
-        .and_then(|(_, notice)| notice.split_once(". Starting a new conversation."))
-        .map(|(scope, _)| scope)
-        .context("chat did not show the resume fallback notice")?;
+    // The composer can be ready before the queued notice reaches scrollback.
+    let read_notice_scope = |screen: &str| {
+        let screen = screen.split_whitespace().collect::<Vec<_>>().join(" ");
+        let (_, notice) = screen.split_once("No resumable ")?;
+        let (scope, _) = notice.split_once(". Starting a new conversation.")?;
+        Some(scope.to_owned())
+    };
+    let screen = pane.wait_stable_scrollback_until(
+        "resume fallback notice",
+        READY_TIMEOUT,
+        /*lines*/ 100,
+        |screen| read_notice_scope(screen).is_some(),
+    )?;
+    let notice_scope =
+        read_notice_scope(&screen).context("chat did not show the resume fallback notice")?;
     insta::assert_snapshot!(notice_scope, @"interactive conversation found for model provider `openai` in the current directory");
     super::resume_recorded_account::exit_tui(pane)?;
     Ok(())
