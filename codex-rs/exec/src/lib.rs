@@ -11,6 +11,7 @@ pub(crate) mod event_processor_with_jsonl_output;
 pub(crate) mod exec_events;
 mod json_usage;
 mod panic_watch;
+mod resume_notice;
 
 pub use cli::Cli;
 pub use cli::Command;
@@ -972,6 +973,10 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
                     (session_configured.thread_id, session_configured)
                 } else {
                     trace_exec_timing("after_resolve_resume_thread_id", exec_session_started_at);
+                    eprintln!(
+                        "{}",
+                        resume_notice::fallback_notice(&config, args, resume_model_override_requested)
+                    );
                     let response: ThreadStartResponse = send_request_with_response(
                         &client,
                         ClientRequest::ThreadStart {
