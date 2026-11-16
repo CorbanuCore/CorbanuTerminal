@@ -460,6 +460,17 @@ async fn start_or_steer(
             let mut task_input =
                 merge_additional_context_input(session, &turn_context, additional_context).await;
             if has_explicit_input {
+                // Corbanu (main's rule): ready agent mail joins the admitted turn before its
+                // first model request, ahead of the new input. Left queued, it would reach the
+                // model only in a continuation after the input was sampled (#445/#507: mail
+                // held while the kill switch was on goes with the next turn someone starts).
+                // `start_task` notes mail carried in the task input as taken. A turn the kill
+                // switch refuses records no input, so the mail then stays queued.
+                if !session.services.model_client().kill_switch_on() {
+                    let (mailbox_input, _) =
+                        session.input_queue.drain_ready_mailbox_input_items().await;
+                    task_input.extend(mailbox_input);
+                }
                 task_input.push(
                     pending_turn_input(
                         session,
@@ -507,6 +518,13 @@ async fn start_if_idle(
         responsesapi_client_metadata,
         ..
     } = request;
+    // #507: while the kill switch is on, idle work starts no turn and records nothing; it
+    // waits for a turn someone starts after the switch is turned off.
+    if session.services.model_client().kill_switch_on() {
+        return Ok(TurnInputSubmission::NotSubmitted {
+            reason: NotSubmittedReason::KillSwitch,
+        });
+    }
     if session.input_queue.has_trigger_turn_mailbox_items().await {
         return Ok(TurnInputSubmission::NotSubmitted {
             reason: NotSubmittedReason::PendingTriggerTurn,

@@ -3929,7 +3929,9 @@ async fn issue_605_minimal_reads_keep_git_below_tmp_read_only() -> anyhow::Resul
                         FileSystemAccessMode::Read,
                     ),
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::Path { path: cwd.clone() },
+                        FileSystemPath::Path {
+                            path: cwd.clone().into(),
+                        },
                         FileSystemAccessMode::Write,
                     ),
                 ]);
@@ -4015,7 +4017,9 @@ async fn issue_649_minimal_reads_keep_denied_paths_below_tmp_unreadable() -> any
                         FileSystemAccessMode::Read,
                     ),
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::Path { path: cwd.clone() },
+                        FileSystemPath::Path {
+                            path: cwd.clone().into(),
+                        },
                         FileSystemAccessMode::Write,
                     ),
                 ]);

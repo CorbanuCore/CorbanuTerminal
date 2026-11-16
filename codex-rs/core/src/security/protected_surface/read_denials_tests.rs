@@ -964,7 +964,9 @@ fn issue_619_a_home_below_a_tmp_spelled_root_is_protected() {
                     FileSystemAccessMode::Read,
                 ),
                 FileSystemSandboxEntry::new(
-                    FileSystemPath::Path { path: abs(root) },
+                    FileSystemPath::Path {
+                        path: abs(root).into(),
+                    },
                     FileSystemAccessMode::Write,
                 ),
             ]),
@@ -977,7 +979,7 @@ fn issue_619_a_home_below_a_tmp_spelled_root_is_protected() {
             .iter()
             .filter(|entry| {
                 entry.access == FileSystemAccessMode::Write
-                    && matches!(&entry.path, FileSystemPath::Path { path } if path.as_path().ends_with("worktrees"))
+                    && matches!(&entry.path, FileSystemPath::Path { path } if path.to_abs_path().is_ok_and(|path| path.as_path().ends_with("worktrees")))
             })
             .cloned()
             .collect()
@@ -1038,7 +1040,12 @@ fn issue_652_a_folder_named_twice_adds_no_worktrees_carve_out() {
     let logical = dir.path().to_path_buf();
     let real = logical.canonicalize().unwrap();
     let entry = |path: &Path, access| {
-        FileSystemSandboxEntry::new(FileSystemPath::Path { path: abs(path) }, access)
+        FileSystemSandboxEntry::new(
+            FileSystemPath::Path {
+                path: abs(path).into(),
+            },
+            access,
+        )
     };
     let profile = PermissionProfile::from_runtime_permissions(
         &FileSystemSandboxPolicy::restricted(vec![
@@ -1071,7 +1078,7 @@ fn issue_652_a_folder_named_twice_adds_no_worktrees_carve_out() {
     assert!(!policy.can_write_effective_path_with_cwd(&home.join("worktrees/w"), &cwd));
     assert!(
         !policy.entries.iter().any(|entry| entry.access == FileSystemAccessMode::Write
-            && matches!(&entry.path, FileSystemPath::Path { path } if path.as_path().ends_with("worktrees"))),
+            && matches!(&entry.path, FileSystemPath::Path { path } if path.to_abs_path().is_ok_and(|path| path.as_path().ends_with("worktrees")))),
         "{:?}",
         policy.entries
     );

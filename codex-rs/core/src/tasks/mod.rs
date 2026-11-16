@@ -1704,6 +1704,7 @@ fn not_submitted_reason_text(reason: &NotSubmittedReason) -> String {
         NotSubmittedReason::ActiveTurnOutputSchemaMismatch => {
             "the running turn expects another output format".to_string()
         }
+        NotSubmittedReason::KillSwitch => "the security kill switch is on".to_string(),
     }
 }
 

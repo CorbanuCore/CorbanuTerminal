@@ -6,6 +6,7 @@
 //! next turn someone starts.
 
 use codex_core::TurnInputRequest;
+use codex_protocol::turn_input::NotSubmittedReason;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -276,11 +277,13 @@ async fn issue_507_no_automatic_idle_turn_while_the_switch_is_on() -> anyhow::Re
         )))
     };
     let refused = test.codex.start_turn_if_idle(automatic()).await?;
-    // Upstream has no kill-switch `NotSubmittedReason` yet: pin the reason
-    // once the open S2a `core/src/session/turn_input.rs` row (#507: refuse
-    // `StartIfIdle` up front while the switch is on) adds one.
     assert!(
-        matches!(refused, StartIfIdleSubmission::NotSubmitted { .. }),
+        matches!(
+            refused,
+            StartIfIdleSubmission::NotSubmitted {
+                reason: NotSubmittedReason::KillSwitch
+            }
+        ),
         "no automatic turn while the switch is on: {refused:?}"
     );
     assert_no_turn_starts(&test.codex, "switch on").await;
