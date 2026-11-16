@@ -779,7 +779,7 @@ mod tests {
         // Skip the live DNS lookup in the local-address check so the host reaches the decider
         // as not_allowed rather than not_allowed_local when DNS is unavailable.
         let state = network_proxy_state_for_policy(NetworkProxyConfig {
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             ..NetworkProxyConfig::default()
         });
         let calls = Arc::new(AtomicUsize::new(0));
@@ -853,7 +853,7 @@ mod tests {
             let mut network = NetworkProxyConfig::default();
             network.set_allowed_domains(vec!["example.com".to_string()]);
             // Skip the live DNS lookup in the local-address check; this test covers attribution.
-            network.allow_local_binding = true;
+            network.allow_local_binding = Some(true);
             network
         });
         state.register_execution("token-baseline-allow", "local", "execution-baseline-allow");
@@ -947,7 +947,7 @@ mod tests {
         // Skip the live DNS lookup in the local-address check so the host reaches the decider
         // as not_allowed rather than not_allowed_local when DNS is unavailable.
         let state = network_proxy_state_for_policy(NetworkProxyConfig {
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             ..NetworkProxyConfig::default()
         });
         let decider: Arc<dyn NetworkPolicyDecider> =

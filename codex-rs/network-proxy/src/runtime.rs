@@ -1756,7 +1756,7 @@ mod tests {
     async fn host_blocked_requires_allowlist_match() {
         // Exercise allowlist matching independently of DNS/local-address checks.
         let state = network_proxy_state_for_policy(NetworkProxyConfig {
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             ..network_settings(&["example.com"], &[])
         });
 
@@ -1807,7 +1807,7 @@ mod tests {
     async fn add_allowed_domain_removes_matching_deny_entry() {
         // Exercise allow/deny list updates independently of DNS/local-address checks.
         let state = network_proxy_state_for_policy(NetworkProxyConfig {
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             ..network_settings(&[], &["example.com"])
         });
 
@@ -2081,7 +2081,7 @@ mod tests {
     async fn host_blocked_global_wildcard_allowlist_allows_public_hosts_except_denylist() {
         // Exercise wildcard matching independently of DNS/local-address checks.
         let state = network_proxy_state_for_policy(NetworkProxyConfig {
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             ..network_settings(&["*"], &["evil.example"])
         });
 

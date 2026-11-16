@@ -64,7 +64,7 @@ async fn mitm_policy_blocks_disallowed_method_and_records_telemetry() {
         let mut network = NetworkProxyConfig::default();
         network.set_allowed_domains(vec!["example.com".to_string()]);
         // Skip the live DNS lookup in the local-address check; this test covers method policy.
-        network.allow_local_binding = true;
+        network.allow_local_binding = Some(true);
         network
     }));
     let ctx = policy_ctx(
@@ -214,7 +214,7 @@ async fn mitm_policy_allows_matching_hooked_write_in_full_mode() {
         mitm_hooks: vec![hook],
         mode: NetworkMode::Full,
         // Keep this hook test independent of the live DNS lookup in the local-address check.
-        allow_local_binding: true,
+        allow_local_binding: Some(true),
         ..NetworkProxyConfig::default()
     };
     network.set_allowed_domains(vec!["api.github.com".to_string()]);
@@ -519,7 +519,7 @@ async fn mitm_policy_records_hook_denials_in_full_mode() {
         mitm_hooks: vec![hook],
         mode: NetworkMode::Full,
         // Keep this hook test independent of the live DNS lookup in the local-address check.
-        allow_local_binding: true,
+        allow_local_binding: Some(true),
         ..NetworkProxyConfig::default()
     };
     network.set_allowed_domains(vec!["api.github.com".to_string()]);

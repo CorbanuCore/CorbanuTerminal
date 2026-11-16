@@ -1399,7 +1399,7 @@ mod tests {
             policy.set_allowed_domains(vec!["example.com".to_string()]);
             // Skip the live DNS lookup in the local-address check so the request reaches the
             // MITM requirement this test asserts on.
-            policy.allow_local_binding = true;
+            policy.allow_local_binding = Some(true);
             policy
         };
         let state = Arc::new(network_proxy_state_for_policy(policy));
