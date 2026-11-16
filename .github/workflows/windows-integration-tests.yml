@@ -1,7 +1,8 @@
 name: windows-integration-tests
 
-# #1856 (owner decision D443): codex-core's and codex-app-server's integration
-# tests (tests/*.rs) run in no Bazel job on Windows. On the native lane
+# #1856 (owner decisions D443/D489): core/app-server integration tests and
+# code-mode host/runtime unit and integration tests run in no Bazel job on
+# Windows. On the native lane
 # (x86_64-pc-windows-gnullvm) they depend on codex-code-mode-host / V8, which
 # needs a target-platform Python that rules_python does not provide there, so
 # Bazel skips them as incompatible. Other crates' integration tests run natively
@@ -23,9 +24,15 @@ on:
       - ".github/workflows/windows-integration-tests.yml"
       - ".github/windows-integration-known-failures.txt"
       - ".github/scripts/windows_integration_known_failures.py"
+      - ".github/actions/setup-ci/**"
       - "codex-rs/.config/nextest.toml"
+      - "codex-rs/Cargo.toml"
+      - "codex-rs/Cargo.lock"
+      - "codex-rs/rust-toolchain.toml"
       - "codex-rs/core/**"
       - "codex-rs/app-server/**"
+      - "codex-rs/code-mode-host/**"
+      - "codex-rs/code-mode-runtime/**"
 
 concurrency:
   group: windows-integration-tests::${{ github.event.pull_request.number || github.ref }}
@@ -135,6 +142,7 @@ jobs:
       # Binaries the tests start from other packages; cargo builds only the
       # tested package's own binaries.
       - name: Build helper binaries
+        if: ${{ matrix.package == 'codex-core' || matrix.package == 'codex-app-server' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -145,7 +153,7 @@ jobs:
             -p codex-exec --bin codex-exec \
             -p codex-rmcp-client --bin test_stdio_server --bin test_streamable_http_server
 
-      - name: Integration tests (known Windows failures excluded)
+      - name: Tests (known Windows failures excluded)
         shell: bash
         env:
           PACKAGE: ${{ matrix.package }}
@@ -160,12 +168,16 @@ jobs:
           filter="$("$python" "$known" filter "$PACKAGE")"
           filter="${filter%$'\r'}"
           echo "nextest filter: $filter"
+          targets=(--test '*')
+          case "$PACKAGE" in
+            codex-code-mode-host|codex-code-mode-runtime) targets=(--lib --tests) ;;
+          esac
           helpers="${CARGO_TARGET_DIR}/ci-test"
           env \
             "CARGO_BIN_EXE_codex_windows_sandbox_setup=$(cygpath -w "${helpers}/codex-windows-sandbox-setup.exe")" \
             "CARGO_BIN_EXE_codex_command_runner=$(cygpath -w "${helpers}/codex-command-runner.exe")" \
             "CARGO_BIN_EXE_codex_conpty_launcher=$(cygpath -w "${helpers}/codex-conpty-launcher.exe")" \
-            cargo nextest run --cargo-profile ci-test -p "$PACKAGE" --test '*' \
+            cargo nextest run --cargo-profile ci-test -p "$PACKAGE" "${targets[@]}" \
               --no-fail-fast --final-status-level fail -E "$filter"
 
       - name: Upload nextest JUnit report
