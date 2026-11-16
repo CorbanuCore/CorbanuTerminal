@@ -31,6 +31,14 @@ impl McpInheritedEnv {
         self == Self::Configured
             || codex_protocol::secretless_launch::is_launch_env_name_allowed(name)
     }
+
+    /// #2324: as Corbanu's other protected launches, an inherited value that
+    /// embeds a URL password (`scheme://user:pass@host`) is dropped even when
+    /// its name is allowed. Literal server `env` values are not inherited.
+    pub(crate) fn allows_value(self, value: &std::ffi::OsStr) -> bool {
+        self == Self::Configured
+            || !codex_protocol::secretless_launch::value_has_url_password(&value.to_string_lossy())
+    }
 }
 
 pub(crate) fn create_env_for_mcp_server(
@@ -39,15 +47,17 @@ pub(crate) fn create_env_for_mcp_server(
 ) -> Result<HashMap<OsString, OsString>> {
     let additional_env_vars = local_stdio_env_var_names(env_vars)?;
     // PF-27-S02: with secretless agent launch armed, inherited variables
-    // must pass the launch allowlist; literal `env` values from the server's
-    // own config are still applied below.
-    let armed = codex_protocol::secretless_launch::is_armed();
+    // must pass the launch allowlist and must not embed a URL password;
+    // literal `env` values from the server's own config are still applied
+    // below.
+    let inheritance = McpInheritedEnv::current();
     let env = DEFAULT_ENV_VARS
         .iter()
         .copied()
         .chain(additional_env_vars)
-        .filter(|var| !armed || codex_protocol::secretless_launch::is_launch_env_name_allowed(var))
+        .filter(|var| inheritance.allows_name(var))
         .filter_map(|var| env::var_os(var).map(|value| (OsString::from(var), value)))
+        .filter(|(_, value)| inheritance.allows_value(value))
         .chain(extra_env.unwrap_or_default())
         .chain(
             codex_protocol::shell_environment::keyring_isolation_env_var()
@@ -70,6 +80,7 @@ pub(crate) fn create_env_overlay_for_remote_mcp_server(
         .filter(|var| !var.is_remote_source())
         .filter(|var| inheritance.allows_name(var.name()))
         .filter_map(|var| env::var_os(var.name()).map(|value| (OsString::from(var.name()), value)))
+        .filter(|(_, value)| inheritance.allows_value(value))
         .chain(extra_env.unwrap_or_default())
         .collect()
 }

@@ -51,6 +51,7 @@ use crate::protocol::CapabilityRootsDiscoverResponse;
 use crate::protocol::ENVIRONMENT_INFO_METHOD;
 use crate::protocol::ENVIRONMENT_STATUS_METHOD;
 use crate::protocol::EXEC_CLOSED_METHOD;
+use crate::protocol::EXEC_ENV_URL_PASSWORD_FILTER_UNSUPPORTED;
 use crate::protocol::EXEC_EXITED_METHOD;
 use crate::protocol::EXEC_METHOD;
 use crate::protocol::EXEC_OUTPUT_DELTA_METHOD;
@@ -776,7 +777,31 @@ impl ExecServerClient {
     }
 
     pub async fn exec(&self, params: ExecParams) -> Result<ExecResponse, ExecServerError> {
+        self.ensure_env_policy_supported(&params).await?;
         self.call(EXEC_METHOD, &params).await
+    }
+
+    /// #2324: refuses a launch asking for URL-password filtering when the
+    /// executor would ignore it (an older executor drops the unknown field).
+    async fn ensure_env_policy_supported(
+        &self,
+        params: &ExecParams,
+    ) -> Result<(), ExecServerError> {
+        if params
+            .env_policy
+            .as_ref()
+            .is_some_and(|policy| policy.drop_url_password_values)
+            && !self
+                .environment_info()
+                .await?
+                .capabilities
+                .env_url_password_filter
+        {
+            return Err(ExecServerError::Protocol(
+                EXEC_ENV_URL_PASSWORD_FILTER_UNSUPPORTED.to_string(),
+            ));
+        }
+        Ok(())
     }
 
     pub async fn environment_info(&self) -> Result<EnvironmentInfo, ExecServerError> {
@@ -946,6 +971,7 @@ impl ExecServerClient {
                 "network denial reports must match the configured observer".to_string(),
             ));
         }
+        self.ensure_env_policy_supported(&params).await?;
         let policy_decision_timeout_ms = params
             .network_proxy
             .as_ref()
@@ -3040,5 +3066,6 @@ mod tests {
         server.await.expect("server task should finish");
     }
 
+    mod env_policy_tests;
     mod network_policy_tests;
 }

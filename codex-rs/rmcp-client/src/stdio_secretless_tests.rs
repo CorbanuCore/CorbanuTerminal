@@ -21,6 +21,37 @@ const CREDENTIALS: &[&str] = &[
     "UNLISTED_SETTING",
 ];
 
+/// #2324: synthetic values for allowed names. `true` = embeds a URL password.
+const URL_CASES: &[(&str, &str, bool)] = &[
+    (
+        "HTTP_PROXY",
+        "http://fixture-user:synthetic-password@proxy.invalid:3128",
+        true,
+    ),
+    (
+        "HTTPS_PROXY",
+        "http://fixture%40user:synthetic%3Apass%2Fword%40x@proxy.invalid:3128",
+        true,
+    ),
+    (
+        "ALL_PROXY",
+        "socks5://fixture-user:synthetic-password@[2001:db8::1]:1080",
+        true,
+    ),
+    ("FTP_PROXY", "http://[2001:db8::1]:3128", false),
+    (
+        "GITHUB_API_URL",
+        "https://fixture%3Auser@api.invalid",
+        false,
+    ),
+    ("GH_HOST", "https://fixture-user@[::1]:8443/api", false),
+    (
+        "GITHUB_SERVER_URL",
+        "https://github.invalid/path?next=a:b@c",
+        false,
+    ),
+];
+
 fn isolated(test: &str, check: impl FnOnce()) {
     const CHILD: &str = "CORBANU_MCP_SECRETLESS_TEST_CHILD";
     if std::env::var_os(CHILD).is_some() {
@@ -35,6 +66,9 @@ fn isolated(test: &str, check: impl FnOnce()) {
         .env("CORBANU_MCP_FIXTURE_DIR", "/synthetic/host");
     for name in CREDENTIALS {
         command.env(name, "synthetic-inherited");
+    }
+    for (name, value, _) in URL_CASES {
+        command.env(name, value);
     }
     let output = command.output().expect("isolated test");
     assert!(
@@ -105,6 +139,8 @@ fn remote_env_on_platform(
     assert!(error.to_string().contains("fixture captured launch"));
     let params = backend.0.lock().unwrap().take().expect("launch request");
     let exec_policy = params.env_policy.expect("explicit environment policy");
+    // The executor applies the value filter after the shared policy (child_env).
+    let value_filter = exec_policy.clone();
     let mut policy = ShellEnvironmentPolicy {
         inherit: exec_policy.inherit,
         ignore_default_excludes: exec_policy.ignore_default_excludes,
@@ -138,6 +174,11 @@ fn remote_env_on_platform(
         ),
     ]);
     inherited.insert("LC_CTYPE".to_string(), "synthetic-locale".to_string());
+    inherited.extend(
+        URL_CASES
+            .iter()
+            .map(|(name, value, _)| (name.to_string(), value.to_string())),
+    );
     if matches!(platform, ExecutorPlatform::Windows) {
         inherited.extend([
             ("SYSTEMROOT".to_string(), "C:\\Windows".to_string()),
@@ -174,6 +215,7 @@ fn remote_env_on_platform(
     }
     let mut env =
         shell_environment::create_env_from_vars(inherited, &policy, /*thread_id*/ None);
+    value_filter.retain_inherited_values(&mut env);
     env.extend(params.env);
     env
 }
@@ -343,6 +385,107 @@ fn pf_27_s02_remote_env_names_cannot_expand_as_globs() {
                     source: Some("remote".to_string()),
                 }]);
                 assert_protected(&env);
+            }
+        },
+    );
+}
+
+/// #2324: with protected launch armed, an allowed name whose inherited value
+/// embeds a URL password is dropped; other URLs pass through unchanged.
+fn assert_url_cases(env: &HashMap<String, String>, armed: bool) {
+    for (name, value, has_password) in URL_CASES {
+        let expected = (!(armed && *has_password)).then_some(*value);
+        assert_eq!(env.get(*name).map(String::as_str), expected, "{name}");
+    }
+}
+
+fn lossy(env: HashMap<OsString, OsString>) -> HashMap<String, String> {
+    env.into_iter()
+        .map(|(name, value)| {
+            (
+                name.to_string_lossy().into_owned(),
+                value.to_string_lossy().into_owned(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn pf_27_s02_local_and_host_url_passwords_are_dropped() {
+    isolated(
+        "stdio_server_launcher::secretless_tests::pf_27_s02_local_and_host_url_passwords_are_dropped",
+        || {
+            let literal = "http://fixture-user:synthetic-password@literal.invalid";
+            let vars: Vec<McpServerEnvVar> = URL_CASES
+                .iter()
+                .map(|(name, _, _)| (*name).into())
+                .collect();
+            let local = || {
+                lossy(
+                    crate::utils::create_env_for_mcp_server(
+                        Some(HashMap::from([(
+                            OsString::from("CORBANU_MCP_LITERAL_PROXY"),
+                            OsString::from(literal),
+                        )])),
+                        &vars,
+                    )
+                    .unwrap(),
+                )
+            };
+            assert_url_cases(&local(), /*armed*/ false);
+            assert_url_cases(&remote_env(vars.clone()), /*armed*/ false);
+
+            codex_protocol::secretless_launch::arm();
+            let local = local();
+            assert_url_cases(&local, /*armed*/ true);
+            // The server's own literal `env` is not inherited and is kept.
+            assert_eq!(
+                local.get("CORBANU_MCP_LITERAL_PROXY").map(String::as_str),
+                Some(literal)
+            );
+            let remote = remote_env(vars);
+            assert_url_cases(&remote, /*armed*/ true);
+            assert_protected(&remote);
+        },
+    );
+}
+
+#[test]
+fn pf_27_s02_remote_source_url_passwords_are_dropped() {
+    isolated(
+        "stdio_server_launcher::secretless_tests::pf_27_s02_remote_source_url_passwords_are_dropped",
+        || {
+            let vars = || {
+                URL_CASES
+                    .iter()
+                    .map(|(name, _, _)| McpServerEnvVar::Config {
+                        name: name.to_string(),
+                        source: Some("remote".to_string()),
+                    })
+                    .collect::<Vec<_>>()
+            };
+            assert_url_cases(&remote_env(vars()), /*armed*/ false);
+            codex_protocol::secretless_launch::arm();
+            let env = remote_env(vars());
+            assert_url_cases(&env, /*armed*/ true);
+            assert_protected(&env);
+            // Every protected launch asks the executor to filter, including
+            // the basic environment it inherits without named variables.
+            for names in [Vec::new(), vec!["HTTP_PROXY".to_string()]] {
+                assert!(
+                    ExecutorStdioServerLauncher::remote_env_policy(
+                        &names,
+                        McpInheritedEnv::Secretless
+                    )
+                    .drop_url_password_values
+                );
+                assert!(
+                    !ExecutorStdioServerLauncher::remote_env_policy(
+                        &names,
+                        McpInheritedEnv::Configured
+                    )
+                    .drop_url_password_values
+                );
             }
         },
     );

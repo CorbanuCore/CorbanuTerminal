@@ -117,6 +117,11 @@ pub struct EnvironmentCapabilities {
     /// a policy-bearing request to an executor without it.
     #[serde(default)]
     pub http_address_policy: bool,
+    /// Whether `exec` honours [`ExecEnvPolicy::drop_url_password_values`]
+    /// (#2324). Clients must not send a policy that sets it to an executor
+    /// without this capability: an older executor ignores the field.
+    #[serde(default)]
+    pub env_url_password_filter: bool,
 }
 
 /// Status returned by an initialized exec-server connection.
@@ -150,6 +155,7 @@ impl EnvironmentInfo {
                 network_proxy_launch: true,
                 capability_discovery_sandbox: true,
                 http_address_policy: true,
+                env_url_password_filter: true,
             },
             // Filled in by the executor, which knows its Windows sandbox state.
             host_sandbox: None,
@@ -221,6 +227,30 @@ pub struct ExecEnvPolicy {
     pub exclude: Vec<String>,
     pub r#set: HashMap<String, String>,
     pub include_only: Vec<String>,
+    /// PF-27-S02 (#2324): drop every inherited variable whose value embeds a
+    /// URL password (`scheme://user:pass@host`), as Corbanu's own protected
+    /// launches do. Names in `set` and the request's `env` overlay are kept.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub drop_url_password_values: bool,
+}
+
+/// Error message when an `exec` request asking for URL-password filtering is
+/// not sent because the executor would ignore it.
+pub const EXEC_ENV_URL_PASSWORD_FILTER_UNSUPPORTED: &str = "the remote executor does not filter \
+     URL passwords from inherited environment values, which protected agent launch requires; \
+     update it to a version that does";
+
+impl ExecEnvPolicy {
+    /// Applies [`Self::drop_url_password_values`] to an environment built from
+    /// this policy, before the request's `env` overlay is added.
+    pub fn retain_inherited_values(&self, env: &mut HashMap<String, String>) {
+        if self.drop_url_password_values {
+            env.retain(|name, value| {
+                self.r#set.contains_key(name)
+                    || !codex_protocol::secretless_launch::value_has_url_password(value)
+            });
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -770,6 +800,10 @@ mod base64_bytes {
             .map_err(serde::de::Error::custom)
     }
 }
+
+#[cfg(test)]
+#[path = "env_policy_tests.rs"]
+mod env_policy_tests;
 
 #[cfg(test)]
 mod tests {

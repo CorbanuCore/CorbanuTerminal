@@ -120,6 +120,7 @@ fn exec_env_policy_excludes_runtime_permission_profile() {
             ],
             r#set: HashMap::from([("KEEP".to_string(), "value".to_string())]),
             include_only: Vec::new(),
+            drop_url_password_values: false,
         }
     );
 }
@@ -159,6 +160,7 @@ fn exec_server_params_use_path_uri_and_env_policy_overlay_contract() {
                 exclude: Vec::new(),
                 r#set: HashMap::new(),
                 include_only: Vec::new(),
+                drop_url_password_values: false,
             },
             local_policy_env: HashMap::from([
                 ("HOME".to_string(), "/client-home".to_string()),

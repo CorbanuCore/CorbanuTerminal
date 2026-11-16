@@ -654,6 +654,7 @@ fn child_env(params: &ExecParams) -> HashMap<String, String> {
         Some(env_policy) => {
             let policy = shell_environment_policy(env_policy);
             let mut env = shell_environment::create_env(&policy, /*thread_id*/ None);
+            env_policy.retain_inherited_values(&mut env);
             // #1817: core's variables win over the inherited ones; on Windows
             // that includes inherited spellings of the same name that differ
             // only by case (#1805), so each name is passed once. Sorted, so
@@ -1388,6 +1389,7 @@ mod tests {
             exclude: Vec::new(),
             r#set: HashMap::from([("POLICY_SET".to_string(), "policy".to_string())]),
             include_only: Vec::new(),
+            drop_url_password_values: false,
         });
 
         let mut expected = HashMap::from([
@@ -1417,6 +1419,7 @@ mod tests {
             exclude: Vec::new(),
             r#set: HashMap::from([("Term".to_string(), "inherited".to_string())]),
             include_only: Vec::new(),
+            drop_url_password_values: false,
         });
 
         let mut expected = HashMap::from([("TERM".to_string(), "overlay".to_string())]);
@@ -1430,6 +1433,79 @@ mod tests {
         }
 
         assert_eq!(child_env(&params), expected);
+    }
+
+    /// #2324: the executor drops inherited values embedding a URL password
+    /// when asked to; names the policy sets and the request's overlay stay.
+    #[test]
+    fn child_env_drops_inherited_url_passwords_on_request() {
+        const PASSWORD: &str = "CORBANU_TEST_2324_URL_WITH_PASSWORD";
+        const ENCODED: &str = "CORBANU_TEST_2324_URL_PERCENT_ENCODED";
+        const IPV6: &str = "CORBANU_TEST_2324_URL_IPV6";
+        const NO_PASSWORD: &str = "CORBANU_TEST_2324_URL_NO_PASSWORD";
+        const IPV6_NO_PASSWORD: &str = "CORBANU_TEST_2324_URL_IPV6_NO_PASSWORD";
+        let inherited = [
+            (
+                PASSWORD,
+                "http://fixture-user:synthetic-password@proxy.invalid:3128",
+            ),
+            (
+                ENCODED,
+                "http://fixture%40user:synthetic%3Apass%40x@proxy.invalid",
+            ),
+            (
+                IPV6,
+                "socks5://fixture-user:synthetic-password@[2001:db8::1]:1080",
+            ),
+            (
+                NO_PASSWORD,
+                "https://fixture-user@proxy.invalid/path?q=a:b@c",
+            ),
+            (IPV6_NO_PASSWORD, "http://[2001:db8::1]:3128"),
+        ];
+        // SAFETY: names are unique to this test; nothing else reads them.
+        unsafe {
+            for (name, value) in inherited {
+                std::env::set_var(name, value);
+            }
+        }
+        let with_password = "http://fixture-user:synthetic-password@kept.invalid".to_string();
+        let run = |drop_url_password_values| {
+            let mut params = test_exec_params(HashMap::from([(
+                "CORBANU_TEST_2324_OVERLAY".to_string(),
+                with_password.clone(),
+            )]));
+            params.env_policy = Some(ExecEnvPolicy {
+                inherit: ShellEnvironmentPolicyInherit::All,
+                ignore_default_excludes: true,
+                exclude: Vec::new(),
+                r#set: HashMap::from([(
+                    "CORBANU_TEST_2324_SET".to_string(),
+                    with_password.clone(),
+                )]),
+                include_only: vec!["CORBANU_TEST_2324_*".to_string()],
+                drop_url_password_values,
+            });
+            let mut env = child_env(&params);
+            if let Some((name, _)) = shell_environment::keyring_isolation_env_var() {
+                env.remove(name);
+            }
+            env.remove("PATHEXT");
+            env
+        };
+
+        let mut expected: HashMap<String, String> = inherited
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect();
+        expected.insert("CORBANU_TEST_2324_SET".to_string(), with_password.clone());
+        expected.insert("CORBANU_TEST_2324_OVERLAY".to_string(), with_password);
+        assert_eq!(run(false), expected);
+
+        for name in [PASSWORD, ENCODED, IPV6] {
+            expected.remove(name);
+        }
+        assert_eq!(run(true), expected);
     }
 
     #[tokio::test]
