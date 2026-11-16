@@ -337,10 +337,10 @@ async fn provider_credentials_and_tool_env_never_reach_trace_logs() -> anyhow::R
     let log_text = sinks
         .assert_clean(
             guard,
-            &[
-                "spawn_child_async",
-                "experimental_bearer_token: Some(\"<redacted>\")",
-            ],
+            // The model's command runs through `exec_command` (unified exec),
+            // whose spawn logs no command line or environment; the call itself
+            // is recorded by its ID.
+            &[call_id, "experimental_bearer_token: Some(\"<redacted>\")"],
             &[
                 PROVIDER_KEY,
                 HEADER_VALUE,
@@ -558,20 +558,11 @@ async fn sandboxed_command_line_credentials_never_reach_trace_logs() -> anyhow::
         .context("function_call_output present for exec_command call")?;
     assert!(output.contains("SBX-398-RAN"), "{output}");
 
-    let log_text = sinks
-        .assert_clean(guard, &["spawn_child_async"], &SECRETS)
-        .await?;
-    let spawn_line = log_text
-        .lines()
-        .find(|line| line.contains("spawn_child_async") && line.contains("SBX-398-RAN"))
-        .context("the sandboxed command should be logged")?;
-    assert!(
-        spawn_line.contains("Authorization: REDACTED")
-            && spawn_line.contains("--password=REDACTED")
-            && spawn_line.contains("api_key=REDACTED"),
-        "{spawn_line}"
-    );
-    #[cfg(target_os = "macos")]
-    assert!(spawn_line.contains("sandbox-exec"), "{spawn_line}");
+    // Main ran this through `shell_command`, whose `spawn_child_async` trace
+    // logged the (redacted) command line. Upstream removed that tool: the
+    // command now runs through `exec_command` (unified exec), whose spawn logs
+    // no command line. The call is recorded by its ID, and no sink may hold
+    // any of the credentials.
+    sinks.assert_clean(guard, &[call_id], &SECRETS).await?;
     Ok(())
 }

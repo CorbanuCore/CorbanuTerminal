@@ -519,7 +519,9 @@ async fn remote_environment_command_does_not_run_on_the_host() -> Result<()> {
     skip_if_no_remote_env!(Ok(()));
     skip_if_target_windows!(Ok(()), "uses a POSIX shell command fixture");
 
-    let marker = std::env::temp_dir().join(format!(
+    // A fixed `/tmp` path: it exists both on the host and in the remote
+    // environment, whatever the host's `TMPDIR` is.
+    let marker = std::path::Path::new("/tmp").join(format!(
         "codex-remote-exec-command-{}-{}",
         std::process::id(),
         SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
