@@ -3200,6 +3200,18 @@ pub struct AuthRuntimeConfig {
     pub auth_route_config: AuthRouteConfig,
 }
 
+impl Drop for AuthManager {
+    fn drop(&mut self) {
+        if self.named_account.is_some() {
+            // Retained clients must not outlive the lifecycle owner. A later manager
+            // for the same account has a new controller and cannot revoke this one.
+            self.auth_route_config
+                .application_network_policy()
+                .invalidate();
+        }
+    }
+}
+
 impl Debug for AuthManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AuthManager")

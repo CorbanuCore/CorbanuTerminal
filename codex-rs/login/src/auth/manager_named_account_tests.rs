@@ -82,6 +82,50 @@ async fn named_account_policy_is_independent_but_administrator_revocation_is_sha
     ));
 }
 
+#[tokio::test]
+async fn dropping_a_named_manager_revokes_retained_clients_before_recreation() {
+    use codex_http_client::NetworkPolicyDenied;
+
+    let home = tempfile::tempdir().unwrap();
+    login_named_account_with_api_key(home.path(), &account("work"), "sk-canary-work").unwrap();
+    let base = AuthManager::from_auth_for_testing_with_home(
+        CodexAuth::from_api_key("sk-canary-default"),
+        home.path().to_path_buf(),
+    );
+    let url = url::Url::parse("https://example.com/").unwrap();
+    let named = base.for_named_account(account("work"));
+    let retained = named.http_client_factory();
+    let permit = retained.network_policy().acquire(&url).unwrap();
+    drop(named);
+    assert_eq!(permit.check(), Err(NetworkPolicyDenied::Revoked));
+    assert!(matches!(
+        retained.network_policy().acquire(&url),
+        Err(NetworkPolicyDenied::Revoked)
+    ));
+    let recreated = base.for_named_account(account("work"));
+    let current = recreated.http_client_factory();
+    let current_permit = current.network_policy().acquire(&url).unwrap();
+    recreated.set_cached_auth(/*new_auth*/ None);
+    assert_eq!(current_permit.check(), Err(NetworkPolicyDenied::Revoked));
+    assert!(matches!(
+        retained.network_policy().acquire(&url),
+        Err(NetworkPolicyDenied::Revoked)
+    ));
+    assert!(matches!(
+        recreated
+            .http_client_factory()
+            .network_policy()
+            .acquire(&url),
+        Err(NetworkPolicyDenied::Unavailable)
+    ));
+    assert!(
+        base.http_client_factory()
+            .network_policy()
+            .acquire(&url)
+            .is_ok()
+    );
+}
+
 fn account(name: &str) -> NamedChatgptAccount {
     NamedChatgptAccount {
         provider_id: "openai".to_string(),
