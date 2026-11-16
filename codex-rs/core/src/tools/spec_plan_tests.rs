@@ -1204,6 +1204,33 @@ async fn multiple_environments_expose_environment_selectors() {
     ));
 }
 
+/// #2370: main offers edit tools only when the environment can write (#709). Under
+/// read-only, a model with `apply_patch_tool_type` gets no edit tools, unlike upstream.
+#[tokio::test]
+async fn edit_tools_follow_the_environment_permission_profile() {
+    let edit_tools = ["apply_patch", "structured_edit", "structured_write"];
+    let plan_for = |profile: PermissionProfile| {
+        probe(move |turn| {
+            set_environment_permission_profile(turn, profile);
+            set_feature(turn, Feature::ShellTool, /*enabled*/ true);
+            update_turn_settings_for_test(turn, |settings| {
+                Arc::make_mut(&mut settings.model_info).apply_patch_tool_type =
+                    Some(ApplyPatchToolType::Freeform);
+            });
+        })
+    };
+
+    let read_only = plan_for(PermissionProfile::read_only()).await;
+    read_only.assert_visible_contains(&["exec_command"]);
+    read_only.assert_visible_lacks(&edit_tools);
+    read_only.assert_registered_lacks(&edit_tools);
+
+    for writable in [PermissionProfile::workspace_write(), PermissionProfile::Disabled] {
+        let plan = plan_for(writable).await;
+        plan.assert_visible_contains(&edit_tools);
+    }
+}
+
 #[tokio::test]
 async fn environment_tools_follow_the_step_context() {
     let (_session, mut turn) = make_session_and_context().await;
