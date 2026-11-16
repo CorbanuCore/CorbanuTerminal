@@ -188,6 +188,14 @@ struct RealDispatchFixture {
 
 impl RealDispatchFixture {
     async fn start(mock: &MockServer, max_threads: usize) -> Result<Self> {
+        Self::start_with_native_tools(mock, max_threads, /*disable_native_tools*/ false).await
+    }
+
+    async fn start_with_native_tools(
+        mock: &MockServer,
+        max_threads: usize,
+        disable_native_tools: bool,
+    ) -> Result<Self> {
         let (mut app, app_events, _op_rx) = make_test_app_with_channels().await;
         if let Ok(crash_home) = std::env::var("PFTERMINAL_DISPATCH_CRASH_HOME") {
             app.config.codex_home = codex_utils_absolute_path::AbsolutePathBuf::try_from(
@@ -215,6 +223,9 @@ impl RealDispatchFixture {
                 r#"model = "dispatch-mock-model"
 model_provider = "dispatch_mock"
 
+[features.multi_agent_v2]
+disable_native_tools = {disable_native_tools}
+
 [model_providers.dispatch_mock]
 name = "Dispatch integration mock"
 base_url = "{}/v1"
@@ -227,6 +238,7 @@ supports_websockets = false
             ),
         )?;
         app.config.multi_agent_v2.max_concurrent_threads_per_session = max_threads;
+        app.config.multi_agent_v2.disable_native_tools = disable_native_tools;
         if let Some(env_key) = app.config.model_provider.env_key.as_deref() {
             std::fs::write(
                 app.config.codex_home.join("provider_auth.json"),
@@ -1257,6 +1269,56 @@ fn three_real_turns_saturate_and_one_release_schedules_one_followup() -> Result<
             })
             .await?;
         pretty_assertions::assert_eq!(responses.requests().len(), 6);
+        fixture.server.shutdown().await?;
+        Ok(())
+    })
+}
+
+#[test]
+fn native_tools_off_switch_hides_manager_tools_on_v2_threads() -> Result<()> {
+    run_dispatch_integration(|| async {
+        let mock = MockServer::start().await;
+        let mut fixture = RealDispatchFixture::start_with_native_tools(
+            &mock, /*max_threads*/ 4, /*disable_native_tools*/ true,
+        )
+        .await?;
+        let target = fixture.spawn_agent("DisabledManager", "troll").await?;
+        let responses = mount_sse_sequence(&mock, vec![sse_completed("done")]).await;
+        fixture
+            .app
+            .app_event_tx
+            .send(AppEvent::SubmitSpawnAgentTask {
+                thread_id: target,
+                task: "answer without manager tools".to_string(),
+                sent_while_kill_switch_on: false,
+            });
+        fixture
+            .route_until(std::time::Duration::from_secs(10), |_| {
+                responses.requests().len() == 1
+            })
+            .await?;
+        let body = responses.requests()[0].body_json();
+        let tools = body["tools"].as_array().expect("tools array");
+        assert!(
+            !tools.is_empty(),
+            "the request must still have ordinary tools"
+        );
+        for tool in tools {
+            let encoded = tool.to_string();
+            for name in [
+                "spawn_agent",
+                "send_message",
+                "followup_task",
+                "wait_agent",
+                "list_agents",
+                "interrupt_agent",
+            ] {
+                assert!(
+                    !encoded.contains(&format!("\"name\":\"{name}\"")),
+                    "{encoded}"
+                );
+            }
+        }
         fixture.server.shutdown().await?;
         Ok(())
     })

@@ -3868,24 +3868,28 @@ async fn multi_agent_v2_namespace_is_supported_by_bedrock_provider() {
 }
 
 #[tokio::test]
-async fn multi_agent_v2_bedrock_workers_only_delegate_when_model_supports_v2() {
-    for (model, model_multi_agent_version, supports_delegation) in [
+async fn multi_agent_v2_bedrock_workers_delegate_unless_native_tools_disabled() {
+    for (model, model_multi_agent_version, disable_native_tools, supports_delegation) in [
         (
             AMAZON_BEDROCK_GPT_5_6_SOL_MODEL_ID,
             Some(MultiAgentVersion::V2),
+            false,
             true,
         ),
         (
             AMAZON_BEDROCK_GPT_5_6_LUNA_MODEL_ID,
             Some(MultiAgentVersion::V1),
             false,
+            true,
         ),
-        (AMAZON_BEDROCK_GPT_5_5_MODEL_ID, None, false),
+        (AMAZON_BEDROCK_GPT_5_5_MODEL_ID, None, false, true),
+        (AMAZON_BEDROCK_GPT_5_5_MODEL_ID, None, true, false),
     ] {
         let plan = probe(|turn| {
             set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
             update_config(turn, |config| {
                 config.multi_agent_v2.tool_namespace = Some("agents".to_string());
+                config.multi_agent_v2.disable_native_tools = disable_native_tools;
             });
             use_bedrock_provider(turn);
             update_turn_settings_for_test(turn, |settings| {

@@ -69,6 +69,8 @@ struct AgentSecurityBinding {
     task_id: BoundedText,
     minimum_level: SecurityLevel,
     force_deny: bool,
+    /// Identifies a detached child's denial; human policy changes do not clear it.
+    parent_unavailable: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -165,6 +167,18 @@ impl EffectivePolicySnapshot {
 }
 
 impl EffectivePolicyView {
+    /// Identifies the recovery action without weakening the detached-agent denial.
+    pub(crate) fn parent_unavailable(&self, agent_id: ThreadId) -> bool {
+        self.read_state().ok().is_some_and(|state| {
+            state.as_ref().is_some_and(|state| {
+                state
+                    .agents
+                    .get(&agent_id)
+                    .is_some_and(|binding| binding.parent_unavailable)
+            })
+        })
+    }
+
     /// #507: the kill-switch event a person turned on, for the whole tree
     /// (every agent of it), or `None` while it is off or before the policy
     /// is initialized. Unreadable or force-denied state is not such a switch.
@@ -253,6 +267,7 @@ impl EffectivePolicyView {
             task_id: BoundedText::new(task_id.into())?,
             minimum_level: parent.minimum_level.max(configured_minimum),
             force_deny: parent.force_deny,
+            parent_unavailable: parent.parent_unavailable,
         };
         if let Some(existing) = state.agents.get(&child_id) {
             if existing != &binding {
@@ -316,6 +331,8 @@ impl TrustedSecurityController {
                 | EffectivePolicyInitialization::UnreadableState => SecurityLevel::Aggressive,
             },
             force_deny: initialization != EffectivePolicyInitialization::Root,
+            parent_unavailable: initialization
+                == EffectivePolicyInitialization::DetachedSpawnedAgent,
         };
         let proposed = EffectivePolicyState {
             next_start_level: persisted.settings.level,

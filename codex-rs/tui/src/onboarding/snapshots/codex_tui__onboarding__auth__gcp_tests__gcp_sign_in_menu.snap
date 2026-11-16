@@ -4,7 +4,7 @@ expression: terminal.backend().to_string()
 ---
   Sign in another way
 
-> 1. Use an OpenAI API key
+> 1. Provide your own API key
      Pay for what you use
 
   2. Use Amazon Bedrock
@@ -13,5 +13,13 @@ expression: terminal.backend().to_string()
   3. Use Google Cloud Vertex AI
      Connect using your Google Cloud credentials
 
-  Press enter to continue
+
+
+
+
+
+
+
+
+  Use ↑/↓ to choose · Press enter to continue
   Press esc to go back

@@ -462,6 +462,9 @@ pub(crate) fn catalog_sign_in_options_from_statuses(
 ) -> Vec<SignInOption> {
     let mut options = Vec::new();
     for (entry_index, entry) in host.catalog().entries().iter().enumerate() {
+        if !host.onboarding_provider_visible(entry) {
+            continue;
+        }
         let status = statuses.get(entry.id.as_str());
         let has_noninteractive_capability = entry.setup_capabilities.iter().any(|capability| {
             matches!(
@@ -785,7 +788,10 @@ impl AuthModeWidget {
 
     fn activate_highlighted_mode(&mut self, key_event: KeyEvent) {
         let option = self.highlighted_mode;
-        if option == SignInOption::OtherMethods || option.is_alternative() {
+        if option == SignInOption::OtherMethods
+            || option.is_alternative()
+            || matches!(option, SignInOption::ProviderApiKey(_))
+        {
             // Enter and printable shortcuts can repeat as plain presses without a release.
             self.activation_key_guard = Some(ActivationKeyGuard::new_at(
                 KeyBinding::from_event(key_event),
@@ -2800,13 +2806,29 @@ pub(crate) mod tests {
     }
 
     pub(crate) async fn widget_forced_chatgpt() -> (AuthModeWidget, TempDir) {
+        widget_with_catalog(/*full_catalog*/ true).await
+    }
+
+    pub(crate) async fn widget_openai_sign_in_menu() -> (AuthModeWidget, TempDir) {
+        widget_with_catalog(/*full_catalog*/ false).await
+    }
+
+    async fn widget_with_catalog(full_catalog: bool) -> (AuthModeWidget, TempDir) {
         let codex_home = TempDir::new().unwrap();
         let codex_home_path = codex_home.path().to_path_buf();
-        let config = ConfigBuilder::default()
+        let mut config = ConfigBuilder::default()
             .codex_home(codex_home_path.clone())
             .build()
             .await
             .unwrap();
+        config
+            .features
+            .disable(Feature::BedrockSetupWizard)
+            .unwrap();
+        config.features.disable(Feature::GcpSetupWizard).unwrap();
+        if !full_catalog {
+            config.model_providers.clear();
+        }
         let provider_status_host = ProviderStatusHost::from_config(
             &config,
             crate::provider_status_host::ProviderAccountMetadata::default(),
@@ -2895,7 +2917,7 @@ pub(crate) mod tests {
         out
     }
 
-    fn api_key_option(id: &str, name: &str, env_key: &str) -> ApiKeyProviderOption {
+    pub(super) fn api_key_option(id: &str, name: &str, env_key: &str) -> ApiKeyProviderOption {
         let catalog = codex_provider_auth::ProviderCatalog::from_runtime_providers(
             &std::collections::HashMap::from([(
                 id.to_string(),
@@ -3165,7 +3187,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn bedrock_option_requires_feature_and_api_login_permission() {
-        let (mut widget, codex_home) = widget_forced_chatgpt().await;
+        let (mut widget, codex_home) = widget_openai_sign_in_menu().await;
         widget.auth_config.forced_login_method = None;
         assert_eq!(
             widget.displayed_sign_in_options(),
@@ -3217,7 +3239,8 @@ pub(crate) mod tests {
             rows.pop();
         }
         insta::assert_snapshot!(rows.join("\n"), @r###"
-          Choose how you want to use Codex.
+          Sign in with ChatGPT to use OpenAI-hosted models
+          or connect an API key for usage-based billing
 
         > 1. Sign in with ChatGPT
              Usage included with Plus, Pro, Business, and Enterprise plans
@@ -3228,7 +3251,13 @@ pub(crate) mod tests {
           3. Sign in another way
              Use an API key or another provider
 
-          Press enter to continue
+
+
+
+
+
+
+          Use ↑/↓ to choose · Press enter to continue
         "###);
 
         widget.auth_config.forced_login_method = Some(ForcedLoginMethod::Chatgpt);

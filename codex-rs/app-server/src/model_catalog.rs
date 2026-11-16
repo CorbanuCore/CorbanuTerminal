@@ -1,5 +1,9 @@
 //! Loads the model catalog for the current effective provider configuration.
 
+#[cfg(test)]
+#[path = "model_catalog_tests.rs"]
+mod tests;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 

@@ -14,7 +14,7 @@ use serde_json::json;
 
 #[tokio::test]
 async fn gcp_menu_gating_and_setup_flow() {
-    let (mut widget, home) = super::tests::widget_forced_chatgpt().await;
+    let (mut widget, home) = super::tests::widget_openai_sign_in_menu().await;
     widget.auth_config.forced_login_method = None;
     widget.handle_sign_in_option(SignInOption::Gcp);
     assert!(matches!(
