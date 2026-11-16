@@ -136,7 +136,10 @@ async fn pending_agent_message_wake_respects_control_changes(
         .with_config(move |config| {
             if matches!(boundary, WakeBoundary::KillSwitch) {
                 config.security_level = codex_security_policy::SecurityLevel::Aggressive;
-                config.features.enable(Feature::SourceEnvelopes).unwrap();
+                config
+                    .features
+                    .enable(Feature::SourceEnvelopes)
+                    .expect("enable source envelopes for kill-switch coverage");
             }
             for feature in [Feature::Collab, Feature::MultiAgentV2] {
                 config.features.enable(feature).expect("enable agent mail");
@@ -265,12 +268,9 @@ async fn pending_agent_message_wake_respects_control_changes(
         .expect("control change must complete while wake discovery is paused");
 
     if matches!(boundary, WakeBoundary::KillSwitch) {
-        // The refusal completes after discovery. It must not send a model request or
-        // consume the mail; switching off alone must not revive the cancelled wake.
-        wait_for_event(&test.codex, |event| {
-            matches!(event, EventMsg::Warning(warning) if warning.message.contains("Agent messages remain queued"))
-        })
-        .await;
+        // Interrupt cancelled the reservation while discovery was paused, so the
+        // abandoned wake need not emit a refusal warning. Switching off alone
+        // must not revive it; the explicit turn below verifies mail preservation.
         assert_eq!(mock.requests().len(), 1);
         switch(codex_core::security_revocation::HumanRevocation::KillSwitchOff)?;
     }

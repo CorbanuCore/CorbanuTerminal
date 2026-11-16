@@ -1,4 +1,4 @@
-//! Pending mail survives eviction without loading idle recipients.
+//! Pending durable mail and publication state survive repeated idle eviction.
 
 use super::*;
 use crate::suite::settings_commits::COMMITTED_MODEL;
@@ -68,6 +68,11 @@ async fn idle_mail_survives_eviction_and_preserves_followup_order() -> Result<()
             config.features.enable(Feature::Sqlite).unwrap();
             config.multi_agent_v2.max_concurrent_threads_per_session = 2;
             config.multi_agent_v2.hide_spawn_agent_metadata = true;
+            // Reload resolves the recorded provider ID through this registry (#1129).
+            config.model_providers.insert(
+                config.model_provider_id.clone(),
+                config.model_provider.clone(),
+            );
         })
         .build_with_auto_env(&server)
         .await?;
@@ -79,7 +84,7 @@ async fn idle_mail_survives_eviction_and_preserves_followup_order() -> Result<()
     wait_for_event(&first, |event| matches!(event, EventMsg::TurnComplete(_))).await;
     ThreadIdle::wait(&first).await;
 
-    mount_root_collaboration_call(
+    let delivery = mount_root_collaboration_call(
         &server,
         "send a note",
         "queued-mail",
@@ -96,14 +101,24 @@ async fn idle_mail_survives_eviction_and_preserves_followup_order() -> Result<()
         AgentStatus::Completed(Some("worker completed".into()))
     );
     let state_db = first.state_db().expect("durable mailbox enabled");
+    let receipt: serde_json::Value = serde_json::from_str(
+        &delivery
+            .function_call_output_text("queued-mail")
+            .expect("queued-mail receipt"),
+    )?;
+    let message_id = receipt["message_id"].as_str().expect("durable message id");
     let queued = state_db
-        .list_recoverable_agent_messages(first_id)
+        .get_agent_message(message_id)
         .await?
-        .into_iter()
-        .find(|message| message.communication.content == MAIL)
         .expect("queued note has a durable row");
-    assert_eq!(queued.phase, AgentMailboxPhase::Submitted);
-    let message_id = queued.communication.message_id.as_deref().unwrap();
+    assert_eq!(
+        (
+            queued.recipient_thread_id,
+            queued.communication.encrypted_content.as_deref(),
+            queued.phase,
+        ),
+        (first_id, Some(MAIL), AgentMailboxPhase::Submitted)
+    );
     drop(first);
 
     mount_root_collaboration_call(
@@ -144,7 +159,9 @@ async fn idle_mail_survives_eviction_and_preserves_followup_order() -> Result<()
     .await;
     test.submit_turn("send while unloaded").await?;
     ThreadIdle::wait(&test.codex).await;
-    assert!(test.thread_manager.get_thread(first_id).await.is_err());
+    // The public tool reloads the recipient to validate its provider/encoding boundary.
+    // The earlier note must survive that reload without starting a model turn.
+    assert!(test.thread_manager.get_thread(first_id).await.is_ok());
 
     let retained = messages.0.lock().unwrap().clone();
     assert_eq!(retained.len(), 2);

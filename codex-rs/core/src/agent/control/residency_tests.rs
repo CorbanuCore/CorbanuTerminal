@@ -7,9 +7,9 @@ use crate::config::test_config;
 use crate::thread_manager::ThreadManagerState;
 use codex_features::Feature;
 use codex_login::CodexAuth;
+use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
 use codex_protocol::error::CodexErrorDetails;
-use codex_protocol::protocol::AgentPath;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::SessionSource;
@@ -21,11 +21,17 @@ use codex_protocol::protocol::TurnCompleteEvent;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
 
+#[test_case::test_case(false; "without_state_db")]
+#[test_case::test_case(true; "with_state_db")]
 #[tokio::test]
-async fn residency_slot_reservation_unloads_oldest_idle_v2_agent_with_volatile_mail() {
+async fn residency_slot_reservation_unloads_oldest_idle_v2_agent_with_volatile_mail(sqlite: bool) {
     let mut config = test_config().await;
     let _ = config.features.enable(Feature::MultiAgentV2);
-    let _ = config.features.disable(Feature::Sqlite);
+    if sqlite {
+        config.features.enable(Feature::Sqlite).unwrap();
+    } else {
+        config.features.disable(Feature::Sqlite).unwrap();
+    }
     config.multi_agent_v2.max_concurrent_threads_per_session = 2;
     let temp_home = tempfile::tempdir().expect("create temp home");
     config.codex_home = temp_home.path().to_path_buf().try_into().unwrap();
@@ -60,12 +66,12 @@ async fn residency_slot_reservation_unloads_oldest_idle_v2_agent_with_volatile_m
         spawn_v2_subagent(&control, &state, config.clone(), root.thread_id, "worker-1").await;
     first_slot.commit(first.thread_id);
     mark_thread_completed(first.thread.as_ref()).await;
-    assert!(first.thread.state_db().is_none());
+    assert_eq!(first.thread.state_db().is_some(), sqlite);
     let queued = InterAgentCommunication::new(
         AgentPath::root(),
         AgentPath::try_from("/root/worker-1").unwrap(),
         Vec::new(),
-        "keep this note without a durable mailbox".to_string(),
+        "keep this note without a durable mailbox row".to_string(),
         /*trigger_turn*/ false,
     );
     first

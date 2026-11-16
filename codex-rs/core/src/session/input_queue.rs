@@ -426,6 +426,16 @@ impl InputQueue {
             .any(|mail| mail.communication.trigger_turn)
     }
 
+    /// Snapshot queued identities before eviction decides which messages have durable rows.
+    pub(crate) async fn mailbox_message_ids(&self) -> Vec<String> {
+        let mut pending = self.mailbox_pending_mails.lock().await;
+        self.read_mailbox(&mut pending, &MailAdmission::default());
+        pending
+            .iter()
+            .filter_map(|mail| mail.communication.message_id.clone())
+            .collect()
+    }
+
     pub(crate) async fn drain_mailbox(&self) -> Vec<PendingMailboxCommunication> {
         let mut pending = self.mailbox_pending_mails.lock().await;
         self.read_mailbox(&mut pending, &MailAdmission::default());

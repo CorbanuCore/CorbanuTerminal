@@ -36,6 +36,11 @@ async fn idle_eviction_preserves_worker_context_for_followup() -> Result<()> {
                 .enable(Feature::MultiAgentV2DynamicTools)
                 .unwrap();
             config.multi_agent_v2.max_concurrent_threads_per_session = 2;
+            // Reload resolves the recorded provider ID through this registry (#1129).
+            config.model_providers.insert(
+                config.model_provider_id.clone(),
+                config.model_provider.clone(),
+            );
         })
         .build_with_auto_env(&server)
         .await?;
