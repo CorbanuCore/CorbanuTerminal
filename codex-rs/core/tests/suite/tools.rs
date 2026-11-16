@@ -267,8 +267,8 @@ async fn turn_environments_keep_tools_and_gate_edits(writable_environment: bool)
             .set_permission_profile(PermissionProfile::workspace_write_with(
                 std::slice::from_ref(&config.cwd),
                 codex_protocol::permissions::NetworkSandboxPolicy::Restricted,
-                true,
-                true,
+                /*exclude_tmpdir_env_var*/ true,
+                /*exclude_slash_tmp*/ true,
             ))
             .expect("writable tool fixture");
         config.update_plan_enabled = true;
@@ -301,8 +301,8 @@ async fn turn_environments_keep_tools_and_gate_edits(writable_environment: bool)
                 permission_profile: Some(PermissionProfile::workspace_write_with(
                     std::slice::from_ref(&test.config.cwd),
                     codex_protocol::permissions::NetworkSandboxPolicy::Restricted,
-                    true,
-                    true,
+                    /*exclude_tmpdir_env_var*/ true,
+                    /*exclude_slash_tmp*/ true,
                 )),
                 ..Default::default()
             }),
