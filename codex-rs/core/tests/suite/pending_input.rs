@@ -2923,6 +2923,11 @@ async fn terminal_compaction_error_does_not_retry_pending_input(
         .items
         .iter()
         .filter_map(|item| {
+            // Main's #1545 contract persists delivered mail as the communication itself.
+            if let RolloutItem::InterAgentCommunication(communication) = item {
+                return (communication.content == PENDING_MESSAGE)
+                    .then_some(communication.content.as_str());
+            }
             let RolloutItem::ResponseItem(envelope) = item else {
                 return None;
             };

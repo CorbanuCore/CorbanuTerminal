@@ -275,9 +275,13 @@ async fn mailbox_preemption_drains_websocket(scenario: MailboxDrain) -> anyhow::
     });
     let test = start_mailbox_preemption(&server, release).await?;
     if let Some(release_drain) = release_drain {
-        server
-            .wait_for_request(/*connection_index*/ 0, /*request_index*/ 2)
-            .await;
+        // Bounded: a missing preemption request must fail this test, not hang the suite.
+        tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            server.wait_for_request(/*connection_index*/ 0, /*request_index*/ 2),
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("the mailbox drain must send its preemption request"))?;
         let steering = "Use both worker updates.";
         let submission = test
             .codex

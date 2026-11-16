@@ -3209,6 +3209,13 @@ async fn multi_agent_v2_peer_followup_completion_notifies_initiating_turn(
             config.model_provider.request_max_retries = Some(0);
             config.model_provider.stream_max_retries = Some(0);
             config.model_provider.supports_websockets = false;
+            // Reloading an evicted child resolves its persisted provider ID from the registry
+            // (#1129). Register this mock provider under the active ID so the reloaded child
+            // reaches the mock server, as a registered provider would in a real session.
+            config.model_providers.insert(
+                config.model_provider_id.clone(),
+                config.model_provider.clone(),
+            );
         });
     let test = builder.build_with_auto_env(&server).await?;
     let root_thread_id = test.session_configured.thread_id;
