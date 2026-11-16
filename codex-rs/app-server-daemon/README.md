@@ -54,7 +54,12 @@ guidance.
 
 Install or update Corbanu Terminal using the platform-specific commands in the
 [installation instructions](../../README.md#install), then explicitly restart
-the daemon. The daemon still requires the existing standalone managed binary
+the daemon. All mutating lifecycle commands stop an updater left by an older
+build; `start`, `restart`, `stop` and `bootstrap` do so even when the managed
+binary is missing. An old updater remains active until one of those commands
+runs or the machine reboots.
+
+The daemon still requires the existing standalone managed binary
 at `CODEX_HOME/packages/standalone/current/codex`; installer support for that
 layout remains a follow-up. A missing managed binary produces an actionable
 error instead of attempting an automatic installation.

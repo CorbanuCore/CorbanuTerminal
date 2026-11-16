@@ -301,6 +301,7 @@ impl Daemon {
 
     async fn start(&self) -> Result<LifecycleOutput> {
         let settings = self.load_settings().await?;
+        self.stop_managed_updater(&settings).await?;
         if let Ok(info) = client::probe(&self.socket_path).await {
             return Ok(self
                 .output(
@@ -339,6 +340,7 @@ impl Daemon {
 
     async fn restart(&self) -> Result<LifecycleOutput> {
         let settings = self.load_settings().await?;
+        self.stop_managed_updater(&settings).await?;
         if client::probe(&self.socket_path).await.is_ok()
             && self.running_backend(&settings).await?.is_none()
         {
@@ -412,6 +414,7 @@ impl Daemon {
 
     async fn stop(&self) -> Result<LifecycleOutput> {
         let settings = self.load_settings().await?;
+        self.stop_managed_updater(&settings).await?;
         if let Some(backend) = self.running_backend_instance(&settings).await? {
             backend.stop().await?;
             return Ok(self
@@ -536,6 +539,7 @@ impl Daemon {
         mode: RemoteControlMode,
     ) -> Result<RemoteControlOutput> {
         let previous_settings = self.load_settings().await?;
+        self.stop_managed_updater(&previous_settings).await?;
         let mut settings = previous_settings.clone();
         let remote_control_enabled = mode.is_enabled();
         let backend = self.running_backend_instance(&previous_settings).await?;
@@ -591,11 +595,12 @@ impl Daemon {
     }
 
     async fn bootstrap_locked(&self, options: BootstrapOptions) -> Result<BootstrapOutput> {
-        self.ensure_managed_codex_bin()?;
-
         let settings = DaemonSettings {
             remote_control_enabled: options.remote_control_enabled,
         };
+        self.stop_managed_updater(&settings).await?;
+        self.ensure_managed_codex_bin()?;
+
         if client::probe(&self.socket_path).await.is_ok()
             && self.running_backend(&settings).await?.is_none()
         {
@@ -603,7 +608,6 @@ impl Daemon {
                 "app server is running but is not managed by codex app-server daemon"
             ));
         }
-        self.stop_managed_updater(&settings).await?;
         settings.save(&self.settings_file).await?;
 
         if let Some(backend) = self.running_backend_instance(&settings).await? {
