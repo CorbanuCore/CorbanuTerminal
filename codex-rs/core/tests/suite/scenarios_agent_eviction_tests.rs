@@ -23,6 +23,12 @@ async fn idle_eviction_preserves_worker_context_for_followup() -> Result<()> {
         .with_extensions(Arc::new(extensions.build()))
         .with_config(|config| {
             configure_scenario_catalog(config);
+            // Spawn and delivery receipts include the nickname in the history snapshot.
+            config
+                .agent_roles
+                .entry("default".into())
+                .or_default()
+                .nickname_candidates = Some(vec!["Worker".into()]);
             // This scenario uses client_echo; omit platform-specific shell schemas.
             config.features.disable(Feature::ShellTool).unwrap();
             config

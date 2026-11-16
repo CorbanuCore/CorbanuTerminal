@@ -4,6 +4,7 @@ use crate::agent::LocalAgentControl;
 use crate::codex_thread::CodexThread;
 use crate::config::Config;
 use crate::config::test_config;
+use crate::state_db_bridge::init_state_db;
 use crate::thread_manager::ThreadManagerState;
 use codex_features::Feature;
 use codex_login::CodexAuth;
@@ -36,11 +37,21 @@ async fn residency_slot_reservation_unloads_oldest_idle_v2_agent_with_volatile_m
     let temp_home = tempfile::tempdir().expect("create temp home");
     config.codex_home = temp_home.path().to_path_buf().try_into().unwrap();
     config.cwd = temp_home.path().to_path_buf().try_into().unwrap();
-    let manager = ThreadManager::with_models_provider_and_home_for_tests(
+    let state_db = if sqlite {
+        Some(
+            init_state_db(&config)
+                .await
+                .expect("sqlite state db should initialize"),
+        )
+    } else {
+        None
+    };
+    let manager = ThreadManager::with_models_provider_home_and_state_for_tests(
         CodexAuth::from_api_key("dummy"),
         config.model_provider.clone(),
         config.codex_home.to_path_buf(),
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        state_db,
     );
     let root = manager
         .start_thread(StartThreadOptions::new(config.clone()))
@@ -63,13 +74,13 @@ async fn residency_slot_reservation_unloads_oldest_idle_v2_agent_with_volatile_m
         .await
         .expect("first resident slot");
     let first =
-        spawn_v2_subagent(&control, &state, config.clone(), root.thread_id, "worker-1").await;
+        spawn_v2_subagent(&control, &state, config.clone(), root.thread_id, "worker_1").await;
     first_slot.commit(first.thread_id);
     mark_thread_completed(first.thread.as_ref()).await;
     assert_eq!(first.thread.state_db().is_some(), sqlite);
     let queued = InterAgentCommunication::new(
         AgentPath::root(),
-        AgentPath::try_from("/root/worker-1").unwrap(),
+        AgentPath::try_from("/root/worker_1").unwrap(),
         Vec::new(),
         "keep this note without a durable mailbox row".to_string(),
         /*trigger_turn*/ false,

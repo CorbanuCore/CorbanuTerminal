@@ -1125,11 +1125,22 @@ async fn subagent_notification_is_included_without_wait() -> Result<()> {
     .await;
     test.submit_turn(TURN_2_NO_WAIT_PROMPT).await?;
 
-    let turn2_requests = wait_for_requests(&turn2).await?;
-    assert!(
-        turn2_requests
-            .iter()
-            .any(|request| request.has_content_kinds(&["multi_agent.subagent_notification"]))
+    // V2 completion is an agent_message, rather than the legacy developer
+    // notification carrying multi_agent.subagent_notification metadata.
+    let request = turn2.single_request();
+    assert_eq!(
+        strip_response_item_ids_from_json(strip_metadata_from_json(Value::Array(
+            request.inputs_of_type("agent_message"),
+        ))),
+        json!([{
+            "type": "agent_message",
+            "author": "/root/worker",
+            "recipient": "/root",
+            "content": [{
+                "type": "input_text",
+                "text": "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\nchild done",
+            }],
+        }]),
     );
 
     Ok(())
