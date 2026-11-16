@@ -284,6 +284,7 @@ impl<'a> ParsedExecCommand<'a> {
         let permission_context = file_system_sandbox_policy_context_for_cwd(&sandbox_context, &cwd);
         let mut permissions = apply_granted_turn_permissions(
             session,
+            &step.turn,
             turn_environment,
             &cwd,
             sandbox_permissions,

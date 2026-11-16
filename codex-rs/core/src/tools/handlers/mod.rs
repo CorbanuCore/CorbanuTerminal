@@ -57,6 +57,7 @@ use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::function_tool::FunctionCallError;
 use crate::sandboxing::SandboxPermissions;
 use crate::session::session::Session;
+use crate::session::turn_context::TurnContext;
 use crate::session::turn_context::TurnEnvironment;
 pub(crate) use crate::tools::code_mode::CodeModeExecuteHandler;
 pub(crate) use crate::tools::code_mode::CodeModeWaitHandler;
@@ -388,6 +389,7 @@ pub(super) fn implicit_granted_permissions(
 
 pub(crate) async fn apply_granted_turn_permissions(
     session: &Session,
+    turn_context: &TurnContext,
     environment: &TurnEnvironment,
     cwd: &PathUri,
     sandbox_permissions: SandboxPermissions,
@@ -401,7 +403,8 @@ pub(crate) async fn apply_granted_turn_permissions(
         };
     }
     let granted_permissions =
-        read_granted_permissions(session, &environment.selection.environment_id).await;
+        read_granted_permissions(session, turn_context, &environment.selection.environment_id)
+            .await;
     with_granted_permissions(
         granted_permissions,
         environment,
@@ -411,16 +414,19 @@ pub(crate) async fn apply_granted_turn_permissions(
     )
 }
 
-/// The session's and the turn's `request_permissions` grants for
+/// The session's and the captured turn's `request_permissions` grants for
 /// `environment_id`, merged. #245: read through the session, which strips
 /// protected paths from a grant while the protected-path rules apply (D51/D520:
 /// none after a security transition).
 pub(crate) async fn read_granted_permissions(
     session: &Session,
+    turn_context: &TurnContext,
     environment_id: &str,
 ) -> Option<AdditionalPermissionProfile> {
     let granted_session_permissions = session.granted_session_permissions(environment_id).await;
-    let granted_turn_permissions = session.granted_turn_permissions(environment_id).await;
+    let granted_turn_permissions = session
+        .granted_turn_permissions(turn_context, environment_id)
+        .await;
     merge_permission_profiles(
         granted_session_permissions.as_ref(),
         granted_turn_permissions.as_ref(),

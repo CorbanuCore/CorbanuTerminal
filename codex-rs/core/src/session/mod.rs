@@ -4714,16 +4714,14 @@ impl Session {
         Some(Arc::clone(&task.turn_context))
     }
 
-    /// The running turn's own grants for `environment_id`, as later commands
-    /// and file tools may use them (#245; D51: none after a security transition).
+    /// The captured turn's own grants for `environment_id`, even after another turn starts.
+    /// D658: background cells retain their turn; D51 still ends grants at a security transition.
     pub(crate) async fn granted_turn_permissions(
         &self,
+        turn_context: &TurnContext,
         environment_id: &str,
     ) -> Option<AdditionalPermissionProfile> {
-        let granted = self
-            .active_task_turn_context()
-            .await?
-            .granted_turn_permissions(environment_id);
+        let granted = turn_context.granted_turn_permissions(environment_id);
         self.usable_grant(granted).await
     }
 
@@ -7470,6 +7468,10 @@ mod home_access_session_tests;
 #[cfg(test)]
 #[path = "approval_options_tests.rs"]
 mod approval_options_tests;
+
+#[cfg(test)]
+#[path = "d658_grant_tests.rs"]
+mod d658_grant_tests;
 
 #[cfg(test)]
 #[path = "stale_approval_tests.rs"]

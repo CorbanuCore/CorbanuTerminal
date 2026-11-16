@@ -154,9 +154,12 @@ async fn extension_file_contexts(
     };
     let mut contexts = Vec::with_capacity(selected.len());
     for environment in selected {
-        let granted =
-            read_granted_permissions(&invocation.session, &environment.selection.environment_id)
-                .await;
+        let granted = read_granted_permissions(
+            &invocation.session,
+            &invocation.turn,
+            &environment.selection.environment_id,
+        )
+        .await;
         let context = crate::security::protected_surface::protect_file_tool_context(
             &invocation.session,
             &invocation.turn,

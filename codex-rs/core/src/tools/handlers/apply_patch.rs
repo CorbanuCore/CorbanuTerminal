@@ -684,7 +684,8 @@ async fn prepare_verified_patch(
     // paths), so every grant that widens the policy is also carried by the
     // request.
     let handler_basis = HandlerBasis::now(session);
-    let granted_permissions = read_granted_permissions(session, environment_id).await;
+    let granted_permissions =
+        read_granted_permissions(session, &step_context.turn, environment_id).await;
     let base_file_system_sandbox_policy = turn_environment
         .permission_profile()
         .file_system_sandbox_policy();
