@@ -1993,7 +1993,9 @@ async fn cold_resume_reresolves_persisted_active_permission_profile() -> Result<
 }
 
 #[tokio::test]
-async fn cold_resume_with_removed_permission_profile_uses_configured_default() -> Result<()> {
+async fn cold_resume_with_removed_permission_profile_is_capped_by_its_snapshot() -> Result<()> {
+    // Corbanu #2384 / D650 (upstream expected the configured full-access default):
+    // the fallback for a removed profile is capped by the thread's saved snapshot.
     let server = create_mock_responses_server_repeating_assistant("Done").await;
     for history_mode in [ThreadHistoryMode::Legacy, ThreadHistoryMode::Paginated] {
         let codex_home = TempDir::new()?;
@@ -2029,13 +2031,11 @@ async fn cold_resume_with_removed_permission_profile_uses_configured_default() -
             ..
         } = timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(resume_id)).await??;
 
-        assert!(matches!(sandbox, AppSandboxPolicy::DangerFullAccess));
-        assert_eq!(
-            active_permission_profile,
-            Some(ActivePermissionProfile::new(
-                BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS,
-            ))
+        assert!(
+            matches!(sandbox, AppSandboxPolicy::WorkspaceWrite { .. }),
+            "{history_mode:?}: {sandbox:?}"
         );
+        assert_eq!(active_permission_profile, None, "{history_mode:?}");
     }
     Ok(())
 }
