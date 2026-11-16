@@ -1762,6 +1762,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
                         app.app_server_target.clone(),
                         app.config.clone(),
                         app.local_settings.clone(),
+                        app.launch_approval_resume_permissions(),
                         app.current_displayed_thread_id(),
                         backends
                             .session_at(displayed_session)

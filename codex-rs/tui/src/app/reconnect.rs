@@ -38,6 +38,7 @@ pub(super) async fn reconnect(
     target: AppServerTarget,
     config: Config,
     local_settings: crate::local_settings::LocalSettings,
+    permission_overrides: crate::resume_permissions::ResumePermissions,
     thread_id: Option<ThreadId>,
     remote_cwd: Option<PathBuf>,
     task_tools: ThreadToolTransport,
@@ -79,11 +80,12 @@ pub(super) async fn reconnect(
             let thread = if let Some(thread_id) = thread_id {
                 stage = "resuming the conversation";
                 match session
-                    .resume_thread(
+                    .resume_thread_with_permission_overrides(
                         &local_settings,
                         config.clone(),
                         thread_id,
                         ResumeModelSettings::PreserveExistingThread,
+                        permission_overrides,
                     )
                     .await
                 {

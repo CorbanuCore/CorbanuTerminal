@@ -314,6 +314,14 @@ pub(crate) async fn execute(
     }
 }
 
+/// D621 (#2310): Aggressive's approval policy for the thread requests these
+/// tools build without the launch overrides; `None` otherwise.
+fn enforced_approval() -> Option<codex_app_server_protocol::AskForApproval> {
+    let mut policy = None;
+    crate::security::aggressive::enforce_approval(&mut policy);
+    policy
+}
+
 fn success_response(value: Value) -> Result<DynamicToolCallResponse, String> {
     let text = response::serialize(value)?;
     Ok(DynamicToolCallResponse {
@@ -523,6 +531,7 @@ async fn execute_inner(
                     params: ThreadResumeParams {
                         thread_id: params.thread_id.clone(),
                         exclude_turns,
+                        approval_policy: enforced_approval(),
                         ..ThreadResumeParams::default()
                     },
                 },
@@ -532,6 +541,7 @@ async fn execute_inner(
             thread_start_params.service_tier = Some(source.service_tier);
             thread_start_params.runtime_workspace_roots = Some(source.runtime_workspace_roots);
             thread_start_params.approval_policy = Some(source.approval_policy);
+            crate::security::aggressive::enforce_approval(&mut thread_start_params.approval_policy);
             thread_start_params.approvals_reviewer = Some(source.approvals_reviewer);
             let sandbox_policy = if let Some(profile) = source.active_permission_profile {
                 thread_start_params.permissions = Some(profile.id);
@@ -669,6 +679,7 @@ async fn execute_inner(
                         ephemeral: thread.ephemeral,
                         exclude_turns,
                         config: mcp_config.clone(),
+                        approval_policy: enforced_approval(),
                         ..ThreadForkParams::default()
                     },
                 },
@@ -708,6 +719,7 @@ async fn execute_inner(
                         thread_id: arguments.thread_id.clone(),
                         exclude_turns,
                         config: mcp_config.clone(),
+                        approval_policy: enforced_approval(),
                         ..ThreadResumeParams::default()
                     },
                 },

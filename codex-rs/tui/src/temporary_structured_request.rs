@@ -47,7 +47,8 @@ pub(crate) struct TemporaryStructuredThreadOptions {
 ///
 /// Structured prompts can contain untrusted transcript text, so the effective app-server config is
 /// read first and every MCP server is explicitly disabled alongside built-in and extension tools.
-/// Approval policy is inherited from the server; the TUI rejects unexpected interaction requests.
+/// Approval policy is inherited from the server (under Aggressive it is `untrusted`, D621); the TUI
+/// rejects unexpected interaction requests.
 pub(crate) async fn start_temporary_thread(
     request_handle: &AppServerRequestHandle,
     options: TemporaryStructuredThreadOptions,
@@ -136,10 +137,14 @@ pub(crate) async fn start_temporary_thread(
             ),
         );
 
+        // D621 (#2310): never left to the server's own policy.
+        let mut approval_policy = None;
+        crate::security::aggressive::enforce_approval(&mut approval_policy);
         request_handle
             .request_typed(ClientRequest::ThreadStart {
                 request_id: RequestId::String(format!("temporary-structured-{}", Uuid::new_v4())),
                 params: ThreadStartParams {
+                    approval_policy,
                     model: Some(model),
                     model_provider: Some(model_provider),
                     cwd: Some(cwd),

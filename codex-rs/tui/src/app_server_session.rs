@@ -306,6 +306,7 @@ pub(crate) async fn request_thread_start_with_history_fallback(
     mut request_id: RequestId,
     mut params: ThreadStartParams,
 ) -> std::result::Result<(ThreadStartResponse, ThreadHistorySupport, bool), TypedRequestError> {
+    crate::security::aggressive::enforce_approval(&mut params.approval_policy);
     let mut history_support = ThreadHistorySupport::Paginated;
     loop {
         match request_handle
@@ -1690,6 +1691,7 @@ impl AppServerSession {
                 codex_protocol::protocol::ThreadSource::SIDE_CONVERSATION.to_string(),
             ));
         }
+        crate::security::aggressive::enforce_approval(&mut params.approval_policy);
         let response: ThreadForkResponse = match self
             .request_handle
             .request_typed(ClientRequest::ThreadFork {
@@ -3056,11 +3058,19 @@ fn thread_resume_params_from_config(
     model_settings: ResumeModelSettings,
     permission_overrides: crate::resume_permissions::ResumePermissions,
 ) -> ThreadResumeParams {
+    // D621 (#2310): Aggressive's approval policy is not in any config layer
+    // the server loads, so it goes with every local resume, rejoins included;
+    // a loaded thread on another policy is then rebuilt or left as is by the
+    // server's usual override rules, never moved to the user's own policy.
+    let aggressive_approval = (permission_overrides.aggressive_approval
+        && thread_params_mode == ThreadParamsMode::Embedded)
+        .then_some(AskForApproval::UnlessTrusted);
     if thread_params_mode.settings_owner() == ThreadSettingsOwner::Server
         || model_settings == ResumeModelSettings::PreserveExistingThread
     {
         return ThreadResumeParams {
             thread_id: thread_id.to_string(),
+            approval_policy: aggressive_approval,
             ..ThreadResumeParams::default()
         };
     }
@@ -3112,6 +3122,9 @@ fn thread_resume_params_from_config(
     };
     if thread_params_mode == ThreadParamsMode::Remote || !permission_overrides.approval_policy {
         params.approval_policy = None;
+    }
+    if aggressive_approval.is_some() {
+        params.approval_policy = aggressive_approval;
     }
     if thread_params_mode == ThreadParamsMode::Remote || !permission_overrides.approvals_reviewer {
         params.approvals_reviewer = None;
@@ -3515,6 +3528,9 @@ mod reasoning_defaults_tests;
 #[path = "app_server_session/workspace_roots_tests.rs"]
 mod workspace_roots_tests;
 
+#[cfg(test)]
+#[path = "app_server_session/aggressive_reload_matrix_tests.rs"]
+mod aggressive_reload_matrix_tests;
 #[cfg(test)]
 #[path = "app_server_session/prompt_history_tests.rs"]
 mod prompt_history_tests;
