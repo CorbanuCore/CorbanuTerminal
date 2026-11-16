@@ -145,6 +145,7 @@ async fn get_auth_status_with_api_key() -> Result<()> {
 async fn personal_access_token_without_email_supports_auth_status_and_account_read() -> Result<()> {
     let codex_home = TempDir::new()?;
     let server = MockServer::start().await;
+    app_test_support::mount_workspace_routing(&server).await;
     Mock::given(method("GET"))
         .and(path("/v1/user-auth-credential/whoami"))
         .and(header("Authorization", "Bearer at-test-token"))

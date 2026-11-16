@@ -74,6 +74,20 @@ location = "us-central1"
     Ok(())
 }
 
+// Discovery runs in the background, including after an account transition.
+async fn list_models_when_ready(server: &mut TestAppServer) -> Result<ModelListResponse> {
+    tokio::time::timeout(Duration::from_secs(/*secs*/ 10), async {
+        loop {
+            let models = list_models(server).await?;
+            if !models.data.is_empty() {
+                return Ok(models);
+            }
+            tokio::time::sleep(Duration::from_millis(/*millis*/ 10)).await;
+        }
+    })
+    .await?
+}
+
 async fn sign_in(server: &mut TestAppServer) -> Result<()> {
     let id = server
         .send_login_account_api_key_request("sk-catalog-test")
@@ -142,7 +156,7 @@ requires_openai_auth = true
         .build_initialized_with_timeout(Duration::from_secs(/*secs*/ 60))
         .await?;
 
-    let initial = list_models(&mut server).await?;
+    let initial = list_models_when_ready(&mut server).await?;
     assert_eq!(
         initial
             .data
@@ -159,7 +173,7 @@ requires_openai_auth = true
     let updated = format!("model_provider = '{required_selection}'\n{updated_providers}");
     std::fs::write(&requirements_path, &updated)?;
     sign_in(&mut server).await?;
-    let switched = list_models(&mut server).await?;
+    let switched = list_models_when_ready(&mut server).await?;
     assert_eq!(
         switched
             .data
@@ -208,7 +222,7 @@ requires_openai_auth = true
     // Removing the requirement restores the user-configured provider in this process.
     std::fs::remove_file(requirements_path)?;
     sign_in(&mut server).await?;
-    assert_eq!(list_models(&mut server).await?, initial);
+    assert_eq!(list_models_when_ready(&mut server).await?, initial);
     Ok(())
 }
 

@@ -885,7 +885,10 @@ async fn plugin_list_omitted_cwds_excludes_server_project_config() -> Result<()>
         ),
     )?;
     set_project_trust_level(codex_home.path(), codex_home.path(), TrustLevel::Trusted)?;
-    let home = codex_home.path().to_string_lossy().into_owned();
+    // The OS home is not a project config root. Keep it separate so the
+    // explicit cwd case actually exercises the trusted project layer.
+    let user_home = TempDir::new()?;
+    let home = user_home.path().to_string_lossy().into_owned();
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .with_env_overrides(&[

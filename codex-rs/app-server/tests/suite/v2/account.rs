@@ -2991,9 +2991,19 @@ async fn login_account_chatgpt_uses_oauth_overrides() -> Result<()> {
             onboarding_entrypoint: None,
         }
     );
-    // Listing immediately after asynchronous login completion must use the new cloud provider.
-    let request = mcp.send_list_models_request(Default::default()).await?;
-    let models: codex_app_server_protocol::ModelListResponse = mcp.read_response(request).await?;
+    // Login completion changes the route immediately; discovery fills it in the background.
+    let models = timeout(DEFAULT_READ_TIMEOUT, async {
+        loop {
+            let request = mcp.send_list_models_request(Default::default()).await?;
+            let models: codex_app_server_protocol::ModelListResponse =
+                mcp.read_response(request).await?;
+            if !models.data.is_empty() {
+                return Ok::<_, anyhow::Error>(models);
+            }
+            tokio::time::sleep(Duration::from_millis(/*millis*/ 10)).await;
+        }
+    })
+    .await??;
     assert_eq!(
         models
             .data

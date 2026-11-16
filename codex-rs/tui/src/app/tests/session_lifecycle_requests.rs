@@ -4181,6 +4181,17 @@ terminal_visualization_instructions = true
     )
     .await;
     let unsaved = app.chat_widget.thread_id().expect("unsaved thread");
+    // New threads now persist eagerly. Model unavailable rollout metadata explicitly so this
+    // still exercises the unsaved-history guard without making the session ephemeral (which
+    // independently disallows both worktree transitions).
+    let mut unsaved_session = app
+        .primary_session_configured
+        .clone()
+        .expect("fresh primary session");
+    unsaved_session.rollout_path = None;
+    app.primary_session_configured = Some(unsaved_session.clone());
+    app.chat_widget
+        .handle_thread_session_quiet(unsaved_session.clone());
     let path = app.chat_widget.rollout_path();
     assert!(path.is_none_or(|path| !rollout_path_is_resumable(&path)));
     let completed = test_turn("completed-unsaved-turn", TurnStatus::Completed, Vec::new());
@@ -4188,7 +4199,7 @@ terminal_visualization_instructions = true
         .store
         .lock()
         .await
-        .set_turns(vec![completed]);
+        .set_session(unsaved_session, vec![completed]);
     for mode in [ManagedWorktreeMode::Fork, ManagedWorktreeMode::New] {
         requests.lock().expect("request recorder lock").clear();
         app.handle_event(

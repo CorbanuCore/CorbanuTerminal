@@ -175,6 +175,50 @@ async fn refreshes_immediately_periodically_and_stops_when_dropped() {
 }
 
 #[tokio::test]
+async fn account_invalidation_wakes_refresh_even_during_an_in_flight_fetch() -> anyhow::Result<()> {
+    let home = tempdir()?;
+    let config_manager = crate::config_manager::ConfigManager::without_managed_config_for_tests(
+        home.path().to_path_buf(),
+    );
+    let config = Arc::new(config_manager.load_non_project_config().await?);
+    let endpoint = TestModelsEndpoint::new();
+    let models_manager: SharedModelsManager = Arc::new(OpenAiModelsManager::new(
+        home.path().to_path_buf(),
+        endpoint.clone(),
+        /*auth_manager*/ None,
+    ));
+    let auth_manager = codex_login::AuthManager::shared_from_config(
+        config.as_ref(),
+        /*enable_codex_api_key_env*/ false,
+    )
+    .await?;
+    let catalog = Arc::new(ModelCatalog::new(
+        config_manager,
+        /*startup_cwd*/ None,
+        config,
+        models_manager,
+        auth_manager,
+    ));
+    let worker = spawn_with_interval(&catalog, Duration::from_secs(/*secs*/ 3600));
+    endpoint.wait_for_fetch_count(/*expected*/ 1).await;
+    catalog.invalidate().await;
+    endpoint.wait_for_fetch_count(/*expected*/ 2).await;
+
+    // The second fetch is held at the endpoint. Listing still returns without waiting.
+    tokio::time::timeout(
+        Duration::from_secs(/*secs*/ 1),
+        catalog.list_models(RefreshStrategy::Offline),
+    )
+    .await??;
+    // A transition during that fetch must wake another refresh once it finishes.
+    catalog.invalidate().await;
+    endpoint.release_second_fetch.notify_one();
+    endpoint.wait_for_fetch_count(/*expected*/ 3).await;
+    drop(worker);
+    Ok(())
+}
+
+#[tokio::test]
 async fn background_refresh_blocks_invalid_requirements_then_recovers() -> anyhow::Result<()> {
     let home = tempdir()?;
     let config = Arc::new(

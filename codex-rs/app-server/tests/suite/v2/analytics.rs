@@ -267,6 +267,12 @@ async fn guardian_review_turns_and_tools_reach_analytics() -> Result<()> {
         .collect::<Vec<_>>();
     for event in &children {
         let params = &event["event_params"];
+        // A failed Guardian review can replace its session. Attribute each
+        // event to the review that emitted its turn, not the first session.
+        let review = reviews
+            .iter()
+            .find(|review| review["turn_id"] == params["turn_id"])
+            .expect("event belongs to a recorded Guardian review");
         assert_eq!(
             json!([
                 params["thread_id"],
@@ -275,7 +281,7 @@ async fn guardian_review_turns_and_tools_reach_analytics() -> Result<()> {
                 params["thread_source"]
             ]),
             json!([
-                reviews[0]["thread_id"],
+                review["thread_id"],
                 thread.session_id,
                 thread.id,
                 "guardian_review"
@@ -482,7 +488,8 @@ async fn multi_agent_v2_tools_emit_collaborator_analytics() -> Result<()> {
         let params = &event["event_params"];
         let receivers = match index {
             0..=3 => vec![child_thread_id.clone()],
-            6 | 7 => vec![thread.id.clone()],
+            // Main refuses interrupting /root before resolving a receiver.
+            6 => vec![thread.id.clone()],
             _ => Vec::new(),
         };
         assert_eq!(

@@ -372,7 +372,7 @@ async fn list_models_uses_remote_catalog_as_source_of_truth(
         }))
     })
     .collect::<Result<Vec<_>, _>>()?;
-    // The startup refresh worker and model/list can both fetch before the cache is populated.
+    // The startup refresh worker fills the catalog while model/list remains nonblocking.
     let _models_mock = Mock::given(method("GET"))
         .and(path("/v1/models"))
         .and(header("authorization", format!("Bearer {bearer_token}")))
@@ -387,17 +387,30 @@ async fn list_models_uses_remote_catalog_as_source_of_truth(
 
     let codex_home = TempDir::new()?;
     let server_uri = server.uri();
-    // Route the `/models` call to this test's OpenAI-compatible mock. The model
-    // catalog itself remains global and non-exclusive.
+    // API-key discovery requires an explicit catalog opt-in. Use an honest custom
+    // provider; reserved OpenAI catalog URLs retain their production restrictions.
+    let provider_config = if api_key.is_some() {
+        format!(
+            r#"
+model_provider = "catalog_fixture"
+[model_providers.catalog_fixture]
+name = "Catalog fixture"
+base_url = "{server_uri}/v1"
+model_catalog_url = "{server_uri}/v1/models"
+requires_openai_auth = true
+"#
+        )
+    } else {
+        format!("model_provider = '{OPENAI_PROVIDER_ID}'\nopenai_base_url = '{server_uri}/v1'")
+    };
     std::fs::write(
         codex_home.path().join("config.toml"),
         format!(
             r#"
 model = "mock-model"
-model_provider = "{OPENAI_PROVIDER_ID}"
-openai_base_url = "{server_uri}/v1"
 approval_policy = "never"
 sandbox_mode = "read-only"
+{provider_config}
 [features]
 api_key_model_discovery = true
 "#
@@ -445,14 +458,11 @@ api_key_model_discovery = true
             description: "Focused".to_string(),
         },
     ];
-    // The remote item is merged into PFTerminal's global catalog; the global
-    // picker default remains authoritative rather than making a one-item
-    // remote response the default model.
-    expected_items[0].is_default = false;
+    // An explicit API-key catalog is authoritative and chooses its first visible
+    // model. ChatGPT merges into the bundled catalog, retaining the product default.
+    expected_items[0].is_default = api_key.is_some();
 
-    // The models manager uses a global bundled catalog as its base and merges the
-    // background `/models` response into it. Poll the non-blocking endpoint until
-    // that background result is visible rather than requiring bootstrap to wait.
+    // Poll the nonblocking endpoint until the background result is visible.
     timeout(DEFAULT_TIMEOUT, async {
         loop {
             let ModelListResponse {
