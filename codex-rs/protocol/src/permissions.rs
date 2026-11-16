@@ -2523,11 +2523,6 @@ impl FileSystemSandboxPolicy {
             let protected_metadata_names =
                 protected_metadata_names_for_writable_root(&matching, &root, &raw_writable_roots);
             let protect_missing_dot_codex = effective_cwd.as_ref() == Some(&root);
-            let mut read_only_subpaths: Vec<AbsolutePathBuf> =
-                default_read_only_subpaths_for_writable_root(&root, protect_missing_dot_codex)
-                    .into_iter()
-                    .filter(|path| !has_explicit_resolved_path_entry(&resolved_entries, path))
-                    .collect();
             // Narrower explicit non-write entries carve out broader writable roots.
             // More specific write entries still remain writable because they appear
             // as separate WritableRoot values and are checked independently.
@@ -2535,57 +2530,66 @@ impl FileSystemSandboxPolicy {
             // so downstream sandboxes can still mask the symlink inode itself.
             // Example: if `<root>/.codex -> <root>/decoy`, bwrap must still see
             // `<root>/.codex`, not only the resolved `<root>/decoy`.
-            read_only_subpaths.extend(
-                prepared_entries
-                    .iter()
-                    .filter(|entry| !entry.entry.access.can_write())
-                    .filter_map(|prepared| {
-                        let entry = prepared.entry;
-                        let effective_path = &prepared.effective_path;
-                        // Preserve the literal in-root path whenever the
-                        // carveout itself lives under this writable root, even
-                        // if following symlinks would resolve back to the root
-                        // or escape outside it. Downstream sandboxes need that
-                        // raw path so they can mask the symlink inode itself.
-                        // Examples:
-                        // - `<root>/linked-private -> <root>/decoy-private`
-                        // - `<root>/linked-private -> /tmp/outside-private`
-                        // - `<root>/alias-root -> <root>`
-                        let raw_carveout_path = if preserve_raw_carveout_paths {
-                            if entry.path == root {
-                                None
-                            } else if entry.path.as_path().starts_with(root.as_path()) {
-                                Some(entry.path.clone())
-                            } else {
-                                raw_writable_roots.iter().find_map(|raw_root| {
-                                    let suffix = entry
-                                        .path
-                                        .as_path()
-                                        .strip_prefix(raw_root.as_path())
-                                        .ok()?;
-                                    if suffix.as_os_str().is_empty() {
-                                        return None;
-                                    }
-                                    Some(root.join(suffix))
-                                })
-                            }
-                        } else {
+            let explicit_carveouts: Vec<AbsolutePathBuf> = prepared_entries
+                .iter()
+                .filter(|entry| !entry.entry.access.can_write())
+                .filter_map(|prepared| {
+                    let entry = prepared.entry;
+                    let effective_path = &prepared.effective_path;
+                    // Preserve the literal in-root path whenever the
+                    // carveout itself lives under this writable root, even
+                    // if following symlinks would resolve back to the root
+                    // or escape outside it. Downstream sandboxes need that
+                    // raw path so they can mask the symlink inode itself.
+                    // Examples:
+                    // - `<root>/linked-private -> <root>/decoy-private`
+                    // - `<root>/linked-private -> /tmp/outside-private`
+                    // - `<root>/alias-root -> <root>`
+                    let raw_carveout_path = if preserve_raw_carveout_paths {
+                        if entry.path == root {
                             None
-                        };
-
-                        if let Some(raw_carveout_path) = raw_carveout_path {
-                            return Some(raw_carveout_path);
+                        } else if entry.path.as_path().starts_with(root.as_path()) {
+                            Some(entry.path.clone())
+                        } else {
+                            raw_writable_roots.iter().find_map(|raw_root| {
+                                let suffix =
+                                    entry.path.as_path().strip_prefix(raw_root.as_path()).ok()?;
+                                if suffix.as_os_str().is_empty() {
+                                    return None;
+                                }
+                                Some(root.join(suffix))
+                            })
                         }
+                    } else {
+                        None
+                    };
 
-                        if effective_path == &root
-                            || !effective_path.as_path().starts_with(root.as_path())
-                        {
-                            return None;
-                        }
+                    if let Some(raw_carveout_path) = raw_carveout_path {
+                        return Some(raw_carveout_path);
+                    }
 
-                        Some(effective_path.clone())
-                    }),
-            );
+                    if effective_path == &root
+                        || !effective_path.as_path().starts_with(root.as_path())
+                    {
+                        return None;
+                    }
+
+                    Some(effective_path.clone())
+                })
+                .collect();
+            // A default carve-out that an explicit entry also produces takes the
+            // explicit entry's place, whichever spelling the cwd used (#2143):
+            // a cwd under `/var/...` (macOS TMPDIR) resolves the root to
+            // `/private/var/...`, so the spelling check above misses the
+            // explicit entry and the order depended on the spelling. The set of
+            // carve-outs is unchanged; only duplicates are dropped.
+            let mut read_only_subpaths: Vec<AbsolutePathBuf> =
+                default_read_only_subpaths_for_writable_root(&root, protect_missing_dot_codex)
+                    .into_iter()
+                    .filter(|path| !has_explicit_resolved_path_entry(&resolved_entries, path))
+                    .filter(|path| !explicit_carveouts.contains(path))
+                    .collect();
+            read_only_subpaths.extend(explicit_carveouts);
             WritableRoot {
                 protected_metadata_names,
                 root,
@@ -4836,6 +4840,40 @@ mod tests {
         assert!(!writable_roots[0].is_path_writable(&dot_agents_config));
         assert!(!writable_roots[0].is_path_writable(&dot_codex_config));
         assert!(!writable_roots[0].is_path_writable(&dot_aws_config));
+    }
+
+    /// #2143: a cwd spelled through a system alias (`/tmp` here; the macOS
+    /// runner's TMPDIR is under `/var`) gets the same carve-outs, in the same
+    /// order, as its real path. The order once followed the spelling.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn writable_root_carveouts_do_not_depend_on_the_cwd_spelling() {
+        let tmp = TempDir::new_in("/tmp").expect("tempdir in /tmp");
+        let aliased_cwd = tmp.path().join("cwd");
+        fs::create_dir(&aliased_cwd).expect("create cwd");
+        let canonical_cwd = aliased_cwd.canonicalize().expect("canonicalize cwd");
+        assert_ne!(aliased_cwd, canonical_cwd, "/tmp should be an alias");
+        let policy = SandboxPolicy::WorkspaceWrite {
+            writable_roots: vec![],
+            network_access: false,
+            exclude_tmpdir_env_var: true,
+            exclude_slash_tmp: true,
+        };
+        let roots_for = |cwd: &Path| {
+            FileSystemSandboxPolicy::from_legacy_sandbox_policy_for_cwd(&policy, cwd)
+                .get_writable_roots_with_cwd(cwd)
+        };
+
+        let canonical = roots_for(&canonical_cwd);
+        let aliased = roots_for(&aliased_cwd);
+
+        let names: Vec<_> = canonical[0]
+            .read_only_subpaths
+            .iter()
+            .map(|path| path.as_path().file_name().expect("file name").to_owned())
+            .collect();
+        assert_eq!(names, [".git", ".agents", ".codex", ".aws"]);
+        assert_eq!(aliased, canonical);
     }
 
     #[test]

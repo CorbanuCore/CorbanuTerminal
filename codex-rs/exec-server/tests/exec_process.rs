@@ -114,7 +114,7 @@ async fn create_process_context(use_remote: bool) -> Result<ProcessContext> {
 
 #[cfg(target_os = "macos")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn codex_home_symlink_opt_out_respects_host_config_and_scope() -> Result<()> {
+async fn codex_home_symlink_roots_write_at_their_real_location() -> Result<()> {
     use codex_exec_server::WriteFileOptions;
     use common::exec_server::exec_server_with_env;
     use std::os::unix::fs::symlink;
@@ -163,23 +163,22 @@ async fn codex_home_symlink_opt_out_respects_host_config_and_scope() -> Result<(
                     Some(&sandbox),
                 )
                 .await;
-            assert_eq!(
+            // Main grants a symlinked writable root at its real location, so
+            // upstream's refusal and its host-config opt-out do not apply
+            // (S3a ledger row for sandboxing/src/seatbelt.rs; #2143): every
+            // root writes, whatever the host or checkout config says.
+            assert!(
                 result.is_ok(),
-                root == workspace.path() || (enabled == Some(true) && root == alias),
                 "root={root:?}, enabled={enabled:?}: {result:?}"
             );
-            if let Err(error) = result {
-                assert!(
-                    error
-                        .to_string()
-                        .contains("symlinked writable roots are not supported"),
-                    "{error}"
-                );
+            if root != workspace.path() {
+                let written = std::fs::read(target.path().join("output"))?;
+                assert_eq!(written, b"written", "root={root:?}, enabled={enabled:?}");
+                std::fs::remove_file(target.path().join("output"))?;
             }
         }
         server.shutdown().await?;
     }
-    assert_eq!(std::fs::read(target.path().join("output"))?, b"written");
     assert_eq!(std::fs::read(workspace.path().join("output"))?, b"written");
     Ok(())
 }
