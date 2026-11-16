@@ -191,15 +191,111 @@ pub fn is_launch_env_name_allowed(name: &str) -> bool {
             .any(|suffix| upper.ends_with(suffix))
 }
 
-/// True when the value is a URL that carries a password (`scheme://user:pass@host`).
+/// True when the value carries a URL password: `scheme://user:pass@host`
+/// anywhere in the value (not only in its first URL), or a scheme-less proxy
+/// form such as `user:pass@proxy:3128` as one of its whitespace-, comma- or
+/// semicolon-separated items (#2395).
 pub fn value_has_url_password(value: &str) -> bool {
-    let Some((_, rest)) = value.split_once("://") else {
-        return false;
-    };
+    value
+        .match_indices("://")
+        .any(|(index, _)| authority_has_password(&value[index + 3..]))
+        || value
+            .split(|c: char| c.is_whitespace() || c == ',' || c == ';')
+            .any(is_schemeless_url_with_password)
+}
+
+/// The original PF-27-S02 rule, applied to the text after one `://`.
+fn authority_has_password(rest: &str) -> bool {
     let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
     authority
         .rsplit_once('@')
         .is_some_and(|(userinfo, _)| userinfo.contains(':'))
+}
+
+/// URI schemes written `scheme:user@host` with no `//` (`mailto:a@b.example`,
+/// `sip:alice@host`, the npm alias `npm:pkg@latest`); their first part is a
+/// scheme, not a user name.
+const OPAQUE_USER_SCHEMES: &[&str] = &[
+    "mailto", "sip", "sips", "xmpp", "im", "pres", "tel", "acct", "news", "npm",
+];
+
+/// `user:pass@host[:port][/path]` with no scheme, as curl accepts for proxies.
+/// The shape is strict so that values without a password, emails, `git@host:repo`,
+/// image digests (`img:tag@sha256:...`) and package specs (`npm:pkg@1.2.3`) pass.
+fn is_schemeless_url_with_password(token: &str) -> bool {
+    let authority = token.split(['/', '?', '#']).next().unwrap_or_default();
+    let Some((userinfo, host_port)) = authority.rsplit_once('@') else {
+        return false;
+    };
+    let Some((user, password)) = userinfo.split_once(':') else {
+        return false;
+    };
+    !user.is_empty()
+        && !password.is_empty()
+        && user.chars().all(|c| c == '@' || is_userinfo_char(c))
+        && password
+            .chars()
+            .all(|c| c == ':' || c == '@' || is_userinfo_char(c))
+        && !OPAQUE_USER_SCHEMES
+            .iter()
+            .any(|scheme| user.eq_ignore_ascii_case(scheme))
+        && is_host_and_port(host_port)
+}
+
+/// RFC 3986 unreserved characters, sub-delims and `%` escapes, minus the
+/// item separators `,` and `;`. Callers also accept a raw `@` (an email user
+/// name, or a password curl splits at the last `@`).
+fn is_userinfo_char(c: char) -> bool {
+    c.is_ascii_alphanumeric()
+        || matches!(
+            c,
+            '-' | '.' | '_' | '~' | '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | '=' | '%'
+        )
+}
+
+/// `host`, `host:port`, `[ipv6]` or `[ipv6]:port`, where the port is 1–5 digits
+/// and a dotted all-numeric host must be a four-part IPv4 address.
+fn is_host_and_port(host_port: &str) -> bool {
+    let (host_ok, port) = match host_port.strip_prefix('[') {
+        Some(bracketed) => {
+            let Some((inside, after)) = bracketed.split_once(']') else {
+                return false;
+            };
+            let ipv6_ok = !inside.is_empty()
+                && inside
+                    .chars()
+                    .all(|c| c.is_ascii_hexdigit() || matches!(c, ':' | '.' | '%'));
+            match after {
+                "" => (ipv6_ok, None),
+                _ => match after.strip_prefix(':') {
+                    Some(port) => (ipv6_ok, Some(port)),
+                    None => return false,
+                },
+            }
+        }
+        None => match host_port.split_once(':') {
+            Some((host, port)) => (is_dns_name_or_ipv4(host), Some(port)),
+            None => (is_dns_name_or_ipv4(host_port), None),
+        },
+    };
+    host_ok
+        && port.is_none_or(|port| {
+            (1..=5).contains(&port.len()) && port.bytes().all(|b| b.is_ascii_digit())
+        })
+}
+
+fn is_dns_name_or_ipv4(host: &str) -> bool {
+    let labels: Vec<&str> = host.split('.').collect();
+    let labels_ok = labels.iter().all(|label| {
+        label.starts_with(|c: char| c.is_ascii_alphanumeric())
+            && label
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    });
+    let numeric = |label: &&str| label.bytes().all(|b| b.is_ascii_digit());
+    labels_ok
+        && (!labels.last().is_some_and(numeric)
+            || (labels.len() == 4 && labels.iter().all(numeric)))
 }
 
 /// Applies the launch allowlist to an environment map. `exempt` names (for
