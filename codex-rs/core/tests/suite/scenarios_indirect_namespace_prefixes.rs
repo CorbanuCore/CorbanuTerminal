@@ -199,6 +199,24 @@ text({descriptions, echo: report.structuredContent.echo, agent: agents.agents[0]
                 }
             }
         }
+        // Corbanu's adapter describes the selected runtime even when the catalog's
+        // namespace prefixes are empty. Verify that change, then compare every other field.
+        let model = if index == 0 {
+            "gpt-5.5"
+        } else {
+            "prefixes-cleared"
+        };
+        for tool in &mut tools {
+            if tool["name"] == "spawn_agent_plaintext" {
+                let description = tool["description"].as_str().expect("adapter description");
+                let runtime = format!("Current inherited runtime: `openai` / `{model}`;");
+                assert_eq!(description.matches(&runtime).count(), 1);
+                tool["description"] = json!(description.replace(
+                    &runtime,
+                    "Current inherited runtime: `openai` / `<SELECTED_MODEL>`;"
+                ));
+            }
+        }
         tools
     });
     assert_eq!(direct_specs[0], direct_specs[1]);

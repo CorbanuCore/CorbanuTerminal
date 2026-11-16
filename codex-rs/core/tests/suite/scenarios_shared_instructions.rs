@@ -29,7 +29,10 @@ const UPDATED: &str = "Never send email.";
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn running_descendants_refresh_only_shared_thread_instructions(shared: bool) -> Result<()> {
     let server = start_mock_server().await;
-    let test = test_codex().build_with_auto_env(&server).await?;
+    let test = test_codex()
+        .with_config(|config| config.model_catalog = Some(upstream_model_catalog()))
+        .build_with_auto_env(&server)
+        .await?;
     let provider = RecordingThreadInstructionsProvider::with_text(INITIAL);
     let provider = Arc::new(if shared { provider.shared() } else { provider });
     let root = test

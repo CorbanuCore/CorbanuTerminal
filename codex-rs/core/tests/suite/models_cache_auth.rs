@@ -263,13 +263,17 @@ async fn auth_and_provider_switches_do_not_reuse_chatgpt_catalog() -> Result<()>
         .build_with_auto_env(&server)
         .await?;
     assert!(home.path().join("models_cache.json").exists());
+    // Discovery supplements the bundled catalog; account changes must discard only
+    // the previous account's remote entries and their default billing tier.
+    let mut expected_models = bundled_models_response()?.models;
+    expected_models.push(model.clone());
     assert_eq!(
         chatgpt
             .thread_manager
             .get_models_manager()
             .get_remote_models()
             .await,
-        vec![model.clone()]
+        expected_models
     );
     login_with_api_key(
         home.path(),
@@ -372,13 +376,15 @@ async fn auth_and_provider_switches_do_not_reuse_chatgpt_catalog() -> Result<()>
         })
         .build_with_auto_env(&other_server)
         .await?;
+    let mut expected_models = bundled_models_response()?.models;
+    expected_models.push(model);
     assert_eq!(
         other
             .thread_manager
             .get_models_manager()
             .get_remote_models()
             .await,
-        vec![model]
+        expected_models
     );
     assert_eq!(other_models.requests().len(), 1);
     Ok(())

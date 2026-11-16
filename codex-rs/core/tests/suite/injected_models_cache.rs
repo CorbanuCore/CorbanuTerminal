@@ -396,10 +396,13 @@ async fn account_switch_during_cache_store_preserves_new_catalog_for_next_turn()
             codex_core::test_support::default_http_client_factory(),
         )
         .await;
-    assert_eq!(manager.get_remote_models().await, vec![new_model.clone()]);
+    // Corbanu retains its bundled entries beside the current account's discovery.
+    let mut expected_models = codex_models_manager::bundled_models_response()?.models;
+    expected_models.push(new_model);
+    assert_eq!(manager.get_remote_models().await, expected_models);
     release_store.send(()).unwrap();
     timeout(Duration::from_secs(10), old_refresh).await??;
-    assert_eq!(manager.get_remote_models().await, vec![new_model]);
+    assert_eq!(manager.get_remote_models().await, expected_models);
     for (mock, account) in [(old_request, "account_id"), (new_request, "second-account")] {
         let requests = mock.requests();
         assert_eq!(requests.len(), 1);

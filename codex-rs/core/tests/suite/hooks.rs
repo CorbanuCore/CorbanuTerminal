@@ -6287,7 +6287,16 @@ async fn model_request_post_hook_orders_tool_dispatch(
             fs::write(home.join("hooks.json"), json!({"hooks": hooks}).to_string())
                 .expect("write hook configuration");
         })
-        .with_config(trust_discovered_hooks)
+        .with_config(move |config| {
+            trust_discovered_hooks(config);
+            if interrupt {
+                // D647: exercise cancellation of an available edit tool.
+                config
+                    .permissions
+                    .set_permission_profile(restrictive_workspace_write_profile())
+                    .expect("writable patch fixture");
+            }
+        })
         .build_with_streaming_server(&server)
         .await?;
     test.codex
