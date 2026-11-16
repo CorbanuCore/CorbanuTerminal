@@ -256,11 +256,17 @@ async fn steps_capture_permission_grants_and_preserve_their_scope(
     );
     let codex_home = tempfile::TempDir::new()?;
     let server = responses::start_mock_server().await;
+    // D647: edit tools require a writable profile. Only an unrelated child is
+    // writable initially; the files below still require the requested cwd grant.
     MockResponsesConfig::new(&server.uri())
         .with_model("gpt-5.4")
         .with_approval_policy("on-request")
-        .with_sandbox_mode("read-only")
-        .with_root_config(r#"approvals_reviewer = "user""#)
+        .with_root_config("approvals_reviewer = \"user\"\ndefault_permissions = \"grant-fixture\"")
+        .with_extra_config(
+            "[permissions.grant-fixture.filesystem]\n\":root\" = \"read\"\n\
+             [permissions.grant-fixture.filesystem.\":project_roots\"]\n\
+             initial_write = \"write\"\n",
+        )
         .enable_feature(Feature::RequestPermissionsTool)
         .enable_feature(Feature::CodeModeOnly)
         .write(codex_home.path())?;
@@ -505,11 +511,16 @@ async fn background_cell_uses_permissions_requested_after_next_turn_starts(
     );
     let codex_home = tempfile::TempDir::new()?;
     let server = responses::start_mock_server().await;
+    // Offer edit tools without granting access to granted.txt before approval.
     MockResponsesConfig::new(&server.uri())
         .with_model("gpt-5.4")
         .with_approval_policy("on-request")
-        .with_sandbox_mode("read-only")
-        .with_root_config(r#"approvals_reviewer = "user""#)
+        .with_root_config("approvals_reviewer = \"user\"\ndefault_permissions = \"grant-fixture\"")
+        .with_extra_config(
+            "[permissions.grant-fixture.filesystem]\n\":root\" = \"read\"\n\
+             [permissions.grant-fixture.filesystem.\":project_roots\"]\n\
+             initial_write = \"write\"\n",
+        )
         .enable_feature(Feature::RequestPermissionsTool)
         .enable_feature(Feature::CodeModeOnly)
         .enable_feature(Feature::GuardianApproval)

@@ -30,11 +30,28 @@ async fn pin_action_updates_shared_section_state() -> Result<()> {
         ))
         .await?;
         assert!(app.agents_overview.pending_pin_change.is_some());
-        let completed = rx.recv().await.expect("pin request completes");
-        assert!(matches!(
-            &completed,
-            AppEvent::AgentsOverviewPinToggled { .. }
-        ));
+        // Overview refresh events may arrive before this request's completion.
+        let completed = tokio::time::timeout(std::time::Duration::from_secs(/*secs*/ 10), async {
+            loop {
+                let event = rx.recv().await.expect("pin request completes");
+                if matches!(&event, AppEvent::AgentsOverviewPinToggled { .. }) {
+                    return event;
+                }
+            }
+        })
+        .await?;
+        let AppEvent::AgentsOverviewPinToggled {
+            request_id,
+            thread_id: completed_thread,
+            pinned: completed_pinned,
+            result,
+        } = &completed
+        else {
+            unreachable!()
+        };
+        assert_eq!(Some(*request_id), app.agents_overview.pending_pin_change);
+        assert_eq!((*completed_thread, *completed_pinned), (thread_id, pinned));
+        assert!(result.is_ok(), "{result:?}");
         app.agents_overview
             .refresh_notifications
             .insert(thread_id, Vec::new());
