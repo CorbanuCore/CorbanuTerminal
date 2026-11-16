@@ -2144,9 +2144,9 @@ async fn check_provider_resume_retries(reopen_via: ProviderResumeRoute) -> Resul
         let home = app.config.codex_home.clone();
         let definition = "[model_providers.missing_provider]\nname = 'Saved provider'\nbase_url = 'http://127.0.0.1:12345/v1'\nwire_api = 'responses'\n";
         let config = if provider_configured {
-            format!("[tui]\nresume_cwd = 'current'\n{definition}")
+            format!("model_provider = 'openai'\n[tui]\nresume_cwd = 'current'\n{definition}")
         } else {
-            "[tui]\nresume_cwd = 'current'\n".to_string()
+            "model_provider = 'openai'\n[tui]\nresume_cwd = 'current'\n".to_string()
         };
         std::fs::write(home.join("config.toml"), config)?;
         crate::legacy_core::config::set_project_trust_level(

@@ -1280,6 +1280,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn cloud_runtime_onboarding_rows_follow_their_own_feature_flags() {
+        use codex_features::Feature;
+        use codex_model_provider_info::AMAZON_BEDROCK_RUNTIME_PROVIDER_ID;
+        use codex_model_provider_info::GCP_PROVIDER_ID;
+
+        let home = tempfile::tempdir().unwrap();
+        let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await
+            .unwrap();
+        for (bedrock, gcp) in [(false, false), (true, false), (false, true), (true, true)] {
+            config
+                .features
+                .set_enabled(Feature::BedrockSetupWizard, bedrock)
+                .unwrap();
+            config
+                .features
+                .set_enabled(Feature::GcpSetupWizard, gcp)
+                .unwrap();
+            let host = ProviderStatusHost::from_config(
+                &config,
+                crate::provider_status_host::ProviderAccountMetadata::default(),
+            );
+            let visible = catalog_sign_in_options(&host, &provider_api_key_options(&host));
+            for (provider, enabled) in [
+                (AMAZON_BEDROCK_RUNTIME_PROVIDER_ID, bedrock),
+                (GCP_PROVIDER_ID, gcp),
+            ] {
+                let index = host
+                    .catalog()
+                    .entries()
+                    .iter()
+                    .position(|entry| entry.id.as_str() == provider)
+                    .expect("cloud runtime remains in the provider catalog");
+                assert_eq!(
+                    visible.contains(&SignInOption::ProviderRuntime(index)),
+                    enabled,
+                    "{provider}: bedrock={bedrock}, gcp={gcp}",
+                );
+            }
+            assert!(visible.contains(&SignInOption::DeviceCode));
+        }
+    }
+
+    #[tokio::test]
     async fn catalog_surface_keeps_openai_alternatives_corbanu_deferred_and_custom_typed() {
         let home = tempfile::tempdir().unwrap();
         let mut config = crate::legacy_core::config::ConfigBuilder::default()
