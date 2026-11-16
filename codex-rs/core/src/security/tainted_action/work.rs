@@ -215,6 +215,7 @@ mod tests {
         ("option_globs.rs", include_str!("option_globs.rs")),
         ("code_tables.rs", include_str!("code_tables.rs")),
         ("code_variables.rs", include_str!("code_variables.rs")),
+        ("expansion_words.rs", include_str!("expansion_words.rs")),
         ("outbound.rs", include_str!("outbound.rs")),
         ("rerun.rs", include_str!("rerun.rs")),
         ("outputs.rs", include_str!("outputs.rs")),

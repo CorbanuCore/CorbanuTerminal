@@ -430,7 +430,8 @@ impl Classifier {
             if level == 0
                 && (self.not_shell == 0 || self.rebuilt > 0)
                 && (writes_zsh_program(&command.words, command_at.as_ref())
-                    || code_writes_zsh_program(&texts, command_at.as_ref()))
+                    || code_writes_zsh_program(&texts, command_at.as_ref())
+                    || super::expansion_words::writes_program(command, &texts))
             {
                 note_git(found, ProtectedActionKind::Persistence);
             }
@@ -1138,6 +1139,12 @@ impl Classifier {
         found: &mut Found,
     ) {
         self.judge_git_words(texts, words, loops, found);
+        // #1661: quoted anchored replacements can also create options.
+        // Keep the original reading above even when this adds a finding.
+        if let Some(made) = super::expansion_words::git_options(words) {
+            let made_texts: Vec<String> = made.iter().map(|word| word.text.clone()).collect();
+            self.judge_git_words(&made_texts, &made, loops, found);
+        }
         // #1636: and on the words as the shell makes them. This reading cuts
         // the command where the shell does, so an option a brace group or an
         // empty expansion makes is seen even where the word lexer cuts the
@@ -2228,7 +2235,7 @@ fn option_readings(text: &str) -> Vec<String> {
 /// #1636: the length of the parameter expansion or substitution output
 /// `text` starts with, if any, and the word it may be instead of the value
 /// (`${N:-word}`).
-fn leading_expansion(text: &str) -> Option<(usize, Option<String>)> {
+pub(super) fn leading_expansion(text: &str) -> Option<(usize, Option<String>)> {
     if text.starts_with(UNSEEN_OUTPUT) {
         return Some((UNSEEN_OUTPUT.len(), None));
     }
@@ -2456,6 +2463,7 @@ fn writes_in(line: &str) -> bool {
             work::step();
             outputs::zsh_program_path(&word.text)
         }) || writes_zsh_program(&command.words, indirect::command_word(&texts).as_ref())
+            || super::expansion_words::writes_program(command, &texts)
     })
 }
 
