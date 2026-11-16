@@ -1,5 +1,6 @@
 ---
 source: core/tests/suite/scenarios_incremental_tools_resume.rs
+assertion_line: 135
 expression: "context_snapshot::format_request_history_snapshot(\"A resumed legacy window retains its generated prefix; rebuilding the next window emits no incremental notice. A later update appends one developer notice, changed definitions, then the removal notice. Unchanged turns and another restart preserve that pair without duplication.\",\n&requests,\n&ContextSnapshotOptions::default().rewrite_known_segments().include_request_settings(),)"
 ---
 Scenario: A resumed legacy window retains its generated prefix; rebuilding the next window emits no incremental notice. A later update appends one developer notice, changed definitions, then the removal notice. Unchanged turns and another restart preserve that pair without duplication.
@@ -16,14 +17,16 @@ Settings:
   text: {"verbosity":"low"}
   tool_choice: "auto"
 -- request 1 (turn) --
-00:additional_tools/developer (2; hash=b07492b5514a41d0):
-        - namespace/functions; hash=cc6e8cf0e5405f3a
+00:additional_tools/developer (2; hash=f55236d21a7f5fc0):
+        - namespace/functions; hash=6a0e9255cbefbcfa
           - custom/exec
           - function/wait
           - function/exec_command
           - function/write_stdin
           - function/request_user_input
           - custom/apply_patch
+          - function/structured_edit
+          - function/structured_write
           - function/view_image
         - tool_search: # Tool discovery  Searches over deferred tool metadata with BM25 and exposes matching tools for t...; args=[limit, query]; hash=b573ed69c0b0e6c7
 01:message/developer:
@@ -49,14 +52,16 @@ Settings:
 ## Window 2 (after request 3: input diverged at item 02)
 Settings: same as window 1
 -- request 4 (turn) --
-00:additional_tools/developer (2; hash=b07492b5514a41d0):
-        - namespace/functions; hash=cc6e8cf0e5405f3a
+00:additional_tools/developer (2; hash=f55236d21a7f5fc0):
+        - namespace/functions; hash=6a0e9255cbefbcfa
           - custom/exec
           - function/wait
           - function/exec_command
           - function/write_stdin
           - function/request_user_input
           - custom/apply_patch
+          - function/structured_edit
+          - function/structured_write
           - function/view_image
         - tool_search: # Tool discovery  Searches over deferred tool metadata with BM25 and exposes matching tools for t...; args=[limit, query]; hash=b573ed69c0b0e6c7
 01:message/developer:
