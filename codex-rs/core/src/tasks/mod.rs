@@ -756,8 +756,15 @@ impl Session {
         turn_context: Arc<TurnContext>,
         task_result: SessionTaskResult,
     ) {
+        let turn_refused = turn_context
+            .pre_turn_refused
+            .load(std::sync::atomic::Ordering::Acquire);
         let (last_agent_message, abort_reason, completed_naturally) = match task_result {
-            Ok(last_agent_message) => (last_agent_message, None, true),
+            Ok(last_agent_message) => (
+                last_agent_message,
+                None,
+                turn_refused || turn_context.terminal_error.lock().await.is_none(),
+            ),
             Err(err) if matches!(err.details(), CodexErrorDetails::TurnAborted) => {
                 (None, Some(TurnAbortReason::Interrupted), false)
             }
@@ -820,7 +827,13 @@ impl Session {
         let mut follow_up_input = Vec::new();
         if !pending_input.is_empty() {
             for (pending_input_item, final_output_json_schema) in pending_input {
-                if completed_naturally && pending_input_seeds_follow_up(&pending_input_item) {
+                // Refused turns retain their existing recovery path. Other terminal errors
+                // save pending input, and unanswered mail waits for the next explicit turn.
+                if completed_naturally
+                    && (pending_input_seeds_follow_up(&pending_input_item)
+                        || (turn_refused
+                            && matches!(pending_input_item, TurnInput::InterAgentCommunication(_))))
+                {
                     follow_up_input.push((pending_input_item, final_output_json_schema));
                 } else {
                     let hook_outcome =
@@ -1369,8 +1382,7 @@ impl Session {
 fn pending_input_seeds_follow_up(input: &TurnInput) -> bool {
     match input {
         TurnInput::UserInput { content, .. } => !content.is_empty(),
-        TurnInput::InterAgentCommunication(_) => true,
-        TurnInput::ResponseItem(_) => false,
+        TurnInput::InterAgentCommunication(_) | TurnInput::ResponseItem(_) => false,
     }
 }
 

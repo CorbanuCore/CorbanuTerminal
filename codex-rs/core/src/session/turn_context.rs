@@ -338,6 +338,9 @@ pub struct TurnContext {
     /// Direct operator turns in a managed child pane must not report their result to the
     /// child's structural parent.
     pub(crate) parent_completion_expected: Arc<AtomicBool>,
+    /// A pre-turn refusal keeps its existing input-discard and mailbox recovery semantics.
+    /// Capture the decision when it happens; credentials and the kill switch can change later.
+    pub(crate) pre_turn_refused: Arc<AtomicBool>,
     pub(crate) terminal_error: Arc<Mutex<Option<ErrorEvent>>>,
     pub(crate) model_edit_protocol_state: Arc<ModelEditProtocolState>,
     pub(crate) explicit_tool_budget_state: Arc<ExplicitToolBudgetState>,
@@ -603,6 +606,7 @@ impl TurnContext {
             turn_skills: self.turn_skills.clone(),
             turn_timing_state: Arc::clone(&self.turn_timing_state),
             parent_completion_expected: Arc::clone(&self.parent_completion_expected),
+            pre_turn_refused: Arc::clone(&self.pre_turn_refused),
             terminal_error: Arc::clone(&self.terminal_error),
             model_edit_protocol_state: Arc::clone(&self.model_edit_protocol_state),
             explicit_tool_budget_state: Arc::clone(&self.explicit_tool_budget_state),
@@ -961,6 +965,7 @@ impl Session {
             turn_skills: TurnSkillsContext::new(skills_snapshot),
             turn_timing_state: Arc::new(TurnTimingState::default()),
             parent_completion_expected: Arc::new(AtomicBool::new(false)),
+            pre_turn_refused: Arc::new(AtomicBool::new(false)),
             terminal_error: Arc::new(Mutex::new(None)),
             model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
             explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),

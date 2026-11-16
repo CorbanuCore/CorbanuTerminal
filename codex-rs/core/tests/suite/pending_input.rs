@@ -1,3 +1,6 @@
+#[path = "pending_input_terminal_error.rs"]
+mod terminal_error;
+
 use core_test_support::test_codex::local_selections;
 use std::sync::Arc;
 

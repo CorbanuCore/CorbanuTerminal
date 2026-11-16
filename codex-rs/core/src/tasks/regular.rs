@@ -86,12 +86,14 @@ impl SessionTask for RegularTask {
             )
             .instrument(run_turn_span.clone())
             .await?;
+            // A terminal error leaves pending input for on_task_finished to save (#2443).
             // Issue #445: a refused turn takes no pending input; looping here
             // would refuse forever. Agent messages stay queued for a later wake
             // after the kill switch is off or the named account is signed in
             // (#1331). `on_task_finished` resubmits pending user input as follow-up
             // turns; while refusal persists, each is refused once and dropped.
-            if !sess.input_queue.has_pending_input(&sess.active_turn).await
+            if ctx.terminal_error.lock().await.is_some()
+                || !sess.input_queue.has_pending_input(&sess.active_turn).await
                 || turn_refusal(&sess, &ctx).await.is_some()
             {
                 return Ok(last_agent_message);
