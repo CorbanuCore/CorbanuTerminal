@@ -1,4 +1,9 @@
 //! Lists the active managed login and switches its workspace through the account-session API.
+//!
+//! D649 (#2381, D562): both act on the default login (its token goes to the
+//! backend), so they are refused with the reason unless the session runs on
+//! the default login: never while a session runs on a named account, its
+//! account is not known yet, or sessions on different accounts are open.
 
 use super::*;
 use codex_app_server_protocol::AccountSession;
@@ -10,7 +15,32 @@ use codex_app_server_protocol::AccountSessionsSwitchParams;
 use codex_app_server_protocol::AccountSessionsSwitchResponse;
 
 impl AccountRequestProcessor {
+    /// Refuses `action` unless the session runs on the default login. Checked
+    /// on entry and again right before each request that sends the default
+    /// login (or refreshes it), as the session may move to a named account
+    /// meanwhile.
+    fn require_default_login_session(&self, action: &str) -> Result<(), JSONRPCErrorError> {
+        if self.auth_manager.session_uses_default_login() {
+            return Ok(());
+        }
+        let reason = self
+            .auth_manager
+            .session_account_conflict()
+            .unwrap_or_else(|| "the session runs on a named account".to_string());
+        Err(invalid_request(format!(
+            "{action} is unavailable: it would use the default login, and {reason}"
+        )))
+    }
+
     pub(crate) async fn list_account_sessions(
+        &self,
+        params: AccountSessionsListParams,
+    ) -> Result<AccountSessionsResponse, JSONRPCErrorError> {
+        self.require_default_login_session("Listing account sessions")?;
+        self.account_sessions(params).await
+    }
+
+    async fn account_sessions(
         &self,
         params: AccountSessionsListParams,
     ) -> Result<AccountSessionsResponse, JSONRPCErrorError> {
@@ -96,6 +126,7 @@ impl AccountRequestProcessor {
         &self,
         auth: &CodexAuth,
     ) -> Result<codex_backend_client::AccountsCheckResponse, JSONRPCErrorError> {
+        self.require_default_login_session("Reading workspace memberships")?;
         let client = BackendClient::from_auth(
             self.config.chatgpt_base_url.clone(),
             auth,
@@ -116,6 +147,7 @@ impl AccountRequestProcessor {
         threads: &crate::request_processors::ThreadRequestProcessor,
         admission: &crate::turn_admission::TurnAdmission,
     ) -> Result<AccountSessionsSwitchResponse, JSONRPCErrorError> {
+        self.require_default_login_session("Switching workspaces")?;
         if self.active_login.lock().await.is_some() {
             return Err(invalid_request(
                 "Finish or cancel the current login before switching workspaces",
@@ -182,11 +214,13 @@ impl AccountRequestProcessor {
             opts.forced_chatgpt_workspace_id = Some(vec![params.account_id]);
             let pause = admission.pause().await?;
             threads.unload_for_workspace_switch().await?;
+            self.require_default_login_session("Switching workspaces")?;
             let (login_id, auth_url) = self.start_browser_login(opts, Some(pause)).await?;
             return Ok(AccountSessionsSwitchResponse::BrowserLogin { login_id, auth_url });
         }
         let _pause = admission.pause().await?;
         threads.unload_for_workspace_switch().await?;
+        self.require_default_login_session("Switching workspaces")?;
         let switched = self
             .auth_manager
             .switch_workspace(&params.session_id, &params.account_id)
@@ -236,8 +270,9 @@ impl AccountRequestProcessor {
         &self,
         params: &AccountSessionsSwitchParams,
     ) -> Result<AccountSessionsSwitchResponse, JSONRPCErrorError> {
+        // Cached auth only (no backend request); the switch itself was checked.
         let response = self
-            .list_account_sessions(AccountSessionsListParams {
+            .account_sessions(AccountSessionsListParams {
                 refresh_workspace_metadata: false,
             })
             .await?;

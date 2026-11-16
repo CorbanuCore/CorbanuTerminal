@@ -3063,11 +3063,13 @@ impl App {
                 if summary_view.is_some() {
                     view.select_summary(summary_view);
                 }
+                // D562 (#2381): the session's configuration, so Analytics
+                // uses the account this session runs on.
                 view.open(
                     app_server.request_handle(),
                     tui.frame_requester(),
                     self.model_catalog.try_list_models()?,
-                    std::sync::Arc::new(self.config.clone()),
+                    std::sync::Arc::new(self.chat_widget.config_ref().clone()),
                 );
                 self.overlay = Some(Overlay::Analytics(view));
                 tui.frame_requester().schedule_frame();
