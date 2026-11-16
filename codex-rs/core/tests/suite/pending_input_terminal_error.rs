@@ -4,6 +4,7 @@ use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::CodexErrorInfo;
+use pretty_assertions::assert_eq;
 use test_case::test_case;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -184,10 +185,10 @@ async fn terminal_compaction_error_does_not_retry_pending_input(
                 return (communication.content == PENDING_MESSAGE)
                     .then_some(communication.content.as_str());
             }
-            let RolloutItem::ResponseItem(envelope) = item else {
+            let RolloutItem::ResponseItem(response_item) = item else {
                 return None;
             };
-            match &envelope.item {
+            match response_item {
                 ResponseItem::Message { role, content, .. } if role == "user" => {
                     content.iter().find_map(|item| match item {
                         ContentItem::InputText { text } if text == PENDING_MESSAGE => {
