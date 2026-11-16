@@ -4226,9 +4226,7 @@ impl AuthManager {
             auth_changed_for_refresh && !super::source::same_source(previous, new_auth.as_ref());
         let login_changed = auth_changed_for_refresh && !same_login(previous, new_auth.as_ref());
         if owner_changed {
-            self.auth_route_config
-                .application_network_policy()
-                .invalidate();
+            self.auth_route_config.owner_changed(new_auth.is_some());
         }
         self.clear_provider_api_key_cache();
         if auth_changed_for_refresh {

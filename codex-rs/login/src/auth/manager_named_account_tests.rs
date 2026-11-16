@@ -8,6 +8,80 @@ use pretty_assertions::assert_eq;
 use super::*;
 use crate::auth::named_chatgpt::login_named_account_with_api_key;
 
+#[tokio::test]
+async fn named_account_policy_is_independent_but_administrator_revocation_is_shared() {
+    use codex_http_client::DestinationPolicy;
+    use codex_http_client::NetworkPolicyController;
+    use codex_http_client::NetworkPolicyDenied;
+
+    let home = tempfile::tempdir().expect("home");
+    login_named_account_with_api_key(home.path(), &account("work"), "sk-canary-work")
+        .expect("sign-in");
+    login_named_account_with_api_key(home.path(), &account("personal"), "sk-canary-personal")
+        .expect("sign-in");
+    let controller = NetworkPolicyController::default();
+    let policy = controller.policy();
+    assert!(controller.publish(
+        policy.revision(),
+        DestinationPolicy::Restricted {
+            allowed_hosts: std::collections::BTreeSet::from(["example.com".to_string()]),
+        }
+    ));
+    let base = Arc::new(
+        AuthManager::new(
+            home.path().to_path_buf(),
+            /*enable_codex_api_key_env*/ false,
+            crate::AuthCredentialsStoreMode::File,
+            /*forced_chatgpt_workspace_id*/ None,
+            /*chatgpt_base_url*/ None,
+            crate::AuthKeyringBackendKind::default(),
+            crate::test_support::transport_default_auth_route_config()
+                .with_application_network_policy(policy.clone()),
+        )
+        .await,
+    );
+    let allowed = url::Url::parse("https://example.com/").unwrap();
+    let blocked = url::Url::parse("https://blocked.example/").unwrap();
+    let base_permit = policy.acquire(&allowed).unwrap();
+    let work = base.for_named_account_loaded(account("work")).await;
+    let personal = base.for_named_account_loaded(account("personal")).await;
+    assert!(Arc::ptr_eq(&work, &base.for_named_account(account("work"))));
+    let captured = work.http_client_factory();
+    let work_permit = captured.network_policy().acquire(&allowed).unwrap();
+    let personal_permit = personal
+        .http_client_factory()
+        .network_policy()
+        .acquire(&allowed)
+        .unwrap();
+    assert_eq!(base_permit.check(), Ok(()));
+    assert!(matches!(
+        captured.network_policy().acquire(&blocked),
+        Err(NetworkPolicyDenied::Destination)
+    ));
+    work.set_cached_auth(Some(CodexAuth::from_api_key("sk-canary-replaced")));
+    assert_eq!(work_permit.check(), Err(NetworkPolicyDenied::Revoked));
+    assert_eq!(personal_permit.check(), Ok(()));
+    assert_eq!(base_permit.check(), Ok(()));
+    assert!(matches!(
+        captured.network_policy().acquire(&allowed),
+        Err(NetworkPolicyDenied::Revoked)
+    ));
+    let fresh = work
+        .http_client_factory()
+        .network_policy()
+        .acquire(&allowed)
+        .unwrap();
+    policy.invalidate();
+    assert_eq!(fresh.check(), Err(NetworkPolicyDenied::Revoked));
+    assert_eq!(personal_permit.check(), Err(NetworkPolicyDenied::Revoked));
+    assert!(matches!(
+        work.http_client_factory()
+            .network_policy()
+            .acquire(&allowed),
+        Err(NetworkPolicyDenied::Unavailable)
+    ));
+}
+
 fn account(name: &str) -> NamedChatgptAccount {
     NamedChatgptAccount {
         provider_id: "openai".to_string(),
