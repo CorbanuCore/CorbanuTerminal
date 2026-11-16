@@ -827,7 +827,7 @@ impl BottomPane {
     }
 
     fn push_view(&mut self, view: Box<dyn BottomPaneView>) {
-        self.composer.cancel_pending_burst_submission();
+        self.cancel_pending_burst_submission();
         self.key_chord_reset_requested = true;
         self.view_stack.push(view);
         self.schedule_active_view_frame();
@@ -2711,6 +2711,9 @@ impl BottomPane {
 
     pub(crate) fn cancel_pending_burst_submission(&mut self) {
         self.composer.cancel_pending_burst_submission();
+        if let Some(questions) = &mut self.questions {
+            questions.cancel_pending_burst_enter();
+        }
     }
 
     pub(crate) fn take_burst_submission(&mut self, now: Instant) -> Option<InputResult> {

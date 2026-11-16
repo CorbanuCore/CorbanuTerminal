@@ -657,11 +657,9 @@ fn oversized_question_ids_keep_questions_answerable_without_echoing_the_id() {
     assert_eq!(reply, "> Question\n\nAnswer");
 }
 
-/// sync-main7 review r2: the questions composer does not hold a burst Enter
-/// (its answers are dispatched only from this view's key path), so a long
-/// keystroke burst ending in Enter answers at once and nothing stays held.
-#[test]
-fn burst_enter_answers_immediately_and_holds_nothing() {
+/// #2433: retain the answer until the held Enter returns through the key path.
+#[tokio::test(start_paused = true)]
+async fn burst_enter_answers_through_key_path_and_holds_nothing_afterward() {
     let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
     let mut editor = AsyncQuestions::new(
         AppEventSender::new(tx),
@@ -676,6 +674,13 @@ fn burst_enter_answers_immediately_and_holds_nothing() {
     for ch in "0123456789abcdef".chars() {
         editor.handle_key_event(KeyEvent::from(KeyCode::Char(ch)));
     }
+    editor.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    assert!(editor.submission.is_none());
+    let token = editor.pending_burst_enter.unwrap();
+    tokio::time::advance(Duration::from_millis(100)).await;
+    assert!(!editor.flush_paste_burst_if_due());
+    assert!(editor.submission.is_none());
+    assert!(editor.prepare_burst_enter_key(token));
     editor.handle_key_event(KeyEvent::from(KeyCode::Enter));
     assert!(matches!(
         &editor.submission,

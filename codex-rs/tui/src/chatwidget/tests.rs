@@ -325,6 +325,7 @@ pub(super) use helpers::*;
 
 #[path = "tests/questions_tests.rs"]
 mod questions_tests;
+pub(crate) use questions_tests::burst_enter_tests::assert_app_input_handoff_cancels_burst;
 
 #[path = "tests/question_turn_end_tests.rs"]
 mod question_turn_end_tests;

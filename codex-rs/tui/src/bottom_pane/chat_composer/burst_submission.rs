@@ -38,6 +38,20 @@ impl ChatComposer {
         Some(result)
     }
 
+    pub(crate) fn has_pending_burst_enter(&self) -> bool {
+        self.draft.paste_burst.has_pending_enter()
+    }
+
+    /// Materialize a quiet Enter's draft without dispatching it. Inline question
+    /// editors replay the key through their normal delivery and input guards.
+    pub(crate) fn prepare_burst_enter_key(&mut self, now: Instant) -> bool {
+        if !self.draft.input_enabled || !self.draft.paste_burst.take_due_enter(now) {
+            return false;
+        }
+        self.flush_pending_input();
+        true
+    }
+
     pub(crate) fn cancel_pending_burst_submission(&mut self) {
         if self.draft.paste_burst.cancel_pending_enter()
             && let Some(pasted) = self.draft.paste_burst.flush_before_modified_input()
