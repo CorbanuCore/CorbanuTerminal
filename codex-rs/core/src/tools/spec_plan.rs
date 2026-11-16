@@ -146,6 +146,9 @@ struct CoreToolPlanContext<'a> {
     wait_for_environment_tool_config: Option<&'a Arc<crate::WaitForEnvironmentToolConfig>>,
     default_agent_type_description: &'a str,
     wait_agent_timeouts: WaitAgentTimeoutOptions,
+    /// Effort-only changes reach the model as configuration updates (upstream's request-effort
+    /// baseline), so tool descriptions must not name the turn's effort.
+    reasoning_effort_updates: bool,
 }
 
 #[instrument(level = "trace", skip_all)]
@@ -177,6 +180,10 @@ pub(crate) fn build_tool_router(
         wait_for_environment_tool_config: wait_for_environment_tool_config.as_ref(),
         default_agent_type_description: &default_agent_type_description,
         wait_agent_timeouts: wait_agent_timeout_options(turn_context),
+        reasoning_effort_updates: session
+            .services
+            .model_client()
+            .reasoning_effort_override_enabled(model_info),
     };
     let mut registry = ToolRegistry::with_tool_policy(Arc::clone(&session.tool_policy));
     add_core_tool_sources(&context, &mut registry);
@@ -344,6 +351,7 @@ pub(crate) fn build_core_tool_registry(
         wait_for_environment_tool_config,
         default_agent_type_description: &default_agent_type_description,
         wait_agent_timeouts: wait_agent_timeout_options(turn_context),
+        reasoning_effort_updates: false,
     };
     let mut registry = ToolRegistry::default();
     add_core_tool_sources(&context, &mut registry);
@@ -1739,7 +1747,11 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                     turn_context,
                     /*supports_cross_provider_overrides*/ true,
                 ),
-                inherited_runtime: spawn_agent_inherited_runtime(turn_context, context.model_info),
+                inherited_runtime: spawn_agent_inherited_runtime(
+                    turn_context,
+                    context.model_info,
+                    context.reasoning_effort_updates,
+                ),
                 agent_type_description,
                 // PF Terminal ships hierarchy roles (Nazgul, Troll, and Orc). They are
                 // real runtime profiles, not optional user configuration, so the native
@@ -1861,7 +1873,11 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                     turn_context,
                     /*supports_cross_provider_overrides*/ false,
                 ),
-                inherited_runtime: spawn_agent_inherited_runtime(turn_context, context.model_info),
+                inherited_runtime: spawn_agent_inherited_runtime(
+                    turn_context,
+                    context.model_info,
+                    context.reasoning_effort_updates,
+                ),
                 agent_type_description,
                 // Built-in PF hierarchy roles remain selectable even when the operator has not
                 // created any custom role files.
@@ -2047,6 +2063,7 @@ fn spawn_agent_available_models(
 fn spawn_agent_inherited_runtime(
     turn_context: &TurnContext,
     model_info: &ModelInfo,
+    reasoning_effort_updates: bool,
 ) -> Option<SpawnAgentRuntime> {
     let model_provider = turn_context.config.model_provider_id.clone();
     turn_context
@@ -2064,6 +2081,9 @@ fn spawn_agent_inherited_runtime(
                 .filter(|_| turn_context.model_info().slug == model_info.slug)
                 .cloned()
                 .or_else(|| model_info.default_reasoning_level.clone()),
+            // #1532 (`thread_sample`): with effort updates the description must not change
+            // when only the turn's effort does (the child inherits that effort either way).
+            effort_follows_turn: reasoning_effort_updates,
             service_tier: turn_context.config.service_tier.clone(),
         })
 }

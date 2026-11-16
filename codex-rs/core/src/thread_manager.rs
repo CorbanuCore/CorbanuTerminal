@@ -82,6 +82,7 @@ use codex_models_manager::manager::SharedModelsManager;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::error::CodexErr;
+use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::mcp::ClientMcpExtensions;
 use codex_protocol::mcp::OPENAI_STANDARD_FORM_INPUT_EXTENSION_ID;
@@ -1395,12 +1396,25 @@ impl ThreadManager {
         if let Some(control) = request.agent_control.control().local()
             && let Some(session_source) = request.options.session_source.as_ref()
         {
-            control
+            let prepared = control
                 .prepare_durable_thread_spawn_parent(
                     session_source,
                     request.options.config.ephemeral,
                 )
-                .await?;
+                .await;
+            match prepared {
+                // #1532: a resumed child was committed below its parent when it was spawned,
+                // so that parent's rollout already exists; resuming the child alone (a cold
+                // transcript, the agents overview) does not need the parent loaded.
+                Err(err)
+                    if matches!(request.options.initial_history, InitialHistory::Resumed(_))
+                        && matches!(
+                            err.details(),
+                            CodexErrorDetails::ThreadNotFound(missing)
+                                if session_source.parent_thread_id() == Some(*missing)
+                        ) => {}
+                prepared => prepared?,
+            }
         }
         // D530 (a): a child pane on a controller without the local backend is refused before
         // it is spawned.

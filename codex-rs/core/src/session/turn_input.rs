@@ -460,6 +460,12 @@ async fn start_or_steer(
             let mut task_input =
                 merge_additional_context_input(session, &turn_context, additional_context).await;
             if has_explicit_input {
+                // Corbanu (main's rule): ready agent mail joins the admitted turn before its
+                // first model request, ahead of the new input. Left queued, it would reach the
+                // model only in a continuation after the input was sampled (#445/#507: mail
+                // held while the kill switch was on goes with the next turn someone starts).
+                // `start_task` notes mail carried in the task input as taken.
+                task_input.extend(Box::pin(ready_mail_for_new_turn(session, &turn_context)).await);
                 task_input.push(
                     pending_turn_input(
                         session,
@@ -481,6 +487,24 @@ async fn start_or_steer(
         }
         Err(reason) => Ok(TurnInputSubmission::NotSubmitted { reason }),
     }
+}
+
+/// Ready agent mail that joins a person's newly admitted turn (main's
+/// `spawn_regular_turn_for_no_active_input`). A turn that will be refused (kill switch #445,
+/// removed or signed-out account #1331) records no input, so the mail then stays queued.
+///
+/// Kept out of `start_or_steer`, with its own awaits boxed, so their temporaries do not
+/// enlarge the submission path's stack frame (a debug-build stack overflow otherwise).
+async fn ready_mail_for_new_turn(session: &Session, turn_context: &TurnContext) -> Vec<TurnInput> {
+    if Box::pin(crate::session::turn::turn_refusal(session, turn_context))
+        .await
+        .is_some()
+    {
+        return Vec::new();
+    }
+    Box::pin(session.input_queue.drain_ready_mailbox_input_items())
+        .await
+        .0
 }
 
 #[expect(
@@ -507,6 +531,13 @@ async fn start_if_idle(
         responsesapi_client_metadata,
         ..
     } = request;
+    // #507: while the kill switch is on, idle work starts no turn and records nothing; it
+    // waits for a turn someone starts after the switch is turned off.
+    if session.services.model_client().kill_switch_on() {
+        return Ok(TurnInputSubmission::NotSubmitted {
+            reason: NotSubmittedReason::KillSwitch,
+        });
+    }
     if session.input_queue.has_trigger_turn_mailbox_items().await {
         return Ok(TurnInputSubmission::NotSubmitted {
             reason: NotSubmittedReason::PendingTriggerTurn,

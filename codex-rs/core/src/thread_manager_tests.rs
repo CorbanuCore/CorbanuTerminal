@@ -684,6 +684,111 @@ async fn thread_id_generator_does_not_replace_resumed_thread_id() {
         .expect("shut down resumed thread");
 }
 
+/// #1532: a spawned child resumes on its own (a cold transcript or the agents overview) while
+/// its parent stays unloaded. The parent was made durable when the child was spawned, so the
+/// resume does not need it live.
+#[tokio::test]
+async fn resumed_child_does_not_need_its_parent_loaded() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    let manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    );
+    let root = manager
+        .start_thread(StartThreadOptions {
+            history_mode: Some(ThreadHistoryMode::Legacy),
+            ..StartThreadOptions::new(config.clone())
+        })
+        .await
+        .expect("start root thread");
+    let child = root
+        .thread
+        .session
+        .services
+        .local_agent_runtime
+        .control(root.thread.session.session_id())
+        .spawn_agent_with_metadata(
+            config.clone(),
+            vec![UserInput::Text {
+                text: "child task".to_string(),
+                text_elements: Vec::new(),
+            }],
+            SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                agent_class: None,
+                parent_thread_id: root.thread_id,
+                depth: 1,
+                agent_path: None,
+                agent_nickname: None,
+                agent_role: None,
+            }),
+            SpawnAgentOptions {
+                parent_thread_id: Some(root.thread_id),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("spawn child agent");
+    let child_thread = manager
+        .get_thread(child.thread_id)
+        .await
+        .expect("child is loaded");
+    child_thread.ensure_rollout_materialized().await;
+    child_thread.flush_rollout().await.expect("flush child");
+    let child_rollout = child_thread
+        .rollout_path()
+        .expect("child rollout path should exist");
+    drop(child_thread);
+    let report = manager
+        .shutdown_all_threads_bounded(Duration::from_secs(10))
+        .await;
+    assert_eq!(report.completed.len(), 2);
+
+    let resumed_manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    );
+    // As app-server's `thread/resume` does: start the stored child with resumed history.
+    let resumed = resumed_manager
+        .start_thread(StartThreadOptions {
+            initial_history: InitialHistory::Resumed(ResumedHistory {
+                history_revision: None,
+                conversation_id: child.thread_id,
+                history: Arc::new(Vec::new()),
+                rollout_path: Some(child_rollout),
+            }),
+            session_source: Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                agent_class: None,
+                parent_thread_id: root.thread_id,
+                depth: 1,
+                agent_path: None,
+                agent_nickname: None,
+                agent_role: None,
+            })),
+            ..StartThreadOptions::new(config)
+        })
+        .await
+        .expect("resume the child without its parent");
+
+    assert_eq!(resumed.thread_id, child.thread_id);
+    assert!(
+        resumed_manager.get_thread(root.thread_id).await.is_err(),
+        "the parent stays unloaded"
+    );
+    resumed
+        .thread
+        .shutdown_and_wait()
+        .await
+        .expect("shut down resumed child");
+}
+
 #[tokio::test]
 async fn child_session_inherits_client_mcp_extensions() {
     let temp_dir = tempdir().expect("tempdir");
