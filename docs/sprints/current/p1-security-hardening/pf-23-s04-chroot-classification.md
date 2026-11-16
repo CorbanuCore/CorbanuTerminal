@@ -72,7 +72,7 @@ finder/exec launcher coverage, authentication recovery and other contributor fea
 - [ ] Format and run final-tree focused chroot and full classifier tests.
 - [ ] Verify no verdict becomes quieter on the recorded comparison corpus.
 - [ ] Independent exact-head security review and all CI complete green.
-- [ ] Independent review of the functional record (#2171); owner decisions on case 5 (#2165, fixed by #2396; #2455 for `unshare`) and case 11's Windows leg.
+- [ ] Independent review of the functional record (#2171); owner decisions on case 5 (#2165, addressed by #2396: on Linux the chroot/sudo forms honour direct rules; #2455 for `unshare`) and case 11's Windows leg.
 - [ ] Record integrated commit, user-visible limits and actual evidence; archive only when all gates pass.
 
 ## Verification

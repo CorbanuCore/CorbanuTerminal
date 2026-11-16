@@ -62,7 +62,8 @@ Failed attempts, kept rather than hidden:
    listed "Approvals off" as an available setting and four executors read it as required; with it the product refuses
    where it would ask, so approve / refuse / cancel legs could not be exercised. Their reports are in
    [reports/attempt1](reports/attempt1), prompts in [packet/prompts/attempt1](packet/prompts/attempt1). At 21:45Z
-   the Z.AI account ran out of balance (HTTP 429, code 1113) and every group stopped; L1 had finished. The run
+   the Z.AI account ran out of balance (HTTP 429, code 1113) and every group still running stopped; L1 and the void
+   attempt-1 L3 had finished. The VM was stopped while waiting and restarted (with a fresh gate) before the run
    resumed at 22:25Z after the account was recharged.
 3. ~23:03Z: the VM wrapper stopped the guest because host free memory fell to 19% (worker floor 20%); L4 and L5 had
    written their reports up to that point, which were collected after a restart, and L7/L8 ran the rest.
@@ -77,8 +78,9 @@ Failed attempts, kept rather than hidden:
 ## Limits
 
 - Linux aarch64 (Ubuntu 24.04) only. Windows: no guest; blocked.
-- Executors are a model: they mis-graded some results (L2 graded its cases "failed" because the TUI shows a shell
-  `cat` as "Read …"; L3 graded case 7 "failed" for a prompt the direct command also gets). The sprint record gives
-  the integrator's evidence review beside every executor verdict.
+- Executors are a model; the integrator overrode some verdicts, each labelled in the record: L2's "failed" (the TUI
+  shows a shell `cat` as "Read …", and an unstartable Aggressive effect leg is "not exercised"), L3's case 7
+  "failed" (the prompt the direct command also gets), L3's case 8 "inconclusive" (passed in part) and L5's case 10
+  "inconclusive" (both builds identical). The sprint record gives the evidence review beside every executor verdict.
 - Raw evidence (actions, screens, PTY logs, session records, mediator and relay logs) stays on the Mac under
   `.codex-work/func-d554-20261116/runs/`.
