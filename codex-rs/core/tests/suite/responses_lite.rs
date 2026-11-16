@@ -165,6 +165,7 @@ async fn base_instructions_use_input_items(responses_lite: bool) -> Result<()> {
                 .to_string()
                 .contains("model.base_instructions")
         );
+        assert!(!body["input"].to_string().contains("test instructions"));
     }
 
     let tools = if responses_lite {
