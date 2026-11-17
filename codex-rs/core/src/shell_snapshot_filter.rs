@@ -2,6 +2,12 @@
 //! export whose raw value carries a protected credential, whatever its name,
 //! and refuse a snapshot whose remaining text still contains one. Raw values
 //! come from the capture's value section and never reach the snapshot file.
+//!
+//! D685: with a credential broker, protected values also include every
+//! credential its hardened engine already brokers, so a copy such as
+//! `HIDDEN_HEADER="$GH_TOKEN"` is omitted even after startup unsets the
+//! source. The engine matches in place (isolated records by fingerprint); no
+//! raw value is retrieved, and a check it cannot complete refuses the snapshot.
 
 use std::ffi::OsString;
 
@@ -9,6 +15,7 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
 use codex_network_proxy::BROKERED_CREDENTIALS_ENV_KEY;
+use codex_network_proxy::NetworkProxy;
 use codex_secret_broker::output_gate;
 use codex_secret_broker::output_gate::OutputGate;
 use codex_secret_broker::output_gate::SecretClass;
@@ -19,17 +26,29 @@ use zeroize::Zeroizing;
 pub(super) struct SnapshotCredentialFilter<'g> {
     local: OutputGate,
     process: &'g OutputGate,
+    /// The session's credential broker, when snapshots are brokered (D685).
+    brokered: Option<&'g NetworkProxy>,
 }
 
 impl SnapshotCredentialFilter<'_> {
-    fn sensitive(&self, value: &str) -> bool {
-        self.local.contains_snapshot_secret(value) || self.process.contains_snapshot_secret(value)
+    fn sensitive(&self, value: &str) -> Result<bool> {
+        if self.local.contains_snapshot_secret(value)
+            || self.process.contains_snapshot_secret(value)
+        {
+            return Ok(true);
+        }
+        let Some(proxy) = self.brokered else {
+            return Ok(false);
+        };
+        proxy
+            .brokered_credential_occurs_in(value)
+            .context("Cannot check snapshot against brokered credentials")
     }
 
     /// Functions and aliases can embed the same values. Refuse the snapshot
     /// rather than writing a partial or syntactically altered shell program.
     pub(super) fn ensure_clean(&self, snapshot: &str) -> Result<()> {
-        if self.sensitive(snapshot) {
+        if self.sensitive(snapshot)? {
             bail!("Snapshot contains protected credential values");
         }
         Ok(())
@@ -41,13 +60,15 @@ impl SnapshotCredentialFilter<'_> {
 /// includes registered vault values; enabling secret_output_gate normally
 /// disables snapshots, but another session in the process may have armed it.
 /// Never arm or add startup values to the process gate: snapshot hygiene must
-/// not alter what commands receive or other sinks mask.
-pub(super) fn retain_safe_exports(
+/// not alter what commands receive or other sinks mask. `brokered` adds the
+/// credentials the session's broker already holds (D685).
+pub(super) fn retain_safe_exports<'g>(
     capture: &mut CapturedSnapshot<'_>,
     raw_len: usize,
     removed: &[String],
-) -> Result<SnapshotCredentialFilter<'static>> {
-    retain_with_gate(capture, raw_len, removed, output_gate::global())
+    brokered: Option<&'g NetworkProxy>,
+) -> Result<SnapshotCredentialFilter<'g>> {
+    retain_with_gate(capture, raw_len, removed, output_gate::global(), brokered)
 }
 
 fn retain_with_gate<'g>(
@@ -55,6 +76,7 @@ fn retain_with_gate<'g>(
     raw_len: usize,
     removed: &[String],
     process_gate: &'g OutputGate,
+    brokered: Option<&'g NetworkProxy>,
 ) -> Result<SnapshotCredentialFilter<'g>> {
     if raw_len > output_gate::MAX_SCAN_BYTES {
         bail!("Snapshot capture exceeds credential scan limit");
@@ -110,17 +132,33 @@ fn retain_with_gate<'g>(
     let filter = SnapshotCredentialFilter {
         local,
         process: process_gate,
+        brokered,
     };
+    let mut check_failure = None;
     capture.retain_exports_by_value(|name, declaration, value| {
         // The capture's own helper names, and bash's own script text, are
         // skipped by the value section, so they could only be checked by their
         // shell-quoted declaration: drop them (main drops __corbanu_snapshot_*).
-        !name.starts_with("__codex_snapshot_")
-            && !matches!(name, "BASH_EXECUTION_STRING" | "BASH_COMMAND")
-            && !is_secret_name(name)
-            && !value.is_some_and(|value| filter.sensitive(value))
-            && !filter.sensitive(declaration)
+        if name.starts_with("__codex_snapshot_")
+            || matches!(name, "BASH_EXECUTION_STRING" | "BASH_COMMAND")
+            || is_secret_name(name)
+        {
+            return false;
+        }
+        let sensitive = value
+            .map_or(Ok(false), |value| filter.sensitive(value))
+            .and_then(|sensitive| Ok(sensitive || filter.sensitive(declaration)?));
+        match sensitive {
+            Ok(sensitive) => !sensitive,
+            Err(error) => {
+                check_failure.get_or_insert(error);
+                false
+            }
+        }
     });
+    if let Some(error) = check_failure {
+        return Err(error);
+    }
     Ok(filter)
 }
 

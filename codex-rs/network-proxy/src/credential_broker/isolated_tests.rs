@@ -1054,6 +1054,26 @@ async fn pf_27_s02_a_spoofed_bootstrap_path_is_never_trusted() {
     );
 }
 
+/// D685: a value copied out of a brokered variable is recognized by its keyed
+/// fingerprint, while the raw value stays in the broker process.
+#[tokio::test(flavor = "multi_thread")]
+async fn d685_snapshot_scan_finds_a_brokered_credential_by_fingerprint() {
+    let upstream = start_upstream().await;
+    let broker = isolated_broker(launcher(&upstream, /*controller_pid_override*/ None));
+    let dummy = virtualized_dummy(&broker);
+    assert!(broker.current_isolated_client().is_some());
+    assert!(!broker.holds_raw_value(SYNTHETIC_TOKEN));
+
+    assert_eq!(
+        broker.known_credential_occurs_in(&format!(
+            "HIDDEN_HEADER=prefix\"{SYNTHETIC_TOKEN}\"suffix"
+        )),
+        Ok(true)
+    );
+    assert_eq!(broker.known_credential_occurs_in(&dummy), Ok(false));
+    assert!(!broker.holds_raw_value(SYNTHETIC_TOKEN));
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn pf_28_s02_broker_scrubs_its_credential_from_the_response() {
     let upstream = start_upstream().await;

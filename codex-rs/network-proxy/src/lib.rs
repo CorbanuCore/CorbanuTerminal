@@ -80,6 +80,7 @@ pub use credential_broker::IsolatedCredentialDispatcher;
 pub use credential_broker::IsolatedCredentialReceipt;
 pub use credential_broker::IsolatedCredentialRoute;
 pub use credential_broker::IsolatedCredentialUse;
+pub use credential_broker::KnownCredentialScanError;
 pub use credential_broker::ScopedCredentialCallbackError;
 pub use credential_broker::ScopedCredentialInjectionError;
 pub use credential_broker::ScopedCredentialResolver;

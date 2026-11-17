@@ -796,6 +796,13 @@ impl NetworkProxyState {
         self.credential_broker().hardened()
     }
 
+    pub(crate) fn known_credential_occurs_in(
+        &self,
+        text: &str,
+    ) -> Result<bool, crate::KnownCredentialScanError> {
+        self.credential_broker().known_credential_occurs_in(text)
+    }
+
     /// PF-28-S02: whether injected values are scrubbed from responses.
     pub(crate) fn credential_response_gate(&self) -> bool {
         self.credential_broker().response_gate_enabled()

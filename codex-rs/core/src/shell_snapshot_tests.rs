@@ -1477,14 +1477,11 @@ async fn snapshot_discovers_and_restores_inherited_credential_aliases() -> Resul
         path: inherited_path,
         credentials: inherited_credentials,
     };
-    let real_hidden_header = "prefix\"ghp_hidden_alias_secret\"suffix";
-    let real_header = "Bearer ghp_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh";
-    let real_stripe_header = "Bearer stripe_live_zyxwvutsrqponmlkjihgfedc";
+    // D640 retires upstream's alias rewriting: copies of a credential are not
+    // replaced by brokered placeholders, so managed-network children get none.
+    let policy = &inherited_credential_broker.shell_environment_policy;
     let mut brokered_env = HashMap::new();
-    let credential_context = snapshot_file.restore_credentials(
-        &mut brokered_env,
-        &inherited_credential_broker.shell_environment_policy,
-    );
+    let credential_context = snapshot_file.restore_credentials(&mut brokered_env, policy);
     brokered_env = credential_context
         .prepare_child_environment(
             &inherited_credential_broker.network_proxy,
@@ -1492,40 +1489,30 @@ async fn snapshot_discovers_and_restores_inherited_credential_aliases() -> Resul
             /*environment_id*/ None,
         )?
         .env;
-    let dummy_header = brokered_env["UNKNOWN_HEADER"].clone();
-    let dummy_hidden_header = brokered_env["HIDDEN_HEADER"].clone();
-    let dummy_stripe_header = brokered_env["STRIPE_HIDDEN_HEADER"].clone();
-    assert_ne!(dummy_header, real_header);
-    assert_ne!(dummy_hidden_header, real_hidden_header);
-    assert_ne!(dummy_stripe_header, real_stripe_header);
     snapshot_file.restore_fail_open_aliases(&mut brokered_env, /*environment_id*/ None);
-    assert_eq!(
-        brokered_env.get("UNKNOWN_HEADER").map(String::as_str),
-        Some(dummy_header.as_str())
-    );
-    assert_eq!(
-        brokered_env.get("HIDDEN_HEADER").map(String::as_str),
-        Some(dummy_hidden_header.as_str())
-    );
-    assert_eq!(
-        brokered_env.get("STRIPE_HIDDEN_HEADER").map(String::as_str),
-        Some(dummy_stripe_header.as_str())
-    );
+    for alias in ["HIDDEN_HEADER", "UNKNOWN_HEADER", "STRIPE_HIDDEN_HEADER"] {
+        assert_eq!(brokered_env.get(alias), None, "{alias}");
+    }
+    for secret in [
+        "ghp_hidden_alias_secret",
+        "ghp_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh",
+        "stripe_live_zyxwvutsrqponmlkjihgfedc",
+    ] {
+        assert!(brokered_env.values().all(|value| !value.contains(secret)));
+    }
 
+    // Fail-open children leave managed networking and keep upstream's real
+    // aliases, except a copy of a credential the hardened engine still brokers.
+    let real_header = "Bearer ghp_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh";
+    let real_stripe_header = "Bearer stripe_live_zyxwvutsrqponmlkjihgfedc";
     let mut fail_open_env = HashMap::new();
-    let _ = snapshot_file.restore_credentials(
-        &mut fail_open_env,
-        &inherited_credential_broker.shell_environment_policy,
-    );
+    let _ = snapshot_file.restore_credentials(&mut fail_open_env, policy);
     snapshot_file.restore_fail_open_aliases(&mut fail_open_env, /*environment_id*/ None);
     assert_eq!(
         fail_open_env.get("UNKNOWN_HEADER").map(String::as_str),
         Some(real_header)
     );
-    assert_eq!(
-        fail_open_env.get("HIDDEN_HEADER").map(String::as_str),
-        Some(real_hidden_header)
-    );
+    assert_eq!(fail_open_env.get("HIDDEN_HEADER"), None);
     assert_eq!(
         fail_open_env
             .get("STRIPE_HIDDEN_HEADER")

@@ -13,7 +13,13 @@ fn capture(value: &str) -> String {
 fn filter_with_gate(raw: &str, removed: &[String], gate: &OutputGate) -> Result<String> {
     let mut capture = CapturedSnapshot::parse(ShellType::Bash, raw.as_bytes())
         .context("invalid shell snapshot capture")?;
-    let filter = retain_with_gate(&mut capture, raw.len(), removed, gate)?;
+    let filter = retain_with_gate(
+        &mut capture,
+        raw.len(),
+        removed,
+        gate,
+        /*brokered*/ None,
+    )?;
     let snapshot = capture.render_script(&ShellEnvironmentPolicy::default());
     filter.ensure_clean(&snapshot)?;
     Ok(snapshot)

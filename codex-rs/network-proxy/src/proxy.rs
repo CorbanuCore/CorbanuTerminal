@@ -1372,6 +1372,17 @@ impl NetworkProxy {
         self.state.credential_broker_hardened()
     }
 
+    /// Whether `text` contains a credential the hardened engine already brokers, including
+    /// isolated records whose raw values stay in the broker process (D685). Matching happens in
+    /// the engine; nothing is returned or registered and no destination is granted. Errors mean
+    /// the check could not be completed and the caller must not persist `text`.
+    pub fn brokered_credential_occurs_in(
+        &self,
+        text: &str,
+    ) -> Result<bool, crate::KnownCredentialScanError> {
+        self.state.known_credential_occurs_in(text)
+    }
+
     /// Applies the selected failure mode to recognized credentials left unmasked after preparation.
     pub fn handle_unmasked_credentials(
         &self,
