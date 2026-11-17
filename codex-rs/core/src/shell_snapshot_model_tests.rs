@@ -62,7 +62,12 @@ fn d690_startup_copy_then_unset_is_removed_from_snapshot() -> Result<()> {
 
 #[test]
 fn d690_model_key_in_function_refuses_snapshot() {
-    let raw = "# Snapshot file\nf() { echo d690-model-value; }\n\0\0#values\0SAFE\0ordinary\0#end\x000\0\0";
+    let raw = "# Snapshot file\nf() { echo d690-model-value; }\n\0\0#values\0SAFE\0ordinary\0#end\x001\0\0";
+    assert!(
+        filtered(raw, &|_| Ok(false))
+            .expect("valid capture without model protection")
+            .contains("d690-model-value")
+    );
     let result = filtered(raw, &|text| Ok(text.contains("d690-model-value")));
     assert_eq!(
         result.unwrap_err().to_string(),
