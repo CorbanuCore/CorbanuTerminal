@@ -557,10 +557,6 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
                 .features
                 .disable(codex_features::Feature::TokenBudget)
                 .unwrap();
-            config
-                .features
-                .disable(codex_features::Feature::RemoteCompactionV2)
-                .unwrap();
         })
         .build_with_auto_env(&server)
         .await?;
@@ -570,15 +566,32 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
     assert!(!events.iter().any(|e| matches!(e, EventMsg::Error(_))));
     let db = test.codex.state_db().unwrap();
     let before = turn_attempts(&db).await?;
+    let observations_before = turn_observations(&db).await?;
+    assert_eq!(observations_before.len(), 1);
     test.codex.submit(Op::Compact).await?;
+    let compaction = gate.next().await?;
+    assert!(compaction.body["input"].as_array().is_some_and(|input| {
+        input
+            .iter()
+            .any(|item| item["type"] == "compaction_trigger")
+    }));
+    compaction
+        .send(vec![
+            json!({
+                "type": "response.output_item.done",
+                "item": {"type": "compaction", "encrypted_content": "fixture"}
+            }),
+            responses::ev_completed("compact"),
+        ])
+        .await?;
     let compact_events = terminal(&test).await?;
     assert!(
         !compact_events
             .iter()
             .any(|event| matches!(event, EventMsg::Error(_)))
     );
-    // The legacy compaction endpoint records its own `compact:` attempt; the
-    // turn's own rows are unchanged.
+    // Remote v2 compaction records its own `compact:` attempt; the turn's
+    // own rows and measured usage are unchanged.
     let after = turn_attempts(&db).await?;
     assert_eq!(after[..before.len()], before[..]);
     assert_eq!(after.len(), before.len() + 1);
@@ -587,8 +600,13 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
         "{}",
         after[before.len()].turn
     );
-    assert_eq!(turn_observations(&db).await?.len(), 1);
-    counts(&gate, (1, 1, 1, 1));
+    let observations_after = turn_observations(&db).await?;
+    assert_eq!(observations_after.len(), observations_before.len() + 1);
+    assert_eq!(
+        observations_after[..observations_before.len()],
+        observations_before
+    );
+    counts(&gate, (1, 1, 2, 0));
     stop(&test).await;
     metadata_terminal_matrix(&server, 0..2).await
 }
