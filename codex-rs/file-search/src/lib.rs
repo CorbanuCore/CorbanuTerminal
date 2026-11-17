@@ -468,6 +468,8 @@ fn walker_worker(
                 });
             }
             n += 1;
+            #[cfg(test)]
+            tests::pause_walk_if_requested(&search_directories[0], n);
             if n >= CHECK_INTERVAL {
                 if cancelled.load(Ordering::Relaxed) || shutdown.load(Ordering::Relaxed) {
                     return ignore::WalkState::Quit;
@@ -647,15 +649,67 @@ mod tests {
 
     use super::*;
     use pretty_assertions::assert_eq;
+    use std::collections::HashMap;
     use std::fs;
     use std::sync::Arc;
     use std::sync::Condvar;
     use std::sync::Mutex;
+    use std::sync::OnceLock;
     use std::sync::atomic::AtomicBool;
     use std::thread;
     use std::time::Duration;
     use std::time::Instant;
     use tempfile::TempDir;
+
+    /// Entries injected before the walker pauses in the streaming regression test.
+    const PAUSE_AFTER_ENTRIES: usize = 64;
+
+    static WALK_PAUSES: OnceLock<Mutex<HashMap<PathBuf, Receiver<()>>>> = OnceLock::new();
+
+    struct WalkPauseGuard {
+        root: PathBuf,
+        resume_tx: Sender<()>,
+    }
+
+    impl WalkPauseGuard {
+        fn resume(&self) {
+            let _ = self.resume_tx.send(());
+        }
+    }
+
+    impl Drop for WalkPauseGuard {
+        fn drop(&mut self) {
+            self.resume();
+            if let Some(pauses) = WALK_PAUSES.get() {
+                pauses.lock().unwrap().remove(&self.root);
+            }
+        }
+    }
+
+    fn pause_walk_after_entries(root: &Path) -> WalkPauseGuard {
+        let (resume_tx, paused) = unbounded();
+        WALK_PAUSES
+            .get_or_init(|| Mutex::new(HashMap::new()))
+            .lock()
+            .unwrap()
+            .insert(root.to_path_buf(), paused);
+        WalkPauseGuard {
+            root: root.to_path_buf(),
+            resume_tx,
+        }
+    }
+
+    pub(super) fn pause_walk_if_requested(root: &Path, entry_count: usize) {
+        if entry_count != PAUSE_AFTER_ENTRIES {
+            return;
+        }
+        let paused = WALK_PAUSES
+            .get()
+            .and_then(|pauses| pauses.lock().unwrap().get(root).cloned());
+        if let Some(paused) = paused {
+            let _ = paused.recv();
+        }
+    }
 
     #[test]
     fn verify_score_is_none_for_non_match() {
@@ -825,20 +879,43 @@ mod tests {
 
     #[test]
     fn session_streams_updates_before_walk_complete() {
-        let dir = create_temp_tree(/*file_count*/ 600);
+        const FILE_COUNT: usize = 600;
+        let dir = create_temp_tree(FILE_COUNT);
+        let walk_pause = pause_walk_after_entries(dir.path());
         let reporter = Arc::new(RecordingReporter::default());
         let session = create_session(
             vec![dir.path().to_path_buf()],
-            FileSearchOptions::default(),
+            FileSearchOptions {
+                threads: NonZero::new(1).unwrap(),
+                ..Default::default()
+            },
             reporter.clone(),
             /*cancel_flag*/ None,
         )
         .expect("session");
 
         session.update_query("file-0");
-        let completed = reporter.wait_for_complete(SESSION_WAIT);
 
-        assert!(completed);
+        let streamed = reporter.wait_until(
+            &reporter.updates,
+            &reporter.update_cv,
+            SESSION_WAIT,
+            |updates| {
+                updates.iter().any(|snapshot| {
+                    !snapshot.walk_complete
+                        && snapshot.scanned_file_count < FILE_COUNT
+                        && !snapshot.matches.is_empty()
+                })
+            },
+        );
+        assert!(
+            streamed,
+            "expected a partial update with matches before the walk completed"
+        );
+
+        walk_pause.resume();
+        assert!(reporter.wait_for_complete(SESSION_WAIT));
+
         let updates = reporter.updates();
         assert!(updates.iter().any(|snapshot| !snapshot.walk_complete));
     }
