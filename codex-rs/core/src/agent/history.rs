@@ -270,6 +270,19 @@ pub(super) async fn prepare_forked_history(
         && config.multi_agent_v2.preserve_fork_prefix
         && preserve_context_baselines;
     if preserve_fork_prefix {
+        // Consumed mail is persisted separately from ordinary response items. A full-history
+        // fork inherits its model-visible content, not a live delivery for the new child.
+        for item in &mut forked_rollout_items {
+            if let RolloutItem::InterAgentCommunication(communication) = item {
+                *item = RolloutItem::ResponseItem(ResponseItemEnvelope {
+                    item: communication.to_model_input_item(),
+                    metadata: Some(codex_history::CodexHarnessMetadata {
+                        user_input_order: communication.recorded_input_order,
+                        ..Default::default()
+                    }),
+                });
+            }
+        }
         let InitialHistory::Forked(items) = fork_history_from_snapshot(
             ForkSnapshot::Interrupted,
             InitialHistory::Forked(forked_rollout_items),

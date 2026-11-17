@@ -1717,6 +1717,22 @@ async fn grandchild_full_fork_preserves_context_baseline(
         );
     }
     let child_input = descendant_requests[0].input();
+    // Responses adds a transport-only user turn after terminal assistant-originated mail.
+    // It is not persisted parent history; assert it explicitly before comparing the full prefix.
+    let child_input = if compact_parent {
+        child_input.as_slice()
+    } else {
+        let (prefill, child_input) = child_input.split_last().expect("child request input");
+        assert_eq!(
+            prefill,
+            &json!({
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Continue."}],
+            })
+        );
+        child_input
+    };
     assert_eq!(
         strip_response_item_ids_from_json(json!(
             &descendant_requests[1].input()[..child_input.len()]
