@@ -2,6 +2,7 @@
 //! Keep the literal outer match, so adding a wrapper can only tighten policy.
 
 use super::commands_for_exec_policy;
+use crate::security::tainted_action::policy_shell_script;
 use crate::security::tainted_action::policy_wrapper_commands;
 use codex_execpolicy::Decision;
 use codex_execpolicy::Evaluation;
@@ -11,7 +12,10 @@ use codex_execpolicy::RuleMatch;
 
 pub(super) fn has_wrappers(command: &[String]) -> bool {
     let wrappers = policy_wrapper_commands(command);
-    wrappers.uncertain || wrappers.starts.len() > 1 || wrappers.open.is_some()
+    wrappers.uncertain
+        || wrappers.starts.len() > 1
+        || wrappers.open.is_some()
+        || policy_shell_script(command).is_some()
 }
 
 pub(crate) fn check_with_wrappers(
@@ -78,12 +82,17 @@ pub(crate) fn check_with_wrappers(
                 decision,
             });
         }
-        if let Some(&start) = wrappers.starts.last()
-            && start > 0
-        {
+        if let Some(&start) = wrappers.starts.last() {
             let inner = &command[start..];
-            let parsed = commands_for_exec_policy(inner);
-            if parsed.commands.len() != 1 || parsed.commands[0] != inner {
+            // #2510 (D688): a shell spelled as this platform runs it
+            // (`BASH -lc`, `bash.exe -c`) unwraps like `bash -lc`. The
+            // literal argv above keeps its own match and fallback.
+            let respelled = policy_shell_script(inner);
+            let parsed_as = respelled.as_deref().unwrap_or(inner);
+            if (start > 0 || respelled.is_some())
+                && let parsed = commands_for_exec_policy(parsed_as)
+                && (parsed.commands.len() != 1 || parsed.commands[0] != parsed_as)
+            {
                 if parsed.used_complex_parsing {
                     matches.push(RuleMatch::HeuristicsRuleMatch {
                         command: inner.to_vec(),
