@@ -100,11 +100,14 @@ async fn fake_executor(host: Host) -> anyhow::Result<(String, Arc<Mutex<Vec<Stri
                         "environment/info" => json!({ "id": id, "result": info(host) }),
                         _ => {
                             let sandboxed = !request["params"]["sandbox"].is_null();
-                            seen.lock().expect("methods").push(if sandboxed {
-                                format!("{method} sandboxed")
-                            } else {
-                                method
-                            });
+                            let image = request["params"]["path"]
+                                .as_str()
+                                .is_some_and(|path| path.ends_with("picture.png"));
+                            seen.lock().expect("methods").push(format!(
+                                "{method}{}{}",
+                                if image { " image" } else { "" },
+                                if sandboxed { " sandboxed" } else { "" },
+                            ));
                             json!({
                                 "id": id,
                                 "error": { "code": -32601, "message": "not served by the fake" },
@@ -286,12 +289,11 @@ async fn issue_2050_remote_windows_without_its_sandbox_refuses_commands_and_file
                     && !image
                         .reached
                         .iter()
-                        .any(|method| method.ends_with(" sandboxed"))
+                        .any(|method| method.ends_with(" sandboxed") || method.contains(" image"))
             } else {
-                image
-                    .reached
-                    .iter()
-                    .any(|method| method.ends_with(" sandboxed"))
+                // Read-all policies omit the RPC sandbox context. Count access to the
+                // requested image itself, never unrelated session metadata lookups.
+                image.reached.iter().any(|method| method.contains(" image"))
             };
             if !ok {
                 wrong.push(format!(
