@@ -155,9 +155,9 @@ impl ModelCredentialBroker {
                 pin_connections: false,
             },
         )?;
-        Ok(Self {
-            client: Arc::new(client),
-        })
+        let client = Arc::new(client);
+        super::model_snapshot::register(client.clone());
+        Ok(Self { client })
     }
 
     /// Hands `value` to the broker. The returned credential holds no copy.
@@ -244,6 +244,16 @@ impl ModelCredentialBroker {
 
     pub fn is_alive(&self) -> bool {
         self.client.is_alive()
+    }
+
+    /// Snapshot-only query; no raw keys or request authority leave the holder.
+    pub fn known_credential_occurs_in(
+        &self,
+        text: &str,
+    ) -> Result<bool, ModelCredentialBrokerError> {
+        self.client
+            .model_credential_occurs_in(text)
+            .map_err(Into::into)
     }
 
     /// The broker's private socket (see [`ModelCredential::socket_path`]).

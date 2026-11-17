@@ -421,6 +421,19 @@ fn scoped_broker(
 }
 
 #[test]
+fn d690_scoped_copy_then_unset_refuses_without_resolving() {
+    let (_broker, _, resolver) = scoped_broker(ResolverOutcome::Success);
+    // Only the copied variable remains in the capture; no source name/value.
+    for text in [
+        "export HIDDEN_HEADER='sk-raw-value-must-not-be-retained'",
+        "export SAFE='ordinary'",
+    ] {
+        assert!(crate::model_credential_occurs_in(text).is_err());
+    }
+    assert!(resolver.requests().is_empty());
+}
+
+#[test]
 fn scoped_openai_route_injects_once_and_passes_complete_context() {
     let (broker, env, resolver) = scoped_broker(ResolverOutcome::Success);
     let dummy = env.get("OPENAI_API_KEY").expect("scoped dummy").to_string();
@@ -640,6 +653,28 @@ impl IsolatedCredentialDispatcher for IsolatedTestDispatcher {
             downloaded_bytes: 20,
         })
     }
+}
+
+#[test]
+fn d690_isolated_route_copy_then_unset_refuses_without_dispatching() {
+    let broker = CredentialBroker::new(/*enabled*/ true);
+    let dispatcher = Arc::new(IsolatedTestDispatcher::default());
+    let route = IsolatedCredentialRoute::new(
+        CapabilityId::from_sha256_hex("f".repeat(64)).expect("capability id"),
+        scoped_authority(),
+        dispatcher.clone(),
+    )
+    .expect("isolated route");
+    broker
+        .install_isolated_openai_route(route)
+        .expect("install");
+    for text in [
+        "export HIDDEN_HEADER='synthetic-isolated-key'",
+        "export SAFE='ordinary'",
+    ] {
+        assert!(crate::model_credential_occurs_in(text).is_err());
+    }
+    assert!(dispatcher.calls.lock().expect("calls").is_empty());
 }
 
 #[test]

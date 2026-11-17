@@ -6,6 +6,9 @@ pub(crate) mod isolated;
 mod memory_scan_tests;
 #[cfg(any(unix, windows))]
 pub mod model_auth;
+mod model_snapshot;
+pub use model_snapshot::ModelSnapshotScanError;
+pub use model_snapshot::model_credential_occurs_in;
 mod providers;
 mod resolver;
 pub(crate) mod response_scrub;
@@ -379,6 +382,7 @@ impl CredentialBroker {
             .credentials
             .retain(|credential| !std::ptr::eq(credential.provider, providers::openai_provider()));
         let dummy_value = providers::openai_provider().dummy_value(route.capability_id().as_str());
+        model_snapshot::register(self.state.clone());
         state.scoped_openai = Some(ScopedCredentialRecord {
             route,
             dummy_value,
@@ -402,6 +406,7 @@ impl CredentialBroker {
             .credentials
             .retain(|credential| !std::ptr::eq(credential.provider, providers::openai_provider()));
         let dummy_value = providers::openai_provider().dummy_value(route.capability_id.as_str());
+        model_snapshot::register(self.state.clone());
         state.isolated_openai = Some(IsolatedCredentialRecord { route, dummy_value });
         Ok(())
     }

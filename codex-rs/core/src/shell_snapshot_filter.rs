@@ -13,6 +13,9 @@ use codex_secret_broker::output_gate::OutputGate;
 use codex_secret_broker::output_gate::SecretClass;
 use zeroize::Zeroizing;
 
+type ModelScan =
+    dyn Fn(&str) -> std::result::Result<bool, codex_network_proxy::ModelSnapshotScanError> + Sync;
+
 use crate::shell::ShellType;
 
 pub(super) fn capture_script(script: String, shell_type: ShellType) -> String {
@@ -122,6 +125,20 @@ pub(super) fn filter_snapshot(raw: &str, removed: &[String]) -> Result<String> {
 }
 
 fn filter_with_gate(raw: &str, removed: &[String], process_gate: &OutputGate) -> Result<String> {
+    filter_with_holders(
+        raw,
+        removed,
+        process_gate,
+        &codex_network_proxy::model_credential_occurs_in,
+    )
+}
+
+fn filter_with_holders(
+    raw: &str,
+    removed: &[String],
+    process_gate: &OutputGate,
+    model_scan: &ModelScan,
+) -> Result<String> {
     if raw.len() > output_gate::MAX_SCAN_BYTES {
         bail!("Snapshot capture exceeds credential scan limit");
     }
@@ -208,8 +225,18 @@ fn filter_with_gate(raw: &str, removed: &[String], process_gate: &OutputGate) ->
     local
         .arm()
         .context("Cannot arm snapshot credential filter")?;
-    let sensitive = |value: &str| {
-        local.contains_snapshot_secret(value) || process_gate.contains_snapshot_secret(value)
+    if codex_model_provider::model_key_broker_required()
+        && (!codex_model_provider::model_key_broker_installed()
+            || codex_model_provider::model_key_broker_unavailable().is_some())
+    {
+        bail!("Cannot protect snapshot while model credential broker is unavailable");
+    }
+    let sensitive = |value: &str| -> Result<bool> {
+        let model_key =
+            model_scan(value).context("Cannot check snapshot against model credentials")?;
+        Ok(model_key
+            || local.contains_snapshot_secret(value)
+            || process_gate.contains_snapshot_secret(value))
     };
     let excluded = regex_lite::Regex::new(&format!(
         "(?i)^({})$",
@@ -221,8 +248,8 @@ fn filter_with_gate(raw: &str, removed: &[String], process_gate: &OutputGate) ->
     for (name, value, declaration) in exports {
         if name.starts_with("__corbanu_snapshot_")
             || excluded.is_match(name)
-            || sensitive(value)
-            || sensitive(declaration)
+            || sensitive(value)?
+            || sensitive(declaration)?
         {
             continue;
         }
@@ -239,11 +266,15 @@ fn filter_with_gate(raw: &str, removed: &[String], process_gate: &OutputGate) ->
     snapshot.push_str(&safe_exports);
     // Functions/aliases can embed the same values too. Refuse the snapshot
     // rather than writing a partial or syntactically altered shell program.
-    if sensitive(&snapshot) {
+    if sensitive(&snapshot)? {
         bail!("Snapshot contains protected credential values");
     }
     Ok(snapshot)
 }
+
+#[cfg(test)]
+#[path = "shell_snapshot_model_tests.rs"]
+mod model_tests;
 
 #[cfg(test)]
 #[path = "shell_snapshot_filter_tests.rs"]

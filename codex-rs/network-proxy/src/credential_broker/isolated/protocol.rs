@@ -12,7 +12,7 @@ use serde::Serialize;
 use std::fmt;
 use zeroize::Zeroize;
 
-pub(crate) const CONTROL_PROTOCOL_VERSION: u32 = 4;
+pub(crate) const CONTROL_PROTOCOL_VERSION: u32 = 5;
 /// Environment variable naming the broker's runtime parent directory.
 pub(crate) const BROKER_RUNTIME_DIR_ENV: &str = "CODEX_CREDENTIAL_BROKER_RUNTIME_DIR";
 /// PF-27-S05: the Corbanu home whose stored provider keys the broker reads.
@@ -196,6 +196,10 @@ pub(crate) enum ControlRequest {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         account: Option<StoredKeyAccount>,
     },
+    /// D690: keyed fingerprints and lengths only, including stashed env keys.
+    SnapshotFingerprints {
+        key: String,
+    },
     /// PF-27-S05: drop one reference (a refreshed sign-in token replaces it).
     Unregister {
         reference: String,
@@ -232,6 +236,9 @@ impl fmt::Debug for ControlRequest {
                 "ControlRequest::RegisterModelStored({binding:?}, {provider_key_id}, {account:?})"
             ),
             Self::Unregister { .. } => formatter.write_str("ControlRequest::Unregister"),
+            Self::SnapshotFingerprints { .. } => {
+                formatter.write_str("ControlRequest::SnapshotFingerprints(<redacted>)")
+            }
             Self::Revoke => formatter.write_str("ControlRequest::Revoke"),
         }
     }
@@ -241,6 +248,7 @@ impl Drop for ControlRequest {
     fn drop(&mut self) {
         match self {
             Self::Hello { channel_key, .. } => channel_key.zeroize(),
+            Self::SnapshotFingerprints { key } => key.zeroize(),
             Self::Register { value, .. }
             | Self::RegisterModel { value, .. }
             | Self::StashEnv { value, .. } => value.zeroize(),
@@ -280,6 +288,9 @@ pub(crate) enum ControlResponse {
         run_generation: u64,
     },
     Stashed,
+    SnapshotFingerprints {
+        records: Vec<(usize, String)>,
+    },
     Unregistered,
     Error {
         code: ControlErrorCode,

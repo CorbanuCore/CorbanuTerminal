@@ -1270,6 +1270,119 @@ mod pf_27_s05 {
         .expect("model broker")
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d690_model_snapshot_registered_and_stashed_copies() {
+        // Bazel runs multiple tests in one process. Other tests intentionally
+        // install unavailable holders, so exercise the global registry alone.
+        const CHILD: &str = "CORBANU_D690_MODEL_SNAPSHOT_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+                .args([
+                    "credential_broker::isolated::tests::pf_27_s05::d690_model_snapshot_registered_and_stashed_copies",
+                    "--exact",
+                    "--nocapture",
+                    "--test-threads=1",
+                ])
+                .env(CHILD, "1")
+                .env("CORBANU_TEST_NO_NATIVE_KEYRING", "1")
+                .output()
+                .expect("run model snapshot child");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                output.status.success() && stdout.contains("1 passed"),
+                "{stdout}\n{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let upstream = start_upstream().await;
+        let broker = model_broker(&upstream);
+        let credential = broker
+            .register(
+                binding(upstream.port, "/v1", ModelAuthHeader::Bearer),
+                "synthetic-d690-model-value",
+            )
+            .expect("register");
+        assert_eq!(
+            broker
+                .known_credential_occurs_in("export COPY='prefixsynthetic-d690-model-valuesuffix'"),
+            Ok(true)
+        );
+        assert_eq!(
+            broker.known_credential_occurs_in("export SAFE='ordinary'"),
+            Ok(false)
+        );
+        assert_eq!(
+            crate::model_credential_occurs_in("synthetic-d690-model-value"),
+            Ok(true)
+        );
+        // Covers the registry while only a credential reference owns the client.
+        drop(broker);
+        assert_eq!(
+            crate::model_credential_occurs_in("synthetic-d690-model-value"),
+            Ok(true)
+        );
+        credential.unregister().expect("unregister");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d690_model_snapshot_refuses_short_keys_and_dead_brokers() {
+        let upstream = start_upstream().await;
+        let broker = model_broker(&upstream);
+        broker
+            .register(binding(upstream.port, "/v1", ModelAuthHeader::Bearer), "xy")
+            .expect("register");
+        assert!(
+            broker
+                .known_credential_occurs_in("ordinary configuration")
+                .is_err()
+        );
+        broker.kill_for_test();
+        assert!(
+            broker
+                .known_credential_occurs_in("ordinary configuration")
+                .is_err()
+        );
+        assert!(crate::model_credential_occurs_in("ordinary configuration").is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "manual D690 isolated snapshot scan timing"]
+    #[allow(clippy::print_stderr)]
+    async fn d690_large_zsh_snapshot_scan_timing() {
+        let upstream = start_upstream().await;
+        let broker = model_broker(&upstream);
+        for index in 0..4 {
+            broker
+                .register(
+                    binding(upstream.port, "/v1", ModelAuthHeader::Bearer),
+                    &format!("synthetic-d690-benchmark-{index:08}"),
+                )
+                .expect("register");
+        }
+        for exports in [1024, 4096, 16384] {
+            let mut text = String::from("# Snapshot file\n");
+            for index in 0..exports {
+                use std::fmt::Write;
+                writeln!(
+                    text,
+                    "typeset -gx SYNTHETIC_ZSH_SETTING_{index:05}='ordinary-value-{index:05}'"
+                )
+                .expect("text");
+            }
+            for sample in 0..3 {
+                let start = std::time::Instant::now();
+                let result = broker.known_credential_occurs_in(&text);
+                eprintln!(
+                    "D690_SCAN bytes={} records=4 sample={sample} elapsed_us={} result={result:?}",
+                    text.len(),
+                    start.elapsed().as_micros()
+                );
+                assert!(!matches!(result, Ok(true)));
+            }
+        }
+    }
+
     fn binding(port: u16, path_prefix: &str, header: ModelAuthHeader) -> ModelCredentialBinding {
         ModelCredentialBinding {
             host: UPSTREAM_HOST.to_string(),
@@ -1571,6 +1684,16 @@ mod pf_27_s05 {
             .expect("take env keys");
         assert_eq!(taken, vec![name.clone()]);
         assert_eq!(std::env::var_os(&name), None);
+        // D690: a startup copy survives after take_env_keys removed the source.
+        let copy = String::from_utf8(memory_scan_tests::mask(&masked)).expect("synthetic key");
+        assert_eq!(
+            broker.known_credential_occurs_in(&format!("prefix{copy}suffix")),
+            Ok(true)
+        );
+        assert_eq!(
+            broker.known_credential_occurs_in("ordinary configuration"),
+            Ok(false)
+        );
 
         let credential = broker
             .register_stored(
