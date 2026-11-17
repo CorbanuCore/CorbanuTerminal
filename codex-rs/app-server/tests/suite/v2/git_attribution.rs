@@ -310,7 +310,16 @@ async fn cold_resume_replaces_legacy_attribution_without_duplication(
     assert_eq!(initial_text.matches(ATTRIBUTION_DISABLED).count(), 0);
     for request in &requests[1..] {
         let developer_text = request.message_input_texts("developer").join("\n");
-        assert_eq!(developer_text.matches(COMMIT_ATTRIBUTION).count(), 1);
+        // The legacy matcher replaces the entire marked combined section.
+        // An unmarked commit-only fragment remains historical context.
+        let historical_commit_count = match legacy_attribution {
+            LegacyAttribution::CommitOnly => 1,
+            LegacyAttribution::UnlinkedPullRequest => 0,
+        };
+        assert_eq!(
+            developer_text.matches(COMMIT_ATTRIBUTION).count(),
+            historical_commit_count
+        );
         assert_eq!(developer_text.matches(PR_ATTRIBUTION).count(), 0);
         assert_eq!(developer_text.matches(ATTRIBUTION_DISABLED).count(), 1);
     }
