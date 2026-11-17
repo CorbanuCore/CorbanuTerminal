@@ -4509,11 +4509,37 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
     .await;
 
     let codex_home = TempDir::new()?;
+    // Spawn selection uses the configured catalog, not only the provider response cache.
+    // Give this custom provider explicit aliases for both models used by the fixture.
+    let catalog_path = codex_home.path().join("spawn-models.json");
+    let bundled = codex_models_manager::bundled_models_response()?;
+    let models = [PARENT_MODEL, REQUESTED_MODEL].map(|slug| {
+        let mut model = bundled
+            .models
+            .iter()
+            .find(|model| model.slug == slug.trim_start_matches("mock_provider/"))
+            .expect("fixture model remains in the bundled catalog")
+            .clone();
+        model.slug = slug.to_string();
+        model.orchestration = Some(
+            codex_protocol::openai_models::ModelOrchestrationMetadata::Eligible {
+                provider_id: "mock_provider".to_string(),
+                capability: codex_protocol::openai_models::ModelCapabilityTier::Legacy,
+                billing: codex_protocol::openai_models::ModelBilling::Local,
+            },
+        );
+        model
+    });
+    std::fs::write(
+        &catalog_path,
+        serde_json::to_vec(&json!({ "models": models }))?,
+    )?;
     MockResponsesConfig::new(&server.uri())
         .enable_feature(Feature::Collab)
         .with_root_config(&format!(
-            "chatgpt_base_url = \"{}\"\ntools.update_plan.enabled = true",
-            server.uri()
+            "chatgpt_base_url = \"{}\"\ntools.update_plan.enabled = true\nmodel_catalog_json = {}",
+            server.uri(),
+            serde_json::to_string(&catalog_path)?,
         ))
         .write(codex_home.path())?;
     write_models_cache_for_provider(codex_home.path(), "mock_provider").await?;
