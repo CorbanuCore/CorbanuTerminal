@@ -63,6 +63,8 @@ mod windows_reads;
 mod windows_shell;
 mod work;
 
+#[cfg(windows)]
+pub(crate) use indirect::indirect_exec_policy::policy_powershell_script;
 pub(crate) use indirect::indirect_exec_policy::policy_shell_script;
 pub(crate) use indirect::indirect_exec_policy::policy_wrapper_commands;
 pub(crate) use paths::USER_PERSISTENCE;

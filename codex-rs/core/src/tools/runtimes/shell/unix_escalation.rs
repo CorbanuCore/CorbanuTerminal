@@ -902,15 +902,17 @@ fn evaluate_intercepted_exec_policy_and_folded(
         )
     };
 
-    crate::exec_policy::check_with_wrappers_and_folded(
-        policy,
-        &commands,
-        &fallback,
-        &MatchOptions {
-            resolve_host_executables: true,
-            fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE,
-        },
-    )
+    let options = MatchOptions {
+        resolve_host_executables: true,
+        fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE,
+    };
+    if enable_shell_wrapper_parsing {
+        crate::exec_policy::check_with_wrappers_and_folded(policy, &commands, &fallback, &options)
+    } else {
+        crate::exec_policy::check_executed_with_wrappers_and_folded(
+            policy, &commands, &fallback, &options,
+        )
+    }
 }
 
 #[derive(Clone)]

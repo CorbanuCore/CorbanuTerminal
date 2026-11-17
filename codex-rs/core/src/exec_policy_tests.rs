@@ -35,6 +35,9 @@ use tempfile::TempDir;
 use tempfile::tempdir;
 use toml::Value as TomlValue;
 
+#[path = "exec_policy_nested_script_tests.rs"]
+mod nested_script_tests;
+
 #[path = "exec_policy_wrapper_tests.rs"]
 mod wrapper_tests;
 

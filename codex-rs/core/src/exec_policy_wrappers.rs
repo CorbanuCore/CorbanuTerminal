@@ -1,6 +1,7 @@
 //! Apply command rules and fallback decisions to every known wrapper layer.
 //! Keep the literal outer match, so adding a wrapper can only tighten policy.
 
+use super::ExecPolicyCommands;
 use super::commands_for_exec_policy;
 use crate::security::tainted_action::policy_shell_script;
 use crate::security::tainted_action::policy_wrapper_commands;
@@ -10,12 +11,30 @@ use codex_execpolicy::MatchOptions;
 use codex_execpolicy::Policy;
 use codex_execpolicy::RuleMatch;
 
+/// #2531 (D553): how many shell scripts nested in one another
+/// (`bash -lc "bash -c '…'"`, also through launchers such as
+/// `sudo bash -c "env bash -c '…'"`) rules see into below each command they
+/// are given. A script nested deeper asks for approval; one behind a
+/// launcher or a respelled shell is still read too.
+pub(crate) const MAX_SCRIPT_DEPTH: usize = 8;
+
+/// The commands inside `command` when it is a shell script rules can read
+/// (`bash -c 'git push'`); `None` for any other command, which parses as
+/// itself.
+fn script_commands(command: &[String]) -> Option<ExecPolicyCommands> {
+    let parsed = commands_for_exec_policy(command);
+    (parsed.commands.len() != 1 || parsed.commands[0] != command).then_some(parsed)
+}
+
 pub(super) fn has_wrappers(command: &[String]) -> bool {
     let wrappers = policy_wrapper_commands(command);
     wrappers.uncertain
         || wrappers.starts.len() > 1
         || wrappers.open.is_some()
         || policy_shell_script(command).is_some()
+        // #2531: a script nested in the script; an amendment for its
+        // literal argv cannot approve the commands inside.
+        || script_commands(command).is_some()
 }
 
 pub(crate) fn check_with_wrappers(
@@ -56,17 +75,49 @@ pub(crate) fn check_with_wrappers_and_folded(
     fallback: &impl Fn(&[String]) -> Decision,
     options: &MatchOptions,
 ) -> (Evaluation, Vec<RuleMatch>) {
+    check(
+        policy, commands, /*read_own_scripts*/ true, fallback, options,
+    )
+}
+
+/// [`check_with_wrappers_and_folded`] for an argv as it is executed, whose
+/// own shell script (`/bin/zsh -lc '…'`) is not read: the escalation path
+/// intercepts the script's commands as they run. Scripts behind a launcher
+/// in it (`sudo bash -c '…'`) and scripts nested in those are still read.
+#[cfg(unix)]
+pub(crate) fn check_executed_with_wrappers_and_folded(
+    policy: &Policy,
+    commands: &[Vec<String>],
+    fallback: &impl Fn(&[String]) -> Decision,
+    options: &MatchOptions,
+) -> (Evaluation, Vec<RuleMatch>) {
+    check(
+        policy, commands, /*read_own_scripts*/ false, fallback, options,
+    )
+}
+
+fn check(
+    policy: &Policy,
+    commands: &[Vec<String>],
+    read_own_scripts: bool,
+    fallback: &impl Fn(&[String]) -> Decision,
+    options: &MatchOptions,
+) -> (Evaluation, Vec<RuleMatch>) {
     let mut matches = Vec::new();
     let mut folded = Vec::new();
     // Inner shell scripts can themselves contain wrapped commands. Use a work
     // list rather than recursion; preserve every outer match along the way.
-    let mut pending = Vec::new();
+    // Each entry carries how many scripts it is nested in.
+    let mut pending: Vec<(Vec<String>, usize)> = Vec::new();
     let mut next = commands.iter();
     loop {
         let owned = pending.pop();
-        let command = match owned.as_ref().or_else(|| next.next()) {
-            Some(command) => command,
-            None => break,
+        let (command, depth) = match &owned {
+            Some((command, depth)) => (command, *depth),
+            None => match next.next() {
+                Some(command) => (command, 0),
+                None => break,
+            },
         };
         let wrappers = policy_wrapper_commands(command);
         // Keep only the strictest fallback for this chain. Copying the entire
@@ -126,17 +177,31 @@ pub(crate) fn check_with_wrappers_and_folded(
             // literal argv above keeps its own match and fallback.
             let respelled = policy_shell_script(inner);
             let parsed_as = respelled.as_deref().unwrap_or(inner);
-            if (start > 0 || respelled.is_some())
-                && let parsed = commands_for_exec_policy(parsed_as)
-                && (parsed.commands.len() != 1 || parsed.commands[0] != parsed_as)
+            // Scripts behind a launcher or a respelled shell are read at any
+            // depth: each is a strict substring of the one around it.
+            let always_read = start > 0 || respelled.is_some();
+            // #2531: a script with no launcher before it too. Its commands
+            // come from a script already (`bash -lc "bash -c 'git push'"`
+            // gives `bash -c 'git push'`), or are those the caller gives.
+            if (always_read || depth > 0 || read_own_scripts)
+                && let Some(parsed) = script_commands(parsed_as)
             {
-                if parsed.used_complex_parsing {
+                if parsed.used_complex_parsing || depth >= MAX_SCRIPT_DEPTH {
                     matches.push(RuleMatch::HeuristicsRuleMatch {
                         command: inner.to_vec(),
                         decision: Decision::Prompt,
                     });
                 }
-                pending.extend(parsed.commands);
+                // Past the bound, still read what is always read, so a
+                // command a rule refuses stays refused, not only asked.
+                if depth < MAX_SCRIPT_DEPTH || always_read {
+                    pending.extend(
+                        parsed
+                            .commands
+                            .into_iter()
+                            .map(|command| (command, depth + 1)),
+                    );
+                }
             }
         }
     }
