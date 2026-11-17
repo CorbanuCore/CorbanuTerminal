@@ -842,6 +842,7 @@ enabled_tools = []
     );
     // mock_provider uses the plaintext collaboration adapter at the Responses boundary.
     // Check both notes in their wire representation, preserving order and exact multiplicity.
+    assert!(child_requests[2].inputs_of_type("agent_message").is_empty());
     let resumed_mail = child_requests[2]
         .message_input_texts("user")
         .into_iter()

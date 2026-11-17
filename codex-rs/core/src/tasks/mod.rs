@@ -387,10 +387,19 @@ impl Session {
         let done = Arc::new(Notify::new());
 
         // #2033 / #1999 (D485): mail that has crossed a turn boundary only.
-        let (pending_items, _) = self
-            .input_queue
-            .get_pending_input_for_task_start(&self.active_turn)
-            .await;
+        // Match explicit turn admission (#445/#507): a refused task must leave ready mail
+        // queued, rather than detach it and race its resubmission against switch-off.
+        let pending_items = if Box::pin(crate::session::turn::turn_refusal(self, &turn_context))
+            .await
+            .is_none()
+        {
+            self.input_queue
+                .get_pending_input_for_task_start(&self.active_turn)
+                .await
+                .0
+        } else {
+            Vec::new()
+        };
         // Pending-work wakes deliberately start RegularTask with empty explicit input and move
         // mailbox items through InputQueue. Classify the complete admitted task here, after that
         // move, so a terminal-result turn cannot masquerade as fresh operator work.
