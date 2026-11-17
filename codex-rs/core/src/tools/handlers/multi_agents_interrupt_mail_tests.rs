@@ -34,6 +34,49 @@ struct Outcome {
 async fn spawn_unload_and_reload(interrupt: bool) -> Outcome {
     let (mut session, mut turn) = make_session_and_context().await;
     let mut config = (*turn.config).clone();
+    // The non-interrupted case must finish a real response, not an authentication
+    // error that previously surfaced as Ok(None) and marked the mailbox completed.
+    let server = if interrupt {
+        None
+    } else {
+        let server = wiremock::MockServer::start().await;
+        let body = [
+            json!({"type": "response.created", "response": {"id": "boot-response"}}),
+            json!({"type": "response.output_item.done", "item": {
+                "type": "message", "id": "boot-message", "role": "assistant",
+                "content": [{"type": "output_text", "text": "boot complete"}]
+            }}),
+            json!({"type": "response.completed", "response": {"id": "boot-response"}}),
+        ]
+        .iter()
+        .map(|event| format!("data: {event}\n\n"))
+        .collect::<String>();
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path("/v1/responses"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_body_raw(body, "text/event-stream"),
+            )
+            .mount(&server)
+            .await;
+        config.model_provider_id = OPENAI_PROVIDER_ID.to_string();
+        config.model_provider = codex_model_provider_info::ModelProviderInfo {
+            name: "OpenAI (test)".to_string(),
+            requires_openai_auth: false,
+            request_max_retries: Some(0),
+            stream_max_retries: Some(0),
+            ..codex_model_provider_info::ModelProviderInfo::create_openai_provider(Some(format!(
+                "{}/v1",
+                server.uri()
+            )))
+        };
+        config.model_providers.insert(
+            config.model_provider_id.clone(),
+            config.model_provider.clone(),
+        );
+        turn.provider =
+            create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
+        Some(server)
+    };
     config.multi_agent_v2.max_concurrent_threads_per_session = 4;
     config
         .features
@@ -105,6 +148,12 @@ async fn spawn_unload_and_reload(interrupt: bool) -> Outcome {
     loop {
         let status = manager.agent_control().get_status(agent_id).await;
         if !matches!(status, AgentStatus::PendingInit | AgentStatus::Running) {
+            if !interrupt {
+                assert_eq!(
+                    status,
+                    AgentStatus::Completed(Some("boot complete".to_string()))
+                );
+            }
             break;
         }
         assert!(
@@ -148,6 +197,18 @@ async fn spawn_unload_and_reload(interrupt: bool) -> Outcome {
         .collect();
     let redelivered = deliveries_of(&ops_after_reload, &first_id);
     let status_after_reload = manager.agent_control().get_status(agent_id).await;
+    if let Some(server) = server {
+        assert_eq!(
+            server
+                .received_requests()
+                .await
+                .expect("mock requests")
+                .iter()
+                .filter(|request| request.url.path() == "/v1/responses")
+                .count(),
+            1
+        );
+    }
     Outcome {
         first_phase_before_reload,
         redelivered,

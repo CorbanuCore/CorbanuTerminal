@@ -16,6 +16,7 @@ use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SessionSource;
+use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -52,6 +53,26 @@ impl ThreadManagerState {
         if !is_resident_candidate(&thread) || !is_unloadable(&thread).await {
             return Ok(ThreadEvictionOutcome::Busy);
         }
+        // A direct Op can carry a message ID without ever entering the durable mailbox.
+        // Resolve ownership while the write guard excludes senders, before shutdown: a
+        // failed database lookup must leave both the running session and its mail intact.
+        let mut durable_mail_ids = HashSet::new();
+        if let Some(state_db) = thread.state_db() {
+            for message_id in thread.session.input_queue.mailbox_message_ids().await {
+                if state_db
+                    .get_agent_message(&message_id)
+                    .await
+                    .map_err(|err| {
+                        CodexErr::Fatal(format!(
+                            "failed to check mailbox ownership before evicting {thread_id}: {err}"
+                        ))
+                    })?
+                    .is_some_and(|message| message.recipient_thread_id == thread_id)
+                {
+                    durable_mail_ids.insert(message_id);
+                }
+            }
+        }
         let manager = Arc::clone(self);
         let teardown = membership
             .clone()
@@ -65,20 +86,34 @@ impl ThreadManagerState {
                 teardown.complete();
                 return Err(err);
             }
-            // Dispatch has stopped and the residency guard excludes senders.
-            // Corbanu (#1545, #1999/#2033): `is_unloadable` keeps a session with mail loaded,
-            // so this is normally empty. Anything left is a durable row handed to this
-            // incarnation, which reload recovery requeues; holding a second copy in memory
-            // would deliver it twice, so it is dropped here.
-            let mail = thread.session.input_queue.drain_mailbox().await;
-            if !mail.is_empty() {
-                tracing::warn!(
-                    %thread_id,
-                    count = mail.len(),
-                    "evicted agent still held mailbox items; reload recovery redelivers them"
-                );
-            }
+            // Dispatch has stopped and the residency guard excludes senders. Durable
+            // recovery owns the content after reload; retaining another queued copy would
+            // deliver it twice. Keep only its publication state until that hand-off.
             let runtime = &thread.session.services.local_agent_runtime;
+            let mut volatile_mail = Vec::new();
+            for mail in thread.session.input_queue.drain_mailbox().await {
+                let communication = mail.communication;
+                if let Some(message_id) = communication
+                    .message_id
+                    .as_ref()
+                    .filter(|message_id| durable_mail_ids.contains(*message_id))
+                {
+                    if let Some(delivery) = communication.delivery.clone() {
+                        runtime.mailboxes.retain_durable_delivery(
+                            thread_id,
+                            message_id.clone(),
+                            delivery,
+                        )?;
+                    }
+                } else {
+                    volatile_mail.push(communication);
+                }
+            }
+            if !volatile_mail.is_empty() {
+                runtime
+                    .mailboxes
+                    .enqueue(thread_id, /*id*/ None, volatile_mail)?;
+            }
             // Preserve configured bindings across eviction without retaining turn-only attachments.
             // Raw bindings keep the original pending owner configuration alive.
             let environments = EvictedEnvironments {
@@ -340,11 +375,9 @@ async fn is_unloadable(thread: &CodexThread) -> bool {
     ) && !pending_first_turn
         && thread.session.active_turn.lock().await.is_none()
         && !thread.session.has_outstanding_durable_sleep()
-        // Corbanu (#1545, #1999/#2033): a session holding any mailbox item stays loaded.
-        // Its items are durable rows handed to this session's incarnation; evicting it would
-        // move them to the in-memory queue while reload recovery requeues the same rows, so
-        // the message would be delivered twice.
-        && !thread.session.input_queue.has_pending_mailbox_items().await
+        // Queue-only mail can be handed back on eviction, but an accepted task waiting
+        // for admission must retain its runtime and turn-start options.
+        && !thread.session.input_queue.has_trigger_turn_mailbox_items().await
 }
 
 #[cfg(test)]

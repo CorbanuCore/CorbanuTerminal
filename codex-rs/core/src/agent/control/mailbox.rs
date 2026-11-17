@@ -2,6 +2,7 @@
 //! Eviction transfers mail before releasing the recipient's residency guard.
 
 use crate::PendingAgentMessage;
+use crate::agent_communication::MessageDelivery;
 use crate::agent_communication::PENDING_MAILBOX_MESSAGES;
 use codex_diagnostics::GaugeGuard;
 use codex_protocol::ThreadId;
@@ -23,6 +24,9 @@ impl Default for Mailboxes {
 #[derive(Default)]
 struct Mailbox {
     pending: Vec<StoredMail>,
+    // Durable content is recovered from the database, never from this queue. Publication
+    // handles alone survive in memory so reload does not publish or consume the mail twice.
+    durable_deliveries: HashMap<String, MessageDelivery>,
     state: watch::Sender<bool>,
 }
 
@@ -33,6 +37,51 @@ struct StoredMail {
 }
 
 impl Mailboxes {
+    pub(super) fn retain_durable_delivery(
+        &self,
+        agent: ThreadId,
+        message_id: String,
+        delivery: MessageDelivery,
+    ) -> Result<()> {
+        let mut mailboxes = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let mailbox = mailboxes
+            .as_mut()
+            .ok_or_else(|| CodexErr::InvalidRequest("agent runtime is shutting down".into()))?
+            .entry(agent)
+            .or_default();
+        let previous = mailbox.durable_deliveries.insert(message_id, delivery);
+        drop(mailboxes);
+        drop(previous);
+        Ok(())
+    }
+
+    pub(super) fn durable_delivery(
+        &self,
+        agent: ThreadId,
+        message_id: &str,
+    ) -> Option<MessageDelivery> {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()?
+            .get(&agent)?
+            .durable_deliveries
+            .get(message_id)
+            .cloned()
+    }
+
+    pub(super) fn clear_durable_delivery(&self, agent: ThreadId, message_id: &str) {
+        // Extension data can run destructors; release the mailbox lock before dropping it.
+        let delivery = self
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_mut()
+            .and_then(|mailboxes| mailboxes.get_mut(&agent))
+            .and_then(|mailbox| mailbox.durable_deliveries.remove(message_id));
+        drop(delivery);
+    }
+
     pub(super) fn enqueue(
         &self,
         agent: ThreadId,
@@ -85,7 +134,9 @@ impl Mailboxes {
                 // Private delegates and cancelled startups can stop without explicit removal.
                 // Retain unread mail and live subscriptions, but reclaim abandoned empty entries.
                 mailboxes.retain(|_, mailbox| {
-                    !mailbox.pending.is_empty() || mailbox.state.receiver_count() != 0
+                    !mailbox.pending.is_empty()
+                        || !mailbox.durable_deliveries.is_empty()
+                        || mailbox.state.receiver_count() != 0
                 });
                 mailboxes.entry(agent).or_default().state.subscribe()
             }

@@ -181,24 +181,14 @@ fn log_field<'a>(line: &'a str, name: &str) -> Option<&'a str> {
         .map(|value| value.trim_matches('"'))
 }
 
-/// Whether the agent-communication log shows `parent_thread_id` receiving a
-/// subagent result: a `kind="result"` send to it and the receive event with the
-/// same communication ID.
-fn parent_received_subagent_result(logs: &str, parent_thread_id: ThreadId) -> bool {
-    let receiver = format!("receiver_thread_id={parent_thread_id}");
-    logs.lines()
-        .filter(|line| {
-            line.contains("state=\"send\"")
-                && line.contains("kind=\"result\"")
-                && line.contains(&receiver)
-        })
-        .filter_map(|line| log_field(line, "communication_id"))
-        .any(|communication_id| {
-            logs.lines().any(|line| {
-                line.contains("state=\"receive\"")
-                    && log_field(line, "communication_id") == Some(communication_id)
-            })
-        })
+/// Whether AgentControl has finished submitting a subagent result to the parent.
+fn parent_result_submission_finished(logs: &str, parent_thread_id: ThreadId) -> bool {
+    let receiver = parent_thread_id.to_string();
+    logs.lines().any(|line| {
+        log_field(line, "state") == Some("send")
+            && log_field(line, "kind") == Some("result")
+            && log_field(line, "receiver_thread_id") == Some(receiver.as_str())
+    })
 }
 
 fn tool_parameter_description(tool: &Value, parameter_name: &str) -> Option<String> {
@@ -458,12 +448,13 @@ async fn wait_for_requests(
     }
 }
 
-/// The child's spawned-task request: it carries the child's prompt but not the
-/// parent's spawn call. A `ResponseMock` records every request that reaches it
+/// The child's spawned-task request is identified by its agent identity; a full
+/// fork also carries the parent's spawn call. A `ResponseMock` records every request that reaches it
 /// before its own matcher runs, so it can also hold parent requests; wait for
 /// this one rather than for any request.
 fn is_child_task_request(request: &ResponsesRequest) -> bool {
-    request.body_contains_text(CHILD_PROMPT) && !request.body_contains_text(SPAWN_CALL_ID)
+    request.body_contains_text(CHILD_PROMPT)
+        && request.body_contains_text(r#""agent_name":"/root/worker""#)
 }
 
 async fn wait_for_child_task_request(
@@ -563,7 +554,8 @@ async fn setup_turn_one_with_custom_spawned_child(
         mount_response_once_match(
             server,
             |req: &wiremock::Request| {
-                body_contains(req, CHILD_PROMPT) && !body_contains(req, SPAWN_CALL_ID)
+                body_contains(req, CHILD_PROMPT)
+                    && body_contains(req, r#"\"agent_name\":\"/root/worker\""#)
             },
             sse_response(child_sse).set_delay(delay),
         )
@@ -572,7 +564,8 @@ async fn setup_turn_one_with_custom_spawned_child(
         mount_sse_once_match(
             server,
             |req: &wiremock::Request| {
-                body_contains(req, CHILD_PROMPT) && !body_contains(req, SPAWN_CALL_ID)
+                body_contains(req, CHILD_PROMPT)
+                    && body_contains(req, r#"\"agent_name\":\"/root/worker\""#)
             },
             child_sse,
         )
@@ -581,7 +574,9 @@ async fn setup_turn_one_with_custom_spawned_child(
 
     let _turn1_followup = mount_sse_once_match(
         server,
-        |req: &wiremock::Request| body_contains(req, SPAWN_CALL_ID),
+        |req: &wiremock::Request| {
+            body_contains(req, SPAWN_CALL_ID) && body_contains(req, r#"\"agent_name\":\"/root\""#)
+        },
         sse(vec![
             ev_response_created("resp-turn1-2"),
             ev_assistant_message("msg-turn1-2", "parent done"),
@@ -1072,6 +1067,11 @@ async fn subagent_notification_is_included_without_wait() -> Result<()> {
         .with_writer(MockWriter::new(output))
         .finish();
     let _guard = tracing::subscriber::set_default(subscriber);
+    // #1177: keep two dispatchers alive so registration on another test's thread
+    // cannot globally disable a communication callsite for this subscriber.
+    let _parallel_dispatch = tracing::Dispatch::new(
+        tracing_subscriber::registry().with(tracing_subscriber::filter::LevelFilter::OFF),
+    );
 
     let server = start_mock_server().await;
     let (test, spawned_id) = setup_turn_one_with_spawned_child(
@@ -1089,24 +1089,29 @@ async fn subagent_notification_is_included_without_wait() -> Result<()> {
         }
     })
     .await?;
-    // #1177, #1058: submit turn 2 only after the parent session has queued the
-    // notification. The mailbox phase is no signal for that: the row is marked
-    // `Submitted` before the hand-off. AgentControl logs `state="send"` once the
-    // hand-off has returned, and the parent logs `state="receive"` with the same
-    // communication ID once the notification is in its mailbox. Turn 2 then
-    // finds it there.
+    // #1177, #1058: Completed and the durable Submitted phase both precede
+    // hand-off. AgentControl logs the result send after enqueueing the parent's
+    // operation. A subsequent settings roundtrip through that same FIFO waits
+    // until the parent has handled it and admitted the notification to its mailbox.
+    // This also works when mail is queued without automatically continuing a turn.
     let parent_thread_id = test.session_configured.thread_id;
     tokio::time::timeout(POSITIVE_WAIT, async {
         loop {
             let logs = String::from_utf8(output.lock().expect("buffer lock").clone())
                 .expect("logs should be UTF-8");
-            if parent_received_subagent_result(&logs, parent_thread_id) {
+            if parent_result_submission_finished(&logs, parent_thread_id) {
                 break;
             }
             sleep(Duration::from_millis(10)).await;
         }
     })
     .await?;
+    timeout(
+        POSITIVE_WAIT,
+        test.codex
+            .update_thread_settings(ThreadSettingsOverrides::default()),
+    )
+    .await??;
 
     let turn2 = mount_sse_once_match(
         &server,
@@ -1120,11 +1125,22 @@ async fn subagent_notification_is_included_without_wait() -> Result<()> {
     .await;
     test.submit_turn(TURN_2_NO_WAIT_PROMPT).await?;
 
-    let turn2_requests = wait_for_requests(&turn2).await?;
-    assert!(
-        turn2_requests
-            .iter()
-            .any(|request| request.has_content_kinds(&["multi_agent.subagent_notification"]))
+    // V2 completion is an agent_message, rather than the legacy developer
+    // notification carrying multi_agent.subagent_notification metadata.
+    let request = turn2.single_request();
+    assert_eq!(
+        strip_response_item_ids_from_json(strip_metadata_from_json(Value::Array(
+            request.inputs_of_type("agent_message"),
+        ))),
+        json!([{
+            "type": "agent_message",
+            "author": "/root/worker",
+            "recipient": "/root",
+            "content": [{
+                "type": "input_text",
+                "text": "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\nchild done",
+            }],
+        }]),
     );
 
     Ok(())
@@ -1258,7 +1274,8 @@ async fn spawned_child_receives_forked_parent_context(
     let child_request_log = mount_sse_once_match(
         &server,
         |req: &wiremock::Request| {
-            body_contains(req, CHILD_PROMPT) && !body_contains(req, SPAWN_CALL_ID)
+            body_contains(req, CHILD_PROMPT)
+                && body_contains(req, r#"\"agent_name\":\"/root/worker\""#)
         },
         sse(vec![
             ev_response_created("resp-child-1"),
@@ -1270,7 +1287,9 @@ async fn spawned_child_receives_forked_parent_context(
 
     let _turn1_followup = mount_sse_once_match(
         &server,
-        |req: &wiremock::Request| body_contains(req, SPAWN_CALL_ID),
+        |req: &wiremock::Request| {
+            body_contains(req, SPAWN_CALL_ID) && body_contains(req, r#"\"agent_name\":\"/root\""#)
+        },
         sse(vec![
             ev_response_created("resp-turn1-2"),
             ev_assistant_message("msg-turn1-2", "parent done"),
@@ -1306,6 +1325,15 @@ async fn spawned_child_receives_forked_parent_context(
 
     let child_request = wait_for_request_with_model(&child_request_log, REQUESTED_MODEL).await?;
     assert!(child_request.body_contains_text(TURN_0_FORK_PROMPT));
+    // A full fork retains the in-flight parent spawn call as well as its messages.
+    assert_eq!(
+        child_request
+            .input()
+            .iter()
+            .filter(|item| { item["type"] == "function_call" && item["call_id"] == SPAWN_CALL_ID })
+            .count(),
+        1,
+    );
     let child_body = child_request.body_json();
     let child_metadata: serde_json::Value = serde_json::from_str(
         child_body["client_metadata"]["x-codex-turn-metadata"]
