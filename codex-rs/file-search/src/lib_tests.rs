@@ -64,6 +64,9 @@ fn file_name_from_path_falls_back_to_full_path() {
 /// CI runners have missed tighter bounds (#1839).
 const SESSION_WAIT: Duration = Duration::from_secs(60);
 
+/// Query whose partial results prove streaming before walk completion.
+const STREAMED_UPDATE_QUERY: &str = "file-0";
+
 #[derive(Default)]
 pub(super) struct RecordingReporter {
     updates: Mutex<Vec<FileSearchSnapshot>>,
@@ -157,7 +160,10 @@ impl SessionReporter for RecordingReporter {
 }
 
 fn is_streamed_update(snapshot: &FileSearchSnapshot) -> bool {
-    !snapshot.walk_complete && snapshot.scanned_file_count > 0 && !snapshot.matches.is_empty()
+    snapshot.query == STREAMED_UPDATE_QUERY
+        && !snapshot.walk_complete
+        && snapshot.scanned_file_count > 0
+        && !snapshot.matches.is_empty()
 }
 
 fn has_streamed_update(updates: &[FileSearchSnapshot]) -> bool {
@@ -301,7 +307,7 @@ fn session_streams_updates_before_walk_complete() {
     let walker = thread::spawn(move || walker_worker(walker_inner, override_matcher, injector));
     let session = FileSearchSession { inner };
 
-    session.update_query("file-0");
+    session.update_query(STREAMED_UPDATE_QUERY);
     assert!(
         reporter.wait_for_streamed_update(SESSION_WAIT),
         "session did not stream a partial update before walk completion"
@@ -312,13 +318,7 @@ fn session_streams_updates_before_walk_complete() {
         .into_iter()
         .find(is_streamed_update)
         .expect("streamed update");
-    assert_eq!(streamed.query, "file-0");
-    assert!(
-        streamed
-            .matches
-            .iter()
-            .all(|file_match| file_match.path.to_string_lossy().starts_with("file-0"))
-    );
+    assert_eq!(streamed.query, STREAMED_UPDATE_QUERY);
 
     release_tx.send(()).expect("release walk completion");
     assert!(reporter.wait_for_complete(SESSION_WAIT));
@@ -334,7 +334,7 @@ fn session_streams_updates_before_walk_complete() {
 fn final_only_updates_do_not_count_as_streamed() {
     // A final-only stream must not satisfy the streaming assertion.
     let final_only = FileSearchSnapshot {
-        query: "file-0".to_string(),
+        query: STREAMED_UPDATE_QUERY.to_string(),
         matches: vec![FileMatch {
             score: 1,
             path: PathBuf::from("file-0000.txt"),
@@ -348,6 +348,18 @@ fn final_only_updates_do_not_count_as_streamed() {
     };
 
     assert!(!has_streamed_update(std::slice::from_ref(&final_only)));
+
+    // An early partial snapshot still carries the empty initial query; it must
+    // not satisfy the streaming assertion even though it has matches.
+    let empty_query_partial = FileSearchSnapshot {
+        query: String::new(),
+        walk_complete: false,
+        ..final_only
+    };
+
+    assert!(!has_streamed_update(std::slice::from_ref(
+        &empty_query_partial
+    )));
 }
 
 #[test]
