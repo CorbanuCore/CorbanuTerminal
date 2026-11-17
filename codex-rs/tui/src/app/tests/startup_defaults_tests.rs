@@ -657,9 +657,10 @@ async fn fresh_startup_reads_destination_and_cleared_model_uses_catalog() -> Res
             let project_path = destination.path().display().to_string();
             // Normalize the complete path before comparing the snapshot; a long
             // disposable test home must not truncate it before replacement.
-            let width = u16::try_from(80 + unicode_width::UnicodeWidthStr::width(project_path.as_str()))?;
-            let rendered = render_bottom_popup(&app.chat_widget, width)
-                .replace(&project_path, "<PROJECT>");
+            let width =
+                u16::try_from(80 + unicode_width::UnicodeWidthStr::width(project_path.as_str()))?;
+            let rendered =
+                render_bottom_popup(&app.chat_widget, width).replace(&project_path, "<PROJECT>");
             insta::assert_snapshot!(rendered, @r"
             › Ask Corbanu Terminal to do anything
 
