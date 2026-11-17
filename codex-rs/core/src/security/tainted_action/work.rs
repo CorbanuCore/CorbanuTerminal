@@ -222,6 +222,10 @@ mod tests {
             include_str!("indirect_exec_policy_names.rs"),
         ),
         (
+            "indirect_exec_policy_powershell.rs",
+            include_str!("indirect_exec_policy_powershell.rs"),
+        ),
+        (
             "indirect_exec_policy_xargs.rs",
             include_str!("indirect_exec_policy_xargs.rs"),
         ),

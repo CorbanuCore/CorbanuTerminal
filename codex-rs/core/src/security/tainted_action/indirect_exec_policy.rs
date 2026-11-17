@@ -24,6 +24,12 @@ use indirect_exec_policy_launchers as launchers;
 mod indirect_exec_policy_names;
 use indirect_exec_policy_names as names;
 
+#[cfg(any(windows, test))]
+#[path = "indirect_exec_policy_powershell.rs"]
+mod indirect_exec_policy_powershell;
+#[cfg(windows)]
+pub(crate) use indirect_exec_policy_powershell::policy_powershell_script;
+
 pub(crate) struct PolicyWrapperCommands {
     pub(crate) starts: Vec<usize>,
     pub(crate) uncertain: bool,

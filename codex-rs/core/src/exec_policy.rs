@@ -46,6 +46,8 @@ use shlex::try_join as shlex_try_join;
 
 #[path = "exec_policy_wrappers.rs"]
 mod wrappers;
+#[cfg(unix)]
+pub(crate) use wrappers::check_executed_with_wrappers;
 pub(crate) use wrappers::check_with_wrappers;
 
 const PROMPT_CONFLICT_REASON: &str =
@@ -1256,8 +1258,13 @@ fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {
 
     #[cfg(windows)]
     {
+        // #2524 (D688): `PWSH -c`, `PowerShell.EXE -Command` read like
+        // `pwsh -c`, `powershell.exe -Command`.
+        let respelled = crate::security::tainted_action::policy_powershell_script(command);
         if let Some(commands) =
-            codex_shell_command::powershell::parse_powershell_command_into_plain_commands(command)
+            codex_shell_command::powershell::parse_powershell_command_into_plain_commands(
+                respelled.as_deref().unwrap_or(command),
+            )
             && !commands.is_empty()
         {
             return ExecPolicyCommands {

@@ -64,6 +64,8 @@ mod windows_shell;
 mod work;
 
 pub(crate) use indirect::indirect_exec_policy::policy_wrapper_commands;
+#[cfg(windows)]
+pub(crate) use indirect::indirect_exec_policy::policy_powershell_script;
 pub(crate) use paths::USER_PERSISTENCE;
 pub(crate) use paths::WORKSPACE_AGENT_SETTINGS;
 pub(crate) use paths::WORKSPACE_PERSISTENCE;

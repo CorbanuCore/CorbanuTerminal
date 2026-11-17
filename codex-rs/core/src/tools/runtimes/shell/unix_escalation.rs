@@ -879,14 +879,14 @@ fn evaluate_intercepted_exec_policy(
         )
     };
 
-    crate::exec_policy::check_with_wrappers(
-        policy,
-        &commands,
-        &fallback,
-        &MatchOptions {
-            resolve_host_executables: true,
-        },
-    )
+    let options = MatchOptions {
+        resolve_host_executables: true,
+    };
+    if enable_shell_wrapper_parsing {
+        crate::exec_policy::check_with_wrappers(policy, &commands, &fallback, &options)
+    } else {
+        crate::exec_policy::check_executed_with_wrappers(policy, &commands, &fallback, &options)
+    }
 }
 
 #[derive(Clone)]
