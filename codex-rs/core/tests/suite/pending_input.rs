@@ -2776,6 +2776,7 @@ async fn terminal_compaction_error_does_not_retry_pending_input(
     pending_input: PendingInputAfterFailure,
 ) -> anyhow::Result<()> {
     const PENDING_MESSAGE: &str = "pending input must survive the failed compaction";
+    const TRIGGERING_PROMPT: &str = "prompt that needs compaction";
     let (release_failure, failure_gate) = oneshot::channel();
     let initial_output = match failure_point {
         CompactionFailurePoint::PreTurn => ev_message_item_done("initial", "first answer"),
@@ -2851,7 +2852,7 @@ async fn terminal_compaction_error_does_not_retry_pending_input(
     if pending_input == PendingInputAfterFailure::QueuedMail {
         submit_queue_only_agent_mail(codex, PENDING_MESSAGE).await;
     }
-    submit_user_input(codex, "prompt that needs compaction").await;
+    submit_user_input(codex, TRIGGERING_PROMPT).await;
     tokio::time::timeout(
         std::time::Duration::from_secs(/*secs*/ 10),
         server.wait_for_request_count(/*count*/ 2),
@@ -2953,6 +2954,26 @@ async fn terminal_compaction_error_does_not_retry_pending_input(
         })
         .collect::<Vec<_>>();
     assert_eq!(saved_pending_messages, vec![PENDING_MESSAGE]);
+    // Main-merge-9 (#2453): the prompt admitted with the failed turn is saved exactly once.
+    let saved_triggering_prompts = history
+        .items
+        .iter()
+        .filter(|item| {
+            let RolloutItem::ResponseItem(envelope) = item else {
+                return false;
+            };
+            matches!(
+                &envelope.item,
+                ResponseItem::Message { role, content, .. }
+                    if role == "user"
+                        && content.iter().any(|content| matches!(
+                            content,
+                            ContentItem::InputText { text } if text == TRIGGERING_PROMPT
+                        ))
+            )
+        })
+        .count();
+    assert_eq!(saved_triggering_prompts, 1);
 
     // The failed turn must not poison a later explicit retry once compaction can succeed.
     submit_user_input(codex, "retry after quota resets").await;

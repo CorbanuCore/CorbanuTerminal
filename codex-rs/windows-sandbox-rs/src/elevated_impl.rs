@@ -205,7 +205,7 @@ mod windows_impl {
                 cwd,
                 &write_roots,
                 logs_base_dir,
-            );
+            )?;
             let cap_sids = write_roots
                 .iter()
                 .map(|root| workspace_write_cap_sid_for_root(codex_home, cwd, root))
