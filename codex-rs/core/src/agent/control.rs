@@ -590,38 +590,63 @@ impl LocalAgentControl {
         // so a message is never lost or delivered twice. Upstream's in-memory queue for
         // unloaded recipients is not durable and takes no new mail.
         {
-            // A known recipient that is not loaded (an evicted V2 manager whose child just
-            // finished, say) has the message admitted to the durable mailbox; its reload
-            // recovers it. Holding the thread map keeps this atomic with publication of a
-            // reloaded session, whose recovery then runs after the admission.
-            let threads = state.threads.read().await;
-            if !threads.contains_key(&agent_id) {
+            // Publication takes this same recipient gate before the map write. Recheck
+            // residency under the gate so arrivals queued behind publication use the live
+            // session; earlier admissions finish before publication/recovery can proceed.
+            let admission = state.mailbox_admission.lock(agent_id).await;
+            let unloaded_state_db = {
+                let threads = state.threads.read().await;
+                (!threads.contains_key(&agent_id)).then(|| {
+                    threads
+                        .get(&context.sender_thread_id)
+                        .and_then(|sender| sender.state_db())
+                })
+            };
+            if let Some(state_db) = unloaded_state_db {
                 // As upstream's unloaded path: a tree that is shutting down takes no new mail.
-                let _membership = self.runtime.admit_start()?;
+                let membership = self.runtime.admit_start()?;
                 self.runtime.ensure_agent_known(agent_id)?;
-                // Read the sender's database handle from the held map: taking the thread map
-                // again here could deadlock behind a queued writer.
-                let state_db = threads
-                    .get(&context.sender_thread_id)
-                    .and_then(|sender| sender.state_db());
-                let submission_id = self
-                    .admit_for_unloaded_recipient(agent_id, state_db, communication)
-                    .await?;
-                if let Some(delivery) = delivery {
-                    self.runtime.mailboxes.retain_durable_delivery(
+                let control = self.clone();
+                let state = Arc::clone(state);
+                // Once DB work starts, cancellation must not let publication overtake a
+                // still-committing write or skip lifecycle retention. Tree shutdown also
+                // waits for this admitted operation through its membership.
+                return tokio::spawn(async move {
+                    let _membership = membership;
+                    let _admission = admission;
+                    #[cfg(test)]
+                    state
+                        .mailbox_admission
+                        .pause_admission(
+                            crate::thread_manager::mailbox_admission::AdmissionStage::BeforeWrite,
+                        )
+                        .await;
+                    let submission_id = control
+                        .admit_for_unloaded_recipient(agent_id, state_db, communication)
+                        .await?;
+                    #[cfg(test)]
+                    state.mailbox_admission.pause_admission(
+                        crate::thread_manager::mailbox_admission::AdmissionStage::BeforeRetention,
+                    ).await;
+                    if let Some(delivery) = delivery {
+                        control.runtime.mailboxes.retain_durable_delivery(
+                            agent_id,
+                            submission_id.clone(),
+                            delivery,
+                        )?;
+                    }
+                    crate::agent_communication::emit_agent_communication_send(
+                        &submission_id,
+                        &context,
+                        log_content.as_deref(),
                         agent_id,
-                        submission_id.clone(),
-                        delivery,
-                    )?;
-                }
-                drop(threads);
-                crate::agent_communication::emit_agent_communication_send(
-                    &submission_id,
-                    &context,
-                    log_content.as_deref(),
-                    agent_id,
-                );
-                return Ok(submission_id);
+                    );
+                    // Keep the manager alive until the operation has finished, even if its
+                    // caller disappears while the database is writing.
+                    drop(state);
+                    Ok(submission_id)
+                })
+                .await?;
             }
         }
         let submission_id = self

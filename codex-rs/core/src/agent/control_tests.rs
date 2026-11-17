@@ -126,6 +126,9 @@ use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use toml::Value as TomlValue;
 
+#[path = "control/mailbox_admission_tests.rs"]
+mod mailbox_admission;
+
 #[path = "control/spawn_publication_tests.rs"]
 mod spawn_publication;
 
