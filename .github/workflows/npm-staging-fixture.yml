@@ -3,51 +3,86 @@ name: npm-staging-fixture
 # repo-checks stages the npm package from the native artifacts of one pinned
 # upstream rust-release run (.github/npm-staging-fixture.json). Those artifacts
 # expire, and an expired pin breaks staging on every packaging PR and main run
-# (#2514, #2515). Weekly, this job checks the pin and, when a required target
-# is missing or expires within 21 days, moves it to the newest successful
+# (#2514, #2515). Weekly, the `check` job verifies the pin. When a target is
+# missing or expires within 21 days, it picks the newest successful
 # rust-release run that has all six targets (searching at most 20 runs) and
-# opens a PR. The PR changes a packaging input, so repo-checks runs full
-# staging on it. PRs opened with the workflow token don't start other
-# workflows: close and reopen the PR (or push to it) to run CI. The job fails
-# if no valid run is found, leaving the pin as it was.
+# uploads the candidate pin plus a verification summary as the
+# `npm-staging-fixture-candidate` artifact. The `report` job then opens, or
+# updates, one bot-owned tracking issue with the proposed pin, run, tag, head
+# SHA, earliest expiry and workflow-run link. A maintainer applies it in a
+# normal PR, which runs full npm staging because the pin is a packaging input.
+# This workflow never opens PRs: the repository setting "Allow GitHub Actions
+# to create and approve pull requests" stays disabled. A healthy pin opens no
+# issue. If no valid run is found, the `check` job fails and the pin stays.
 on:
   schedule:
     - cron: "41 6 * * 1"
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency:
   group: npm-staging-fixture
   cancel-in-progress: false
 
 jobs:
-  refresh:
-    name: Check and refresh the npm staging fixture
+  check:
+    name: Check the npm staging fixture
     if: github.repository == 'CorbanuCore/CorbanuTerminal'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+    outputs:
+      changed: ${{ steps.fixture.outputs.changed }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: Verify the pin, or move it to the newest valid rust-release run
+      - name: Verify the pin, or find the newest valid rust-release run
         id: fixture
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 .github/scripts/npm_staging_fixture.py refresh --summary-file "${RUNNER_TEMP}/npm-staging-fixture.md"
+        run: >-
+          python3 .github/scripts/npm_staging_fixture.py refresh
+          --output "${RUNNER_TEMP}/npm-staging-fixture/npm-staging-fixture.json"
+          --summary-file "${RUNNER_TEMP}/npm-staging-fixture/summary.md"
 
-      - name: Open pull request
+      - name: Upload the candidate pin and verification summary
         if: steps.fixture.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          add-paths: .github/npm-staging-fixture.json
-          commit-message: "ci: move the npm staging fixture to rust-release run ${{ steps.fixture.outputs.run_id }}"
-          title: "ci: move the npm staging fixture to ${{ steps.fixture.outputs.tag }} (#2515)"
-          body-path: ${{ runner.temp }}/npm-staging-fixture.md
-          branch: bot/npm-staging-fixture
-          delete-branch: true
+          name: npm-staging-fixture-candidate
+          path: ${{ runner.temp }}/npm-staging-fixture/
+          if-no-files-found: error
+
+  report:
+    name: Open or update the refresh tracking issue
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-staging-fixture-candidate
+          path: ${{ runner.temp }}/npm-staging-fixture
+
+      - name: Open or update the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          python3 .github/scripts/npm_staging_fixture.py report
+          --repo "$REPO" --run-url "$RUN_URL"
+          --summary-file "${RUNNER_TEMP}/npm-staging-fixture/summary.md"

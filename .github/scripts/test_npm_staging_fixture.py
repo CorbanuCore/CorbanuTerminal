@@ -17,6 +17,8 @@ from npm_staging_fixture import FixtureError, verify
 
 
 REPO = "openai/codex"
+THIS_REPO = "CorbanuCore/CorbanuTerminal"
+RUN_URL = f"https://github.com/{THIS_REPO}/actions/runs/99"
 NOW = datetime(2026, 11, 17, 13, 0, tzinfo=timezone.utc)
 FAR = "2027-02-15T03:09:19Z"  # about 90 days after NOW
 TARGETS = fixture.stage.BINARY_TARGETS
@@ -67,16 +69,62 @@ def full_set(**overrides) -> list[dict]:
 class FakeGh:
     """Serve `gh api` calls from per-run tables; record every call."""
 
-    def __init__(self, runs: dict[int, dict], artifacts: dict[int, list[dict]]):
+    def __init__(
+        self,
+        runs: dict[int, dict],
+        artifacts: dict[int, list[dict]],
+        issues: list[dict] | None = None,
+    ):
         self.runs = runs
         self.artifacts = artifacts
+        # Issues of THIS repo (all creators, open and closed, PRs included).
+        self.issues = issues if issues is not None else []
         self.calls: list[list[str]] = []
+        self.writes: list[tuple[str, str, dict]] = []
 
-    def __call__(self, args, text=True):
+    def __call__(self, args, text=True, input=None):
         self.calls.append(list(args))
         assert args[:2] == ["gh", "api"], args
         path = next(a for a in args[2:] if a.startswith("repos/"))
         jq = args[args.index("--jq") + 1] if "--jq" in args else None
+        if "--method" in args:
+            method = args[args.index("--method") + 1]
+            assert args[-2:] == ["--input", "-"], args
+            payload = json.loads(input)
+            self.writes.append((method, path, payload))
+            if method == "POST" and path == f"repos/{THIS_REPO}/issues":
+                number = max([i["number"] for i in self.issues] + [0]) + 1
+                issue = {
+                    "number": number,
+                    "state": "open",
+                    "user": {"login": "github-actions[bot]"},
+                    "html_url": f"https://github.com/{THIS_REPO}/issues/{number}",
+                    **payload,
+                }
+                self.issues.append(issue)
+                return json.dumps(issue)
+            m = re.fullmatch(rf"repos/{THIS_REPO}/issues/(\d+)", path)
+            if method == "PATCH" and m:
+                issue = next(i for i in self.issues if i["number"] == int(m.group(1)))
+                issue.update(payload)
+                return json.dumps(issue)
+            raise AssertionError(f"unexpected gh write: {args}")
+        if path == (
+            f"repos/{THIS_REPO}/issues?state=open&creator=github-actions%5Bbot%5D"
+            "&sort=created&direction=asc&per_page=100"
+        ):
+            assert jq == ".[]" and "--paginate" not in args
+            # Like the API, filter by state and creator (PRs are included).
+            listed = sorted(
+                (
+                    i
+                    for i in self.issues
+                    if i["state"] == "open"
+                    and i["user"]["login"] == "github-actions[bot]"
+                ),
+                key=lambda i: i["number"],
+            )
+            return "".join(json.dumps(i) + "\n" for i in listed)
         m = re.fullmatch(rf"repos/{REPO}/actions/runs/(\d+)", path)
         if m:
             assert jq is None
@@ -286,14 +334,54 @@ class CommandTest(unittest.TestCase):
             {10: run(10, "2026-11-17T03:09:19Z"), 11: run(11, "2026-11-17T09:00:00Z")},
             {10: full_set(), 11: full_set()},
         )
-        code, out, _ = self.main(gh, "refresh")
+        candidate = self.dir / "out" / "candidate.json"
+        code, out, _ = self.main(
+            gh,
+            "refresh",
+            "--output",
+            str(candidate),
+            "--summary-file",
+            str(self.summary),
+        )
         self.assertEqual(code, 0)
         self.assertEqual(self.pin.read_text(), before)
         self.assertIn("changed=false", self.output.read_text())
+        self.assertIn("no tracking issue", out)
         self.assertFalse(
             any("workflows" in " ".join(c) for c in gh.calls),
             "no search when the pin is valid",
         )
+        # Healthy: no candidate, no summary, so no artifact and no issue.
+        self.assertFalse(candidate.exists())
+        self.assertFalse(self.summary.exists())
+        self.assertEqual(gh.writes, [])
+
+    def test_refresh_writes_candidate_to_output_and_leaves_pin(self) -> None:
+        before = self.write_pin(10)
+        runs = {
+            10: run(10, "2026-08-19T00:03:26Z"),
+            11: run(11, "2026-11-17T00:00:00Z"),
+        }
+        candidate = self.dir / "out" / "npm-staging-fixture.json"
+        code, _, err = self.main(
+            FakeGh(runs, {10: [], 11: full_set()}),
+            "refresh",
+            "--output",
+            str(candidate),
+            "--summary-file",
+            str(self.summary),
+        )
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(self.pin.read_text(), before)
+        self.assertEqual(json.loads(candidate.read_text())["run_id"], 11)
+        summary = self.summary.read_text()
+        self.assertIn(f"```json\n{candidate.read_text()}```", summary)
+        self.assertIn(
+            "fails the check: run 10: Expected workflow artifact not found", summary
+        )
+        self.assertIn("in a normal PR", summary)
+        self.assertIn("stays disabled", summary)
+        self.assertNotIn(fixture.ISSUE_MARKER, summary)
 
     def test_refresh_picks_newest_valid_run_and_skips_invalid_ones(self) -> None:
         self.write_pin(10)
@@ -364,11 +452,130 @@ class CommandTest(unittest.TestCase):
             10: run(10, "2026-08-19T00:03:26Z"),
             11: run(11, "2026-11-17T00:00:00Z"),
         }
-        code, _, err = self.main(FakeGh(runs, {10: [], 11: []}), "refresh")
+        candidate = self.dir / "out" / "candidate.json"
+        code, _, err = self.main(
+            FakeGh(runs, {10: [], 11: []}),
+            "refresh",
+            "--output",
+            str(candidate),
+            "--summary-file",
+            str(self.summary),
+        )
         self.assertEqual(code, 1)
         self.assertIn("the pin stays at run 10", err)
         self.assertEqual(self.pin.read_text(), before)
+        # The job fails: no `changed` output, candidate or summary, so the
+        # workflow uploads nothing and the report job does not run.
         self.assertFalse(self.output.exists())
+        self.assertFalse(candidate.exists())
+        self.assertFalse(self.summary.exists())
+
+    # --- report: the one bot-owned tracking issue -------------------------
+
+    def report(self, gh: FakeGh) -> tuple[int, str, str]:
+        return self.main(
+            gh,
+            "report",
+            "--repo",
+            THIS_REPO,
+            "--run-url",
+            RUN_URL,
+            "--summary-file",
+            str(self.summary),
+        )
+
+    @staticmethod
+    def bot_issue(number: int, body: str, **overrides) -> dict:
+        issue = {
+            "number": number,
+            "state": "open",
+            "title": "old title",
+            "body": body,
+            "user": {"login": "github-actions[bot]"},
+            "html_url": f"https://github.com/{THIS_REPO}/issues/{number}",
+        }
+        issue.update(overrides)
+        return issue
+
+    def test_report_opens_issue_when_none_exists(self) -> None:
+        self.summary.write_text("## refresh needed\n\nproposed pin\n")
+        marker = fixture.ISSUE_MARKER
+        decoys = [
+            # A human issue quoting the marker, a bot PR and a closed bot issue.
+            self.bot_issue(1, marker, user={"login": "someone"}),
+            self.bot_issue(2, marker, pull_request={"url": "x"}),
+            self.bot_issue(3, marker, state="closed"),
+            self.bot_issue(4, "an unrelated bot issue"),
+        ]
+        gh = FakeGh({}, {}, issues=decoys)
+        code, out, err = self.report(gh)
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(
+            [(m, p) for m, p, _ in gh.writes], [("POST", f"repos/{THIS_REPO}/issues")]
+        )
+        body = gh.writes[0][2]["body"]
+        self.assertTrue(body.startswith(marker + "\n## refresh needed"))
+        self.assertIn(f"Workflow run: {RUN_URL}", body)
+        self.assertIn(fixture.ARTIFACT_NAME, body)
+        self.assertEqual(gh.writes[0][2]["title"], fixture.ISSUE_TITLE)
+        self.assertIn("Opened tracking issue #5", out)
+        self.assertIn("issue=5\naction=opened\n", self.output.read_text())
+
+    def test_report_updates_existing_issue_instead_of_duplicating(self) -> None:
+        self.summary.write_text("## refresh needed\n\nnewer candidate\n")
+        older = self.bot_issue(7, f"{fixture.ISSUE_MARKER}\nolder candidate\n")
+        newer = self.bot_issue(9, f"{fixture.ISSUE_MARKER}\nanother\n")
+        gh = FakeGh({}, {}, issues=[newer, older])
+        code, out, err = self.report(gh)
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(
+            [(m, p) for m, p, _ in gh.writes],
+            [("PATCH", f"repos/{THIS_REPO}/issues/7")],
+        )
+        self.assertIn("newer candidate", older["body"])
+        self.assertEqual(older["title"], fixture.ISSUE_TITLE)
+        self.assertEqual(len(gh.issues), 2)
+        self.assertIn("Updated tracking issue #7", out)
+
+    def test_report_is_idempotent_across_weekly_runs(self) -> None:
+        self.summary.write_text("## refresh needed\n\nsame candidate\n")
+        gh = FakeGh({}, {})
+        for _ in range(3):
+            self.assertEqual(self.report(gh)[0], 0)
+        self.assertEqual(len(gh.issues), 1)
+        # Opened once; the identical second and third reports write nothing.
+        self.assertEqual([m for m, _, _ in gh.writes], ["POST"])
+        self.assertIn("action=unchanged", self.output.read_text())
+
+    def test_lookup_only_trusts_bot_issues_with_the_marker(self) -> None:
+        # Even if the listing returned other issues (the creator filter is the
+        # API's), only an open bot issue, not a PR, with the marker counts.
+        marker = fixture.ISSUE_MARKER
+        listed = [
+            self.bot_issue(1, marker, user={"login": "someone"}),
+            self.bot_issue(2, marker, pull_request={"url": "x"}),
+            self.bot_issue(3, "no marker"),
+            self.bot_issue(4, f"text\n{marker}\n"),
+        ]
+
+        def lines(issues):
+            return "".join(json.dumps(i) + "\n" for i in issues)
+
+        with mock.patch.object(fixture, "gh_api", return_value=lines(listed)):
+            self.assertEqual(fixture.find_tracking_issue(THIS_REPO)["number"], 4)
+        with mock.patch.object(fixture, "gh_api", return_value=lines(listed[:3])):
+            self.assertIsNone(fixture.find_tracking_issue(THIS_REPO))
+
+    def test_report_fails_closed_without_summary(self) -> None:
+        gh = FakeGh({}, {})
+        code, _, err = self.report(gh)
+        self.assertEqual(code, 1)
+        self.assertIn("cannot read summary", err)
+        self.summary.write_text("  \n")
+        code, _, err = self.report(gh)
+        self.assertEqual(code, 1)
+        self.assertIn("is empty", err)
+        self.assertEqual((gh.calls, gh.writes), ([], []))
 
     def test_rejects_bad_arguments(self) -> None:
         self.write_pin(10)
@@ -403,6 +610,30 @@ class RepoWiringTest(unittest.TestCase):
         # A pin change is a packaging input, so its PR runs full staging.
         self.assertIn(".github/npm-staging-fixture.json", workflow)
         self.assertIn(".github/scripts/npm_staging_fixture.py", workflow)
+
+    def test_refresh_workflow_reports_by_issue_with_least_privilege(self) -> None:
+        text = (self.ROOT / ".github/workflows/npm-staging-fixture.yml").read_text()
+        for forbidden in (
+            "contents: write",
+            "pull-requests: write",
+            "create-pull-request",
+        ):
+            self.assertNotIn(forbidden, text)
+        self.assertRegex(text, r"(?m)^permissions:\n  contents: read\n")
+        jobs = text.split("\njobs:\n", 1)[1]
+        check, report = jobs.split("\n  report:\n", 1)
+        self.assertNotIn("issues: write", check)
+        self.assertIn("refresh\n", check)
+        self.assertIn("name: npm-staging-fixture-candidate", check)
+        self.assertIn("if: steps.fixture.outputs.changed == 'true'", check)
+        # Only the reporting job may write issues, and only after a check
+        # that found a valid replacement (a failed check skips it).
+        self.assertIn("needs: check\n", report)
+        self.assertIn("if: needs.check.outputs.changed == 'true'", report)
+        self.assertRegex(
+            report, r"permissions:\n      contents: read\n      issues: write\n"
+        )
+        self.assertIn("npm_staging_fixture.py report", report)
 
 
 if __name__ == "__main__":
