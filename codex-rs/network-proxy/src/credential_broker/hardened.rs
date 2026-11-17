@@ -44,6 +44,10 @@ use codex_secret_broker::CredentialReference as BrokerCredentialReference;
 #[cfg(any(unix, windows))]
 use codex_secret_broker::ProviderRequestOperation;
 
+mod known_scan;
+
+pub use known_scan::KnownCredentialScanError;
+
 #[derive(Clone)]
 pub(crate) struct HardenedBroker {
     state: Arc<RwLock<HardenedState>>,
@@ -138,6 +142,9 @@ struct HardenedRecord {
     provider: &'static providers::CredentialProvider,
     host_binding: providers::CredentialHostBinding,
     secret: RecordSecret,
+    /// Byte length of the trimmed real value: lets `known_scan` match an
+    /// isolated record by fingerprint without the value itself.
+    value_len: usize,
     dummy_value: String,
 }
 
@@ -721,6 +728,7 @@ impl HardenedState {
             provider,
             host_binding,
             secret: RecordSecret::Raw(Zeroizing::new(real_value.to_string())),
+            value_len: real_value.len(),
             dummy_value: dummy_value.clone(),
         });
         dummy_value
@@ -796,6 +804,7 @@ impl HardenedState {
                 reference,
                 client,
             },
+            value_len: real_value.len(),
             dummy_value: dummy_value.clone(),
         });
         dummy_value
@@ -815,6 +824,7 @@ impl HardenedState {
             provider,
             host_binding,
             secret: RecordSecret::Unavailable { fingerprint },
+            value_len: real_value.len(),
             dummy_value: dummy_value.clone(),
         });
         dummy_value

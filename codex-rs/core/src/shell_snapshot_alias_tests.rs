@@ -88,7 +88,7 @@ fn capture_raw(kind: ShellType, executable: &str, home: &Path, render: Render) -
 fn snapshot(kind: ShellType, raw: &str, removed: &[String], render: Render) -> Result<String> {
     let mut capture =
         CapturedSnapshot::parse(kind, raw.as_bytes()).context("invalid shell snapshot capture")?;
-    let filter = retain_safe_exports(&mut capture, raw.len(), removed)?;
+    let filter = retain_safe_exports(&mut capture, raw.len(), removed, /*brokered*/ None)?;
     let snapshot = match render {
         Render::Plain => capture.render_script(&ShellEnvironmentPolicy::default()),
         Render::Brokered => {

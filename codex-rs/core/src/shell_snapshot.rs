@@ -645,9 +645,14 @@ async fn capture_snapshot(
     // shell startup files define no longer reaches commands through the
     // snapshot (as on main). The captured environment, and so the broker's
     // credential and alias handling, is untouched.
-    // #2314: nor is any export whose value carries a protected credential.
-    let credential_filter =
-        filter::retain_safe_exports(&mut capture, raw_snapshot.len(), removed_env_vars)?;
+    // #2314: nor is any export whose value carries a protected credential,
+    // including (D685) one the broker already holds whose source was unset.
+    let credential_filter = filter::retain_safe_exports(
+        &mut capture,
+        raw_snapshot.len(),
+        removed_env_vars,
+        credential_broker.map(|broker| &broker.network_proxy),
+    )?;
     let Some(credential_broker) = credential_broker else {
         let snapshot = capture.render_script(shell_environment_policy);
         credential_filter.ensure_clean(&snapshot)?;

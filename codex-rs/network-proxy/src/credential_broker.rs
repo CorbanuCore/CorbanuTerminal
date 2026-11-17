@@ -44,6 +44,7 @@ pub use resolver::ScopedCredentialUse;
 #[cfg(all(test, any(unix, windows)))]
 pub(crate) use hardened::BrokeredCredentialRoute;
 pub(crate) use hardened::CredentialRouting;
+pub use hardened::KnownCredentialScanError;
 #[cfg(any(unix, windows))]
 pub(crate) use isolated::IsolatedBrokerOptions;
 #[cfg(not(any(unix, windows)))]
@@ -415,6 +416,15 @@ impl CredentialBroker {
     /// Whether `main`'s engine owns brokering for this broker.
     pub(crate) fn hardened(&self) -> bool {
         self.hardened.armed()
+    }
+
+    /// Whether `text` carries a credential the hardened engine has registered
+    /// (see `hardened::known_scan`).
+    pub(crate) fn known_credential_occurs_in(
+        &self,
+        text: &str,
+    ) -> Result<bool, KnownCredentialScanError> {
+        self.hardened.known_credential_occurs_in(text)
     }
 
     /// Whether a Corbanu protection is armed (isolated broker, Core-sourced
