@@ -1666,7 +1666,9 @@ other non-default provider fields are not supported"
             location: None,
             credential_file: None,
             capabilities: None,
-            include_internal_metadata: true,
+            // D634 / #2351: endpoint overrides do not inherit a first-party metadata grant.
+            // ModelProvider checks the resolved HTTPS destination before including it.
+            include_internal_metadata: false,
         }
     }
 
