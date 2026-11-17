@@ -46,6 +46,8 @@ const UNSHARE: &str = "unshare -Ur sh -c 'echo NAMESPACE-MADE-D$((40+8))'";
 /// The same as a plain command, which isn't a protected action: asked about
 /// in D48's own fresh prompt.
 const PLAIN: &str = "unshare -Ur printf NAMESPACE-MADE-%s D48";
+/// [`PLAIN`] behind `chroot /`, as in #2455.
+const CHROOTED: &str = "unshare -Ur chroot / printf NAMESPACE-MADE-%s D48";
 const NAMESPACE_MADE: &str = "NAMESPACE-MADE-D48";
 /// What the model's own shell prints if it runs (it never should).
 const OWN_SHELL_RAN: &str = "OWN-SHELL-RAN-D48";
@@ -106,8 +108,8 @@ fn step(call_id: &str, command: &str, kind: Kind, own_shell: &str) -> Vec<Value>
 #[derive(Clone, Copy, Debug)]
 struct Setup {
     level: SecurityLevel,
-    /// A "don't ask again" rule saved earlier for `unshare`.
-    saved_rule: bool,
+    /// Rules saved earlier ("don't ask again"); empty for none.
+    rules: &'static str,
     approval: AskForApproval,
     /// The automatic reviewer answers ordinary prompts.
     auto_review: bool,
@@ -166,12 +168,9 @@ async fn run(
     calls: &[(Kind, &'static str, ReviewDecision)],
 ) -> anyhow::Result<Vec<Call>> {
     let home = Arc::new(TempDir::new()?);
-    if setup.saved_rule {
+    if !setup.rules.is_empty() {
         std::fs::create_dir_all(home.path().join("rules"))?;
-        std::fs::write(
-            home.path().join("rules/default.rules"),
-            "prefix_rule(pattern=[\"unshare\"], decision=\"allow\")\n",
-        )?;
+        std::fs::write(home.path().join("rules/default.rules"), setup.rules)?;
     }
     let mut steps = vec![vec![
         ev_response_created("call-first"),
@@ -269,6 +268,7 @@ async fn run(
             })
             .await?;
     }
+    super::session_resources::shutdown(&test).await?;
     let requests = captured.requests();
     Ok(ids
         .iter()
@@ -291,9 +291,14 @@ async fn run(
         .collect())
 }
 
+/// "Don't ask again" rules for `unshare` and the command [`PLAIN`] runs
+/// (#2455: one for `unshare` alone no longer covers it).
+const SAVED_RULES: &str = "prefix_rule(pattern=[\"unshare\"], decision=\"allow\")\n\
+                           prefix_rule(pattern=[\"printf\"], decision=\"allow\")\n";
+
 const MODERATE: Setup = Setup {
     level: SecurityLevel::Moderate,
-    saved_rule: false,
+    rules: "",
     approval: AskForApproval::OnRequest,
     auto_review: false,
 };
@@ -450,7 +455,7 @@ async fn d48_saved_rule_aggressive_approvals_off_and_auto_review() -> anyhow::Re
         (
             "saved rule",
             Setup {
-                saved_rule: true,
+                rules: SAVED_RULES,
                 ..MODERATE
             },
             PLAIN,
@@ -494,8 +499,64 @@ async fn d48_saved_rule_aggressive_approvals_off_and_auto_review() -> anyhow::Re
                 call.unwarned()
                     && call.refused
                     && !call.made
-                    && (!setup.saved_rule || call.asked.is_empty())
+                    && (setup.rules.is_empty() || call.asked.is_empty())
             }
+        };
+        if !ok {
+            wrong.push(format!("{name}: {call:#?}\noutput: {}", call.output));
+        }
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+    Ok(())
+}
+
+/// #2455 (D670): after untrusted content under Moderate, D48's fresh prompt
+/// for a known tool doesn't get past a rule for the command it runs. A
+/// forbidden rule refuses it before anyone is asked; a prompt rule's reason
+/// is in D48's prompt, ahead of the warning; a saved rule for `unshare`
+/// alone doesn't cover the command, so the person is asked as without one.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue2455_d48_prompt_keeps_inner_command_rules() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+    const FORBIDDEN: &str = "prefix_rule(pattern=[\"unshare\"], decision=\"allow\")\n\
+                             prefix_rule(pattern=[\"printf\"], decision=\"forbidden\")\n";
+    const PROMPT: &str = "prefix_rule(pattern=[\"printf\"], decision=\"prompt\")\n";
+    const UNSHARE_ONLY: &str = "prefix_rule(pattern=[\"unshare\"], decision=\"allow\")\n";
+    let mut wrong = Vec::new();
+    for (name, rules, command) in [
+        ("forbidden", FORBIDDEN, PLAIN),
+        ("forbidden behind chroot", FORBIDDEN, CHROOTED),
+        ("prompt", PROMPT, PLAIN),
+        ("prompt behind chroot", PROMPT, CHROOTED),
+        ("unshare only", UNSHARE_ONLY, PLAIN),
+    ] {
+        let calls = Box::pin(run(
+            Setup { rules, ..MODERATE },
+            &[(Kind::Escalated, command, ReviewDecision::Approved)],
+        ))
+        .await?;
+        let call = &calls[0];
+        eprintln!("{name}: {call:#?}");
+        let ok = if name.starts_with("forbidden") {
+            call.asked.is_empty()
+                && !call.made
+                && call
+                    .output
+                    .contains("policy forbids commands starting with `printf")
+        } else {
+            let policy_first = |reason: &String| {
+                reason
+                    .find("requires approval by policy")
+                    .is_some_and(|at| reason.find(WARNING).is_some_and(|warning| at < warning))
+            };
+            call.asked.len() == 1
+                && call.allowed()
+                && if name == "unshare only" {
+                    call.warned()
+                } else {
+                    call.asked.iter().all(policy_first)
+                }
         };
         if !ok {
             wrong.push(format!("{name}: {call:#?}\noutput: {}", call.output));

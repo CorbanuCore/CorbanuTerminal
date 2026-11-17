@@ -273,6 +273,8 @@ mod safety_check_downgrade;
 mod sandbox_denied_at_start;
 mod scenarios;
 mod search_tool;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod session_resources;
 mod settings_commits;
 mod settings_constraints;
 mod shell_snapshot;

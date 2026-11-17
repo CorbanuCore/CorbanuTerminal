@@ -1,0 +1,3 @@
+## Security
+
+Command rules now cover `xargs`, `su`, `sg` and `watch` (#2455, D676–D678). `xargs` applies rules to the command it runs: a forbidden rule that matches its fixed words (for example `xargs -n1 git push`) refuses it, and it requires approval whenever a forbidden or prompt rule could match once `xargs` adds words read from its input (for example `xargs git` or `xargs -I{} git {}`). `su` with a command (`su -c`, `--command`, `--session-command`, `-s`, or words passed to the shell), and every `sg` and `watch` command, require approval even when an allow rule covers them. Unrecognized `xargs` options require approval too.
