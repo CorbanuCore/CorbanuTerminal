@@ -226,6 +226,9 @@ pub(crate) async fn run_turn(
     // #1331 (D171): so is a turn on a named account that was removed or
     // signed out meanwhile, so it is not recorded as a turn on that account.
     if let Some(err) = turn_refusal(sess.as_ref(), turn_context.as_ref()).await {
+        turn_context
+            .pre_turn_refused
+            .store(true, std::sync::atomic::Ordering::Release);
         sess.track_turn_codex_error(turn_context.as_ref(), &err);
         sess.emit_turn_error_lifecycle(turn_context.as_ref(), err.to_codex_protocol_error())
             .await;
@@ -253,8 +256,10 @@ pub(crate) async fn run_turn(
     )
     .await
     {
+        // Pre-turn compaction precedes input recording, including mail admitted with the
+        // user's prompt. Preserve those inputs once on failure, honoring prompt hooks.
+        run_hooks_and_record_inputs(&sess, &turn_context, &input).await;
         if matches!(err.details(), CodexErrorDetails::TurnAborted) {
-            run_hooks_and_record_inputs(&sess, &turn_context, &input).await;
             return Err(err);
         }
         let error = err.to_codex_protocol_error();

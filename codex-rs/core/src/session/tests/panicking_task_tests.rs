@@ -70,3 +70,131 @@ async fn a_panicking_task_fails_its_turn_instead_of_leaving_it_running() {
     .await
     .expect("the finished turn is cleared");
 }
+
+#[test_case::test_case(false; "natural_completion")]
+#[test_case::test_case(true; "terminal_error")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn taken_unanswered_mail_is_saved_without_follow_up(terminal_error: bool) {
+    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: false,
+        },
+    )
+    .await;
+
+    let mut mail = InterAgentCommunication::new(
+        AgentPath::root().join("worker").expect("worker path"),
+        AgentPath::root(),
+        Vec::new(),
+        "save this unanswered mail".to_string(),
+        /*trigger_turn*/ true,
+    );
+    mail.set_turn_id_if_missing(&tc.sub_id);
+    let expected = mail.to_model_input_item();
+    let turn_state = Arc::clone(
+        &sess
+            .active_turn
+            .lock()
+            .await
+            .as_ref()
+            .expect("active turn")
+            .turn_state,
+    );
+    sess.input_queue
+        .extend_pending_input_for_turn_state(
+            &turn_state,
+            vec![TurnInput::InterAgentCommunication(mail)],
+        )
+        .await;
+    if terminal_error {
+        sess.send_event(
+            &tc,
+            EventMsg::Error(ErrorEvent {
+                message: "quota exhausted".to_string(),
+                codex_error_info: Some(CodexErrorInfo::UsageLimitExceeded),
+            }),
+        )
+        .await;
+    }
+    while rx.try_recv().is_ok() {}
+
+    sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
+        .await;
+
+    assert_eq!(
+        strip_response_item_ids(sess.clone_history().await.raw_items()),
+        strip_response_item_ids(&[expected])
+    );
+    assert!(sess.active_turn.lock().await.is_none());
+    // A mistaken follow-up is dispatched through the submission loop, so allow that loop
+    // to run and fail on a second turn rather than checking only the synchronous slot.
+    let unexpected_start = tokio::time::timeout(Duration::from_millis(100), async {
+        while let Ok(event) = rx.recv().await {
+            if matches!(event.msg, EventMsg::TurnStarted(_)) {
+                return;
+            }
+        }
+        panic!("event channel closed");
+    })
+    .await;
+    assert!(
+        unexpected_start.is_err(),
+        "unanswered mail started another turn"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn refused_turn_retains_pending_user_follow_up_after_refusal_is_cleared() {
+    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: false,
+        },
+    )
+    .await;
+    let pending = vec![UserInput::Text {
+        text: "pending after refusal".to_string(),
+        text_elements: Vec::new(),
+    }];
+    sess.steer_input(
+        pending.clone(),
+        /*additional_context*/ Default::default(),
+        Some(&tc.sub_id),
+        /*client_user_message_id*/ None,
+        /*responsesapi_client_metadata*/ None,
+    )
+    .await
+    .expect("pending input admitted");
+    // The refusal decision is already captured. The live provider is now usable; querying
+    // its current state at completion would misclassify the original refusal as a failure.
+    tc.pre_turn_refused
+        .store(true, std::sync::atomic::Ordering::Release);
+    sess.send_event(
+        &tc,
+        EventMsg::Error(ErrorEvent {
+            message: "earlier pre-turn refusal".to_string(),
+            codex_error_info: Some(CodexErrorInfo::BadRequest),
+        }),
+    )
+    .await;
+    while rx.try_recv().is_ok() {}
+
+    sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
+        .await;
+
+    let _ = recv_terminal_event(&rx, TerminalEventKind::TurnComplete).await;
+    let follow_up = recv_skipping_mcp_startup(&rx, "expected refused-input follow-up turn").await;
+    assert!(
+        matches!(follow_up.msg, EventMsg::TurnStarted(started) if started.turn_id != tc.sub_id),
+        "the captured refusal must retain its existing follow-up path"
+    );
+    expect_user_message_item_started(&rx, &pending).await;
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
