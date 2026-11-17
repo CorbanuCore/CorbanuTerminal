@@ -280,3 +280,107 @@ async fn issue2455c_xargs_operands_and_other_commands_are_not_matched() {
         requirement("xargs ls", rules).await
     );
 }
+
+/// `rules` plus managed requirements (`requirements.toml` `[rules]`), merged
+/// as `load_exec_policy` merges them.
+async fn managed_requirement(line: &str, rules: &str, managed: &str) -> ExecApprovalRequirement {
+    let managed: codex_config::RequirementsExecPolicyToml =
+        toml::from_str(managed).expect("parse managed rules");
+    let policy =
+        policy_from_src(Some(rules)).merge_overlay(&managed.to_policy().expect("managed policy"));
+    let command = shlex::split(line).unwrap();
+    ExecPolicyManager::new(Arc::new(policy))
+        .create_exec_approval_requirement_for_command(ExecApprovalRequest {
+            command: &command,
+            approval_policy: AskForApproval::OnRequest,
+            permission_profile: PermissionProfile::Disabled,
+            environment_policy: None,
+            windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            prefix_rule: None,
+            allow_prefix_rules: AllowPrefixRules::Honor,
+        })
+        .await
+}
+
+const MANAGED_PROMPT_USER_PUSH: &str = r#"
+[[prefix_rules]]
+pattern = [{ token = "git" }, { token = "push" }]
+decision = "prompt-user"
+"#;
+
+const MANAGED_FORBIDDEN_FORCE_PUSH: &str = r#"
+[[prefix_rules]]
+pattern = [{ token = "git" }, { token = "push" }]
+decision = "prompt-user"
+
+[[prefix_rules]]
+pattern = [{ token = "git" }, { token = "push" }, { token = "--force" }]
+decision = "forbidden"
+"#;
+
+/// #2506: an xargs command that stdin could complete into a managed
+/// prompt-user rule needs a fresh human decision, never the configured
+/// reviewer's plain approval (`printf push | xargs git`).
+#[tokio::test]
+async fn issue2506_xargs_keeps_prompt_user_for_a_rule_stdin_could_complete() {
+    let rules = r#"prefix_rule(pattern=["xargs"], decision="allow")
+prefix_rule(pattern=["git", "status"], decision="allow")
+prefix_rule(pattern=["git", "fetch"], decision="prompt")"#;
+    for managed in [MANAGED_PROMPT_USER_PUSH, MANAGED_FORBIDDEN_FORCE_PUSH] {
+        for command in [
+            "xargs git",
+            "xargs -n 1 git",
+            "xargs sudo git",
+            "xargs -I{} git {}",
+            // Every rule counts where stdin supplies the command.
+            "xargs env",
+            "xargs -0 sh -c",
+            "xargs su",
+            // Options xargs cannot read: nothing about its argv is known.
+            "xargs --frobnicate git status",
+            "xargs -n",
+            "sudo xargs -q ls",
+        ] {
+            let result = managed_requirement(command, rules, managed).await;
+            assert!(
+                matches!(result, ExecApprovalRequirement::NeedsHumanApproval { .. }),
+                "{command}: {result:?}"
+            );
+        }
+        // Fixed words no prompt-user rule can follow keep plain approval.
+        let result = managed_requirement("xargs git fetch", rules, managed).await;
+        assert!(
+            matches!(result, ExecApprovalRequirement::NeedsApproval { .. }),
+            "{result:?}"
+        );
+        assert!(matches!(
+            managed_requirement("xargs git status", rules, managed).await,
+            ExecApprovalRequirement::Skip { .. }
+        ));
+    }
+    // A rule the fixed words already match applies as usual.
+    let result = managed_requirement("xargs git push", rules, MANAGED_PROMPT_USER_PUSH).await;
+    assert!(
+        matches!(result, ExecApprovalRequirement::NeedsHumanApproval { .. }),
+        "{result:?}"
+    );
+}
+
+/// D686 / D691 (pending): a forbidden rule stdin could complete asks for
+/// approval, as on main; only a prompt-user rule needs a human.
+#[tokio::test]
+async fn issue2506_xargs_forbidden_rule_stdin_could_complete_keeps_main_parity() {
+    let rules = r#"prefix_rule(pattern=["xargs"], decision="allow")
+prefix_rule(pattern=["git", "push"], decision="forbidden")"#;
+    let result = requirement("xargs git", rules).await;
+    assert!(asks(&result), "{result:?}");
+    for (rule, expected) in [
+        (Decision::Allow, None),
+        (Decision::Prompt, Some(Decision::Prompt)),
+        (Decision::PromptUser, Some(Decision::PromptUser)),
+        (Decision::Forbidden, Some(Decision::Prompt)),
+    ] {
+        assert_eq!(wrappers::open_xargs_decision(rule), expected, "{rule:?}");
+    }
+}
