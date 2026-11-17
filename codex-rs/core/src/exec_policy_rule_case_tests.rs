@@ -166,19 +166,35 @@ fn d692_exact_rule_matches_exclude_case_folded_ones() {
 #[tokio::test]
 async fn d692_allow_rules_keep_the_exact_name() {
     // UnlessTrusted asks for commands no rule allows.
+    // `bypass_sandbox` is true only when the allow rule approved the command.
     let result = requirement("ls x", AskForApproval::UnlessTrusted).await;
     assert!(
-        matches!(result, ExecApprovalRequirement::Skip { .. }),
+        matches!(
+            result,
+            ExecApprovalRequirement::Skip {
+                bypass_sandbox: true,
+                ..
+            }
+        ),
         "{result:?}"
     );
     for line in ["LS x", "Ls x"] {
         let result = requirement(line, AskForApproval::UnlessTrusted).await;
-        // D696: Windows too, though its host-executable lookup reads a bare
-        // name by its lower-cased basename.
-        assert!(
-            matches!(result, ExecApprovalRequirement::NeedsApproval { .. }),
-            "{line}: {result:?}"
-        );
+        // D696: the allow rule never approves it, Windows included. Windows
+        // still runs it without asking, but inside the sandbox: its built-in
+        // read-only list reads `LS` as `ls`, which is the same program there.
+        let expected = if cfg!(windows) {
+            matches!(
+                result,
+                ExecApprovalRequirement::Skip {
+                    bypass_sandbox: false,
+                    ..
+                }
+            )
+        } else {
+            matches!(result, ExecApprovalRequirement::NeedsApproval { .. })
+        };
+        assert!(expected, "{line}: {result:?}");
     }
 }
 
