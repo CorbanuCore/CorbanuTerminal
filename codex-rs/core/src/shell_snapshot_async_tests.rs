@@ -36,7 +36,7 @@ async fn large_filter_leaves_async_worker_responsive() -> Result<()> {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("snapshot.sh").abs();
     let raw = zeroize::Zeroizing::new(format!(
-        "# Snapshot file\n{}\0\0#values\0SAFE\0ordinary\0#end\x000\0\0",
+        "# Snapshot file\n{}\0\0#values\0SAFE\0ordinary\0#end\x001\0\0",
         "# ordinary shell function and alias text\n".repeat(80_000)
     ));
     assert!(raw.len() > 3 * 1024 * 1024);
@@ -145,12 +145,13 @@ async fn blocking_filter_matches_synchronous_filter_on_randomized_captures() -> 
     use rand::SeedableRng;
     let mut rng = rand::rngs::StdRng::seed_from_u64(/*state*/ 2541);
     let dir = tempfile::tempdir()?;
+    let mut outcomes = (0, 0);
     for case in 0..100 {
         let text: String = (0..rng.random_range(0..2048))
             .map(|_| char::from(rng.random_range(b'a'..=b'z')))
             .collect();
         let raw = format!(
-            "# Snapshot file\n# {text}\n\0\0#values\0SAFE\0ordinary\0SYNTHETIC_TOKEN\0synthetic-2541-value\0COPY\0{}\0#end\x001\0COPY\0export COPY='{}'\n\0\0",
+            "# Snapshot file\n# {text}\n\0\0#values\0SAFE\0ordinary\0SYNTHETIC_TOKEN\0synthetic-2541-value\0COPY\0{}\0#end\x003\0COPY\0export COPY='{}'\n\0\0",
             if case % 2 == 0 {
                 "synthetic-2541-value"
             } else {
@@ -177,14 +178,19 @@ async fn blocking_filter_matches_synchronous_filter_on_randomized_captures() -> 
         .await;
         match expected {
             Ok(expected) => {
+                outcomes.0 += 1;
+                assert!(!expected.contains("synthetic-2541-value"));
+                assert_eq!(expected.contains("export COPY="), case % 2 != 0);
                 actual?;
                 assert_eq!(fs::read_to_string(&path).await?, expected);
             }
             Err(expected) => {
+                outcomes.1 += 1;
                 assert_eq!(actual.unwrap_err().to_string(), expected.to_string());
                 assert!(!path.exists());
             }
         }
     }
+    assert_eq!(outcomes, (66, 34));
     Ok(())
 }
