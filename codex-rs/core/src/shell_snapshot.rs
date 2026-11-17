@@ -44,6 +44,10 @@ use tracing::info_span;
 
 #[path = "shell_snapshot_filter.rs"]
 mod filter;
+
+#[cfg(test)]
+#[path = "shell_snapshot_async_tests.rs"]
+mod async_tests;
 #[path = "shell_snapshot_sandbox.rs"]
 mod sandbox;
 
@@ -97,6 +101,7 @@ struct SnapshotCredentials {
     binding_context_credential_keys: HashMap<String, Vec<String>>,
 }
 
+#[derive(Clone)]
 struct SnapshotCredentialBroker {
     network_proxy: NetworkProxy,
     shell_environment_policy: ShellEnvironmentPolicy,
@@ -578,7 +583,11 @@ async fn write_shell_snapshot(
         removed_env_vars,
     )
     .await?;
+    write_filtered_snapshot(output_path, snapshot).await?;
+    Ok(credentials)
+}
 
+async fn write_filtered_snapshot(output_path: &AbsolutePathBuf, snapshot: String) -> Result<()> {
     if let Some(parent) = output_path.parent() {
         let parent_display = parent.display();
         fs::create_dir_all(&parent)
@@ -591,7 +600,7 @@ async fn write_shell_snapshot(
         .await
         .with_context(|| format!("Failed to write snapshot to {snapshot_path}"))?;
 
-    Ok(credentials)
+    Ok(())
 }
 
 async fn capture_snapshot(
@@ -638,6 +647,48 @@ async fn capture_snapshot(
         )
         .await?,
     );
+    let credential_broker = credential_broker.cloned();
+    let shell_environment_policy = shell_environment_policy.clone();
+    let removed_env_vars = removed_env_vars.to_vec();
+    let runtime = tokio::runtime::Handle::current();
+    run_snapshot_filter(SNAPSHOT_TIMEOUT, move || {
+        filter_captured_snapshot(
+            &raw_snapshot,
+            shell_type,
+            &shell_environment_policy,
+            credential_broker.as_ref(),
+            broker_config_revision,
+            &removed_env_vars,
+            &runtime,
+        )
+    })
+    .await
+}
+
+/// The blocking worker owns the zeroizing raw capture and a strong proxy
+/// reference. It cannot write a file, including after timeout or cancellation.
+async fn run_snapshot_filter<T: Send + 'static>(
+    scan_timeout: Duration,
+    filter: impl FnOnce() -> Result<T> + Send + 'static,
+) -> Result<T> {
+    // Dropping this handle aborts queued work. Running scans retain their
+    // existing hard bounds; their late results are discarded without writing.
+    let task = tokio_util::task::AbortOnDropHandle::new(tokio::task::spawn_blocking(filter));
+    timeout(scan_timeout, task)
+        .await
+        .context("Snapshot credential scan timed out")?
+        .context("Snapshot credential scan failed")?
+}
+
+fn filter_captured_snapshot(
+    raw_snapshot: &str,
+    shell_type: ShellType,
+    shell_environment_policy: &ShellEnvironmentPolicy,
+    credential_broker: Option<&SnapshotCredentialBroker>,
+    broker_config_revision: u64,
+    removed_env_vars: &[String],
+    runtime: &tokio::runtime::Handle,
+) -> Result<(String, Option<SnapshotCredentials>)> {
     let mut capture = CapturedSnapshot::parse(shell_type, raw_snapshot.as_bytes())
         .ok_or_else(|| anyhow!("invalid shell snapshot capture"))?;
     // #310: no secret-named export, nor a provider credential name, is written
@@ -672,7 +723,9 @@ async fn capture_snapshot(
     let policy = &credential_broker.shell_environment_policy;
     // Child visibility must not change the trusted destination of an inherited credential.
     let inherited_env = std::env::vars().collect();
-    let network_config = credential_broker.network_proxy.current_cfg().await?;
+    // This function runs on a blocking thread; retain the original ordering
+    // of the asynchronous config read relative to credential filtering.
+    let network_config = runtime.block_on(credential_broker.network_proxy.current_cfg())?;
     let inherited_env = network_config
         .credential_broker_context
         .with_fallbacks(&inherited_env);
