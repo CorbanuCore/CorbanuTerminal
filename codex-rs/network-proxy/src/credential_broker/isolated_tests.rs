@@ -1059,27 +1059,39 @@ async fn pf_27_s02_a_spoofed_bootstrap_path_is_never_trusted() {
 #[allow(clippy::print_stderr)]
 async fn d685_large_zsh_snapshot_scan_timing() {
     let upstream = start_upstream().await;
-    let broker = isolated_broker(launcher(&upstream, /*controller_pid_override*/ None));
-    virtualized_dummy(&broker);
-    for exports in [4096, 16384, 65536] {
-        let mut text = String::from("# Snapshot file\n");
-        for index in 0..exports {
-            use std::fmt::Write;
-            writeln!(
-                text,
-                "typeset -gx SYNTHETIC_ZSH_SETTING_{index:05}='ordinary-value-{index:05}'"
-            )
-            .expect("text");
+    for keys in [1, 2, 4, 8] {
+        let broker = isolated_broker(launcher(&upstream, /*controller_pid_override*/ None));
+        for index in 0..keys {
+            let mut env = HashMap::from([(
+                "GH_TOKEN".to_string(),
+                format!("ghp_synthetic_2502_{index:08}{}", "k".repeat(index)),
+            )]);
+            broker.virtualize_child_env(&mut env);
         }
-        for sample in 0..3 {
-            let start = std::time::Instant::now();
-            let result = broker.known_credential_occurs_in(&text);
-            eprintln!(
-                "D690_SCAN engine=D685 bytes={} records=1 sample={sample} elapsed_us={} result={result:?}",
-                text.len(),
-                start.elapsed().as_micros()
-            );
-            assert!(!matches!(result, Ok(true)));
+        for bytes in [512 * 1024, 1024 * 1024, 3 * 1024 * 1024] {
+            let mut text = String::from("# Snapshot file\n");
+            for index in 0.. {
+                use std::fmt::Write;
+                writeln!(
+                    text,
+                    "_plugin_{index:05} () {{ local context state line; _arguments '-h[help]' '*:file:_files'; }}\nalias plugin_{index:05}='git status --short'"
+                )
+                .expect("text");
+                if text.len() >= bytes {
+                    text.truncate(bytes);
+                    break;
+                }
+            }
+            for sample in 0..3 {
+                let start = std::time::Instant::now();
+                let result = broker.known_credential_occurs_in(&text);
+                eprintln!(
+                    "D690_SCAN engine=D685 bytes={} records={keys} sample={sample} elapsed_us={} result={result:?}",
+                    text.len(),
+                    start.elapsed().as_micros()
+                );
+                assert!(!matches!(result, Ok(true)));
+            }
         }
     }
 }
@@ -1101,6 +1113,12 @@ async fn d685_snapshot_scan_finds_a_brokered_credential_by_fingerprint() {
         Ok(true)
     );
     assert_eq!(broker.known_credential_occurs_in(&dummy), Ok(false));
+    let large = "x".repeat(/*n*/ 3 * 1024 * 1024);
+    assert_eq!(broker.known_credential_occurs_in(&large), Ok(false));
+    assert_eq!(
+        broker.known_credential_occurs_in(&format!("{large}{SYNTHETIC_TOKEN}")),
+        Ok(true)
+    );
     assert!(!broker.holds_raw_value(SYNTHETIC_TOKEN));
 }
 
@@ -1362,6 +1380,12 @@ mod pf_27_s05 {
             broker.known_credential_occurs_in("export SAFE='ordinary'"),
             Ok(false)
         );
+        let large = "x".repeat(/*n*/ 3 * 1024 * 1024);
+        assert_eq!(broker.known_credential_occurs_in(&large), Ok(false));
+        assert_eq!(
+            broker.known_credential_occurs_in(&format!("{large}synthetic-d690-model-value")),
+            Ok(true)
+        );
         assert_eq!(
             crate::model_credential_occurs_in("synthetic-d690-model-value"),
             Ok(true)
@@ -1401,34 +1425,40 @@ mod pf_27_s05 {
     #[allow(clippy::print_stderr)]
     async fn d690_large_zsh_snapshot_scan_timing() {
         let upstream = start_upstream().await;
-        let broker = model_broker(&upstream);
-        for index in 0..4 {
-            broker
-                .register(
-                    binding(upstream.port, "/v1", ModelAuthHeader::Bearer),
-                    &format!("synthetic-d690-benchmark-{index:08}"),
-                )
-                .expect("register");
-        }
-        for exports in [1024, 4096, 16384] {
-            let mut text = String::from("# Snapshot file\n");
-            for index in 0..exports {
-                use std::fmt::Write;
-                writeln!(
-                    text,
-                    "typeset -gx SYNTHETIC_ZSH_SETTING_{index:05}='ordinary-value-{index:05}'"
-                )
-                .expect("text");
+        for keys in [1, 2, 4, 8] {
+            let broker = model_broker(&upstream);
+            for index in 0..keys {
+                broker
+                    .register(
+                        binding(upstream.port, "/v1", ModelAuthHeader::Bearer),
+                        &format!("synthetic-d690-benchmark-{index:08}{}", "k".repeat(index)),
+                    )
+                    .expect("register");
             }
-            for sample in 0..3 {
-                let start = std::time::Instant::now();
-                let result = broker.known_credential_occurs_in(&text);
-                eprintln!(
-                    "D690_SCAN bytes={} records=4 sample={sample} elapsed_us={} result={result:?}",
-                    text.len(),
-                    start.elapsed().as_micros()
-                );
-                assert!(!matches!(result, Ok(true)));
+            for bytes in [512 * 1024, 1024 * 1024, 3 * 1024 * 1024] {
+                let mut text = String::from("# Snapshot file\n");
+                for index in 0.. {
+                    use std::fmt::Write;
+                    writeln!(
+                        text,
+                        "_plugin_{index:05} () {{ local context state line; _arguments '-h[help]' '*:file:_files'; }}\nalias plugin_{index:05}='git status --short'"
+                    )
+                    .expect("text");
+                    if text.len() >= bytes {
+                        text.truncate(bytes);
+                        break;
+                    }
+                }
+                for sample in 0..3 {
+                    let start = std::time::Instant::now();
+                    let result = broker.known_credential_occurs_in(&text);
+                    eprintln!(
+                        "D690_SCAN bytes={} records={keys} sample={sample} elapsed_us={} result={result:?}",
+                        text.len(),
+                        start.elapsed().as_micros()
+                    );
+                    assert!(!matches!(result, Ok(true)));
+                }
             }
         }
     }
