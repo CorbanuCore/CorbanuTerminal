@@ -450,7 +450,8 @@ fn snapshot_replay_size_limits(
 /// snapshot keeps the child masked and marked. A failed capture falls back to
 /// normal startup without upstream's fail-open restore: no claim (in the log or
 /// on the child's stderr) that it runs with unmasked credentials, and the broker
-/// markers stay. A successful capture is unchanged by keeping those markers.
+/// markers stay. A successful capture also makes no false unmasked warning
+/// (#2402), while retaining its replayed profile value and masked credentials.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test_case("exit 7\n", false; "failed_capture_falls_back_masked")]
 #[test_case("export PROFILE_VALUE=from-profile\n", true; "successful_capture_replays_masked")]
@@ -568,18 +569,19 @@ async fn credential_snapshot_keeps_child_masked_under_main_engine(
         logs.contains("shell snapshot log capture sentinel"),
         "{logs}"
     );
+    assert!(!logs.contains("unmasked"), "{logs}");
     if replayed {
         assert_eq!(
             prepared.env.get("PROFILE_VALUE").map(String::as_str),
             Some("from-profile")
         );
     } else {
-        assert!(!logs.contains("unmasked"), "{logs}");
         assert_eq!(prepared.command, params.argv);
     }
     let child_key = prepared.env.get("OPENAI_API_KEY").expect("child key");
     assert_ne!(child_key, real_key);
     assert!(!child_key.contains("executor-only"), "{child_key}");
+    assert!(prepared.env.values().all(|value| !value.contains(real_key)));
     assert_eq!(
         prepared
             .env
