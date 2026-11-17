@@ -124,8 +124,9 @@ async fn assert_standalone(binary: &Path, expected_executor_version: &str) -> an
 
         let file = directory.path().join("readable.txt");
         std::fs::write(&file, "ok")?;
+        let file_url = url::Url::from_file_path(&file).map_err(|()| anyhow::anyhow!("file URI"))?;
         let read = json!({"id": 3, "method": "fs/readFile", "params": {
-            "path": url::Url::from_file_path(&file).unwrap(), "sandbox": sandbox,
+            "path": file_url, "sandbox": sandbox,
         }});
         stdin.write_all(format!("{read}\n").as_bytes()).await?;
         let response: Value =
