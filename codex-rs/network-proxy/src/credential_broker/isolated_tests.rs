@@ -1322,6 +1322,29 @@ mod pf_27_s05 {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn d690_model_snapshot_registered_and_stashed_copies() {
+        // Bazel runs multiple tests in one process. Other tests intentionally
+        // install unavailable holders, so exercise the global registry alone.
+        const CHILD: &str = "CORBANU_D690_MODEL_SNAPSHOT_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+                .args([
+                    "credential_broker::isolated::tests::pf_27_s05::d690_model_snapshot_registered_and_stashed_copies",
+                    "--exact",
+                    "--nocapture",
+                    "--test-threads=1",
+                ])
+                .env(CHILD, "1")
+                .env("CORBANU_TEST_NO_NATIVE_KEYRING", "1")
+                .output()
+                .expect("run model snapshot child");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                output.status.success() && stdout.contains("1 passed"),
+                "{stdout}\n{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
         let upstream = start_upstream().await;
         let broker = model_broker(&upstream);
         let credential = broker
