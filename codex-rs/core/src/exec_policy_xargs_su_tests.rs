@@ -508,6 +508,9 @@ async fn issue2519_unread_wrappers_need_a_human_when_a_restrictive_rule_exists()
         "watch -n 1 git push",
         "watch --ex git push",
         "watch -q 1 -x git push",
+        "watch -nx git push",
+        "watch -dx git push",
+        "watch -x -n",
         "watch -x",
         // D676: su with a command.
         "su -c 'git push'",
@@ -528,6 +531,8 @@ async fn issue2519_unread_wrappers_need_a_human_when_a_restrictive_rule_exists()
         "runuser -u root git status -x",
         "firejail git status",
         "systemd-run --shell",
+        // Under xargs, a replacement inside watch's options.
+        "xargs -I{} watch -n{} -x git status",
     ];
     for managed in [MANAGED_PROMPT_USER_PUSH, MANAGED_FORBIDDEN_FORCE_PUSH] {
         for command in commands {
@@ -543,6 +548,30 @@ async fn issue2519_unread_wrappers_need_a_human_when_a_restrictive_rule_exists()
         let result = requirement(command, WRAPPER_RULES).await;
         assert!(
             matches!(result, ExecApprovalRequirement::NeedsApproval { .. }),
+            "{command}: {result:?}"
+        );
+    }
+}
+
+/// #2519: under xargs, `watch -x git` reads `git` as the program (stdin only
+/// appends), so a prompt-user rule stdin could complete needs a human; a
+/// read command marked uncertain (permutation) still refuses on an inner
+/// forbidden rule.
+#[tokio::test]
+async fn issue2519_xargs_watch_exec_and_uncertain_read_commands() {
+    let rules = format!("{WRAPPER_RULES}\nprefix_rule(pattern=[\"xargs\"], decision=\"allow\")");
+    let result = managed_requirement("xargs watch -x git", &rules, MANAGED_PROMPT_USER_PUSH).await;
+    assert!(
+        matches!(result, ExecApprovalRequirement::NeedsHumanApproval { .. }),
+        "{result:?}"
+    );
+    for command in [
+        "runuser -u root git push --force -x",
+        "firejail git push --force",
+    ] {
+        let result = managed_requirement(command, &rules, MANAGED_FORBIDDEN_FORCE_PUSH).await;
+        assert!(
+            matches!(result, ExecApprovalRequirement::Forbidden { .. }),
             "{command}: {result:?}"
         );
     }
