@@ -1128,6 +1128,11 @@ impl TestCodexBuilder {
         // structured provider identity in sync so exact-route validation never observes a
         // provider object from one route paired with another route's ID.
         config.model_provider_id = "openai".to_string();
+        // Cold agent reload resolves the persisted provider ID through this registry.
+        // Keep it on the same mock route as the selected provider.
+        config
+            .model_providers
+            .insert("openai".to_string(), model_provider.clone());
         config.model_provider = model_provider;
         if let Ok(path) = codex_utils_cargo_bin::cargo_bin("codex") {
             config.codex_self_exe = Some(path);
