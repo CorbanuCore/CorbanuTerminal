@@ -1764,7 +1764,7 @@ impl ModelClient {
         let mut websocket_session = self.take_cached_websocket_session();
         if websocket_session.auth_owner_generation != auth_owner_generation {
             // Drop the old owner's cache before this turn can establish fresh routing state.
-            websocket_session.reset(Some("other"));
+            websocket_session.reset(Some("auth_changed"));
             websocket_session.auth_owner_generation = auth_owner_generation;
         }
         ModelClientSession {
@@ -4451,7 +4451,7 @@ impl ModelClientSession {
 
         if needs_new || owner_changed {
             self.websocket_session.reset(if owner_changed {
-                Some("other")
+                Some("auth_changed")
             } else {
                 reset_reason
             });
