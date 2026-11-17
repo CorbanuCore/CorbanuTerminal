@@ -1067,9 +1067,9 @@ fn spawn_agent_tool_description(
 {usage_hint_text}"#
         );
     }
-    let agent_role_usage_hint = if model_catalog_in_context {
-        ""
-    } else if available_models_description.is_some() {
+    let agent_role_usage_hint = if model_catalog_in_context
+        || available_models_description.is_some()
+    {
         "\nAgent-role guidance below only helps choose which agent to use after spawning is already authorized; it never authorizes spawning by itself."
     } else {
         "\n"

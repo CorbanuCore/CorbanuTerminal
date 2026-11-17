@@ -272,6 +272,7 @@ async fn wait_for_model_available(manager: &SharedModelsManager, slug: &str) {
 }
 
 #[test_case(MultiAgentVersion::V1, false; "v1_default")]
+#[test_case(MultiAgentVersion::V1, true; "v1_context")]
 #[test_case(MultiAgentVersion::V2, false; "v2_default")]
 #[test_case(MultiAgentVersion::V2, true; "v2_context")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

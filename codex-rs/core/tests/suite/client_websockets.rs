@@ -1238,7 +1238,7 @@ async fn responses_websocket_reconnects_after_account_switch() {
         assert_continuation_metrics(
             &harness.session_telemetry,
             &[
-                (["full", "other", "generation"], 1),
+                (["full", "auth_changed", "generation"], 1),
                 (["full", "no_previous_request", "generation"], 1),
                 (["incremental", "incremental", "generation"], 3),
             ],
