@@ -1117,14 +1117,18 @@ impl NetworkApprovalService {
             retry_reason: Some(policy_denial_message.clone()),
             network_approval_context: Some(network_approval_context.clone()),
         };
-        let user_prompt = pending_owner.review_user_prompt(
-            session,
-            &turn_context,
-            owner_call
-                .as_ref()
-                .map(|call| call.trigger.call_id.as_str()),
-            &policy_denial_message,
-            session.request_user_approval(&action, &approval_context),
+        // Keep the prompt future out of each nested approval frame on the proxy's
+        // polling stack. Boxing preserves its lazy polling and cancellation behavior.
+        let user_prompt = Box::pin(
+            pending_owner.review_user_prompt(
+                session,
+                &turn_context,
+                owner_call
+                    .as_ref()
+                    .map(|call| call.trigger.call_id.as_str()),
+                &policy_denial_message,
+                session.request_user_approval(&action, &approval_context),
+            ),
         );
         let approval =
             session.request_approval_with_user_prompt(&action, &approval_context, user_prompt);
