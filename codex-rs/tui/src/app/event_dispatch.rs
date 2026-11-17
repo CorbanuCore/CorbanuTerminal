@@ -2278,6 +2278,9 @@ impl App {
             AppEvent::OpenAllModelsPopup { models } => {
                 self.chat_widget.open_all_models_popup(models);
             }
+            AppEvent::ClearProviderCooldown { config, model } => {
+                self.clear_provider_cooldown(app_server, &config, &model).await;
+            }
             AppEvent::OpenGpuMenu => {
                 self.refresh_gpu_spend_indicator().await;
                 let Some(state_db) = self.state_db.as_ref() else {

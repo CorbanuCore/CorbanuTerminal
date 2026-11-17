@@ -1595,6 +1595,12 @@ pub(crate) enum AppEvent {
 
     /// Open the durable GPU rental and recipe surface.
     OpenGpuMenu,
+
+    /// Clear only the current provider/model/credential's local rate-limit state.
+    ClearProviderCooldown {
+        config: Box<crate::legacy_core::config::Config>,
+        model: String,
+    },
     OpenGpuRental {
         rental_id: String,
     },

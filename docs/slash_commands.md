@@ -9,6 +9,7 @@ workflows. Use the command picker in the TUI for the complete active list.
 | Command        | Purpose                                                         |
 | -------------- | --------------------------------------------------------------- |
 | `/model`       | Choose provider, model, and reasoning effort                    |
+| `/model clear-cooldown` | Clear the current provider/model/credential's local rate-limit wait |
 | `/providers`   | Manage account sign-ins and provider credentials                |
 | `/status`      | Show session configuration, model, permissions, and token state |
 | `/usage`       | Show account or Plan allowance and reset information            |
