@@ -251,6 +251,135 @@ fn rejects_ambiguous_cur_project_with_multiple_punctuated_ancestors() {
 }
 
 #[test]
+fn resolves_cur_project_under_multiple_hyphenated_ancestors() {
+    let root = TempDir::new().expect("tempdir");
+    // Mirrors an isolated test home: several ancestors with one or more hyphens.
+    let project = [
+        "corbanu-rtx",
+        "astra-d659-profile-x1_y2",
+        "tmp",
+        ".tmpAbC123",
+        "my-project",
+    ]
+    .iter()
+    .fold(root.path().to_path_buf(), |path, component| {
+        path.join(component)
+    });
+    fs::create_dir_all(&project).expect("project root");
+
+    assert_eq!(
+        decode_cur_project_path(&encode_project_path(&project)),
+        Some(project)
+    );
+}
+
+#[test]
+fn rejects_cur_project_when_probe_budget_is_exhausted() {
+    let root = TempDir::new().expect("tempdir");
+    let project = ["a-b", "c-d", "e"]
+        .iter()
+        .fold(root.path().to_path_buf(), |path, component| {
+            path.join(component)
+        });
+    fs::create_dir_all(&project).expect("project root");
+    let encoded = encode_project_path(&project);
+
+    let required = (0..=MAX_CUR_PROJECT_PATH_PROBES)
+        .find(|limit| decode_cur_project_path_with_probe_limit(&encoded, *limit).is_some())
+        .expect("project resolves within the default budget");
+    assert_eq!(
+        decode_cur_project_path_with_probe_limit(&encoded, required),
+        Some(project)
+    );
+    // Any smaller budget fails closed, even after a match was already found.
+    for limit in 0..required {
+        assert_eq!(
+            decode_cur_project_path_with_probe_limit(&encoded, limit),
+            None
+        );
+    }
+}
+
+#[test]
+fn rejects_cur_project_deeper_than_probe_budget() {
+    let root = TempDir::new().expect("tempdir");
+    let project = (0..64).fold(root.path().to_path_buf(), |path, _| path.join("x"));
+    fs::create_dir_all(&project).expect("deep project");
+
+    assert_eq!(
+        decode_cur_project_path(&encode_project_path(&project)),
+        None
+    );
+}
+
+#[test]
+fn rejects_cur_project_traversal_components() {
+    let root = TempDir::new().expect("tempdir");
+    let project = root.path().join("project");
+    fs::create_dir_all(&project).expect("project root");
+    let encoded_root = encode_project_path(root.path());
+
+    assert_eq!(
+        decode_cur_project_path(&format!("{encoded_root}-project")),
+        Some(project)
+    );
+    for suffix in [
+        "project-..",
+        "project-.",
+        "..-project",
+        "project--x",
+        "project-",
+    ] {
+        assert_eq!(
+            decode_cur_project_path(&format!("{encoded_root}-{suffix}")),
+            None,
+            "{suffix}"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn resolves_cur_project_through_symlinked_hyphenated_ancestor() {
+    let root = TempDir::new().expect("tempdir");
+    let target = root.path().join("real").join("target-dir");
+    fs::create_dir_all(target.join("my-project")).expect("project root");
+    std::os::unix::fs::symlink(&target, root.path().join("linked-dir")).expect("symlink");
+    let project = root.path().join("linked-dir").join("my-project");
+
+    assert_eq!(
+        decode_cur_project_path(&encode_project_path(&project)),
+        Some(project)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn rejects_cur_project_through_dangling_looping_or_ambiguous_symlinks() {
+    let root = TempDir::new().expect("tempdir");
+    let encoded_root = encode_project_path(root.path());
+    std::os::unix::fs::symlink(
+        root.path().join("missing"),
+        root.path().join("dangling-link"),
+    )
+    .expect("dangling symlink");
+    std::os::unix::fs::symlink(root.path().join("loop-link"), root.path().join("loop-link"))
+        .expect("looping symlink");
+    fs::create_dir_all(root.path().join("a").join("b-c")).expect("real project");
+    fs::create_dir_all(root.path().join("elsewhere").join("c")).expect("symlink target");
+    std::os::unix::fs::symlink(root.path().join("elsewhere"), root.path().join("a-b"))
+        .expect("ambiguous symlink");
+
+    for suffix in ["dangling-link", "loop-link", "loop-link-x", "a-b-c"] {
+        assert_eq!(
+            decode_cur_project_path(&format!("{encoded_root}-{suffix}")),
+            None,
+            "{suffix}"
+        );
+    }
+}
+
+#[test]
 fn parses_windows_cursor_fixture_project_directory() {
     assert_eq!(
         decode_cur_windows_project_drive("C--Users-fixture-Cursor"),
