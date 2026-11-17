@@ -565,11 +565,12 @@ impl InputQueue {
     /// Clear any pending waiters and input buffered for the current turn. Input deferred to
     /// re-admission goes back to submission admission.
     pub(crate) async fn clear_pending(&self, active_turn: &ActiveTurn) {
-        let mut turn_state = active_turn.turn_state.lock().await;
-        turn_state.clear_pending_waiters();
+        let mut pending_input = {
+            let mut turn_state = active_turn.turn_state.lock().await;
+            turn_state.clear_pending_waiters();
+            std::mem::take(&mut turn_state.pending_input)
+        };
         // Pending mail can own extension attachments whose destructors need the lock released.
-        let mut pending_input = std::mem::take(&mut turn_state.pending_input);
-        drop(turn_state);
         let deferred = std::mem::take(&mut pending_input.deferred);
         drop(pending_input);
         if !deferred.is_empty() {
