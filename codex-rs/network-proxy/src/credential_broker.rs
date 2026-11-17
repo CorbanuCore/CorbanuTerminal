@@ -13,6 +13,7 @@ mod memory_scan_tests;
 pub mod model_auth;
 mod model_snapshot;
 mod provider_config;
+mod snapshot_scan;
 pub use model_snapshot::ModelSnapshotScanError;
 pub use model_snapshot::model_credential_occurs_in;
 mod providers;
