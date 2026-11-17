@@ -169,6 +169,23 @@ fn fingerprint_occurs(
     Ok(false)
 }
 
+impl crate::credential_broker::model_snapshot::SnapshotHolder
+    for std::sync::RwLock<super::HardenedState>
+{
+    fn occurs_in(
+        &self,
+        _text: &str,
+    ) -> Result<bool, crate::credential_broker::model_snapshot::ModelSnapshotScanError> {
+        use crate::credential_broker::model_snapshot::ModelSnapshotScanError;
+        let state = self.read().map_err(|_| ModelSnapshotScanError)?;
+        // Do not consume a capability through resolve/dispatch for inspection.
+        if state.scoped_openai.is_some() || state.isolated_openai.is_some() {
+            return Err(ModelSnapshotScanError);
+        }
+        Ok(false)
+    }
+}
+
 #[cfg(test)]
 #[path = "known_scan_tests.rs"]
 mod tests;

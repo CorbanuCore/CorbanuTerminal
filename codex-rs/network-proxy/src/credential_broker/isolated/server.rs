@@ -674,6 +674,35 @@ impl Broker {
                 self.register(usable, CredentialKind::Model(binding.clone()), value)
             }
             ControlRequest::StashEnv { name, value } => self.stash_env(name, value),
+            ControlRequest::SnapshotFingerprints { key } => {
+                let Some(key) = super::protocol::decode_key(key) else {
+                    return ControlResponse::Error {
+                        code: ControlErrorCode::Malformed,
+                    };
+                };
+                let key = Zeroizing::new(key);
+                let Ok(state) = self.state.lock() else {
+                    return ControlResponse::Error {
+                        code: ControlErrorCode::Unavailable,
+                    };
+                };
+                let records = state
+                    .credentials
+                    .values()
+                    .map(|record| &record.value)
+                    .chain(state.env_stash.values())
+                    .map(|value| {
+                        (
+                            value.len(),
+                            crate::credential_broker::model_snapshot::fingerprint(
+                                &key,
+                                value.as_bytes(),
+                            ),
+                        )
+                    })
+                    .collect();
+                ControlResponse::SnapshotFingerprints { records }
+            }
             ControlRequest::RegisterModelStored {
                 binding,
                 provider_key_id,

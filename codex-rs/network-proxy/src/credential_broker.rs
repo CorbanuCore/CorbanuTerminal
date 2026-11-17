@@ -11,7 +11,10 @@ mod matching;
 mod memory_scan_tests;
 #[cfg(any(unix, windows))]
 pub mod model_auth;
+mod model_snapshot;
 mod provider_config;
+pub use model_snapshot::ModelSnapshotScanError;
+pub use model_snapshot::model_credential_occurs_in;
 mod providers;
 mod registry;
 mod replacement;
