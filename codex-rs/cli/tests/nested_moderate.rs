@@ -238,9 +238,15 @@ async fn run(setup: Setup) -> Result<Run> {
         Target::UnshareSameHome => format!(
             "echo marker=${{CODEX_SANDBOX_USER_NAMESPACES_DENIED:-unset}}; unshare -Ur {nested} 2>&1; echo \"exit=$?\""
         ),
-        Target::MadeUpMarker => format!(
-            "mkdir -p made-up/tmp && : > made-up/tmp/security-moderate-marker && chmod 000 made-up/tmp/security-moderate-marker && CORBANU_SECURITY_ORIGIN=\"$PWD/made-up\" {nested} 2>&1; echo \"exit=$?\"; env -u CORBANU_HOME -u PFTERMINAL_HOME CODEX_HOME=\"$PWD/made-up\" {nested} 2>&1; echo \"exit=$?\""
-        ),
+        Target::MadeUpMarker => {
+            // A literal path, not `$PWD`: Core asks before an `env` that is
+            // read past a word known only at run time (#2543), which would
+            // stop the nested run before it can refuse.
+            let made_up = quote(&cwd.canonicalize()?.join("made-up").to_string_lossy());
+            format!(
+                "mkdir -p made-up/tmp && : > made-up/tmp/security-moderate-marker && chmod 000 made-up/tmp/security-moderate-marker && CORBANU_SECURITY_ORIGIN={made_up} {nested} 2>&1; echo \"exit=$?\"; env -u CORBANU_HOME -u PFTERMINAL_HOME CODEX_HOME={made_up} {nested} 2>&1; echo \"exit=$?\""
+            )
+        }
         Target::NotAgents => [
             "resume --last",
             "app-server",
