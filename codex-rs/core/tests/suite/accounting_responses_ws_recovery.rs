@@ -656,15 +656,8 @@ async fn metadata_terminal_matrix(
                         end,
                     ])
                     .await?;
-                let fallback = kind == "response.incomplete";
-                if fallback {
-                    let retry = gate.next().await?;
-                    assert!(
-                        retry.http,
-                        "incomplete response retains native HTTP fallback"
-                    );
-                    retry.send(vec![json!({"type":"response.failed","response":{"error":{"code":"invalid_prompt","message":"fixture fallback"}}})]).await?;
-                }
+                // D659 preserves terminal typed errors. ResponseIncomplete does
+                // not retry via HTTP; its metadata and usage still count below.
                 let events = terminal(&test).await?;
                 let actual: Vec<_> = events
                     .iter()
@@ -688,7 +681,7 @@ async fn metadata_terminal_matrix(
                 );
                 let db = test.codex.state_db().unwrap();
                 let records = turn_attempts(&db).await?;
-                assert_eq!(records.len(), 1 + usize::from(fallback));
+                assert_eq!(records.len(), 1);
                 chain(&records);
                 assert_eq!(
                     turn_observations(&db).await?.len(),
@@ -704,19 +697,19 @@ async fn metadata_terminal_matrix(
                             } else {
                                 0
                             },
-                            unknown: i64::from(usage_kind != 2) + i64::from(fallback),
+                            unknown: i64::from(usage_kind != 2),
                         }),
                         known_usd: if usage_kind == 2 { "0.000644" } else { "0" }
                             .to_string()
                             .try_into()?,
-                        unknown_estimates: i64::from(usage_kind != 2) + i64::from(fallback),
-                        attempts: 1 + i64::from(fallback),
+                        unknown_estimates: i64::from(usage_kind != 2),
+                        attempts: 1,
                         ..Default::default()
                     })
                 );
                 eprintln!("metadata matrix passed: mask={mask}, usage={usage_kind}, kind={kind}");
                 gate.no_pending().await;
-                counts(&gate, (1, 1, 1, usize::from(fallback)));
+                counts(&gate, (1, 1, 1, 0));
                 stop(&test).await;
             }
         }
