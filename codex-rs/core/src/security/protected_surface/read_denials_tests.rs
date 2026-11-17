@@ -187,7 +187,7 @@ async fn pf_23_s01_file_tools_get_the_denials_after_taint() {
         .clone();
     let auth = turn.config.codex_home.join("auth.json");
     let readable = |context: codex_file_system::FileSystemSandboxContext| {
-        let profile = PermissionProfile::try_from(context.permissions).unwrap();
+        let profile = context.permissions;
         #[allow(deprecated)]
         let cwd = turn.cwd.clone();
         profile
@@ -1539,8 +1539,8 @@ async fn pf_23_s02_protected_levels_apply_the_rules_from_the_start() {
     #[allow(deprecated)]
     let cwd = turn.cwd.clone();
     let readable = |context: codex_file_system::FileSystemSandboxContext| {
-        PermissionProfile::try_from(context.permissions)
-            .unwrap()
+        context
+            .permissions
             .file_system_sandbox_policy()
             .can_read_path_with_cwd(auth.as_path(), cwd.as_path())
     };
@@ -1753,7 +1753,7 @@ async fn issue_239_read_denials_apply_under_protected_level_before_taint() {
         .clone();
     let auth = turn.config.codex_home.join("auth.json");
     let readable = |context: codex_file_system::FileSystemSandboxContext| {
-        let profile = PermissionProfile::try_from(context.permissions).unwrap();
+        let profile = context.permissions;
         #[allow(deprecated)]
         let cwd = turn.cwd.clone();
         profile
@@ -1983,7 +1983,7 @@ async fn issue_506_file_tools_cannot_list_the_home_under_aggressive() {
         let context =
             turn.file_system_sandbox_context(/*additional_permissions*/ None, &environment);
         let protected = protect_file_tool_context(&session, &turn, &environment, context);
-        let profile = PermissionProfile::try_from(protected.permissions).unwrap();
+        let profile = protected.permissions;
         let unlistable = profile
             .file_system_sandbox_policy()
             .get_unlistable_directories();

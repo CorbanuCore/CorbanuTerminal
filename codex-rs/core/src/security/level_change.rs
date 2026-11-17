@@ -163,7 +163,6 @@ pub fn non_user_level_floor(config: &Config) -> SecurityLevel {
     config
         .config_layer_stack
         .layers_high_to_low()
-        .into_iter()
         .filter(|layer| !matches!(layer.name, ConfigLayerSource::User { .. }))
         .filter_map(|layer| {
             layer

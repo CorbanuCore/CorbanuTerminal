@@ -31,15 +31,15 @@ async fn session_with(
     let (session, mut turn) = crate::session::tests::make_session_and_context().await;
     {
         let config = Arc::make_mut(&mut turn.config);
-        config
+        let approval = config
             .permissions
             .approval_policy
-            .set(AskForApproval::Never)
-            .expect("approval policy");
-        config
+            .set(AskForApproval::Never);
+        assert!(approval.is_ok(), "approval policy: {approval:?}");
+        let permissions = config
             .permissions
-            .set_permission_profile(PermissionProfile::Disabled)
-            .expect("permission profile");
+            .set_permission_profile(PermissionProfile::Disabled);
+        assert!(permissions.is_ok(), "permission profile: {permissions:?}");
         policy(&mut config.permissions.shell_environment_policy);
         config_edit(config);
     }
@@ -246,11 +246,11 @@ async fn session_at_level(
 ) -> Option<(Arc<Session>, Arc<TurnContext>)> {
     let (session, mut turn) = crate::session::tests::make_session_and_context().await;
     let config = Arc::make_mut(&mut turn.config);
-    config
+    let approval = config
         .permissions
         .approval_policy
-        .set(AskForApproval::Never)
-        .expect("approval policy");
+        .set(AskForApproval::Never);
+    assert!(approval.is_ok(), "approval policy: {approval:?}");
     config.codex_linux_sandbox_exe = Some(core_test_support::find_codex_linux_sandbox_exe().ok()?);
     let client = (*session.services.model_client())
         .clone()
@@ -269,7 +269,7 @@ async fn issue_442_exec_command_explains_a_denied_protected_read() {
     let Some((session, turn)) =
         session_at_level(codex_security_policy::SecurityLevel::Aggressive).await
     else {
-        eprintln!("skipping: no codex-linux-sandbox helper");
+        tracing::warn!("skipping: no codex-linux-sandbox helper");
         return;
     };
     let home = turn.config.codex_home.to_path_buf();
@@ -302,7 +302,7 @@ async fn issue_826_exec_command_explains_a_refused_user_namespace() {
     let Some((session, turn)) =
         session_at_level(codex_security_policy::SecurityLevel::Moderate).await
     else {
-        eprintln!("skipping: no codex-linux-sandbox helper");
+        tracing::warn!("skipping: no codex-linux-sandbox helper");
         return;
     };
     let text = exec_command_output(&session, &turn, "unshare --user true").await;

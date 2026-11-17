@@ -1139,13 +1139,6 @@ impl CodexThread {
         self.inject_item_without_turn(item, /*origin*/ None).await;
     }
 
-    /// Records a context fragment without creating a new user turn boundary.
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) async fn inject_fragment_without_turn(&self, fragment: impl ContextualUserFragment) {
-        self.inject_item_without_turn(ContextualUserFragment::into(fragment), /*origin*/ None)
-            .await;
-    }
-
     /// A sub-agent's result notification: agent data, never human or host text
     /// (`source_envelopes`; first registration wins).
     pub(crate) async fn inject_agent_result_fragment_without_turn(

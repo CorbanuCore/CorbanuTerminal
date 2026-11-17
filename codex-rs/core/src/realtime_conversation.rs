@@ -2436,7 +2436,7 @@ async fn run_realtime_input_task(
                         // the record first.
                         if let (Some(usage_tx), RealtimeEvent::ResponseDone(done)) =
                             (&usage_tx, &event)
-                            && let Some(usage) = done.usage.clone()
+                            && let Some(usage) = done.usage
                         {
                             let _ = usage_tx.send(usage);
                         }

@@ -782,7 +782,7 @@ impl Fixture {
     async fn new() -> Result<Self> {
         let home = tempfile::tempdir()?;
         let db = StateRuntime::init(
-            SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path())?),
+            SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path())?),
             "anthropic".into(),
         )
         .await?;
@@ -832,7 +832,7 @@ impl Fixture {
         drop(db);
         for _ in 0..2 {
             let db = StateRuntime::init(
-                SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path())?),
+                SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path())?),
                 "anthropic".into(),
             )
             .await?;

@@ -44,7 +44,7 @@ impl Fixture {
     async fn new() -> anyhow::Result<Self> {
         let home = tempfile::tempdir()?;
         let db = StateRuntime::init(
-            SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path())?),
+            SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path())?),
             "openai".into(),
         )
         .await?;

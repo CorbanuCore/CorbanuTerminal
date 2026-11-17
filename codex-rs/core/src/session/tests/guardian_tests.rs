@@ -1511,7 +1511,7 @@ async fn accounting_owner_of_a_guardian_fork_is_the_reviewed_conversation() -> a
     // reviewed conversation's, and so is its ledger.
     let home = tempfile::tempdir()?;
     let db = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(
+        codex_state::SqliteConfig::new_for_testing(
             codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
         ),
         "openai".into(),
@@ -1633,7 +1633,7 @@ async fn accounting_owner_of_side_and_consolidation_sessions() -> anyhow::Result
     use crate::accounting::Uncollected;
     let home = tempfile::tempdir()?;
     let db = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(
+        codex_state::SqliteConfig::new_for_testing(
             codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
         ),
         "openai".into(),
@@ -1826,7 +1826,7 @@ async fn accounting_owner_of_ephemeral_sub_agents() -> anyhow::Result<()> {
     use crate::accounting::Uncollected;
     let home = tempfile::tempdir()?;
     let db = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(
+        codex_state::SqliteConfig::new_for_testing(
             codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
         ),
         "openai".into(),

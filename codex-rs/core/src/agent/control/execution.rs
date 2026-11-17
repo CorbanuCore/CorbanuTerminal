@@ -8,6 +8,7 @@ use codex_protocol::error::CodexErr;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::protocol::MultiAgentVersion;
+#[cfg(test)]
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::SessionSource;
 use std::sync::Arc;
@@ -149,6 +150,7 @@ impl AgentExecutionLimiter {
 /// slot. Once admitted, the human-started task still acquires an execution
 /// guard, so it remains visible to capacity accounting. Mailbox wakeups and
 /// agent-authored work remain bounded here.
+#[cfg(test)]
 pub(crate) fn op_starts_worker_turn(op: &Op) -> bool {
     matches!(op, Op::InterAgentCommunication { communication, .. } if communication.trigger_turn)
         || matches!(op, Op::WakePendingWork)

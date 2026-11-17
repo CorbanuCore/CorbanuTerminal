@@ -569,7 +569,7 @@ impl WorldState {
             updates.extend(
                 section_updates
                     .into_iter()
-                    .map(|update| update.attributed_to(*id)),
+                    .map(|update| update.attributed_to(id)),
             );
         }
         (snapshot, updates)

@@ -449,6 +449,7 @@ impl ExecPolicyManager {
 
     /// The approval an agent command needs under the session's live level
     /// (see [`Self::current_for`]), parsed for this host's shell rules.
+    #[cfg(test)]
     pub(crate) async fn create_exec_approval_requirement(
         &self,
         req: ExecApprovalRequest<'_>,

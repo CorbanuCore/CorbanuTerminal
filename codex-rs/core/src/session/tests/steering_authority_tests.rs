@@ -453,10 +453,13 @@ async fn user_turn_updates_approvals_reviewer_for_mcp() {
         .mcp_runtime
         .current_config()
         .expect("the user-turn path should publish an MCP runtime config");
-    let state = session.state.lock().await;
+    let approvals_reviewer = {
+        let state = session.state.lock().await;
+        state.session_configuration.step_settings.approvals_reviewer
+    };
     assert_eq!(
         (
-            state.session_configuration.step_settings.approvals_reviewer,
+            approvals_reviewer,
             published.approvals_reviewer,
             step.mcp.config().approvals_reviewer,
         ),
@@ -466,7 +469,6 @@ async fn user_turn_updates_approvals_reviewer_for_mcp() {
             codex_config::types::ApprovalsReviewer::AutoReview,
         )
     );
-    drop(state);
     session.abort_all_tasks(TurnAbortReason::Interrupted).await;
 }
 
@@ -624,6 +626,10 @@ async fn deferred_input_does_not_interrupt_turn_local_sleep() {
     // Both turn-local deferral and the interrupted session FIFO.
     for interrupted in [false, true] {
         if interrupted {
+            #[expect(
+                clippy::await_holding_invalid_type,
+                reason = "Clearing pending input must stay atomic with the active turn"
+            )]
             let active = sess.active_turn.lock().await;
             sess.input_queue
                 .clear_pending(active.as_ref().expect("active turn"))

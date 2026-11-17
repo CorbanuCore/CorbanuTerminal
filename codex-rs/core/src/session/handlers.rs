@@ -506,7 +506,7 @@ pub(super) async fn readmit_interrupted_input(
             let held = TurnInput::UserInput {
                 content: content.clone(),
                 client_id: client_id.clone(),
-                metadata: metadata.clone(),
+                metadata,
             };
             let request = codex_protocol::turn_input::TurnInputRequest {
                 input: codex_protocol::turn_input::TurnInput::UserInput { content, client_id },

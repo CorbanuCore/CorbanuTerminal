@@ -872,7 +872,7 @@ async fn pf_60_s03_realtime_call_is_recorded() -> anyhow::Result<()> {
     let (mut session, _context) =
         crate::session::tests::make_session_and_context_for_config(config).await;
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
         "openai".into(),
     )
     .await?;
@@ -1192,7 +1192,7 @@ async fn realtime_ledger_session_with_events(
         crate::session::tests::make_session_and_context_for_config(config).await;
     let events = crate::session::tests::capture_events(&mut session);
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.to_path_buf())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.to_path_buf())?),
         "openai".into(),
     )
     .await?;

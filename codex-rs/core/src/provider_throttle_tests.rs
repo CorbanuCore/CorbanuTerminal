@@ -92,7 +92,7 @@ fn env_key_throttle_identity_is_salted_per_home() {
 
 async fn open_state_db(home: &Path) -> StateDbHandle {
     codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(
+        codex_state::SqliteConfig::new_for_testing(
             codex_utils_absolute_path::AbsolutePathBuf::try_from(home).expect("absolute"),
         ),
         "zai".to_string(),
