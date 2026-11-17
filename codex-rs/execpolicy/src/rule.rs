@@ -19,7 +19,7 @@ pub enum PatternToken {
 }
 
 impl PatternToken {
-    fn matches(&self, token: &str) -> bool {
+    pub(crate) fn matches(&self, token: &str) -> bool {
         match self {
             Self::Single(expected) => expected == token,
             Self::Alts(alternatives) => alternatives.iter().any(|alt| alt == token),

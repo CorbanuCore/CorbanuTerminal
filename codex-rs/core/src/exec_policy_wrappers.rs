@@ -11,7 +11,7 @@ use codex_execpolicy::RuleMatch;
 
 pub(super) fn has_wrappers(command: &[String]) -> bool {
     let wrappers = policy_wrapper_commands(command);
-    wrappers.uncertain || wrappers.starts.len() > 1
+    wrappers.uncertain || wrappers.starts.len() > 1 || wrappers.open.is_some()
 }
 
 pub(crate) fn check_with_wrappers(
@@ -49,6 +49,21 @@ pub(crate) fn check_with_wrappers(
                 }
             }
             matches.extend(found);
+            // #2455 (D677): xargs adds words read from stdin. Ask whenever a
+            // prompt or forbidden rule could match once they arrive; a rule
+            // the fixed argv already matches applies above. Allow rules only
+            // approve, so they need no prompt.
+            if let Some(open) = &wrappers.open
+                && heuristic.is_none_or(|(_, previous)| previous < Decision::Prompt)
+                && policy
+                    .strictest_rule_matching_more_args(
+                        &command[start..open.known_end.max(start)],
+                        options,
+                    )
+                    .is_some_and(|decision| decision > Decision::Allow)
+            {
+                heuristic = Some((candidate, Decision::Prompt));
+            }
         }
         if let Some((command, decision)) = heuristic {
             matches.push(RuleMatch::HeuristicsRuleMatch {

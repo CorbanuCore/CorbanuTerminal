@@ -11,6 +11,12 @@ use super::work;
 mod indirect_exec_policy_more_launchers;
 use indirect_exec_policy_more_launchers as more;
 
+#[path = "indirect_exec_policy_xargs.rs"]
+mod indirect_exec_policy_xargs;
+pub(super) use indirect_exec_policy_xargs::Xargs;
+pub(super) use indirect_exec_policy_xargs::known_end;
+pub(super) use indirect_exec_policy_xargs::xargs;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Arity {
     Flag,
@@ -560,6 +566,9 @@ mod tests {
             "bwrap --bind / /",
             "firejail --quiet",
             "busybox",
+            "xargs -0 -n 1",
+            "xargs -I{}",
+            "xargs -Ia --",
         ] {
             work::assert_linear(launcher, |scale| {
                 let layers = scale * 64;

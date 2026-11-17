@@ -22,12 +22,21 @@ use indirect_exec_policy_launchers as launchers;
 pub(crate) struct PolicyWrapperCommands {
     pub(crate) starts: Vec<usize>,
     pub(crate) uncertain: bool,
+    /// #2455 (D677): an `xargs` in the chain adds words read from stdin.
+    pub(crate) open: Option<OpenArgv>,
+}
+
+/// The argv an `xargs` runs: its end is open, and from `known_end` on its
+/// words may be replaced by input.
+pub(crate) struct OpenArgv {
+    pub(crate) known_end: usize,
 }
 
 pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands {
     let mut result = PolicyWrapperCommands {
         starts: vec![0],
         uncertain: false,
+        open: None,
     };
     let mut start = 0;
     // Computed on the first launcher only.
@@ -126,6 +135,34 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
                 }
             }
             (at < words.len()).then_some(at)
+        } else if name == "xargs" {
+            match launchers::xargs(words, start) {
+                launchers::Xargs::Command { at, replace } => {
+                    match &mut result.open {
+                        None => {
+                            result.open = Some(OpenArgv {
+                                known_end: launchers::known_end(words, at, replace),
+                            });
+                        }
+                        // A nested xargs with a replacement string: treat
+                        // its whole argv as unknown (one scan per command).
+                        Some(open) if replace.iter().any(Option::is_some) => {
+                            open.known_end = open.known_end.min(at);
+                        }
+                        Some(_) => {}
+                    }
+                    Some(at)
+                }
+                // xargs runs `echo`.
+                launchers::Xargs::NoCommand => return result,
+                launchers::Xargs::Uncertain => None,
+            }
+        } else if matches!(name, "sg" | "watch")
+            || (name == "su" && !su_login_only(&words[start..]))
+        {
+            // #2455 (D676, D678): these run a shell string (su -c, sg, watch)
+            // or pass words to a shell; approval-only for now.
+            None
         } else if launchers::is_launcher(name, start) {
             // #2455 (D670): unshare, nsenter, timeout and the like.
             let scan = *scan.get_or_insert_with(|| launchers::scan(words));
@@ -150,6 +187,25 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
         start = after;
     }
     result
+}
+
+/// D676: `su` that only opens a login or interactive shell: `su`, then an
+/// optional `-`, `-l` or `--login`, then an optional user. Anything more
+/// (`-c`, `--command`, `--session-command`, `-s`, words the shell receives
+/// as arguments, other options) may run a command.
+fn su_login_only(words: &[String]) -> bool {
+    let mut rest = &words[1..];
+    if rest
+        .first()
+        .is_some_and(|word| matches!(word.as_str(), "-" | "-l" | "--login"))
+    {
+        rest = &rest[1..];
+    }
+    match rest {
+        [] => true,
+        [user] => !user.starts_with('-'),
+        _ => false,
+    }
 }
 
 fn known_option(wrapper: &str, option: &str, value_options: &[&str]) -> bool {
