@@ -365,11 +365,13 @@ prefix_rule(pattern=["git", "push"], decision="allow")"#;
             "{script}"
         );
     }
+    // #2519: the forbidden `rm` rule could match what an unread sudo runs,
+    // so a human decides.
     let uncertain = heredoc("sudo --future-option value git push <<'EOF'\nEOF");
     assert!(
         matches!(
             requirement(&uncertain, rules).await,
-            ExecApprovalRequirement::NeedsApproval { .. }
+            ExecApprovalRequirement::NeedsHumanApproval { .. }
         ),
         "{uncertain}"
     );
