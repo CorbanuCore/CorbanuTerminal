@@ -3580,8 +3580,9 @@ GH_TOKEN = "{REAL_GITHUB_TOKEN}"
         assert!(values[1].starts_with("ghp_"));
         assert_ne!(values[1], REAL_GITHUB_TOKEN);
         if mode == "flat_managed" {
-            assert!(values[2].starts_with("custom_"));
-            assert_eq!(values[2].len(), REAL_CUSTOM_TOKEN.len());
+            // D353/D354 keep configured providers off under the hardened broker.
+            // Their variables are withheld, rather than restored as upstream dummies.
+            assert_eq!(values[2], "");
             assert_ne!(values[2], REAL_CUSTOM_TOKEN);
         }
         return Ok(());
