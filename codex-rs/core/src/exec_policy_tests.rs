@@ -53,6 +53,9 @@ mod xargs_su_tests;
 #[path = "exec_policy_launcher_case_tests.rs"]
 mod launcher_case_tests;
 
+#[path = "exec_policy_shell_case_tests.rs"]
+mod shell_case_tests;
+
 #[cfg(windows)]
 #[path = "exec_policy_windows_tests.rs"]
 mod windows_tests;

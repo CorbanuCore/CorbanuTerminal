@@ -97,6 +97,24 @@ async fn rules_apply_inside_nested_scripts() {
     );
 }
 
+/// #2510 (D688): where names fold, a respelled shell anywhere in the chain
+/// is read too, and so are the scripts nested in it.
+#[cfg(any(target_os = "macos", windows))]
+#[tokio::test]
+async fn respelled_shells_in_nested_chains_are_read() {
+    for layers in [
+        &["bash -lc", "BASH -c", "sh -c"][..],
+        &["Bash -lc", "bash -c", "ZSH -c"],
+        &["sudo BASH -c", "env Sh -c"],
+    ] {
+        let command = nested(layers, "git push");
+        let result = requirement(&command, FORBID).await;
+        assert!(forbidden(&result), "{command:?}: {result:?}");
+        let result = requirement(&command, PROMPT).await;
+        assert!(by_policy(&result), "{command:?}: {result:?}");
+    }
+}
+
 #[tokio::test]
 async fn nested_scripts_without_a_matching_command_keep_their_decision() {
     for layers in FORMS {

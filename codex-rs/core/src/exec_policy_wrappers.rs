@@ -3,6 +3,7 @@
 
 use super::ExecPolicyCommands;
 use super::commands_for_exec_policy;
+use crate::security::tainted_action::policy_shell_script;
 use crate::security::tainted_action::policy_wrapper_commands;
 use codex_execpolicy::Decision;
 use codex_execpolicy::Evaluation;
@@ -29,6 +30,7 @@ pub(super) fn has_wrappers(command: &[String]) -> bool {
     wrappers.uncertain
         || wrappers.starts.len() > 1
         || wrappers.open.is_some()
+        || policy_shell_script(command).is_some()
         // #2531: a script nested in the script; an amendment for its
         // literal argv cannot approve the commands inside.
         || script_commands(command).is_some()
@@ -130,14 +132,19 @@ fn check(
                 decision,
             });
         }
-        // #2531: a script with no launcher before it too. Its commands come
-        // from a script already (`bash -lc "bash -c 'git push'"` gives
-        // `bash -c 'git push'`), or are those the caller gives.
-        if let Some(&start) = wrappers.starts.last()
-            && (start > 0 || depth > 0 || read_own_scripts)
-        {
+        if let Some(&start) = wrappers.starts.last() {
             let inner = &command[start..];
-            if let Some(parsed) = script_commands(inner) {
+            // #2510 (D688): a shell spelled as this platform runs it
+            // (`BASH -lc`, `bash.exe -c`) unwraps like `bash -lc`. The
+            // literal argv above keeps its own match and fallback.
+            let respelled = policy_shell_script(inner);
+            let parsed_as = respelled.as_deref().unwrap_or(inner);
+            // #2531: a script with no launcher before it too. Its commands
+            // come from a script already (`bash -lc "bash -c 'git push'"`
+            // gives `bash -c 'git push'`), or are those the caller gives.
+            if (start > 0 || depth > 0 || read_own_scripts || respelled.is_some())
+                && let Some(parsed) = script_commands(parsed_as)
+            {
                 if parsed.used_complex_parsing || depth >= MAX_SCRIPT_DEPTH {
                     matches.push(RuleMatch::HeuristicsRuleMatch {
                         command: inner.to_vec(),

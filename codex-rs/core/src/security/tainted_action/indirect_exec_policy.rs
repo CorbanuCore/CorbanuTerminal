@@ -61,14 +61,23 @@ fn policy_wrapper_commands_for(words: &[String], case: names::NameCase) -> Polic
     let mut chroot_words: Option<Vec<String>> = None;
     while let Some(program) = words.get(start) {
         work::step();
+        if names::unsure(program, case) {
+            // #2510: a name this platform may run as a launcher or a shell
+            // spelled another way; its argv boundaries are unknown.
+            result.uncertain = true;
+            break;
+        }
         let name = names::launcher_name_for(program, case);
         let name = name.as_ref();
         let after = if name == "chroot" {
             // #2503: the classifier's chroot reader knows names spelled
-            // chroot in any ASCII case only. For a spelling only this
-            // platform reads as chroot (Windows `chroot.exe`), read a copy
-            // of the argv, made once, with just this word spelled chroot.
-            let argv = if basename(program).eq_ignore_ascii_case("chroot") {
+            // chroot in any ASCII case only, and (#2510) reads its words as
+            // a shell would, skipping an assignment-like or comment-like
+            // first word (`a=b/chroot`, `#x/chroot`) that argv runs as a
+            // program. For any other spelling (`/usr/sbin/chroot` too),
+            // read a copy of the argv, made once, with just this word
+            // spelled chroot.
+            let argv = if program.eq_ignore_ascii_case("chroot") {
                 &words[start..]
             } else {
                 let spelled = chroot_words.get_or_insert_with(|| words.to_vec());
@@ -224,6 +233,31 @@ fn policy_wrapper_commands_for(words: &[String], case: names::NameCase) -> Polic
         start = after;
     }
     result
+}
+
+/// #2510 (D688): `[shell, -c|-lc, script]` whose `shell` runs bash, zsh or
+/// sh on this platform (see [`names`]) under a spelling the shell parser
+/// does not read (`BASH -lc`, `/bin/Sh -c`, `Bash.exe -c`): the argv with
+/// the shell spelled as that parser reads it, so rules see the script's
+/// commands. `None` where the parser reads `words` already.
+pub(crate) fn policy_shell_script(words: &[String]) -> Option<Vec<String>> {
+    policy_shell_script_for(words, names::PLATFORM)
+}
+
+fn policy_shell_script_for(words: &[String], case: names::NameCase) -> Option<Vec<String>> {
+    let [shell, flag, script] = words else {
+        return None;
+    };
+    if case == names::NameCase::Sensitive
+        || !matches!(flag.as_str(), "-c" | "-lc")
+        || names::unsure(shell, case)
+        || codex_shell_command::bash::extract_bash_command(words).is_some()
+    {
+        return None;
+    }
+    let name = names::launcher_name_for(shell, case);
+    matches!(name.as_ref(), "bash" | "zsh" | "sh")
+        .then(|| vec![name.into_owned(), flag.clone(), script.clone()])
 }
 
 /// A launcher with no command of its own. Under xargs (D677) stdin may
