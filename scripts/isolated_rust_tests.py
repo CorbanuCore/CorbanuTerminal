@@ -27,6 +27,11 @@ def test_environment(parent: dict[str, str], home: Path) -> dict[str, str]:
         "CODEX_APP_SERVER_MANAGED_CONFIG_PATH",
     ):
         env.pop(name, None)
+    # Bash treats SSH_CLIENT/SSH2_CLIENT as a remote-daemon launch and reads
+    # .bashrc instead of BASH_ENV. An SSH test runner must not suppress startup
+    # fixtures (or leave their synchronization markers waiting forever, #2520).
+    for name in ("SSH_CLIENT", "SSH2_CLIENT"):
+        env.pop(name, None)
     # Leave the higher-priority aliases unset: existing test fixtures override
     # CODEX_HOME themselves. Setting all three here would shadow those fixtures.
     env["CODEX_HOME"] = str(home)
