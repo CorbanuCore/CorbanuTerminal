@@ -29,9 +29,14 @@ pub(super) fn multi_agent_v2_handler(
         if let ToolSpec::Function(tool) = handler.spec()
             && let Some(properties) = tool.parameters.properties
         {
-            // Argument transport requires these markers even without server encryption config.
+            // Reserved collaboration schemas gain their encrypted-message marker later, at
+            // provider projection. Catalog overrides must preserve the parameter before then.
+            let reserved_message = matches!(
+                tool.name.as_str(),
+                "spawn_agent" | "send_message" | "followup_task"
+            );
             for (name, schema) in *properties {
-                if schema.encrypted == Some(true) {
+                if schema.encrypted == Some(true) || reserved_message && name == "message" {
                     let property = parameters
                         .properties
                         .as_mut()
