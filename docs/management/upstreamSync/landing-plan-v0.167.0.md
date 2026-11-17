@@ -53,7 +53,7 @@ Only **two open PRs target sync** at the cut: [#2274](https://github.com/Corbanu
 
 ### Owner decisions
 
-[The current queue](https://github.com/CorbanuCore/CorbanuTerminal/issues/1532#issuecomment-6939945244) maps `$W/astra-synccore6-decisions.md` SC6-1…7 to D679…D685. **Travis decides; the coordinator assigns implementation afterwards.** No option below is approved by this plan.
+[The current queue](https://github.com/CorbanuCore/CorbanuTerminal/issues/1532#issuecomment-6939945244) maps `$W/astra-synccore6-decisions.md` SC6-1…7 to D679…D685. **Travis accepted D679–D685 as recommended on November 17 at 06:31Z** ([owner record](https://github.com/CorbanuCore/CorbanuTerminal/issues/1532#issuecomment-6940669510)). The table preserves the original choices; implementation/evidence links are reconciled in [#2565](https://github.com/CorbanuCore/CorbanuTerminal/pull/2565), without claiming final qualification.
 
 | Decision | Failing occurrences | Choice needed; recommendation |
 | --- | ---: | --- |
@@ -65,7 +65,7 @@ Only **two open PRs target sync** at the cut: [#2274](https://github.com/Corbanu
 | D684 / SC6-6 | 1 core | Send a full current skill catalog on reconnect, or preserve full catalog plus availability history in section-replacing adapters. Recommend the full current catalog; test both provider styles through compaction/resume. |
 | D685 / SC6-7 | 1 core library | Keep the copied-token gap when its source is unset, or filter using broker-known credentials with bounded matching and refusal when protection is unavailable. Recommend filtering, with independent security review and Travis's sign-off. |
 
-These are the **17 decision-dependent failures**, grouped by root cause. The remaining **22 CLI failures** are remote executor/plugin/hook/MCP/credential-history startup failures (21 core, one app), not evidence that those security cases passed. D685 is a real protection gap shared with main, not just an upstream expectation mismatch.
+These were the **17 decision-dependent failures** at the original cut, grouped by root cause; their choices are now accepted and the implementations are linked in #2565. They are not a current pending-decision count. The remaining **22 CLI failures** are remote executor/plugin/hook/MCP/credential-history startup failures (21 core, one app), not evidence that those security cases passed. D685 is a real protection gap shared with main, not just an upstream expectation mismatch.
 
 Other owner actions: schedule the Windows desktop checklist; sign SG2 and the final SG3/merge. **D676–D678 were accepted at 05:45 UTC** and are being implemented in #2493; the handoff's older pending labels are stale. D659–D674 are accepted; D675 was superseded. D628 deliberately leaves the Windows provisioning service **off**; activation is a separate future decision, not permission to enable it for landing. Deferred named-account flag removal #1080 is likewise outside this sync. No additional undecided D-row was found in the latest coordinator record.
 
@@ -89,22 +89,22 @@ Revert `sync-ci-mode` using the program tooling: `blocking-ci` currently skips B
 
 ### Ledger and release-note completeness
 
-At the sync cut the eight live ledgers contain **3,679 rows: 3,583 resolved and 96 open**. Preview ledgers are excluded. These are row counts, not unique defects; several old rows describe fixes that have since merged.
+The November 17 reconciliation in [#2565](https://github.com/CorbanuCore/CorbanuTerminal/pull/2565), against sync source `5b5c85143884c903cdcceecca276c06f6f9eee94`, records **3,749 rows: 3,670 resolved and 79 open** after audit. Preview ledgers are excluded. These are row counts, not unique defects. The earlier cut had 3,679 rows; 70 resolved entries were added subsequently, then this audit resolved 17 of the 96 previously open rows. Each remaining row has a dated disposition and owner: 10 are held by #2274 and 69 are tracked in [#2562](https://github.com/CorbanuCore/CorbanuTerminal/issues/2562), [#2563](https://github.com/CorbanuCore/CorbanuTerminal/issues/2563) and [#2564](https://github.com/CorbanuCore/CorbanuTerminal/issues/2564). These counts do not establish SG2/SG3 or sprint completion.
 
 | Ledger suffix after `ledger-rust-v0.167.0` | Resolved | Open |
 | --- | ---: | ---: |
-| `.tsv` | 1 | 29 |
+| `.tsv` | 5 | 25 |
 | `-resolved.tsv` | 1,006 | 0 |
 | `-s1c.tsv` | 202 | 0 |
 | `-s3b.tsv` | 547 | 27 |
 | `-s4a.tsv` | 136 | 0 |
-| `-compile.tsv` | 183 | 12 |
-| `-main-merges.tsv` | 636 | 18 |
-| `-main-merges-2.tsv` | 872 | 10 |
+| `-compile.tsv` | 192 | 7 |
+| `-main-merges.tsv` | 643 | 11 |
+| `-main-merges-2.tsv` | 939 | 9 |
 
-The integrator and security owner must give **every open row** a current disposition, linked implementation and test/review evidence. Work includes the CLI/MXC row and obsolete MCP-server remnants; S3b guardian/disclosure, sandbox/credential and Windows audit/ACL rows; old core/session/test ports; Telegram notification handling; D525 EMA/config/role documentation; remote MCP discovery coverage; and the 28 main-carry rows. A later passing suite alone does not resolve a documented boundary-review obligation. Audit migration renumbering and preserved released checksums too. Preserve split ledgers and the blob-size limit.
+The integrator and security owner must finish the **79 dispositioned open rows**, linking implementation and current-head test/review evidence before closure. Work includes the CLI/MXC row and obsolete MCP-server remnants; S3b guardian/disclosure, sandbox/credential and Windows audit/ACL rows; old core/session/test ports; Telegram notification handling; D525 EMA/config/role documentation; remote MCP discovery coverage; and the 20 remaining main-carry rows. A later passing suite alone does not resolve a documented boundary-review obligation. Audit migration renumbering and preserved released checksums too. Preserve split ledgers and the blob-size limit.
 
-There are **139 Markdown release-note fragments** (plus `.gitkeep`) on the inspected sync head. Presence is not completeness. Audit user-visible removals, provider/auth behavior, security changes, doctor/CLI changes and D679–D685 outcomes against fragments, then run `release_notes.py check` and `preview`. Never recreate `RELEASE_NOTES.md`. Main merge #9 deliberately omitted the duplicate #2443 fragment because sync's D659–D664 fragment already covers it; preserve that explanation. Finish app-server/config guidance, the upgrade/compatibility record, footprint dispositions and sprint evidence. Do not mark S3/S4/S5 complete from ledger counts alone.
+There are **152 Markdown release-note fragments** (plus `.gitkeep`) on the reconciled sync source. Check and preview pass; [#2564](https://github.com/CorbanuCore/CorbanuTerminal/issues/2564) records the coverage, sprint-record and migration/rollback gaps. Presence is not completeness. Audit user-visible removals, provider/auth behavior, security changes, doctor/CLI changes and D679–D685 outcomes against fragments, then run `release_notes.py check` and `preview`. Never recreate `RELEASE_NOTES.md`. Main merge #9 deliberately omitted the duplicate #2443 fragment because sync's D659–D664 fragment already covers it; preserve that explanation. Finish app-server/config guidance, the upgrade/compatibility record, footprint dispositions and sprint evidence. Do not mark S3/S4/S5 complete from ledger counts alone.
 
 **Sprint records also block handoff; owner: the integrator.** At the cut, main's PF-85-S01–S05 records are `draft` with no implementation worktree assigned. On sync, S01 is `in_progress`, while S02–S05 remain `draft` and unassigned. Reconcile each record with its actual authorized worktree, completed work and final-tree evidence; do not relabel them complete merely because code merged. S03 must record Travis's exact-head SG2 sign-off on the dedicated **“needs security sign-off”** PR. Complete and archive S01–S04 when their gates are met. S05 must accurately separate pre-merge gates from its later merge/canary tasks; complete and archive it only after those tasks finish. Run `python3 docs/sprints/check.py` on the reconciled records.
 

@@ -148,6 +148,13 @@ impl StatusIndicatorWidget {
         self.details.as_deref()
     }
 
+    #[cfg(test)]
+    pub(crate) fn reset_timer_for_tests(&mut self, now: Instant) {
+        self.elapsed_running = Duration::ZERO;
+        self.last_resume_at = now;
+        self.is_paused = false;
+    }
+
     pub(crate) fn set_interrupt_hint_visible(&mut self, visible: bool) {
         self.show_interrupt_hint = visible;
     }
