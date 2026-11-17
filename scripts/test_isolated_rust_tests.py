@@ -62,6 +62,39 @@ class IsolatedRustTests(unittest.TestCase):
                 canary.read_text(encoding="utf-8"), "synthetic-do-not-touch"
             )
 
+    @unittest.skipUnless(os.name == "posix", "requires a POSIX shell")
+    def test_ssh_session_does_not_suppress_bash_startup_fixture(self):
+        bash = runner.shutil.which("bash")
+        if bash is None:
+            self.skipTest("bash is not installed")
+        with tempfile.TemporaryDirectory() as root:
+            home = Path(root)
+            startup = home / "startup.sh"
+            startup.write_text("export FIXTURE_STARTED=yes\n", encoding="utf-8")
+            for marker in ("SSH_CLIENT", "SSH2_CLIENT"):
+                with self.subTest(marker=marker):
+                    parent = {
+                        "PATH": os.defpath,
+                        "HOME": str(home),
+                        "BASH_ENV": str(startup),
+                        "SHLVL": "0",
+                        marker: "192.0.2.1 12345 22",
+                        "SSH_CONNECTION": "192.0.2.1 12345 192.0.2.2 22",
+                    }
+                    env = runner.test_environment(parent, home)
+                    result = subprocess.run(
+                        [bash, "-c", 'printf "%s" "${FIXTURE_STARTED-missing}"'],
+                        env=env,
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                        timeout=5,
+                    )
+                    self.assertEqual(result.stdout, "yes")
+                    self.assertEqual(result.stderr, "")
+                    self.assertIn(marker, parent)
+
     def test_existing_fixture_can_override_codex_home_without_alias_shadowing(self):
         env = runner.test_environment({"CORBANU_HOME": "host"}, Path("run-profile"))
         env["CODEX_HOME"] = "individual-fixture"
