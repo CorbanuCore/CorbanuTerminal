@@ -55,7 +55,11 @@ async fn a_429_holds_later_requests_back_in_every_session() -> anyhow::Result<()
     let server = MockServer::start().await;
     let mock = mount_response_sequence(&server, vec![rate_limited()]).await;
 
-    let mut builder = test_codex();
+    let mut builder = test_codex().with_config(|config| {
+        // Exercise cross-turn cooldown, without waiting through in-turn stream retries.
+        config.model_provider.request_max_retries = Some(0);
+        config.model_provider.stream_max_retries = Some(0);
+    });
     let first = builder.build(&server).await?;
     let error = turn_error(&first).await?;
     assert!(error.contains("rate limited by provider"), "{error}");
@@ -95,6 +99,8 @@ async fn a_429_holds_later_requests_back_in_every_session() -> anyhow::Result<()
 fn named_account_session(account: &'static str) -> core_test_support::test_codex::TestCodexBuilder {
     test_codex()
         .with_config(move |config| {
+            config.model_provider.request_max_retries = Some(0);
+            config.model_provider.stream_max_retries = Some(0);
             let vault = codex_vault::Vault::new(config.codex_home.to_path_buf());
             for (name, key) in [
                 ("alpha", "pf84-shared-fixture-key"),
