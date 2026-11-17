@@ -1,8 +1,10 @@
 //! #2455 follow-up (D670): more launchers that exec their trailing argv —
 //! the shell builtins `command` and `exec`, `time`, `caffeinate` and
 //! `systemd-run` (getopt tables read by the parent), and `pkexec`, `bwrap`,
-//! `firejail`, `busybox` and `toybox`, whose own parsers are below.
+//! `firejail`, `busybox` and `toybox`, and zsh's precommand modifiers,
+//! whose own parsers are below.
 
+use super::super::basename;
 use super::Arity::Flag;
 use super::Arity::Value;
 use super::HELP;
@@ -97,7 +99,10 @@ pub(super) const SYSTEMD_RUN: &[Opt] = &[
 /// command line, `--expand-environment`).
 pub(super) fn systemd_run(options: &[String], shell: bool, floor: bool) -> Option<bool> {
     // `--shell` runs `$SHELL`; an `Exec*=` property (`-p ExecStartPre=…`)
-    // runs a command line of its own.
+    // runs a command line of its own. Properties that change what the
+    // command's name resolves to (`RootDirectory=`, `BindPaths=`) or start
+    // other units (`OnFailure=`, `Unit=`) are like chroot, `bwrap --bind`
+    // or `systemctl start`: the command itself is still the one matched.
     if shell
         || options.iter().any(|word| {
             work::step();
@@ -109,17 +114,62 @@ pub(super) fn systemd_run(options: &[String], shell: bool, floor: bool) -> Optio
     Some(floor)
 }
 
-/// Launchers with their own parsers.
-pub(super) const OWN_PARSERS: &[&str] = &["pkexec", "bwrap", "firejail", "busybox", "toybox"];
+/// Launchers with their own parsers. zsh's precommand modifiers (`-`,
+/// `noglob`, `nocorrect`) and `builtin` take no options.
+const OWN_PARSERS: &[&str] = &[
+    "pkexec",
+    "bwrap",
+    "firejail",
+    "-",
+    "noglob",
+    "nocorrect",
+    "builtin",
+];
+
+pub(super) fn is_launcher(name: &str) -> bool {
+    OWN_PARSERS.contains(&name) || multicall_name(name).is_some()
+}
 
 pub(super) fn launch(name: &str, words: &[String], start: usize) -> Option<Launch> {
+    if let Some(multicall_name) = multicall_name(name) {
+        return Some(multicall(multicall_name, words, start));
+    }
     Some(match name {
         "pkexec" => pkexec(words, start),
         "bwrap" => bwrap(words, start),
         "firejail" => firejail(words, start),
-        "busybox" | "toybox" => multicall(name, words, start),
+        "-" | "noglob" | "nocorrect" | "builtin" => modifier(words, start),
         _ => return None,
     })
+}
+
+/// busybox runs its own main for any name starting `busybox`
+/// (`busybox.static`), toybox for any starting `toybox`.
+fn multicall_name(name: &str) -> Option<&'static str> {
+    if name.starts_with("busybox") {
+        Some("busybox")
+    } else if name.starts_with("toybox") {
+        Some("toybox")
+    } else {
+        None
+    }
+}
+
+/// `noglob cmd`, `builtin exec cmd`: the next word is the command (bash's
+/// `builtin` also accepts `--`).
+fn modifier(words: &[String], start: usize) -> Launch {
+    let mut at = start + 1;
+    if words[start] == "builtin" && words.get(at).is_some_and(|word| word == "--") {
+        at += 1;
+    }
+    match words.get(at) {
+        None => Launch::NoCommand,
+        Some(word) if word.starts_with('-') && word != "-" => Launch::Uncertain,
+        Some(_) => Launch::Command {
+            at,
+            uncertain: false,
+        },
+    }
 }
 
 /// polkit's pkexec compares whole words (no `=`, `--` or clusters); the
@@ -293,9 +343,12 @@ fn multicall(name: &str, words: &[String], start: usize) -> Launch {
         return Launch::NoCommand;
     };
     if !word.starts_with('-') {
+        // `busybox ./rm` runs the `rm` applet, which a rule for `./rm` or
+        // a resolved path need not match: keep a floor. A further
+        // `busybox…` name is read as a launcher in turn.
         return Launch::Command {
             at: start + 1,
-            uncertain: false,
+            uncertain: word.contains('/') && multicall_name(basename(word)).is_none(),
         };
     }
     let listing: &[&str] = if name == "busybox" {

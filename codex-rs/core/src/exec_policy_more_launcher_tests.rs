@@ -1,6 +1,7 @@
 //! #2455 follow-up (D670): rules apply through the shell builtins `command`
 //! and `exec`, `time`, `caffeinate`, `systemd-run`, `pkexec`, `bwrap`,
-//! `firejail` and `busybox`/`toybox` applets, as through unshare and sudo.
+//! `firejail`, `busybox`/`toybox` applets and zsh's precommand modifiers,
+//! as through unshare and sudo.
 
 use super::*;
 use pretty_assertions::assert_eq;
@@ -40,6 +41,8 @@ prefix_rule(pattern=["bwrap"], decision="allow")
 prefix_rule(pattern=["firejail"], decision="allow")
 prefix_rule(pattern=["busybox"], decision="allow")
 prefix_rule(pattern=["toybox"], decision="allow")
+prefix_rule(pattern=["builtin"], decision="allow")
+prefix_rule(pattern=["noglob"], decision="allow")
 prefix_rule(pattern=["sudo"], decision="allow")
 prefix_rule(pattern=["unshare"], decision="allow")"#;
 
@@ -150,6 +153,23 @@ async fn issue2455b_launchers_preserve_inner_rule_decisions() {
         "command exec time -p busybox",
         "sudo -n exec command -p",
         "systemd-run --scope unshare -r chroot /",
+        // zsh precommand modifiers, which `exec` passes through.
+        "-",
+        "noglob",
+        "nocorrect",
+        "builtin",
+        "builtin --",
+        "builtin exec",
+        "exec -",
+        "exec -c -",
+        "exec -- -",
+        "exec noglob",
+        // Any busybox… or toybox… name is the multicall binary.
+        "busybox.static",
+        "/bin/busybox-static",
+        "busybox busybox-x",
+        "busybox /bin/busybox",
+        "toybox toybox.foo",
     ];
     for wrapper in wrappers {
         for decision in ["allow", "prompt", "forbidden"] {
@@ -258,6 +278,11 @@ prefix_rule(pattern=["git", "push"], decision="allow")"#
         "busybox -x git push",
         "busybox --install git push",
         "toybox -x git push",
+        // The applet is the base name: a path need not match a rule.
+        "busybox ./git push",
+        "busybox /tmp/git push",
+        "builtin -x git push",
+        "noglob -x git push",
     ] {
         assert_eq!(
             requirement(command, &rules).await,
@@ -312,6 +337,8 @@ async fn issue2455b_operands_and_queries_are_not_commands() {
         "busybox",
         "busybox --list",
         "toybox --long",
+        "noglob",
+        "builtin",
         // Option values and operands.
         "exec -a git echo push",
         "time -o git echo push",
@@ -326,7 +353,7 @@ async fn issue2455b_operands_and_queries_are_not_commands() {
         "commander git push",
         "executor git push",
         "timed git push",
-        "busyboxx git push",
+        "mybusybox git push",
     ] {
         assert!(
             matches!(

@@ -266,7 +266,7 @@ pub(super) fn is_launcher(name: &str) -> bool {
     LAUNCHERS.iter().any(|(launcher, _)| {
         work::step();
         *launcher == name
-    }) || more::OWN_PARSERS.contains(&name)
+    }) || more::is_launcher(name)
 }
 
 /// Where the command a launcher runs starts.
@@ -307,7 +307,7 @@ pub(super) fn scan(words: &[String]) -> Scan {
 }
 
 /// `words[start]` names a launcher in [`LAUNCHERS`] or
-/// [`more::OWN_PARSERS`]; `scan` is [`scan`]`(words)`.
+/// [`more::is_launcher`]; `scan` is [`scan`]`(words)`.
 pub(super) fn launch(name: &str, words: &[String], start: usize, scan: Scan) -> Launch {
     let last_option = scan.last_option;
     if let Some(launch) = more::launch(name, words, start) {
