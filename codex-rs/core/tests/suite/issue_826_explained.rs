@@ -190,6 +190,7 @@ async fn run(
     .into_iter()
     .map(|denial| denial.reason)
     .collect();
+    super::session_resources::shutdown(&test).await?;
     Ok(Outcome {
         output,
         warnings,
