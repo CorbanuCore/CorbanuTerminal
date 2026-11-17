@@ -76,12 +76,11 @@ prefix_rule(pattern=["echo", "blocked"], decision="forbidden")"#,
         )
         .unwrap();
     });
-    // `shell_command` is a local-only tool. Keep exercising its exec-policy path
-    // even when the suite runs with a remote exec-server environment.
-    let test = builder.build(&server).await?;
+    let test = builder.build_with_auto_env(&server).await?;
+    // Sync: upstream replaced `shell_command` with `exec_command`.
     let args = json!({
-        "command": "unshare -r chroot / echo blocked",
-        "timeout_ms": 1_000,
+        "cmd": "unshare -r chroot / echo blocked",
+        "yield_time_ms": 1_000,
     });
     let _command_request = mount_sse_once(
         &server,
@@ -89,7 +88,7 @@ prefix_rule(pattern=["echo", "blocked"], decision="forbidden")"#,
             ev_response_created("resp-unshare-1"),
             ev_function_call(
                 "unshare-forbidden",
-                "shell_command",
+                "exec_command",
                 &serde_json::to_string(&args)?,
             ),
             ev_completed("resp-unshare-1"),
@@ -154,11 +153,11 @@ prefix_rule(pattern=["echo", "blocked"], decision="forbidden")"#
             )
             .unwrap();
         });
-        // `shell_command` is a local-only tool; see the tests above.
-        let test = builder.build(&server).await?;
+        let test = builder.build_with_auto_env(&server).await?;
+        // Sync: upstream replaced `shell_command` with `exec_command`.
         let args = json!({
-            "command": line,
-            "timeout_ms": 1_000,
+            "cmd": line,
+            "yield_time_ms": 1_000,
         });
         let _command_request = mount_sse_once(
             &server,
@@ -166,7 +165,7 @@ prefix_rule(pattern=["echo", "blocked"], decision="forbidden")"#
                 ev_response_created("resp-launcher-1"),
                 ev_function_call(
                     "launcher-forbidden",
-                    "shell_command",
+                    "exec_command",
                     &serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-launcher-1"),
