@@ -1,4 +1,5 @@
-//! D553 / #2165: argv boundaries for exec-policy rules. Reuse the classifier's
+//! D553 / #2165: argv boundaries for exec-policy rules (sudo, env, chroot;
+//! #2455 / D670 adds the launchers in `launchers`). Reuse the classifier's
 //! option tables and chroot reader, but fail closed on unknown option syntax.
 //! Unlike shell classification, these words are already argv: do not interpret
 //! shell keywords, comments, or command arguments as additional programs.
@@ -14,6 +15,10 @@ use super::sudo_option_words;
 use super::sudo_value_letter;
 use super::work;
 
+#[path = "indirect_exec_policy_launchers.rs"]
+mod indirect_exec_policy_launchers;
+use indirect_exec_policy_launchers as launchers;
+
 pub(crate) struct PolicyWrapperCommands {
     pub(crate) starts: Vec<usize>,
     pub(crate) uncertain: bool,
@@ -25,6 +30,8 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
         uncertain: false,
     };
     let mut start = 0;
+    // Computed on the first launcher only.
+    let mut last_option = None;
     while let Some(program) = words.get(start) {
         work::step();
         let name = basename(program);
@@ -119,6 +126,17 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
                 }
             }
             (at < words.len()).then_some(at)
+        } else if launchers::is_launcher(name) {
+            // #2455 (D670): unshare, nsenter, timeout and the like.
+            let last = *last_option.get_or_insert_with(|| launchers::last_option(words));
+            match launchers::launch(name, words, start, last) {
+                launchers::Launch::Command { at, uncertain } => {
+                    result.uncertain |= uncertain;
+                    Some(at)
+                }
+                launchers::Launch::NoCommand => return result,
+                launchers::Launch::Uncertain => None,
+            }
         } else {
             break;
         };

@@ -38,6 +38,9 @@ use toml::Value as TomlValue;
 #[path = "exec_policy_wrapper_tests.rs"]
 mod wrapper_tests;
 
+#[path = "exec_policy_launcher_tests.rs"]
+mod launcher_tests;
+
 #[cfg(windows)]
 #[path = "exec_policy_windows_tests.rs"]
 mod windows_tests;

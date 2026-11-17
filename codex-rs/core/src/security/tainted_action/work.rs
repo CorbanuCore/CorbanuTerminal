@@ -209,6 +209,10 @@ mod tests {
             "indirect_exec_policy.rs",
             include_str!("indirect_exec_policy.rs"),
         ),
+        (
+            "indirect_exec_policy_launchers.rs",
+            include_str!("indirect_exec_policy_launchers.rs"),
+        ),
         ("invocation.rs", include_str!("invocation.rs")),
         ("launched_git.rs", include_str!("launched_git.rs")),
         ("launched_input.rs", include_str!("launched_input.rs")),

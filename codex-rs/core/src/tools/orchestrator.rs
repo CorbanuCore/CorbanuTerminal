@@ -630,6 +630,9 @@ impl ToolOrchestrator {
                 retry_reason: Some(
                     [
                         Some(action.approval_reason()),
+                        // #2455: a prompt rule's reason (`… requires approval
+                        // by policy`) is shown here too, not replaced.
+                        policy_prompt_reason(&requirement),
                         post_taint_hint.map(str::to_string),
                         protected_read_note.clone(),
                         kept_read_note,
@@ -2171,6 +2174,17 @@ where
             .model_client()
             .post_taint_state()
             .is_some_and(|state| state.taint_generation == 0 && state.moderate_bound())
+}
+
+/// The reason a prompt rule gave for this command, if one matched.
+fn policy_prompt_reason(requirement: &ExecApprovalRequirement) -> Option<String> {
+    match requirement {
+        ExecApprovalRequirement::NeedsApproval {
+            reason: Some(reason),
+            ..
+        } => Some(reason.clone()),
+        _ => None,
+    }
 }
 
 /// Why a command that asks to run outside the sandbox runs, for its prompt:

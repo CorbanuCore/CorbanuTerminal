@@ -63,3 +63,67 @@ prefix_rule(pattern=["echo", "blocked"], decision="forbidden")"#,
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn issue2455_shell_tool_rejects_forbidden_command_behind_unshare_chroot() -> Result<()> {
+    let server = start_mock_server().await;
+    let mut builder = test_codex().with_config(|config| {
+        let rules = config.codex_home.join("rules");
+        fs::create_dir_all(&rules).unwrap();
+        fs::write(
+            rules.join("wrappers.rules"),
+            r#"prefix_rule(pattern=["unshare"], decision="allow")
+prefix_rule(pattern=["echo", "blocked"], decision="forbidden")"#,
+        )
+        .unwrap();
+    });
+    // `shell_command` is a local-only tool. Keep exercising its exec-policy path
+    // even when the suite runs with a remote exec-server environment.
+    let test = builder.build(&server).await?;
+    let args = json!({
+        "command": "unshare -r chroot / echo blocked",
+        "timeout_ms": 1_000,
+    });
+    let _command_request = mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-unshare-1"),
+            ev_function_call(
+                "unshare-forbidden",
+                "shell_command",
+                &serde_json::to_string(&args)?,
+            ),
+            ev_completed("resp-unshare-1"),
+        ]),
+    )
+    .await;
+    let response = mount_sse_once(
+        &server,
+        sse(vec![
+            ev_assistant_message("msg-unshare-1", "done"),
+            ev_completed("resp-unshare-2"),
+        ]),
+    )
+    .await;
+    submit_user_turn(
+        &test,
+        "run the command",
+        AskForApproval::Never,
+        PermissionProfile::Disabled,
+        /*collaboration_mode*/ None,
+    )
+    .await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    let output = response
+        .single_request()
+        .function_call_output("unshare-forbidden");
+    let output = output["output"].as_str().expect("tool output");
+    assert!(
+        output.contains("policy forbids commands starting with `echo blocked`"),
+        "unexpected output: {output}"
+    );
+    Ok(())
+}
