@@ -167,10 +167,6 @@ async fn issue2455_launchers_preserve_inner_rule_decisions() {
         "chrt -f 10",
         "chrt --rr 1",
         "chrt --idle",
-        // Any integer `strtoimax` reads whole is the priority.
-        "chrt -o +0",
-        "chrt -o -- -0",
-        "chrt -o ' 0'",
         "chrt -T 1 -P 2 -D 3 --deadline 0",
         "taskset 0x3",
         "taskset -c 0-3",
@@ -258,6 +254,10 @@ prefix_rule(pattern=["git", "push"], decision="allow")"#
         // getopt may permute: a later dash word could be the launcher's.
         "doas git push -f",
         "runuser -u nobody git push -f",
+        // Whether this is chrt's priority depends on the version.
+        "chrt -o +0 git push",
+        "chrt -o -- -0 git push",
+        "chrt -o ' 0' git push",
     ] {
         assert_eq!(
             requirement(command, &rules).await,
@@ -271,7 +271,7 @@ prefix_rule(pattern=["git", "push"], decision="allow")"#
 }
 
 #[tokio::test]
-async fn issue2455_possibly_permuted_launchers_still_refuse_forbidden_commands() {
+async fn issue2455_uncertain_launcher_commands_still_refuse_forbidden_commands() {
     let rules = format!(
         r#"{LAUNCHER_ALLOW_RULES}
 prefix_rule(pattern=["git", "push"], decision="forbidden")"#
@@ -279,6 +279,10 @@ prefix_rule(pattern=["git", "push"], decision="forbidden")"#
     for command in [
         "doas git push -f",
         "runuser -u nobody git push -f",
+        // util-linux before 2.42 reads a signed priority; 2.42+ runs it.
+        "chrt -o +0 git push",
+        "chrt -o -- -0 git push",
+        "chrt -o ' 0' git push",
         "doas -u root -- git push -f",
         "runuser -u nobody -- git push -f",
     ] {

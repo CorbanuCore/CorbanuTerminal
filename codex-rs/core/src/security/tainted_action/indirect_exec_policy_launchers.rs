@@ -341,9 +341,17 @@ pub(super) fn launch(
         "chrt" if has("pid", 'p') || has("max", 'm') => return Launch::NoCommand,
         "taskset" if has("pid", 'p') => return Launch::NoCommand,
         "timeout" | "taskset" => at += 1, // The duration or the CPU mask.
-        // A priority (any integer `strtoimax` reads whole), or (newer
-        // util-linux, for policies without one) the command itself.
-        "chrt" if words.get(at).is_some_and(|word| is_integer(word)) => at += 1,
+        // A priority, or (util-linux 2.42+, for policies without one) the
+        // command itself. Before 2.42 any integer `strtoimax` reads whole
+        // is the priority; since, only plain digits are: for `+0`, `-0` or
+        // ` 0` the version decides, so keep an approval floor as well.
+        "chrt" if words.get(at).is_some_and(|word| is_integer(word)) => {
+            uncertain = !words[at].bytes().all(|byte| {
+                work::step();
+                byte.is_ascii_digit()
+            });
+            at += 1;
+        }
         "flock" => {
             // A lock file or descriptor, then argv or `-c` with a script.
             at += 1;
