@@ -738,8 +738,12 @@ impl CoreShellActionProvider {
         };
         let evaluation = {
             let policy = self.policy.read().await;
-            let mut evaluation =
-                evaluate_intercepted_exec_policy(&policy, program, argv, policy_context());
+            let (mut evaluation, case_folded) = evaluate_intercepted_exec_policy_and_folded(
+                &policy,
+                program,
+                argv,
+                policy_context(),
+            );
             if self.strict_rules {
                 crate::exec_policy::apply_strict_forbidden_matches(
                     &mut evaluation,
@@ -747,8 +751,9 @@ impl CoreShellActionProvider {
                     &join_program_and_argv(program, argv),
                 );
             }
-            evaluation
+            (evaluation, case_folded)
         };
+        let (evaluation, case_folded) = evaluation;
         // #626: as for a shell command, a prompt under Aggressive names the
         // remembered approvals that would have run this program unasked.
         let suspended_note = (self.live_aggressive && evaluation.decision == Decision::Prompt)
@@ -763,8 +768,15 @@ impl CoreShellActionProvider {
             .flatten();
         // When true, means the Evaluation was due to *.rules, not the
         // fallback function.
+        // D692: not by a differently cased rule alone, which only adds a
+        // prompt or refusal to what the fallback decides.
         let decision_driven_by_policy =
-            Self::decision_driven_by_policy(&evaluation.matched_rules, evaluation.decision);
+            Self::decision_driven_by_policy(&evaluation.matched_rules, evaluation.decision)
+                && crate::exec_policy::has_exact_rule_match(
+                    &evaluation.matched_rules,
+                    &case_folded,
+                    evaluation.decision,
+                );
         // Issue #540: where the protected-path rules apply, an intercepted
         // exec leaves the sandbox only within a request a person approved to
         // run outside it, never through an allow rule (as in the
@@ -841,6 +853,17 @@ fn evaluate_intercepted_exec_policy(
     argv: &[String],
     context: InterceptedExecPolicyContext,
 ) -> Evaluation {
+    evaluate_intercepted_exec_policy_and_folded(policy, program, argv, context).0
+}
+
+/// [`evaluate_intercepted_exec_policy`], also returning the case-folded rule
+/// matches (D692) it added.
+fn evaluate_intercepted_exec_policy_and_folded(
+    policy: &Policy,
+    program: &AbsolutePathBuf,
+    argv: &[String],
+    context: InterceptedExecPolicyContext,
+) -> (Evaluation, Vec<RuleMatch>) {
     let InterceptedExecPolicyContext {
         approval_policy,
         permission_profile,
@@ -881,11 +904,14 @@ fn evaluate_intercepted_exec_policy(
 
     let options = MatchOptions {
         resolve_host_executables: true,
+        fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE,
     };
     if enable_shell_wrapper_parsing {
-        crate::exec_policy::check_with_wrappers(policy, &commands, &fallback, &options)
+        crate::exec_policy::check_with_wrappers_and_folded(policy, &commands, &fallback, &options)
     } else {
-        crate::exec_policy::check_executed_with_wrappers(policy, &commands, &fallback, &options)
+        crate::exec_policy::check_executed_with_wrappers_and_folded(
+            policy, &commands, &fallback, &options,
+        )
     }
 }
 

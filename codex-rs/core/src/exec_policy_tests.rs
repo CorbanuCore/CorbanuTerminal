@@ -50,6 +50,9 @@ mod more_launcher_tests;
 #[path = "exec_policy_xargs_su_tests.rs"]
 mod xargs_su_tests;
 
+#[path = "exec_policy_rule_case_tests.rs"]
+mod rule_case_tests;
+
 #[path = "exec_policy_launcher_case_tests.rs"]
 mod launcher_case_tests;
 

@@ -35,6 +35,12 @@ test-group = 'provider_tui_journeys'
 retries = 0
 slow-timeout = { period = "60s", terminate-after = 3 }
 
+[[profile.default.overrides]]
+# #2502: keep the full 3 MiB/eight-length equivalence regression. Unoptimized
+# macOS CI exceeded the default 60 s bound; release latency is measured apart.
+filter = 'package(codex-network-proxy) & test(three_mib_eight_isolated_lengths_pass_and_copies_at_end_are_found)'
+slow-timeout = { period = "60s", terminate-after = 5 }
+
 [test-groups.app_server_protocol_codegen]
 max-threads = 1
 
