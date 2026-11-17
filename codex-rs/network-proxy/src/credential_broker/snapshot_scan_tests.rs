@@ -82,14 +82,17 @@ fn randomized_equivalence_to_original_matcher() {
 
 #[test]
 fn full_rolling_hash_collision_requires_exact_bytes() {
-    // Base-257 representation of 30 * 2^64: distinct ASCII windows with
-    // identical rolling hashes, exercising the exact comparison on a hit.
-    let collision = [29u8, 20, 62, 127, 37, 122, 68, 17, 30];
-    let hash = collision.iter().fold(0u64, |h, b| {
-        h.wrapping_mul(BASE).wrapping_add(u64::from(*b))
-    });
-    assert_eq!(hash, 0);
-    let mut text = vec![0u8; collision.len()];
+    // Base-257 representation of 31 * 2^64, offset by one in each byte.
+    // These collide with nine 1s, and the intervening windows do not evict
+    // that negative cache entry: dropping exact equality makes this test fail.
+    let collision = [31u8, 13, 91, 72, 108, 67, 97, 10, 32];
+    let hash = |bytes: &[u8]| {
+        bytes.iter().fold(0u64, |h, b| {
+            h.wrapping_mul(BASE).wrapping_add(u64::from(*b))
+        })
+    };
+    let mut text = vec![1u8; collision.len()];
+    assert_eq!(hash(&collision), hash(&text));
     text.extend_from_slice(&collision);
     assert_eq!(
         scan(
