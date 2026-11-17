@@ -299,6 +299,17 @@ pub(super) struct Scan {
     dollar: bool,
 }
 
+impl Scan {
+    /// More words may follow (xargs appends stdin): any of them may be an
+    /// option or hold a `$`.
+    pub(super) fn open_end(self) -> Self {
+        Self {
+            last_option: Some(usize::MAX),
+            dollar: true,
+        }
+    }
+}
+
 pub(super) fn scan(words: &[String]) -> Scan {
     let mut scan = Scan {
         last_option: None,

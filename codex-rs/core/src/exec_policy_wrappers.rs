@@ -37,6 +37,8 @@ pub(crate) fn check_with_wrappers(
         let mut heuristic = wrappers
             .uncertain
             .then_some((command.as_slice(), Decision::Prompt));
+        // Every rule counts where no word is known; scan them once.
+        let mut any_rule = None;
         for &start in &wrappers.starts {
             let candidate = &command[start..];
             let found = policy.matches_for_command_with_options(
@@ -55,12 +57,17 @@ pub(crate) fn check_with_wrappers(
             // approve, so they need no prompt.
             if let Some(open) = &wrappers.open
                 && heuristic.is_none_or(|(_, previous)| previous < Decision::Prompt)
-                && policy
-                    .strictest_rule_matching_more_args(
-                        &command[start..open.known_end.max(start)],
-                        options,
-                    )
-                    .is_some_and(|decision| decision > Decision::Allow)
+                && {
+                    let known = &command[start..open.known_end.max(start)];
+                    let strictest = if known.is_empty() {
+                        *any_rule.get_or_insert_with(|| {
+                            policy.strictest_rule_matching_more_args(known, options)
+                        })
+                    } else {
+                        policy.strictest_rule_matching_more_args(known, options)
+                    };
+                    strictest.is_some_and(|decision| decision > Decision::Allow)
+                }
             {
                 heuristic = Some((candidate, Decision::Prompt));
             }

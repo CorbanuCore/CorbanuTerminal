@@ -4,6 +4,7 @@
 //! Unlike shell classification, these words are already argv: do not interpret
 //! shell keywords, comments, or command arguments as additional programs.
 
+use super::super::shell::SHELLS;
 use super::FLAG_LETTERS;
 use super::SimpleCommand;
 use super::WRAPPERS;
@@ -48,7 +49,7 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
             // No held redirections: callers supply argv after shell parsing.
             let reads = chroot_reads(&SimpleCommand::default(), &words[start..], /*from*/ 0);
             let Some(read) = reads.first() else {
-                break;
+                return no_command(result);
             };
             result.uncertain |= read.unknown_option;
             read.command.map(|at| start + at)
@@ -131,11 +132,11 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
                 // environment. A missing option value advances past len and
                 // still fails closed below.
                 if at == words.len() {
-                    return result;
+                    return no_command(result);
                 }
             }
             (at < words.len()).then_some(at)
-        } else if name == "xargs" {
+        } else if matches!(name, "xargs" | "gxargs") {
             match launchers::xargs(words, start) {
                 launchers::Xargs::Command { at, replace } => {
                     match &mut result.open {
@@ -154,27 +155,34 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
                     Some(at)
                 }
                 // xargs runs `echo`.
-                launchers::Xargs::NoCommand => return result,
+                launchers::Xargs::NoCommand => return no_command(result),
                 launchers::Xargs::Uncertain => None,
             }
         } else if matches!(name, "sg" | "watch")
-            || (name == "su" && !su_login_only(&words[start..]))
+            || (name == "su" && (result.open.is_some() || !su_login_only(&words[start..])))
         {
             // #2455 (D676, D678): these run a shell string (su -c, sg, watch)
-            // or pass words to a shell; approval-only for now.
+            // or pass words to a shell; approval-only for now. Under xargs,
+            // stdin may add `-c` to any su.
             None
         } else if launchers::is_launcher(name, start) {
             // #2455 (D670): unshare, nsenter, timeout and the like.
-            let scan = *scan.get_or_insert_with(|| launchers::scan(words));
+            let mut scan = *scan.get_or_insert_with(|| launchers::scan(words));
+            if result.open.is_some() {
+                // D677: stdin may add option words or a `$` at the end.
+                scan = scan.open_end();
+            }
             match launchers::launch(name, words, start, scan) {
                 launchers::Launch::Command { at, uncertain } => {
                     result.uncertain |= uncertain;
                     Some(at)
                 }
-                launchers::Launch::NoCommand => return result,
+                launchers::Launch::NoCommand => return no_command(result),
                 launchers::Launch::Uncertain => None,
             }
         } else {
+            // D677: under xargs, stdin may give a shell its script.
+            result.uncertain |= result.open.is_some() && SHELLS.contains(&name);
             break;
         };
         let Some(after) = after else {
@@ -186,6 +194,13 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
         }
         start = after;
     }
+    result
+}
+
+/// A launcher with no command of its own. Under xargs (D677) stdin may
+/// supply one, which no rule has seen.
+fn no_command(mut result: PolicyWrapperCommands) -> PolicyWrapperCommands {
+    result.uncertain |= result.open.is_some();
     result
 }
 

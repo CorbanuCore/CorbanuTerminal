@@ -148,6 +148,8 @@ async fn issue2455c_xargs_refuses_forbidden_fixed_commands() {
         "xargs sudo -n git push",
         "xargs xargs git push",
         "/usr/bin/xargs git push",
+        "gxargs -0 git push",
+        "xargs env FOO=1 git push",
     ] {
         for result in [
             requirement(command, XARGS_RULES).await,
@@ -194,6 +196,29 @@ async fn issue2455c_xargs_asks_when_stdin_could_complete_a_rule() {
         "xargs -I{} {} push",
         "xargs -I{} sudo -u {} git status",
         "xargs xargs -I{} git {}",
+        // No command of its own, or a shell: stdin supplies the command,
+        // a script or su's `-c`.
+        "xargs env",
+        "xargs env -i",
+        "xargs env FOO=1",
+        "xargs nice",
+        "xargs time",
+        "xargs command",
+        "xargs caffeinate",
+        "xargs busybox",
+        "xargs flock lockfile",
+        "xargs chroot /",
+        "xargs xargs",
+        "xargs -0 xargs -0",
+        "xargs su",
+        "xargs su root",
+        "xargs -I% su %",
+        "xargs -0 sh -c",
+        "xargs bash -c 'git status'",
+        "xargs busybox sh",
+        // Options stdin could add to a permuting launcher.
+        "xargs doas git status",
+        "xargs runuser -u root git status",
         // Unknown or malformed options.
         "xargs --frobnicate git status",
         "xargs -q git status",
