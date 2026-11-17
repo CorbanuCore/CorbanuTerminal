@@ -294,6 +294,11 @@ def migrations(tree: GitTree, files: list[str]) -> list[dict[str, str]]:
 
 def model_catalog(tree: GitTree) -> list[dict[str, Any]]:
     models = json.loads(tree.text(MODEL_CATALOG))["models"]
+    for path in tree.files():
+        if path.startswith("codex-rs/models-manager/models-") and path.endswith(
+            ".json"
+        ):
+            models.extend(json.loads(tree.text(path))["models"])
     fields = (
         "slug",
         "display_name",
