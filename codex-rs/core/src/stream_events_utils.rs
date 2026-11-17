@@ -435,7 +435,11 @@ pub(crate) async fn handle_output_item_done(
             };
             record_completed_response_item(ctx.sess.as_ref(), ctx.step_context.as_ref(), &item)
                 .await;
-            if let Some(response_item) = response_input_to_response_item(&response) {
+            if let Some(mut response_item) = response_input_to_response_item(&response) {
+                ctx.sess
+                    .services
+                    .executed_tool_calls
+                    .attach_rejected_function_call(&item, &mut response_item, &ctx.step_context);
                 ctx.sess
                     .record_conversation_items(
                         &ctx.step_context.turn,

@@ -366,6 +366,38 @@ impl ExecutedToolCalls {
         Some((recorded, permit))
     }
 
+    /// Record a function attempt rejected while constructing the call, before dispatch.
+    pub(crate) fn attach_rejected_function_call(
+        &self,
+        input: &ResponseItem,
+        output: &mut ResponseItem,
+        step_context: &StepContext,
+    ) {
+        let ResponseItem::FunctionCall {
+            name,
+            namespace,
+            arguments,
+            call_id,
+            encrypted_function_args,
+            ..
+        } = input
+        else {
+            return;
+        };
+        let call = step_context.tool_router.resolve_flat_tool_call(ToolCall {
+            tool_name: codex_tools::ToolName::new(namespace.clone(), name.clone())
+                .with_default_namespace(),
+            call_id: call_id.clone(),
+            payload: ToolPayload::Function {
+                arguments: arguments.clone(),
+            },
+            encrypted_function_args: encrypted_function_args.clone(),
+            native_call: None,
+        });
+        let prepared = self.prepare_direct_call(&call, &call.direct_source(), step_context);
+        self.attach_direct_call_to_output(output, prepared);
+    }
+
     fn reserve_direct_call(&self) -> Option<DirectCallPermit> {
         let recording = Arc::downgrade(&self.lock_state().as_ref()?.recording);
         self.pending_direct_calls
