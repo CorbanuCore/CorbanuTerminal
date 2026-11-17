@@ -463,6 +463,9 @@ impl ExecPolicyManager {
         };
         let match_options = MatchOptions {
             resolve_host_executables: true,
+            // D692: forbidden and prompt rules match the program name in
+            // any case where this platform finds programs that way.
+            fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE,
         };
         let mut evaluation = check_with_wrappers(
             exec_policy.as_ref(),
@@ -647,6 +650,7 @@ impl ExecPolicyManager {
         }
         let match_options = MatchOptions {
             resolve_host_executables: true,
+            fold_program_case: false,
         };
         let existing_evaluation = current_policy.check_multiple_with_options(
             [&amendment.command],

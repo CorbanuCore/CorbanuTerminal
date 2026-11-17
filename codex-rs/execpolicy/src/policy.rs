@@ -22,13 +22,27 @@ type HeuristicsFallback<'a> = Option<&'a dyn Fn(&[String]) -> Decision>;
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct MatchOptions {
     pub resolve_host_executables: bool,
+    /// D692: program names compare without regard to case (macOS and
+    /// Windows; see [`PROGRAM_NAMES_FOLD_CASE`]). Only forbidden and prompt
+    /// rules match a differently cased name, through
+    /// [`Policy::case_folded_matches`] and
+    /// [`Policy::strictest_rule_matching_more_args`]; allow rules still need
+    /// the exact name, and [`Policy::matches_for_command_with_options`] stays
+    /// exact.
+    pub fold_program_case: bool,
 }
+
+/// D692: whether this platform finds programs without regard to case
+/// (case-insensitive APFS on macOS, NTFS on Windows).
+pub const PROGRAM_NAMES_FOLD_CASE: bool = cfg!(any(target_os = "macos", windows));
 
 #[derive(Clone, Debug)]
 pub struct Policy {
     rules_by_program: MultiMap<String, RuleRef>,
     network_rules: Vec<NetworkRule>,
     host_executables_by_name: HashMap<String, Arc<[AbsolutePathBuf]>>,
+    /// D692: the programs of `rules_by_program` by [`fold_program_name`].
+    programs_by_folded_name: HashMap<String, Vec<String>>,
 }
 
 impl Policy {
@@ -41,10 +55,18 @@ impl Policy {
         network_rules: Vec<NetworkRule>,
         host_executables_by_name: HashMap<String, Arc<[AbsolutePathBuf]>>,
     ) -> Self {
+        let mut programs_by_folded_name: HashMap<String, Vec<String>> = HashMap::new();
+        for program in rules_by_program.keys() {
+            programs_by_folded_name
+                .entry(fold_program_name(program))
+                .or_default()
+                .push(program.clone());
+        }
         Self {
             rules_by_program,
             network_rules,
             host_executables_by_name,
+            programs_by_folded_name,
         }
     }
 
@@ -116,6 +138,12 @@ impl Policy {
             justification,
         });
 
+        if !self.rules_by_program.contains_key(first_token) {
+            self.programs_by_folded_name
+                .entry(fold_program_name(first_token))
+                .or_default()
+                .push(first_token.clone());
+        }
         self.rules_by_program.insert(first_token.clone(), rule);
         Ok(())
     }
@@ -330,10 +358,19 @@ impl Policy {
             .flatten()
             .and_then(|program| executable_path_lookup_key(program.as_path()));
         let rest = &known[1..];
+        // D692: forbidden and prompt rules for the name in another case.
+        let folded = std::iter::once(first)
+            .chain(basename.as_ref())
+            .filter(|_| options.fold_program_case)
+            .flat_map(|program| self.programs_folding_like(program))
+            .filter_map(|program| self.rules_by_program.get_vec(program))
+            .flatten()
+            .filter(|rule| rule_decision(rule.as_ref()) > Decision::Allow);
         std::iter::once(first)
             .chain(basename.as_ref())
             .filter_map(|program| self.rules_by_program.get_vec(program))
             .flatten()
+            .chain(folded)
             .filter(|rule| {
                 rule.as_any()
                     .downcast_ref::<PrefixRule>()
@@ -348,6 +385,84 @@ impl Policy {
             })
             .map(|rule| rule_decision(rule.as_ref()))
             .max()
+    }
+
+    /// D692: the matches of forbidden and prompt rules whose program equals
+    /// the command's only up to case (see [`fold_program_name`]), when
+    /// `options.fold_program_case`: `RM -rf x` for a forbidden `rm` rule,
+    /// and with `resolve_host_executables` `/bin/RM` for `rm` (at a listed
+    /// host path, compared up to case). Rules for the exact name are left to
+    /// [`Self::matches_for_command_with_options`]; callers add these to its
+    /// matches and keep its fallback, so they can only make a command
+    /// stricter. Allow rules never match here.
+    pub fn case_folded_matches(&self, cmd: &[String], options: &MatchOptions) -> Vec<RuleMatch> {
+        let mut found = Vec::new();
+        let Some(first) = cmd.first().filter(|_| options.fold_program_case) else {
+            return found;
+        };
+        let mut add = |program: &String, resolved: Option<&AbsolutePathBuf>| {
+            let Some(rules) = self.rules_by_program.get_vec(program) else {
+                return;
+            };
+            let respelled = std::iter::once(program.clone())
+                .chain(cmd[1..].iter().cloned())
+                .collect::<Vec<_>>();
+            for rule in rules {
+                if rule_decision(rule.as_ref()) == Decision::Allow {
+                    continue;
+                }
+                if let Some(rule_match) = rule.matches(&respelled) {
+                    let rule_match = match resolved {
+                        Some(program) => rule_match.with_resolved_program(program),
+                        None => rule_match,
+                    };
+                    if !found.contains(&rule_match) {
+                        found.push(rule_match);
+                    }
+                }
+            }
+        };
+        for program in self.programs_folding_like(first) {
+            add(program, None);
+        }
+        // Only a written absolute path: a bare name is folded above.
+        if options.resolve_host_executables
+            && let Ok(path) = AbsolutePathBuf::from_absolute_path_checked(first)
+            && let Some(basename) = executable_path_lookup_key(path.as_path())
+        {
+            let folded_path = fold_program_name(&path.as_path().to_string_lossy());
+            let programs = self
+                .programs_by_folded_name
+                .get(&fold_program_name(&basename))
+                .into_iter()
+                .flatten();
+            for program in programs {
+                let listed = self.host_executables_by_name.get(program);
+                // The exact name at an exactly listed path (or with no list)
+                // is matched by `matches_for_command_with_options`.
+                if *program == basename && listed.is_none_or(|paths| paths.contains(&path)) {
+                    continue;
+                }
+                if let Some(paths) = listed
+                    && !paths.iter().any(|listed| {
+                        fold_program_name(&listed.as_path().to_string_lossy()) == folded_path
+                    })
+                {
+                    continue;
+                }
+                add(program, Some(&path));
+            }
+        }
+        found
+    }
+
+    /// The rule programs equal to `name` up to case, other than `name`.
+    fn programs_folding_like<'a>(&'a self, name: &'a str) -> impl Iterator<Item = &'a String> {
+        self.programs_by_folded_name
+            .get(&fold_program_name(name))
+            .into_iter()
+            .flatten()
+            .filter(move |program| program.as_str() != name)
     }
 
     fn match_exact_rules(&self, cmd: &[String]) -> Option<Vec<RuleMatch>> {
@@ -388,6 +503,30 @@ impl Policy {
             .map(|rule_match| rule_match.with_resolved_program(&program))
             .collect()
     }
+}
+
+/// D692: `name` as case-insensitive file systems compare it: Unicode
+/// lowercase, plus the folds APFS applies that lowercasing does not (`ſ`,
+/// `ß`, the Latin ligatures) and the dotless `ı`, which NTFS uppercases to
+/// `I`. Folding more than a file system does only adds forbidden and prompt
+/// matches.
+pub(crate) fn fold_program_name(name: &str) -> String {
+    let mut folded = String::with_capacity(name.len());
+    for c in name.chars() {
+        match c {
+            '\u{17f}' => folded.push('s'),
+            '\u{131}' => folded.push('i'),
+            '\u{df}' | '\u{1e9e}' => folded.push_str("ss"),
+            '\u{fb00}' => folded.push_str("ff"),
+            '\u{fb01}' => folded.push_str("fi"),
+            '\u{fb02}' => folded.push_str("fl"),
+            '\u{fb03}' => folded.push_str("ffi"),
+            '\u{fb04}' => folded.push_str("ffl"),
+            '\u{fb05}' | '\u{fb06}' => folded.push_str("st"),
+            c => folded.extend(c.to_lowercase()),
+        }
+    }
+    folded
 }
 
 /// A prefix rule's decision; other kinds count as forbidding (fail closed).

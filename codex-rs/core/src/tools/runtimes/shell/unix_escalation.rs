@@ -885,6 +885,7 @@ fn evaluate_intercepted_exec_policy(
         &fallback,
         &MatchOptions {
             resolve_host_executables: true,
+            fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE,
         },
     )
 }

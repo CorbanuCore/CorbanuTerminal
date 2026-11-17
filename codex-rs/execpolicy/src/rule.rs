@@ -251,6 +251,7 @@ pub(crate) fn validate_match_examples(
     let mut unmatched_examples = Vec::new();
     let options = MatchOptions {
         resolve_host_executables: true,
+        fold_program_case: false,
     };
 
     for example in matches {
@@ -286,6 +287,7 @@ pub(crate) fn validate_not_match_examples(
 ) -> Result<()> {
     let options = MatchOptions {
         resolve_host_executables: true,
+        fold_program_case: false,
     };
 
     for example in not_matches {

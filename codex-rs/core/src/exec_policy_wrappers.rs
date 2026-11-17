@@ -51,6 +51,8 @@ pub(crate) fn check_with_wrappers(
                 }
             }
             matches.extend(found);
+            // D692: kept beside the fallback, so this only adds checks.
+            matches.extend(policy.case_folded_matches(candidate, options));
             // #2455 (D677): xargs adds words read from stdin. Ask whenever a
             // prompt or forbidden rule could match once they arrive; a rule
             // the fixed argv already matches applies above. Allow rules only
