@@ -88,7 +88,6 @@ fn sec_win_1953_foreign_records_refuse_elevated_capture_and_watch() {
                 env_map: std::env::vars().collect(),
                 timeout_ms: Some(90_000),
                 cancellation: None,
-                use_private_desktop: true,
                 proxy_enforced: false,
                 network_proxy_restricting_sid: None,
                 read_roots_override: None,
