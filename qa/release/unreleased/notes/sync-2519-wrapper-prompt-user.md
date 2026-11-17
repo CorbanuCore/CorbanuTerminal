@@ -1,0 +1,3 @@
+## Security
+
+A command that runs another through a wrapper now respects managed `prompt-user` and `forbidden` rules as strictly as the direct command. Where Corbanu can read the wrapped command (for example `sudo git push` or `watch -x git push`), those rules apply exactly as written. Where it cannot (`su -c '…'`, `sg`, `watch` without `-x`, `env -S`, or options it does not know), any `prompt-user` or `forbidden` rule that could match now requires a fresh human decision instead of an approval the configured reviewer could give. The same applies when a `forbidden` rule could match once `xargs` adds words from its input (D691). `watch -x` still always asks for approval (#2519).
