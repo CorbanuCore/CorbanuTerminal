@@ -586,12 +586,37 @@ impl<'a> TmuxPane<'a> {
         timeout: Duration,
         condition: impl Fn(&str) -> bool,
     ) -> Result<String> {
+        self.wait_stable_capture(description, timeout, || self.capture_viewport(), condition)
+    }
+
+    pub(crate) fn wait_stable_scrollback_until(
+        &self,
+        description: &str,
+        timeout: Duration,
+        lines: usize,
+        condition: impl Fn(&str) -> bool,
+    ) -> Result<String> {
+        self.wait_stable_capture(
+            description,
+            timeout,
+            || self.capture_scrollback_tail(lines),
+            condition,
+        )
+    }
+
+    fn wait_stable_capture(
+        &self,
+        description: &str,
+        timeout: Duration,
+        capture: impl Fn() -> Result<String>,
+        condition: impl Fn(&str) -> bool,
+    ) -> Result<String> {
         let deadline = Instant::now() + timeout;
         let mut previous_matching_capture = None;
         let mut last_capture = String::new();
 
         while Instant::now() < deadline {
-            last_capture = self.capture_viewport()?;
+            last_capture = capture()?;
             if condition(&last_capture) {
                 if previous_matching_capture.as_deref() == Some(last_capture.as_str()) {
                     return Ok(last_capture);
@@ -606,7 +631,7 @@ impl<'a> TmuxPane<'a> {
         let reason = format!("timed out waiting for stable {description}");
         let artifact = self.server.emit_failure(&reason, Some(self.id.as_str()));
         anyhow::bail!(
-            "{reason}; last viewport:\n{last_capture}\nartifacts: {}",
+            "{reason}; last capture:\n{last_capture}\nartifacts: {}",
             artifact.display()
         );
     }
