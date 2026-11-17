@@ -7,6 +7,9 @@ license.workspace = true
 [lints]
 workspace = true
 
+[features]
+test-support = []
+
 [dependencies]
 keyring = { workspace = true, features = ["crypto-rust"] }
 tracing = { workspace = true }

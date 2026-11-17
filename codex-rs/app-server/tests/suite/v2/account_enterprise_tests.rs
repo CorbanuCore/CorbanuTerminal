@@ -208,7 +208,7 @@ async fn enterprise_login_attempt_lifecycle() -> Result<()> {
 
     let keyring = TestKeyring::default();
     let account_read = Arc::clone(&keyring.account_read);
-    keyring::set_default_credential_builder(Box::new(keyring));
+    codex_keyring_store::test_support::install(Box::new(keyring));
     let server = MockServer::builder().start().await;
     let idp_server = MockServer::start().await;
     app_test_support::mount_workspace_routing(&server).await;
@@ -1623,7 +1623,7 @@ async fn enterprise_login_setup_is_cancelled_by_account_changes() -> Result<()> 
         return Ok(());
     }
 
-    keyring::set_default_credential_builder(Box::<TestKeyring>::default());
+    codex_keyring_store::test_support::install(Box::<TestKeyring>::default());
     for (account_method, account_params) in [
         ("account/logout", json!({})),
         (

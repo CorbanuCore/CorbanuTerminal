@@ -14,6 +14,9 @@ use std::time::Duration;
 use std::time::Instant;
 use tracing::trace;
 
+#[cfg(feature = "test-support")]
+pub mod test_support;
+
 #[cfg(target_os = "macos")]
 mod macos_interaction;
 #[cfg(any(target_os = "macos", test))]
@@ -51,6 +54,11 @@ fn with_native_interaction<T>(
     account: &str,
     callback: impl FnOnce() -> Result<T, CredentialStoreError>,
 ) -> Result<T, CredentialStoreError> {
+    #[cfg(feature = "test-support")]
+    if test_support::is_installed() {
+        test_support::require_isolated_debug_lane()?;
+        return callback();
+    }
     #[cfg(target_os = "macos")]
     {
         macos_interaction::run(service, account, callback)
@@ -299,8 +307,7 @@ impl KeyringStore for DefaultKeyringStore {
             move || {
                 with_native_interaction(&service, &account, || {
                     trace!("keyring.load start");
-                    let entry =
-                        Entry::new(&service, &account).map_err(CredentialStoreError::new)?;
+                    let entry = credential_entry(&service, &account)?;
                     match entry.get_password() {
                         Ok(password) => {
                             trace!("keyring.load success");
@@ -332,8 +339,7 @@ impl KeyringStore for DefaultKeyringStore {
             move || {
                 with_native_interaction(&service, &account, || {
                     trace!("keyring.save start");
-                    let entry =
-                        Entry::new(&service, &account).map_err(CredentialStoreError::new)?;
+                    let entry = credential_entry(&service, &account)?;
                     match entry.set_password(&value) {
                         Ok(()) => {
                             trace!("keyring.save success");
@@ -360,8 +366,7 @@ impl KeyringStore for DefaultKeyringStore {
             move || {
                 with_native_interaction(&service, &account, || {
                     trace!("keyring.delete start");
-                    let entry =
-                        Entry::new(&service, &account).map_err(CredentialStoreError::new)?;
+                    let entry = credential_entry(&service, &account)?;
                     match entry.delete_credential() {
                         Ok(()) => {
                             trace!("keyring.delete success");
@@ -382,9 +387,21 @@ impl KeyringStore for DefaultKeyringStore {
     }
 }
 
+fn credential_entry(service: &str, account: &str) -> Result<Entry, CredentialStoreError> {
+    #[cfg(feature = "test-support")]
+    if let Some(entry) = test_support::entry(service, account) {
+        return entry;
+    }
+    Entry::new(service, account).map_err(CredentialStoreError::new)
+}
+
 // Debug fixtures exercise the existing profile-local fallback without ever calling
 // the native keyring. Release builds cannot enable this test isolation override.
 fn reject_fixture_keyring_access() -> Result<(), CredentialStoreError> {
+    #[cfg(feature = "test-support")]
+    if test_support::is_installed() {
+        return test_support::require_isolated_debug_lane();
+    }
     if cfg!(debug_assertions) && std::env::var_os("CORBANU_TEST_NO_NATIVE_KEYRING").is_some() {
         return Err(CredentialStoreError::from_message(
             "Native keyring is unavailable in an isolated test fixture".to_string(),
