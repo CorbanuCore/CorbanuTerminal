@@ -87,7 +87,11 @@ async fn spawn_reports_effective_settings_after_child_runtime_is_removed() -> Re
     let mut extensions = ExtensionRegistryBuilder::new();
     extensions.turn_lifecycle_contributor(remover.clone());
     let test = test_codex()
-        .with_model(INHERITED_MODEL)
+        // Model metadata takes precedence over the V2 feature flag. This fixture
+        // exercises V1 spawn and must select that protocol explicitly.
+        .with_model_info_override(INHERITED_MODEL, |model| {
+            model.multi_agent_version = Some(codex_protocol::protocol::MultiAgentVersion::V1);
+        })
         .with_extensions(Arc::new(extensions.build()))
         .with_config(|config| {
             config.features.enable(Feature::Collab).expect("enable collab");
