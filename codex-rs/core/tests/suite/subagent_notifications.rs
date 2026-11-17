@@ -3240,9 +3240,27 @@ async fn multi_agent_v2_peer_followup_completion_notifies_initiating_turn(
     const REQUESTER_CALL_ID: &str = "spawn-routing-requester";
     const FOLLOWUP_CALL_ID: &str = "request-peer-followup";
 
+    #[derive(Default)]
+    struct WakeIdle(tokio::sync::Notify);
+    struct ObserveWakeIdle;
+    impl codex_extension_api::ThreadLifecycleContributor<Config> for ObserveWakeIdle {
+        fn on_thread_idle<'a>(
+            &'a self,
+            input: codex_extension_api::ThreadIdleInput<'a>,
+        ) -> codex_extension_api::ExtensionFuture<'a, ()> {
+            Box::pin(async move {
+                if let Some(idle) = input.thread_store.get::<WakeIdle>() {
+                    idle.0.notify_one();
+                }
+            })
+        }
+    }
+    let mut extensions = ExtensionRegistryBuilder::<Config>::new();
+    extensions.thread_lifecycle_contributor(Arc::new(ObserveWakeIdle));
     let server = start_mock_server().await;
     let mut builder = test_codex()
         .with_model("gpt-5.6-sol")
+        .with_extensions(Arc::new(extensions.build()))
         .with_config(|config| {
             for feature in [Feature::Collab, Feature::MultiAgentV2] {
                 config
@@ -3451,7 +3469,7 @@ async fn multi_agent_v2_peer_followup_completion_notifies_initiating_turn(
     })
     .await;
 
-    let mut worker_followup_turn_id = worker_followup_request
+    let worker_followup_turn_id = worker_followup_request
         .requests()
         .into_iter()
         .find_map(|request| {
@@ -3473,52 +3491,6 @@ async fn multi_agent_v2_peer_followup_completion_notifies_initiating_turn(
             })
         })
         .expect("worker follow-up model request");
-    if reload_sleeping_worker {
-        worker_thread.shutdown_and_wait().await?;
-        test.thread_manager.remove_thread(&worker_thread_id).await;
-        test.thread_manager
-            .ensure_multi_agent_v2_child_loaded(worker_thread_id)
-            .await?;
-        worker_thread = test.thread_manager.get_thread(worker_thread_id).await?;
-        // Simulate the extension restoring durable sleep; Core owns the
-        // queue-only wake and completion routing exercised below.
-        worker_thread
-            .thread_extension_data()
-            .insert(codex_extension_items::sleep::SleepItem {
-                id: "peer-worker-sleep".to_string(),
-                duration_ms: 60_000,
-            });
-        let wake_request = mount_sse_once_match(
-            &server,
-            |request: &wiremock::Request| body_contains(request, "wake sleeping peer work"),
-            sse(vec![
-                ev_response_created("resp-peer-worker-wake"),
-                ev_assistant_message("msg-peer-worker-wake", "peer follow-up finished"),
-                ev_completed("resp-peer-worker-wake"),
-            ]),
-        )
-        .await;
-        worker_thread
-            .submit(Op::InterAgentCommunication {
-                communication: codex_protocol::protocol::InterAgentCommunication::new(
-                    codex_protocol::AgentPath::root(),
-                    codex_protocol::AgentPath::try_from("/root/worker").expect("worker path"),
-                    Vec::new(),
-                    "wake sleeping peer work".to_string(),
-                    /*trigger_turn*/ false,
-                ),
-                start_options: TurnStartOptions::default(),
-            })
-            .await?;
-        worker_followup_turn_id =
-            wait_for_event_match(worker_thread.as_ref(), |event| match event {
-                EventMsg::TurnComplete(completed) => Some(completed.turn_id.clone()),
-                _ => None,
-            })
-            .await;
-        let request = wake_request.single_request();
-        assert_parent_turn(&request.body_json(), Some(&requester_turn_id))?;
-    }
     let completed = timeout(
         Duration::from_secs(5),
         wait_for_event_match(requester_thread.as_ref(), |event| match event {
@@ -3544,7 +3516,7 @@ async fn multi_agent_v2_peer_followup_completion_notifies_initiating_turn(
         (completed.thread_id, completed.turn_id, completed_item),
         (
             requester_thread_id,
-            requester_turn_id,
+            requester_turn_id.clone(),
             SubAgentActivityItem {
                 model: None,
                 reasoning_effort: None,
@@ -3557,6 +3529,100 @@ async fn multi_agent_v2_peer_followup_completion_notifies_initiating_turn(
             },
         )
     );
+
+    if reload_sleeping_worker {
+        worker_thread.shutdown_and_wait().await?;
+        test.thread_manager.remove_thread(&worker_thread_id).await;
+        test.thread_manager
+            .ensure_multi_agent_v2_child_loaded(worker_thread_id)
+            .await?;
+        worker_thread = test.thread_manager.get_thread(worker_thread_id).await?;
+        let wake_idle = worker_thread
+            .thread_extension_data()
+            .get_or_init(WakeIdle::default);
+        // D683: the explicit delegation above owns one completion. Restoring durable
+        // sleep and waking it with queue-only mail does not create another delegation.
+        worker_thread
+            .thread_extension_data()
+            .insert(codex_extension_items::sleep::SleepItem {
+                id: "peer-worker-sleep".to_string(),
+                duration_ms: 60_000,
+            });
+        let wake_request = mount_sse_once_match(
+            &server,
+            |request: &wiremock::Request| body_contains(request, "wake sleeping peer work"),
+            sse(vec![
+                ev_response_created("resp-peer-worker-wake"),
+                ev_assistant_message("msg-peer-worker-wake", "queue-only wake finished"),
+                ev_completed("resp-peer-worker-wake"),
+            ]),
+        )
+        .await;
+        worker_thread
+            .submit(Op::InterAgentCommunication {
+                communication: codex_protocol::protocol::InterAgentCommunication::new(
+                    codex_protocol::AgentPath::root(),
+                    codex_protocol::AgentPath::try_from("/root/worker").expect("worker path"),
+                    Vec::new(),
+                    "wake sleeping peer work".to_string(),
+                    /*trigger_turn*/ false,
+                ),
+                start_options: TurnStartOptions::default(),
+            })
+            .await?;
+        let wake_turn_id = wait_for_event_match(worker_thread.as_ref(), |event| match event {
+            EventMsg::TurnComplete(completed) => {
+                assert_eq!(
+                    completed.last_agent_message.as_deref(),
+                    Some("queue-only wake finished")
+                );
+                assert!(completed.error.is_none());
+                Some(completed.turn_id.clone())
+            }
+            _ => None,
+        })
+        .await;
+        assert_ne!(wake_turn_id, worker_followup_turn_id);
+        let request = wake_request.single_request();
+        assert_parent_turn(&request.body_json(), Some(&requester_turn_id))?;
+
+        // TurnComplete precedes terminal routing. This thread's idle callback runs
+        // after routing, so absence is checked after completion, not a timed silence.
+        timeout(POSITIVE_WAIT, wake_idle.0.notified()).await?;
+        test.codex
+            .update_thread_settings(ThreadSettingsOverrides::default())
+            .await?;
+        requester_thread.ensure_rollout_materialized().await;
+        requester_thread.flush_rollout().await?;
+        let rollout = codex_rollout::RolloutRecorder::get_rollout_history(
+            &requester_thread
+                .rollout_path()
+                .expect("requester rollout path"),
+        )
+        .await?;
+        let completion_ids = rollout
+            .get_rollout_items()
+            .iter()
+            .filter_map(|item| match item {
+                RolloutItem::EventMsg(EventMsg::ItemCompleted(completed)) => {
+                    match &completed.item {
+                        TurnItem::SubAgentActivity(activity)
+                            if activity.kind == SubAgentActivityKind::Completed
+                                && activity.agent_thread_id == worker_thread_id =>
+                        {
+                            Some(activity.id.clone())
+                        }
+                        _ => None,
+                    }
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            completion_ids,
+            vec![format!("subagent-completed-{worker_followup_turn_id}")]
+        );
+    }
 
     // Fresh turn input is sampled before queued mail is drained. Let that first
     // request complete successfully so the next request can include the result.
@@ -3593,6 +3659,10 @@ async fn multi_agent_v2_peer_followup_completion_notifies_initiating_turn(
                 && request.body_contains_text("peer follow-up finished")
         })
         .expect("root result request");
+    assert!(
+        !root_request.body_contains_text("queue-only wake finished"),
+        "queue-only wakes must not send terminal-result mail to the parent"
+    );
     assert!(
         root_request
             .inputs_of_type("agent_message")
