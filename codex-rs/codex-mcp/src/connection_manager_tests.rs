@@ -5837,7 +5837,7 @@ async fn manager_with_reusable_ready_server(
                 startup_timeout: config
                     .startup_timeout_sec
                     .unwrap_or(DEFAULT_STARTUP_TIMEOUT),
-                discover_timeout: crate::rmcp_client::effective_discover_timeout(&config),
+                discover_timeout: crate::rmcp_client::effective_discover_timeout(config),
                 initialized_apps: None,
                 startup_trigger: None,
                 legacy_fallback: None,
