@@ -63,7 +63,10 @@ fn asks(result: &ExecApprovalRequirement) -> bool {
     )
 }
 
-/// Shells spelled as macOS and Windows run them, with their flag.
+/// Shells spelled as macOS and Windows run them, with their flag. Only
+/// spellings the shell parser does not read already (`detect_shell_type`
+/// reads `zsh.exe` and `sh.exe.` by their file stem), so the list cannot
+/// drift into names that unwrap without this change.
 fn shells() -> Vec<String> {
     let mut shells = [
         "BASH -lc",
@@ -83,10 +86,17 @@ fn shells() -> Vec<String> {
             "BASH.EXE -lc".to_string(),
             "SH.EXE. -c".to_string(),
             // Quoted: shlex reads an unquoted `\` as an escape.
-            // (`zsh.exe` and `sh.exe.` are read by the shell parser already.)
             "'C:\\Tools\\Zsh.exe' -c".to_string(),
+            "'C:\\Tools\\zsh.exe' -c".to_string(),
+            "sh.exe. -c".to_string(),
         ]);
     }
+    shells.retain(|shell| {
+        let program = shlex::split(shell).unwrap().remove(0);
+        codex_shell_command::shell_detect::detect_shell_type(std::path::Path::new(&program))
+            .is_none()
+    });
+    assert!(shells.len() >= 8, "{shells:?}");
     shells
 }
 
@@ -117,10 +127,13 @@ async fn issue2510_shell_scripts_unwrap_in_any_case() {
             let result = requirement(&command).await;
             assert_eq!(refused(&result), CASE_INSENSITIVE, "{command}: {result:?}");
         }
-        // Nested inside a lower-case script.
-        let command = format!("bash -lc \"{shell} 'git push'\"");
-        let result = requirement(&command).await;
-        assert_eq!(refused(&result), CASE_INSENSITIVE, "{command}: {result:?}");
+        // Nested inside a lower-case script. (Its plain-command parser
+        // does not read a quoted drive path such as `'C:\Tools\Zsh.exe'`.)
+        if !shell.contains(':') {
+            let command = format!("bash -lc \"{shell} 'git push'\"");
+            let result = requirement(&command).await;
+            assert_eq!(refused(&result), CASE_INSENSITIVE, "{command}: {result:?}");
+        }
     }
 }
 
