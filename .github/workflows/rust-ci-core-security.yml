@@ -171,6 +171,19 @@ jobs:
           cargo test --locked --target ${{ inputs.target }} -p codex-core --test all -- \
             suite::issue_506:: suite::issue_584:: suite::issue_620_622:: suite::issue_736_740:: suite::issue_747:: suite::issue_748::
 
+      # #2477: run these session-heavy fixtures together in one process. Nextest
+      # isolation or a high runner limit would hide leaked servers/SQLite pools.
+      # Build above first; constrain only this test step, preserving parallelism.
+      - name: "Session fixtures at the default open-file limit (#2477)"
+        run: |
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            ulimit -Sn 256
+          else
+            ulimit -Sn 1024
+          fi
+          cargo test --locked --target ${{ inputs.target }} -p codex-core --test all -- \
+            suite::issue_874:: suite::issue_891 suite::issue_826
+
       # #1367: a test binary once died with a bare SIGSEGV and no output, and
       # the log could not say which thread faulted. When this job fails on
       # macOS, keep the crash reports (`*.ips`) so the next occurrence can.

@@ -245,6 +245,7 @@ async fn run(
             _ => break,
         }
     }
+    super::session_resources::shutdown(&test).await?;
     let requests = captured.requests();
     let calls = ids
         .iter()

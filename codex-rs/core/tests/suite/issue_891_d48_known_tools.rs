@@ -268,6 +268,7 @@ async fn run(
             })
             .await?;
     }
+    super::session_resources::shutdown(&test).await?;
     let requests = captured.requests();
     Ok(ids
         .iter()

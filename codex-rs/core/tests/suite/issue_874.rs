@@ -172,7 +172,6 @@ async fn run_with(
         // Host-sandbox security test: local executor on purpose (#708).
         .build(&server)
         .await?;
-    std::mem::forget(server);
     test.codex
         .start_or_steer_turn(
             TurnInputRequest::user_input(vec![UserInput::Text {
@@ -216,7 +215,9 @@ async fn run_with(
             _ => break,
         }
     }
-    // The test (and its project folder) lives until the caller has looked.
+    super::session_resources::shutdown(&test).await?;
+    // Keep the project available for inspection and subsequent sessions, but
+    // release this session's database descriptors and mock server now.
     Ok((
         Run {
             warned_before_asked: if asked == 0 {
