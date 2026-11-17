@@ -34,6 +34,7 @@ mod remote;
 
 enum BoardClock {
     Available,
+    AvailableWithSleep,
     Unavailable,
 }
 
@@ -41,10 +42,10 @@ impl codex_core::TimeProvider for BoardClock {
     fn current_time(&self, _thread_id: codex_protocol::ThreadId) -> codex_core::TimeFuture<'_> {
         Box::pin(async move {
             match self {
-                Self::Available => Ok(chrono::DateTime::parse_from_rfc3339(
-                    "2026-09-18T12:00:00Z",
-                )?
-                .with_timezone(&chrono::Utc)),
+                Self::Available | Self::AvailableWithSleep => Ok(
+                    chrono::DateTime::parse_from_rfc3339("2026-09-18T12:00:00Z")?
+                        .with_timezone(&chrono::Utc),
+                ),
                 Self::Unavailable => Err(anyhow::anyhow!("board clock unavailable")),
             }
         })
@@ -53,9 +54,14 @@ impl codex_core::TimeProvider for BoardClock {
     fn sleep(
         &self,
         _thread_id: codex_protocol::ThreadId,
-        _duration: std::time::Duration,
+        duration: std::time::Duration,
     ) -> codex_core::SleepFuture<'_> {
-        Box::pin(async { Ok(()) })
+        Box::pin(async move {
+            if matches!(self, Self::AvailableWithSleep) {
+                tokio::time::sleep(duration).await;
+            }
+            Ok(())
+        })
     }
 }
 
@@ -713,6 +719,10 @@ async fn board_unsubscribe_survives_post_and_resume_until_resubscribed(
             configure(config);
             config.multi_agent_v2.disable_direct_message = disable_direct_message;
             config.model_provider.base_url = Some(base_url);
+            config.model_providers.insert(
+                config.model_provider_id.clone(),
+                config.model_provider.clone(),
+            );
             config
                 .features
                 .disable(Feature::EnableRequestCompression)
@@ -774,11 +784,20 @@ async fn board_unsubscribe_survives_post_and_resume_until_resubscribed(
                 if matches!(&event.item, TurnItem::AgentMessage(message) if message.id == phase))
         })
         .await;
+        // Only delegated work reports a terminal result to its parent. A direct
+        // user turn intentionally has no parent-completion owner.
         child
-            .start_or_steer_turn(TurnInputRequest::user_input(vec![UserInput::Text {
-                text: format!("Reply to the discussion while {phase}."),
-                text_elements: vec![],
-            }]))
+            .submit(codex_protocol::protocol::Op::InterAgentCommunication {
+                communication: codex_protocol::protocol::InterAgentCommunication::new(
+                    codex_protocol::AgentPath::root(),
+                    codex_protocol::AgentPath::try_from("/root/worker").expect("worker path"),
+                    Vec::new(),
+                    format!("Reply to the discussion while {phase}."),
+                    /*trigger_turn*/ true,
+                )
+                .with_kind(codex_protocol::protocol::AgentMessageKind::FollowUp),
+                start_options: codex_core::TurnStartOptions::default(),
+            })
             .await?;
         wait_for_event(&child, |event| matches!(event, EventMsg::TurnComplete(_))).await;
         let requests = streaming
