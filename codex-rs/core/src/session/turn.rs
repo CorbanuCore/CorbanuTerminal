@@ -66,6 +66,7 @@ use crate::session::turn_completion::objective_from_turn_input;
 use crate::session::turn_context::TurnContext;
 use crate::skills::emit_explicit_skill_invocations;
 use crate::stream_events_utils::HandleOutputCtx;
+use crate::stream_events_utils::InFlightFuture;
 use crate::stream_events_utils::TurnItemContributorPolicy;
 use crate::stream_events_utils::finalize_non_tool_response_item;
 use crate::stream_events_utils::handle_non_tool_response_item;
@@ -4128,6 +4129,7 @@ async fn try_run_sampling_request(
     let mut response_usage = Some(sess.begin_response_usage());
     let mut in_flight: FuturesOrdered<AbortOnDropHandle<CodexResult<ResponseItemEnvelope>>> =
         FuturesOrdered::new();
+    let mut deferred_tools: Vec<InFlightFuture<'static>> = Vec::new();
     let mut needs_follow_up = false;
     let mut last_agent_message: Option<String> = None;
     let mut active_item: Option<TurnItem> = None;
@@ -4428,10 +4430,14 @@ async fn try_run_sampling_request(
                     };
                 if let Some(tool_future) = output_result.tool_future {
                     saw_client_tool_call = true;
-                    // Start tool execution as soon as its completed call item arrives. Keeping
-                    // only an unpolled future in `FuturesOrdered` defers all work until the
-                    // provider emits `response.completed`, defeating streamed tool dispatch.
-                    in_flight.push_back(AbortOnDropHandle::new(tokio::spawn(tool_future)));
+                    if defer_tool_dispatch {
+                        // Spawning also polls deferred futures: retain these until the sync
+                        // post-model hook finishes, including its cancellation boundary.
+                        deferred_tools.push(tool_future);
+                    } else {
+                        // Ordinary tools start as soon as the completed call item arrives.
+                        in_flight.push_back(AbortOnDropHandle::new(tokio::spawn(tool_future)));
+                    }
                 }
                 if let Some(agent_message) = output_result.last_agent_message {
                     last_agent_message = Some(agent_message);
@@ -4942,6 +4948,10 @@ async fn try_run_sampling_request(
             token_usage: request_token_usage,
         })
         .await;
+    }
+    for tool_future in deferred_tools {
+        // Each deferred future records an aborted output instead of dispatching if cancelled.
+        in_flight.push_back(AbortOnDropHandle::new(tokio::spawn(tool_future)));
     }
     flush_assistant_text_segments_all(
         &sess,
