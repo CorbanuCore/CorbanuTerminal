@@ -576,6 +576,8 @@ async fn cold_resume_preserves_effective_developer_instructions_for_worker(
     let server = responses::start_mock_server().await;
     let redirect_server = responses::start_mock_server().await;
     let redirect_base_url = format!("{}/v1", redirect_server.uri());
+    let role_server = responses::start_mock_server().await;
+    let role_base_url = format!("{}/v1", role_server.uri());
     let mut spawn_args = json!({
         "message": INITIAL_TASK,
         "task_name": "worker",
@@ -779,8 +781,8 @@ async fn cold_resume_preserves_effective_developer_instructions_for_worker(
                 r#"developer_instructions = {ROLE_INSTRUCTIONS:?}
 model_reasoning_effort = "high"
 sandbox_mode = "danger-full-access"
-model_providers.mock_provider.name = "Untrusted role provider"
-model_providers.mock_provider.base_url = {redirect_base_url:?}
+model_providers.mock_provider.name = "Owner-configured role provider"
+model_providers.mock_provider.base_url = {role_base_url:?}
 features.shell_tool = false
 "#
             ),
@@ -808,8 +810,15 @@ features.shell_tool = false
         ]),
     )
     .await;
+    // D526: an owner-edited user role may overlay a configured custom provider.
+    // Keep that destination distinct from the forbidden direct-client override.
+    let resumed_child_server = if agent_type.is_some() {
+        &role_server
+    } else {
+        &server
+    };
     let resumed_child_request = responses::mount_sse_once_match(
-        &server,
+        resumed_child_server,
         |request: &wiremock::Request| {
             let body = String::from_utf8_lossy(&request.body);
             body.contains(FOLLOWUP_TASK) && !body.contains(FOLLOWUP_CALL_ID)
@@ -1012,6 +1021,14 @@ features.shell_tool = false
         .await?;
     let resumed_child_request = timeout(READ_TIMEOUT, async {
         loop {
+            assert!(
+                redirect_server
+                    .received_requests()
+                    .await
+                    .expect("redirect mock requests")
+                    .is_empty(),
+                "direct-client config redirected the owner-restored child"
+            );
             if let Some(request) = resumed_child_request
                 .requests()
                 .into_iter()
@@ -1035,13 +1052,42 @@ features.shell_tool = false
         assert!(!has_shell_tool(&resumed_child_request));
     }
     assert_developer_instructions(&resumed_child_request, "resumed");
+    let role_requests = role_server
+        .received_requests()
+        .await
+        .expect("owner role mock requests");
+    if agent_type.is_some() {
+        assert!(
+            role_requests.iter().any(|request| {
+                request
+                    .headers
+                    .get("thread-id")
+                    .and_then(|value| value.to_str().ok())
+                    == Some(child_thread_id.as_str())
+                    && String::from_utf8_lossy(&request.body).contains(FOLLOWUP_TASK)
+            }),
+            "the resumed child must use the owner's updated custom-provider endpoint"
+        );
+    } else {
+        assert!(role_requests.is_empty());
+    }
+    assert!(
+        role_requests.iter().all(|request| {
+            request
+                .headers
+                .get("thread-id")
+                .and_then(|value| value.to_str().ok())
+                != Some(resumed_parent.thread.id.as_str())
+        }),
+        "the child's role endpoint must not redirect the resumed parent"
+    );
     assert!(
         redirect_server
             .received_requests()
             .await
             .expect("redirect mock requests")
             .is_empty(),
-        "caller or role config redirected the owner-restored child"
+        "direct-client config redirected the owner-restored child"
     );
 
     Ok(())
