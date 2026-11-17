@@ -201,6 +201,9 @@ async fn unknown_commands_ask_when_a_rule_could_match() {
         "sudo -u $u true",
         "env -u $v true",
         "chroot $d true",
+        // The issue_766 nested-run test's script before it named its home
+        // literally (cli/tests/nested_moderate.rs).
+        "env -u CORBANU_HOME CODEX_HOME=\"$PWD/made-up\" corbanu exec hi 2>&1; echo \"exit=$?\"",
         // zsh's `=git` and ksh's `@(…)` are not what they read as.
         "=git push",
         "gi@(t) push",
