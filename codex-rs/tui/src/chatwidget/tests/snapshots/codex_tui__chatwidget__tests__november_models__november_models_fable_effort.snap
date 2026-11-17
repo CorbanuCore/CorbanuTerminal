@@ -1,0 +1,13 @@
+---
+source: tui/src/chatwidget/tests/november_models.rs
+expression: popup
+---
+  Select Reasoning Level for Claude Fable 5.2
+
+  1. Low              Lower latency and token use for narrow edits.
+  2. Medium           Moderate reasoning for everyday coding.
+› 3. High (default)   Default Fable 5.2 reasoning for complex coding.
+  4. Extra high       Deeper reasoning for difficult implementation work.
+  5. More reasoning…  Max consumes usage limits faster
+
+  Press enter to confirm or esc to go back
