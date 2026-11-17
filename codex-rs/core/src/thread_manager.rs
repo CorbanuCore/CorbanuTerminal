@@ -1,3 +1,4 @@
+pub(crate) mod mailbox_admission;
 mod managed;
 mod shared_instructions;
 mod shutdown;
@@ -527,6 +528,7 @@ pub(crate) struct ResumeThreadWithHistoryOptions {
 pub(crate) struct ThreadManagerState {
     // Eviction updates this registry and residency together, locking the registry first.
     pub(crate) threads: Arc<RwLock<HashMap<ThreadId, Arc<CodexThread>>>>,
+    pub(crate) mailbox_admission: mailbox_admission::MailboxAdmission,
     shared_thread_instructions: shared_instructions::SharedThreadInstructionsProviders,
     thread_created_tx: broadcast::Sender<ThreadId>,
     thread_id_generator: ThreadIdGenerator,
@@ -715,6 +717,7 @@ impl ThreadManager {
         Self {
             state: Arc::new(ThreadManagerState {
                 threads: Arc::new(RwLock::new(HashMap::new())),
+                mailbox_admission: Default::default(),
                 shared_thread_instructions: Default::default(),
                 thread_created_tx,
                 thread_id_generator: default_thread_id_generator(),
@@ -925,6 +928,7 @@ impl ThreadManager {
         Self {
             state: Arc::new(ThreadManagerState {
                 threads: Arc::new(RwLock::new(HashMap::new())),
+                mailbox_admission: Default::default(),
                 shared_thread_instructions: Default::default(),
                 thread_created_tx,
                 thread_id_generator: default_thread_id_generator(),
@@ -3021,6 +3025,11 @@ impl ThreadManagerState {
             .mcp_ema_cancellation()
             .clone();
         {
+            // A prior unloaded admission must finish (including lifecycle retention) before
+            // this session becomes visible and its caller can recover the durable mailbox.
+            #[cfg(test)]
+            self.mailbox_admission.publishing.notify_one();
+            let _admission = self.mailbox_admission.lock(thread_id).await;
             let mut threads = self.threads.write().await;
             if let std::collections::hash_map::Entry::Vacant(e) = threads.entry(thread_id) {
                 if let Some(update) = initial_host_config {
