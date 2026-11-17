@@ -30,6 +30,16 @@ fn respelled(words: &[String], case: names::NameCase) -> Option<Vec<String>> {
     if !matches!(name.as_ref(), "pwsh" | "powershell") {
         return None;
     }
+    // A `\\?\` path skips Win32 normalization (`pwsh.exe.` and `pwsh`
+    // name other files there than `pwsh.exe`): respell its letter case only,
+    // else read just its literal argv.
+    if (program.starts_with(r"\\?\") || program.starts_with("//?/"))
+        && !program
+            .to_ascii_lowercase()
+            .ends_with(&format!("\\{name}.exe"))
+    {
+        return None;
+    }
     // Keep the directory (or drive) as written: `C:\PS\PWSH.EXE` reads as
     // `C:\PS\pwsh.exe`, the same file.
     let path = program.trim_end_matches(['/', '\\']);
@@ -81,6 +91,10 @@ mod tests {
             ("powershell.exe. ", None),
             ("PWSH.com", None),
             ("pwshx", None),
+            (r"\\?\C:\PS\PWSH.EXE", Some(r"\\?\C:\PS\pwsh.exe")),
+            (r"\\?\C:\PS\PWSH.EXE.", None),
+            (r"\\?\C:\PS\pwsh.exe ", None),
+            (r"\\?\C:\PS\PWSH", None),
             ("bash", None),
         ] {
             let command = words(&[program, "-NoProfile", "-Command", "git push"]);

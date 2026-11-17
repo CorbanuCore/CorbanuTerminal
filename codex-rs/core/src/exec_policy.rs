@@ -446,6 +446,19 @@ impl ExecPolicyManager {
             used_complex_parsing,
             command_origin,
         } = commands_for_exec_policy(command);
+        // #2524: a respelled PowerShell (`PWSH -c`) keeps its literal argv
+        // too, as a respelled bash does (#2510), so reading its script only
+        // adds checks.
+        #[cfg(windows)]
+        let commands = {
+            let mut commands = commands;
+            if command_origin == ExecPolicyCommandOrigin::PowerShell
+                && crate::security::tainted_action::policy_powershell_script(command).is_some()
+            {
+                commands.push(command.to_vec());
+            }
+            commands
+        };
         // Keep heredoc prefix parsing for rule evaluation so existing
         // allow/prompt/forbidden rules still apply, but avoid auto-derived
         // amendments when only the heredoc fallback parser matched.

@@ -102,10 +102,13 @@ async fn rules_apply_inside_nested_scripts() {
 #[cfg(any(target_os = "macos", windows))]
 #[tokio::test]
 async fn respelled_shells_in_nested_chains_are_read() {
+    let deep = vec!["BASH -c"; MAX_SCRIPT_DEPTH + 3];
     for layers in [
         &["bash -lc", "BASH -c", "sh -c"][..],
         &["Bash -lc", "bash -c", "ZSH -c"],
         &["sudo BASH -c", "env Sh -c"],
+        // Respelled shells are read at any depth, as before #2531.
+        &deep,
     ] {
         let command = nested(layers, "git push");
         let result = requirement(&command, FORBID).await;
@@ -182,11 +185,20 @@ async fn scripts_nested_beyond_the_bound_ask() {
             "{inner}: {unread:?}"
         );
     }
-    // Launchers between the scripts do not count towards the bound.
-    let mut layers = vec!["bash -lc"];
-    layers.extend(std::iter::repeat_n("sudo -n env bash -c", deepest_read - 1));
-    let result = requirement(&nested(&layers, "git push"), FORBID).await;
-    assert!(forbidden(&result), "{result:?}");
+    // Scripts behind a launcher are read at any depth, as before #2531, so
+    // a refused command stays refused past the bound (it also asks there).
+    for count in [deepest_read, deepest_read + 2] {
+        let mut layers = vec!["bash -lc"];
+        layers.extend(std::iter::repeat_n("sudo -n bash -c", count - 1));
+        let result = requirement(&nested(&layers, "git push"), FORBID).await;
+        assert!(forbidden(&result), "{count}: {result:?}");
+        let result = requirement(&nested(&layers, "git push"), PROMPT).await;
+        assert!(by_policy(&result), "{count}: {result:?}");
+        let mut layers = vec!["sudo -n bash -c"; count];
+        layers[0] = "sudo bash -c";
+        let result = requirement(&nested(&layers, "git push"), FORBID).await;
+        assert!(forbidden(&result), "{count}: {result:?}");
+    }
 }
 
 #[tokio::test]

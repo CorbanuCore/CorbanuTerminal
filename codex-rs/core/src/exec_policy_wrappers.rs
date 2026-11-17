@@ -14,7 +14,8 @@ use codex_execpolicy::RuleMatch;
 /// #2531 (D553): how many shell scripts nested in one another
 /// (`bash -lc "bash -c '…'"`, also through launchers such as
 /// `sudo bash -c "env bash -c '…'"`) rules see into below each command they
-/// are given. A script nested deeper asks for approval.
+/// are given. A script nested deeper asks for approval; one behind a
+/// launcher or a respelled shell is still read too.
 pub(crate) const MAX_SCRIPT_DEPTH: usize = 8;
 
 /// The commands inside `command` when it is a shell script rules can read
@@ -176,10 +177,13 @@ fn check(
             // literal argv above keeps its own match and fallback.
             let respelled = policy_shell_script(inner);
             let parsed_as = respelled.as_deref().unwrap_or(inner);
+            // Scripts behind a launcher or a respelled shell are read at any
+            // depth: each is a strict substring of the one around it.
+            let always_read = start > 0 || respelled.is_some();
             // #2531: a script with no launcher before it too. Its commands
             // come from a script already (`bash -lc "bash -c 'git push'"`
             // gives `bash -c 'git push'`), or are those the caller gives.
-            if (start > 0 || depth > 0 || read_own_scripts || respelled.is_some())
+            if (always_read || depth > 0 || read_own_scripts)
                 && let Some(parsed) = script_commands(parsed_as)
             {
                 if parsed.used_complex_parsing || depth >= MAX_SCRIPT_DEPTH {
@@ -188,7 +192,9 @@ fn check(
                         decision: Decision::Prompt,
                     });
                 }
-                if depth < MAX_SCRIPT_DEPTH {
+                // Past the bound, still read what is always read, so a
+                // command a rule refuses stays refused, not only asked.
+                if depth < MAX_SCRIPT_DEPTH || always_read {
                     pending.extend(
                         parsed
                             .commands
