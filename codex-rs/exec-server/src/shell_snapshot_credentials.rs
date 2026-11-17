@@ -155,17 +155,22 @@ pub(super) async fn prepare(
             && !key.starts_with(CONFIGURED_VALUE_PREFIX)
     });
     proxy.apply_to_env(&mut snapshot.environment);
-    proxy
-        .handle_unmasked_credentials(
-            &mut snapshot.environment,
-            CredentialMaskingFailureMode::Warn,
-        )
-        .map_err(|_| {
-            (
-                "credential_proxy",
-                internal_error("failed to prepare startup credentials".to_string()),
+    if !proxy.credential_broker_hardened() {
+        // Main's engine owns its placeholders; upstream's separate credential
+        // registry cannot classify them (#2402, D353/D354). Keep its warning
+        // only for snapshots prepared by that upstream engine.
+        proxy
+            .handle_unmasked_credentials(
+                &mut snapshot.environment,
+                CredentialMaskingFailureMode::Warn,
             )
-        })?;
+            .map_err(|_| {
+                (
+                    "credential_proxy",
+                    internal_error("failed to prepare startup credentials".to_string()),
+                )
+            })?;
+    }
     let allowed_metadata = proxy.credential_broker_environment(&snapshot.environment);
     let mut credential_keys = discovered_metadata.credential_keys.clone();
     credential_keys.extend(
