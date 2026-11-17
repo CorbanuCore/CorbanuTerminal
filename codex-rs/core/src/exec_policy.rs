@@ -459,15 +459,6 @@ impl ExecPolicyManager {
             }
             commands
         };
-        // Keep heredoc prefix parsing for rule evaluation so existing
-        // allow/prompt/forbidden rules still apply, but avoid auto-derived
-        // amendments when only the heredoc fallback parser matched.
-        // A wrapper-only amendment cannot approve stricter inner commands,
-        // and an uncertain boundary must never become a remembered bypass.
-        let auto_amendment_allowed = !used_complex_parsing
-            && !commands
-                .iter()
-                .any(|command| wrappers::has_wrappers(command));
         let exec_policy_fallback = |cmd: &[String]| {
             render_decision_for_unmatched_command(
                 cmd,
@@ -487,6 +478,20 @@ impl ExecPolicyManager {
             // any case where this platform finds programs that way.
             fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE,
         };
+        // Keep heredoc prefix parsing for rule evaluation so existing
+        // allow/prompt/forbidden rules still apply, but avoid auto-derived
+        // amendments when only the heredoc fallback parser matched.
+        // A wrapper-only amendment cannot approve stricter inner commands,
+        // and an uncertain boundary must never become a remembered bypass.
+        let auto_amendment_allowed = !used_complex_parsing
+            && !commands
+                .iter()
+                .any(|command| wrappers::has_wrappers(command))
+            && !wrappers::asks_for_unread_powershell(
+                exec_policy.as_ref(),
+                &commands,
+                &match_options,
+            );
         let (mut evaluation, case_folded) = wrappers::check_with_wrappers_and_folded(
             exec_policy.as_ref(),
             &commands,

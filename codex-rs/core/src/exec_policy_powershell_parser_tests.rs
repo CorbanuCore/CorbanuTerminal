@@ -214,22 +214,37 @@ async fn unreadable_powershell_script_asks_when_a_rule_could_match() {
 
 #[tokio::test]
 async fn unreadable_powershell_script_changes_nothing_without_strict_rules() {
+    // The literal argv decides, as for any command rules cannot read, and
+    // its amendment stays available: a later prompt or forbidden rule still
+    // asks for the unread script, since the strictest match wins.
+    let _hidden = hide_trusted_powershell_on_this_thread();
     let command = words(&["powershell.exe", "-Command", "git push"]);
     for rules in [
         None,
         Some(r#"prefix_rule(pattern=["git"], decision="allow")"#),
     ] {
-        let read = requirement(command.clone(), rules, AskForApproval::OnRequest).await;
-        let _hidden = hide_trusted_powershell_on_this_thread();
         let unread = requirement(command.clone(), rules, AskForApproval::OnRequest).await;
-        assert!(
-            matches!(unread, ExecApprovalRequirement::Skip { .. }),
-            "{rules:?}: {unread:?}"
+        assert_eq!(
+            unread,
+            ExecApprovalRequirement::Skip {
+                bypass_sandbox: false,
+                proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(command.clone())),
+            },
+            "{rules:?}"
         );
-        if rules.is_none() {
-            assert_eq!(unread, read);
-        }
     }
+    // Once remembered, that amendment cannot outrank a strict rule.
+    let rules = format!(
+        "prefix_rule(pattern=[\"powershell.exe\", \"-Command\", \"git push\"], decision=\"allow\")\n{FORBID_GIT_PUSH}"
+    );
+    let result = requirement(command.clone(), Some(&rules), AskForApproval::OnRequest).await;
+    assert_eq!(
+        result,
+        ExecApprovalRequirement::NeedsApproval {
+            reason: None,
+            proposed_execpolicy_amendment: None,
+        }
+    );
 }
 
 #[tokio::test]

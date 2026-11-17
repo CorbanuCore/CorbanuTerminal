@@ -35,8 +35,28 @@ pub(super) fn has_wrappers(command: &[String]) -> bool {
         // #2531: a script nested in the script; an amendment for its
         // literal argv cannot approve the commands inside.
         || script_commands(command).is_some()
-        // #2546: nor those of a PowerShell script no trusted parser read.
-        || powershell_script_unreadable(command)
+}
+
+/// #2546: whether [`check`] asks for a PowerShell script in `commands` that
+/// no trusted parser read; an amendment for its literal argv cannot approve
+/// the commands inside. With no prompt or forbidden rule it does not ask.
+pub(super) fn asks_for_unread_powershell(
+    policy: &Policy,
+    commands: &[Vec<String>],
+    options: &MatchOptions,
+) -> bool {
+    any_strict_rule(policy, options)
+        && commands
+            .iter()
+            .any(|command| powershell_script_unreadable(command))
+}
+
+/// Whether any prompt or forbidden rule exists, which could match a command
+/// rules cannot see.
+fn any_strict_rule(policy: &Policy, options: &MatchOptions) -> bool {
+    policy
+        .strictest_rule_matching_more_args(&[], options)
+        .is_some_and(|decision| decision > Decision::Allow)
 }
 
 /// #2546 (D553): whether `command` runs a PowerShell `-Command` script that
@@ -221,9 +241,7 @@ fn check(
                     );
                 }
             } else if (always_read || depth > 0 || read_own_scripts)
-                && policy
-                    .strictest_rule_matching_more_args(&[], options)
-                    .is_some_and(|decision| decision > Decision::Allow)
+                && any_strict_rule(policy, options)
                 && powershell_script_unreadable(inner)
             {
                 // #2546 (D553): a PowerShell script no trusted parser read.
