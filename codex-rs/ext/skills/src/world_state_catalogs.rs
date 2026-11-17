@@ -5,6 +5,7 @@ use std::sync::Arc;
 use codex_extension_api::ContextualUserFragment;
 use codex_extension_api::ExtensionEventSink;
 use codex_extension_api::ExtensionWarning;
+use codex_extension_api::WorldStateContextMode;
 use codex_extension_api::WorldStateContributionInput;
 use codex_extension_api::WorldStateSectionContribution;
 use serde::Deserialize;
@@ -457,6 +458,11 @@ impl<'a> CatalogRenderingContext<'a> {
             CatalogKind::Executor => executor_skills_world_state_section(
                 body,
                 include_instructions,
+                self.input
+                    .step_store
+                    .get::<WorldStateContextMode>()
+                    .map(|mode| *mode)
+                    .unwrap_or_default(),
                 self.input
                     .previous_world_state
                     .and_then(|state| state.get(crate::world_state::SKILLS_WORLD_STATE_ID)),

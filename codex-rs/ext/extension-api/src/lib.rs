@@ -110,6 +110,7 @@ pub use contributors::TurnLifecycleContributor;
 pub use contributors::TurnStartInput;
 pub use contributors::TurnStartPhase;
 pub use contributors::TurnStopInput;
+pub use contributors::WorldStateContextMode;
 pub use contributors::WorldStateContributionInput;
 pub use contributors::WorldStateSectionContribution;
 pub use registry::ExtensionRegistry;
