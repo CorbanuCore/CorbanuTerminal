@@ -1068,6 +1068,13 @@ async fn review_uses_session_model_when_review_model_unset() {
     let codex_home = Arc::new(TempDir::new().unwrap());
     let test = test_codex()
         .with_home(Arc::clone(&codex_home))
+        .with_pre_build_hook(|home| {
+            std::fs::write(
+                home.join("config.toml"),
+                "[features]\nsleep_tool = false\ncurrent_time_reminder = false\n",
+            )
+            .expect("explicitly disabled clock features should be written");
+        })
         .with_config(|config| {
             config.model = Some("gpt-5.4".to_string());
             config.review_model = None;
