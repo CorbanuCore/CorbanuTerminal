@@ -237,5 +237,14 @@ async fn issue_445_refused_turn_leaves_agent_messages_queued() -> anyhow::Result
     );
     assert!(requests[0].body_contains_text("pf445-held-mail"));
     assert!(requests[0].body_contains_text("Anything new?"));
+    assert_eq!(
+        requests[0]
+            .input()
+            .iter()
+            .map(|item| item.to_string().matches("pf445-held-mail").count())
+            .sum::<usize>(),
+        1,
+        "the mail held by the kill switch reaches the model exactly once",
+    );
     Ok(())
 }
