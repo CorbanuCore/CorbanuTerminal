@@ -857,8 +857,10 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
     assert!(!snapshot.contains("attacker.example"));
     assert!(!snapshot.contains("attacker.vendor.example"));
     assert!(!snapshot.contains("CODEX_NETWORK_PROXY_BROKERED_CREDENTIALS"));
-    assert!(snapshot.contains("IDENTITY_SEEN=\"missing\""));
-    assert!(snapshot.contains("EXCLUDED_PARENT_HOME=\"missing\""));
+    // STARTUP_NPM_TOKEN_SEEN is secret-named, so its "missing" value is
+    // registered by retain_safe_exports. The identity/home markers containing
+    // that same value may therefore be omitted. Each replay below requires
+    // either omission or the safe sentinel, never an inherited identity/home.
     assert!(snapshot.contains("STARTUP_PATH_OVERRIDE_SEEN=\"/enterprise/bin\""));
     assert!(snapshot.contains("declare -x PATH=\"/enterprise/bin\""));
     assert!(snapshot.contains("STARTUP_CORP_REGION_SEEN=\"production\""));
@@ -943,7 +945,12 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
             }
             let replay = Command::new("/bin/bash")
                 .arg("-c")
-                .arg(". \"$1\" && export -p")
+                .arg(
+                    ". \"$1\" || exit 1\n\
+                     test \"${IDENTITY_SEEN-missing}\" = missing || { printf '%s\\n' 'unsafe IDENTITY_SEEN' >&2; exit 1; }\n\
+                     test \"${EXCLUDED_PARENT_HOME-missing}\" = missing || { printf '%s\\n' 'unsafe EXCLUDED_PARENT_HOME' >&2; exit 1; }\n\
+                     export -p",
+                )
                 .arg("snapshot")
                 .arg(snapshot_file.path().as_path())
                 .env_clear()
