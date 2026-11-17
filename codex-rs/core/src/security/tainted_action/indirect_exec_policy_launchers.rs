@@ -14,9 +14,13 @@ enum Arity {
     Value,
     /// An optional value: only `--name=value` or the rest of a short word.
     Optional,
+    /// A flag in short form; an optional `--name=value` in long form
+    /// (unshare's `-m` but `--mount[=file]`).
+    LongOptional,
 }
 
 use Arity::Flag;
+use Arity::LongOptional;
 use Arity::Optional;
 use Arity::Value;
 
@@ -30,14 +34,14 @@ const VERSION: Opt = ('V', "version", Flag);
 const UNSHARE: &[Opt] = &[
     HELP,
     VERSION,
-    ('m', "mount", Optional),
-    ('u', "uts", Optional),
-    ('i', "ipc", Optional),
-    ('n', "net", Optional),
-    ('p', "pid", Optional),
-    ('U', "user", Optional),
-    ('C', "cgroup", Optional),
-    ('T', "time", Optional),
+    ('m', "mount", LongOptional),
+    ('u', "uts", LongOptional),
+    ('i', "ipc", LongOptional),
+    ('n', "net", LongOptional),
+    ('p', "pid", LongOptional),
+    ('U', "user", LongOptional),
+    ('C', "cgroup", LongOptional),
+    ('T', "time", LongOptional),
     ('f', "fork", Flag),
     ('\0', "kill-child", Optional),
     ('\0', "mount-proc", Optional),
@@ -268,8 +272,27 @@ pub(super) enum Launch {
     Uncertain,
 }
 
-/// `words[start]` names a launcher in [`LAUNCHERS`].
-pub(super) fn launch(name: &str, words: &[String], start: usize) -> Launch {
+/// The last word that looks like an option, for [`launch`]'s permutation
+/// check (one scan per command, however many launchers it chains).
+pub(super) fn last_option(words: &[String]) -> Option<usize> {
+    let mut last = None;
+    for (at, word) in words.iter().enumerate() {
+        work::step();
+        if word.starts_with('-') && word != "-" {
+            last = Some(at);
+        }
+    }
+    last
+}
+
+/// `words[start]` names a launcher in [`LAUNCHERS`]; `last_option` is
+/// [`last_option`]`(words)`.
+pub(super) fn launch(
+    name: &str,
+    words: &[String],
+    start: usize,
+    last_option: Option<usize>,
+) -> Launch {
     let Some((_, options)) = LAUNCHERS.iter().find(|(launcher, _)| {
         work::step();
         *launcher == name
@@ -318,9 +341,9 @@ pub(super) fn launch(name: &str, words: &[String], start: usize) -> Launch {
         "chrt" if has("pid", 'p') || has("max", 'm') => return Launch::NoCommand,
         "taskset" if has("pid", 'p') => return Launch::NoCommand,
         "timeout" | "taskset" => at += 1, // The duration or the CPU mask.
-        // A numeric priority, or (newer util-linux, for policies without
-        // one) the command itself.
-        "chrt" if words.get(at).is_some_and(|word| is_number(word)) => at += 1,
+        // A priority (any integer `strtoimax` reads whole), or (newer
+        // util-linux, for policies without one) the command itself.
+        "chrt" if words.get(at).is_some_and(|word| is_integer(word)) => at += 1,
         "flock" => {
             // A lock file or descriptor, then argv or `-c` with a script.
             at += 1;
@@ -346,13 +369,13 @@ pub(super) fn launch(name: &str, words: &[String], start: usize) -> Launch {
             {
                 return Launch::Uncertain;
             }
-            uncertain = !ended && permuted_options(words, at);
+            uncertain = !ended && permuted(last_option, at);
         }
         "doas" => {
             if has("", 'L') && at >= words.len() {
                 return Launch::NoCommand;
             }
-            uncertain = !ended && permuted_options(words, at);
+            uncertain = !ended && permuted(last_option, at);
         }
         _ => {}
     }
@@ -382,7 +405,7 @@ fn option(options: &[Opt], word: &str, seen: &mut Vec<Opt>) -> Option<usize> {
         return match (found.2, attached) {
             (Flag, true) => None,
             (Value, false) => Some(2),
-            _ => Some(1),
+            (Value | Optional | LongOptional, _) | (Flag, false) => Some(1),
         };
     }
     let letters = word.strip_prefix('-')?;
@@ -394,7 +417,7 @@ fn option(options: &[Opt], word: &str, seen: &mut Vec<Opt>) -> Option<usize> {
         })?;
         seen.push(found);
         match found.2 {
-            Flag => {}
+            Flag | LongOptional => {}
             // The rest of the word is its value.
             Optional => return Some(1),
             Value => return Some(1 + usize::from(index + letter.len_utf8() == letters.len())),
@@ -436,15 +459,48 @@ fn nice_adjustment(word: &str) -> bool {
     rest.starts_with(|c: char| c.is_ascii_digit())
 }
 
-fn is_number(word: &str) -> bool {
-    !word.is_empty() && word.bytes().all(|byte| byte.is_ascii_digit())
+/// What `strtoimax` reads whole: leading white space, a sign, digits.
+fn is_integer(word: &str) -> bool {
+    let unsigned = word.trim_start_matches([' ', '\t', '\n', '\u{b}', '\u{c}', '\r']);
+    let digits = unsigned.strip_prefix(['+', '-']).unwrap_or(unsigned);
+    !digits.is_empty()
+        && digits.bytes().all(|byte| {
+            work::step();
+            byte.is_ascii_digit()
+        })
 }
 
-/// Whether GNU getopt, if the launcher permutes, could read a later word as
-/// its own option and so change the command.
-fn permuted_options(words: &[String], from: usize) -> bool {
-    words.iter().skip(from + 1).any(|word| {
-        work::step();
-        word.starts_with('-') && word != "-"
-    })
+/// Whether GNU getopt, if the launcher permutes, could read a word after
+/// the command name `at` as its own option and so change the command.
+fn permuted(last_option: Option<usize>, at: usize) -> bool {
+    last_option.is_some_and(|last| last > at)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::policy_wrapper_commands;
+    use super::work;
+
+    /// Chained launchers, including those with a permutation check, cost
+    /// linear work.
+    #[test]
+    fn launcher_chains_are_linear() {
+        for launcher in [
+            "doas",
+            "runuser -u x",
+            "unshare -r",
+            "timeout 5",
+            "nice -n 1",
+        ] {
+            work::assert_linear(launcher, |scale| {
+                let layers = scale * 64;
+                let mut words = Vec::new();
+                for _ in 0..layers {
+                    words.extend(launcher.split(' ').map(str::to_string));
+                }
+                words.extend(["cmd".to_string(), "-x".to_string()]);
+                assert!(policy_wrapper_commands(&words).starts.len() > layers);
+            });
+        }
+    }
 }

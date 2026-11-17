@@ -30,6 +30,8 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
         uncertain: false,
     };
     let mut start = 0;
+    // Computed on the first launcher only.
+    let mut last_option = None;
     while let Some(program) = words.get(start) {
         work::step();
         let name = basename(program);
@@ -126,7 +128,8 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
             (at < words.len()).then_some(at)
         } else if launchers::is_launcher(name) {
             // #2455 (D670): unshare, nsenter, timeout and the like.
-            match launchers::launch(name, words, start) {
+            let last = *last_option.get_or_insert_with(|| launchers::last_option(words));
+            match launchers::launch(name, words, start, last) {
                 launchers::Launch::Command { at, uncertain } => {
                     result.uncertain |= uncertain;
                     Some(at)
