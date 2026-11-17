@@ -927,7 +927,8 @@ impl ProviderAuthCommandFixture {
                 &script_path,
                 r#"#!/bin/sh
 printf '%s\n' "$GOOGLE_APPLICATION_CREDENTIALS" >> credential-env.txt
-if [ -f fail-until-401 ]; then
+if [ -f fail-once ]; then
+    mv fail-once failed-once
     exit 1
 fi
 first_line=$(sed -n '1p' tokens.txt)
@@ -950,7 +951,10 @@ setlocal EnableExtensions DisableDelayedExpansion
 setlocal EnableDelayedExpansion
 echo(!GOOGLE_APPLICATION_CREDENTIALS!>> credential-env.txt
 endlocal
-if exist fail-until-401 exit /b 1
+if exist fail-once (
+    move /y fail-once failed-once >nul
+    exit /b 1
+)
 
 set "first_line="
 <tokens.txt set /p "first_line="
@@ -1739,18 +1743,18 @@ async fn provider_auth_command_recovers_after_initial_resolution_failure() {
     skip_if_no_network!();
 
     let server = MockServer::start().await;
-    let auth_fixture = ProviderAuthCommandFixture::new(&["recovered-token"]).unwrap();
-    let failure_marker = auth_fixture.tempdir.path().join("fail-until-401");
+    let auth_fixture =
+        ProviderAuthCommandFixture::new(&["recovered-token", "recovered-token"]).unwrap();
+    let failure_marker = auth_fixture.tempdir.path().join("fail-once");
     std::fs::write(&failure_marker, "").unwrap();
 
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
         .and(|request: &wiremock::Request| !request.headers.contains_key("authorization"))
-        .respond_with(move |_request: &wiremock::Request| {
-            std::fs::remove_file(&failure_marker).unwrap();
-            ResponseTemplate::new(401).set_body_string("unauthorized")
-        })
-        .expect(1)
+        // Command-auth failures must recover locally, never by sending an
+        // anonymous request and waiting for the remote server to reject it.
+        .respond_with(ResponseTemplate::new(401).set_body_string("unauthorized"))
+        .expect(0)
         .mount(&server)
         .await;
     Mock::given(method("POST"))
@@ -1769,6 +1773,8 @@ async fn provider_auth_command_recovers_after_initial_resolution_failure() {
         .await;
 
     send_provider_auth_request(&server, auth_fixture.auth()).await;
+    assert!(auth_fixture.tempdir.path().join("failed-once").exists());
+    server.verify().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
