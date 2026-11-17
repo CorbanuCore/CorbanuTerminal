@@ -16,7 +16,8 @@ use super::sudo_value_letter;
 use super::work;
 
 #[path = "indirect_exec_policy_launchers.rs"]
-mod launchers;
+mod indirect_exec_policy_launchers;
+use indirect_exec_policy_launchers as launchers;
 
 pub(crate) struct PolicyWrapperCommands {
     pub(crate) starts: Vec<usize>,
