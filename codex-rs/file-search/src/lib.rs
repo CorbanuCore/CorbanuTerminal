@@ -904,6 +904,7 @@ mod tests {
                 updates.iter().any(|snapshot| {
                     !snapshot.walk_complete
                         && snapshot.scanned_file_count < FILE_COUNT
+                        && snapshot.query == "file-0"
                         && !snapshot.matches.is_empty()
                 })
             },
