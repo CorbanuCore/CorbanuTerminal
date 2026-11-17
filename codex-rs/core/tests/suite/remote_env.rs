@@ -1616,6 +1616,16 @@ async fn serve_environment_with_instruction_files(
                     "result": { "dataBase64": BASE64_STANDARD.encode(contents) }
                 })
             }
+            Some("fs/readFile")
+                if request["params"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("guardian-marker.txt")) =>
+            {
+                json!({
+                    "id": request["id"],
+                    "error": { "code": -32004, "message": "not found" }
+                })
+            }
             method => panic!("unexpected exec-server request: {method:?}"),
         };
         websocket
