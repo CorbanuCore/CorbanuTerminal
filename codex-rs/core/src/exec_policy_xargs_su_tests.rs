@@ -230,7 +230,12 @@ async fn issue2455c_xargs_asks_when_stdin_could_complete_a_rule() {
             requirement(command, XARGS_RULES).await,
             escalated(command, XARGS_RULES).await,
         ] {
-            assert!(asks(&result), "{command}: {result:?}");
+            // D691: the forbidden `git push` rule could match, so a human
+            // decides.
+            assert!(
+                matches!(result, ExecApprovalRequirement::NeedsHumanApproval { .. }),
+                "{command}: {result:?}"
+            );
         }
     }
     // A prompt rule alone can be completed too.
@@ -241,7 +246,10 @@ prefix_rule(pattern=["git", "fetch"], decision="prompt")"#;
     // Through a rule for xargs itself.
     let rules = r#"prefix_rule(pattern=["xargs", "git", "push"], decision="forbidden")"#;
     let result = requirement("xargs git", rules).await;
-    assert!(asks(&result), "{result:?}");
+    assert!(
+        matches!(result, ExecApprovalRequirement::NeedsHumanApproval { .. }),
+        "{result:?}"
+    );
 }
 
 #[tokio::test]
@@ -367,20 +375,175 @@ prefix_rule(pattern=["git", "fetch"], decision="prompt")"#;
     );
 }
 
-/// D686 / D691 (pending): a forbidden rule stdin could complete asks for
-/// approval, as on main; only a prompt-user rule needs a human.
+/// D691 (accepted 2026-11-17): a forbidden rule stdin could complete needs
+/// a fresh human decision; one the fixed argv already matches still refuses.
 #[tokio::test]
-async fn issue2506_xargs_forbidden_rule_stdin_could_complete_keeps_main_parity() {
+async fn d691_xargs_forbidden_rule_stdin_could_complete_needs_a_human() {
     let rules = r#"prefix_rule(pattern=["xargs"], decision="allow")
 prefix_rule(pattern=["git", "push"], decision="forbidden")"#;
-    let result = requirement("xargs git", rules).await;
-    assert!(asks(&result), "{result:?}");
+    for command in ["xargs git", "xargs -n 1 git", "xargs sh -c"] {
+        let result = requirement(command, rules).await;
+        assert!(
+            matches!(result, ExecApprovalRequirement::NeedsHumanApproval { .. }),
+            "{command}: {result:?}"
+        );
+    }
+    let result = requirement("xargs git push", rules).await;
+    assert!(
+        matches!(result, ExecApprovalRequirement::Forbidden { .. }),
+        "{result:?}"
+    );
     for (rule, expected) in [
         (Decision::Allow, None),
         (Decision::Prompt, Some(Decision::Prompt)),
         (Decision::PromptUser, Some(Decision::PromptUser)),
-        (Decision::Forbidden, Some(Decision::Prompt)),
+        (Decision::Forbidden, Some(Decision::PromptUser)),
     ] {
-        assert_eq!(wrappers::open_xargs_decision(rule), expected, "{rule:?}");
+        assert_eq!(wrappers::possible_rule_decision(rule), expected, "{rule:?}");
+    }
+}
+
+const WRAPPER_RULES: &str = r#"prefix_rule(pattern=["su"], decision="allow")
+prefix_rule(pattern=["sg"], decision="allow")
+prefix_rule(pattern=["watch"], decision="allow")
+prefix_rule(pattern=["sudo"], decision="allow")
+prefix_rule(pattern=["env"], decision="allow")
+prefix_rule(pattern=["chroot"], decision="allow")
+prefix_rule(pattern=["timeout"], decision="allow")
+prefix_rule(pattern=["nice"], decision="allow")
+prefix_rule(pattern=["unshare"], decision="allow")
+prefix_rule(pattern=["nsenter"], decision="allow")
+prefix_rule(pattern=["flock"], decision="allow")
+prefix_rule(pattern=["runuser"], decision="allow")
+prefix_rule(pattern=["firejail"], decision="allow")
+prefix_rule(pattern=["systemd-run"], decision="allow")
+prefix_rule(pattern=["git", "status"], decision="allow")
+prefix_rule(pattern=["git", "fetch"], decision="prompt")"#;
+
+/// #2519 (D670): where a wrapper's command can be read, prompt-user and
+/// forbidden rules apply to it exactly as to the direct command.
+#[tokio::test]
+async fn issue2519_read_wrappers_apply_rules_as_the_direct_command() {
+    for managed in [MANAGED_PROMPT_USER_PUSH, MANAGED_FORBIDDEN_FORCE_PUSH] {
+        for inner in ["git push", "git push --force", "git fetch", "git status"] {
+            let direct = managed_requirement(inner, WRAPPER_RULES, managed).await;
+            for wrapper in [
+                "sudo",
+                "sudo -u root",
+                "env A=1",
+                "env -i",
+                "chroot /",
+                "timeout 5",
+                "nice -n 1",
+                "unshare -r",
+                "sudo timeout 5 env A=1",
+            ] {
+                let command = format!("{wrapper} {inner}");
+                let result = managed_requirement(&command, WRAPPER_RULES, managed).await;
+                assert_eq!(
+                    std::mem::discriminant(&result),
+                    std::mem::discriminant(&direct),
+                    "{command}: {result:?} vs {direct:?}"
+                );
+            }
+        }
+    }
+}
+
+/// #2519 (D678): `watch -x` stays approval-only but runs its argv, so the
+/// command's own rules apply: a prompt-user rule needs a human, a forbidden
+/// one refuses, and other commands keep plain approval.
+#[tokio::test]
+async fn issue2519_watch_exec_applies_the_command_rules() {
+    let human = |result: &ExecApprovalRequirement| {
+        matches!(result, ExecApprovalRequirement::NeedsHumanApproval { .. })
+    };
+    for watch in [
+        "watch -x",
+        "watch -bx",
+        "watch -x --",
+        "watch -n 1 -x",
+        "watch -n1 -tx",
+        "watch -d -x",
+        "watch -dpermanent -x",
+        "watch --interval 1 --exec",
+        "watch --interval=1 --differences=permanent --no-title -x",
+        "sudo watch -x",
+        "watch -x sudo",
+    ] {
+        for (inner, managed, expect_human) in [
+            ("git push", MANAGED_PROMPT_USER_PUSH, true),
+            ("git push --force", MANAGED_FORBIDDEN_FORCE_PUSH, false),
+            ("git status", MANAGED_PROMPT_USER_PUSH, false),
+            ("git fetch", MANAGED_FORBIDDEN_FORCE_PUSH, false),
+        ] {
+            let command = format!("{watch} {inner}");
+            let result = managed_requirement(&command, WRAPPER_RULES, managed).await;
+            if inner == "git push --force" {
+                assert!(
+                    matches!(result, ExecApprovalRequirement::Forbidden { .. }),
+                    "{command}: {result:?}"
+                );
+            } else if expect_human {
+                assert!(human(&result), "{command}: {result:?}");
+            } else {
+                assert!(
+                    matches!(result, ExecApprovalRequirement::NeedsApproval { .. }),
+                    "{command}: {result:?}"
+                );
+            }
+        }
+    }
+}
+
+/// #2519: where a wrapper's command cannot be read (a shell string, unknown
+/// options, a form D676-D678 keep approval-only), any prompt-user or
+/// forbidden rule could match what it runs: a human decides, never the
+/// configured reviewer's plain approval.
+#[tokio::test]
+async fn issue2519_unread_wrappers_need_a_human_when_a_restrictive_rule_exists() {
+    let commands = [
+        // D678: watch without -x runs `sh -c` on its words.
+        "watch git push",
+        "watch -n 1 git push",
+        "watch --ex git push",
+        "watch -q 1 -x git push",
+        "watch -x",
+        // D676: su with a command.
+        "su -c 'git push'",
+        "su root -c 'git status'",
+        "su - root -c 'git push'",
+        "sudo su -c 'git push'",
+        // D678: sg runs a shell string.
+        "sg wheel -c 'git push'",
+        "sg wheel git push",
+        // Options the wrapper tables do not know.
+        "env -S 'git push'",
+        "sudo --frobnicate git push",
+        "chroot --frobnicate / git push",
+        // D670 launchers: unknown options, shell strings, permutation.
+        "timeout --frobnicate 5 git push",
+        "nsenter --frobnicate git push",
+        "flock /tmp/lock -c 'git push'",
+        "runuser -u root git status -x",
+        "firejail git status",
+        "systemd-run --shell",
+    ];
+    for managed in [MANAGED_PROMPT_USER_PUSH, MANAGED_FORBIDDEN_FORCE_PUSH] {
+        for command in commands {
+            let result = managed_requirement(command, WRAPPER_RULES, managed).await;
+            let ExecApprovalRequirement::NeedsHumanApproval { reason } = &result else {
+                panic!("{command}: {result:?}");
+            };
+            assert!(reason.is_some(), "{command}: {result:?}");
+        }
+    }
+    // Without a prompt-user or forbidden rule they keep plain approval.
+    for command in commands {
+        let result = requirement(command, WRAPPER_RULES).await;
+        assert!(
+            matches!(result, ExecApprovalRequirement::NeedsApproval { .. }),
+            "{command}: {result:?}"
+        );
     }
 }

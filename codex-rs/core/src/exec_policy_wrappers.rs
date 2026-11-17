@@ -13,20 +13,22 @@ use codex_shell_command::is_dangerous_command::DangerousCommandPlatform;
 
 pub(super) fn has_wrappers(command: &[String]) -> bool {
     let wrappers = policy_wrapper_commands(command);
-    wrappers.uncertain || wrappers.starts.len() > 1 || wrappers.open.is_some()
+    wrappers.uncertain
+        || wrappers.approval_only
+        || wrappers.starts.len() > 1
+        || wrappers.open.is_some()
 }
 
-/// D677/D686 (#2506): what an open `xargs` gets for a rule its stdin words
-/// could still complete. Allow rules only approve, so they need no prompt; a
-/// prompt-user rule keeps its fresh human decision.
-pub(super) fn open_xargs_decision(rule: Decision) -> Option<Decision> {
+/// D677/D686 (#2506), D691 and #2519: what a command gets for a rule that
+/// could match what it runs (words an open `xargs` adds, or a wrapper whose
+/// command cannot be read). Allow rules only approve, so they need no
+/// prompt; a prompt-user rule keeps its fresh human decision, and so does a
+/// forbidden one (D691): the rule may not apply, so it is not refused.
+pub(super) fn possible_rule_decision(rule: Decision) -> Option<Decision> {
     match rule {
         Decision::Allow => None,
         Decision::Prompt => Some(Decision::Prompt),
-        Decision::PromptUser => Some(Decision::PromptUser),
-        // D691 pending: main parity. If the owner chooses the stricter
-        // variant, change this to `Some(Decision::PromptUser)`.
-        Decision::Forbidden => Some(Decision::Prompt),
+        Decision::PromptUser | Decision::Forbidden => Some(Decision::PromptUser),
     }
 }
 
@@ -66,8 +68,7 @@ pub(crate) fn check_with_wrappers(
         let wrappers = policy_wrapper_commands(command);
         // Keep only the strictest fallback for this chain. Copying the entire
         // remaining argv at every layer would grow quadratically with nesting.
-        let mut heuristic = wrappers
-            .uncertain
+        let mut heuristic = (wrappers.uncertain || wrappers.approval_only)
             .then_some((command.as_slice(), Decision::Prompt));
         // #2455 (D677, D686): xargs adds words read from stdin. Ask whenever
         // a prompt, prompt-user or forbidden rule could match once they
@@ -78,15 +79,21 @@ pub(crate) fn check_with_wrappers(
         let mut could_complete = |known: &[String]| {
             if known.is_empty() {
                 *any_rule.get_or_insert_with(|| {
-                    policy.strictest_rule_matching_more_args_by(known, options, open_xargs_decision)
+                    policy.strictest_rule_matching_more_args_by(
+                        known,
+                        options,
+                        possible_rule_decision,
+                    )
                 })
             } else {
-                policy.strictest_rule_matching_more_args_by(known, options, open_xargs_decision)
+                policy.strictest_rule_matching_more_args_by(known, options, possible_rule_decision)
             }
         };
-        // #2506: under xargs, an uncertain chain (a launcher with no command,
-        // a shell, unknown options) runs what stdin says: every rule counts.
-        if wrappers.open.is_some() && wrappers.uncertain {
+        // #2506, #2519: an uncertain chain (a shell string as with `su -c`
+        // or `watch`, unknown options, under xargs a launcher with no
+        // command or a shell) runs a command no rule has seen: every rule
+        // counts. Where the command is read, its rules apply as written.
+        if wrappers.uncertain {
             raise(&mut heuristic, command, could_complete(&[]));
         }
         for &start in &wrappers.starts {

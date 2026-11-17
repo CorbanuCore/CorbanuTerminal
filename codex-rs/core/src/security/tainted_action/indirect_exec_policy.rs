@@ -22,7 +22,12 @@ use indirect_exec_policy_launchers as launchers;
 
 pub(crate) struct PolicyWrapperCommands {
     pub(crate) starts: Vec<usize>,
+    /// Some layer's command could not be read (#2519: every rule could
+    /// match what it runs). Also an approval floor.
     pub(crate) uncertain: bool,
+    /// #2519 (D678): every layer was read, but one stays approval-only
+    /// (`watch -x`). Its command's rules apply as written.
+    pub(crate) approval_only: bool,
     /// #2455 (D677): an `xargs` in the chain adds words read from stdin.
     pub(crate) open: Option<OpenArgv>,
 }
@@ -37,6 +42,7 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
     let mut result = PolicyWrapperCommands {
         starts: vec![0],
         uncertain: false,
+        approval_only: false,
         open: None,
     };
     let mut start = 0;
@@ -163,12 +169,19 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
                     None
                 }
             }
+        } else if name == "watch"
+            && let Some(at) = watch_exec(words, start)
+        {
+            // #2519 (D678): `watch -x` stays approval-only, but it runs
+            // this argv, so its rules apply as for the direct command.
+            result.approval_only = true;
+            Some(at)
         } else if matches!(name, "sg" | "watch")
             || (name == "su" && (result.open.is_some() || !su_login_only(&words[start..])))
         {
-            // #2455 (D676, D678): these run a shell string (su -c, sg, watch)
-            // or pass words to a shell; approval-only for now. Under xargs,
-            // stdin may add `-c` to any su.
+            // #2455 (D676, D678): these run a shell string (su -c, sg, watch
+            // without -x) or pass words to a shell; approval-only for now.
+            // Under xargs, stdin may add `-c` to any su.
             None
         } else if launchers::is_launcher(name, start) {
             // #2455 (D670): unshare, nsenter, timeout and the like.
@@ -207,6 +220,66 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
 fn no_command(mut result: PolicyWrapperCommands) -> PolicyWrapperCommands {
     result.uncertain |= result.open.is_some();
     result
+}
+
+/// #2519: where `watch -x` (exec, no shell) starts its command. procps-ng
+/// reads options with a leading `+` (they end at the first operand). Only
+/// exact options whose arity no version changes are read; any other option,
+/// or no `-x` (watch joins its words for `sh -c`), is `None`.
+fn watch_exec(words: &[String], start: usize) -> Option<usize> {
+    const FLAGS: &[&str] = &[
+        "beep",
+        "color",
+        "no-color",
+        "differences",
+        "errexit",
+        "chgexit",
+        "precise",
+        "no-rerun",
+        "no-title",
+        "no-wrap",
+    ];
+    let mut at = start + 1;
+    let mut exec = false;
+    while let Some(word) = words.get(at) {
+        work::step();
+        if word == "--" {
+            at += 1;
+            break;
+        }
+        if !word.starts_with('-') || word == "-" {
+            break;
+        }
+        at += 1;
+        if let Some(long) = word.strip_prefix("--") {
+            match long.split_once('=') {
+                None if long == "exec" => exec = true,
+                None if long == "interval" => at += 1,
+                None if FLAGS.contains(&long) => {}
+                Some(("interval" | "differences", _)) => {}
+                _ => return None,
+            }
+            continue;
+        }
+        let mut letters = word[1..].chars();
+        while let Some(letter) = letters.next() {
+            work::step();
+            match letter {
+                'x' => exec = true,
+                'b' | 'c' | 'C' | 'e' | 'g' | 'p' | 'r' | 't' | 'w' => {}
+                // An optional value can only be attached.
+                'd' => break,
+                'n' => {
+                    if letters.as_str().is_empty() {
+                        at += 1;
+                    }
+                    break;
+                }
+                _ => return None,
+            }
+        }
+    }
+    (exec && at < words.len()).then_some(at)
 }
 
 /// D676: `su` that only opens a login or interactive shell: `su`, then an

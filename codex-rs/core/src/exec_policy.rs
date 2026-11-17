@@ -1605,6 +1605,11 @@ fn derive_prompt_reason(command_args: &[String], evaluation: &Evaluation) -> Opt
         Some((_matched_prefix_len, None)) => {
             Some(format!("`{command}` requires {approval} by policy"))
         }
+        // #2519: no rule matched as written, but one could match what the
+        // command runs (a wrapper or xargs input); name the reason.
+        None if evaluation.decision == Decision::PromptUser => Some(format!(
+            "`{command}` requires human approval: a prompt-user or forbidden rule could match the command it runs"
+        )),
         None => None,
     }
 }
