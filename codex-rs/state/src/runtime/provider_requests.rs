@@ -650,6 +650,7 @@ impl StateRuntime {
 UPDATE provider_request_state AS current SET
     cooldown_until_ms = MAX(current.cooldown_until_ms, named.cooldown_until_ms),
     provider_reset_at_ms = MAX(current.provider_reset_at_ms, named.provider_reset_at_ms),
+    updated_at_ms = MAX(current.updated_at_ms, named.updated_at_ms),
     consecutive_429_count = MAX(current.consecutive_429_count, named.consecutive_429_count),
     last_status = CASE WHEN named.cooldown_until_ms > current.cooldown_until_ms
         THEN named.last_status ELSE current.last_status END,
@@ -800,7 +801,7 @@ ON CONFLICT(provider_id, model, key_fingerprint) DO NOTHING
     .await?;
     let row = sqlx::query(
         r#"
-SELECT consecutive_429_count, cooldown_until_ms
+SELECT consecutive_429_count, cooldown_until_ms, provider_reset_at_ms
 FROM provider_request_state
 WHERE provider_id = ? AND model = ? AND key_fingerprint = ?
         "#,
@@ -813,6 +814,7 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ?
     let existing = UnleasedRow {
         consecutive_429_count: row.try_get("consecutive_429_count")?,
         cooldown_until_ms: row.try_get("cooldown_until_ms")?,
+        provider_reset_at_ms: row.try_get("provider_reset_at_ms")?,
     };
     let Some(update) = existing.apply(result, now_ms) else {
         return Ok(());
@@ -851,6 +853,7 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ?
 pub(super) struct UnleasedRow {
     pub(super) consecutive_429_count: i64,
     pub(super) cooldown_until_ms: i64,
+    pub(super) provider_reset_at_ms: i64,
 }
 
 /// What an unleased result writes.
@@ -892,14 +895,19 @@ impl UnleasedRow {
                 let cooldown = retry_after_ms
                     .filter(|ms| *ms > 0)
                     .unwrap_or_else(|| default_cooldown_ms(consecutive_429_count));
+                let provider_reset_at_ms = retry_after_ms
+                    .filter(|ms| *ms > 0)
+                    .map_or(0, |ms| now_ms.saturating_add(ms));
                 Some(UnleasedUpdate {
                     cooldown_until_ms: self
                         .cooldown_until_ms
                         .max(now_ms.saturating_add(cooldown))
                         .min(now_ms.saturating_add(MAX_PROVIDER_COOLDOWN_MS)),
-                    provider_reset_at_ms: retry_after_ms
-                        .filter(|ms| *ms > 0)
-                        .map_or(0, |ms| now_ms.saturating_add(ms)),
+                    provider_reset_at_ms: if cooling {
+                        self.provider_reset_at_ms.max(provider_reset_at_ms)
+                    } else {
+                        provider_reset_at_ms
+                    },
                     last_status: Some(RATE_LIMIT_STATUS),
                     last_request_id: request_id.clone(),
                     provider_input_tokens: None,

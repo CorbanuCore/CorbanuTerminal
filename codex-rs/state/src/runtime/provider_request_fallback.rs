@@ -224,6 +224,7 @@ impl MemoryRow {
         let update = UnleasedRow {
             consecutive_429_count: self.consecutive_429_count,
             cooldown_until_ms: self.cooldown_until_ms,
+            provider_reset_at_ms: self.provider_reset_at_ms,
         }
         .apply(result, now_ms)?;
         let new_cooldown = update.cooldown_until_ms != self.cooldown_until_ms;

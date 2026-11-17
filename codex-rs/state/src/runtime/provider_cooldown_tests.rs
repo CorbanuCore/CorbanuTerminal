@@ -66,6 +66,11 @@ async fn multi_day_retry_is_capped_and_successful_probe_clears() {
             .await
             .unwrap();
     assert_eq!(stored_deadline, start + MAX_PROVIDER_COOLDOWN_MS);
+    // Another in-flight refusal without a hint must retain the longer hint.
+    runtime
+        .record_provider_request_unleased_result_once(&key(), &refusal(None), start)
+        .await
+        .unwrap();
     let block = runtime
         .check_provider_request_cooldown_once(&key(), &preflight(), start)
         .await
@@ -129,6 +134,7 @@ async fn refused_probe_rearms_and_consecutive_backoff_stays_bounded() {
         let update = UnleasedRow {
             consecutive_429_count: count,
             cooldown_until_ms: 0,
+            provider_reset_at_ms: 0,
         }
         .apply(&refusal(None), expiry)
         .unwrap();
@@ -172,6 +178,33 @@ async fn legacy_row_is_clamped_once_without_sliding_or_losing_hint() {
         .await
         .unwrap();
     assert_eq!(count, 4);
+}
+
+#[tokio::test]
+async fn adopting_a_recent_cooldown_into_an_old_row_keeps_its_age() {
+    let runtime = runtime().await;
+    runtime
+        .check_provider_request_cooldown_once(&key(), &preflight(), /*now_ms*/ 0)
+        .await
+        .unwrap();
+    let now = 10 * MAX_PROVIDER_COOLDOWN_MS;
+    sqlx::query("INSERT INTO provider_request_state (provider_id, model, key_fingerprint, cooldown_until_ms, last_status, updated_at_ms) VALUES (?, ?, 'by-name', ?, 429, ?)")
+        .bind(&key().provider_id).bind(&key().model).bind(now + 60_000).bind(now)
+        .execute(runtime.pool.as_ref()).await.unwrap();
+    runtime
+        .adopt_named_account_provider_request_key(
+            &key().provider_id,
+            "by-name",
+            &key().key_fingerprint,
+            now,
+        )
+        .await;
+    let block = runtime
+        .check_provider_request_cooldown_once(&key(), &preflight(), now)
+        .await
+        .unwrap()
+        .expect("recent adopted cooldown");
+    assert_eq!(block.remaining_ms, 60_000);
 }
 
 #[tokio::test]
