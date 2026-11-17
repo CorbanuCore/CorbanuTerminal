@@ -8,9 +8,10 @@
 //! folding, which maps a few non-ASCII letters and ligatures to ASCII
 //! ([`FOLDS`]; checked on APFS over every code point). Windows also drops an
 //! `.exe` suffix and trailing dots and spaces, and separates directories
-//! with `\` too. Not read: characters legacy HFS+ volumes ignore (such as
-//! U+200D), Windows 8.3 short names (`BUSYBO~1.EXE`) and `::$DATA` stream
-//! suffixes (#2510).
+//! with `\` too. #2510: names this module cannot canonicalize confidently
+//! are [`unsure`]: characters legacy HFS+ volumes ignore (such as U+200D)
+//! on macOS, and Windows 8.3 short names (`BUSYBO~1.EXE`) and stream
+//! suffixes (`sudo::$DATA`, `sudo:s`). Callers fail closed on them.
 //!
 //! Linux file systems are case-sensitive (ext4/f2fs case-folded directories
 //! are opt-in and not used for program directories), so names there stay as
@@ -98,6 +99,57 @@ fn windows_file_name(word: &str) -> &str {
 
 fn trim_windows(name: &str) -> &str {
     name.trim_end_matches(['.', ' '])
+}
+
+/// #2510: whether the program `word` may run as a name [`launcher_name_for`]
+/// cannot tell (a launcher or shell spelled another way), so its argv
+/// boundaries are unknown. macOS: the name holds a default-ignorable code
+/// point, which legacy HFS+ volumes drop from names (`su\u{200d}do` is
+/// `sudo` there). Windows: the file name is an 8.3 short name (`~` then a
+/// digit: `BUSYBO~1.EXE` may be `busybox.exe`) or names an NTFS stream
+/// (`sudo::$DATA`). Only the file name counts: short directory names such
+/// as `C:\PROGRA~1\` are common and do not change which program runs.
+pub(super) fn unsure(word: &str, case: NameCase) -> bool {
+    match case {
+        NameCase::Sensitive => false,
+        NameCase::Insensitive => basename(word).chars().any(|c| {
+            work::step();
+            default_ignorable(c)
+        }),
+        NameCase::Windows => {
+            let name = windows_file_name(word);
+            name.contains(':')
+                || name
+                    .as_bytes()
+                    .windows(2)
+                    .any(|pair| pair[0] == b'~' && pair[1].is_ascii_digit())
+        }
+    }
+}
+
+/// Unicode's Default_Ignorable_Code_Point property (a superset of the
+/// characters HFS+ ignores in names: U+200C..U+200F, U+202A..U+202E,
+/// U+206A..U+206F and U+FEFF).
+fn default_ignorable(c: char) -> bool {
+    matches!(
+        u32::from(c),
+        0xAD | 0x34F
+            | 0x61C
+            | 0x115F..=0x1160
+            | 0x17B4..=0x17B5
+            | 0x180B..=0x180F
+            | 0x200B..=0x200F
+            | 0x202A..=0x202E
+            | 0x2060..=0x206F
+            | 0x3164
+            | 0xFE00..=0xFE0F
+            | 0xFEFF
+            | 0xFFA0
+            | 0xFFF0..=0xFFF8
+            | 0x1BCA0..=0x1BCA3
+            | 0x1D173..=0x1D17A
+            | 0xE0000..=0xE0FFF
+    )
 }
 
 /// `name` with ASCII letters lowercased and [`FOLDS`] applied.
@@ -302,19 +354,90 @@ mod tests {
                 "{spelled}"
             );
         }
-        // As on main: names the classifier's reader skips (an assignment,
-        // a comment) are read as no command.
+    }
+
+    #[test]
+    fn chroot_named_like_an_assignment_reads_its_own_argv() {
+        // #2510: argv runs its first word as a program, so a chroot named
+        // like an assignment or a comment reads its own root and command,
+        // not a later chroot's (main read no command, or the later one).
         for case in [
             NameCase::Sensitive,
             NameCase::Insensitive,
             NameCase::Windows,
         ] {
-            for line in ["a=b/chroot / git push", "#x/chroot / git push"] {
+            for (line, starts) in [
+                ("a=b/chroot / git push", vec![0, 2]),
+                ("#x/chroot / git push", vec![0, 2]),
+                ("a=b/chroot chroot / evil", vec![0, 2]),
+                ("a=b/chroot --userspec=u / git push", vec![0, 3]),
+                ("/usr/sbin/chroot / git push", vec![0, 2]),
+                ("chroot / a=b/chroot / git push", vec![0, 2, 4]),
+            ] {
                 assert_eq!(
                     shape(line, case),
-                    (vec![0], false, None),
+                    (starts, false, None),
                     "{line} ({case:?})"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn unsure_names_fail_closed() {
+        let uncertain: Shape = (vec![0], true, None);
+        let other_program: Shape = (vec![0], false, None);
+        for (line, unsure_in) in [
+            // Default-ignorable code points: HFS+ drops some from names.
+            ("su\u{200d}do -n git push", &[NameCase::Insensitive][..]),
+            ("/usr/bin/\u{feff}env git push", &[NameCase::Insensitive]),
+            ("BA\u{200c}SH -c x", &[NameCase::Insensitive]),
+            ("x\u{e0001} git push", &[NameCase::Insensitive]),
+            // Windows short names and NTFS streams.
+            ("BUSYBO~1.EXE git push", &[NameCase::Windows]),
+            ("SUDO~1 -n git push", &[NameCase::Windows]),
+            ("C:\\x\\BASH~1.EXE -c x", &[NameCase::Windows]),
+            ("sudo::$DATA -n git push", &[NameCase::Windows]),
+            ("C:env.exe:s git push", &[NameCase::Windows]),
+            // Behind a launcher the platform reads.
+            ("sudo -n su\u{200d}do git push", &[NameCase::Insensitive]),
+            ("sudo -n XARG~1 git push", &[NameCase::Windows]),
+        ] {
+            for case in [
+                NameCase::Sensitive,
+                NameCase::Insensitive,
+                NameCase::Windows,
+            ] {
+                let found = shape(line, case);
+                if unsure_in.contains(&case) {
+                    let expected = if line.starts_with("sudo -n") {
+                        (vec![0, 2], true, None)
+                    } else {
+                        uncertain.clone()
+                    };
+                    assert_eq!(found, expected, "{line} ({case:?})");
+                } else if !line.starts_with("sudo -n") {
+                    assert_eq!(found, other_program, "{line} ({case:?})");
+                }
+            }
+        }
+        // Short directory names and ordinary names stay readable.
+        for line in [
+            "C:\\PROGRA~1\\Git\\bin\\git.exe push",
+            "git~ push",
+            "~1 push",
+        ] {
+            for case in [
+                NameCase::Sensitive,
+                NameCase::Insensitive,
+                NameCase::Windows,
+            ] {
+                let expected = if case == NameCase::Windows && line == "~1 push" {
+                    uncertain.clone()
+                } else {
+                    other_program.clone()
+                };
+                assert_eq!(shape(line, case), expected, "{line} ({case:?})");
             }
         }
     }
@@ -365,6 +488,43 @@ mod tests {
                 shape("builtin -- git push", case),
                 (vec![0, 2], false, None)
             );
+        }
+    }
+
+    #[test]
+    fn shells_respell_only_where_names_fold() {
+        for (shell, flag, insensitive, windows) in [
+            // The shell parser reads these already.
+            ("bash", "-lc", None, None),
+            ("/bin/sh", "-c", None, None),
+            ("bash.exe", "-c", None, None),
+            ("BASH", "-lc", Some("bash"), Some("bash")),
+            ("/bin/Sh", "-c", Some("sh"), Some("sh")),
+            ("Z\u{17f}h", "-c", Some("zsh"), Some("zsh")),
+            ("Bash.exe", "-c", None, Some("bash")),
+            ("C:\\x\\SH.EXE.", "-c", None, Some("sh")),
+            ("BASH", "-x", None, None),
+            ("BASH~1.EXE", "-c", None, None),
+            ("BA\u{200d}SH", "-c", None, None),
+            ("BASHX", "-c", None, None),
+            ("FISH", "-c", None, None),
+        ] {
+            let words = [shell, flag, "git push"].map(str::to_string);
+            let respelled = |case| {
+                super::super::policy_shell_script_for(&words, case)
+                    .map(|words| (words[0].clone(), words[1..] == [flag, "git push"]))
+            };
+            assert_eq!(respelled(NameCase::Sensitive), None, "{shell}");
+            for (case, expected) in [
+                (NameCase::Insensitive, insensitive),
+                (NameCase::Windows, windows),
+            ] {
+                assert_eq!(
+                    respelled(case),
+                    expected.map(|name: &str| (name.to_string(), true)),
+                    "{shell} ({case:?})"
+                );
+            }
         }
     }
 
