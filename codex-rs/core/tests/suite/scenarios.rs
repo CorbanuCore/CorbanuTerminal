@@ -2896,15 +2896,21 @@ async fn subagent_waits_for_its_inherited_environment_configuration() -> Result<
     use super::remote_env::spawn_tests::PendingSpawnCase;
     use super::remote_env::spawn_tests::pending_subagent_scenario;
 
-    let requests =
-        pending_subagent_scenario(PendingSpawnCase::TurnSettings, configure_scenario_catalog)
-            .await?;
+    let requests = pending_subagent_scenario(PendingSpawnCase::TurnSettings, |config| {
+        configure_scenario_catalog(config);
+        config
+            .agent_roles
+            .entry("default".into())
+            .or_default()
+            .nickname_candidates = Some(vec!["Worker".into()]);
+    })
+    .await?;
     let labels = [
         "parent delegates while the environment is starting",
         "parent waits for the worker",
         "child sees the inherited starting environment",
         "child receives the ready result and updated environment",
-        "parent receives the child result",
+        "parent observes child state after the permission change",
     ];
     assert_eq!(requests.len(), labels.len());
     let entries = requests
@@ -2913,7 +2919,7 @@ async fn subagent_waits_for_its_inherited_environment_configuration() -> Result<
         .map(|(request, label)| SnapshotEntry::body(request).labeled(label))
         .collect::<Vec<_>>();
     let snapshot = context_snapshot::format_context_snapshot(
-        "A parent spawns a child before the selected environment is configured. The child sees it starting, waits, and receives the ready result after an ordinary parent turn-settings update.",
+        "A parent spawns a child before the selected environment is configured. The child sees it starting, waits, and receives the ready result after a parent turn-settings update. The permission change defers child mail until the parent admits a turn under the new permissions.",
         &entries,
         &ContextSnapshotOptions::default(),
     );

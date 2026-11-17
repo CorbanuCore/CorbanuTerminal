@@ -5,6 +5,31 @@ use codex_vault::ProviderAccountName;
 use codex_vault::Vault;
 use pretty_assertions::assert_eq;
 
+#[test]
+fn typed_retry_deadline_reaches_shared_throttle() {
+    let deadline = codex_http_client::RetryAfter::from_delay(std::time::Duration::from_secs(60))
+        .expect("bounded deadline");
+    let error = CodexErr::from(CodexErrorDetails::RateLimitExceeded("fixture".to_string()))
+        .with_retry_after(deadline);
+    let delay = provider_request_error_retry_after_ms(&error).expect("typed advice");
+    assert!((1..=60_001).contains(&delay));
+}
+
+#[test]
+fn expired_retry_advice_does_not_restart_default_cooldown() {
+    let deadline = codex_http_client::RetryAfter::from_delay(std::time::Duration::ZERO)
+        .expect("expired deadline");
+    let error = CodexErr::from(CodexErrorDetails::RateLimitExceeded("fixture".to_string()))
+        .with_retry_after(deadline);
+    assert_eq!(provider_request_error_retry_after_ms(&error), Some(1));
+    assert_eq!(
+        provider_request_error_retry_after_ms(&CodexErr::from(
+            CodexErrorDetails::RateLimitExceeded("fixture".to_string())
+        )),
+        None
+    );
+}
+
 fn zai_on(account: Option<&str>) -> ModelProviderInfo {
     let mut provider = ModelProviderInfo::create_zai_provider();
     provider.account = account.map(|name| NamedProviderAccount {

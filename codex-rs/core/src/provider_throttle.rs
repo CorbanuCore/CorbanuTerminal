@@ -453,6 +453,16 @@ fn provider_request_error_request_id(err: &CodexErr) -> Option<String> {
 }
 
 fn provider_request_error_retry_after_ms(err: &CodexErr) -> Option<i64> {
+    if let Some(delay) = err.server_retry_delay() {
+        // Typed stream errors carry a deadline independently of their detail variant.
+        // Round up so another session cannot retry early. The state throttle treats
+        // zero as missing advice, so expired advice needs the smallest positive delay.
+        return Some(
+            i64::try_from(delay.as_millis())
+                .unwrap_or(i64::MAX)
+                .saturating_add(1),
+        );
+    }
     match err.details() {
         CodexErrorDetails::RetryLimit(err) => err.retry_after_ms,
         _ => None,
