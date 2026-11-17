@@ -7,6 +7,10 @@
 
 use super::work;
 
+#[path = "indirect_exec_policy_more_launchers.rs"]
+mod indirect_exec_policy_more_launchers;
+use indirect_exec_policy_more_launchers as more;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Arity {
     Flag,
@@ -251,13 +255,18 @@ const LAUNCHERS: &[(&str, &[Opt])] = &[
     ("flock", FLOCK),
     ("doas", DOAS),
     ("runuser", RUNUSER),
+    ("command", more::COMMAND),
+    ("exec", more::EXEC),
+    ("time", more::TIME),
+    ("caffeinate", more::CAFFEINATE),
+    ("systemd-run", more::SYSTEMD_RUN),
 ];
 
 pub(super) fn is_launcher(name: &str) -> bool {
     LAUNCHERS.iter().any(|(launcher, _)| {
         work::step();
         *launcher == name
-    })
+    }) || more::OWN_PARSERS.contains(&name)
 }
 
 /// Where the command a launcher runs starts.
@@ -272,27 +281,38 @@ pub(super) enum Launch {
     Uncertain,
 }
 
-/// The last word that looks like an option, for [`launch`]'s permutation
-/// check (one scan per command, however many launchers it chains).
-pub(super) fn last_option(words: &[String]) -> Option<usize> {
-    let mut last = None;
+/// What [`launch`] needs from the whole command: one scan per command,
+/// however many launchers it chains.
+#[derive(Clone, Copy)]
+pub(super) struct Scan {
+    /// The last word that looks like an option (the permutation check).
+    last_option: Option<usize>,
+    /// Some word has a `$` (systemd-run may expand it).
+    dollar: bool,
+}
+
+pub(super) fn scan(words: &[String]) -> Scan {
+    let mut scan = Scan {
+        last_option: None,
+        dollar: false,
+    };
     for (at, word) in words.iter().enumerate() {
         work::step();
         if word.starts_with('-') && word != "-" {
-            last = Some(at);
+            scan.last_option = Some(at);
         }
+        scan.dollar |= word.contains('$');
     }
-    last
+    scan
 }
 
-/// `words[start]` names a launcher in [`LAUNCHERS`]; `last_option` is
-/// [`last_option`]`(words)`.
-pub(super) fn launch(
-    name: &str,
-    words: &[String],
-    start: usize,
-    last_option: Option<usize>,
-) -> Launch {
+/// `words[start]` names a launcher in [`LAUNCHERS`] or
+/// [`more::OWN_PARSERS`]; `scan` is [`scan`]`(words)`.
+pub(super) fn launch(name: &str, words: &[String], start: usize, scan: Scan) -> Launch {
+    let last_option = scan.last_option;
+    if let Some(launch) = more::launch(name, words, start) {
+        return launch;
+    }
     let Some((_, options)) = LAUNCHERS.iter().find(|(launcher, _)| {
         work::step();
         *launcher == name
@@ -300,6 +320,7 @@ pub(super) fn launch(
         return Launch::Uncertain;
     };
     let mut seen: Vec<Opt> = Vec::new();
+    let mut abbreviated = false;
     let mut at = start + 1;
     let mut ended = false;
     while let Some(word) = words.get(at) {
@@ -317,7 +338,7 @@ pub(super) fn launch(
             at += 1;
             continue;
         }
-        let Some(words_used) = option(options, word, &mut seen) else {
+        let Some(words_used) = option(options, word, &mut seen, &mut abbreviated) else {
             return Launch::Uncertain;
         };
         at += words_used;
@@ -339,6 +360,18 @@ pub(super) fn launch(
             return Launch::NoCommand;
         }
         "chrt" if has("pid", 'p') || has("max", 'm') => return Launch::NoCommand,
+        "command" if has("", 'v') || has("", 'V') => return Launch::NoCommand,
+        "systemd-run" => {
+            // Its option words and values (and any `--`).
+            match more::systemd_run(
+                &words[start + 1..at],
+                has("shell", 'S'),
+                abbreviated || scan.dollar,
+            ) {
+                Some(floor) => uncertain = floor,
+                None => return Launch::Uncertain,
+            }
+        }
         "taskset" if has("pid", 'p') => return Launch::NoCommand,
         "timeout" | "taskset" => at += 1, // The duration or the CPU mask.
         // A priority, or (util-linux 2.42+, for policies without one) the
@@ -392,7 +425,10 @@ pub(super) fn launch(
     }
     // No command: some only print or query; the rest run a shell, or fail.
     let quiet = informational
-        || matches!(name, "nice" | "ionice")
+        || matches!(
+            name,
+            "nice" | "ionice" | "command" | "exec" | "time" | "caffeinate"
+        )
         || (name == "setpriv" && (has("dump", 'd') || has("list-caps", '\0')));
     if quiet {
         Launch::NoCommand
@@ -403,12 +439,19 @@ pub(super) fn launch(
 
 /// The words option `word` uses (1, or 2 when its value is the next word),
 /// recording what it set; `None` when it is unknown or ambiguous.
-fn option(options: &[Opt], word: &str, seen: &mut Vec<Opt>) -> Option<usize> {
+/// `abbreviated`: set when a long name was a unique abbreviation.
+fn option(
+    options: &[Opt],
+    word: &str,
+    seen: &mut Vec<Opt>,
+    abbreviated: &mut bool,
+) -> Option<usize> {
     if let Some(long) = word.strip_prefix("--") {
         let (name, attached) = long
             .split_once('=')
             .map_or((long, false), |(name, _)| (name, true));
         let found = long_option(options, name)?;
+        *abbreviated |= found.1 != name;
         seen.push(found);
         return match (found.2, attached) {
             (Flag, true) => None,
@@ -499,6 +542,15 @@ mod tests {
             "unshare -r",
             "timeout 5",
             "nice -n 1",
+            "command -p",
+            "exec -a x",
+            "time -p",
+            "caffeinate -i",
+            "systemd-run --scope -p A=1",
+            "pkexec --user x",
+            "bwrap --bind / /",
+            "firejail --quiet",
+            "busybox",
         ] {
             work::assert_linear(launcher, |scale| {
                 let layers = scale * 64;
