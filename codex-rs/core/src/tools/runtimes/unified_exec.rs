@@ -683,7 +683,12 @@ impl UnifiedExecRuntime<'_> {
             && !shell_snapshot_location
                 .as_ref()
                 .is_some_and(|snapshot| snapshot.exists());
-        if brokered_shell_snapshot_missing && let Some(network) = managed_network {
+        // D641/D653: main's one-way broker retains masking and markers without a
+        // snapshot; upstream's fail-open restore and warning do not apply.
+        if brokered_shell_snapshot_missing
+            && let Some(network) = managed_network
+            && !network.credential_broker_hardened()
+        {
             network.restore_and_disable_brokered_credentials(&mut env, &mut command);
             let message = "Credential masking is unavailable because a protected shell snapshot could not be created. This command will run with unmasked credentials.";
             tracing::warn!("{message}");
