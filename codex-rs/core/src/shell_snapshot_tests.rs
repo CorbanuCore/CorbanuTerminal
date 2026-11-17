@@ -918,6 +918,7 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
         for brokered in [false, true] {
             let replay_env = if brokered {
                 context
+                    .clone()
                     .prepare_child_environment(
                         &network_proxy,
                         env.clone(),
