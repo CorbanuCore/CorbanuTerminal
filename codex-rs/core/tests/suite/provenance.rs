@@ -927,7 +927,9 @@ async fn pf_30_s03_automatic_reviewer_cannot_approve_a_tainted_protected_action(
     );
     let (test, captured) = pf_30_s03_two_call_turn_with(
         SecurityLevel::Moderate,
-        AskForApproval::UnlessTrusted,
+        // Automatic review applies to on-request approvals; UnlessTrusted routes
+        // ordinary approvals directly to the human and cannot exercise this guard.
+        AskForApproval::OnRequest,
         "ls",
         PF_30_S03_VAULT,
         |config| config.approvals_reviewer = ApprovalsReviewer::AutoReview,
