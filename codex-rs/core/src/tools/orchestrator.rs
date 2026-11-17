@@ -2408,9 +2408,13 @@ where
 /// The reason a prompt rule gave for this command, if one matched.
 fn policy_prompt_reason(requirement: &ExecApprovalRequirement) -> Option<String> {
     match requirement {
+        // #2506: a prompt-user rule's reason too, as in `escalation_why`.
         ExecApprovalRequirement::NeedsApproval {
             reason: Some(reason),
             ..
+        }
+        | ExecApprovalRequirement::NeedsHumanApproval {
+            reason: Some(reason),
         } => Some(reason.clone()),
         _ => None,
     }
@@ -3053,6 +3057,36 @@ fn is_sandbox_startup_failure(sandbox: SandboxType, output: &ExecToolCallOutput)
 mod tests {
     use super::*;
     use codex_protocol::exec_output::StreamOutput;
+
+    /// #2506: the D48 prompt shows a prompt-user rule's reason as it does a
+    /// prompt rule's; other requirements add none.
+    #[test]
+    fn policy_prompt_reason_reads_prompt_and_prompt_user_reasons() {
+        let reason = || Some("`git push` requires human approval by policy".to_string());
+        assert_eq!(
+            policy_prompt_reason(&ExecApprovalRequirement::NeedsHumanApproval { reason: reason() }),
+            reason()
+        );
+        assert_eq!(
+            policy_prompt_reason(&ExecApprovalRequirement::NeedsApproval {
+                reason: reason(),
+                proposed_execpolicy_amendment: None,
+            }),
+            reason()
+        );
+        for requirement in [
+            ExecApprovalRequirement::NeedsHumanApproval { reason: None },
+            ExecApprovalRequirement::NeedsApproval {
+                reason: None,
+                proposed_execpolicy_amendment: None,
+            },
+            ExecApprovalRequirement::Forbidden {
+                reason: "no".to_string(),
+            },
+        ] {
+            assert_eq!(policy_prompt_reason(&requirement), None, "{requirement:?}");
+        }
+    }
 
     /// Issue #540: a run that keeps its sandbox leaves it on retry only for
     /// a protected action a person approves afresh, never for a network

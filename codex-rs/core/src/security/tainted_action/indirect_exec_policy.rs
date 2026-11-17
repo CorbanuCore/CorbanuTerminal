@@ -156,7 +156,12 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
                 }
                 // xargs runs `echo`.
                 launchers::Xargs::NoCommand => return no_command(result),
-                launchers::Xargs::Uncertain => None,
+                // #2506: unreadable options; stdin may complete any rule.
+                launchers::Xargs::Uncertain => {
+                    let open = result.open.get_or_insert(OpenArgv { known_end: start });
+                    open.known_end = open.known_end.min(start);
+                    None
+                }
             }
         } else if matches!(name, "sg" | "watch")
             || (name == "su" && (result.open.is_some() || !su_login_only(&words[start..])))

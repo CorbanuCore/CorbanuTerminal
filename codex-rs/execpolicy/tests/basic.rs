@@ -1085,6 +1085,45 @@ prefix_rule(pattern=["Tool", "Run"], not_match=["tool Run", "Tool run"])
     Ok(())
 }
 
+/// #2506: each rule's decision is mapped before the strictest is taken, so a
+/// weakened forbidden rule cannot hide a prompt-user rule.
+#[test]
+fn strictest_rule_matching_more_args_by_maps_each_rule() -> Result<()> {
+    let mut policy = Policy::empty();
+    policy.add_prefix_rule(&tokens(&["git", "push"]), Decision::PromptUser)?;
+    policy.add_prefix_rule(&tokens(&["git", "push", "--force"]), Decision::Forbidden)?;
+    policy.add_prefix_rule(&tokens(&["git", "status", "-s"]), Decision::Allow)?;
+    let options = MatchOptions {
+        resolve_host_executables: false,
+    };
+    let weaken_forbidden = |decision| match decision {
+        Decision::Allow => None,
+        Decision::Forbidden => Some(Decision::Prompt),
+        other => Some(other),
+    };
+    for (known, expected) in [
+        (vec![], Some(Decision::PromptUser)),
+        (vec!["git"], Some(Decision::PromptUser)),
+        (vec!["git", "push"], Some(Decision::Prompt)),
+        (vec!["git", "status"], None),
+    ] {
+        assert_eq!(
+            policy.strictest_rule_matching_more_args_by(
+                &tokens(&known),
+                &options,
+                weaken_forbidden
+            ),
+            expected,
+            "{known:?}"
+        );
+    }
+    assert_eq!(
+        policy.strictest_rule_matching_more_args(&tokens(&["git"]), &options),
+        Some(Decision::Forbidden)
+    );
+    Ok(())
+}
+
 #[test]
 fn strictest_rule_matching_more_args_counts_only_longer_rules() -> Result<()> {
     let mut parser = PolicyParser::new();

@@ -447,12 +447,24 @@ impl Policy {
         known: &[String],
         options: &MatchOptions,
     ) -> Option<Decision> {
+        self.strictest_rule_matching_more_args_by(known, options, Some)
+    }
+
+    /// [`Self::strictest_rule_matching_more_args`] with each rule's decision
+    /// mapped first (`None` skips the rule), so a caller that weakens one
+    /// level cannot lose a stricter outcome from another (#2506).
+    pub fn strictest_rule_matching_more_args_by(
+        &self,
+        known: &[String],
+        options: &MatchOptions,
+        map: impl Fn(Decision) -> Option<Decision>,
+    ) -> Option<Decision> {
         let Some(first) = known.first() else {
             return self
                 .rules_by_program
                 .iter_all()
                 .flat_map(|(_, rules)| rules)
-                .map(|rule| rule_decision(rule.as_ref()))
+                .filter_map(|rule| map(rule_decision(rule.as_ref())))
                 .max();
         };
         let basename = options
@@ -478,7 +490,7 @@ impl Policy {
                             })
                     })
             })
-            .map(|rule| rule_decision(rule.as_ref()))
+            .filter_map(|rule| map(rule_decision(rule.as_ref())))
             .max()
     }
 
