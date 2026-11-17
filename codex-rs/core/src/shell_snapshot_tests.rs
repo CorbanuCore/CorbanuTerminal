@@ -629,7 +629,9 @@ async fn inactive_profiles_keep_snapshots_but_active_brokers_require_sandbox() -
     new_env = context
         .prepare_child_environment(&proxy, new_env, /*environment_id*/ None)?
         .env;
-    assert_ne!(new_env["OPENAI_API_KEY"], old_env["OPENAI_API_KEY"]);
+    // D353: the retained broker keeps a stable placeholder for this credential;
+    // the snapshot itself must still be invalidated and rebuilt above.
+    assert_eq!(new_env["OPENAI_API_KEY"], old_env["OPENAI_API_KEY"]);
     assert_ne!(new_env["OPENAI_API_KEY"], "sk-snapshot-cache-test");
 
     // A credential change during capture should recapture once under the new configuration.
@@ -1384,14 +1386,9 @@ async fn snapshot_protects_posix_startup_only_when_it_contains_credentials() -> 
     let posix_snapshot = fs::read_to_string(&posix_snapshot_path).await?;
     assert!(posix_snapshot.contains("POSIX_STARTUP_LOADED"));
     assert!(!posix_snapshot.contains("ghp_posix_shell_secret"));
-    assert_eq!(
-        posix_credentials
-            .protected_startup_env
-            .as_deref()
-            .map(std::fs::canonicalize)
-            .transpose()?,
-        Some(std::fs::canonicalize(&posix_startup)?)
-    );
+    // D353/D354 keep upstream snapshot credential replay off. The retained
+    // engine strips the secret from the snapshot without a protected replay path.
+    assert!(posix_credentials.protected_startup_env.is_none());
 
     std::fs::write(&posix_startup, "export APPLICATION_SETTING=production\n")?;
     let application_snapshot_path = dir.path().join("posix-application-snapshot.sh").abs();
