@@ -281,20 +281,69 @@ mod tests {
     }
 
     #[test]
-    fn chroot_spellings_the_classifier_reader_skips_are_read() {
+    fn windows_chroot_spellings_read_only_their_own_word() {
+        for (spelled, canonical) in [
+            (
+                "C:\\x\\chroot.exe --userspec=u/chroot / git push",
+                "chroot --userspec=u/chroot / git push",
+            ),
+            (
+                "chroot.exe -ux/chroot / git push",
+                "chroot -ux/chroot / git push",
+            ),
+            (
+                "CHROOT.EXE / CHROOT.EXE / git push",
+                "chroot / chroot / git push",
+            ),
+        ] {
+            assert_eq!(
+                shape(spelled, NameCase::Windows),
+                shape(canonical, NameCase::Windows),
+                "{spelled}"
+            );
+        }
+        // As on main: names the classifier's reader skips (an assignment,
+        // a comment) are read as no command.
         for case in [
             NameCase::Sensitive,
             NameCase::Insensitive,
             NameCase::Windows,
         ] {
-            let expected = shape("chroot / git push", case);
-            // An assignment-like path still runs chroot when exec'd.
-            assert_eq!(shape("a=b/chroot / git push", case), expected, "{case:?}");
-            assert_eq!(
-                shape("nice -n 5 a=b/chroot / git push", case),
-                shape("nice -n 5 chroot / git push", case),
-                "{case:?}"
-            );
+            for line in ["a=b/chroot / git push", "#x/chroot / git push"] {
+                assert_eq!(
+                    shape(line, case),
+                    (vec![0], false, None),
+                    "{line} ({case:?})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn respelled_chains_are_linear() {
+        for (launcher, case) in [
+            ("CHROOT /", NameCase::Insensitive),
+            ("chroot.exe /", NameCase::Windows),
+            ("C:\\x\\Chroot.EXE /", NameCase::Windows),
+            ("SUDO -n", NameCase::Insensitive),
+            ("XARGS -0", NameCase::Insensitive),
+            ("\u{17f}etsid", NameCase::Insensitive),
+            ("a=b/chroot r=1", NameCase::Windows),
+            ("a=b/chroot r=1", NameCase::Sensitive),
+        ] {
+            super::work::assert_linear(launcher, |scale| {
+                let layers = scale * 64;
+                let mut words = Vec::new();
+                for _ in 0..layers {
+                    words.extend(launcher.split(' ').map(str::to_string));
+                }
+                words.extend(["cmd".to_string(), "-x".to_string()]);
+                let found = super::super::policy_wrapper_commands_for(&words, case);
+                assert!(
+                    found.starts.len() > layers || launcher.starts_with("a=b"),
+                    "{launcher}"
+                );
+            });
         }
     }
 

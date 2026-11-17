@@ -51,30 +51,28 @@ fn policy_wrapper_commands_for(words: &[String], case: names::NameCase) -> Polic
     let mut start = 0;
     // Computed on the first launcher only.
     let mut scan = None;
-    // Built the first time a chroot needs it.
-    let mut chroot_words = None;
+    // A copy of `words` for the chroot reader, made when first needed.
+    let mut chroot_words: Option<Vec<String>> = None;
     while let Some(program) = words.get(start) {
         work::step();
         let name = names::launcher_name_for(program, case);
         let name = name.as_ref();
         let after = if name == "chroot" {
+            // #2503: the classifier's chroot reader knows names spelled
+            // chroot in any ASCII case only. For a spelling only this
+            // platform reads as chroot (Windows `chroot.exe`), read a copy
+            // of the argv, made once, with just this word spelled chroot.
+            let argv = if basename(program).eq_ignore_ascii_case("chroot") {
+                &words[start..]
+            } else {
+                let spelled = chroot_words.get_or_insert_with(|| words.to_vec());
+                spelled[start] = "chroot".to_string();
+                &spelled[start..]
+            };
             // No held redirections: callers supply argv after shell parsing.
-            let mut reads =
-                chroot_reads(&SimpleCommand::default(), &words[start..], /*from*/ 0);
-            if reads.is_empty() {
-                // #2503: the classifier's reader knows only names spelled
-                // chroot (not `chroot.exe`, `a=b/chroot`): read a copy of
-                // the argv with each word naming chroot so spelled.
-                let spelled = chroot_words.get_or_insert_with(|| spelled_chroot(words, case));
-                reads = chroot_reads(
-                    &SimpleCommand::default(),
-                    &spelled[start..],
-                    /*from*/ 0,
-                );
-            }
+            let reads = chroot_reads(&SimpleCommand::default(), argv, /*from*/ 0);
             let Some(read) = reads.first() else {
-                result.uncertain = true;
-                break;
+                return no_command(result);
             };
             result.uncertain |= read.unknown_option;
             read.command.map(|at| start + at)
@@ -220,22 +218,6 @@ fn policy_wrapper_commands_for(words: &[String], case: names::NameCase) -> Polic
         start = after;
     }
     result
-}
-
-/// `words` with each word that names chroot (as `case` reads names)
-/// written `chroot`.
-fn spelled_chroot(words: &[String], case: names::NameCase) -> Vec<String> {
-    words
-        .iter()
-        .map(|word| {
-            work::step();
-            if names::launcher_name_for(word, case) == "chroot" {
-                "chroot".to_string()
-            } else {
-                word.clone()
-            }
-        })
-        .collect()
 }
 
 /// A launcher with no command of its own. Under xargs (D677) stdin may
