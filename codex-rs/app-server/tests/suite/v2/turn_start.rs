@@ -496,9 +496,14 @@ async fn tool_call_metadata_stays_out_of_raw_response_item_notifications(
         .find(|item| item["type"] == "function_call_output" && item["call_id"] == "mcp-call")
         .context("follow-up tool output")?;
     assert!(serde_json::to_string(&output["output"])?.contains("Calendar result"));
+    let mut expected_call =
+        json!({"name": "mcp__codex_apps__calendar_list_events", "arguments": arguments});
+    if analytics_enabled != Some(false) {
+        expected_call["tool_result_metadata"] = result_metadata;
+    }
     assert_eq!(
         output["internal_chat_message_metadata_passthrough"]["executed_tool_calls"],
-        json!([{"name": "mcp__codex_apps__calendar_list_events", "arguments": arguments}]),
+        json!([expected_call]),
     );
     assert_eq!(
         output["internal_chat_message_metadata_passthrough"]["tool_calls_complete"],
