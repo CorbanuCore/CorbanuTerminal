@@ -404,8 +404,18 @@ impl Policy {
             let Some(rules) = self.rules_by_program.get_vec(program) else {
                 return;
             };
+            // Only as many words as the longest pattern reads.
+            let words = rules
+                .iter()
+                .map(|rule| {
+                    rule.as_any()
+                        .downcast_ref::<PrefixRule>()
+                        .map_or(usize::MAX, |rule| rule.pattern.rest.len())
+                })
+                .max()
+                .unwrap_or_default();
             let respelled = std::iter::once(program.clone())
-                .chain(cmd[1..].iter().cloned())
+                .chain(cmd[1..].iter().take(words).cloned())
                 .collect::<Vec<_>>();
             for rule in rules {
                 if rule_decision(rule.as_ref()) == Decision::Allow {
@@ -425,9 +435,12 @@ impl Policy {
         for program in self.programs_folding_like(first) {
             add(program, None);
         }
-        // Only a written absolute path: a bare name is folded above.
+        // A path (`/bin/RM`, `../bin/RM`), read by its basename as the
+        // exact host lookup reads it. A bare name was folded above.
+        let is_path = first.contains('/') || (cfg!(windows) && first.contains('\\'));
         if options.resolve_host_executables
-            && let Ok(path) = AbsolutePathBuf::from_absolute_path_checked(first)
+            && is_path
+            && let Ok(path) = AbsolutePathBuf::try_from(first.clone())
             && let Some(basename) = executable_path_lookup_key(path.as_path())
         {
             let folded_path = fold_program_name(&path.as_path().to_string_lossy());

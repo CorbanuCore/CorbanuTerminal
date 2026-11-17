@@ -24,6 +24,18 @@ async fn requirement(line: &str, approval_policy: AskForApproval) -> ExecApprova
     .await
 }
 
+async fn escalated(line: &str, approval_policy: AskForApproval) -> ExecApprovalRequirement {
+    exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+        policy_src: Some(RULES.to_string()),
+        command: shlex::split(line).unwrap(),
+        approval_policy,
+        permission_profile: PermissionProfile::workspace_write(),
+        sandbox_permissions: SandboxPermissions::RequireEscalated,
+        prefix_rule: None,
+    })
+    .await
+}
+
 fn refused_by_rule(result: &ExecApprovalRequirement) -> bool {
     matches!(
         result,
@@ -52,6 +64,8 @@ async fn d692_forbidden_rules_match_any_case() {
         "RM -rf x",
         "Rm x",
         "/bin/RM -rf x",
+        "./RM x",
+        "../../../../bin/RM -rf x",
         "\u{17f}udo -n RM -rf x",
         "sudo RM -rf x",
         "SUDO Rm x",
@@ -92,6 +106,58 @@ async fn d692_prompt_rules_match_any_case() {
 }
 
 #[tokio::test]
+async fn d692_case_folded_prompt_is_approved_as_the_fallback() {
+    // Rule prompts allowed, sandbox approvals refused.
+    let granular = AskForApproval::Granular(GranularApprovalConfig {
+        sandbox_approval: false,
+        rules: true,
+        skill_approval: false,
+        request_permissions: false,
+        mcp_elicitations: false,
+    });
+    // As on main, the escalation the fallback asks for is refused: a prompt
+    // rule matched only in another case does not make it a rule prompt.
+    let result = escalated("GIT push", granular).await;
+    assert!(
+        matches!(result, ExecApprovalRequirement::Forbidden { .. }),
+        "{result:?}"
+    );
+    // The exact name is a rule prompt, which these settings allow.
+    let result = escalated("git push", granular).await;
+    assert!(asks_by_rule(&result), "{result:?}");
+}
+
+#[test]
+fn d692_exact_rule_matches_exclude_case_folded_ones() {
+    let prompt = |prefix: &[&str]| RuleMatch::PrefixRuleMatch {
+        matched_prefix: prefix.iter().map(ToString::to_string).collect(),
+        decision: Decision::Prompt,
+        resolved_program: None,
+        justification: None,
+    };
+    let heuristic = RuleMatch::HeuristicsRuleMatch {
+        command: vec!["GIT".to_string()],
+        decision: Decision::Prompt,
+    };
+    let folded = [prompt(&["git", "push"])];
+    for (matched, exact) in [
+        (vec![heuristic, prompt(&["git", "push"])], false),
+        // The same rule matched exactly too (`git push && GIT push`).
+        (
+            vec![prompt(&["git", "push"]), prompt(&["git", "push"])],
+            true,
+        ),
+        (vec![prompt(&["git", "push"]), prompt(&["rm"])], true),
+    ] {
+        assert_eq!(
+            crate::exec_policy::has_exact_rule_match(&matched, &folded, Decision::Prompt),
+            exact,
+            "{matched:?}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn d692_allow_rules_keep_the_exact_name() {
     // UnlessTrusted asks for commands no rule allows.
     let result = requirement("ls x", AskForApproval::UnlessTrusted).await;
@@ -101,9 +167,9 @@ async fn d692_allow_rules_keep_the_exact_name() {
     );
     for line in ["LS x", "Ls x"] {
         let result = requirement(line, AskForApproval::UnlessTrusted).await;
-        assert!(
-            matches!(result, ExecApprovalRequirement::NeedsApproval { .. }),
-            "{line}: {result:?}"
-        );
+        // Windows: unchanged from main, whose host-executable lookup already
+        // reads a bare name by its lower-cased basename (any rule kind).
+        let asks = matches!(result, ExecApprovalRequirement::NeedsApproval { .. });
+        assert_eq!(asks, !cfg!(windows), "{line}: {result:?}");
     }
 }

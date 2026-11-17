@@ -1144,6 +1144,22 @@ fn case_folded_matches_resolve_host_executables() -> Result<()> {
             vec![Decision::Forbidden]
         }
     );
+    // Relative paths read by their basename, as the exact lookup does.
+    for cmd in ["./RM", "../bin/RM"] {
+        assert_eq!(
+            unlisted
+                .case_folded_matches(&tokens(&[cmd, "x"]), &FOLD)
+                .iter()
+                .map(RuleMatch::decision)
+                .collect::<Vec<_>>(),
+            if cfg!(windows) {
+                Vec::new()
+            } else {
+                vec![Decision::Forbidden]
+            },
+            "{cmd}"
+        );
+    }
     // Without host resolution, only the word itself folds.
     assert_eq!(
         policy.case_folded_matches(
