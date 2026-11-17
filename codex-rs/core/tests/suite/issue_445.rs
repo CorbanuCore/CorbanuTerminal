@@ -189,11 +189,14 @@ async fn issue_445_refused_turn_leaves_agent_messages_queued() -> anyhow::Result
     let server = start_mock_server().await;
     let captured = mount_sse_sequence(
         &server,
-        vec![sse(vec![
-            ev_response_created("answer"),
-            ev_assistant_message("msg-answer", "noted"),
-            ev_completed("answer"),
-        ])],
+        vec![
+            sse(vec![
+                ev_response_created("answer"),
+                ev_assistant_message("msg-answer", "noted"),
+                ev_completed("answer"),
+            ]);
+            2
+        ],
     )
     .await;
     let test = test_codex()
@@ -229,13 +232,25 @@ async fn issue_445_refused_turn_leaves_agent_messages_queued() -> anyhow::Result
 
     switch(&test, HumanRevocation::KillSwitchOff)?;
     assert_eq!(turn(&test, "Anything new?").await?, None);
-    let requests = captured.requests();
     assert_eq!(
-        requests.len(),
+        captured.requests().len(),
         1,
-        "one request carries the mail and the prompt"
+        "mail must not start an automatic turn"
     );
-    assert!(requests[0].body_contains_text("pf445-held-mail"));
+    // D660: queue-only mail drained after sampling is retained for the next explicit turn.
+    assert_eq!(turn(&test, "Read the queued worker update.").await?, None);
+    let requests = captured.requests();
+    assert_eq!(requests.len(), 2, "each explicit turn makes one request");
     assert!(requests[0].body_contains_text("Anything new?"));
+    assert!(requests[1].body_contains_text("Read the queued worker update."));
+    assert_eq!(
+        requests[1]
+            .input()
+            .iter()
+            .map(|item| item.to_string().matches("pf445-held-mail").count())
+            .sum::<usize>(),
+        1,
+        "the mail held by the kill switch reaches the model exactly once",
+    );
     Ok(())
 }

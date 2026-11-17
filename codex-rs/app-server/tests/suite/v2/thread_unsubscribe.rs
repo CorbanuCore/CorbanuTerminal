@@ -840,17 +840,26 @@ enabled_tools = []
             "content": [{"type": "output_text", "text": "Remember the initial child result"}],
         })],
     );
-    for message in ["Unread note for later", "Continue the child task"] {
-        assert_eq!(
-            child_requests[2]
-                .inputs_of_type("agent_message")
-                .iter()
-                .filter(|item| item.to_string().contains(message))
-                .count(),
-            1,
-            "resumed child must receive {message} exactly once",
-        );
-    }
+    // mock_provider uses the plaintext collaboration adapter at the Responses boundary.
+    // Check both notes in their wire representation, preserving order and exact multiplicity.
+    let resumed_mail = child_requests[2]
+        .message_input_texts("user")
+        .into_iter()
+        .filter(|text| {
+            text.contains("Unread note for later") || text.contains("Continue the child task")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        resumed_mail,
+        ["Unread note for later", "Continue the child task"]
+            .map(|message| {
+                format!(
+                    "<inter_agent_message sender=\"/root\" recipient=\"/root/worker\">\n{message}\n</inter_agent_message>"
+                )
+            })
+            .to_vec(),
+        "resumed child must receive each note exactly once, in delivery order",
+    );
     // Reload must keep tracing both turns under the same logical child.
     let expected_calls = child_requests
         .iter()
