@@ -155,6 +155,7 @@ async fn run(
         .iter()
         .find_map(|request| request.function_call_output_text(CALL_ID))
         .unwrap_or_default();
+    super::session_resources::shutdown(&test).await?;
     assert!(!output.contains(VAULT_CANARY), "{output}");
     Ok((
         Outcome {

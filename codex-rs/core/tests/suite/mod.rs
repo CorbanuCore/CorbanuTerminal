@@ -189,6 +189,8 @@ mod safety_buffering;
 mod safety_check_downgrade;
 mod sandbox_denied_at_start;
 mod search_tool;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod session_resources;
 mod shell_command;
 mod shell_serialization;
 mod shell_snapshot;
