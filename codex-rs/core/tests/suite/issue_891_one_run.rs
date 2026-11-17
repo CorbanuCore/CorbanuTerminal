@@ -96,8 +96,9 @@ struct Setup {
     aggressive_launch: bool,
     /// A tool output (untrusted content) before the calls.
     untrusted_first: bool,
-    /// A "don't ask again" rule saved earlier for `unshare`; the calls run
-    /// [`PLAIN`] instead of [`SCRIPT`].
+    /// "Don't ask again" rules saved earlier for `unshare` and the command
+    /// it runs (#2455: one for `unshare` alone no longer covers it); the
+    /// calls run [`PLAIN`] instead of [`SCRIPT`].
     saved_rule: bool,
     /// The person's settings turn the sandbox off (full access).
     full_access: bool,
@@ -139,7 +140,8 @@ async fn run(
         std::fs::create_dir_all(home.path().join("rules"))?;
         std::fs::write(
             home.path().join("rules/default.rules"),
-            "prefix_rule(pattern=[\"unshare\"], decision=\"allow\")\n",
+            "prefix_rule(pattern=[\"unshare\"], decision=\"allow\")\n\
+             prefix_rule(pattern=[\"printf\"], decision=\"allow\")\n",
         )?;
     }
     let mut steps = Vec::new();

@@ -1,8 +1,10 @@
-//! D553 / #2165: argv boundaries for exec-policy rules. Reuse the classifier's
+//! D553 / #2165: argv boundaries for exec-policy rules (sudo, env, chroot;
+//! #2455 / D670 adds the launchers in `launchers`). Reuse the classifier's
 //! option tables and chroot reader, but fail closed on unknown option syntax.
 //! Unlike shell classification, these words are already argv: do not interpret
 //! shell keywords, comments, or command arguments as additional programs.
 
+use super::super::shell::SHELLS;
 use super::FLAG_LETTERS;
 use super::SimpleCommand;
 use super::WRAPPERS;
@@ -14,17 +16,32 @@ use super::sudo_option_words;
 use super::sudo_value_letter;
 use super::work;
 
+#[path = "indirect_exec_policy_launchers.rs"]
+mod indirect_exec_policy_launchers;
+use indirect_exec_policy_launchers as launchers;
+
 pub(crate) struct PolicyWrapperCommands {
     pub(crate) starts: Vec<usize>,
     pub(crate) uncertain: bool,
+    /// #2455 (D677): an `xargs` in the chain adds words read from stdin.
+    pub(crate) open: Option<OpenArgv>,
+}
+
+/// The argv an `xargs` runs: its end is open, and from `known_end` on its
+/// words may be replaced by input.
+pub(crate) struct OpenArgv {
+    pub(crate) known_end: usize,
 }
 
 pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands {
     let mut result = PolicyWrapperCommands {
         starts: vec![0],
         uncertain: false,
+        open: None,
     };
     let mut start = 0;
+    // Computed on the first launcher only.
+    let mut scan = None;
     while let Some(program) = words.get(start) {
         work::step();
         let name = basename(program);
@@ -32,7 +49,7 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
             // No held redirections: callers supply argv after shell parsing.
             let reads = chroot_reads(&SimpleCommand::default(), &words[start..], /*from*/ 0);
             let Some(read) = reads.first() else {
-                break;
+                return no_command(result);
             };
             result.uncertain |= read.unknown_option;
             read.command.map(|at| start + at)
@@ -115,11 +132,57 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
                 // environment. A missing option value advances past len and
                 // still fails closed below.
                 if at == words.len() {
-                    return result;
+                    return no_command(result);
                 }
             }
             (at < words.len()).then_some(at)
+        } else if matches!(name, "xargs" | "gxargs") {
+            match launchers::xargs(words, start) {
+                launchers::Xargs::Command { at, replace } => {
+                    match &mut result.open {
+                        None => {
+                            result.open = Some(OpenArgv {
+                                known_end: launchers::known_end(words, at, replace),
+                            });
+                        }
+                        // A nested xargs with a replacement string: treat
+                        // its whole argv as unknown (one scan per command).
+                        Some(open) if replace.iter().any(Option::is_some) => {
+                            open.known_end = open.known_end.min(at);
+                        }
+                        Some(_) => {}
+                    }
+                    Some(at)
+                }
+                // xargs runs `echo`.
+                launchers::Xargs::NoCommand => return no_command(result),
+                launchers::Xargs::Uncertain => None,
+            }
+        } else if matches!(name, "sg" | "watch")
+            || (name == "su" && (result.open.is_some() || !su_login_only(&words[start..])))
+        {
+            // #2455 (D676, D678): these run a shell string (su -c, sg, watch)
+            // or pass words to a shell; approval-only for now. Under xargs,
+            // stdin may add `-c` to any su.
+            None
+        } else if launchers::is_launcher(name, start) {
+            // #2455 (D670): unshare, nsenter, timeout and the like.
+            let mut scan = *scan.get_or_insert_with(|| launchers::scan(words));
+            if result.open.is_some() {
+                // D677: stdin may add option words or a `$` at the end.
+                scan = scan.open_end();
+            }
+            match launchers::launch(name, words, start, scan) {
+                launchers::Launch::Command { at, uncertain } => {
+                    result.uncertain |= uncertain;
+                    Some(at)
+                }
+                launchers::Launch::NoCommand => return no_command(result),
+                launchers::Launch::Uncertain => None,
+            }
         } else {
+            // D677: under xargs, stdin may give a shell its script.
+            result.uncertain |= result.open.is_some() && SHELLS.contains(&name);
             break;
         };
         let Some(after) = after else {
@@ -132,6 +195,32 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
         start = after;
     }
     result
+}
+
+/// A launcher with no command of its own. Under xargs (D677) stdin may
+/// supply one, which no rule has seen.
+fn no_command(mut result: PolicyWrapperCommands) -> PolicyWrapperCommands {
+    result.uncertain |= result.open.is_some();
+    result
+}
+
+/// D676: `su` that only opens a login or interactive shell: `su`, then an
+/// optional `-`, `-l` or `--login`, then an optional user. Anything more
+/// (`-c`, `--command`, `--session-command`, `-s`, words the shell receives
+/// as arguments, other options) may run a command.
+fn su_login_only(words: &[String]) -> bool {
+    let mut rest = &words[1..];
+    if rest
+        .first()
+        .is_some_and(|word| matches!(word.as_str(), "-" | "-l" | "--login"))
+    {
+        rest = &rest[1..];
+    }
+    match rest {
+        [] => true,
+        [user] => !user.starts_with('-'),
+        _ => false,
+    }
 }
 
 fn known_option(wrapper: &str, option: &str, value_options: &[&str]) -> bool {
