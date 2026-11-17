@@ -1,6 +1,10 @@
 #[path = "shell_snapshot_filter.rs"]
 mod filter;
 
+#[cfg(test)]
+#[path = "shell_snapshot_async_tests.rs"]
+mod async_tests;
+
 use std::io::ErrorKind;
 use std::path::Path;
 use std::process::Stdio;
@@ -227,7 +231,28 @@ async fn write_shell_snapshot(
 
     let raw_snapshot =
         zeroize::Zeroizing::new(capture_snapshot(&shell, cwd, removed_env_vars).await?);
-    let snapshot = filter::filter_snapshot(&raw_snapshot, removed_env_vars)?;
+    let removed_env_vars = removed_env_vars.to_vec();
+    filter_and_write_snapshot(output_path, SNAPSHOT_TIMEOUT, move || {
+        filter::filter_snapshot(&raw_snapshot, &removed_env_vars)
+    })
+    .await
+}
+
+/// Only the awaiting task can write. A timed-out or dropped caller cannot
+/// publish a late result, even though a running blocking task cannot be stopped.
+/// The task owns the zeroizing capture and keeps existing scan bounds/refusals.
+async fn filter_and_write_snapshot(
+    output_path: &AbsolutePathBuf,
+    scan_timeout: Duration,
+    filter: impl FnOnce() -> Result<String> + Send + 'static,
+) -> Result<()> {
+    // Abort queued work on timeout/cancellation; already-running work stays
+    // bounded by the scanner and has no access to the output path.
+    let task = tokio_util::task::AbortOnDropHandle::new(tokio::task::spawn_blocking(filter));
+    let snapshot = timeout(scan_timeout, task)
+        .await
+        .context("Snapshot credential scan timed out")?
+        .context("Snapshot credential scan failed")??;
 
     if let Some(parent) = output_path.parent() {
         let parent_display = parent.display();
