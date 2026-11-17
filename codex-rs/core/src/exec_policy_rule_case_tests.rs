@@ -66,7 +66,7 @@ async fn d692_forbidden_rules_match_any_case() {
         "/bin/RM -rf x",
         "./RM x",
         "../../../../bin/RM -rf x",
-        "\u{17f}udo -n RM -rf x",
+        "\u{17f}\u{75}do -n RM -rf x",
         "sudo RM -rf x",
         "SUDO Rm x",
         "bash -lc 'RM -rf x'",

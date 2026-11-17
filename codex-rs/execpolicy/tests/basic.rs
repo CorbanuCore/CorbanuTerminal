@@ -1051,7 +1051,7 @@ fn case_folded_matches_only_strict_rules() -> Result<()> {
         (&["rscript", "x"], vec![Decision::Forbidden]),
         (&["RSCRIPT"], vec![Decision::Forbidden]),
         (&["/BIN/SUDO", "ls"], vec![Decision::Prompt]),
-        (&["\u{17f}udo"], vec![]),
+        (&["\u{17f}\u{75}do"], vec![]),
         // The exact name is left to the exact lookup.
         (&["rm", "x"], vec![]),
         // Arguments stay exact.
@@ -1095,7 +1095,7 @@ fn case_folded_matches_only_strict_rules() -> Result<()> {
     let mut policy = Policy::empty();
     policy.add_prefix_rule(&tokens(&["sudo"]), Decision::Forbidden)?;
     policy.add_prefix_rule(&tokens(&["timeout"]), Decision::Forbidden)?;
-    for cmd in ["\u{17f}udo", "SUDO", "t\u{131}meout"] {
+    for cmd in ["\u{17f}\u{75}do", "SUDO", "t\u{131}meout"] {
         assert_eq!(
             folded_decisions(&policy, &[cmd], &FOLD),
             vec![Decision::Forbidden],
