@@ -83,7 +83,8 @@ fn shells() -> Vec<String> {
             "BASH.EXE -lc".to_string(),
             "SH.EXE. -c".to_string(),
             // Quoted: shlex reads an unquoted `\` as an escape.
-            "'C:\\Tools\\zsh.exe' -c".to_string(),
+            // (`zsh.exe` and `sh.exe.` are read by the shell parser already.)
+            "'C:\\Tools\\Zsh.exe' -c".to_string(),
         ]);
     }
     shells
