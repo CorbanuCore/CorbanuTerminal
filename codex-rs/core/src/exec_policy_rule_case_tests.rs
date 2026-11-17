@@ -117,11 +117,17 @@ async fn d692_case_folded_prompt_is_approved_as_the_fallback() {
     });
     // As on main, the escalation the fallback asks for is refused: a prompt
     // rule matched only in another case does not make it a rule prompt.
+    // (Windows: unchanged from main, whose host-executable lookup already
+    // reads `GIT` by its lower-cased basename as an exact rule prompt.)
     let result = escalated("GIT push", granular).await;
-    assert!(
-        matches!(result, ExecApprovalRequirement::Forbidden { .. }),
-        "{result:?}"
-    );
+    if cfg!(windows) {
+        assert!(asks_by_rule(&result), "{result:?}");
+    } else {
+        assert!(
+            matches!(result, ExecApprovalRequirement::Forbidden { .. }),
+            "{result:?}"
+        );
+    }
     // The exact name is a rule prompt, which these settings allow.
     let result = escalated("git push", granular).await;
     assert!(asks_by_rule(&result), "{result:?}");
