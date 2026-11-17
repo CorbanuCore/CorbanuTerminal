@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""#1989: the non-blocking macOS changed-crate test job
+"""#1989: the required macOS changed-crate test job
 (rust-ci-changed-crate-tests-macos.yml) and its selection helper."""
 
+import json
+import os
 import re
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -54,26 +57,59 @@ class SelectionTest(unittest.TestCase):
                     macos.changed_packages([path], PACKAGES), list(macos.MACOS_PACKAGES)
                 )
 
-    def test_packages_exist_and_the_workflow_triggers_on_them(self) -> None:
-        directories = {package: directory for directory, package in cargo_packages(REPO_ROOT).items()}
-        workflow = WORKFLOW.read_text(encoding="utf-8")
-        paths = re.search(r"(?ms)^  pull_request:\n    paths:\n(.*?)\n\n", workflow)
-        self.assertIsNotNone(paths)
-        triggers = set(re.findall(r'^      - "([^"]+)"$', paths.group(1), re.M))
-        expected = {path + "**" if path.endswith("/") else path for path in macos.JOB_FILES}
+    def test_five_existing_packages_remain_selected_by_their_paths(self) -> None:
+        packages = cargo_packages(REPO_ROOT)
+        directories = {package: directory for directory, package in packages.items()}
+        self.assertEqual(set(macos.MACOS_PACKAGES), {
+            "codex-exec-server", "codex-keyring-store", "codex-network-proxy",
+            "codex-process-hardening", "codex-sandboxing",
+        })
         for package in macos.MACOS_PACKAGES:
             with self.subTest(package=package):
-                self.assertIn(package, directories)
-                expected.add(f"{directories[package]}/**")
-        expected.add("third_party/rama-dns/**")
-        self.assertEqual(triggers, expected)
+                path = f"{directories[package]}/src/lib.rs"
+                self.assertEqual(macos.changed_packages([path], packages), [package])
+        self.assertEqual(macos.changed_packages(["docs/ci.md"], packages), [])
 
-    def test_not_part_of_ci_required(self) -> None:
+    def test_part_of_ci_required_without_duplicate_pr_trigger(self) -> None:
         blocking = (REPO_ROOT / ".github/workflows/blocking-ci.yml").read_text(encoding="utf-8")
-        self.assertNotIn(WORKFLOW.name, blocking)
-        for workflow in (REPO_ROOT / ".github/workflows").glob("*.yml"):
-            if workflow != WORKFLOW:
-                self.assertNotIn(WORKFLOW.name, workflow.read_text(encoding="utf-8"), workflow)
+        self.assertIn(f"    uses: ./{macos.WORKFLOW}\n", blocking)
+        self.assertIn("      - rust-ci-macos\n", blocking.split("  required:", 1)[1])
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("  workflow_call:\n", workflow)
+        self.assertNotIn("  pull_request:", workflow)
+        self.assertIn("    needs: [packages, test]\n", workflow)
+        self.assertIn("    if: ${{ always() }}\n", workflow.split("  required:", 1)[1])
+        self.assertIn("          NEEDS: ${{ toJSON(needs) }}", workflow)
+
+
+class RequiredResultsTest(unittest.TestCase):
+    def test_gate_exit_status_for_selection_and_matrix_outcomes(self) -> None:
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        command = re.search(r"        run: (.*check-results)\n", workflow).group(1)
+        for selected in ("[]", '["codex-exec-server"]', "", "null", "{}", '["unknown"]'):
+            for selection_result in ("success", "failure", "cancelled", "skipped"):
+                for test_result in ("success", "failure", "cancelled", "skipped"):
+                    with self.subTest(selected=selected, selection=selection_result, test=test_result):
+                        needs = {
+                            "packages": {"result": selection_result, "outputs": {"packages": selected}},
+                            "test": {"result": test_result},
+                        }
+                        expected = selection_result == "success" and (
+                            (selected == "[]" and test_result == "skipped")
+                            or (selected == '["codex-exec-server"]' and test_result == "success")
+                        )
+                        result = subprocess.run(
+                            command.split(), cwd=REPO_ROOT,
+                            env={**os.environ, "NEEDS": json.dumps(needs)},
+                            capture_output=True, text=True,
+                        )
+                        self.assertEqual(result.returncode, 0 if expected else 1, result.stderr)
+
+    def test_missing_dependencies_fail_closed(self) -> None:
+        self.assertFalse(macos.check_results({}))
+        self.assertFalse(macos.check_results({
+            "packages": {"result": "success", "outputs": {"packages": "[]"}},
+        }))
 
 
 class KnownFailuresTest(unittest.TestCase):
@@ -97,7 +133,7 @@ class KnownFailuresTest(unittest.TestCase):
             macos.KnownFailure("codex-vault", "tests::two", "2"),
         ]
         text = macos.summary(entries, "codex-sandboxing")
-        self.assertIn("Non-blocking", text)
+        self.assertIn("Required:", text)
         self.assertIn("- `seatbelt::tests::one` (#1)", text)
         self.assertNotIn("tests::two", text)
         self.assertIn("Known macOS failures excluded (1,", text)

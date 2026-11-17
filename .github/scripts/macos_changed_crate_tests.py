@@ -2,7 +2,7 @@
 """#1989 (owner decision D503): helpers for rust-ci-changed-crate-tests-macos.yml.
 
 The Linux `Changed crate tests` job (#1984) runs a PR's changed crates on
-Linux only. This non-blocking twin runs a few crates with macOS-only code
+Linux only. This required twin runs a few crates with macOS-only code
 paths on macOS, so a macOS-only break shows up on the PR instead of nowhere:
 no PR, postmerge or nightly job ran these crates' tests on macOS before.
 
@@ -12,13 +12,16 @@ Usage:
       selection as the Linux job, via the shared `cargo_packages` list), or
       all of them when it changes one of this job's own files.
   macos_changed_crate_tests.py packages --all
-      Every package (manual runs).
+      Every package (main and manual runs).
+  macos_changed_crate_tests.py check-results
+      Require successful selection and all selected tests, using NEEDS JSON.
   macos_changed_crate_tests.py filter|summary <cargo package>
       The nextest filter excluding the package's known macOS failures
       (.github/macos-changed-crate-known-failures.txt), or the job summary.
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -52,6 +55,7 @@ MACOS_PACKAGES = (
 # the PR proves the job still works.
 JOB_FILES = (
     WORKFLOW,
+    ".github/workflows/blocking-ci.yml",
     ".github/actions/check-clean-worktree/",
     ".github/actions/setup-ci/",
     ".github/macos-changed-crate-known-failures.txt",
@@ -77,8 +81,7 @@ def summary(entries: list[KnownFailure], package: str) -> str:
     lines = [
         f"### {package}: tests on macOS (#1989)",
         "",
-        "Non-blocking: blocking-ci.yml does not call this workflow, so `CI required`"
-        " neither waits for nor depends on it.",
+        "Required: `CI required` waits for package selection and every selected test.",
     ]
     if excluded:
         lines += [
@@ -91,7 +94,28 @@ def summary(entries: list[KnownFailure], package: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def check_results(needs: dict) -> bool:
+    """Only an explicitly empty successful selection permits skipped tests."""
+    selection = needs.get("packages", {})
+    if selection.get("result") != "success":
+        return False
+    try:
+        packages = json.loads(selection.get("outputs", {}).get("packages", ""))
+    except (ValueError, TypeError):
+        return False
+    if not isinstance(packages, list) or any(
+        package not in MACOS_PACKAGES for package in packages
+    ):
+        return False
+    expected = "success" if packages else "skipped"
+    return needs.get("test", {}).get("result") == expected
+
+
 def main(argv: list[str]) -> int:
+    if argv[1:] == ["check-results"]:
+        passed = check_results(json.loads(os.environ["NEEDS"]))
+        print("macOS selected tests passed." if passed else "macOS test dependencies did not succeed.")
+        return 0 if passed else 1
     if argv[1:] == ["packages", "--all"]:
         selected = list(MACOS_PACKAGES)
     elif len(argv) == 4 and argv[1] == "packages":
