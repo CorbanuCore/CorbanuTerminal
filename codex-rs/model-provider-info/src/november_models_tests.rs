@@ -21,11 +21,11 @@ fn november_models_resolve_without_changing_identity_or_provider_defaults() {
     );
     assert_eq!(claude_plan_translation(CLAUDE_FABLE_5_2_MODEL), None);
     assert_eq!(
-        resolve_model_for_provider(None, ANTHROPIC_PROVIDER_ID),
+        resolve_model_for_provider(/*model*/ None, ANTHROPIC_PROVIDER_ID),
         Some(ANTHROPIC_DEFAULT_MODEL.to_string())
     );
     assert_eq!(
-        resolve_model_for_provider(None, CLAUDE_PLAN_PROVIDER_ID),
+        resolve_model_for_provider(/*model*/ None, CLAUDE_PLAN_PROVIDER_ID),
         Some(CLAUDE_PLAN_MODEL.to_string())
     );
 }

@@ -818,10 +818,10 @@ fn fable_5_2_api_rates_match_the_published_sheet() -> anyhow::Result<()> {
     assert_eq!(
         prices[0].rates,
         Rates {
-            noncached: Some(decimal("8")?),
-            read: Some(decimal("0.20")?),
-            write: Some(decimal("10")?),
-            output: Some(decimal("40")?),
+            noncached: Some(rate(/*milli*/ 8_000)?),
+            read: Some(rate(/*milli*/ 200)?),
+            write: Some(rate(/*milli*/ 10_000)?),
+            output: Some(rate(/*milli*/ 40_000)?),
         }
     );
     Ok(())
@@ -904,7 +904,7 @@ fn openai_api_key_rates_match_the_published_sheet() -> anyhow::Result<()> {
         }
         // Fast (formerly Priority), Flex and unknown tiers have no Standard
         // price here: no price, never the Standard one.
-        for tier in ["priority", "flex", "auto"] {
+        for tier in ["priority", "ultrafast", "flex", "auto"] {
             assert!(
                 responses_original(model, "openai", scope, read_on, Some(tier))?.is_empty(),
                 "{model} {tier}"

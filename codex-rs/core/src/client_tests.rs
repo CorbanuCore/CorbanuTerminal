@@ -3192,6 +3192,24 @@ fn opus_5_5_plan_request_preserves_exact_model_and_subscription_identity() {
 }
 
 #[test]
+fn fable_5_2_request_uses_exact_upstream_model_high_effort_and_output_limit() {
+    let model = codex_models_manager::bundled_models_response()
+        .expect("catalog")
+        .models
+        .into_iter()
+        .find(|model| model.slug == "claude-fable-5-2")
+        .expect("Fable 5.2");
+    let request = test_model_client(SessionSource::Cli)
+        .build_anthropic_messages_request(&super::Prompt::default(), &model, /*effort*/ None)
+        .expect("Fable 5.2 request");
+    let body = serde_json::to_value(request).expect("request JSON");
+    assert_eq!(body["model"], json!("claude-fable-5-2"));
+    assert_eq!(body["max_tokens"], json!(128_000));
+    assert_eq!(body["thinking"]["type"], json!("adaptive"));
+    assert_eq!(body["output_config"]["effort"], json!("high"));
+}
+
+#[test]
 fn anthropic_request_uses_model_limit_above_legacy_32k_cap() {
     let prompt = super::Prompt {
         input: vec![ResponseItem::Message {
