@@ -50,8 +50,13 @@ pub(crate) fn detect_recent_cur_sessions_with_limits(
         if !project_storage.is_dir() {
             continue;
         }
+        let transcripts = cur_transcript_files(&project_storage.join("agent-transcripts"));
+        if transcripts.is_empty() {
+            // Skip path recovery, and its filesystem probes, for empty projects.
+            continue;
+        }
         let fallback_cwd = cur_project_cwd(&project_storage, external_agent_home);
-        for path in cur_transcript_files(&project_storage.join("agent-transcripts")) {
+        for path in transcripts {
             candidates.push(SessionFileCandidate {
                 path,
                 fallback_cwd: fallback_cwd.clone(),
@@ -131,7 +136,8 @@ fn decode_cur_project_path_with_probe_limit(encoded: &str, probe_limit: usize) -
     let components = encoded.split('-').collect::<Vec<_>>();
     if components.iter().any(|component| {
         component.is_empty()
-            || matches!(*component, "." | "..")
+            // Dot-only names (`.`, `..`, and `...`, which Windows reads as `.`).
+            || component.bytes().all(|byte| byte == b'.')
             || component.contains(['/', '\\', ':'])
     }) {
         return None;

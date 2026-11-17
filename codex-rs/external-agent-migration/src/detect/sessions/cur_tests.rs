@@ -276,12 +276,10 @@ fn resolves_cur_project_under_multiple_hyphenated_ancestors() {
 #[test]
 fn rejects_cur_project_when_probe_budget_is_exhausted() {
     let root = TempDir::new().expect("tempdir");
-    let project = ["a-b", "c-d", "e"]
-        .iter()
-        .fold(root.path().to_path_buf(), |path, component| {
-            path.join(component)
-        });
+    let project = root.path().join("a-b").join("c");
     fs::create_dir_all(&project).expect("project root");
+    // A dead-end branch the search visits only after it has found the match.
+    fs::create_dir_all(root.path().join("a")).expect("decoy directory");
     let encoded = encode_project_path(&project);
 
     let required = (0..=MAX_CUR_PROJECT_PATH_PROBES)
@@ -326,6 +324,7 @@ fn rejects_cur_project_traversal_components() {
     for suffix in [
         "project-..",
         "project-.",
+        "project-...",
         "..-project",
         "project--x",
         "project-",
