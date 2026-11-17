@@ -823,7 +823,22 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
     // D353/D354/D640: configured-provider destination/replay metadata is inert.
     assert!(captured_credentials.context_env.is_empty());
     assert!(captured_credentials.protected_startup_env.is_none());
-    assert!(captured_credentials.fail_open_aliases.is_empty());
+    // This map also records denied aliases and unrelated inherited entries.
+    // D353/D354 withhold these configured providers rather than registering them
+    // with the upstream replay broker; any retained aliases must remain denied.
+    for key in [
+        "STRIPE_AUTH_HEADER",
+        "VENDOR_AUTH_HEADER",
+        "LOCAL_AUTH_HEADER",
+    ] {
+        assert!(
+            captured_credentials
+                .fail_open_aliases
+                .get(key)
+                .is_none_or(|alias| !alias.authorized),
+            "unsupported configured alias {key} was authorized for replay"
+        );
+    }
     let snapshot = fs::read_to_string(&path).await?;
 
     for secret in [
@@ -889,34 +904,13 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
     ] {
         let mut env = HashMap::new();
         let context = snapshot_file.restore_credentials(&mut env, &replay_policy);
-        snapshot_file.restore_fail_open_aliases(&mut env, /*environment_id*/ None);
-        for key in [
-            "GH_TOKEN",
-            "GITHUB_TOKEN",
-            "GH_ENTERPRISE_TOKEN",
-            "GITHUB_ENTERPRISE_TOKEN",
-            "OPENAI_API_KEY",
-            "STRIPE_API_KEY",
-            "VENDOR_PASSWORD",
-            "LOCAL_TOKEN",
-            "AUTH_HEADER",
-            "AUTH_BUNDLE",
-            "VENDOR_AUTH_HEADER",
-            "LOCAL_AUTH_HEADER",
-            "STRIPE_HOST",
-            "VENDOR_HOST",
-            "GH_HOST",
-            "OPENAI_BASE_URL",
-        ] {
-            assert!(!env.contains_key(key), "{case} restored unsupported {key}");
-        }
         assert_eq!(
             context.with_fallbacks(&env).as_ref(),
             &env,
             "{case} must not restore private destinations"
         );
         for brokered in [false, true] {
-            let replay_env = if brokered {
+            let mut replay_env = if brokered {
                 context
                     .clone()
                     .prepare_child_environment(
@@ -928,6 +922,25 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
             } else {
                 env.clone()
             };
+            // Exercise both branches after preparation. Cleanup may remove entries,
+            // and built-in credentials may remain masked; configured providers must
+            // never gain a replay source, alias or destination.
+            snapshot_file.restore_fail_open_aliases(&mut replay_env, Some("d682-snapshot-child"));
+            for key in [
+                "STRIPE_API_KEY",
+                "VENDOR_PASSWORD",
+                "LOCAL_TOKEN",
+                "STRIPE_AUTH_HEADER",
+                "VENDOR_AUTH_HEADER",
+                "LOCAL_AUTH_HEADER",
+                "STRIPE_HOST",
+                "VENDOR_HOST",
+            ] {
+                assert!(
+                    !replay_env.contains_key(key),
+                    "{case}/{brokered} restored unsupported {key}"
+                );
+            }
             let replay = Command::new("/bin/bash")
                 .arg("-c")
                 .arg(". \"$1\" && export -p")
@@ -950,6 +963,10 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
                 "npm_enterprise_token",
                 "ghp_removed_enterprise_secret",
             ] {
+                assert!(
+                    replay_env.values().all(|value| !value.contains(secret)),
+                    "{case}/{brokered} restored a raw credential in the child environment"
+                );
                 assert!(
                     !output.contains(secret),
                     "{case}/{brokered} replay exposed {secret}"
