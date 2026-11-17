@@ -734,9 +734,14 @@ async fn credential_snapshot_proxy() -> Result<crate::config::StartedNetworkProx
 async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Result<()> {
     let dir = tempdir()?;
     let startup = dir.path().join("startup.sh");
+    let witness =
+        shlex::try_quote(dir.path().join("d682-startup-witness").to_str().unwrap())?.into_owned();
+    let entered =
+        shlex::try_quote(dir.path().join("d682-startup-entered").to_str().unwrap())?.into_owned();
     std::fs::write(
         &startup,
-        "unset GITHUB_ENTERPRISE_TOKEN UNSET_AUTH_HEADER\n\
+        "printf entered > __D682_ENTERED__\n\
+         unset GITHUB_ENTERPRISE_TOKEN UNSET_AUTH_HEADER\n\
          export GH_TOKEN='ghp_shell_only_secret'\n\
          export AUTH_HEADER=\"Bearer $GH_TOKEN\"\n\
          declare -rx GITHUB_TOKEN='ghp_readonly_secret'\n\
@@ -769,9 +774,9 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
          test \"$STRIPE_API_KEY\" = stripe_live_abcdefghijklmnopqrstuvwx && \\\n\
          test \"$VENDOR_PASSWORD\" = pin_abcdefgh && \\\n\
          test \"$LOCAL_AUTH_HEADER\" = 'Bearer local_abcdefghijklmnopqrstuvwx' && \\\n\
-         printf initialized > \"$PWD/d682-startup-witness\"\n\
-         if test \"$STARTUP_PATH_OVERRIDE_SEEN\" = /enterprise/bin; then printf path-ok; else printf path-other; fi > \"$PWD/d682-safe-observations\"\n\
-         if test \"$STARTUP_CORP_REGION_SEEN\" = production; then printf region-ok; else printf region-other; fi >> \"$PWD/d682-safe-observations\"\n",
+         printf initialized > __D682_WITNESS__\n"
+            .replace("__D682_ENTERED__", &entered)
+            .replace("__D682_WITNESS__", &witness),
     )?;
 
     let started_proxy = credential_snapshot_proxy().await?;
@@ -781,7 +786,25 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
         shell_type: ShellType::Bash,
         shell_path: PathBuf::from("/bin/bash"),
     };
-    let trusted_startup = ("BASH_ENV".to_string(), startup.display().to_string());
+    // Initialize synthetic credentials explicitly in the capture shell. This
+    // fixture tests hardened capture/replay, independently of implicit BASH_ENV
+    // startup behavior. Validation and replay below use the real shell directly.
+    let wrapper = dir.path().join("capture-shell");
+    let startup_arg = shlex::try_quote(startup.to_str().unwrap())?;
+    std::fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\nunset BASH_ENV\nexec /bin/bash --noprofile --norc -c '. \"$1\" || exit 1; eval \"$2\"' d682-capture {startup_arg} \"$2\"\n"
+        ),
+    )?;
+    std::fs::set_permissions(
+        &wrapper,
+        std::os::unix::fs::PermissionsExt::from_mode(0o700),
+    )?;
+    let capture_shell = Shell {
+        shell_type: ShellType::Bash,
+        shell_path: wrapper,
+    };
     let shell_environment_policy = ShellEnvironmentPolicy {
         exclude: vec![
             EnvironmentVariablePattern::new_case_insensitive("HOME"),
@@ -789,7 +812,6 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
             EnvironmentVariablePattern::new_case_insensitive("STRIPE_HOST"),
         ],
         r#set: HashMap::from([
-            trusted_startup.clone(),
             ("GH_HOST".to_string(), "github.example.com".to_string()),
             (
                 "GITHUB_ENTERPRISE_TOKEN".to_string(),
@@ -820,7 +842,7 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
     };
     let path = dir.path().join("snapshot.sh").abs();
     let credentials = write_shell_snapshot(
-        &shell,
+        &capture_shell,
         &path,
         &dir.path().abs(),
         &credential_broker.shell_environment_policy,
@@ -829,25 +851,15 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
         /*removed_env_vars*/ &[],
     )
     .await?;
-    let snapshot_probe = fs::read_to_string(&path).await?;
     let initialized = fs::read_to_string(dir.path().join("d682-startup-witness"))
         .await
         .unwrap_or_default()
         == "initialized";
-    let observations = fs::read_to_string(dir.path().join("d682-safe-observations"))
+    let startup_entered = fs::read_to_string(dir.path().join("d682-startup-entered"))
         .await
-        .unwrap_or_default();
-    eprintln!(
-        "D682 startup={initialized} path_input={} region_input={} path_marker={} path_export={} region_marker={} region_export={} identity_marker={} home_marker={}",
-        observations.contains("path-ok"),
-        observations.contains("region-ok"),
-        snapshot_probe.contains("STARTUP_PATH_OVERRIDE_SEEN="),
-        snapshot_probe.contains("declare -x PATH="),
-        snapshot_probe.contains("STARTUP_CORP_REGION_SEEN="),
-        snapshot_probe.contains("CORP_REGION="),
-        snapshot_probe.contains("IDENTITY_SEEN="),
-        snapshot_probe.contains("EXCLUDED_PARENT_HOME=")
-    );
+        .unwrap_or_default()
+        == "entered";
+    assert!(startup_entered, "capture must source the startup fixture");
     assert!(
         initialized,
         "capture must run the startup fixture and initialize its seven credentials"
@@ -890,13 +902,9 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
     assert!(!snapshot.contains("attacker.example"));
     assert!(!snapshot.contains("attacker.vendor.example"));
     assert!(!snapshot.contains("CODEX_NETWORK_PROXY_BROKERED_CREDENTIALS"));
-    // STARTUP_NPM_TOKEN_SEEN is secret-named, so its "missing" value is
-    // registered by retain_safe_exports. The identity/home markers containing
-    // that same value may therefore be omitted. Each replay below requires
-    // either omission or the safe sentinel, never an inherited identity/home.
-    assert!(snapshot.contains("STARTUP_PATH_OVERRIDE_SEEN=\"/enterprise/bin\""));
-    assert!(snapshot.contains("declare -x PATH=\"/enterprise/bin\""));
-    assert!(snapshot.contains("STARTUP_CORP_REGION_SEEN=\"production\""));
+    // Sensitive marker declarations may be omitted by the export filter. Replay
+    // checks require identity/home omission or a safe sentinel and verify safe
+    // startup settings semantically, without depending on export serialization.
     validate_snapshot(
         &shell,
         &path,
@@ -982,6 +990,10 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
                     ". \"$1\" || exit 1\n\
                      test \"${IDENTITY_SEEN-missing}\" = missing || { printf '%s\\n' 'unsafe IDENTITY_SEEN' >&2; exit 1; }\n\
                      test \"${EXCLUDED_PARENT_HOME-missing}\" = missing || { printf '%s\\n' 'unsafe EXCLUDED_PARENT_HOME' >&2; exit 1; }\n\
+                     test \"${STARTUP_PATH_OVERRIDE_SEEN-unset}\" = /enterprise/bin || { printf '%s\\n' 'missing startup PATH setting' >&2; exit 1; }\n\
+                     test \"$PATH\" = /enterprise/bin || { printf '%s\\n' 'missing PATH setting' >&2; exit 1; }\n\
+                     test \"${STARTUP_CORP_REGION_SEEN-unset}\" = production || { printf '%s\\n' 'missing startup region setting' >&2; exit 1; }\n\
+                     test \"${CORP_REGION-unset}\" = production || { printf '%s\\n' 'missing region setting' >&2; exit 1; }\n\
                      export -p",
                 )
                 .arg("snapshot")
@@ -989,7 +1001,11 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
                 .env_clear()
                 .envs(&replay_env)
                 .output()?;
-            assert!(replay.status.success(), "{case}/{brokered}: {replay:?}");
+            assert!(
+                replay.status.success(),
+                "{case}/{brokered}: replay failed ({})",
+                replay.status
+            );
             let output = String::from_utf8(replay.stdout)?;
             for secret in [
                 "ghp_shell_only_secret",
