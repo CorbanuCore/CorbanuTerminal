@@ -1127,7 +1127,7 @@ fn case_folded_matches_resolve_host_executables() -> Result<()> {
     );
     // Another directory is another program when paths are listed.
     assert_eq!(
-        policy.case_folded_matches(&[other_upper.clone()], &FOLD),
+        policy.case_folded_matches(std::slice::from_ref(&other_upper), &FOLD),
         Vec::new()
     );
     // With no list any directory counts. (On Windows the basename key is
