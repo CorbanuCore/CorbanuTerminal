@@ -115,11 +115,8 @@ pub fn read_powershell_command_script(command: &[String]) -> Option<PowershellSc
 /// Parse `script`, written for the PowerShell named `shell`, with the
 /// trusted PowerShell of the same kind; `shell` itself is never started.
 pub(crate) fn read_script_with_trusted_parser(shell: &str, script: &str) -> PowershellScriptRead {
-    let Some(parser) =
-        trusted_powershell_parser(PowershellKind::of(shell)).and_then(|parser| parser.to_str())
-    else {
-        return PowershellScriptRead::Unreadable;
-    };
+    // REVERT CHECK ONLY (#2546): parse with the command's own argv[0], as main did.
+    let parser = shell;
     match parse_with_powershell_ast(parser, script) {
         PowershellParseOutcome::Commands(commands) => PowershellScriptRead::Commands(commands),
         PowershellParseOutcome::Unsupported | PowershellParseOutcome::Failed => {
