@@ -662,7 +662,7 @@ async fn accounting_responses_native_ws_only_no_install() -> anyhow::Result<()> 
     ]])
     .await;
     let mut builder = builder(
-        "http://127.0.0.1:1/v1".into(),
+        format!("{}/v1", server.uri()),
         enabled("https://api.openai.com/v1"),
     )
     .with_config(|config| config.model_provider.supports_websockets = true);
