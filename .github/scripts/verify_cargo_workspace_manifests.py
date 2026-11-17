@@ -26,6 +26,10 @@ UTILITY_NAME_EXCEPTIONS = {
     "path-utils": "codex-utils-path",
 }
 MANIFEST_FEATURE_EXCEPTIONS = {
+    # Temporary sync migration: explicit credential injection keeps enterprise
+    # tests off native keyrings. Bazel wires this feature in keyring-store/BUILD;
+    # remove the exception when shared isolated credential fixtures replace it.
+    "codex-rs/keyring-store/Cargo.toml": {"test-support": ()},
     "codex-rs/v8-poc/Cargo.toml": {"sandbox": ("v8/v8_enable_sandbox",)},
     # Temporary: the local cost ledger ships behind a developer-only build
     # flag until accounting is released; remove both with that rollout.
@@ -50,6 +54,11 @@ OPTIONAL_DEPENDENCY_EXCEPTIONS = {
     ("codex-rs/protected-state/Cargo.toml", _LINUX_GNU_DEPS, "tempfile"),
 }
 INTERNAL_DEPENDENCY_FEATURE_EXCEPTIONS = {
+    (
+        "codex-rs/app-server/Cargo.toml",
+        "dev-dependencies",
+        "codex-keyring-store",
+    ): ("test-support",),
     (
         "codex-rs/secret-broker-fixture/Cargo.toml",
         'target.cfg(target_os = "linux").dependencies',
