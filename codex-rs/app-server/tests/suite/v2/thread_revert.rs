@@ -585,11 +585,16 @@ async fn thread_revert_replaces_paginated_history_before_turn() -> Result<()> {
         .expect("third turn request")
         .body_json();
     assert_eq!(body["service_tier"], "priority");
+    // D680: reverting history and changing models retain this conversation's
+    // frozen base instructions. A new conversation is the explicit rebuild path.
+    let requests = response_mock.requests();
+    let original_instructions = requests[0].body_json()["instructions"].clone();
     assert!(
-        !body["instructions"]
+        original_instructions
             .as_str()
-            .is_some_and(|instructions| { instructions.contains("# Personality") })
+            .is_some_and(|instructions| instructions.contains("# Personality"))
     );
+    assert_eq!(body["instructions"], original_instructions);
     let model_input = body["input"].clone();
     let model_input = serde_json::to_string(&model_input)?;
     assert!(model_input.contains(r#""text":"first""#));
@@ -605,6 +610,31 @@ async fn thread_revert_replaces_paginated_history_before_turn() -> Result<()> {
         .await?,
         vec![turn_ids[0].clone(), third_turn.turn.id]
     );
+
+    let fresh = mcp
+        .start_thread(ThreadStartParams {
+            personality: Some(Personality::None),
+            ..Default::default()
+        })
+        .await?;
+    mcp.start_turn_and_wait_for_completion(TurnStartParams {
+        thread_id: fresh.thread.id,
+        input: vec![UserInput::Text {
+            text: "fresh conversation".to_string(),
+            text_elements: Vec::new(),
+        }],
+        ..Default::default()
+    })
+    .await?;
+    let fresh_body = response_mock
+        .last_request()
+        .expect("fresh conversation request")
+        .body_json();
+    let fresh_instructions = fresh_body["instructions"]
+        .as_str()
+        .expect("fresh base instructions");
+    assert_ne!(fresh_body["instructions"], original_instructions);
+    assert!(!fresh_instructions.contains("# Personality"));
     Ok(())
 }
 

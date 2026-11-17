@@ -975,11 +975,9 @@ features.shell_tool = false
             "warm metadata-only child resume should not replay token usage"
         );
     }
-    let expected_reasoning_effort = if agent_type.is_some() {
-        ReasoningEffort::High
-    } else {
-        ReasoningEffort::Low
-    };
+    // D679: the explicit spawn effort is persisted conversation state. Editing a
+    // role's default must not replace it on cold resume, even for an implicit role.
+    let expected_reasoning_effort = ReasoningEffort::Low;
     assert_eq!(
         resumed.reasoning_effort,
         Some(expected_reasoning_effort.clone())
