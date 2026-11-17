@@ -243,14 +243,6 @@ async fn request_user_input_interrupt_emits_deferred_token_count(
 ) -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
-    let server = start_mock_server().await;
-    let TestCodex {
-        codex,
-        cwd,
-        session_configured,
-        ..
-    } = test_codex().build(&server).await?;
-
     let call_id = "user-input-interrupt";
     let request_args = json!({
         "questions": [{
@@ -271,12 +263,22 @@ async fn request_user_input_interrupt_emits_deferred_token_count(
     let mut terminal = ev_completed_with_tokens("resp-interrupt", /*total_tokens*/ 77);
     terminal["type"] = json!(terminal_type);
     terminal["response"]["incomplete_details"] = json!({"reason": "max_output_tokens"});
-    let response = sse(vec![
-        ev_response_created("resp-interrupt"),
-        ev_function_call(call_id, "request_user_input", &request_args),
-        terminal,
-    ]);
-    responses::mount_sse_once(&server, response).await;
+    let server = responses::start_websocket_server(vec![vec![
+        vec![ev_response_created("warmup"), ev_completed("warmup")],
+        vec![
+            ev_response_created("resp-interrupt"),
+            ev_function_call(call_id, "request_user_input", &request_args),
+            terminal.clone(),
+        ],
+    ]])
+    .await;
+    let release_terminal = server.gate_response_event(&terminal);
+    let TestCodex {
+        codex,
+        cwd,
+        session_configured,
+        ..
+    } = test_codex().build_with_websocket_server(&server).await?;
 
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(PermissionProfile::Disabled, cwd.path());
@@ -304,14 +306,55 @@ async fn request_user_input_interrupt_emits_deferred_token_count(
         )
         .await?;
 
+    let request = wait_for_event(&codex, |event| {
+        matches!(
+            event,
+            EventMsg::RequestUserInput(_) | EventMsg::TokenCount(_)
+        )
+    })
+    .await;
+    let EventMsg::RequestUserInput(request) = request else {
+        panic!("usage must stay deferred while awaiting the question: {request:?}");
+    };
+    assert_eq!(request.call_id, call_id);
+    release_terminal
+        .send(())
+        .expect("release response terminal");
+
+    if terminal_type == "response.incomplete" {
+        // D659: incomplete streams have no RawResponseCompleted success event.
+        // Wait for recorded usage while the question remains pending, then
+        // exercise the same explicit interruption and deferred count below.
+        timeout(Duration::from_secs(30), async {
+            loop {
+                if codex.token_usage_info().await.is_some_and(|info| {
+                    info.total_token_usage.total_tokens == 77
+                }) {
+                    break;
+                }
+                tokio::select! {
+                    event = codex.next_event() => {
+                        let event = event.expect("question remains pending");
+                        assert!(
+                            !matches!(event.msg, EventMsg::TokenCount(_) | EventMsg::RawResponseCompleted(_)),
+                            "usage must remain deferred without a success event: {:?}", event.msg
+                        );
+                    }
+                    _ = tokio::time::sleep(Duration::from_millis(10)) => {}
+                }
+            }
+        })
+        .await?;
+    }
+
     // The tool call starts before the stream reaches `response.completed`, so
     // the question can arrive before the turn has recorded the usage (reliably
     // with developer-accounting, which writes each usage report to the ledger
     // before forwarding it). Interrupt only once the turn has both asked and
     // recorded the completed response; neither order is guaranteed. The token
     // count must still be held back while the question is pending.
-    let mut request = None;
-    let mut response_completed = false;
+    let mut request = Some(request);
+    let mut response_completed = terminal_type == "response.incomplete";
     while request.is_none() || !response_completed {
         match wait_for_event(&codex, |event| {
             matches!(
