@@ -93,45 +93,19 @@ pub(super) fn scan_fingerprints(
     key: &[u8; 32],
     records: &[(usize, String)],
 ) -> Result<bool, ModelSnapshotScanError> {
-    use sha2::Digest;
-    if text.len() > codex_secret_broker::output_gate::MAX_SCAN_BYTES
-        || records.iter().any(|(len, hash)| {
-            *len < 3 || *len > 8192 || super::isolated::protocol::decode_key(hash).is_none()
+    let records = records
+        .iter()
+        .map(|(length, hash)| {
+            Ok(super::snapshot_scan::Fingerprint {
+                length: *length,
+                prefix: key.to_vec(),
+                digest: super::isolated::protocol::decode_key(hash)
+                    .ok_or(ModelSnapshotScanError)?,
+            })
         })
-    {
-        return Err(ModelSnapshotScanError);
-    }
-    let text = text.as_bytes();
-    let prefix = sha2::Sha256::new().chain_update(key);
-    let mut windows_left = 1usize << 21;
-    for (len, hash) in records {
-        if *len > text.len() {
-            continue;
-        }
-        let expected = super::isolated::protocol::decode_key(hash).ok_or(ModelSnapshotScanError)?;
-        for start in 0..=text.len() - len {
-            let word = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
-            if *len < 8
-                && ((start > 0 && word(text[start - 1]))
-                    || text.get(start + len).copied().is_some_and(word))
-            {
-                continue;
-            }
-            if windows_left == 0 {
-                return Err(ModelSnapshotScanError);
-            }
-            windows_left -= 1;
-            let candidate: [u8; 32] = prefix
-                .clone()
-                .chain_update(&text[start..start + len])
-                .finalize()
-                .into();
-            if candidate == expected {
-                return Ok(true);
-            }
-        }
-    }
-    Ok(false)
+        .collect::<Result<Vec<_>, ModelSnapshotScanError>>()?;
+    super::snapshot_scan::scan(text, records, super::snapshot_scan::MAX_WINDOWS)
+        .map_err(|()| ModelSnapshotScanError)
 }
 
 #[cfg(test)]
