@@ -532,7 +532,7 @@ impl Policy {
         {
             return Vec::new();
         }
-        let allow_spelled_exactly = !allow_needs_exact_spelling
+        let allow_rules_apply = !allow_needs_exact_spelling
             || allow_spelled_exactly(program.as_path(), listed.map(|paths| &paths[..]), &basename);
 
         let basename_command = std::iter::once(basename)
@@ -540,7 +540,7 @@ impl Policy {
             .collect::<Vec<_>>();
         rules
             .iter()
-            .filter(|rule| allow_spelled_exactly || rule_decision(rule.as_ref()) != Decision::Allow)
+            .filter(|rule| allow_rules_apply || rule_decision(rule.as_ref()) != Decision::Allow)
             .filter_map(|rule| rule.matches(&basename_command))
             .map(|rule_match| rule_match.with_resolved_program(&program))
             .collect()
@@ -571,8 +571,10 @@ fn allow_spelled_exactly(
     }
 }
 
-/// Path equality without the drive letter case folding Windows `Path`
-/// comparison applies; every other component already compares exactly.
+/// Path equality on each component's text as written: unlike Windows `Path`
+/// equality it tells apart drive letter case (`c:` and `C:`) and prefix
+/// separators (`//server/share` and `\\server\share`), which only ever
+/// makes allow rules match less.
 fn same_spelling(a: &std::path::Path, b: &std::path::Path) -> bool {
     a.components()
         .map(std::path::Component::as_os_str)
