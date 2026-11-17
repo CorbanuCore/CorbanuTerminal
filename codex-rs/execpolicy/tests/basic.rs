@@ -961,3 +961,55 @@ host_executable(name = "git", paths = ["{git_path_literal}"])
     );
     Ok(())
 }
+
+#[test]
+fn strictest_rule_matching_more_args_counts_only_longer_rules() -> Result<()> {
+    let mut parser = PolicyParser::new();
+    parser.parse(
+        "test.rules",
+        r#"prefix_rule(pattern=["git", ["push", "fetch"], "--force"], decision="forbidden")
+prefix_rule(pattern=["git", "push"], decision="prompt")
+prefix_rule(pattern=["git", "status"], decision="allow")
+prefix_rule(pattern=["ls"], decision="allow")"#,
+    )?;
+    let policy = parser.build();
+    let options = MatchOptions {
+        resolve_host_executables: true,
+    };
+    let git = host_absolute_path(&["usr", "bin", "git"]);
+    for (known, expected) in [
+        (vec![], Some(Decision::Forbidden)),
+        (vec!["git"], Some(Decision::Forbidden)),
+        (vec!["git", "fetch"], Some(Decision::Forbidden)),
+        (vec![git.as_str(), "push"], Some(Decision::Forbidden)),
+        // Already matched (left to ordinary matching), or never matching.
+        (vec!["git", "push", "--force"], None),
+        (vec!["git", "status"], None),
+        (vec!["git", "push", "-f"], None),
+        (vec!["gitx"], None),
+        (vec!["ls"], None),
+        (vec!["cat"], None),
+    ] {
+        assert_eq!(
+            policy.strictest_rule_matching_more_args(&tokens(&known), &options),
+            expected,
+            "{known:?}"
+        );
+    }
+    let mut parser = PolicyParser::new();
+    parser.parse(
+        "test.rules",
+        r#"prefix_rule(pattern=["git", "push"], decision="prompt")
+prefix_rule(pattern=["git", "status"], decision="allow")"#,
+    )?;
+    let policy = parser.build();
+    assert_eq!(
+        policy.strictest_rule_matching_more_args(&tokens(&["git"]), &options),
+        Some(Decision::Prompt)
+    );
+    assert_eq!(
+        Policy::empty().strictest_rule_matching_more_args(&[], &options),
+        None
+    );
+    Ok(())
+}

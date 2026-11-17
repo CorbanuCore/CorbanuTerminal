@@ -11,6 +11,12 @@ use super::work;
 mod indirect_exec_policy_more_launchers;
 use indirect_exec_policy_more_launchers as more;
 
+#[path = "indirect_exec_policy_xargs.rs"]
+mod indirect_exec_policy_xargs;
+pub(super) use indirect_exec_policy_xargs::Xargs;
+pub(super) use indirect_exec_policy_xargs::known_end;
+pub(super) use indirect_exec_policy_xargs::xargs;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Arity {
     Flag,
@@ -293,6 +299,17 @@ pub(super) struct Scan {
     dollar: bool,
 }
 
+impl Scan {
+    /// More words may follow (xargs appends stdin): any of them may be an
+    /// option or hold a `$`.
+    pub(super) fn open_end(self) -> Self {
+        Self {
+            last_option: Some(usize::MAX),
+            dollar: true,
+        }
+    }
+}
+
 pub(super) fn scan(words: &[String]) -> Scan {
     let mut scan = Scan {
         last_option: None,
@@ -560,6 +577,9 @@ mod tests {
             "bwrap --bind / /",
             "firejail --quiet",
             "busybox",
+            "xargs -0 -n 1",
+            "xargs -I{}",
+            "xargs -Ia --",
         ] {
             work::assert_linear(launcher, |scale| {
                 let layers = scale * 64;

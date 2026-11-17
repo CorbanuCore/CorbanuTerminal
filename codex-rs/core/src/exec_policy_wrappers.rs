@@ -11,7 +11,7 @@ use codex_execpolicy::RuleMatch;
 
 pub(super) fn has_wrappers(command: &[String]) -> bool {
     let wrappers = policy_wrapper_commands(command);
-    wrappers.uncertain || wrappers.starts.len() > 1
+    wrappers.uncertain || wrappers.starts.len() > 1 || wrappers.open.is_some()
 }
 
 pub(crate) fn check_with_wrappers(
@@ -37,6 +37,8 @@ pub(crate) fn check_with_wrappers(
         let mut heuristic = wrappers
             .uncertain
             .then_some((command.as_slice(), Decision::Prompt));
+        // Every rule counts where no word is known; scan them once.
+        let mut any_rule = None;
         for &start in &wrappers.starts {
             let candidate = &command[start..];
             let found = policy.matches_for_command_with_options(
@@ -49,6 +51,26 @@ pub(crate) fn check_with_wrappers(
                 }
             }
             matches.extend(found);
+            // #2455 (D677): xargs adds words read from stdin. Ask whenever a
+            // prompt or forbidden rule could match once they arrive; a rule
+            // the fixed argv already matches applies above. Allow rules only
+            // approve, so they need no prompt.
+            if let Some(open) = &wrappers.open
+                && heuristic.is_none_or(|(_, previous)| previous < Decision::Prompt)
+                && {
+                    let known = &command[start..open.known_end.max(start)];
+                    let strictest = if known.is_empty() {
+                        *any_rule.get_or_insert_with(|| {
+                            policy.strictest_rule_matching_more_args(known, options)
+                        })
+                    } else {
+                        policy.strictest_rule_matching_more_args(known, options)
+                    };
+                    strictest.is_some_and(|decision| decision > Decision::Allow)
+                }
+            {
+                heuristic = Some((candidate, Decision::Prompt));
+            }
         }
         if let Some((command, decision)) = heuristic {
             matches.push(RuleMatch::HeuristicsRuleMatch {

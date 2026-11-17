@@ -304,6 +304,52 @@ impl Policy {
         }
     }
 
+    /// D677 (#2455): the strictest decision of the rules that `known` does
+    /// not match yet but could once more words follow it (xargs appends
+    /// words read from stdin): their pattern extends past `known` and agrees
+    /// with it so far. Rules `known` already matches are left to
+    /// [`Self::matches_for_command_with_options`]. With no `known` words
+    /// every rule counts. An absolute program also counts its basename's
+    /// rules, whatever the host executable paths (stricter than matching).
+    pub fn strictest_rule_matching_more_args(
+        &self,
+        known: &[String],
+        options: &MatchOptions,
+    ) -> Option<Decision> {
+        let Some(first) = known.first() else {
+            return self
+                .rules_by_program
+                .iter_all()
+                .flat_map(|(_, rules)| rules)
+                .map(|rule| rule_decision(rule.as_ref()))
+                .max();
+        };
+        let basename = options
+            .resolve_host_executables
+            .then(|| AbsolutePathBuf::try_from(first.clone()).ok())
+            .flatten()
+            .and_then(|program| executable_path_lookup_key(program.as_path()));
+        let rest = &known[1..];
+        std::iter::once(first)
+            .chain(basename.as_ref())
+            .filter_map(|program| self.rules_by_program.get_vec(program))
+            .flatten()
+            .filter(|rule| {
+                rule.as_any()
+                    .downcast_ref::<PrefixRule>()
+                    .is_none_or(|rule| {
+                        let pattern = &rule.pattern.rest;
+                        pattern.len() > rest.len()
+                            && pattern
+                                .iter()
+                                .zip(rest)
+                                .all(|(token, word)| token.matches(word))
+                    })
+            })
+            .map(|rule| rule_decision(rule.as_ref()))
+            .max()
+    }
+
     fn match_exact_rules(&self, cmd: &[String]) -> Option<Vec<RuleMatch>> {
         let first = cmd.first()?;
         Some(
@@ -342,6 +388,13 @@ impl Policy {
             .map(|rule_match| rule_match.with_resolved_program(&program))
             .collect()
     }
+}
+
+/// A prefix rule's decision; other kinds count as forbidding (fail closed).
+fn rule_decision(rule: &dyn crate::rule::Rule) -> Decision {
+    rule.as_any()
+        .downcast_ref::<PrefixRule>()
+        .map_or(Decision::Forbidden, |rule| rule.decision)
 }
 
 fn upsert_domain(entries: &mut Vec<String>, host: &str) {
