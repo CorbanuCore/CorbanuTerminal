@@ -349,9 +349,10 @@ fn script_word(node: Node<'_>, src: &str) -> Option<String> {
     }
 }
 
-/// An unquoted word after backslash removal; `None` where bash may expand
-/// it: pathname expansion (`*`, `?`, `[…]`), brace expansion (`{a,b}`,
-/// `{1..3}`) or tilde expansion. Approximate on the side of `None`.
+/// An unquoted word after backslash removal; `None` where bash (or zsh or
+/// ksh, read alike) may expand it: pathname expansion (`*`, `?`, `[…]`,
+/// `@(…)`), brace expansion (`{a,b}`, `{1..3}`), tilde expansion or zsh's
+/// `=cmd`. Approximate on the side of `None`.
 fn unquoted_word(text: &str) -> Option<String> {
     let mut word = String::new();
     let mut chars = text.chars();
@@ -364,6 +365,10 @@ fn unquoted_word(text: &str) -> Option<String> {
                 None => word.push('\\'),
             },
             '*' | '?' | '~' => return None,
+            // zsh's `=cmd` is the program's path.
+            '=' if word.is_empty() => return None,
+            // ksh's and extglob's `@(…)`, `+(…)`, `!(…)`.
+            '@' | '+' | '!' if rest().next() == Some('(') => return None,
             '[' if rest().any(|next| next == ']') => return None,
             '{' if rest().any(|next| matches!(next, ',' | '.'))
                 && rest().any(|next| next == '}') =>

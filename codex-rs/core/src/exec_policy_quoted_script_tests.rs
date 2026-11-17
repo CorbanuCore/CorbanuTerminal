@@ -195,6 +195,15 @@ async fn unknown_commands_ask_when_a_rule_could_match() {
         "sudo -u \"$user\" $cmd",
         "env $assignment git push",
         "nice -n \"$n\" $cmd push",
+        // A launcher's operand may hold the program (review r1).
+        "timeout $(echo 5 git push) origin",
+        "nice -n $(echo 5 git push) origin",
+        "sudo -u $u true",
+        "env -u $v true",
+        "chroot $d true",
+        // zsh's `=git` and ksh's `@(…)` are not what they read as.
+        "=git push",
+        "gi@(t) push",
         "bash -c \"$script\"",
         "sh -c 'git push' \"$x\"",
         "eval_me=1; $(printf git) push",

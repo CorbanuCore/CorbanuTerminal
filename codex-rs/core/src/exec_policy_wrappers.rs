@@ -355,9 +355,18 @@ fn partial_command_matches(
     if wrappers.uncertain {
         return any_strict_rule();
     }
+    // Words after an unknown one may move: it may expand to no word or
+    // several.
+    let first_unknown = words
+        .iter()
+        .position(Option::is_none)
+        .unwrap_or(words.len());
     for &start in &wrappers.starts {
-        // Words after an unknown one may move: it may expand to no word or
-        // several.
+        // A launcher read past an unknown word (`timeout $t git`, `sudo -u
+        // $u git`): the program may be another word.
+        if start > first_unknown {
+            return any_strict_rule();
+        }
         let mut end = words[start..]
             .iter()
             .position(Option::is_none)

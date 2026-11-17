@@ -55,6 +55,7 @@ fn quoted_words_read_as_bash_runs_them() {
             plain(&[&["C:\\Tools\\Zsh.exe", "-c", "x"]]),
         ),
         ("ls {} -g'*.py'", plain(&[&["ls", "{}", "-g*.py"]])),
+        ("git a=b \\=c d+e", plain(&[&["git", "a=b", "=c", "d+e"]])),
         (
             "test -f x && ls a\\[b]",
             plain(&[&["test", "-f", "x"], &["ls", "a[b]"]]),
@@ -78,6 +79,7 @@ fn words_bash_builds_at_run_time_are_unknown() {
         ("/usr/bin/g*t push", partial(&[&["?", "push"]])),
         ("git {pu,}sh", partial(&[&["git", "?"]])),
         ("~/bin/git push", partial(&[&["?", "push"]])),
+        ("=git push", partial(&[&["?", "push"]])),
         ("[ -f x ] && 'git' push", partial(&[&["git", "push"]])),
         ("$'git' push", partial(&[&["git", "push"]])),
         ("git push > /dev/null", partial(&[&["git", "push"]])),
