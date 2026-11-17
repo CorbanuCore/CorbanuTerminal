@@ -160,6 +160,10 @@ async fn pre_tool_use_cwd_matches_execution(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "traced_test installs its in-memory global subscriber to capture spawned tasks"
+)]
 #[tracing_test::traced_test]
 async fn invalid_execution_cwd_records_failure_without_running_hooks() -> Result<()> {
     skip_if_no_network!(Ok(()));

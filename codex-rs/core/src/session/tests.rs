@@ -5748,7 +5748,7 @@ async fn session_new_turn_refreshes_runtime_gpu_provider_endpoint_without_resele
     const NOW_MS: i64 = 1_800_000_000_000;
     let state_home = tempfile::tempdir().expect("state home");
     let state = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(state_home.path().abs()),
+        codex_state::SqliteConfig::new_for_testing(state_home.path().abs()),
         "runtime-provider-test".to_string(),
     )
     .await
@@ -5823,7 +5823,7 @@ async fn session_new_turn_refreshes_runtime_gpu_provider_endpoint_without_resele
 
     let sqlite_home = state_home.path().abs();
     let session = make_session_with_config(move |config| {
-        config.sqlite = codex_state::SqliteConfig::from_sqlite_home(sqlite_home);
+        config.sqlite = codex_state::SqliteConfig::new_for_testing(sqlite_home);
         assert!(!config.model_providers.contains_key(runtime_provider_id));
     })
     .await

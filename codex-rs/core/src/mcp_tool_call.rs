@@ -478,7 +478,6 @@ fn layer_mentions_mcp_server(
     config
         .config_layer_stack
         .layers_high_to_low()
-        .into_iter()
         .filter(|layer| include(layer))
         .any(|layer| {
             match layer

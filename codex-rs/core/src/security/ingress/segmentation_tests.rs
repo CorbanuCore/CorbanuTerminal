@@ -4,7 +4,6 @@
 use super::tests::screen_binding;
 use super::tests::screening_fixture;
 use super::*;
-use crate::context::ContextualUserFragment;
 use crate::context::ProvenanceContext;
 use codex_content_security::ClassifierVerdict;
 use codex_content_security::ScreeningBudget;

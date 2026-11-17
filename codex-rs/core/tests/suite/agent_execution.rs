@@ -223,6 +223,10 @@ async fn v2_nested_spawn_checks_shared_active_execution_capacity() -> Result<()>
 }
 
 #[tokio::test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "traced_test installs its in-memory global subscriber to capture spawned tasks"
+)]
 #[tracing_test::traced_test]
 async fn child_turn_start_preserves_root_attribution() -> Result<()> {
     let server = start_mock_server().await;

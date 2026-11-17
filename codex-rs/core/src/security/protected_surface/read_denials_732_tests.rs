@@ -45,7 +45,7 @@ fn separate_database_rules_keep_top_level_provenance_and_read_time_protection() 
             let bytes = serde_json::to_vec(&transport).unwrap();
             let decoded: codex_file_system::ExecFileSystemSandboxEntry =
                 serde_json::from_slice(&bytes).unwrap();
-            assert_eq!(FileSystemSandboxEntry::try_from(decoded).unwrap(), *entry);
+            assert_eq!(FileSystemSandboxEntry::from(decoded), *entry);
         }
         let scans = policy.get_unreadable_glob_scans_with_cwd(&cwd);
         assert_eq!(

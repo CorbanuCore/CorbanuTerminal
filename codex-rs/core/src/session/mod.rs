@@ -4132,6 +4132,7 @@ impl Session {
         rx_approve.await.unwrap_or(ReviewDecision::Abort)
     }
 
+    #[cfg(test)]
     pub(crate) async fn request_permissions_for_environment(
         self: &Arc<Self>,
         step_context: &Arc<StepContext>,
@@ -4150,8 +4151,8 @@ impl Session {
             })
     }
 
-    /// [`Self::request_permissions_for_environment`], or `Err` with why when
-    /// the request was refused before anyone was asked (#584).
+    /// Request permissions, or return `Err` with why the request was refused
+    /// before anyone was asked (#584).
     #[expect(
         clippy::await_holding_invalid_type,
         reason = "active turn checks and turn state updates must remain atomic"
@@ -4686,10 +4687,6 @@ impl Session {
         }
     }
 
-    #[expect(
-        clippy::await_holding_invalid_type,
-        reason = "active turn reads must stay consistent with the matching turn state"
-    )]
     pub(crate) async fn active_turn_context_and_strict_auto_review(
         &self,
     ) -> Option<(
@@ -4706,12 +4703,6 @@ impl Session {
         let strict_auto_review = turn_context.strict_auto_review_enabled();
         let environments = self.services.turn_environments.snapshot_now();
         Some((turn_context, settings, environments, strict_auto_review))
-    }
-
-    async fn active_task_turn_context(&self) -> Option<Arc<TurnContext>> {
-        let active = self.active_turn.lock().await;
-        let task = active.as_ref()?.task.as_ref()?;
-        Some(Arc::clone(&task.turn_context))
     }
 
     /// The captured turn's own grants for `environment_id`, even after another turn starts.
@@ -4795,14 +4786,6 @@ impl Session {
             config.sqlite.home().to_path_buf(),
             configs,
         )
-    }
-
-    /// Whether strict auto-review is on for the running turn under the policy
-    /// in force (D51: not after a security transition).
-    pub(crate) async fn strict_auto_review_enabled_for_turn(&self) -> bool {
-        self.active_task_turn_context()
-            .await
-            .is_some_and(|turn_context| turn_context.strict_auto_review_enabled())
     }
 
     /// The session's grants for `environment_id`, as later commands and file

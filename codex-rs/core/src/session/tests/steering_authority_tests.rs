@@ -453,10 +453,13 @@ async fn user_turn_updates_approvals_reviewer_for_mcp() {
         .mcp_runtime
         .current_config()
         .expect("the user-turn path should publish an MCP runtime config");
-    let state = session.state.lock().await;
+    let approvals_reviewer = {
+        let state = session.state.lock().await;
+        state.session_configuration.step_settings.approvals_reviewer
+    };
     assert_eq!(
         (
-            state.session_configuration.step_settings.approvals_reviewer,
+            approvals_reviewer,
             published.approvals_reviewer,
             step.mcp.config().approvals_reviewer,
         ),
@@ -466,7 +469,6 @@ async fn user_turn_updates_approvals_reviewer_for_mcp() {
             codex_config::types::ApprovalsReviewer::AutoReview,
         )
     );
-    drop(state);
     session.abort_all_tasks(TurnAbortReason::Interrupted).await;
 }
 
@@ -598,6 +600,10 @@ fn sleep_invocation(sess: &Arc<Session>, tc: &Arc<TurnContext>, call_id: String)
 /// upstream defers held input the same way): deferred input, in the turn or in the interrupted
 /// FIFO, does not wake the running turn's sleep; consumable input still does.
 #[tokio::test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "Clearing pending input must stay atomic with the active turn"
+)]
 async fn deferred_input_does_not_interrupt_turn_local_sleep() {
     let (sess, tc, _rx) = make_session_and_context_with_rx().await;
     spawn_never_ending(&sess, &tc, TaskKind::Regular).await;

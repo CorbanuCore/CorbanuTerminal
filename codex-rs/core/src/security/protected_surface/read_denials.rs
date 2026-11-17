@@ -1623,7 +1623,7 @@ pub(crate) fn protect_file_tool_context(
         denials.deny_home_listing();
     }
     if let Some(protected) = denials.apply(&profile) {
-        context.permissions = protected.into();
+        context.permissions = protected;
     }
     context
 }

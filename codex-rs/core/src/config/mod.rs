@@ -90,7 +90,6 @@ use codex_mcp::McpPluginAttribution;
 use codex_mcp::McpProtocolMode;
 use codex_mcp::McpServerRegistration;
 use codex_mcp::ResolvedMcpCatalog;
-use codex_memories_read::memory_root;
 use codex_model_provider::ChatgptBaseUrl;
 use codex_model_provider::DEFAULT_CHATGPT_BASE_URL;
 use codex_model_provider::ProviderCapabilities;
@@ -2077,7 +2076,10 @@ pub async fn load_gpu_runtime_model_provider_records(
         );
         return Vec::new();
     };
-    let sqlite = codex_state::SqliteConfig::from_sqlite_home(sqlite_home);
+    let sqlite = codex_state::SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+        sqlite_home,
+        /*enforce_delete_on_nfs*/ false,
+    );
     if !sqlite.has_existing_state_db() {
         return Vec::new();
     }
@@ -6880,7 +6882,6 @@ fn narrow_project_provider_allowlist(
 pub(crate) fn layered_security_floor(stack: &ConfigLayerStack) -> SecurityLevel {
     stack
         .layers_high_to_low()
-        .into_iter()
         .filter_map(|layer| {
             layer
                 .config

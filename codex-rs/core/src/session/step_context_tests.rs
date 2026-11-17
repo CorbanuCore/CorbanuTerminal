@@ -98,8 +98,8 @@ async fn pf_23_s01_step_file_access_gets_the_read_denials() {
         .next()
         .expect("an environment");
     let readable = |context: codex_file_system::FileSystemSandboxContext| {
-        codex_protocol::models::PermissionProfile::try_from(context.permissions)
-            .expect("a permission profile")
+        context
+            .permissions
             .file_system_sandbox_policy()
             .can_read_path_with_cwd(auth.as_path(), cwd.as_path())
     };

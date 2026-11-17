@@ -759,7 +759,8 @@ async fn apply_user_role_provider_choice_is_bounded() {
         base_url: Some("http://127.0.0.1:9/v1".to_string()),
         ..Default::default()
     };
-    let cases: [(&str, fn(&mut Config), &str); 5] = [
+    type ProviderChoiceCase<'a> = (&'a str, fn(&mut Config), &'a str);
+    let cases: [ProviderChoiceCase<'_>; 5] = [
         (
             "model = \"m\"\nmodel_provider = \"amazon-bedrock\"\n\n[model_providers.amazon-bedrock.aws]\nregion = \"us-west-2\"\n",
             |_| {},

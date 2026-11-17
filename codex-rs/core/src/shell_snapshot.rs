@@ -1099,6 +1099,10 @@ fn is_removed_env_var(name: &str, removed_env_vars: &[String]) -> bool {
         .any(|removed| removed.eq_ignore_ascii_case(name))
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Snapshot execution keeps shell, timeout, environment, and sandbox inputs explicit"
+)]
 async fn run_script_with_timeout(
     shell: &Shell,
     script: &str,

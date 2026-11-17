@@ -3377,6 +3377,10 @@ async fn drain_in_flight(
     }
     fatal.map_or(Ok(()), Err)
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The lease needs the request inputs and its cancellation/timing context"
+)]
 async fn acquire_provider_request_lease(
     sess: &Session,
     turn_context: &TurnContext,

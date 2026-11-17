@@ -212,7 +212,7 @@ fn spawn_agent_catalog_exposes_parent_runtime_and_frontier_effort_policy() {
         std::slice::from_ref(&sol),
         Some(&SpawnAgentRuntime {
             effort_follows_turn: true,
-            ..inherited_runtime.clone()
+            ..inherited_runtime
         }),
     );
     assert!(follows_turn.contains(

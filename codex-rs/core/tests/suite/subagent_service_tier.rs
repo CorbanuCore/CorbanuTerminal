@@ -169,7 +169,7 @@ async fn root_service_tier_change_updates_existing_subagent(
             config
                 .features
                 .enable(Feature::CurrentTimeReminder)
-                .unwrap();
+                .expect("current-time reminder feature can be configured");
             config.current_time_reminder = Some(CurrentTimeReminderConfig {
                 sleep_tool: true,
                 ..CurrentTimeReminderConfig::default()

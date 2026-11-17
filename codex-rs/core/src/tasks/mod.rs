@@ -1600,7 +1600,6 @@ impl Session {
                 .pending_tool_calls
                 .take_unrecorded_outputs(cancelled_at)
                 .into_iter()
-                .map(ResponseItem::from)
                 .collect();
             self.retain_unrecorded_tool_outputs(&mut outputs).await;
             if !outputs.is_empty() {
