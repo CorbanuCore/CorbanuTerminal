@@ -114,20 +114,20 @@ pub(super) fn systemd_run(options: &[String], shell: bool, floor: bool) -> Optio
     Some(floor)
 }
 
-/// Launchers with their own parsers. zsh's precommand modifiers (`-`,
-/// `noglob`, `nocorrect`) and `builtin` take no options.
+/// Launchers with their own parsers. zsh's precommand modifiers
+/// (`noglob`, `nocorrect`, and `-` where it begins a command) and
+/// `builtin` take no options.
 const OWN_PARSERS: &[&str] = &[
     "pkexec",
     "bwrap",
     "firejail",
-    "-",
     "noglob",
     "nocorrect",
     "builtin",
 ];
 
-pub(super) fn is_launcher(name: &str) -> bool {
-    OWN_PARSERS.contains(&name) || multicall_name(name).is_some()
+pub(super) fn is_launcher(name: &str, start: usize) -> bool {
+    OWN_PARSERS.contains(&name) || multicall_name(name).is_some() || (name == "-" && start == 0)
 }
 
 pub(super) fn launch(name: &str, words: &[String], start: usize) -> Option<Launch> {
@@ -156,10 +156,11 @@ fn multicall_name(name: &str) -> Option<&'static str> {
 }
 
 /// `noglob cmd`, `builtin exec cmd`: the next word is the command (bash's
-/// `builtin` also accepts `--`).
+/// `builtin` also accepts `--`; zsh's modifiers combine, `noglob - cmd`).
 fn modifier(words: &[String], start: usize) -> Launch {
     let mut at = start + 1;
-    if words[start] == "builtin" && words.get(at).is_some_and(|word| word == "--") {
+    let skip = if words[start] == "builtin" { "--" } else { "-" };
+    if words.get(at).is_some_and(|word| word == skip) {
         at += 1;
     }
     match words.get(at) {

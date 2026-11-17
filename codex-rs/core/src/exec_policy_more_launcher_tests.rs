@@ -164,6 +164,9 @@ async fn issue2455b_launchers_preserve_inner_rule_decisions() {
         "exec -c -",
         "exec -- -",
         "exec noglob",
+        "noglob -",
+        "nocorrect - noglob",
+        "sudo -n noglob",
         // Any busybox… or toybox… name is the multicall binary.
         "busybox.static",
         "/bin/busybox-static",
@@ -283,6 +286,9 @@ prefix_rule(pattern=["git", "push"], decision="allow")"#
         "busybox /tmp/git push",
         "builtin -x git push",
         "noglob -x git push",
+        "- -x git push",
+        // bash may run `command - cmd`; zsh refuses it.
+        "command - git push",
     ] {
         assert_eq!(
             requirement(command, &rules).await,
@@ -307,6 +313,7 @@ prefix_rule(pattern=["git", "push"], decision="forbidden")"#
         "systemd-run --wai git push",
         "systemd-run --sco git push",
         "systemd-run git push '$X'",
+        "command - git push",
     ] {
         assert!(
             matches!(
@@ -354,6 +361,10 @@ async fn issue2455b_operands_and_queries_are_not_commands() {
         "executor git push",
         "timed git push",
         "mybusybox git push",
+        // After a program, `-` is a program named `-`, not zsh's modifier.
+        "nice - git push",
+        "timeout 5 - git push",
+        "sudo - git push",
     ] {
         assert!(
             matches!(

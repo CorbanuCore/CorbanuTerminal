@@ -126,7 +126,7 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
                 }
             }
             (at < words.len()).then_some(at)
-        } else if launchers::is_launcher(name) {
+        } else if launchers::is_launcher(name, start) {
             // #2455 (D670): unshare, nsenter, timeout and the like.
             let scan = *scan.get_or_insert_with(|| launchers::scan(words));
             match launchers::launch(name, words, start, scan) {

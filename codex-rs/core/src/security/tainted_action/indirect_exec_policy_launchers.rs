@@ -262,11 +262,13 @@ const LAUNCHERS: &[(&str, &[Opt])] = &[
     ("systemd-run", more::SYSTEMD_RUN),
 ];
 
-pub(super) fn is_launcher(name: &str) -> bool {
+/// `start`: where `name` is in the command (zsh's `-` modifier only
+/// begins one; after a program, `-` is a program named `-`).
+pub(super) fn is_launcher(name: &str, start: usize) -> bool {
     LAUNCHERS.iter().any(|(launcher, _)| {
         work::step();
         *launcher == name
-    }) || more::is_launcher(name)
+    }) || more::is_launcher(name, start)
 }
 
 /// Where the command a launcher runs starts.
@@ -361,6 +363,12 @@ pub(super) fn launch(name: &str, words: &[String], start: usize, scan: Scan) -> 
         }
         "chrt" if has("pid", 'p') || has("max", 'm') => return Launch::NoCommand,
         "command" if has("", 'v') || has("", 'V') => return Launch::NoCommand,
+        // zsh's `-` modifier, which `exec` passes on (`exec - cmd`). zsh's
+        // `command -` fails; bash's may not, so keep a floor there.
+        "exec" | "command" if words.get(at).is_some_and(|word| word == "-") => {
+            uncertain = name == "command";
+            at += 1;
+        }
         "systemd-run" => {
             // Its option words and values (and any `--`).
             match more::systemd_run(
