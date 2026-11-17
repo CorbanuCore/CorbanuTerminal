@@ -161,6 +161,22 @@ doesn't change (through a dependency) shows up on `main`.
 - SDK checks on hosted Linux x64.
 - V8 canary coverage on hosted Linux x64 only.
 
+## npm Staging Fixture
+
+Full npm staging in `repo-checks` (main pushes, manual runs and PRs that change
+a packaging input) downloads the six native target artifacts from one pinned,
+successful upstream `rust-release` run. The run is pinned in
+`.github/npm-staging-fixture.json` with its tag, head SHA and artifact expiry.
+Those artifacts expire, so the weekly `npm-staging-fixture` workflow runs
+`.github/scripts/npm_staging_fixture.py refresh`: when a required target is
+missing, expired or expires within 21 days, it moves the pin to the newest
+successful `rust-release` run (of the last 20) whose six targets pass the same
+check, and opens a PR. Targets are picked with staging's own signed /
+`-unsigned` rule. If no run passes, the job fails and the pin stays. The pin is
+a packaging input, so that PR runs full staging; because the workflow token
+opens it, close and reopen it to start CI. Check the pin by hand with
+`python3 .github/scripts/npm_staging_fixture.py check` (#2515).
+
 ## Actions Cache
 
 The repository's Actions cache is limited to 10 GB and GitHub evicts the least
