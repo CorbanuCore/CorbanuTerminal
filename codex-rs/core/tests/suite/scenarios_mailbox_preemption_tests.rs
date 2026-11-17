@@ -30,6 +30,10 @@ enum Boundary {
     PartialAnswer,
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "traced_test installs its in-memory global subscriber to capture spawned tasks"
+)]
 #[tracing_test::traced_test]
 #[test_case(Boundary::Reasoning, false; "reasoning_default")]
 #[test_case(Boundary::Commentary, false; "commentary_default")]

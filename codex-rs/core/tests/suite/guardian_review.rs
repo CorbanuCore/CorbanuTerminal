@@ -2400,6 +2400,10 @@ async fn interrupted_guardian_review_across_model_change_does_not_execute_the_co
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "traced_test installs its in-memory global subscriber to capture spawned tasks"
+)]
 #[tracing_test::traced_test]
 #[test_case(None, false, true; "legacy_fallback")]
 #[test_case(None, true, true; "otel_enabled")]
