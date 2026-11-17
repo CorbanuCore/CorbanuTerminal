@@ -53,6 +53,11 @@ rama-dns = { version = "=0.3.0-alpha.4" }
 libc = { workspace = true }
 rama-unix = { version = "=0.3.0-alpha.4" }
 
+# sha2 0.10 gates its runtime-detected ARM SHA instructions behind "asm".
+# Keep the portable fallback and leave other architectures' backends unchanged.
+[target.'cfg(all(target_arch = "aarch64", unix))'.dependencies]
+sha2 = { workspace = true, features = ["asm"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3"
 
