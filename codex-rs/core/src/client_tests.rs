@@ -2396,8 +2396,7 @@ fn websocket_continuation_reports_unavailable_response_state() {
 }
 
 #[tokio::test]
-async fn responses_http_preserves_raw_tool_metadata_for_openai_custom_endpoint()
--> anyhow::Result<()> {
+async fn responses_http_omits_raw_tool_metadata_for_openai_custom_endpoint() -> anyhow::Result<()> {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
@@ -2462,7 +2461,13 @@ async fn responses_http_preserves_raw_tool_metadata_for_openai_custom_endpoint()
     let requests = server.received_requests().await.expect("received requests");
     assert_eq!(requests.len(), 1);
     let body: serde_json::Value = serde_json::from_slice(&requests[0].body)?;
-    assert_eq!(body["input"], serde_json::to_value(vec![output.clone()])?);
+    // D634: preserve ordinary tool output and call metadata, but omit provider-private data.
+    let mut transmitted_output = output.clone();
+    transmitted_output.clear_tool_result_metadata();
+    assert_eq!(
+        body["input"],
+        serde_json::to_value(vec![transmitted_output])?
+    );
     assert_eq!(prompt.input, vec![output]);
     Ok(())
 }
