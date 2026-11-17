@@ -7,8 +7,8 @@
 //! and `ſu` run `sudo`, `env` and `su`. APFS applies full Unicode case
 //! folding, which maps a few non-ASCII letters and ligatures to ASCII
 //! ([`FOLDS`]; checked on APFS over every code point). Windows also drops an
-//! `.exe` suffix and trailing dots and spaces, and separates directories
-//! with `\` too. #2510: names this module cannot canonicalize confidently
+//! `.exe` suffix and trailing dots and spaces, separates directories with
+//! `\` too, and folds the dotless `ı` ([`WINDOWS_FOLDS`]). #2510: names this module cannot canonicalize confidently
 //! are [`unsure`]: characters legacy HFS+ volumes ignore (such as U+200D)
 //! on macOS, and Windows 8.3 short names (`BUSYBO~1.EXE`) and stream
 //! suffixes (`sudo::$DATA`, `sudo:s`). Callers fail closed on them.
@@ -60,6 +60,11 @@ const FOLDS: &[(char, &str)] = &[
     ('\u{fb06}', "st"),
 ];
 
+/// #2510: NTFS compares names after mapping them through its upcase table,
+/// which follows Unicode's simple uppercase: besides the ASCII letters and
+/// `ſ` (in [`FOLDS`]), only the dotless `ı` uppercases to ASCII (`I`).
+const WINDOWS_FOLDS: &[(char, &str)] = &[('\u{131}', "i")];
+
 /// The launcher name `word` runs as where names compare as `case` says
 /// ([`PLATFORM`] for this platform).
 pub(super) fn launcher_name_for(word: &str, case: NameCase) -> Cow<'_, str> {
@@ -68,7 +73,7 @@ pub(super) fn launcher_name_for(word: &str, case: NameCase) -> Cow<'_, str> {
         NameCase::Insensitive => basename(word),
         NameCase::Windows => windows_file_name(word),
     };
-    let folded = fold(name);
+    let folded = fold(name, case);
     if case != NameCase::Windows {
         return folded;
     }
@@ -152,15 +157,21 @@ fn default_ignorable(c: char) -> bool {
     )
 }
 
-/// `name` with ASCII letters lowercased and [`FOLDS`] applied.
-fn fold(name: &str) -> Cow<'_, str> {
+/// `name` with ASCII letters lowercased and [`FOLDS`] (and on Windows
+/// [`WINDOWS_FOLDS`]) applied.
+fn fold(name: &str, case: NameCase) -> Cow<'_, str> {
     if name.is_ascii() && !name.bytes().any(|byte| byte.is_ascii_uppercase()) {
         return Cow::Borrowed(name);
     }
     let mut folded = String::with_capacity(name.len());
     for c in name.chars() {
         work::step();
-        match FOLDS.iter().find(|(from, _)| *from == c) {
+        let windows = if case == NameCase::Windows {
+            WINDOWS_FOLDS
+        } else {
+            &[]
+        };
+        match FOLDS.iter().chain(windows).find(|(from, _)| *from == c) {
             Some((_, to)) => folded.push_str(to),
             None => folded.push(c.to_ascii_lowercase()),
         }
@@ -192,6 +203,9 @@ mod tests {
             ),
             ("unsha\u{df}e", "unsha\u{df}e", "unshasse", "unshasse"),
             ("sud\u{f3}", "sud\u{f3}", "sud\u{f3}", "sud\u{f3}"),
+            // #2510: NTFS uppercases the dotless i to I; APFS does not fold it.
+            ("t\u{131}meout", "t\u{131}meout", "t\u{131}meout", "timeout"),
+            ("N\u{131}CE", "N\u{131}CE", "n\u{131}ce", "nice"),
             ("sudo.exe", "sudo.exe", "sudo.exe", "sudo"),
             ("SUDO.EXE. ", "SUDO.EXE. ", "sudo.exe. ", "sudo"),
             (

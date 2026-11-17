@@ -204,3 +204,12 @@ async fn issue2510_chroot_named_like_an_assignment_reads_its_own_argv() {
     let result = requirement("sudo a=b/chroot / git push").await;
     assert!(!refused(&result), "{result:?}");
 }
+
+#[tokio::test]
+async fn issue2510_windows_folds_the_dotless_i() {
+    // NTFS uppercases `ı` to `I`, so `tımeout` runs timeout there.
+    for command in ["t\u{131}meout 5 git push", "N\u{131}CE -n 5 git push"] {
+        let result = requirement(command).await;
+        assert_eq!(refused(&result), cfg!(windows), "{command}: {result:?}");
+    }
+}
