@@ -309,6 +309,38 @@ model_provider = "openai"
 }
 
 #[tokio::test]
+async fn edited_role_effort_applies_without_selected_override() {
+    let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    assert_eq!(config.model_reasoning_effort, None);
+    let role_path = write_role_config(
+        &home,
+        "effort-default.toml",
+        "model_reasoning_effort = \"low\"",
+    )
+    .await;
+    config.agent_roles.insert(
+        "custom".to_string(),
+        AgentRoleConfig {
+            config_file: Some(role_path.clone()),
+            source: crate::config::AgentRoleSource::User,
+            ..Default::default()
+        },
+    );
+
+    let mut original = config.clone();
+    apply_role_to_config(&mut original, Some("custom"))
+        .await
+        .expect("original role default");
+    assert_eq!(original.model_reasoning_effort, Some(ReasoningEffort::Low));
+
+    fs::write(&role_path, "model_reasoning_effort = \"high\"").expect("edit role default");
+    apply_role_to_config(&mut config, Some("custom"))
+        .await
+        .expect("edited role default");
+    assert_eq!(config.model_reasoning_effort, Some(ReasoningEffort::High));
+}
+
+#[tokio::test]
 async fn apply_role_preserves_unspecified_keys() {
     let (home, mut config) = test_config_with_cli_overrides(vec![
         (

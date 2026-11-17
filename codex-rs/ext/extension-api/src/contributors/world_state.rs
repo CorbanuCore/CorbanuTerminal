@@ -10,6 +10,15 @@ use serde_json::Value;
 use crate::ExtensionData;
 use crate::ExtensionMetrics;
 
+/// Provider projection captured in the step store before World State contributions.
+/// Append-only hosts may refer to older sections; replacing hosts need self-contained updates.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum WorldStateContextMode {
+    #[default]
+    AppendOnly,
+    ReplaceSections,
+}
+
 /// Host state available while an extension contributes one sampling step's World State.
 pub struct WorldStateContributionInput<'a> {
     pub thread_id: ThreadId,

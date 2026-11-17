@@ -3337,10 +3337,10 @@ async fn production_turn_keeps_rebalanced_catalogs_stable_after_compaction_and_r
             cloud_lines,
             match index {
                 0 => vec![expected_line],
-                1..=3 => vec![expected_line, ready_line],
+                // Non-OpenAI adapters project only the latest section from each producer.
                 _ => vec![ready_line],
             },
-            "request {index} should only append cloud text when rebalancing prevents omissions",
+            "request {index} should expose the current cloud allocation",
         );
         assert_eq!(
             developer_texts
