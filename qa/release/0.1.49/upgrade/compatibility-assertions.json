@@ -1,0 +1,19 @@
+{
+  "checks": {
+    "all_original_config_entries_preserved": true,
+    "only_added_config_is_default_service_tier": true,
+    "history_prefix_preserved": true,
+    "same_rollout_preserved_and_extended": true,
+    "thread_ids_preserved": true,
+    "idle_legacy_row_removed": true,
+    "qa-cooldown_preserved": true,
+    "qa-lease_preserved": true,
+    "qa-days_preserved": true,
+    "qa-unrelated_preserved": true,
+    "no_vault_canary_in_evidence": true
+  },
+  "evidence_files_scanned": 33,
+  "leak_paths": [],
+  "config_before_sha256": "e3159c53d29352ae1e7f175b3e5723f364c531b79bd1acfd2d94180158e4de87",
+  "config_after_sha256": "19d0b2cf87e25780c581762f9fa09c509e33e2bb2b66b70cddfd7eda1a2175ba"
+}
