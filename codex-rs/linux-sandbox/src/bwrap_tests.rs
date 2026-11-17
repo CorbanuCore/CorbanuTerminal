@@ -1666,7 +1666,8 @@ fn read_only_tmp_carveout_keeps_daemon_sockets_masked() {
 /// app-server socket folder among them is masked again afterwards.
 #[test]
 fn read_only_tmp_snapshot_masks_daemon_sockets_again() {
-    let missing = std::env::temp_dir().join(format!("s3a-l1-missing-{}", std::process::id()));
+    // This fixture exercises the literal /tmp policy, independently of TMPDIR.
+    let missing = Path::new("/tmp").join(format!("s3a-l1-missing-{}", std::process::id()));
     let policy = FileSystemSandboxPolicy::restricted(
         [
             (Path::new("/"), FileSystemAccessMode::Write),
