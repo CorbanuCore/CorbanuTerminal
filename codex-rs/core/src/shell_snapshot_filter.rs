@@ -22,17 +22,24 @@ use codex_secret_broker::output_gate::SecretClass;
 use codex_shell_command::shell_snapshot::CapturedSnapshot;
 use zeroize::Zeroizing;
 
+type ModelScan =
+    dyn Fn(&str) -> std::result::Result<bool, codex_network_proxy::ModelSnapshotScanError> + Sync;
+
 /// The protected values of one capture; checks the final snapshot text.
 pub(super) struct SnapshotCredentialFilter<'g> {
     local: OutputGate,
     process: &'g OutputGate,
     /// The session's credential broker, when snapshots are brokered (D685).
     brokered: Option<&'g NetworkProxy>,
+    model_scan: &'g ModelScan,
 }
 
 impl SnapshotCredentialFilter<'_> {
     fn sensitive(&self, value: &str) -> Result<bool> {
-        if self.local.contains_snapshot_secret(value)
+        let model_key =
+            (self.model_scan)(value).context("Cannot check snapshot against model credentials")?;
+        if model_key
+            || self.local.contains_snapshot_secret(value)
             || self.process.contains_snapshot_secret(value)
         {
             return Ok(true);
@@ -78,6 +85,30 @@ fn retain_with_gate<'g>(
     process_gate: &'g OutputGate,
     brokered: Option<&'g NetworkProxy>,
 ) -> Result<SnapshotCredentialFilter<'g>> {
+    retain_with_holders(
+        capture,
+        raw_len,
+        removed,
+        process_gate,
+        brokered,
+        &codex_network_proxy::model_credential_occurs_in,
+    )
+}
+
+fn retain_with_holders<'g>(
+    capture: &mut CapturedSnapshot<'_>,
+    raw_len: usize,
+    removed: &[String],
+    process_gate: &'g OutputGate,
+    brokered: Option<&'g NetworkProxy>,
+    model_scan: &'g ModelScan,
+) -> Result<SnapshotCredentialFilter<'g>> {
+    if codex_model_provider::model_key_broker_required()
+        && (!codex_model_provider::model_key_broker_installed()
+            || codex_model_provider::model_key_broker_unavailable().is_some())
+    {
+        bail!("Cannot protect snapshot while model credential broker is unavailable");
+    }
     if raw_len > output_gate::MAX_SCAN_BYTES {
         bail!("Snapshot capture exceeds credential scan limit");
     }
@@ -133,6 +164,7 @@ fn retain_with_gate<'g>(
         local,
         process: process_gate,
         brokered,
+        model_scan,
     };
     let mut check_failure = None;
     capture.retain_exports_by_value(|name, declaration, value| {
@@ -161,6 +193,10 @@ fn retain_with_gate<'g>(
     }
     Ok(filter)
 }
+
+#[cfg(test)]
+#[path = "shell_snapshot_model_tests.rs"]
+mod model_tests;
 
 #[cfg(test)]
 #[path = "shell_snapshot_filter_tests.rs"]

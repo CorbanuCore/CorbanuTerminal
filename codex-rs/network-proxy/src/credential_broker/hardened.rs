@@ -370,6 +370,7 @@ impl HardenedBroker {
             .credentials
             .retain(|credential| !std::ptr::eq(credential.provider, providers::openai_provider()));
         let dummy_value = providers::openai_provider().dummy_value(route.capability_id().as_str());
+        super::model_snapshot::register(self.state.clone());
         state.scoped_openai = Some(ScopedCredentialRecord {
             route,
             dummy_value,
@@ -393,6 +394,7 @@ impl HardenedBroker {
             .credentials
             .retain(|credential| !std::ptr::eq(credential.provider, providers::openai_provider()));
         let dummy_value = providers::openai_provider().dummy_value(route.capability_id.as_str());
+        super::model_snapshot::register(self.state.clone());
         state.isolated_openai = Some(IsolatedCredentialRecord { route, dummy_value });
         Ok(())
     }

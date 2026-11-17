@@ -12,6 +12,8 @@ mod config;
 mod connect_policy;
 mod connection_lifecycle;
 mod credential_broker;
+pub use credential_broker::ModelSnapshotScanError;
+pub use credential_broker::model_credential_occurs_in;
 mod destination;
 // PF-33-S03 contract. Parts are used only by its standalone test target
 // (tests/destination_contract.rs compiles the same file).
