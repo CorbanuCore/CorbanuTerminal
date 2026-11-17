@@ -47,6 +47,11 @@ use shlex::try_join as shlex_try_join;
 #[path = "exec_policy_wrappers.rs"]
 mod wrappers;
 pub(crate) use wrappers::check_with_wrappers;
+// For the zsh-fork exec check (Unix only).
+#[cfg(unix)]
+pub(crate) use wrappers::check_with_wrappers_and_folded;
+#[cfg(unix)]
+pub(crate) use wrappers::has_exact_rule_match;
 
 const PROMPT_CONFLICT_REASON: &str =
     "approval required by policy, but AskForApproval is set to Never";
@@ -463,8 +468,11 @@ impl ExecPolicyManager {
         };
         let match_options = MatchOptions {
             resolve_host_executables: true,
+            // D692: forbidden and prompt rules match the program name in
+            // any case where this platform finds programs that way.
+            fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE,
         };
-        let mut evaluation = check_with_wrappers(
+        let (mut evaluation, case_folded) = wrappers::check_with_wrappers_and_folded(
             exec_policy.as_ref(),
             &commands,
             &exec_policy_fallback,
@@ -502,9 +510,13 @@ impl ExecPolicyManager {
                 ),
             },
             Decision::Prompt => {
-                let prompt_is_rule = evaluation.matched_rules.iter().any(|rule_match| {
-                    is_policy_match(rule_match) && rule_match.decision() == Decision::Prompt
-                });
+                // D692: a prompt only a differently cased rule asks for is
+                // rejected or approved as the fallback's prompt would be.
+                let prompt_is_rule = wrappers::has_exact_rule_match(
+                    &evaluation.matched_rules,
+                    &case_folded,
+                    Decision::Prompt,
+                );
                 // #626: which remembered approvals Aggressive suspended, where
                 // the full policy would have run the command unasked.
                 let suspended_note = live_aggressive
@@ -647,6 +659,7 @@ impl ExecPolicyManager {
         }
         let match_options = MatchOptions {
             resolve_host_executables: true,
+            fold_program_case: false,
         };
         let existing_evaluation = current_policy.check_multiple_with_options(
             [&amendment.command],

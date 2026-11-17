@@ -24,7 +24,40 @@ pub(crate) fn check_with_wrappers(
     fallback: &impl Fn(&[String]) -> Decision,
     options: &MatchOptions,
 ) -> Evaluation {
+    check_with_wrappers_and_folded(policy, commands, fallback, options).0
+}
+
+/// D692: whether `matched` holds a rule match for `decision` other than the
+/// case-folded ones in `folded` (which [`check_with_wrappers_and_folded`]
+/// also put in `matched`). A decision only a differently cased rule makes is
+/// approved and sandboxed as the fallback's would be, so folding only adds.
+pub(crate) fn has_exact_rule_match(
+    matched: &[RuleMatch],
+    folded: &[RuleMatch],
+    decision: Decision,
+) -> bool {
+    let count = |matches: &[RuleMatch]| {
+        matches
+            .iter()
+            .filter(|rule_match| {
+                matches!(rule_match, RuleMatch::PrefixRuleMatch { .. })
+                    && rule_match.decision() == decision
+            })
+            .count()
+    };
+    count(matched) > count(folded)
+}
+
+/// [`check_with_wrappers`], also returning the case-folded rule matches
+/// (D692, [`Policy::case_folded_matches`]) it added to the evaluation.
+pub(crate) fn check_with_wrappers_and_folded(
+    policy: &Policy,
+    commands: &[Vec<String>],
+    fallback: &impl Fn(&[String]) -> Decision,
+    options: &MatchOptions,
+) -> (Evaluation, Vec<RuleMatch>) {
     let mut matches = Vec::new();
+    let mut folded = Vec::new();
     // Inner shell scripts can themselves contain wrapped commands. Use a work
     // list rather than recursion; preserve every outer match along the way.
     let mut pending = Vec::new();
@@ -55,6 +88,10 @@ pub(crate) fn check_with_wrappers(
                 }
             }
             matches.extend(found);
+            // D692: kept beside the fallback, so this only adds checks.
+            let case_folded = policy.case_folded_matches(candidate, options);
+            matches.extend(case_folded.iter().cloned());
+            folded.extend(case_folded);
             // #2455 (D677): xargs adds words read from stdin. Ask whenever a
             // prompt or forbidden rule could match once they arrive; a rule
             // the fixed argv already matches applies above. Allow rules only
@@ -103,12 +140,13 @@ pub(crate) fn check_with_wrappers(
             }
         }
     }
-    Evaluation {
+    let evaluation = Evaluation {
         decision: matches
             .iter()
             .map(RuleMatch::decision)
             .max()
             .unwrap_or(Decision::Prompt),
         matched_rules: matches,
-    }
+    };
+    (evaluation, folded)
 }

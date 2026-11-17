@@ -22,6 +22,7 @@ pub use execpolicycheck::ExecPolicyCheckCommand;
 pub use parser::PolicyParser;
 pub use policy::Evaluation;
 pub use policy::MatchOptions;
+pub use policy::PROGRAM_NAMES_FOLD_CASE;
 pub use policy::Policy;
 pub use rule::NetworkRuleProtocol;
 pub use rule::PatternToken;
