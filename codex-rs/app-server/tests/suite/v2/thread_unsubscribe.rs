@@ -852,10 +852,10 @@ enabled_tools = []
         .collect::<Vec<_>>();
     assert_eq!(
         resumed_mail,
-        ["Unread note for later", "Continue the child task"]
-            .map(|message| {
+        [("MESSAGE", "Unread note for later"), ("NEW_TASK", "Continue the child task")]
+            .map(|(message_type, message)| {
                 format!(
-                    "<inter_agent_message sender=\"/root\" recipient=\"/root/worker\">\n{message}\n</inter_agent_message>"
+                    "<inter_agent_message sender=\"/root\" recipient=\"/root/worker\">\nMessage Type: {message_type}\nTask name: /root/worker\nSender: /root\nPayload:\n{message}\n</inter_agent_message>"
                 )
             })
             .to_vec(),
