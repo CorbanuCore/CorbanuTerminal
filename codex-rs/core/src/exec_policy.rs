@@ -47,7 +47,10 @@ use shlex::try_join as shlex_try_join;
 #[path = "exec_policy_wrappers.rs"]
 mod wrappers;
 pub(crate) use wrappers::check_with_wrappers;
+// For the zsh-fork exec check (Unix only).
+#[cfg(unix)]
 pub(crate) use wrappers::check_with_wrappers_and_folded;
+#[cfg(unix)]
 pub(crate) use wrappers::has_exact_rule_match;
 
 const PROMPT_CONFLICT_REASON: &str =

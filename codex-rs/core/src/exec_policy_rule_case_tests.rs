@@ -150,7 +150,7 @@ fn d692_exact_rule_matches_exclude_case_folded_ones() {
         (vec![prompt(&["git", "push"]), prompt(&["rm"])], true),
     ] {
         assert_eq!(
-            crate::exec_policy::has_exact_rule_match(&matched, &folded, Decision::Prompt),
+            crate::exec_policy::wrappers::has_exact_rule_match(&matched, &folded, Decision::Prompt),
             exact,
             "{matched:?}"
         );

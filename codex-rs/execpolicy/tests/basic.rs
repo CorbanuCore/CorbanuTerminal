@@ -1069,10 +1069,14 @@ fn case_folded_matches_only_strict_rules() -> Result<()> {
         );
         // The exact lookup is unchanged by the option.
         assert_eq!(
-            policy.matches_for_command_with_options(&tokens(cmd), None, &FOLD),
             policy.matches_for_command_with_options(
                 &tokens(cmd),
-                None,
+                /*heuristics_fallback*/ None,
+                &FOLD
+            ),
+            policy.matches_for_command_with_options(
+                &tokens(cmd),
+                /*heuristics_fallback*/ None,
                 &MatchOptions {
                     resolve_host_executables: true,
                     fold_program_case: false,
