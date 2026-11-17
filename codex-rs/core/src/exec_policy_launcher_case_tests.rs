@@ -165,7 +165,7 @@ prefix_rule(pattern=["git", "fetch"], decision="prompt")"#;
         "SUDO -n ENV FOO=1 git",
         "/usr/bin/Sudo -n /usr/bin/Env -i Nice -n 5 git",
         "Command Exec TIME -p UNSHARE -r CHROOT / git",
-        "BusyBox NoGlob \u{17f}udo git",
+        "BusyBox NoGlob \u{17f}\u{75}do git",
         "Xargs -0 TIMEOUT 5 git",
     ] {
         let result = requirement(&format!("{chain} push"), rules).await;
@@ -268,7 +268,7 @@ async fn issue2503_other_names_are_not_launchers() {
         "SUDOX git push",
         "XARGSX git push",
         "sud\u{f3} git push",
-        "\u{ff53}udo git push",
+        "\u{ff53}\u{75}do git push",
     ] {
         assert!(
             matches!(
