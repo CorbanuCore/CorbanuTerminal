@@ -807,10 +807,7 @@ async fn text_only_mcp_content_uses_content_items() -> anyhow::Result<()> {
     );
     // D634: attribution is still captured above, but the custom inference
     // endpoint must not receive the internal MCP server/tool inventory.
-    assert_eq!(
-        request_body["client_metadata"].get("mcp_attribution"),
-        None,
-    );
+    assert_eq!(request_body["client_metadata"].get("mcp_attribution"), None);
 
     server.verify().await;
     Ok(())
