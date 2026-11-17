@@ -543,6 +543,42 @@ mod tests {
     }
 
     #[test]
+    fn posix_shells_read_as_sh_everywhere() {
+        // #2543: `dash -c` and the like read like `sh -c`.
+        for (shell, folds) in [
+            ("dash", false),
+            ("/usr/bin/ksh", false),
+            ("mksh", false),
+            ("DASH", true),
+            ("/bin/Ksh", true),
+        ] {
+            let words = [shell, "-c", "git push"].map(str::to_string);
+            for case in [
+                NameCase::Sensitive,
+                NameCase::Insensitive,
+                NameCase::Windows,
+            ] {
+                let expected = (!(folds && case == NameCase::Sensitive))
+                    .then(|| ["sh", "-c", "git push"].map(str::to_string).to_vec());
+                assert_eq!(
+                    super::super::policy_shell_script_for(&words, case),
+                    expected,
+                    "{shell} ({case:?})"
+                );
+            }
+        }
+        // Shells with other syntax are not read as sh.
+        for shell in ["fish", "csh", "tcsh"] {
+            let words = [shell, "-c", "git push"].map(str::to_string);
+            assert_eq!(
+                super::super::policy_shell_script_for(&words, NameCase::Sensitive),
+                None,
+                "{shell}"
+            );
+        }
+    }
+
+    #[test]
     fn platform_mode() {
         let expected = if cfg!(windows) {
             NameCase::Windows

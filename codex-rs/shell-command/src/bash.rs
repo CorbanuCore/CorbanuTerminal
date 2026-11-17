@@ -75,6 +75,17 @@ pub fn try_parse_shell_bounded(
 /// (parentheses, redirections, substitutions, control flow, etc.). Otherwise
 /// returns `None`.
 pub fn try_parse_word_only_commands_sequence(tree: &Tree, src: &str) -> Option<Vec<Vec<String>>> {
+    let mut commands = Vec::new();
+    for node in word_only_command_nodes(tree)? {
+        commands.push(parse_plain_command_from_node(node, src)?);
+    }
+    Some(commands)
+}
+
+/// The command nodes of a "word only commands sequence" (see
+/// [`try_parse_word_only_commands_sequence`]) in source order, before their
+/// words are read; `None` for any other script.
+fn word_only_command_nodes(tree: &Tree) -> Option<Vec<Node<'_>>> {
     if tree.root_node().has_error() {
         return None;
     }
@@ -130,12 +141,7 @@ pub fn try_parse_word_only_commands_sequence(tree: &Tree, src: &str) -> Option<V
 
     // Walk uses a stack (LIFO), so re-sort by position to restore source order.
     command_nodes.sort_by_key(Node::start_byte);
-
-    let mut commands = Vec::new();
-    for node in command_nodes {
-        commands.push(parse_plain_command_from_node(node, src)?);
-    }
-    Some(commands)
+    Some(command_nodes)
 }
 
 /// Parses a shell script consisting only of plain commands joined by safe operators.
@@ -224,6 +230,174 @@ pub fn extract_bash_command(command: &[String]) -> Option<(&str, &str)> {
 pub fn parse_shell_lc_plain_commands(command: &[String]) -> Option<Vec<Vec<String>>> {
     let (_, script) = extract_bash_command(command)?;
     parse_shell_script_into_commands(script)
+}
+
+/// #2543: what command rules can know of a shell script before it runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ScriptCommands {
+    /// Plain commands joined only by `&&`, `||`, `;` and `|` (see
+    /// [`parse_shell_script_into_commands`]), each word as bash passes it
+    /// on once quotes are removed (`'git' push`, `g"i"t push`).
+    Plain(Vec<Vec<String>>),
+    /// Any other script: every command in it in source order, including
+    /// those in substitutions, control flow and function bodies, with
+    /// assignments and redirections left out. A word bash builds only as the
+    /// script runs (expansions, globs, braces, `~`) is `None`; it may also
+    /// become no word or several.
+    Partial(Vec<Vec<Option<String>>>),
+    /// The script does not parse.
+    Unreadable,
+}
+
+/// [`read_script_commands`] for a `bash -lc "..."`, `sh -c "..."` or
+/// `zsh -lc "..."` invocation; `None` for any other command.
+pub fn shell_lc_script_commands(command: &[String]) -> Option<ScriptCommands> {
+    let (_, script) = extract_bash_command(command)?;
+    Some(read_script_commands(script))
+}
+
+/// #2543: the commands of `script` as far as they are known before it runs.
+/// Unlike [`parse_shell_script_into_commands`], quoted command names are
+/// read (`'git' push` runs `git push`), and a word bash would still change
+/// (`g\it`, `/usr/bin/gi?`, `{git,}`) is never read as written.
+pub fn read_script_commands(script: &str) -> ScriptCommands {
+    let Some(tree) = try_parse_shell(script) else {
+        return ScriptCommands::Unreadable;
+    };
+    let root = tree.root_node();
+    if root.has_error() {
+        return ScriptCommands::Unreadable;
+    }
+    let mut command_nodes = Vec::new();
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        if node.kind() == "command" {
+            command_nodes.push(node);
+        }
+        let mut cursor = node.walk();
+        stack.extend(node.named_children(&mut cursor));
+    }
+    command_nodes.sort_by_key(Node::start_byte);
+    let commands: Vec<Vec<Option<String>>> = command_nodes
+        .into_iter()
+        .map(|node| script_command_words(node, script))
+        .filter(|words| !words.is_empty())
+        .collect();
+    if word_only_command_nodes(&tree).is_some() && commands.iter().flatten().all(Option::is_some) {
+        return ScriptCommands::Plain(
+            commands
+                .into_iter()
+                .map(|words| words.into_iter().flatten().collect())
+                .collect(),
+        );
+    }
+    ScriptCommands::Partial(commands)
+}
+
+/// The argv words of a command node; assignments, redirections and
+/// comments are not argv.
+fn script_command_words(command: Node<'_>, src: &str) -> Vec<Option<String>> {
+    let mut words = Vec::new();
+    let mut cursor = command.walk();
+    for child in command.named_children(&mut cursor) {
+        match child.kind() {
+            "variable_assignment"
+            | "variable_assignments"
+            | "file_redirect"
+            | "heredoc_redirect"
+            | "herestring_redirect"
+            | "comment" => {}
+            "command_name" => {
+                words.push(child.named_child(0).and_then(|name| script_word(name, src)))
+            }
+            _ => words.push(script_word(child, src)),
+        }
+    }
+    words
+}
+
+/// The word bash makes of `node` after quote removal, or `None` when the
+/// word is built as the script runs.
+fn script_word(node: Node<'_>, src: &str) -> Option<String> {
+    let text = node.utf8_text(src.as_bytes()).ok()?;
+    match node.kind() {
+        "word" | "number" if is_literal_word_or_number(node) => unquoted_word(text),
+        "raw_string" => parse_raw_string(node, src),
+        "string" => {
+            parse_double_quoted_string(node, src)?;
+            double_quoted_text(text.strip_prefix('"')?.strip_suffix('"')?)
+        }
+        // A decoded byte above ASCII is not the character it is read as.
+        "ansi_c_string" => ansi_c::decode(text).filter(|word| word.is_ascii()),
+        "concatenation" => {
+            // The grammar splits `gi[t]` and `{a,b}` into several words;
+            // look for expansions in their unquoted text as a whole.
+            let mut word = String::new();
+            let mut unquoted = String::new();
+            let mut cursor = node.walk();
+            for part in node.named_children(&mut cursor) {
+                word.push_str(&script_word(part, src)?);
+                match part.kind() {
+                    "word" | "number" => unquoted.push_str(part.utf8_text(src.as_bytes()).ok()?),
+                    _ => unquoted.push('\0'),
+                }
+            }
+            unquoted_word(&unquoted)?;
+            Some(word)
+        }
+        _ => None,
+    }
+}
+
+/// An unquoted word after backslash removal; `None` where bash may expand
+/// it: pathname expansion (`*`, `?`, `[…]`), brace expansion (`{a,b}`,
+/// `{1..3}`) or tilde expansion. Approximate on the side of `None`.
+fn unquoted_word(text: &str) -> Option<String> {
+    let mut word = String::new();
+    let mut chars = text.chars();
+    while let Some(ch) = chars.next() {
+        let rest = || chars.clone();
+        match ch {
+            '\\' => match chars.next() {
+                Some('\n') => {}
+                Some(escaped) => word.push(escaped),
+                None => word.push('\\'),
+            },
+            '*' | '?' | '~' => return None,
+            '[' if rest().any(|next| next == ']') => return None,
+            '{' if rest().any(|next| matches!(next, ',' | '.'))
+                && rest().any(|next| next == '}') =>
+            {
+                return None;
+            }
+            _ => word.push(ch),
+        }
+    }
+    Some(word)
+}
+
+/// The text between double quotes after bash removes its backslashes:
+/// before `$`, `` ` ``, `"`, `\` and a newline only.
+fn double_quoted_text(text: &str) -> Option<String> {
+    let mut word = String::new();
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            word.push(ch);
+            continue;
+        }
+        match chars.peek() {
+            Some('\n') => {
+                chars.next();
+            }
+            Some(&escaped @ ('$' | '`' | '"' | '\\')) => {
+                chars.next();
+                word.push(escaped);
+            }
+            _ => word.push('\\'),
+        }
+    }
+    Some(word)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -862,3 +1036,7 @@ mod tests {
         assert_eq!(parse_shell_lc_single_command_prefix(&command), None);
     }
 }
+
+#[cfg(test)]
+#[path = "bash/script_commands_tests.rs"]
+mod script_commands_tests;
