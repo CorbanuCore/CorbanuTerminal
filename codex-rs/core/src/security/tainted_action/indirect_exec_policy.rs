@@ -20,6 +20,10 @@ use super::work;
 mod indirect_exec_policy_launchers;
 use indirect_exec_policy_launchers as launchers;
 
+#[path = "indirect_exec_policy_names.rs"]
+mod indirect_exec_policy_names;
+use indirect_exec_policy_names as names;
+
 pub(crate) struct PolicyWrapperCommands {
     pub(crate) starts: Vec<usize>,
     pub(crate) uncertain: bool,
@@ -34,6 +38,11 @@ pub(crate) struct OpenArgv {
 }
 
 pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands {
+    policy_wrapper_commands_for(words, names::PLATFORM)
+}
+
+/// #2503 (D688): launcher names compare as `case` says (see [`names`]).
+fn policy_wrapper_commands_for(words: &[String], case: names::NameCase) -> PolicyWrapperCommands {
     let mut result = PolicyWrapperCommands {
         starts: vec![0],
         uncertain: false,
@@ -44,12 +53,16 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
     let mut scan = None;
     while let Some(program) = words.get(start) {
         work::step();
-        let name = basename(program);
+        let name = names::launcher_name_for(program, case);
+        let name = name.as_ref();
         let after = if name == "chroot" {
             // No held redirections: callers supply argv after shell parsing.
             let reads = chroot_reads(&SimpleCommand::default(), &words[start..], /*from*/ 0);
             let Some(read) = reads.first() else {
-                return no_command(result);
+                // #2503: a name only Windows reads as chroot (`chroot.exe`),
+                // which the classifier's reader does not: fail closed.
+                result.uncertain = true;
+                break;
             };
             result.uncertain |= read.unknown_option;
             read.command.map(|at| start + at)

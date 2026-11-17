@@ -138,7 +138,7 @@ pub(super) fn launch(name: &str, words: &[String], start: usize) -> Option<Launc
         "pkexec" => pkexec(words, start),
         "bwrap" => bwrap(words, start),
         "firejail" => firejail(words, start),
-        "-" | "noglob" | "nocorrect" | "builtin" => modifier(words, start),
+        "-" | "noglob" | "nocorrect" | "builtin" => modifier(name, words, start),
         _ => return None,
     })
 }
@@ -158,9 +158,9 @@ fn multicall_name(name: &str) -> Option<&'static str> {
 /// `noglob cmd`, `builtin exec cmd`: the next word is the command (bash's
 /// `builtin` also accepts `--`). zsh's `-` repeats and follows any of
 /// them (`noglob - - cmd`, `builtin - cmd`).
-fn modifier(words: &[String], start: usize) -> Launch {
+fn modifier(name: &str, words: &[String], start: usize) -> Launch {
     let mut at = start + 1;
-    if words[start] == "builtin" && words.get(at).is_some_and(|word| word == "--") {
+    if name == "builtin" && words.get(at).is_some_and(|word| word == "--") {
         at += 1;
     }
     let at = skip_dashes(words, at);
