@@ -20,6 +20,10 @@ use super::work;
 mod indirect_exec_policy_launchers;
 use indirect_exec_policy_launchers as launchers;
 
+#[path = "indirect_exec_policy_names.rs"]
+mod indirect_exec_policy_names;
+use indirect_exec_policy_names as names;
+
 pub(crate) struct PolicyWrapperCommands {
     pub(crate) starts: Vec<usize>,
     pub(crate) uncertain: bool,
@@ -34,6 +38,11 @@ pub(crate) struct OpenArgv {
 }
 
 pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands {
+    policy_wrapper_commands_for(words, names::PLATFORM)
+}
+
+/// #2503 (D688): launcher names compare as `case` says (see [`names`]).
+fn policy_wrapper_commands_for(words: &[String], case: names::NameCase) -> PolicyWrapperCommands {
     let mut result = PolicyWrapperCommands {
         starts: vec![0],
         uncertain: false,
@@ -42,12 +51,26 @@ pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands
     let mut start = 0;
     // Computed on the first launcher only.
     let mut scan = None;
+    // A copy of `words` for the chroot reader, made when first needed.
+    let mut chroot_words: Option<Vec<String>> = None;
     while let Some(program) = words.get(start) {
         work::step();
-        let name = basename(program);
+        let name = names::launcher_name_for(program, case);
+        let name = name.as_ref();
         let after = if name == "chroot" {
+            // #2503: the classifier's chroot reader knows names spelled
+            // chroot in any ASCII case only. For a spelling only this
+            // platform reads as chroot (Windows `chroot.exe`), read a copy
+            // of the argv, made once, with just this word spelled chroot.
+            let argv = if basename(program).eq_ignore_ascii_case("chroot") {
+                &words[start..]
+            } else {
+                let spelled = chroot_words.get_or_insert_with(|| words.to_vec());
+                spelled[start] = "chroot".to_string();
+                &spelled[start..]
+            };
             // No held redirections: callers supply argv after shell parsing.
-            let reads = chroot_reads(&SimpleCommand::default(), &words[start..], /*from*/ 0);
+            let reads = chroot_reads(&SimpleCommand::default(), argv, /*from*/ 0);
             let Some(read) = reads.first() else {
                 return no_command(result);
             };
