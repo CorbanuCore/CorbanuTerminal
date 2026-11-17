@@ -299,6 +299,7 @@ struct PreparedProcessHandles {
 pub(super) struct StartFailure {
     pub(super) error: UnifiedExecError,
     pub(super) shown_by_review: bool,
+    pub(super) launch_failure_reported: bool,
     /// #873: a policy refused it (before it started, or the launch contract
     /// at start), so it ends as refused whether or not a review showed it.
     pub(super) refused_by_policy: bool,
@@ -729,6 +730,7 @@ impl UnifiedExecProcessManager {
             Err(StartFailure {
                 error,
                 shown_by_review,
+                launch_failure_reported,
                 refused_by_policy,
             }) => {
                 self.release_process_id(request.process_id).await;
@@ -738,9 +740,9 @@ impl UnifiedExecProcessManager {
                     // #873: shown once and ended as refused with the reason,
                     // like a refused shell command.
                     emit_refused_at_start(context, &request, cwd, error.to_string()).await;
-                } else if shown_by_review {
-                    // #466: the review showed this command as running;
-                    // end it, or it stays "Running" for good.
+                } else if shown_by_review && !launch_failure_reported {
+                    // #466: end an approved command that failed before the launch layer
+                    // could report it. Launch failures already have one begin/end pair.
                     emit_failed_at_start(context, &request, cwd, error.to_string()).await;
                 }
                 return Err(error);
@@ -1771,6 +1773,7 @@ impl UnifiedExecProcessManager {
         let result = orchestrator.run(&mut runtime, &req, &tool_ctx).await;
         let shown_by_review = runtime.shown_by_review();
         let start_rejected = runtime.start_rejected();
+        let launch_failure_reported = runtime.launch_failure_reported();
         let result = result
             .map(|result| (result.output, result.deferred_network_approval))
             .map_err(|err| {
@@ -1808,6 +1811,7 @@ impl UnifiedExecProcessManager {
                 StartFailure {
                     error,
                     shown_by_review,
+                    launch_failure_reported,
                     refused_by_policy,
                 }
             });
