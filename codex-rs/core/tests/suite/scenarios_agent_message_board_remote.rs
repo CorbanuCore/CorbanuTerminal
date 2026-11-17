@@ -45,6 +45,7 @@ async fn remote_board_uses_the_existing_tools_and_session_identity() -> anyhow::
             config.ephemeral = true;
             config.current_time_reminder = Some(codex_core::config::CurrentTimeReminderConfig {
                 clock_source: codex_features::CurrentTimeSource::External,
+                sleep_tool: true,
                 ..Default::default()
             });
             config.multi_agent_v2.message_board_remote = Some(RemoteMessageBoardConfigToml {
@@ -56,7 +57,7 @@ async fn remote_board_uses_the_existing_tools_and_session_identity() -> anyhow::
         .with_model_info_override("gpt-5.5", |model| {
             model.multi_agent_version = Some(codex_protocol::protocol::MultiAgentVersion::V2);
         })
-        .with_external_time_provider(Arc::new(BoardClock::Available))
+        .with_external_time_provider(Arc::new(BoardClock::AvailableWithSleep))
         .build_with_auto_env(&server)
         .await?;
     let root_id = root.session_configured.thread_id;
@@ -146,9 +147,9 @@ async fn remote_board_uses_the_existing_tools_and_session_identity() -> anyhow::
                 ),
                 responses::ev_function_call_with_namespace(
                     "await-notification",
-                    "collaboration",
-                    "wait_agent",
-                    "{}",
+                    "clock",
+                    "sleep",
+                    &json!({"duration_ms": 30_000}).to_string(),
                 ),
                 responses::ev_completed("remote-post"),
             ]),
@@ -187,7 +188,7 @@ async fn remote_board_uses_the_existing_tools_and_session_identity() -> anyhow::
         .collect::<Vec<_>>();
     for body in &mut bodies {
         for item in body["input"].as_array_mut().context("request input")? {
-            if item["type"] == "function_call_output" {
+            if item["type"] == "function_call_output" && item["call_id"] != "await-notification" {
                 let mut output: Value =
                     serde_json::from_str(item["output"].as_str().context("output")?)?;
                 output.sort_all_objects();

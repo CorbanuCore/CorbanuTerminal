@@ -49,9 +49,8 @@ const INSTRUCTED: &str = "a command never leaves the sandbox it runs in";
 /// How the command asks to leave the sandbox, if it does.
 #[derive(Clone, Copy, Debug)]
 enum Route {
-    /// An ordinary command under `untrusted`, approved by the person; after
-    /// the sandbox denies it, the retry without the sandbox needs no new
-    /// answer.
+    /// An ordinary command under `untrusted`, approved by the person. D639(a)
+    /// keeps a sandbox denial terminal instead of retrying without the sandbox.
     Retry,
     /// An exec-policy allow rule saved earlier ("don't ask again").
     Rule,
@@ -265,8 +264,9 @@ async fn issue_747_moderate_never_runs_a_command_outside_the_sandbox() -> anyhow
         (SecurityLevel::Moderate, Route::Retry, 1, false),
         // D6: the remembered rule still skips the prompt, inside the sandbox.
         (SecurityLevel::Moderate, Route::Rule, 0, false),
-        // Approved once, its retry outside the sandbox runs unasked.
-        (SecurityLevel::Permissive, Route::Retry, 1, true),
+        // D639(a): an ordinary denied command stays refused; approval does not
+        // turn the sandbox error into an automatic retry outside it.
+        (SecurityLevel::Permissive, Route::Retry, 1, false),
         (SecurityLevel::Permissive, Route::Rule, 0, true),
         (SecurityLevel::Moderate, Route::EscalatedExec, 1, false),
         (SecurityLevel::Permissive, Route::EscalatedExec, 1, true),

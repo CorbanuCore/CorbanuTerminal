@@ -22,6 +22,7 @@ use wiremock::matchers::path;
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn guardian_reviews_target_environment_and_reuses_prefix(tool: &str) -> Result<()> {
     skip_if_no_network!(Ok(()));
+    let edit_tool = tool == "apply_patch";
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let executor_url = format!("ws://{}", listener.local_addr()?);
     let (attach, connection) = tokio::sync::oneshot::channel();
@@ -44,14 +45,26 @@ async fn guardian_reviews_target_environment_and_reuses_prefix(tool: &str) -> Re
             model.guardian = None;
             model.auto_review_model_override = Some("gpt-5.5".to_owned());
         })
-        .with_config(|config| {
+        .with_config(move |config| {
             config.project_doc_max_bytes = 0;
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
             config.approvals_reviewer = ApprovalsReviewer::AutoReview;
+            // D647 keeps edit tools hidden in read-only sessions. Give this
+            // patch-review fixture a writable profile; Guardian still denies it.
+            let permissions = if edit_tool {
+                PermissionProfile::workspace_write_with(
+                    &[],
+                    NetworkSandboxPolicy::Restricted,
+                    /*exclude_tmpdir_env_var*/ true,
+                    /*exclude_slash_tmp*/ true,
+                )
+            } else {
+                PermissionProfile::read_only()
+            };
             config
                 .permissions
-                .set_permission_profile(PermissionProfile::read_only())
-                .expect("set read-only permissions");
+                .set_permission_profile(permissions)
+                .expect("set review fixture permissions");
             config
                 .features
                 .enable(Feature::RequestPermissionsTool)
@@ -96,6 +109,13 @@ async fn guardian_reviews_target_environment_and_reuses_prefix(tool: &str) -> Re
     );
     secondary.config = EnvironmentConfigState::Ready(secondary_config);
 
+    // Keep the patch outside the writable cwd so approval remains necessary.
+    let patch_target = test
+        .config
+        .cwd
+        .parent()
+        .expect("fixture parent")
+        .join("guardian-marker.txt");
     let targets = [secondary_id, primary.environment_id.as_str()];
     let mut events = Vec::new();
     for (index, environment_id) in targets.iter().enumerate() {
@@ -115,7 +135,8 @@ async fn guardian_reviews_target_environment_and_reuses_prefix(tool: &str) -> Re
             "apply_patch" => ev_apply_patch_custom_tool_call(
                 &call_id,
                 &format!(
-                    "*** Begin Patch\n*** Environment ID: {environment_id}\n*** Add File: guardian-marker.txt\n+review-only\n*** End Patch\n"
+                    "*** Begin Patch\n*** Environment ID: {environment_id}\n*** Add File: {}\n+review-only\n*** End Patch\n",
+                    patch_target.display(),
                 ),
             ),
             "request_permissions" => ev_function_call(
