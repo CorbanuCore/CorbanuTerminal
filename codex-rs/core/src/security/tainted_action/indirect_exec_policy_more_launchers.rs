@@ -156,13 +156,14 @@ fn multicall_name(name: &str) -> Option<&'static str> {
 }
 
 /// `noglob cmd`, `builtin exec cmd`: the next word is the command (bash's
-/// `builtin` also accepts `--`; zsh's modifiers combine, `noglob - cmd`).
+/// `builtin` also accepts `--`). zsh's `-` repeats and follows any of
+/// them (`noglob - - cmd`, `builtin - cmd`).
 fn modifier(words: &[String], start: usize) -> Launch {
     let mut at = start + 1;
-    let skip = if words[start] == "builtin" { "--" } else { "-" };
-    if words.get(at).is_some_and(|word| word == skip) {
+    if words[start] == "builtin" && words.get(at).is_some_and(|word| word == "--") {
         at += 1;
     }
+    let at = skip_dashes(words, at);
     match words.get(at) {
         None => Launch::NoCommand,
         Some(word) if word.starts_with('-') && word != "-" => Launch::Uncertain,
@@ -171,6 +172,15 @@ fn modifier(words: &[String], start: usize) -> Launch {
             uncertain: false,
         },
     }
+}
+
+/// The first word from `at` that is not zsh's `-` modifier.
+pub(super) fn skip_dashes(words: &[String], mut at: usize) -> usize {
+    while words.get(at).is_some_and(|word| word == "-") {
+        work::step();
+        at += 1;
+    }
+    at
 }
 
 /// polkit's pkexec compares whole words (no `=`, `--` or clusters); the

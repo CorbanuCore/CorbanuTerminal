@@ -167,6 +167,15 @@ async fn issue2455b_launchers_preserve_inner_rule_decisions() {
         "noglob -",
         "nocorrect - noglob",
         "sudo -n noglob",
+        // zsh's `-` repeats, and follows `builtin` too.
+        "builtin -",
+        "builtin builtin -",
+        "- - -",
+        "noglob - -",
+        "nocorrect - - -",
+        "exec - -",
+        "exec -c - -",
+        "exec - - - noglob -",
         // Any busybox… or toybox… name is the multicall binary.
         "busybox.static",
         "/bin/busybox-static",

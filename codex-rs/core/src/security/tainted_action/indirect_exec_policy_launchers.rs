@@ -363,11 +363,12 @@ pub(super) fn launch(name: &str, words: &[String], start: usize, scan: Scan) -> 
         }
         "chrt" if has("pid", 'p') || has("max", 'm') => return Launch::NoCommand,
         "command" if has("", 'v') || has("", 'V') => return Launch::NoCommand,
-        // zsh's `-` modifier, which `exec` passes on (`exec - cmd`). zsh's
-        // `command -` fails; bash's may not, so keep a floor there.
+        // zsh's `-` modifier, which `exec` passes on and may repeat
+        // (`exec - - cmd`). zsh's `command -` fails; bash's may not, so
+        // keep a floor there.
         "exec" | "command" if words.get(at).is_some_and(|word| word == "-") => {
             uncertain = name == "command";
-            at += 1;
+            at = more::skip_dashes(words, at);
         }
         "systemd-run" => {
             // Its option words and values (and any `--`).
