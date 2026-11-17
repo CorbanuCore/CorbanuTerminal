@@ -199,10 +199,7 @@ async fn mount_root_collaboration_call(
     .await;
 }
 
-fn configure_multi_agent_v2_with_role(
-    config: &mut codex_core::config::Config,
-    model_provider_base_url: &str,
-) {
+fn configure_multi_agent_v2_with_role(config: &mut codex_core::config::Config) {
     config
         .features
         .enable(Feature::Collab)
@@ -221,7 +218,9 @@ fn configure_multi_agent_v2_with_role(
     std::fs::write(
         &role_path,
         format!(
-            "model = \"{ROLE_MODEL}\"\nmodel_reasoning_effort = \"high\"\ndeveloper_instructions = \"{ROLE_DEVELOPER_INSTRUCTIONS}\"\nmodel_provider = \"mock\"\n\n[model_providers.mock]\nname = \"mock\"\nbase_url = \"{model_provider_base_url}\"\nenv_key = \"PATH\"\nwire_api = \"responses\"\n"
+            // D526: identity/resume fixtures inherit the registered parent provider;
+            // role-local provider definitions are rejected, not an alternate mock route.
+            "model = \"{ROLE_MODEL}\"\nmodel_reasoning_effort = \"high\"\ndeveloper_instructions = \"{ROLE_DEVELOPER_INSTRUCTIONS}\"\n"
         ),
     )
     .expect("write durable worker role config");
@@ -324,10 +323,7 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
     )
     .await;
 
-    let initial_model_provider_base_url = format!("{}/v1", server.uri());
-    let mut initial_builder = test_codex().with_config(move |config| {
-        configure_multi_agent_v2_with_role(config, &initial_model_provider_base_url);
-    });
+    let mut initial_builder = test_codex().with_config(configure_multi_agent_v2_with_role);
     let initial = initial_builder.build_with_auto_env(&server).await?;
     let root_thread_id = initial.session_configured.thread_id;
     let root_session_id = initial.session_configured.session_id;
@@ -538,11 +534,10 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
         server.uri(),
         /* analytics_enabled */ Some(true),
     );
-    let resumed_model_provider_base_url = format!("{}/v1", server.uri());
     let mut resume_builder = test_codex()
         .with_analytics_events_client(analytics_client.clone())
         .with_config(move |config| {
-            configure_multi_agent_v2_with_role(config, &resumed_model_provider_base_url);
+            configure_multi_agent_v2_with_role(config);
             config.analytics_enabled = Some(true);
         });
     let resumed = resume_builder.restart(&server, &initial).await?;

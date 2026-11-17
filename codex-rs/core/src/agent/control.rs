@@ -871,6 +871,11 @@ impl LocalAgentControl {
         root_thread_id: ThreadId,
     ) -> CodexResult<()> {
         let state = self.runtime.upgrade()?;
+        let restored_v2_identities = state
+            .get_thread(root_thread_id)
+            .await?
+            .multi_agent_version()
+            == Some(MultiAgentVersion::V2);
         let Some(agent_graph_store) = state.agent_graph_store() else {
             return Ok(());
         };
@@ -892,6 +897,17 @@ impl LocalAgentControl {
             }
         };
         for thread_id in descendant_ids {
+            // V2 startup has already reserved identities in graph order. Do not retry failed
+            // reads or resurrect path collisions through the legacy source-only restoration.
+            if restored_v2_identities
+                && self
+                    .runtime
+                    .registry
+                    .agent_metadata_for_thread(thread_id)
+                    .is_none()
+            {
+                continue;
+            }
             let stored_thread = match state
                 .read_stored_thread(ReadThreadParams {
                     thread_id,
@@ -911,7 +927,11 @@ impl LocalAgentControl {
                     continue;
                 }
             };
-            self.restore_thread_spawn_metadata(thread_id, &stored_thread.source);
+            if restored_v2_identities {
+                self.ensure_thread_security_inheritance(thread_id, &stored_thread.source);
+            } else {
+                self.restore_thread_spawn_metadata(thread_id, &stored_thread.source);
+            }
         }
         Ok(())
     }

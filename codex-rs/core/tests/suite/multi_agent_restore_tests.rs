@@ -176,10 +176,9 @@ impl ThreadStore for GatedChildMetadataStore {
 async fn cold_root_resume_overlaps_child_reads_and_applies_identities_in_graph_order() -> Result<()>
 {
     let server = start_mock_server().await;
-    let initial_url = format!("{}/v1", server.uri());
     let initial = test_codex()
         .with_config(move |config| {
-            configure_multi_agent_v2_with_role(config, &initial_url);
+            configure_multi_agent_v2_with_role(config);
             config
                 .features
                 .enable(Feature::Sqlite)
@@ -257,11 +256,10 @@ async fn cold_root_resume_overlaps_child_reads_and_applies_identities_in_graph_o
         started: started_tx,
         completed: completed_tx,
     });
-    let resume_url = format!("{}/v1", server.uri());
     let mut resume_builder = test_codex()
         .with_thread_store(store)
         .with_config(move |config| {
-            configure_multi_agent_v2_with_role(config, &resume_url);
+            configure_multi_agent_v2_with_role(config);
             config
                 .features
                 .enable(Feature::Sqlite)
@@ -293,10 +291,14 @@ async fn cold_root_resume_overlaps_child_reads_and_applies_identities_in_graph_o
 
     assert_eq!(resumed.thread_manager.list_thread_ids().await, vec![root]);
     for child_id in [last, failed] {
-        assert!(matches!(
-            resumed.thread_manager.ensure_multi_agent_v2_child_loaded(child_id).await,
-            Err(error) if matches!(error.details(), CodexErrorDetails::ThreadNotFound(id) if *id == child_id)
-        ));
+        let result = resumed
+            .thread_manager
+            .ensure_multi_agent_v2_child_loaded(child_id)
+            .await;
+        assert!(
+            matches!(&result, Err(error) if matches!(error.details(), CodexErrorDetails::ThreadNotFound(id) if *id == child_id)),
+            "invalid restored child {child_id}: {result:?}",
+        );
     }
     resumed
         .thread_manager
@@ -310,7 +312,7 @@ async fn cold_root_resume_overlaps_child_reads_and_applies_identities_in_graph_o
         &server,
         "continue restored child",
         "resume-child",
-        "followup_task",
+        "followup_task_plaintext",
         &json!({ "target": first.to_string(), "message": "continue after resume" }).to_string(),
     )
     .await;
@@ -322,6 +324,14 @@ async fn cold_root_resume_overlaps_child_reads_and_applies_identities_in_graph_o
     .await;
     resumed.submit_turn("continue restored child").await?;
     let child = resumed.thread_manager.get_thread(first).await?;
+    // Cold loading can publish an earlier recovery completion; wait for this follow-up's request.
+    timeout(Duration::from_secs(10), async {
+        while followup.requests().is_empty() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .context("restored child should sample the new follow-up")?;
     wait_for_event(child.as_ref(), |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
