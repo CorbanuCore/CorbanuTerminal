@@ -810,6 +810,9 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
             EnvironmentVariablePattern::new_case_insensitive("HOME"),
             EnvironmentVariablePattern::new_case_insensitive("VENDOR_HOST"),
             EnvironmentVariablePattern::new_case_insensitive("STRIPE_HOST"),
+            EnvironmentVariablePattern::new_case_insensitive("*TOKEN*"),
+            EnvironmentVariablePattern::new_case_insensitive("*KEY*"),
+            EnvironmentVariablePattern::new_case_insensitive("*PASSWORD*"),
         ],
         r#set: HashMap::from([
             ("GH_HOST".to_string(), "github.example.com".to_string()),
@@ -835,6 +838,27 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
         ]),
         ..ShellEnvironmentPolicy::default()
     };
+    // Generic fail-open aliases use capture-time source authorization, separate
+    // from the inert upstream credential registry. Deny all seven fixture
+    // sources and the readonly equivalent explicitly; policy.set can otherwise
+    // override exclusions. Startup still creates them after launch filtering.
+    for key in [
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "HOMEBREW_GITHUB_API_TOKEN",
+        "GH_ENTERPRISE_TOKEN",
+        "OPENAI_API_KEY",
+        "STRIPE_API_KEY",
+        "VENDOR_PASSWORD",
+        "LOCAL_TOKEN",
+    ] {
+        let allowed = create_env_from_vars(
+            std::iter::once((key.to_string(), "fixture-source".to_string())),
+            &shell_environment_policy,
+            None,
+        );
+        assert!(!allowed.contains_key(key), "capture policy admitted {key}");
+    }
     let credential_broker = SnapshotCredentialBroker {
         network_proxy: network_proxy.clone(),
         shell_environment_policy: shell_environment_policy.clone(),
@@ -868,9 +892,9 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
     // D353/D354/D640: configured-provider destination/replay metadata is inert.
     assert!(captured_credentials.context_env.is_empty());
     assert!(captured_credentials.protected_startup_env.is_none());
-    // This map also records denied aliases and unrelated inherited entries.
-    // D353/D354 withhold these configured providers rather than registering them
-    // with the upstream replay broker; any retained aliases must remain denied.
+    // This separate generic alias map can authorize sources permitted at capture.
+    // Here the capture policy denies these sources, including LOCAL_TOKEN whose
+    // value was copied before unsetting it. Any retained aliases must stay denied.
     for key in [
         "STRIPE_AUTH_HEADER",
         "VENDOR_AUTH_HEADER",
@@ -915,9 +939,11 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
     )
     .await?;
 
-    // D682 explicitly retires raw restoration, alias rewriting and destination
-    // rebinding contracts. Neither permissive filtering nor an explicit allow-list
-    // may reactivate replay through the retained hardened engine.
+    // D682 retires unsupported registered-provider restoration and destination
+    // rebinding. This matrix also proves permissive replay filters cannot reopen
+    // capture-time source denial through the separate generic alias helper.
+    // Permitted generic fail-open behavior stays covered by the copied-credential
+    // regression, not by a blanket claim that every alias is always denied.
     let snapshot_file = ShellSnapshotFile {
         path,
         credentials,
