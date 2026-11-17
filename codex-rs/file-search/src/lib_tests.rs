@@ -5,6 +5,8 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
+use crossbeam_channel::bounded;
+use crossbeam_channel::select;
 use pretty_assertions::assert_eq;
 use std::fs;
 use std::sync::Arc;
@@ -122,6 +124,12 @@ impl RecordingReporter {
         })
     }
 
+    fn wait_for_streamed_update(&self, timeout: Duration) -> bool {
+        self.wait_until(&self.updates, &self.update_cv, timeout, |updates| {
+            has_streamed_update(updates)
+        })
+    }
+
     fn snapshot(&self) -> FileSearchSnapshot {
         self.updates
             .lock()
@@ -146,6 +154,64 @@ impl SessionReporter for RecordingReporter {
         }
         self.complete_cv.notify_all();
     }
+}
+
+fn is_streamed_update(snapshot: &FileSearchSnapshot) -> bool {
+    !snapshot.walk_complete && snapshot.scanned_file_count > 0 && !snapshot.matches.is_empty()
+}
+
+fn has_streamed_update(updates: &[FileSearchSnapshot]) -> bool {
+    updates.iter().any(is_streamed_update)
+}
+
+/// Forwards session work to the matcher while holding back the walker
+/// completion signal until the test releases it. This deterministically
+/// recreates the ordering where the walk has finished but the matcher has not
+/// yet observed completion.
+fn spawn_walk_complete_relay(
+    work_rx: Receiver<WorkSignal>,
+    matcher_tx: Sender<WorkSignal>,
+    release_rx: Receiver<()>,
+) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        let mut held_walk_complete = false;
+        let mut released = false;
+        loop {
+            select! {
+                recv(work_rx) -> signal => {
+                    let Ok(signal) = signal else {
+                        break;
+                    };
+                    match signal {
+                        WorkSignal::WalkComplete => {
+                            if released {
+                                let _ = matcher_tx.send(WorkSignal::WalkComplete);
+                            } else {
+                                held_walk_complete = true;
+                            }
+                        }
+                        WorkSignal::Shutdown => {
+                            let _ = matcher_tx.send(WorkSignal::Shutdown);
+                            break;
+                        }
+                        signal @ (WorkSignal::QueryUpdated(_) | WorkSignal::NucleoNotify) => {
+                            let _ = matcher_tx.send(signal);
+                        }
+                    }
+                }
+                recv(release_rx) -> release => {
+                    if release.is_err() {
+                        break;
+                    }
+                    released = true;
+                    if held_walk_complete {
+                        let _ = matcher_tx.send(WorkSignal::WalkComplete);
+                        held_walk_complete = false;
+                    }
+                }
+            }
+        }
+    })
 }
 
 fn create_temp_tree(file_count: usize) -> TempDir {
@@ -186,20 +252,102 @@ fn session_scanned_file_count_is_monotonic_across_queries() {
 fn session_streams_updates_before_walk_complete() {
     let dir = create_temp_tree(/*file_count*/ 600);
     let reporter = Arc::new(RecordingReporter::default());
-    let session = create_session(
-        vec![dir.path().to_path_buf()],
-        FileSearchOptions::default(),
-        reporter.clone(),
-        /*cancel_flag*/ None,
-    )
-    .expect("session");
+
+    // Mirror create_session wiring, but route work through the relay so the
+    // matcher cannot observe WalkComplete before this test sees partial results.
+    let FileSearchOptions {
+        limit,
+        exclude,
+        threads,
+        compute_indices,
+        respect_gitignore,
+    } = FileSearchOptions::default();
+    let search_directories = vec![dir.path().to_path_buf()];
+    let override_matcher =
+        build_override_matcher(&search_directories[0], &exclude).expect("override matcher");
+
+    let (work_tx, work_rx) = unbounded();
+    let (matcher_tx, matcher_rx) = unbounded();
+    let (release_tx, release_rx) = bounded(1);
+    let relay = spawn_walk_complete_relay(work_rx, matcher_tx.clone(), release_rx);
+
+    let notify_tx = matcher_tx.clone();
+    let notify = Arc::new(move || {
+        let _ = notify_tx.send(WorkSignal::NucleoNotify);
+    });
+    drop(matcher_tx);
+    let nucleo = Nucleo::new(
+        Config::DEFAULT.match_paths(),
+        notify,
+        Some(threads.get()),
+        1,
+    );
+    let injector = nucleo.injector();
+    let inner = Arc::new(SessionInner {
+        search_directories,
+        limit: limit.get(),
+        threads: threads.get(),
+        compute_indices,
+        respect_gitignore,
+        cancelled: Arc::new(AtomicBool::new(false)),
+        shutdown: Arc::new(AtomicBool::new(false)),
+        reporter: reporter.clone(),
+        work_tx,
+    });
+
+    let matcher_inner = inner.clone();
+    let matcher = thread::spawn(move || matcher_worker(matcher_inner, matcher_rx, nucleo));
+    let walker_inner = inner.clone();
+    let walker = thread::spawn(move || walker_worker(walker_inner, override_matcher, injector));
+    let session = FileSearchSession { inner };
 
     session.update_query("file-0");
-    let completed = reporter.wait_for_complete(SESSION_WAIT);
+    assert!(
+        reporter.wait_for_streamed_update(SESSION_WAIT),
+        "session did not stream a partial update before walk completion"
+    );
 
-    assert!(completed);
-    let updates = reporter.updates();
-    assert!(updates.iter().any(|snapshot| !snapshot.walk_complete));
+    let streamed = reporter
+        .updates()
+        .into_iter()
+        .find(is_streamed_update)
+        .expect("streamed update");
+    assert_eq!(streamed.query, "file-0");
+    assert!(
+        streamed
+            .matches
+            .iter()
+            .all(|file_match| file_match.path.to_string_lossy().starts_with("file-0"))
+    );
+
+    release_tx.send(()).expect("release walk completion");
+    assert!(reporter.wait_for_complete(SESSION_WAIT));
+    assert!(has_streamed_update(&reporter.updates()));
+
+    drop(session);
+    relay.join().expect("relay");
+    walker.join().expect("walker");
+    matcher.join().expect("matcher").expect("matcher result");
+}
+
+#[test]
+fn final_only_updates_do_not_count_as_streamed() {
+    // A final-only stream must not satisfy the streaming assertion.
+    let final_only = FileSearchSnapshot {
+        query: "file-0".to_string(),
+        matches: vec![FileMatch {
+            score: 1,
+            path: PathBuf::from("file-0000.txt"),
+            match_type: MatchType::File,
+            root: PathBuf::from("/tmp"),
+            indices: None,
+        }],
+        total_match_count: 1,
+        scanned_file_count: 600,
+        walk_complete: true,
+    };
+
+    assert!(!has_streamed_update(std::slice::from_ref(&final_only)));
 }
 
 #[test]
