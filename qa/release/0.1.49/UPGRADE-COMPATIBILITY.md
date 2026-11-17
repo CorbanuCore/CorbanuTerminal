@@ -64,7 +64,7 @@ Text and Enter were sent separately.
 | Published old package checksum and version | Pass |
 | Existing thread id and rollout | Pass; same thread, rollout prefix preserved and extended |
 | History reopening | Pass; old history is an unchanged prefix of new history |
-| New completed response after resume | Pass; local mock received a new request |
+| New completed response after resume | Pass; local mock received a new request; persisted assistant messages and `task_complete` events increase from one to two (also two on backup rollback) |
 | Vault value after upgrade | Pass; compared in memory; Linux file-backed key storage only |
 | State, logs, goals and memories databases | Pass; `PRAGMA integrity_check = ok` on all four |
 | State migrations | 1–52 become 1–53; 32-byte provider salt exists |
@@ -75,7 +75,7 @@ Text and Enter were sent separately.
 | Existing config values | Pass; every original parsed entry unchanged; default service tier is the only addition |
 | In-place downgrade to 0.1.48 | **Unsupported in this test**; startup rejects migration 53 |
 | Rollback with pre-upgrade backup | Pass; config byte identity, conversation response and vault comparison |
-| Synthetic vault-value scan | Pass; no matches in 33 evidence files |
+| Synthetic vault-value scan | Pass; no matches in the initial 33 files or final 34-file scan |
 
 The config addition is explained by
 `codex-rs/tui/src/app/resume_defaults.rs::remember_resumed_model`: acknowledged

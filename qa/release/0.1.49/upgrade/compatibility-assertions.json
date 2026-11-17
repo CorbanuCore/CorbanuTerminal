@@ -10,9 +10,12 @@
     "qa-lease_preserved": true,
     "qa-days_preserved": true,
     "qa-unrelated_preserved": true,
+    "seeded-pre-upgrade-backup_completed_assistant_turns": true,
+    "upgraded-backup_completed_assistant_turns": true,
+    "rollback-profile_completed_assistant_turns": true,
     "no_vault_canary_in_evidence": true
   },
-  "evidence_files_scanned": 33,
+  "evidence_files_scanned": 34,
   "leak_paths": [],
   "config_before_sha256": "e3159c53d29352ae1e7f175b3e5723f364c531b79bd1acfd2d94180158e4de87",
   "config_after_sha256": "19d0b2cf87e25780c581762f9fa09c509e33e2bb2b66b70cddfd7eda1a2175ba"

@@ -24,8 +24,8 @@ versioned QA/notes changes. D701 explicitly changes the base for 0.1.49 to main.
 - [ ] #2549 merged (quoted script command-rule bypass).
 - [ ] #2555 merged (trusted PowerShell parser).
 - [ ] #2558 merged (exact Windows allow-rule spelling).
-- [ ] Fixing PR for **issue** #2567 merged (provider cooldown; record PR number).
-- [ ] astra-models62 new-models PR merged (record PR number).
+- [ ] #2573 merged (fixing **issue** #2567, provider cooldown).
+- [ ] #2571 merged (astra-models62 new models).
 
 Poll GitHub about every 20 minutes and record merge commits/times. An open or
 closed-unmerged PR, or an issue closed without the accepted fix, does not pass.
@@ -56,6 +56,10 @@ literal head SHA with `--merge --match-head-commit`.
 
 ## True-TUI matrix on the final candidate
 
+Current-main [native harness preflight](PREFLIGHT-TUI.md) passed the exercised
+macOS and Windows prompt/cancel/recovery flows. Its failed navigation/onboarding
+attempts are preserved. Final release-branch replays remain pending.
+
 Every run records source SHA, package/binary SHA-256, version, platform, profile,
 working directory, literal text/key events, visible checkpoints, exit status,
 and raw capture/log paths. Send text and Enter separately. Use RUST_LOG=trace
@@ -78,7 +82,9 @@ any unavailable interactive setup separately.
 Execute on each platform:
 
 1. Fresh profile: first paint, onboarding, `/status`, `/providers`, `/model`,
-   `/help`, `/docs`; choose an existing model and each new applicable route.
+   the command list opened by typing `/`, and `/docs`; choose an existing model
+   and each new applicable route. The initial plan's `/help` case was corrected
+   after preflight showed it is not a supported slash command.
    Verify existing choices/defaults remain available and header/footer agree.
 2. Send a one-line prompt; run a harmless workspace file-read/write task;
    cancel an in-flight request with Escape; submit a recovery prompt.
