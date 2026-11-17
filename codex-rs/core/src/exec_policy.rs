@@ -1286,9 +1286,11 @@ fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {
     {
         // #2524 (D688): `PWSH -c`, `PowerShell.EXE -Command` read like
         // `pwsh -c`, `powershell.exe -Command`.
+        // #2546 (D553): a trusted PowerShell reads the script, never the
+        // command's own argv[0]; a script none can read asks (`wrappers`).
         let respelled = crate::security::tainted_action::policy_powershell_script(command);
-        if let Some(commands) =
-            codex_shell_command::powershell::parse_powershell_command_into_plain_commands(
+        if let Some(codex_shell_command::powershell::PowershellScriptRead::Commands(commands)) =
+            codex_shell_command::powershell::read_powershell_command_script(
                 respelled.as_deref().unwrap_or(command),
             )
             && !commands.is_empty()
