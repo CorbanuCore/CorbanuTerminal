@@ -223,7 +223,7 @@ async fn responses_websocket_preserves_credit_usage_metadata() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn responses_websocket_preserves_raw_tool_metadata_for_openai_custom_endpoint() {
+async fn responses_websocket_omits_raw_tool_metadata_for_openai_custom_endpoint() {
     skip_if_no_network!();
 
     let server = start_websocket_server(vec![vec![vec![
@@ -247,7 +247,12 @@ async fn responses_websocket_preserves_raw_tool_metadata_for_openai_custom_endpo
     output.append_executed_tool_calls(vec![call]);
     output.mark_tool_calls_complete();
     let prompt = prompt_with_input(vec![output.clone()]);
-    let expected = serde_json::to_value(&output).unwrap();
+    // D634: keep ordinary output and call metadata, but strip provider-private data
+    // from custom endpoints without changing the captured prompt.
+    let mut transmitted_output = output.clone();
+    transmitted_output.clear_tool_result_metadata();
+    let expected = serde_json::to_value(&transmitted_output).unwrap();
+    assert_ne!(expected, serde_json::to_value(&output).unwrap());
 
     let mut client_session = harness.client.new_session();
     stream_until_complete_with_model_info(
