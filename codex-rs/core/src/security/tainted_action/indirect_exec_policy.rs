@@ -51,16 +51,28 @@ fn policy_wrapper_commands_for(words: &[String], case: names::NameCase) -> Polic
     let mut start = 0;
     // Computed on the first launcher only.
     let mut scan = None;
+    // Built the first time a chroot needs it.
+    let mut chroot_words = None;
     while let Some(program) = words.get(start) {
         work::step();
         let name = names::launcher_name_for(program, case);
         let name = name.as_ref();
         let after = if name == "chroot" {
             // No held redirections: callers supply argv after shell parsing.
-            let reads = chroot_reads(&SimpleCommand::default(), &words[start..], /*from*/ 0);
+            let mut reads =
+                chroot_reads(&SimpleCommand::default(), &words[start..], /*from*/ 0);
+            if reads.is_empty() {
+                // #2503: the classifier's reader knows only names spelled
+                // chroot (not `chroot.exe`, `a=b/chroot`): read a copy of
+                // the argv with each word naming chroot so spelled.
+                let spelled = chroot_words.get_or_insert_with(|| spelled_chroot(words, case));
+                reads = chroot_reads(
+                    &SimpleCommand::default(),
+                    &spelled[start..],
+                    /*from*/ 0,
+                );
+            }
             let Some(read) = reads.first() else {
-                // #2503: a name only Windows reads as chroot (`chroot.exe`),
-                // which the classifier's reader does not: fail closed.
                 result.uncertain = true;
                 break;
             };
@@ -208,6 +220,22 @@ fn policy_wrapper_commands_for(words: &[String], case: names::NameCase) -> Polic
         start = after;
     }
     result
+}
+
+/// `words` with each word that names chroot (as `case` reads names)
+/// written `chroot`.
+fn spelled_chroot(words: &[String], case: names::NameCase) -> Vec<String> {
+    words
+        .iter()
+        .map(|word| {
+            work::step();
+            if names::launcher_name_for(word, case) == "chroot" {
+                "chroot".to_string()
+            } else {
+                word.clone()
+            }
+        })
+        .collect()
 }
 
 /// A launcher with no command of its own. Under xargs (D677) stdin may

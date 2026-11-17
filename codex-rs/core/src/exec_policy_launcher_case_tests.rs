@@ -103,7 +103,9 @@ fn spellings(launcher: &str) -> Vec<String> {
     }
     if cfg!(windows) {
         names.push(format!("{upper}.EXE"));
-        names.push(format!("C:\\Tools\\{name}.exe"));
+        // Quoted: shlex reads an unquoted `\` as an escape.
+        names.push(format!("'C:\\Tools\\{name}.exe'"));
+        names.push(format!("{name}.exe."));
     }
     names
         .into_iter()

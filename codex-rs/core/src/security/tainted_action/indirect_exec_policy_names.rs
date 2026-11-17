@@ -2,12 +2,15 @@
 //! (`sudo`, `env`, `xargs`, `su`, ...) are recognized by this name only, so
 //! every launcher, present and future, matches names the same way.
 //!
-//! macOS (APFS and HFS+ by default) and Windows (NTFS) look program names up
-//! without regard to case: there `SUDO`, `/usr/bin/Env` and `ſu` run `sudo`,
-//! `env` and `su`. APFS applies full Unicode case folding, which maps a few
-//! non-ASCII letters and ligatures to ASCII ([`FOLDS`]; checked on APFS).
-//! Windows also drops an `.exe` suffix and trailing dots and spaces, and
-//! separates directories with `\` too.
+//! macOS (case-insensitive APFS, the default) and Windows (NTFS) look
+//! program names up without regard to case: there `SUDO`, `/usr/bin/Env`
+//! and `ſu` run `sudo`, `env` and `su`. APFS applies full Unicode case
+//! folding, which maps a few non-ASCII letters and ligatures to ASCII
+//! ([`FOLDS`]; checked on APFS over every code point). Windows also drops an
+//! `.exe` suffix and trailing dots and spaces, and separates directories
+//! with `\` too. Not read: characters legacy HFS+ volumes ignore (such as
+//! U+200D), Windows 8.3 short names (`BUSYBO~1.EXE`) and `::$DATA` stream
+//! suffixes (#2510).
 //!
 //! Linux file systems are case-sensitive (ext4/f2fs case-folded directories
 //! are opt-in and not used for program directories), so names there stay as
@@ -267,19 +270,52 @@ mod tests {
                     let spelled = line(spelled);
                     let found = shape(&spelled, case);
                     if case == NameCase::Windows {
-                        // chroot.exe: the classifier's chroot reader does
-                        // not see it; the chain fails closed instead.
-                        if name == "chroot" {
-                            assert_eq!(found, (vec![0], true, None), "{spelled}");
-                        } else {
-                            assert_eq!(found, expected, "{spelled}");
-                        }
+                        assert_eq!(found, expected, "{spelled}");
                     } else if !matches!(name, "busybox" | "toybox") {
                         // (Any name starting busybox or toybox is theirs.)
                         assert_eq!(found, not_a_launcher, "{spelled} ({case:?})");
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn chroot_spellings_the_classifier_reader_skips_are_read() {
+        for case in [
+            NameCase::Sensitive,
+            NameCase::Insensitive,
+            NameCase::Windows,
+        ] {
+            let expected = shape("chroot / git push", case);
+            // An assignment-like path still runs chroot when exec'd.
+            assert_eq!(shape("a=b/chroot / git push", case), expected, "{case:?}");
+            assert_eq!(
+                shape("nice -n 5 a=b/chroot / git push", case),
+                shape("nice -n 5 chroot / git push", case),
+                "{case:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn path_named_builtin_keeps_its_floor() {
+        // Only the shell builtin takes `--`; a program named builtin may
+        // read it otherwise.
+        for case in [
+            NameCase::Sensitive,
+            NameCase::Insensitive,
+            NameCase::Windows,
+        ] {
+            assert_eq!(
+                shape("/x/builtin -- git push", case),
+                (vec![0], true, None),
+                "{case:?}"
+            );
+            assert_eq!(
+                shape("builtin -- git push", case),
+                (vec![0, 2], false, None)
+            );
         }
     }
 
