@@ -761,7 +761,17 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
          export EXCLUDED_PARENT_HOME=\"${HOME-missing}\"\n\
          export STARTUP_PATH_OVERRIDE_SEEN=\"${PATH%%:*}\"\n\
          export STARTUP_CORP_REGION_SEEN=\"${CORP_REGION-missing}\"\n\
-         export STARTUP_NPM_TOKEN_SEEN=\"${NPM_TOKEN-missing}\"\n",
+         export STARTUP_NPM_TOKEN_SEEN=\"${NPM_TOKEN-missing}\"\n\
+         test \"$GH_TOKEN\" = ghp_shell_only_secret && \\\n\
+         test \"$GITHUB_TOKEN\" = ghp_readonly_secret && \\\n\
+         test \"$GH_ENTERPRISE_TOKEN\" = ghp_enterprise_secret && \\\n\
+         test \"$OPENAI_API_KEY\" = sk-proj-snapshot-secret && \\\n\
+         test \"$STRIPE_API_KEY\" = stripe_live_abcdefghijklmnopqrstuvwx && \\\n\
+         test \"$VENDOR_PASSWORD\" = pin_abcdefgh && \\\n\
+         test \"$LOCAL_AUTH_HEADER\" = 'Bearer local_abcdefghijklmnopqrstuvwx' && \\\n\
+         printf initialized > \"$PWD/d682-startup-witness\"\n\
+         if test \"$STARTUP_PATH_OVERRIDE_SEEN\" = /enterprise/bin; then printf path-ok; else printf path-other; fi > \"$PWD/d682-safe-observations\"\n\
+         if test \"$STARTUP_CORP_REGION_SEEN\" = production; then printf region-ok; else printf region-other; fi >> \"$PWD/d682-safe-observations\"\n",
     )?;
 
     let started_proxy = credential_snapshot_proxy().await?;
@@ -819,6 +829,29 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
         /*removed_env_vars*/ &[],
     )
     .await?;
+    let snapshot_probe = fs::read_to_string(&path).await?;
+    let initialized = fs::read_to_string(dir.path().join("d682-startup-witness"))
+        .await
+        .unwrap_or_default()
+        == "initialized";
+    let observations = fs::read_to_string(dir.path().join("d682-safe-observations"))
+        .await
+        .unwrap_or_default();
+    eprintln!(
+        "D682 startup={initialized} path_input={} region_input={} path_marker={} path_export={} region_marker={} region_export={} identity_marker={} home_marker={}",
+        observations.contains("path-ok"),
+        observations.contains("region-ok"),
+        snapshot_probe.contains("STARTUP_PATH_OVERRIDE_SEEN="),
+        snapshot_probe.contains("declare -x PATH="),
+        snapshot_probe.contains("STARTUP_CORP_REGION_SEEN="),
+        snapshot_probe.contains("CORP_REGION="),
+        snapshot_probe.contains("IDENTITY_SEEN="),
+        snapshot_probe.contains("EXCLUDED_PARENT_HOME=")
+    );
+    assert!(
+        initialized,
+        "capture must run the startup fixture and initialize its seven credentials"
+    );
     let captured_credentials = credentials.as_ref().expect("brokered snapshot credentials");
     // D353/D354/D640: configured-provider destination/replay metadata is inert.
     assert!(captured_credentials.context_env.is_empty());
