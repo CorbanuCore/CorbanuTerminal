@@ -26,15 +26,21 @@ versioned QA/notes changes. D701 explicitly changes the base for 0.1.49 to main.
   merge `5ddb26bb2651cddb8965fa0bc27a37c78c2135b1`.
 - [x] #2558 merged (exact Windows allow-rule spelling), 2026-11-18 00:29:16Z;
   merge `135197a9a1f10d2cfd4af116af1c27e516e873b0`.
-- [ ] #2573 merged (fixing **issue** #2567, provider cooldown).
+- [x] #2573 merged (fixing **issue** #2567, provider cooldown), 2026-11-18 03:41:30Z;
+  merge `ebbe3cfac79660b4ccf8ab01974c438ec61acfcd`.
 - [x] #2571 merged (astra-models62 new models), 2026-11-18 01:56:12Z;
   merge `1036647d52c95fd02ce32112c69b799d0e5f8328`.
 - [ ] #2580 merged (fixing issue #2568, Windows PowerShell command parsing).
-- [ ] #2586 merged (#2584 investigation: report the underlying Win32 labeling
-  failure). Correct the private fixture's folder permissions and require a
-  passing Medium-token live replay on the final candidate.
+- [x] #2586 merged (#2584 diagnostic), 2026-11-18 04:37:57Z;
+  merge `4dec082e87070e218114f09c69e5b7caf5ca16b7`. Corrected private fixture
+  permissions pass current-binary Medium QA; require a fresh final-candidate replay.
+- [ ] #2591 merged (issue #2590, ChatGPT Plan compatibility version for GPT-6.2).
+  Run final-candidate plan-route smokes for `gpt-6.2-astra` and `gpt-6.2-sol`,
+  plus a `gpt-6-astra` regression; preserve exact model/effort and route evidence.
 
-The coordinator added #2568 and #2584 as release gates on 2026-11-18.
+The coordinator added #2568 and #2584 as release gates on 2026-11-18, and
+added #2590/#2591 at 04:25Z. The initial version diagnosis was corrected by
+that worker: main advertises 0.156.0; #2591 selects 0.167.0.
 Keep this preparation PR as the evidence home. After #2584's fix merges,
 repeat the measured Medium-token case on the release-candidate build; require
 successful tool execution and retain both the original failure and replay.

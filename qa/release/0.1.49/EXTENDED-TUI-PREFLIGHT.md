@@ -29,6 +29,10 @@ macOS uses the existing outer Seatbelt denial of the operator home and
 Keychain services. Linux uses a non-root, no-network Docker container with a
 read-only root, capped tmpfs/memory/PIDs and only the worker fixture writable.
 Mock responses do not qualify live provider behavior or tool sandboxing.
+The later native Windows replay, with measured Medium integrity and protected
+AppData/workspace ACLs, passes the same 12 checks plus native readiness (13).
+Raw result: `$W/astra-rel149-windows-smoke-protected-acl-result.json`;
+remote fixture: `C:\CorbanuQA\astra-rel149\acl-parent-smoke-medium-protected-acl\fixture`.
 
 ## Security choice, restart and recovery
 
