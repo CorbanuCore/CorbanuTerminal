@@ -229,6 +229,7 @@ async fn composed_scripts_never_run_unasked() {
 /// costs: `cargo test -p codex-core --lib script_corpus_ask_rate -- --ignored --nocapture`.
 #[tokio::test]
 #[ignore = "needs a corpus file"]
+#[allow(clippy::print_stderr, reason = "a measurement run by hand")]
 async fn script_corpus_ask_rate() {
     let Ok(path) = std::env::var("CORBANU_SCRIPT_CORPUS") else {
         return;
