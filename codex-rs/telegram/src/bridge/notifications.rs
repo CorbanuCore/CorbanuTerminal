@@ -17,8 +17,38 @@ use tracing::warn;
 use super::BridgeRuntime;
 use super::finish_edit_result;
 use super::status::StatusTokenUsage;
+use crate::conversation::ConversationKey;
 use crate::render::render_html_chunks;
+use crate::session::SessionStore;
 use crate::session::StreamUpdate;
+
+// Keep status notices tied to the originating Codex thread, including the
+// Telegram topic. An unknown or replaced thread must never become a broadcast.
+async fn thread_status_notice(
+    sessions: &SessionStore,
+    notification: ServerNotification,
+) -> Option<(ConversationKey, String)> {
+    let (thread_id, message) = match notification {
+        ServerNotification::StrictReviewRequired(notification) => (
+            notification.thread_id,
+            "Warning: This request requires additional safety checks, some tool calls might take extra time"
+                .to_string(),
+        ),
+        ServerNotification::AuthRecoveryStarted(notification) => {
+            (notification.thread_id, notification.message)
+        }
+        ServerNotification::AuthRecoveryCompleted(notification) => {
+            (notification.thread_id, format!("✓ {}", notification.message))
+        }
+        _ => return None,
+    };
+    let conversation = sessions.conversation_for_thread(&thread_id).await?;
+    Some((conversation, message))
+}
+
+#[cfg(test)]
+#[path = "notifications_tests.rs"]
+mod tests;
 
 impl BridgeRuntime {
     pub(super) async fn handle_notification(
@@ -100,6 +130,16 @@ impl BridgeRuntime {
                 {
                     self.send_text(chat_id, &format!("Warning: {}", notification.message))
                         .await?;
+                }
+                Ok(())
+            }
+            notification @ (ServerNotification::StrictReviewRequired(_)
+            | ServerNotification::AuthRecoveryStarted(_)
+            | ServerNotification::AuthRecoveryCompleted(_)) => {
+                if let Some((conversation, message)) =
+                    thread_status_notice(&self.sessions, notification).await
+                {
+                    self.send_text(conversation, &message).await?;
                 }
                 Ok(())
             }
@@ -202,12 +242,15 @@ impl BridgeRuntime {
             | ServerNotification::ThreadRealtimeSdp(_)
             | ServerNotification::ThreadRealtimeError(_)
             | ServerNotification::ThreadRealtimeClosed(_)
-            | ServerNotification::AuthRecoveryCompleted(_)
-            | ServerNotification::AuthRecoveryStarted(_)
-            | ServerNotification::GatewayOAuthChanged(_)
+            | ServerNotification::WindowsWorldWritableWarning(_)
+            | ServerNotification::WindowsSandboxSetupCompleted(_)
+            | ServerNotification::AccountLoginCompleted(_) => Ok(()),
+            // These metadata, account/project, and realtime-stream updates have
+            // no Telegram presentation. Existing turn, message, and approval
+            // notifications remain the chat's source of user-visible state.
+            ServerNotification::GatewayOAuthChanged(_)
             | ServerNotification::McpServerEventStream(_)
             | ServerNotification::ProjectChanged(_)
-            | ServerNotification::StrictReviewRequired(_)
             | ServerNotification::ThreadAttachmentUpdated(_)
             | ServerNotification::ThreadPredictionUpdated(_)
             | ServerNotification::ThreadProjectUpdated(_)
@@ -217,10 +260,7 @@ impl BridgeRuntime {
             | ServerNotification::ThreadRealtimeItemStarted(_)
             | ServerNotification::ThreadRealtimeItemTranscriptDelta(_)
             | ServerNotification::ThreadReverted(_)
-            | ServerNotification::ThreadSectionChanged(_)
-            | ServerNotification::WindowsWorldWritableWarning(_)
-            | ServerNotification::WindowsSandboxSetupCompleted(_)
-            | ServerNotification::AccountLoginCompleted(_) => Ok(()),
+            | ServerNotification::ThreadSectionChanged(_) => Ok(()),
         }
     }
 
