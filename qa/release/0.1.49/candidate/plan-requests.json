@@ -1,0 +1,140 @@
+[
+  {
+    "method": "GET",
+    "path": "/backend-api/codex/models",
+    "query": {
+      "client_version": "0.167.0"
+    },
+    "version": "0.167.0",
+    "incoming_encoding": null,
+    "responses_lite": null,
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "path": "/backend-api/codex/responses",
+    "query": {},
+    "version": "0.167.0",
+    "incoming_encoding": "zstd",
+    "responses_lite": null,
+    "model": "gpt-6.2-astra",
+    "reasoning": {
+      "effort": "low",
+      "context": "all_turns"
+    },
+    "text": {
+      "verbosity": "low"
+    },
+    "body_keys": [
+      "client_metadata",
+      "include",
+      "input",
+      "model",
+      "parallel_tool_calls",
+      "prompt_cache_key",
+      "reasoning",
+      "store",
+      "stream",
+      "text",
+      "tool_choice"
+    ],
+    "tool_types": [],
+    "tool_names": [],
+    "status": 200,
+    "response_model": "gpt-6.2-astra",
+    "completed": true,
+    "error_type": "ClientConnectionResetError"
+  },
+  {
+    "method": "GET",
+    "path": "/backend-api/codex/models",
+    "query": {
+      "client_version": "0.167.0"
+    },
+    "version": "0.167.0",
+    "incoming_encoding": null,
+    "responses_lite": null,
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "path": "/backend-api/codex/responses",
+    "query": {},
+    "version": "0.167.0",
+    "incoming_encoding": "zstd",
+    "responses_lite": null,
+    "model": "gpt-6.2-sol",
+    "reasoning": {
+      "effort": "low",
+      "context": "all_turns"
+    },
+    "text": {
+      "verbosity": "low"
+    },
+    "body_keys": [
+      "client_metadata",
+      "include",
+      "input",
+      "model",
+      "parallel_tool_calls",
+      "prompt_cache_key",
+      "reasoning",
+      "store",
+      "stream",
+      "text",
+      "tool_choice"
+    ],
+    "tool_types": [],
+    "tool_names": [],
+    "status": 200,
+    "response_model": "gpt-6.2-sol",
+    "completed": true,
+    "error_type": "ClientConnectionResetError"
+  },
+  {
+    "method": "GET",
+    "path": "/backend-api/codex/models",
+    "query": {
+      "client_version": "0.167.0"
+    },
+    "version": "0.167.0",
+    "incoming_encoding": null,
+    "responses_lite": null,
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "path": "/backend-api/codex/responses",
+    "query": {},
+    "version": "0.167.0",
+    "incoming_encoding": "zstd",
+    "responses_lite": null,
+    "model": "gpt-6-astra",
+    "reasoning": {
+      "effort": "low",
+      "context": "all_turns"
+    },
+    "text": {
+      "verbosity": "low"
+    },
+    "body_keys": [
+      "client_metadata",
+      "include",
+      "input",
+      "model",
+      "parallel_tool_calls",
+      "prompt_cache_key",
+      "reasoning",
+      "store",
+      "stream",
+      "text",
+      "tool_choice"
+    ],
+    "tool_types": [],
+    "tool_names": [],
+    "status": 200,
+    "response_model": "gpt-6-astra",
+    "completed": true,
+    "error_type": "ClientConnectionResetError"
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "source_commit": "5fd571822bef255237f963c7bc18286a9110f58b",
+  "binary_sha256": "53f77726294ee6323aa565ae1400ce4cf53a0e15ab305be9bb10ca3bb812cb57",
+  "model": "Qwen3.8-Flash-Next-Uncensored-MLX-Serve-mixed-4-8bit",
+  "provider": "already-running local MLX; no credentials; no load/switch/settings change",
+  "checks": {
+    "input_preserved": true
+  },
+  "limits": "one TUI task, 240-second cutoff; disposable fixture, not canonical live-repository or benchmark qualification",
+  "error": "[Errno 2] No such file or directory: '/Volumes/CorbanuDrive/Corbanu/.codex-work/astra-rel149-live-current/workspace/result.json'",
+  "elapsed_seconds": 153.94
+}
