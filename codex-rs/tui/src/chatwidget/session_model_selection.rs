@@ -9,18 +9,6 @@ use crate::model_catalog::LUNA_RESERVE_MODEL;
 /// A final Astra selection whose model transition must be checked while the app applies it.
 #[derive(Debug)]
 pub(crate) enum AstraModelPickerAction {
-    // Sync S4b decision (ledger, chatwidget/model_popups.rs): an explicit pick in main's
-    // provider-tabbed picker sends main's provider-aware events, so these two upstream picker
-    // actions are not sent there; the handlers stay for the follow-up that reconciles them.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "main's picker sends provider-aware events (S4b)")
-    )]
-    UpdateModel,
-    #[expect(dead_code, reason = "main's picker sends provider-aware events (S4b)")]
-    ApplyModelSelection {
-        effort: Option<ReasoningEffortConfig>,
-    },
     ApplyAdvancedReasoning {
         effort: ReasoningEffortConfig,
     },
@@ -50,8 +38,6 @@ impl AstraModelPickerAction {
 
     pub(crate) fn into_app_event(self, model: String) -> AppEvent {
         match self {
-            Self::UpdateModel => AppEvent::UpdateModel(model),
-            Self::ApplyModelSelection { effort } => AppEvent::ApplyModelSelection { model, effort },
             Self::ApplyAdvancedReasoning { effort } => {
                 AppEvent::ApplyAdvancedReasoning { model, effort }
             }

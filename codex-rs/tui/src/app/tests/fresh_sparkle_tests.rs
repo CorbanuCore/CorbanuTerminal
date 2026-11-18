@@ -464,7 +464,9 @@ async fn only_confirmed_picker_model_changes_can_arm_the_sparkle() -> Result<()>
                     AppEvent::AstraSelectedFromModelPicker {
                         thread_id: original_id,
                         model: "gpt-6-astra".into(),
-                        action: AstraModelPickerAction::UpdateModel,
+                        action: AstraModelPickerAction::UpdateModelSelection {
+                            provider: Some("openai".into()),
+                        },
                     },
                 )
                 .await?;
