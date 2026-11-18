@@ -3658,8 +3658,8 @@ async fn remote_limited_mode_method_block_ends_command_as_failed() -> Result<()>
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 /// #2269 (S3b, `network-proxy/src/credential_broker/configured.rs` row): main's broker
 /// engine does not broker configured `credential_providers`, so their source values are
-/// withheld from the command instead of reaching it unmasked. D612 (withhold or refuse
-/// at config load) is the owner's open choice; this pins the current withholding.
+/// withheld from the command instead of reaching it unmasked. D612 (accepted): keep this
+/// withholding; refusing such configs at load is a tracked follow-up (#2629).
 async fn agent_started_proxy_withholds_unbrokered_provider_credential() -> Result<()> {
     const REAL_CREDENTIAL: &str = "alias_aaaaaaaaaaaaaaaaaaaaaaaa";
     let upstream = tokio::net::TcpListener::bind("127.0.0.1:0").await?;

@@ -2547,10 +2547,62 @@ fn main_engine_withholds_unbrokered_configured_provider_sources() {
     // The built-in sources are still virtualized (masked), not dropped.
     let masked = child.get("GH_TOKEN").expect("GH_TOKEN stays brokered");
     assert_ne!(masked, PF28_S02_TOKEN);
-    let masked_copy = child
-        .get("GITHUB_TOKEN")
-        .expect("GITHUB_TOKEN stays brokered");
-    assert_ne!(masked_copy, ALIAS_VALUE);
+    for env in [&child, &snapshot] {
+        let masked_copy = env
+            .get("GITHUB_TOKEN")
+            .expect("GITHUB_TOKEN stays brokered");
+        assert_ne!(masked_copy, ALIAS_VALUE);
+    }
+}
+
+/// D612 (#2562): a configured provider may name a built-in key. Where the
+/// hardened engine masks it (an enterprise token with its `GH_HOST`) the
+/// placeholder is kept; where it leaves it raw (no `GH_HOST`) the variable and
+/// every copy of its value are withheld, also when only built-in keys are named.
+#[test]
+fn main_engine_withholds_unmasked_builtin_configured_sources() {
+    const ENTERPRISE_TOKEN: &str = "ghe_enterprise_token_value_0123456789";
+    let broker = CredentialBroker::new(/*enabled*/ true).with_main_engine();
+    broker.configure(&NetworkProxyConfig {
+        credential_broker: true,
+        credential_providers: BTreeMap::from([(
+            "enterprise".to_string(),
+            CredentialProviderConfig {
+                env: vec!["GH_ENTERPRISE_TOKEN".to_string()],
+                url_prefixes: vec!["https://github.corp.example/api".to_string()],
+                ..CredentialProviderConfig::default()
+            },
+        )]),
+        ..NetworkProxyConfig::default()
+    });
+    for host in [None, Some("github.corp.example")] {
+        let mut base = env_map([
+            ("GH_ENTERPRISE_TOKEN", ENTERPRISE_TOKEN),
+            ("COPIED", ENTERPRISE_TOKEN),
+            ("PATH", "/usr/bin"),
+        ]);
+        if let Some(host) = host {
+            base.insert("GH_HOST".to_string(), host.to_string());
+        }
+        let mut child = base.clone();
+        broker.virtualize_child_env(&mut child);
+        let mut snapshot = base;
+        broker.virtualize_snapshot_env(&mut snapshot, /*environment_id*/ None);
+        for env in [&child, &snapshot] {
+            assert!(
+                env.values().all(|value| !value.contains(ENTERPRISE_TOKEN)),
+                "{host:?}: {env:?}"
+            );
+            assert!(!env.contains_key("COPIED"), "{host:?}: {env:?}");
+            assert_eq!(env.get("PATH").map(String::as_str), Some("/usr/bin"));
+            // Masked with its enterprise host; withheld without one.
+            assert_eq!(
+                env.contains_key("GH_ENTERPRISE_TOKEN"),
+                host.is_some(),
+                "{host:?}: {env:?}"
+            );
+        }
+    }
 }
 
 #[test]
