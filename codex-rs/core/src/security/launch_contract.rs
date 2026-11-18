@@ -520,12 +520,8 @@ impl LaunchContract {
         )
         .map_err(|_| LaunchDenied::CodexHomeLockUnavailable)?;
         // D609 (a): on the real folder, not a junction in front of it.
-        let home = codex_home_acl_target(self.codex_home.as_path())
-            .map_err(|_| LaunchDenied::WindowsSandboxNotSetUp)?;
-        // SAFETY: `group` holds a valid SID for the duration of the call.
-        let present = unsafe {
-            codex_windows_sandbox::add_deny_read_ace_for_new_files(&home, group.as_mut_ptr().cast())
-        };
+        let present =
+            deny_new_codex_home_files(self.codex_home.as_path(), group.as_mut_ptr().cast());
         if !matches!(present, Ok(true)) {
             return Err(LaunchDenied::WindowsSandboxNotSetUp);
         }
@@ -1123,6 +1119,19 @@ fn codex_home_acl_target(codex_home: &Path) -> std::io::Result<std::path::PathBu
     dunce::canonicalize(codex_home)
 }
 
+/// PF-27-S06, D609 (a): adds the new-file read deny for `sid` on `codex_home`'s real folder and
+/// confirms it there. Whether it is present afterwards.
+#[cfg(windows)]
+pub(crate) fn deny_new_codex_home_files(
+    codex_home: &Path,
+    sid: *mut std::ffi::c_void,
+) -> std::io::Result<bool> {
+    let home = codex_home_acl_target(codex_home)?;
+    // SAFETY: the caller passes a valid SID for the duration of the call.
+    unsafe { codex_windows_sandbox::add_deny_read_ace_for_new_files(&home, sid) }
+        .map_err(std::io::Error::other)
+}
+
 /// Removes the new-file deny for `group` from `codex_home` unless an armed
 /// process holds the lock. Returns whether it was removed.
 #[cfg(windows)]
@@ -1130,6 +1139,9 @@ pub(crate) fn release_new_file_deny(
     codex_home: &Path,
     sid: *mut std::ffi::c_void,
 ) -> std::io::Result<bool> {
+    // D609 (a): the entry is on the real folder.
+    let codex_home = codex_home_acl_target(codex_home)?;
+    let codex_home = codex_home.as_path();
     // SAFETY: `sid` is a valid SID for the duration of the call.
     let present = unsafe {
         codex_windows_sandbox::has_exact_deny_read_ace_for_new_files(codex_home, Some(sid))
