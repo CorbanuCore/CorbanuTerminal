@@ -314,12 +314,13 @@ async fn parser_issue_controls_stay_precise() {
     }
 }
 
-/// #2601 in PowerShell: an alias, a function or a PowerShell drive can
-/// rebind a command name, and `Invoke-Expression`, `Import-Module`,
-/// `Add-Type` and script-file jobs run code that is not their argv. On
-/// Windows the trusted parser reads these scripts as plain commands, so each such
-/// command fails closed as bash's `alias` does. Elsewhere no PowerShell
-/// script is read, so each asks as an unread script.
+/// #2601 in PowerShell: an alias, a function or a PowerShell drive named
+/// by a literal argument can rebind a command name, and
+/// `Invoke-Expression`, `Import-Module`, `Add-Type` and script-file jobs run
+/// code that is not their argv. On Windows the trusted parser reads these
+/// scripts as plain commands, so each such command fails closed as bash's
+/// `alias` does (a partial list: #2661). Elsewhere no PowerShell script is
+/// read, so each asks as an unread script.
 #[tokio::test]
 async fn issue_2601_powershell_name_rebinding_and_code_asks() {
     // The trusted parser reads the reproducer in full, as plain commands.
@@ -361,6 +362,12 @@ async fn issue_2601_powershell_name_rebinding_and_code_asks() {
         "Add-Type -Path ./m.dll",
         "Invoke-Command -FilePath ./x.ps1",
         "Start-Job -FilePath ./x.ps1",
+        // .NET may fold these non-ASCII letters to ASCII (review round 1).
+        "\u{131}ex 'git push'",
+        "\u{131}nvoke-expression 'git push'",
+        "\u{17f}al f git; f push",
+        "Set-Item al\u{131}as:f git; f push",
+        "\u{17f}et-location funct\u{131}on:; Set-Item f 'git push'; f",
     ];
     let mut commands = Vec::new();
     for script in scripts {
