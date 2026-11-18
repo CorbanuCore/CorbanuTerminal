@@ -1,3 +1,6 @@
+#[path = "project_role_warning_tests.rs"]
+mod project_role_warning_tests;
+
 use crate::config::edit::ConfigEdit;
 use crate::config::edit::ConfigEditsBuilder;
 use crate::config::edit::apply_blocking;

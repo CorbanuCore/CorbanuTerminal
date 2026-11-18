@@ -2931,6 +2931,115 @@ async fn issue1545_a_hand_off_to_a_session_replaced_by_an_in_process_reload_is_r
     );
 }
 
+/// #2009: reapplying the persisted role must keep a sandbox raised after startup.
+#[tokio::test]
+async fn ensure_v2_agent_loaded_keeps_live_windows_sandbox_after_stored_role_reapply() {
+    use crate::windows_sandbox::WindowsSandboxLevelExt;
+    use codex_protocol::config_types::WindowsSandboxLevel;
+
+    let (home, mut config) = test_config().await;
+    config.features.enable(Feature::MultiAgentV2).expect("v2");
+    config.features.enable(Feature::Sqlite).expect("sqlite");
+    let role_file = home.path().join("reload-role.toml");
+    std::fs::write(&role_file, "developer_instructions = \"before reload\"\n").expect("write role");
+    config.agent_roles.insert(
+        "reload-worker".to_string(),
+        AgentRoleConfig {
+            description: None,
+            config_file: Some(role_file.clone()),
+            nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
+        },
+    );
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (parent_id, parent) = harness.start_paginated_thread().await;
+    let control = parent
+        .session
+        .services
+        .local_agent_runtime
+        .control(parent.session.session_id());
+    let child = control
+        .spawn_agent_with_metadata(
+            harness.config.clone(),
+            text_input("hello child"),
+            role_spawn_source(parent_id, 1, "/root/worker", "reload-worker"),
+            SpawnAgentOptions {
+                parent_thread_id: Some(parent_id),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("spawn role child");
+    let mut child_thread = harness.manager.get_thread(child.thread_id).await.unwrap();
+    child_thread
+        .inject_response_items(vec![assistant_message(
+            "child persisted",
+            Some(MessagePhase::FinalAnswer),
+        )])
+        .await
+        .expect("persist child history");
+
+    for level in [
+        WindowsSandboxLevel::RestrictedToken,
+        WindowsSandboxLevel::Elevated,
+    ] {
+        child_thread.shutdown_and_wait().await.expect("stop child");
+        let stored = child_thread
+            .read_thread(
+                /*include_archived*/ true, /*include_history*/ false,
+            )
+            .await
+            .expect("persisted role");
+        assert_eq!(stored.agent_role.as_deref(), Some("reload-worker"));
+        assert!(
+            harness
+                .manager
+                .remove_thread(&child.thread_id)
+                .await
+                .is_some()
+        );
+        parent
+            .session
+            .update_settings(SessionSettingsUpdate {
+                windows_sandbox_level: Some(level),
+                ..Default::default()
+            })
+            .await
+            .expect("raise live parent sandbox");
+        // The starting layers still have no sandbox. A reconstruction from those
+        // layers would lose the live setting when the stored role is applied.
+        assert_eq!(
+            WindowsSandboxLevel::from_config(&harness.config),
+            WindowsSandboxLevel::Disabled
+        );
+        let instructions = format!("reapplied at {level:?}");
+        std::fs::write(
+            &role_file,
+            format!("developer_instructions = \"{instructions}\"\n"),
+        )
+        .expect("edit persisted role");
+        let pin = control
+            .ensure_v2_agent_loaded(
+                harness.config.clone(),
+                child.thread_id,
+                Some(Arc::clone(&parent)),
+            )
+            .await
+            .expect("cold reload with current parent settings");
+        child_thread = harness.manager.get_thread(child.thread_id).await.unwrap();
+        let turn = child_thread.session.new_default_turn().await;
+        assert_eq!(
+            (
+                turn.windows_sandbox_level,
+                WindowsSandboxLevel::from_config(&turn.config),
+                turn.developer_instructions.as_deref(),
+            ),
+            (level, level, Some(instructions.as_str()))
+        );
+        drop(pin);
+    }
+}
+
 #[tokio::test]
 async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
     check_v2_agent_reload(V2ReloadRoute::Sender).await;
