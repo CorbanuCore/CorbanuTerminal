@@ -137,7 +137,10 @@ async fn parameters_and_abbreviations_are_read() {
             assert_forbidden(words(&command)).await;
         }
     } else {
-        eprintln!("no trusted pwsh here; its forms are not exercised");
+        #[allow(clippy::print_stderr)]
+        {
+            eprintln!("no trusted pwsh here; its forms are not exercised");
+        }
     }
 }
 
