@@ -382,9 +382,40 @@ oauth.authorization_server_issuer='https://as.example'"#;
     // Nor opt into cross-app access.
     assert!(
         validate_xaa_opt_in_source(
-            &role_stack(vec![role_layer(user, "[features]\nuse_xaa=true")]),
+            &role_stack(vec![role_layer(user.clone(), "[features]\nuse_xaa=true")]),
             /*xaa_enabled*/ true,
         )
+        .is_err()
+    );
+    // A role layer named like a managed source is never selected as managed: the trusted
+    // user registration wins over it.
+    let other_idp =
+        "[mcp_enterprise_managed_auth.idp]\nissuer = 'https://other.example'\nclient_id = 'other'";
+    let selected = McpEnterpriseManagedAuthConfig::from_config_layers(
+        &role_stack(vec![
+            role_layer(system.clone(), other_idp),
+            ConfigLayerEntry::new(user, toml::from_str(idp).unwrap()),
+        ]),
+        /*fallback*/ None,
+    )
+    .unwrap()
+    .expect("the user's registration stays selected");
+    assert_eq!(selected.idp.issuer, "https://idp.example");
+    // Nor re-enable an enterprise server a trusted layer disabled.
+    assert!(
+        validate_effective_ema(&role_stack(vec![
+            ConfigLayerEntry::new(
+                system.clone(),
+                toml::from_str(
+                    "[mcp_servers.enterprise]\nurl='https://resource.example/mcp'\nauth='ema_auth'\nenabled=false"
+                )
+                .unwrap()
+            ),
+            role_layer(
+                ConfigLayerSource::SessionFlags,
+                "[mcp_servers.enterprise]\nenabled=true"
+            ),
+        ]))
         .is_err()
     );
     // The same trusted registration without a role layer stays valid.

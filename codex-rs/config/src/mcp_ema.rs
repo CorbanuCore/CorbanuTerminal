@@ -198,14 +198,16 @@ impl McpEnterpriseManagedAuthConfig {
         };
         let selected = sections()
             .find(|(layer, _)| {
-                matches!(
-                    layer.name,
-                    ConfigLayerSource::Mdm { .. }
-                        | ConfigLayerSource::System { .. }
-                        | ConfigLayerSource::EnterpriseManaged { .. }
-                        | ConfigLayerSource::LegacyManagedConfigTomlFromFile { .. }
-                        | ConfigLayerSource::LegacyManagedConfigTomlFromMdm
-                )
+                // D525 (a): a project-declared agent role never counts as managed.
+                !layer.is_project_scoped()
+                    && matches!(
+                        layer.name,
+                        ConfigLayerSource::Mdm { .. }
+                            | ConfigLayerSource::System { .. }
+                            | ConfigLayerSource::EnterpriseManaged { .. }
+                            | ConfigLayerSource::LegacyManagedConfigTomlFromFile { .. }
+                            | ConfigLayerSource::LegacyManagedConfigTomlFromMdm
+                    )
             })
             .or_else(|| {
                 // D525 (a): a project-declared agent role is project configuration too.

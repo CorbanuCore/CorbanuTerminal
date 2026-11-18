@@ -325,7 +325,7 @@ async fn guardian_denied_exec_renders_warning_and_denied_request() {
 }
 
 #[tokio::test]
-async fn guardian_approved_exec_is_hidden_from_history() {
+async fn guardian_approved_exec_renders_approved_request() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.show_welcome_banner = false;
 
@@ -367,7 +367,11 @@ async fn guardian_approved_exec_is_hidden_from_history() {
     let mut term = crate::custom_terminal::Terminal::with_options(backend).expect("terminal");
     term.set_viewport_area(viewport);
 
-    assert!(drain_insert_history(&mut rx).is_empty());
+    // D617: the approval stays in history, as on main.
+    for lines in drain_insert_history(&mut rx) {
+        crate::insert_history::insert_history_lines(&mut term, lines)
+            .expect("Failed to insert history lines in test");
+    }
 
     term.draw(|f| {
         chat.render(f.area(), f.buffer_mut());
@@ -375,7 +379,7 @@ async fn guardian_approved_exec_is_hidden_from_history() {
     .expect("draw guardian approval history");
 
     assert_chatwidget_snapshot!(
-        "guardian_approved_exec_is_hidden_from_history",
+        "guardian_approved_exec_renders_approved_request",
         normalize_snapshot_paths(term.backend().vt100().screen().contents())
     );
 }
@@ -471,7 +475,7 @@ async fn guardian_approved_request_permissions_renders_request_summary() {
 }
 
 #[tokio::test]
-async fn guardian_approved_non_command_requests_stay_in_history() {
+async fn guardian_approved_requests_stay_in_history() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.show_welcome_banner = false;
     for (action, expected) in [
@@ -493,6 +497,13 @@ async fn guardian_approved_non_command_requests_stay_in_history() {
                 tool_title: None,
             },
             "✔ Request approved for MCP search on Docs",
+        ),
+        (
+            GuardianAssessmentAction::ApplyPatch {
+                cwd: test_path_buf("/tmp/project").abs().into(),
+                files: vec![test_path_buf("/tmp/project/report.md").abs().into()],
+            },
+            "✔ Request approved for apply_patch touching /tmp/project/report.md",
         ),
         (
             GuardianAssessmentAction::RequestPermissions {

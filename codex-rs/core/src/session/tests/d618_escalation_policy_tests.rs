@@ -82,8 +82,43 @@ async fn escalation_is_refused_under_every_policy_except_on_request() {
 
 #[tokio::test]
 async fn escalation_still_reaches_the_approval_flow_under_on_request() {
-    assert_eq!(
-        escalated_exec_result(AskForApproval::OnRequest).await,
-        Ok(())
-    );
+    let (session, turn_context, rx_event) = make_session_and_context_with_rx().await;
+    assert_eq!(turn_context.approval_policy(), AskForApproval::OnRequest);
+    let step_context = StepContext::for_test(Arc::clone(&turn_context));
+    let handler = ExecCommandHandler::default();
+    let handled = handler.handle(ToolInvocation {
+        session,
+        turn: Arc::clone(&turn_context),
+        step_context,
+        cancellation_token: CancellationToken::new(),
+        tracker: Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new())),
+        call_id: "exec-call".to_string(),
+        tool_name: codex_tools::ToolName::plain("exec_command"),
+        source: crate::tools::context::ToolCallSource::Direct,
+        native_call: None,
+        environments: Default::default(),
+        payload: ToolPayload::Function {
+            arguments: serde_json::json!({
+                "cmd": "echo hi",
+                "sandbox_permissions": SandboxPermissions::RequireEscalated,
+                "justification": "need unsandboxed execution",
+            })
+            .to_string(),
+        },
+    });
+    let approval_requested = async {
+        loop {
+            let event = rx_event.recv().await.expect("session event");
+            if let EventMsg::ExecApprovalRequest(request) = event.msg {
+                break request.call_id;
+            }
+        }
+    };
+    tokio::select! {
+        call_id = approval_requested => assert_eq!(call_id, "exec-call"),
+        resp = handled => panic!("escalation under OnRequest ended without asking (ok: {})", resp.is_ok()),
+        () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
+            panic!("escalation under OnRequest never asked for approval")
+        }
+    }
 }
