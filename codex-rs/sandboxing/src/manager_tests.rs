@@ -829,6 +829,9 @@ fn transform_for_direct_spawn_windows_elevated_passes_deny_read_rules() {
         );
         return;
     }
+    let _account_guard =
+        codex_windows_sandbox_test_support::WindowsSandboxAccountTestGuard::acquire()
+            .expect("Windows sandbox test account lock");
     let codex_home = tempfile::TempDir::new().expect("codex home");
     let helper_dir = tempfile::TempDir::new().expect("helper dir");
     let configured_helper = helper_dir.path().join("configured-codex-helper.exe");
