@@ -14,6 +14,8 @@ use codex_shell_command::bash::ScriptCommands;
 use codex_shell_command::bash::parse_shell_lc_single_command_prefix;
 use codex_shell_command::bash::shell_lc_script_commands;
 use codex_shell_command::is_dangerous_command::DangerousCommandPlatform;
+use codex_shell_command::powershell::UnreadPowershell;
+use codex_shell_command::powershell::unread_powershell_command_line;
 
 /// #2531 (D553): how many shell scripts nested in one another
 /// (`bash -lc "bash -c '…'"`, also through launchers such as
@@ -55,6 +57,9 @@ pub(super) fn has_wrappers(
         // #2531: a script nested in the script; an amendment for its
         // literal argv cannot approve the commands inside.
         || (read_own_scripts && script_commands(command, platform).is_some())
+        // #2568: an amendment for a PowerShell command line whose script
+        // rules cannot read cannot approve the commands inside.
+        || unread_powershell_command_line(command).is_some()
 }
 
 /// D677/D686 (#2506), D691 and #2519: what a command gets for a rule that
@@ -275,6 +280,22 @@ pub(super) fn check(
                     could_complete(known)
                 };
                 raise(&mut heuristic, candidate, decision);
+            }
+            // #2568 (D553): a PowerShell command line whose script rules
+            // cannot read (an unknown parameter, a script from stdin,
+            // `-File`): every rule counts. A `-File` script's file and
+            // arguments are checked as a command too.
+            if platform == DangerousCommandPlatform::Windows
+                && let Some(unread) = unread_powershell_command_line(candidate)
+            {
+                raise(&mut heuristic, candidate, could_complete(&[]));
+                if let UnreadPowershell::File(file) = unread {
+                    pending.push(Pending {
+                        command: file.to_vec(),
+                        restrict_only,
+                        depth,
+                    });
+                }
             }
         }
         if let Some((command, decision)) = heuristic {

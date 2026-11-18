@@ -1,6 +1,6 @@
 use codex_shell_command::bash::extract_bash_command;
 use codex_shell_command::bash::parse_shell_lc_plain_commands;
-use codex_shell_command::powershell::extract_powershell_command;
+use codex_shell_command::powershell::extract_plain_powershell_command;
 
 const CANONICAL_BASH_SCRIPT_PREFIX: &str = "__codex_shell_script__";
 const CANONICAL_POWERSHELL_SCRIPT_PREFIX: &str = "__codex_powershell_script__";
@@ -27,7 +27,9 @@ pub(crate) fn canonicalize_command_for_approval(command: &[String]) -> Vec<Strin
         ];
     }
 
-    if let Some((_shell, script)) = extract_powershell_command(command) {
+    // #2568: only a plain `-Command`; other parameters (`-WorkingDirectory`,
+    // `-EncodedCommand`) keep the literal argv.
+    if let Some((_shell, script)) = extract_plain_powershell_command(command) {
         return vec![
             CANONICAL_POWERSHELL_SCRIPT_PREFIX.to_string(),
             script.to_string(),
