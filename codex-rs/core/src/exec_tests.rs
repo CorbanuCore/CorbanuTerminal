@@ -1819,7 +1819,11 @@ fn d537_localhost_unc_folders_are_refused_in_every_spelling() {
             "{folder}: {err}"
         );
     }
-    for folder in [r"C:\work", r"\\server\share\src", r"\\localhost.example\share"] {
+    for folder in [
+        r"C:\work",
+        r"\\server\share\src",
+        r"\\localhost.example\share",
+    ] {
         let path = AbsolutePathBuf::from_absolute_path_checked(folder).expect(folder);
         refuse_localhost_unc_folder(&path).expect(folder);
     }
