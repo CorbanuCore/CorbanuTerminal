@@ -613,7 +613,7 @@ impl Session {
     }
 
     /// Acquires V2 inventories and reports changes without scheduling an MCP refresh.
-    pub(super) async fn executor_capability_discovery_for_step_v2(
+    pub(crate) async fn executor_capability_discovery_for_step_v2(
         &self,
         config: &Config,
         environments: &TurnEnvironmentSnapshot,
