@@ -1006,5 +1006,34 @@ fn d616_remote_mxc_requires_explicit_local_binding() -> anyhow::Result<()> {
             ),
         }
     }
+    // Without a controller the owner supplies the whole ceiling: unset is refused too.
+    for (owner_binding, expected) in [(None, None), (Some(true), Some(true))] {
+        let mut owner_config = NetworkProxyConfig {
+            allow_local_binding: owner_binding,
+            ..Default::default()
+        };
+        owner_config.set_allowed_domains(vec!["example.com".to_string()]);
+        let owner = EnvironmentNetworkPolicy::from_config(
+            &owner_config,
+            /*managed_allowed_domains_only*/ false,
+        );
+        let composed = NetworkProxySpec::for_environment(
+            /*controller*/ None,
+            &owner,
+            &profile,
+            &Policy::empty(),
+            ExplicitTrue,
+        );
+        match expected {
+            None => assert_eq!(
+                composed.expect_err("omission must be refused").to_string(),
+                codex_network_proxy::MXC_EXPLICIT_LOCAL_BINDING_REQUIRED
+            ),
+            Some(binding) => assert_eq!(
+                composed?.environment_policy().allow_local_binding,
+                Some(binding)
+            ),
+        }
+    }
     Ok(())
 }

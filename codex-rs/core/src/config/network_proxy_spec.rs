@@ -312,7 +312,14 @@ impl NetworkProxySpec {
                     enabled: true,
                     // Without a controller, the owner supplies the entire permission ceiling.
                     dangerously_allow_all_unix_sockets: Some(true),
-                    allow_local_binding: Some(policy.allow_local_binding.unwrap_or(false)),
+                    // D616: an unset owner value stays unset under ExplicitTrue, so it is
+                    // refused below with the reason instead of becoming false.
+                    allow_local_binding: if local_binding_policy == LocalBindingPolicy::ExplicitTrue
+                    {
+                        policy.allow_local_binding
+                    } else {
+                        Some(policy.allow_local_binding.unwrap_or(false))
+                    },
                     ..NetworkProxyConfig::default()
                 },
                 /*requirements*/ None,

@@ -1707,10 +1707,19 @@ pub(crate) async fn remote_network_proxy_launch(
     };
     let launch = network
         .remote_launch_config(
-            crate::windows_sandbox::remote_local_binding_policy_for_sandbox(
-                environment.config().windows_sandbox_type,
-                environment.executor_platform_os.as_deref(),
-            ),
+            // Environment hooks also launch here for the local environment, which keeps
+            // the local rule; D616 applies to remote executors.
+            if environment.environment.is_remote() {
+                crate::windows_sandbox::remote_local_binding_policy_for_sandbox(
+                    environment.config().windows_sandbox_type,
+                    environment.executor_platform_os.as_deref(),
+                )
+            } else {
+                crate::windows_sandbox::local_binding_policy_for_sandbox(
+                    environment.config().windows_sandbox_type,
+                    environment.executor_platform_os.as_deref(),
+                )
+            },
             credential_masking,
         )
         .await
