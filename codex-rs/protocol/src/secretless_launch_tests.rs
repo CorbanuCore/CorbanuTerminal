@@ -96,6 +96,10 @@ fn issue_2401_extracts_every_url_password() {
             "http://u:First,Part;2401@host;u:Second-2401@proxy",
             &["First,Part;2401", "Second-2401"],
         ),
+        (
+            "http://u:Pass@word,2401@host https://u:Pass@word;2401@other",
+            &["Pass@word,2401", "Pass@word;2401"],
+        ),
         ("user:p@ss@proxy", &["p@ss"]),
         ("http://u:p@host", &["p"]),
         ("http://user:@host user:@proxy http://user:   @host", &[]),

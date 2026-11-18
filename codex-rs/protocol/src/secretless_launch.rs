@@ -220,13 +220,23 @@ fn authority_password(rest: &str) -> Option<&str> {
     let authority = rest
         .split(|c: char| c.is_whitespace() || matches!(c, '/' | '?' | '#'))
         .next()?;
-    // Commas and semicolons are legal in userinfo. They separate list items
-    // only after an at-sign, so a later scheme-less item cannot swallow this
-    // URL's password.
+    let (userinfo, _) = authority.rsplit_once('@')?;
+    let colon = userinfo.find(':')?;
+    // A separator before userinfo's colon belongs to an earlier, public
+    // URL (the scheme-less pass handles the following credential item).
+    if authority[..colon].contains([',', ';']) {
+        return None;
+    }
     let at = authority.find('@')?;
-    let host_end = authority[at..]
-        .find([',', ';'])
-        .map_or(authority.len(), |offset| at + offset);
+    // Commas/semicolons can be password characters, even after a raw @.
+    // End this authority only when a following item is itself a proxy URL.
+    let host_end = authority
+        .match_indices([',', ';'])
+        .find_map(|(index, _)| {
+            let next = authority[index + 1..].split([',', ';']).next()?;
+            (index > at && schemeless_url_password(next).is_some()).then_some(index)
+        })
+        .unwrap_or(authority.len());
     let (userinfo, _) = authority[..host_end].rsplit_once('@')?;
     let (_, password) = userinfo.split_once(':')?;
     (!password.is_empty()).then_some(password)
