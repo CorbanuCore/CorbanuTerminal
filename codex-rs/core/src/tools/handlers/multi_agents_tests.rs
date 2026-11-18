@@ -976,6 +976,11 @@ async fn spawn_agent_explicit_runtime_supports_required_multimodel_pairs() {
         (OPENROUTER_PROVIDER_ID, "x-ai/grok-4.5"),
         (KIMI_CODE_PROVIDER_ID, KIMI_CODE_K3_MODEL),
         (ZAI_PROVIDER_ID, "glm-5.3"),
+        // D703 moves these beyond the all-provider description's 32-row cap.
+        // The description is not an allowlist for exact runtime selection.
+        (OPENROUTER_PROVIDER_ID, "minimax/minimax-m3"),
+        ("openai", "gpt-5.6-luna"),
+        ("vercel-anthropic-fast", "zai/glm-5.2-fast"),
     ];
 
     for (provider, model) in expected {
