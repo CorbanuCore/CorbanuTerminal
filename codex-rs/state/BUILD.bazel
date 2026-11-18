@@ -13,7 +13,10 @@ codex_rust_crate(
     ]),
     crate_name = "codex_state",
     # Several integration tests share this helper through `#[path]`.
-    integration_compile_data_extra = ["src/runtime/accounting_late_import_test_support.rs"],
+    integration_compile_data_extra = [
+        "src/runtime/accounting_late_import_test_support.rs",
+        "tests/fixtures/accounting/pre-5bae-ledger.sql",
+    ],
     # Wall-clock bounds still failed while other work occupied the Windows
     # runner (#905, #1881). Keep main #1898's exclusive, serial target; the
     # macro forbids combining this isolation with unit-test sharding.
