@@ -56,7 +56,20 @@ async fn chatgpt_62_catalog_preserves_native_runtime_contract() {
             "default_verbosity",
         ] {
             if let Some(value) = source.get(field) {
-                assert_eq!(&serialized[field], value, "native field {field}");
+                if field == "shell_type" {
+                    // Sync deliberately canonicalizes the legacy shell_command spelling
+                    // to UnifiedExec in ConfigShellToolType; verify both sides explicitly.
+                    assert_eq!(value, &json!("shell_command"));
+                    assert_eq!(serialized[field], json!("unified_exec"));
+                } else if field == "supports_parallel_tool_calls" {
+                    // Upstream 86b1123ff6 retired this gate: all prompts allow parallel
+                    // tools, while client.rs still disables them for Responses Lite.
+                    assert_eq!(value, &json!(true));
+                    assert!(serialized.get(field).is_none());
+                    assert!(actual.use_responses_lite);
+                } else {
+                    assert_eq!(&serialized[field], value, "native field {field}");
+                }
             }
         }
         assert!(actual.supports_reasoning_summary_parameter);
