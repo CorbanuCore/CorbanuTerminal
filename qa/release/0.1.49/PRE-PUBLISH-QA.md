@@ -1,6 +1,7 @@
 # Corbanu Terminal 0.1.49 pre-publish QA plan
 
-Status: **phase-1 preparation complete; merge gates pending; NOT READY; nothing published**.
+Status: **candidate QA complete; final PR CI/review/merge recorded separately; nothing published**.
+See [candidate results and limitations](RELEASE.md) and [raw result summaries](candidate/).
 Owner authority: Travis, D701/D702, 2026-11-17. Executor: astra-rel149 (Astra High).
 The coordinator dispatches publication after the READY handoff. No additional
 Travis sign-off is requested. Missing evidence remains disclosed, never passed.
@@ -21,7 +22,8 @@ versioned QA/notes changes. D701 explicitly changes the base for 0.1.49 to main.
 
 ## Gates before the release branch and version-bump merge
 
-- [ ] #2549 merged (quoted script command-rule bypass).
+- [x] #2549 merged (quoted script command-rule bypass), 2026-11-18 04:41:38Z;
+  merge `bc5b002bb5d18cdb3a9809e22a44ba140cc13f13`.
 - [x] #2555 merged (trusted PowerShell parser), 2026-11-18 01:56:42Z;
   merge `5ddb26bb2651cddb8965fa0bc27a37c78c2135b1`.
 - [x] #2558 merged (exact Windows allow-rule spelling), 2026-11-18 00:29:16Z;
@@ -30,20 +32,22 @@ versioned QA/notes changes. D701 explicitly changes the base for 0.1.49 to main.
   merge `ebbe3cfac79660b4ccf8ab01974c438ec61acfcd`.
 - [x] #2571 merged (astra-models62 new models), 2026-11-18 01:56:12Z;
   merge `1036647d52c95fd02ce32112c69b799d0e5f8328`.
-- [ ] #2580 merged (fixing issue #2568, Windows PowerShell command parsing).
+- [x] #2580 merged (issue #2568, Windows PowerShell command parsing),
+  2026-11-18 05:55:42Z; merge `ad2b22f0b287132dbc4dad48575614403c758fc6`.
 - [x] #2586 merged (#2584 diagnostic), 2026-11-18 04:37:57Z;
   merge `4dec082e87070e218114f09c69e5b7caf5ca16b7`. Corrected private fixture
-  permissions pass current-binary Medium QA; require a fresh final-candidate replay.
-- [ ] #2591 merged (issue #2590, ChatGPT Plan compatibility version for GPT-6.2).
+  permissions pass both preflight and the [final candidate Medium replay](candidate/windows-live.json).
+- [x] #2591 merged (issue #2590, ChatGPT Plan compatibility version for GPT-6.2),
+  2026-11-18 05:39:12Z; merge `6ee54387e872940b64d9fc3f90db138fd4d7af2f`.
   Run final-candidate plan-route smokes for `gpt-6.2-astra` and `gpt-6.2-sol`,
   plus a `gpt-6-astra` regression; preserve exact model/effort and route evidence.
 
 The coordinator added #2568 and #2584 as release gates on 2026-11-18, and
 added #2590/#2591 at 04:25Z. The initial version diagnosis was corrected by
 that worker: main advertises 0.156.0; #2591 selects 0.167.0.
-Keep this preparation PR as the evidence home. After #2584's fix merges,
-repeat the measured Medium-token case on the release-candidate build; require
-successful tool execution and retain both the original failure and replay.
+Preparation PR #2572 remains the preflight evidence home. After #2584's fix
+merged, the measured Medium-token candidate replay passed with two tool calls.
+Both the original failure and successful replay are retained.
 
 Poll GitHub about every 20 minutes and record merge commits/times. An open or
 closed-unmerged PR, or an issue closed without the accepted fix, does not pass.
@@ -53,13 +57,26 @@ assemble with `python3 scripts/release/release_notes.py assemble --version 0.1.4
 and validate the workflow's version and nonempty versioned-notes conditions.
 Do not dispatch `corbanu-terminal-release.yml` during this worker's assignment.
 
+The release branch was cut from `ad2b22f0b287132dbc4dad48575614403c758fc6`
+after [postmerge CI run 44247625166](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44247625166)
+completed successfully (verified 2026-11-18 06:41Z). All eight gate merge commits
+are ancestors of that base, including the named-account cooldown follow-up #2589.
+Candidate build source: `c46a9d10edb39e3a44bc74b0705408269233eee3`.
+All platforms receive that exact source; later evidence-only commits are recorded
+separately. The source archive SHA-256 is
+`23e437a2e58daf5f91f0dc5a5f970f3b743ebcd6bc1d6780020bc4ce7bd25728`.
+
 ## Notes and automated checks
 
 - [x] Initial `release_notes.py check`: 123 fragments valid.
 - [x] Initial `preview` captured outside the repository, without assembling.
 - [x] First-parent merge inventory since `rust-v0.1.48`: 1,266 merges.
 - [x] Phase-1 [coverage audit](NOTES-AUDIT.md): nine verified fragments added;
-  132 fragments validate and preview succeeds. Refresh after gate PRs land.
+  132 preparation fragments validate and preview succeeds. After the gates,
+  main has 132 fragments; adding our nine gives 141. All 141 were assembled into
+  [0.1.49 release notes](RELEASE_NOTES.md); zero unreleased fragments remain.
+  Six notes tests and workflow version/nonempty-notes validation pass. Bazel
+  lock update succeeds without a lockfile change.
 - [x] Release-note unit checks and diff checks pass. Linux installer
   release-contract checks pass 5/5. The macOS attempt failed 3/5 because the
   fixture assumes Linux assets; it is preserved, not counted as a macOS pass.
@@ -91,7 +108,8 @@ navigation, approval typing/cancellation and security-state restart/recovery
 checks. The selected Windows non-admin sandbox correctly refuses Moderate;
 its security-state replay is unavailable without default/admin sandbox setup.
 Canonical TensorCash/Isometric URLs were unavailable to this executor and no
-local overrides were configured. Final release-branch replays remain pending.
+local overrides were configured. The available release-branch replays are now
+complete; [candidate results](RELEASE.md) separate passes from the unavailable lanes.
 
 Every run records source SHA, package/binary SHA-256, version, platform, profile,
 working directory, literal text/key events, visible checkpoints, exit status,
@@ -102,9 +120,9 @@ binary; native credential tests need a dedicated isolated account/VM.
 
 | Platform | Execution lane | Status |
 | --- | --- | --- |
-| macOS arm64 | isolated account/VM; tmux PTY using test-tui procedure | Pending release build |
-| Linux x86_64 | glitch, private profile and tmux PTY; private target; count real Cargo builds first, maximum two machine-wide, -j10 | Phase-1 upgrade complete; release replay pending |
-| Native Windows | DESKTOP-UJS3HC4, existing `C:\CorbanuQA` MSYS2/tmux and console-session harness; native `.exe`, not WSL | Native harness preflight complete; release build/replay pending |
+| macOS arm64 | private profile, outer Seatbelt with operator-home/Keychain denial, tmux PTY | Candidate build, 12 smoke, 7 security and 4 live checks pass; three Plan routes pass |
+| Linux x86_64 | glitch, non-root Docker, private profile and tmux; count-first private build -j10 | Candidate build, 12 smoke, 7 security and 4 live checks pass; upgrade/rollback and 16 cooldown checks pass |
+| Native Windows | DESKTOP-UJS3HC4, native `.exe` through MSYS2/tmux; measured Medium token and protected fixture ACLs | Candidate build, 13 smoke and 4 live checks pass; full Moderate flow unavailable in non-admin lane |
 
 For Windows, use the existing SSH identity `ambient_windows_desktop_ujs3hc4` and
 host `desktop-ujs3hc4.tail36b615.ts.net`. Check the active harness and user session
@@ -140,7 +158,9 @@ true-TUI or real-provider evidence. Disclose unavailable provider routes.
 Phase-1 run is recorded in [upgrade compatibility](UPGRADE-COMPATIBILITY.md):
 conversation/history, vault and DB migration checks passed; resume added only
 `service_tier = "default"`; 0.1.48 refused the upgraded database and recovered
-on the pre-upgrade backup. Final release replay is pending.
+on the pre-upgrade backup. The [candidate replay](RELEASE.md#installed-0148-upgrade-and-rollback)
+also passes upgrade/rollback and all 14 compatibility assertions, with 16 additional
+cooldown checks. Its expected in-place downgrade refusal is preserved.
 
 Use the published 0.1.48 archive verified against its release checksum manifest.
 Install into a private package layout; do not change the operator installation.

@@ -1,0 +1,27 @@
+﻿{
+    "source_commit":  "c46a9d10edb39e3a44bc74b0705408269233eee3",
+    "build_exit":  "0",
+    "binaries":  [
+                     {
+                         "sha256":  "f7a9de7fc96ee44c3c20915e83c56e1dd21f1fd40da2da64f63e64b7b0caad52",
+                         "name":  "corbanu.exe",
+                         "signature":  "NotSigned"
+                     },
+                     {
+                         "sha256":  "4388641d530d6db1f4f7431a013e8d778e4b45b30f1f96a62cf3238515cbfbe3",
+                         "name":  "codex-command-runner.exe",
+                         "signature":  "NotSigned"
+                     },
+                     {
+                         "sha256":  "45fb3f5fa5a8bd00825ec7676e68423340682d15ee3d977ce49ed254afd27ab7",
+                         "name":  "codex-conpty-launcher.exe",
+                         "signature":  "NotSigned"
+                     },
+                     {
+                         "sha256":  "9d6df6a9887af2ede148d2bd7885472f531176666a12a814feea9d5a8953bf8c",
+                         "name":  "codex-windows-sandbox-setup.exe",
+                         "signature":  "NotSigned"
+                     }
+                 ],
+    "machine":  "DESKTOP-UJS3HC4"
+}

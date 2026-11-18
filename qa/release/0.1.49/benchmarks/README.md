@@ -10,7 +10,9 @@ task, base, rubric and thresholds are not frozen. The full relevant model-set
 manifest, route exclusions/approvals, pricing snapshot, runtime and spend caps
 are not frozen. Runtime and spend for the full cycle are unknown, not zero.
 
-The isolated upgrade mock-provider run is compatibility evidence, not a
-competitive benchmark or production-provider qualification. D701/D702 authorize
-release preparation; this disclosure does not request another owner sign-off.
+The candidate's isolated upgrade, platform tool fixtures and three real ChatGPT
+Plan route smokes are compatibility and functional evidence, not a competitive
+benchmark or full model matrix. [Candidate results](../RELEASE.md) record their
+scope. D701/D702 authorize the release; this disclosure does not request another
+owner sign-off.
 Only a completed qualifying cycle can reset the count.

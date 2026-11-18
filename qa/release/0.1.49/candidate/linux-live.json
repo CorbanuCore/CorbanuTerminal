@@ -1,0 +1,18 @@
+{
+  "source_commit": "c46a9d10edb39e3a44bc74b0705408269233eee3",
+  "binary_sha256": "dccaf6f6d147026224cd4a03214bb554ff7d745f8b9b2f6c28404d949daacfbc",
+  "model": "Qwen3.8-Flash-Next-Uncensored-MLX-Serve-mixed-4-8bit",
+  "checks": {
+    "input_preserved": true,
+    "tool_written_result_correct": true,
+    "persisted_tool_calls": true,
+    "persisted_completion": true
+  },
+  "isolation": "Non-root Docker, read-only root and candidate mounts, only fresh worker fixture writable plus bounded tmpfs, all capabilities dropped, no-new-privileges, 4GB/256-pid limits; host network for private loopback SSH tunnel; no host home/IPC/keyring/socket mounts",
+  "limits": "one task, 240-second cutoff; fixture, not canonical live-repository qualification; candidate native sandbox disabled inside external Docker boundary",
+  "tool_names": [
+    "exec_command",
+    "exec_command"
+  ],
+  "elapsed_seconds": 9.55
+}

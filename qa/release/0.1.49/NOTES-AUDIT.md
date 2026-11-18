@@ -57,10 +57,17 @@ do not claim fresh qualification of every historical security fix.
 - Release tooling: fragment validation/assembly is maintainer process, not a
   product feature. Installer test fixes are not described as runtime changes.
 
-## Required final refresh
+## Final refresh
 
-This is a phase-1 audit, not certification of every merge's product classification.
-Refresh against the actual release-base SHA after #2549, #2555, #2558, the #2567
-fix and astra-models62 merge. Ensure their fragments are included, re-run preview,
-check shipped-feature documentation, and assemble only at release preparation.
-Do not write notes claiming those currently unmerged fixes already shipped.
+Release base `ad2b22f0b287132dbc4dad48575614403c758fc6` adds ten first-parent
+merges to the audited baseline (1,276 since rust-v0.1.48). Main now has 132
+fragments. Nine added/updated fragments cover quoting, trusted PowerShell parsing,
+Windows allow spelling, cooldowns including named-account clearing, PowerShell
+command-line parsing, Telegram polling, Windows label diagnostics, ChatGPT model
+access and the model additions. All eight gate PRs and #2589 are in the base.
+
+Our nine verified additions bring the assembly to 141 fragments. Check and
+preview pass; `assemble --version 0.1.49` transferred every fragment. The
+versioned notes body exactly matches that preview, and no unreleased fragments
+remain. This is coverage evidence, not certification of every historical merge's
+product classification or fresh qualification of every described feature.
