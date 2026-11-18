@@ -363,6 +363,7 @@ async fn new_config(
         main_execve_wrapper_exe: None,
         zsh_path: None,
         model_reasoning_effort: None,
+        configured_reasoning_effort_mapping: None,
         plan_mode_reasoning_effort: None,
         model_reasoning_summary: None,
         model_supports_reasoning_summaries: None,
