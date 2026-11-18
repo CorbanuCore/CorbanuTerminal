@@ -48,6 +48,26 @@ pub(crate) struct OpenArgv {
     pub(crate) known_end: usize,
 }
 
+/// #2543: whether `program` runs a shell, which runs any command its words
+/// give it.
+pub(crate) fn policy_runs_shell(program: &str) -> bool {
+    SHELLS.contains(&basename(program))
+}
+
+/// #2543: `[shell, -c|-lc, script]` for a POSIX shell the shell parser does
+/// not know (`dash -c`, `ksh -c`): the argv with the shell spelled `sh`, so
+/// rules see the script's commands; their quoting is sh's.
+pub(crate) fn policy_posix_shell_script(words: &[String]) -> Option<Vec<String>> {
+    const POSIX_SHELLS: &[&str] = &[
+        "dash", "ksh", "ash", "mksh", "yash", "rbash", "posh", "lksh", "oksh", "hush", "osh",
+    ];
+    let [shell, flag, script] = words else {
+        return None;
+    };
+    (matches!(flag.as_str(), "-c" | "-lc") && POSIX_SHELLS.contains(&basename(shell)))
+        .then(|| vec!["sh".to_string(), flag.clone(), script.clone()])
+}
+
 pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands {
     policy_wrapper_commands_for(words, names::PLATFORM)
 }

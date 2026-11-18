@@ -2409,7 +2409,7 @@ pub(crate) mod walk;
 
 #[cfg(test)]
 #[path = "acl_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 /// Upstream's ACL tests (rust-v0.167.0), kept beside ours.
 #[cfg(test)]

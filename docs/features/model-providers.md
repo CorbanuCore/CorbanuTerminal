@@ -62,6 +62,23 @@ restart. Local model servers have no fabricated account-login action.
 
 See [PF-58 qualification and limitations](../../qa/provider-auth/pf-58/README.md).
 
+## Recovering from a rate-limit cooldown
+
+After a provider returns HTTP 429, Corbanu waits locally for at most 60 minutes.
+The error shows the remaining wait and any longer reset hint from the provider.
+The next request after the local wait probes the provider: success clears the
+backoff; another 429 starts a new bounded wait. Older saved cooldowns follow the
+same limit.
+
+If the provider's allowance has already reset, select the affected model and run
+`/model clear-cooldown`. From the command line, use
+`corbanu -m MODEL -c 'model_provider="PROVIDER"' model clear-cooldown`, with the
+same profile and credential selection as the affected request. Include
+`--account [PROVIDER:]NAME` when the request selected a named account. This clears
+only that provider/model/credential's cooldown and backoff; an active request keeps
+its lease. It does not change the provider's allowance. For a remote session,
+run the CLI command on the app-server host.
+
 ## Choosing subagent models
 
 Ask for the model you want, for example: “Use Luna and Kimi K3 as separate

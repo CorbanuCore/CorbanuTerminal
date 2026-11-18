@@ -39,8 +39,9 @@ use tracing::instrument;
 use crate::config::Config;
 use crate::sandboxing::SandboxPermissions;
 use crate::tools::sandboxing::ExecApprovalRequirement;
-use codex_shell_command::bash::parse_shell_lc_plain_commands;
+use codex_shell_command::bash::ScriptCommands;
 use codex_shell_command::bash::parse_shell_lc_single_command_prefix;
+use codex_shell_command::bash::shell_lc_script_commands;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use shlex::try_join as shlex_try_join;
 
@@ -576,8 +577,11 @@ impl ExecPolicyManager {
                 command_platform,
             )
         };
-        let (mut evaluation, mut case_folded) =
-            check_commands(exec_policy.as_ref(), &exec_policy_fallback);
+        let wrappers::Checked {
+            mut evaluation,
+            folded: mut case_folded,
+            unread_script_prompts,
+        } = check_commands(exec_policy.as_ref(), &exec_policy_fallback);
         // S3b: upstream no longer matches rules against a heredoc script's
         // command; main did. Keep its prompt and forbidden rules at every level.
         apply_heredoc_restrictive_matches(
@@ -588,6 +592,19 @@ impl ExecPolicyManager {
             &match_options,
             command_platform,
         );
+        // #2543: the commands of a script rules cannot read as plain
+        // commands only add prompts and refusals. An amendment for the
+        // script's literal argv could not approve them.
+        let auto_amendment_allowed = auto_amendment_allowed
+            && !unread_script_prompts
+            && !apply_unread_script_matches(
+                &mut evaluation,
+                &mut case_folded,
+                exec_policy.as_ref(),
+                full_command,
+                &match_options,
+                command_platform,
+            );
         if self.strict_rules_for(live_aggressive) {
             // The original command, not the parsed one: parsing keeps only
             // the first command of a heredoc script. The whole command line,
@@ -634,7 +651,7 @@ impl ExecPolicyManager {
                 let suspended_note = live_aggressive
                     .then(|| {
                         self.aggressive_suspended_note(|policy| {
-                            check_commands(policy, &exec_policy_fallback).0
+                            check_commands(policy, &exec_policy_fallback).evaluation
                         })
                     })
                     .flatten();
@@ -685,7 +702,7 @@ impl ExecPolicyManager {
                 // Bypass sandbox only when every parsed command segment is
                 // explicitly allowed by execpolicy.
                 bypass_sandbox: check_commands(exec_policy.as_ref(), &|_| Decision::Forbidden)
-                    .0
+                    .evaluation
                     .decision
                     == Decision::Allow,
                 proposed_execpolicy_amendment: if auto_amendment_allowed {
@@ -1353,6 +1370,42 @@ fn apply_heredoc_restrictive_matches(
     evaluation.matched_rules = matched_rules;
 }
 
+/// #2543: add [`wrappers::unread_script_matches`] to `evaluation` (and
+/// the D692 case-folded ones among them to `case_folded`); whether it found
+/// any, including those `evaluation` already had (an amendment could not
+/// approve those either).
+fn apply_unread_script_matches(
+    evaluation: &mut Evaluation,
+    case_folded: &mut Vec<RuleMatch>,
+    policy: &Policy,
+    command: &[String],
+    match_options: &MatchOptions,
+    command_platform: DangerousCommandPlatform,
+) -> bool {
+    let (found, folded) =
+        wrappers::unread_script_matches(policy, command, match_options, command_platform);
+    if found.is_empty() {
+        return false;
+    }
+    case_folded.extend(
+        folded
+            .into_iter()
+            .filter(|rule_match| !evaluation.matched_rules.contains(rule_match)),
+    );
+    let restrictive = found
+        .into_iter()
+        .filter(|rule_match| !evaluation.matched_rules.contains(rule_match))
+        .collect::<Vec<_>>();
+    if let Some(decision) = restrictive.iter().map(RuleMatch::decision).max() {
+        evaluation.decision = evaluation.decision.max(decision);
+        // These first, so a refusal names the rule that caused it.
+        let mut matched_rules = restrictive;
+        matched_rules.append(&mut evaluation.matched_rules);
+        evaluation.matched_rules = matched_rules;
+    }
+    true
+}
+
 /// Make `evaluation` Forbidden when [`strict_forbidden_matches`] finds any.
 pub(crate) fn apply_strict_forbidden_matches(
     evaluation: &mut Evaluation,
@@ -1434,7 +1487,10 @@ fn commands_for_exec_policy_for_platform(
     command: &[String],
     command_platform: DangerousCommandPlatform,
 ) -> ExecPolicyCommands {
-    if let Some(commands) = parse_shell_lc_plain_commands(command)
+    // #2543: quoted words read as bash runs them (`'git' push`). A script
+    // that is not plain is read for prompt and forbidden rules only (see
+    // `wrappers::unread_script_matches`).
+    if let Some(ScriptCommands::Plain(commands)) = shell_lc_script_commands(command)
         && !commands.is_empty()
     {
         return ExecPolicyCommands {

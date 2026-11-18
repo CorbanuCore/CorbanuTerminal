@@ -6,15 +6,16 @@ workflows. Use the command picker in the TUI for the complete active list.
 
 ## Session and inference
 
-| Command        | Purpose                                                         |
-| -------------- | --------------------------------------------------------------- |
-| `/model`       | Choose provider, model, and reasoning effort                    |
-| `/providers`   | Manage account sign-ins and provider credentials                |
-| `/status`      | Show session configuration, model, permissions, and token state |
-| `/usage`       | Show account or Plan allowance and reset information            |
-| `/permissions` | Choose what the active session may do                           |
-| `/review`      | Review current workspace changes                                |
-| `/diff`        | Show the workspace diff, including untracked files              |
+| Command                 | Purpose                                                             |
+| ----------------------- | ------------------------------------------------------------------- |
+| `/model`                | Choose provider, model, and reasoning effort                        |
+| `/model clear-cooldown` | Clear the current provider/model/credential's local rate-limit wait |
+| `/providers`            | Manage account sign-ins and provider credentials                    |
+| `/status`               | Show session configuration, model, permissions, and token state     |
+| `/usage`                | Show account or Plan allowance and reset information                |
+| `/permissions`          | Choose what the active session may do                               |
+| `/review`               | Review current workspace changes                                    |
+| `/diff`                 | Show the workspace diff, including untracked files                  |
 
 ## Credentials, wallet, and compute
 

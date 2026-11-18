@@ -59,6 +59,9 @@ mod catalog_origin_tests;
 #[path = "november_models_tests.rs"]
 mod november_models_tests;
 
+#[path = "chatgpt_compat_tests.rs"]
+mod chatgpt_compat_tests;
+
 const DEFAULT_HTTP_CLIENT_FACTORY: HttpClientFactory =
     HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault);
 const STANDARD_BASE: &str = include_str!("../../core/assets/agent/builtins/standard_base.md");

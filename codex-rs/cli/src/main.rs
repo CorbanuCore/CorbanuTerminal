@@ -78,6 +78,7 @@ mod exec_args_tests;
 mod exec_server_args_tests;
 mod marketplace_cmd;
 mod mcp_cmd;
+mod model_cmd;
 <<<<<<< HEAD
 mod nested_security;
 mod pfterminal_home;
@@ -193,6 +194,9 @@ enum Subcommand {
 
     /// Manage named accounts per provider (`named_accounts` feature).
     Account(account_cmd::AccountCommand),
+
+    /// Manage the selected model's local provider state.
+    Model(model_cmd::ModelCommand),
 
     /// Internal: print the active Claude Code OAuth token for the Corbanu Terminal-native Claude Plan provider.
     #[clap(hide = true, name = codex_login::auth::CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND)]
@@ -2116,6 +2120,14 @@ async fn dispatch_cli(
             );
             run_vault_command(vault_cli).await?;
         }
+        Some(Subcommand::Model(model_cli)) => {
+            reject_remote_mode_for_subcommand(
+                root_remote.as_deref(),
+                root_remote_auth_token_env.as_deref(),
+                "model",
+            )?;
+            model_cmd::run(model_cli, root_config_overrides, interactive).await?;
+        }
         Some(Subcommand::Account(mut account_cli)) => {
             reject_remote_mode_for_subcommand(
                 root_remote.as_deref(),
@@ -2571,6 +2583,7 @@ fn profile_v2_for_subcommand<'a>(
         | Subcommand::Telegram(_)
         | Subcommand::Tasknode(_)
         | Subcommand::Mcp(_)
+        | Subcommand::Model(_)
         | Subcommand::MigrateNfsDb(_)
         | Subcommand::Sandbox(_)
         | Subcommand::Debug(DebugCommand {
@@ -2578,7 +2591,7 @@ fn profile_v2_for_subcommand<'a>(
         }) => Ok(Some(profile_v2)),
         _ => anyhow::bail!(
 <<<<<<< HEAD
-            "--profile only applies to runtime commands, `corbanu tasknode`, and `corbanu mcp`: `corbanu`, `corbanu exec`, `corbanu review`, `corbanu resume`, `corbanu archive`, `corbanu delete`, `corbanu unarchive`, `corbanu fork`, `corbanu telegram`, `corbanu tasknode`, `corbanu mcp`, `corbanu sandbox`, and `corbanu debug prompt-input`."
+            "--profile only applies to runtime commands, `corbanu tasknode`, `corbanu mcp`, and `corbanu model`: `corbanu`, `corbanu exec`, `corbanu review`, `corbanu resume`, `corbanu archive`, `corbanu delete`, `corbanu unarchive`, `corbanu fork`, `corbanu telegram`, `corbanu tasknode`, `corbanu mcp`, `corbanu model`, `corbanu sandbox`, and `corbanu debug prompt-input`."
 ||||||| 413492cd6c
             "--profile only applies to runtime commands and `codex mcp`: `codex`, `codex exec`, `codex review`, `codex resume`, `codex archive`, `codex delete`, `codex unarchive`, `codex fork`, `codex mcp`, `codex sandbox`, and `codex debug prompt-input`."
 =======
@@ -3660,6 +3673,7 @@ fn unsupported_subcommand_name_for_strict_config(
         Some(Subcommand::Logout(_)) => Some("logout"),
         Some(Subcommand::Vault(_)) => Some("vault"),
         Some(Subcommand::Account(_)) => Some("account"),
+        Some(Subcommand::Model(_)) => Some("model"),
         Some(Subcommand::Tasknode(_)) => Some("tasknode"),
         Some(Subcommand::ClaudePaneSmoke(_)) => Some("claude-pane-smoke"),
         Some(Subcommand::ClaudePaneWorkflowSuite(_)) => Some("claude-pane-workflow-suite"),
