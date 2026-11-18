@@ -77,3 +77,72 @@ async fn review_step_reads_session_grants_through_the_session() {
         Some(grant.permissions.into())
     );
 }
+
+/// #245 on the review step: while the protected-path rules apply, a session grant that covers a
+/// protected file (the Corbanu home's `auth.json`) reaches the speculative step without it.
+#[tokio::test]
+async fn review_step_gets_session_grants_with_protected_paths_stripped() {
+    use codex_protocol::models::AdditionalPermissionProfile;
+    use codex_protocol::models::FileSystemPermissions;
+    use codex_protocol::permissions::FileSystemAccessMode;
+    use codex_protocol::permissions::FileSystemPath;
+    use codex_protocol::permissions::FileSystemSandboxEntry;
+    use codex_security_policy::SecurityLevel;
+    use codex_utils_absolute_path::AbsolutePathBuf;
+    use codex_utils_path_uri::PathUri;
+
+    let (session, turn) = make_session_and_context().await;
+    let session = Arc::new(session);
+    let entry = |path: &std::path::Path| {
+        FileSystemSandboxEntry::new(
+            FileSystemPath::Path {
+                path: PathUri::from_abs_path(
+                    &AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+                ),
+            },
+            FileSystemAccessMode::Read,
+        )
+    };
+    let additional = |entries| AdditionalPermissionProfile {
+        network: None,
+        file_system: Some(FileSystemPermissions {
+            entries,
+            glob_scan_max_depth: None,
+        }),
+    };
+    #[allow(deprecated)]
+    let notes = turn.cwd.join("notes.txt");
+    let auth = turn.config.codex_home.join("auth.json");
+    let notes_only = additional(vec![entry(notes.as_path())]);
+    let grant = additional(vec![entry(notes.as_path()), entry(auth.as_path())]);
+    let control = session
+        .services
+        .agent_control
+        .local()
+        .expect("local agent backend")
+        .clone()
+        .with_effective_security_policy(
+            SecurityLevel::Moderate,
+            session.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
+        .expect("policy");
+    assert!(session.services.record_granted_permissions(
+        LOCAL_ENVIRONMENT_ID,
+        grant,
+        session.services.authority_marker(),
+    ));
+    let client = (*session.services.model_client())
+        .clone()
+        .with_ingress_policy(SecurityLevel::Moderate, control.effective_security_policy())
+        .with_source_envelopes(/*enabled*/ true);
+    session.services.replace_model_client(client);
+
+    let step = speculative_review_step(&session, &CancellationToken::new())
+        .await
+        .expect("speculative review step");
+    assert_eq!(
+        read_granted_permissions(&session, &step.turn, LOCAL_ENVIRONMENT_ID).await,
+        Some(notes_only)
+    );
+}
