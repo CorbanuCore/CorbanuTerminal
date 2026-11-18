@@ -166,7 +166,7 @@ async fn v2_rpc_refreshes_metadata_and_enforces_sandbox() -> anyhow::Result<()> 
             assert!(
                 error.chain().any(|cause| cause
                     .to_string()
-                    .contains("cannot enforce split filesystem read restrictions")),
+                    .contains("can't limit which files a command may read")),
                 "{error:#}"
             );
             let mut sandbox = FileSystemSandboxContext::from_legacy_sandbox_policy(

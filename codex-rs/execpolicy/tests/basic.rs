@@ -1413,7 +1413,13 @@ fn strictest_rule_matching_more_args_folds_only_strict_rules() -> Result<()> {
     );
     assert_eq!(
         policy.strictest_rule_matching_more_args(&tokens(&["RM"]), &exact),
-        None
+        // Windows host-executable lookup folds the basename even when the
+        // separate program-case matching option is disabled (D696).
+        if cfg!(windows) {
+            Some(Decision::Forbidden)
+        } else {
+            None
+        }
     );
     assert_eq!(
         policy.strictest_rule_matching_more_args(&tokens(&["LS"]), &FOLD),
