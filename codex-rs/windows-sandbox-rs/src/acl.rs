@@ -831,10 +831,13 @@ pub unsafe fn ensure_allow_mask_aces_with_inheritance(
 }
 
 /// Ensure read/execute grants without replacing existing entries or overriding denies.
-/// Returns true if any ACE was added.
+/// Returns true if any ACE was added. D611: production grants go through
+/// [`grant_read_execute_aces_to_handle`]; upstream's long-path tests still
+/// use this path form.
 ///
 /// # Safety
 /// Caller must pass valid SID pointers and an existing path.
+#[cfg(test)]
 pub(crate) unsafe fn grant_read_execute_aces(
     path: &Path,
     sids: &[*mut c_void],
@@ -850,10 +853,9 @@ pub(crate) unsafe fn grant_read_execute_aces(
     )
 }
 
-/// D611: [`grant_read_execute_aces`] through an already-open handle, so the
+/// D611: ensure read/execute grants through an already-open handle, so the
 /// entries land on the object the handle names whatever its path now resolves
-/// to. Existing entries and denies are kept, as there. Returns true if any ACE
-/// was added.
+/// to. Existing entries and denies are kept. Returns true if any ACE was added.
 ///
 /// # Safety
 /// Caller must pass valid SID pointers and a handle opened with `READ_CONTROL`
