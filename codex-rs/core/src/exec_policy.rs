@@ -39,9 +39,8 @@ use tracing::instrument;
 use crate::config::Config;
 use crate::sandboxing::SandboxPermissions;
 use crate::tools::sandboxing::ExecApprovalRequirement;
-use codex_shell_command::bash::ScriptCommands;
 use codex_shell_command::bash::parse_shell_lc_single_command_prefix;
-use codex_shell_command::bash::shell_lc_script_commands;
+use codex_shell_command::bash::shell_lc_script_read;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use shlex::try_join as shlex_try_join;
 
@@ -595,16 +594,18 @@ impl ExecPolicyManager {
         // #2543: the commands of a script rules cannot read as plain
         // commands only add prompts and refusals. An amendment for the
         // script's literal argv could not approve them.
-        let auto_amendment_allowed = auto_amendment_allowed
-            && !unread_script_prompts
-            && !apply_unread_script_matches(
-                &mut evaluation,
-                &mut case_folded,
-                exec_policy.as_ref(),
-                full_command,
-                &match_options,
-                command_platform,
-            );
+        // #2548: read whether or not an amendment could be offered (an
+        // `&&` here once skipped it for scripts with wrappers).
+        let unread_found = apply_unread_script_matches(
+            &mut evaluation,
+            &mut case_folded,
+            exec_policy.as_ref(),
+            full_command,
+            &match_options,
+            command_platform,
+        );
+        let auto_amendment_allowed =
+            auto_amendment_allowed && !unread_script_prompts && !unread_found;
         if self.strict_rules_for(live_aggressive) {
             // The original command, not the parsed one: parsing keeps only
             // the first command of a heredoc script. The whole command line,
@@ -1489,12 +1490,20 @@ fn commands_for_exec_policy_for_platform(
 ) -> ExecPolicyCommands {
     // #2543: quoted words read as bash runs them (`'git' push`). A script
     // that is not plain is read for prompt and forbidden rules only (see
-    // `wrappers::unread_script_matches`).
-    if let Some(ScriptCommands::Plain(commands)) = shell_lc_script_commands(command)
-        && !commands.is_empty()
+    // `wrappers::unread_script_matches`); so is (#2548) one whose commands
+    // run more than their argv (`eval`, a shell's here-document), and one
+    // outside the minimal lexical set (never plain).
+    if let Some(read) = shell_lc_script_read(command)
+        && read.plain
+        && !read.commands.is_empty()
+        && !wrappers::runs_more_than_argv(&read)
     {
         return ExecPolicyCommands {
-            commands,
+            commands: read
+                .commands
+                .iter()
+                .map(|command| command.words.iter().flatten().cloned().collect())
+                .collect(),
             command_origin: ExecPolicyCommandOrigin::Generic,
         };
     }

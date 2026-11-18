@@ -1,10 +1,42 @@
-//! #2543: [`read_script_commands`] reads quoted words as bash does, and
-//! never reads a word bash still changes as written.
+//! #2543: [`read_script`] reads quoted words as bash does, and never reads
+//! a word bash still changes as written.
 
-use super::ScriptCommands;
-use super::read_script_commands;
-use super::shell_lc_script_commands;
+use super::script_read::read_tree;
+use super::shell_lc_script_read;
 use pretty_assertions::assert_eq;
+
+/// What these tests check of a [`super::ScriptRead`].
+#[derive(Debug, PartialEq, Eq)]
+enum ScriptCommands {
+    Plain(Vec<Vec<String>>),
+    Partial(Vec<Vec<Option<String>>>),
+    Unreadable,
+}
+
+/// By the syntax tree alone: the lexical pre-filter is tested in
+/// `script_read_tests`.
+fn read_script_commands(script: &str) -> ScriptCommands {
+    summary(read_tree(script))
+}
+
+fn shell_lc_script_commands(command: &[String]) -> Option<ScriptCommands> {
+    shell_lc_script_read(command).map(summary)
+}
+
+fn summary(read: super::ScriptRead) -> ScriptCommands {
+    let words = read.commands.into_iter().map(|command| command.words);
+    if read.unread {
+        ScriptCommands::Unreadable
+    } else if read.plain {
+        ScriptCommands::Plain(
+            words
+                .map(|words| words.into_iter().flatten().collect())
+                .collect(),
+        )
+    } else {
+        ScriptCommands::Partial(words.collect())
+    }
+}
 
 fn plain(commands: &[&[&str]]) -> ScriptCommands {
     ScriptCommands::Plain(
@@ -75,8 +107,8 @@ fn words_bash_builds_at_run_time_are_unknown() {
             partial(&[&["git", "?"], &["echo", "push"]]),
         ),
         ("/usr/bin/gi? push", partial(&[&["?", "push"]])),
-        ("/usr/bin/gi[t] push", partial(&[&["?", "push"]])),
         ("/usr/bin/g*t push", partial(&[&["?", "push"]])),
+        ("/usr/bin/gi[t] push", partial(&[&["?", "push"]])),
         ("git {pu,}sh", partial(&[&["git", "?"]])),
         ("~/bin/git push", partial(&[&["?", "push"]])),
         ("=git push", partial(&[&["?", "push"]])),
