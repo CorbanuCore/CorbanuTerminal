@@ -370,8 +370,8 @@ async fn foreign_patch_paths_are_not_auto_approved_under_a_restricted_turn() {
         {
             return;
         }
-        // Seatbelt rejects the foreign drive root while preparing its path
-        // matcher, before the later write-permission check can refuse it.
+        // macOS path-alias preparation rejects the foreign drive root before
+        // the later write-permission check can refuse it.
         Err(FunctionCallError::RespondToModel(message))
             if cfg!(target_os = "macos")
                 && message
