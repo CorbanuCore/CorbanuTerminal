@@ -378,3 +378,26 @@ async fn issue_2601_powershell_name_rebinding_and_code_asks() {
     let failures = failures_for(commands, &[FORBID, PROMPT]).await;
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+/// #2601 (sync review round 1): the PowerShell check only adds an ask where
+/// a command would otherwise run as its argv; script text read precisely
+/// (`eval`'s words, a shell's here-document) keeps its refusals even with a
+/// word on the alias drive.
+#[tokio::test]
+async fn powershell_check_keeps_refusals_of_read_scripts() {
+    for script in [
+        "eval git push alias:",
+        "eval git push \u{131}x:",
+        "bash -s alias: <<'E'\ngit push\nE",
+    ] {
+        for command in spellings(script) {
+            let results = requirements(&command, FORBID).await;
+            assert!(
+                results
+                    .iter()
+                    .all(|result| matches!(result, ExecApprovalRequirement::Forbidden { .. })),
+                "{command:?}: {results:?}"
+            );
+        }
+    }
+}

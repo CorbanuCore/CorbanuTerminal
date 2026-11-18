@@ -36,15 +36,26 @@ pub(super) enum Role {
 /// The role of `program_and_args`, run after the launcher words `before`
 /// (`env A=1`, `sudo`) with input `stdin`.
 pub(super) fn role(before: &[String], program_and_args: &[String], stdin: &CommandStdin) -> Role {
+    let role = argv_or_code_role(before, program_and_args, stdin);
+    // #2601: only where nothing else reads or asks: a script text read
+    // precisely (`eval git push alias:`) keeps its refusals.
+    if role == Role::Argv
+        && let Some((program, args)) = program_and_args.split_first()
+        && powershell_runs_code(program, args.iter().map(String::as_str))
+    {
+        return Role::Unread;
+    }
+    role
+}
+
+/// [`role`] before the PowerShell check.
+fn argv_or_code_role(before: &[String], program_and_args: &[String], stdin: &CommandStdin) -> Role {
     if before.iter().any(|word| assigns_code_variable(word)) {
         return Role::Unread;
     }
     let Some((program, args)) = program_and_args.split_first() else {
         return Role::Argv;
     };
-    if powershell_runs_code(program, args.iter().map(String::as_str)) {
-        return Role::Unread;
-    }
     if runs_shell(program) {
         return shell_role(program, args, stdin);
     }
@@ -108,8 +119,8 @@ pub(super) fn runs_shell(program: &str) -> bool {
 }
 
 /// #2601 (D553): PowerShell commands (and their aliases) that rebind a
-/// command name or run code that is not their argv: text, a module, a
-/// compiled type, a script file in a job.
+/// command name or run code that is not their argv: text, a module or
+/// snap-in, a compiled type, a script file in a job.
 const POWERSHELL_CODE_COMMANDS: &[&str] = &[
     "invoke-expression",
     "iex",
@@ -130,6 +141,8 @@ const POWERSHELL_CODE_COMMANDS: &[&str] = &[
     "start-job",
     "sajb",
     "start-threadjob",
+    "add-pssnapin",
+    "asnp",
 ];
 
 /// #2601 (D553): a PowerShell command that may change what a later command
