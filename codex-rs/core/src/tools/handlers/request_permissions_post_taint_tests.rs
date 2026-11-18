@@ -47,10 +47,19 @@ async fn tainted_session(
     Arc<Session>,
     Arc<TurnContext>,
     async_channel::Receiver<codex_protocol::protocol::Event>,
+    wiremock::MockServer,
 ) {
     // The test model's slug, for `required_on_models`.
     let (_, probe, _) = crate::session::tests::make_session_and_context_with_rx().await;
     let model = probe.model_info().slug.clone();
+    // Automatic reviews these tests start reach a local stand-in that
+    // refuses them at once, never a real service.
+    let reviewer = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::any())
+        .respond_with(wiremock::ResponseTemplate::new(401))
+        .mount(&reviewer)
+        .await;
+    let reviewer_url = format!("{}/v1", reviewer.uri());
     let (session, turn, events) =
         crate::session::tests::make_session_and_context_with_auth_and_config_and_rx(
             codex_login::CodexAuth::from_api_key("Test API Key"),
@@ -62,6 +71,7 @@ async fn tainted_session(
                     .set(policy)
                     .expect("approval policy");
                 force_reviewer(config, forced, &model);
+                config.model_provider.base_url = Some(reviewer_url.clone());
             },
         )
         .await;
@@ -78,7 +88,7 @@ async fn tainted_session(
         internal_chat_message_metadata_passthrough: None,
     }]);
     session.services.replace_model_client(client);
-    (session, turn, events)
+    (session, turn, events, reviewer)
 }
 
 /// Writes `forced` into `config`'s administrator requirements.
@@ -108,6 +118,45 @@ fn force_reviewer(config: &mut Config, forced: Forced, model: &str) {
     )
     .expect("replace test requirements");
 }
+
+fn network_request(turn: &TurnContext) -> super::PreparedPermissionRequest {
+    let environment = turn
+        .initial_environments
+        .primary()
+        .expect("primary environment")
+        .selection();
+    super::PreparedPermissionRequest {
+        environment_id: environment.environment_id,
+        reason: None,
+        permissions: codex_protocol::request_permissions::RequestPermissionProfile {
+            network: Some(codex_protocol::models::NetworkPermissions {
+                enabled: Some(true),
+            }),
+            ..Default::default()
+        },
+    }
+}
+
+/// The post-taint question for `call-permissions`, answered `answer`.
+async fn answer_question(session: &Session, turn: &TurnContext, answer: &str) {
+    let id = crate::security::protected_surface::question_id("call-permissions");
+    session
+        .notify_user_input_response(
+            &turn.sub_id,
+            codex_protocol::request_user_input::RequestUserInputResponse {
+                answers: std::collections::HashMap::from([(
+                    id,
+                    codex_protocol::request_user_input::RequestUserInputAnswer {
+                        answers: vec![answer.to_string()],
+                    },
+                )]),
+            },
+        )
+        .await;
+}
+
+/// D625 (a) (ii)'s refusal at the review itself.
+const RELOAD_REFUSAL: &str = "administrator requirements changed while this permissions request";
 
 fn invocation(session: &Arc<Session>, turn: &Arc<TurnContext>) -> ToolInvocation {
     let step_context = StepContext::for_test(Arc::clone(turn));
@@ -144,7 +193,8 @@ async fn issue_2272_forced_reviewer_cannot_answer_post_taint_permission_requests
         Forced::ModelRequiresReview,
         Forced::PersonMayNotReview,
     ] {
-        let (session, turn, _events) = tainted_session(AskForApproval::Never, forced).await;
+        let (session, turn, _events, _reviewer) =
+            tainted_session(AskForApproval::Never, forced).await;
         let result = check_dispatch(&invocation(&session, &turn), ToolOrigin::Builtin).await;
         match forced {
             Forced::No => assert_eq!(result, Ok(()), "{forced:?}"),
@@ -164,7 +214,8 @@ async fn issue_2272_forced_reviewer_cannot_answer_post_taint_permission_requests
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn issue_2272_forced_reviewer_routes_post_taint_permission_requests_to_the_person() {
     for forced in [Forced::ModelRequiresReview, Forced::PersonMayNotReview] {
-        let (session, turn, events) = tainted_session(AskForApproval::OnRequest, forced).await;
+        let (session, turn, events, _reviewer) =
+            tainted_session(AskForApproval::OnRequest, forced).await;
         let invocation = invocation(&session, &turn);
         let dispatch =
             tokio::spawn(async move { check_dispatch(&invocation, ToolOrigin::Builtin).await });
@@ -194,7 +245,8 @@ async fn issue_2272_forced_reviewer_routes_post_taint_permission_requests_to_the
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn d625_requirements_reload_after_dispatch_still_asks_the_person_first() {
     for forced in [Forced::ModelRequiresReview, Forced::PersonMayNotReview] {
-        let (session, turn, events) = tainted_session(AskForApproval::OnRequest, Forced::No).await;
+        let (session, turn, events, _reviewer) =
+            tainted_session(AskForApproval::OnRequest, Forced::No).await;
         *session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
         let invocation = invocation(&session, &turn);
         let step_context = Arc::clone(&invocation.step_context);
@@ -227,21 +279,7 @@ async fn d625_requirements_reload_after_dispatch_still_asks_the_person_first() {
             "{forced:?}: the reload forces the automatic reviewer"
         );
 
-        let environment = turn
-            .initial_environments
-            .primary()
-            .expect("primary environment")
-            .selection();
-        let request = super::PreparedPermissionRequest {
-            environment_id: environment.environment_id,
-            reason: None,
-            permissions: codex_protocol::request_permissions::RequestPermissionProfile {
-                network: Some(codex_protocol::models::NetworkPermissions {
-                    enabled: Some(true),
-                }),
-                ..Default::default()
-            },
-        };
+        let request = network_request(&turn);
         let mut review = tokio::spawn({
             let session = Arc::clone(&session);
             async move {
@@ -281,20 +319,7 @@ async fn d625_requirements_reload_after_dispatch_still_asks_the_person_first() {
             shown.questions[0].question
         );
 
-        let id = crate::security::protected_surface::question_id("call-permissions");
-        session
-            .notify_user_input_response(
-                &turn.sub_id,
-                codex_protocol::request_user_input::RequestUserInputResponse {
-                    answers: std::collections::HashMap::from([(
-                        id,
-                        codex_protocol::request_user_input::RequestUserInputAnswer {
-                            answers: vec!["Cancel".to_string()],
-                        },
-                    )]),
-                },
-            )
-            .await;
+        answer_question(&session, &turn, "Cancel").await;
         let refusal = tokio::time::timeout(Duration::from_secs(10), review)
             .await
             .expect("review finished")
@@ -305,4 +330,120 @@ async fn d625_requirements_reload_after_dispatch_still_asks_the_person_first() {
             "{forced:?}: {refusal}"
         );
     }
+}
+
+/// D625 (a) (ii), at the review itself: requirements that force the
+/// automatic reviewer were reloaded after the checks before the review, and
+/// the person has not allowed this call. The review refuses the request
+/// rather than let the reviewer answer alone. Untainted, it goes ahead.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn d625_review_refuses_a_forced_review_the_person_did_not_allow() {
+    for forced in [Forced::ModelRequiresReview, Forced::PersonMayNotReview] {
+        let (session, turn, _events, _reviewer) =
+            tainted_session(AskForApproval::OnRequest, forced).await;
+        let step_context = StepContext::for_test(Arc::clone(&turn));
+        let context = crate::tools::ApprovalContext {
+            exec_requirement: None,
+            review_context: crate::guardian::GuardianReviewContext::from(&step_context),
+            cancellation_token: None,
+            call_id: "call-permissions".to_string(),
+            tool_name: ToolName::plain("request_permissions"),
+            strict_auto_review: false,
+            approval_reason: None,
+            retry_reason: None,
+            network_approval_context: None,
+        };
+        let action = network_request(&turn).approval_action("call-permissions", &turn.sub_id);
+        let decision = tokio::time::timeout(
+            Duration::from_secs(10),
+            session.request_guardian_approval(action.clone(), &context),
+        )
+        .await
+        .expect("review finished");
+        match decision {
+            Some(codex_protocol::protocol::ReviewDecision::Denied { rejection })
+                if rejection.contains(RELOAD_REFUSAL) => {}
+            other => panic!("{forced:?}: the forced reviewer answered alone: {other:?}"),
+        }
+
+        // Once the person allowed this call, the forced reviewer reviews it.
+        turn.post_taint_policy_answers.note("call-permissions");
+        let decision = tokio::time::timeout(
+            Duration::from_secs(10),
+            session.request_guardian_approval(action, &context),
+        )
+        .await
+        .expect("review finished");
+        assert!(
+            !matches!(
+                &decision,
+                Some(codex_protocol::protocol::ReviewDecision::Denied { rejection })
+                    if rejection.contains(RELOAD_REFUSAL)
+            ),
+            "{forced:?}: {decision:?}"
+        );
+    }
+}
+
+/// D625 (a): the person allowed the request at the dispatch check (forced
+/// review already in force); the request's review does not ask again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn d625_request_allowed_at_dispatch_is_not_asked_again() {
+    let (session, turn, events, _reviewer) =
+        tainted_session(AskForApproval::OnRequest, Forced::ModelRequiresReview).await;
+    *session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
+    let invocation = invocation(&session, &turn);
+    let step_context = Arc::clone(&invocation.step_context);
+    let dispatch =
+        tokio::spawn(async move { check_dispatch(&invocation, ToolOrigin::Builtin).await });
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let EventMsg::RequestUserInput(_) = events.recv().await.expect("event").msg {
+                return;
+            }
+        }
+    })
+    .await
+    .expect("the person was asked at dispatch");
+    answer_question(&session, &turn, "Allow once").await;
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(10), dispatch)
+            .await
+            .expect("dispatch finished")
+            .expect("dispatch joined"),
+        Ok(())
+    );
+
+    let mut review = tokio::spawn({
+        let session = Arc::clone(&session);
+        let request = network_request(&turn);
+        async move {
+            session
+                .request_permissions_explained(
+                    &step_context,
+                    "call-permissions".to_string(),
+                    request,
+                    tokio_util::sync::CancellationToken::new(),
+                )
+                .await
+        }
+    });
+    let finished = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            tokio::select! {
+                finished = &mut review => return finished.expect("review joined"),
+                event = events.recv() => {
+                    if let EventMsg::RequestUserInput(shown) = event.expect("event").msg {
+                        panic!("asked again: {:?}", shown.questions[0].question);
+                    }
+                }
+            }
+        }
+    })
+    .await
+    .expect("review finished");
+    assert!(
+        !matches!(&finished, Err(refusal) if refusal.contains(RELOAD_REFUSAL)),
+        "{finished:?}"
+    );
 }

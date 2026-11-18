@@ -245,6 +245,14 @@ pub(crate) async fn check_dispatch(
     origin: ToolOrigin,
 ) -> Result<(), String> {
     let coverage = coverage(origin, &invocation.tool_name);
+    if invocation.tool_name.name == "request_permissions" {
+        // An answer recorded for an earlier call with this id is not this one's.
+        invocation
+            .step_context
+            .turn
+            .post_taint_policy_answers
+            .forget(&invocation.call_id);
+    }
     // Looking the target up is only worth it once the checks apply.
     let restarts = coverage == Coverage::AgentFollowup
         && is_tainted(&invocation.session)
@@ -307,18 +315,24 @@ pub(crate) async fn check_dispatch(
     Ok(())
 }
 
-/// Calls whose policy request the person allowed at the dispatch check
-/// ([`check_dispatch`]), for that request's own review to read (D625 (a)).
+/// Calls whose `request_permissions` the person allowed after untrusted
+/// content, at the dispatch check ([`check_dispatch`]) or right before the
+/// request's review ([`confirm_policy_request_review`]), for that review to
+/// read (D625 (a)). A new dispatch of a call id clears its entry first.
 #[derive(Debug, Default)]
 pub(crate) struct PostTaintPolicyAnswers(std::sync::Mutex<HashSet<String>>);
 
 impl PostTaintPolicyAnswers {
-    fn note(&self, call_id: &str) {
+    pub(crate) fn note(&self, call_id: &str) {
         self.lock().insert(call_id.to_string());
     }
 
-    fn take(&self, call_id: &str) -> bool {
-        self.lock().remove(call_id)
+    fn forget(&self, call_id: &str) {
+        self.lock().remove(call_id);
+    }
+
+    fn contains(&self, call_id: &str) -> bool {
+        self.lock().contains(call_id)
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, HashSet<String>> {
@@ -333,16 +347,16 @@ impl PostTaintPolicyAnswers {
 /// answers its prompt; if administrator requirements reloaded since then (or
 /// untrusted content arrived) so that an automatic reviewer would now answer,
 /// the person is asked here first, as the dispatch check would have done.
-/// Without untrusted content, or once the person allowed this call at
-/// dispatch, nothing is asked.
+/// Without untrusted content, or once the person allowed this call, nothing
+/// is asked. A reload after this point is caught at the review itself
+/// ([`forced_review_refusal`]).
 pub(crate) async fn confirm_policy_request_review(
     session: &Session,
     step_context: &StepContext,
     call_id: &str,
 ) -> Result<(), String> {
-    if step_context.turn.post_taint_policy_answers.take(call_id)
-        || !automatic_reviewer_answers(session, step_context).await
-    {
+    let answers = &step_context.turn.post_taint_policy_answers;
+    if answers.contains(call_id) || !automatic_reviewer_answers(session, step_context).await {
         return Ok(());
     }
     let admission = admit(
@@ -360,7 +374,28 @@ pub(crate) async fn confirm_policy_request_review(
     };
     let question = format!("Allow `request_permissions`? {}", check.reason());
     let approved = ask_human(session, &step_context.turn, call_id, question).await;
-    check.resolve(session, approved)
+    check.resolve(session, approved)?;
+    answers.note(call_id);
+    Ok(())
+}
+
+/// D625 (a) (ii), at the review itself: administrator requirements force the
+/// automatic reviewer for a `request_permissions` call (read once, by the
+/// caller, for the review). After untrusted content that needs the person's
+/// answer for this call first; without it (requirements reloaded after the
+/// checks above), the request is refused instead of answered by the reviewer
+/// alone.
+pub(crate) fn forced_review_refusal(
+    session: &Session,
+    turn: &TurnContext,
+    call_id: &str,
+) -> Option<String> {
+    (is_tainted(session) && !turn.post_taint_policy_answers.contains(call_id)).then(|| {
+        "Not run: administrator requirements changed while this permissions request was \
+         pending after untrusted content entered the session. Ask again so the person can \
+         decide first."
+            .to_string()
+    })
 }
 
 fn is_tainted(session: &Session) -> bool {

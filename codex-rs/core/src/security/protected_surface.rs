@@ -37,6 +37,7 @@ pub(crate) use gate::ask_human;
 pub(crate) use gate::ask_human_answer;
 pub(crate) use gate::check_dispatch;
 pub(crate) use gate::confirm_policy_request_review;
+pub(crate) use gate::forced_review_refusal;
 #[cfg(test)]
 pub(crate) use gate::question_id;
 pub(crate) use image_reads::check_image_generation;
