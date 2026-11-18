@@ -1006,6 +1006,17 @@ fn ps_output_chunk_leading_whitespace_snapshot() {
 }
 
 #[test]
+fn error_event_provider_cooldown_snapshot() {
+    // Matches the core formatter fixture: one-hour enforcement with the provider's
+    // longer reset hint retained for display.
+    let cell = new_error_event(
+        "provider request blocked by local cooldown for claude-plan/claude-opus-5-5-plan (config:auth-command) for about 3600s. Last status: 429, request id: fixture-request. Last preflight: input=10 cached_input=0 request_bytes=100. Provider reset hint: about 308374s remaining (not enforced locally). After this wait, the next request probes the provider. To retry now, use /model clear-cooldown or corbanu model clear-cooldown with the same provider/model settings.".to_string(),
+    );
+    let rendered = render_lines(&cell.display_lines(/*width*/ 120)).join("\n");
+    insta::assert_snapshot!(rendered);
+}
+
+#[test]
 fn error_event_oversized_input_snapshot() {
     let cell = new_error_event(
         "Message exceeds the maximum length of 1048576 characters (1048577 provided).".to_string(),
