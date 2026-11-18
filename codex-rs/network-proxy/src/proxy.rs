@@ -1024,6 +1024,15 @@ impl NetworkProxy {
         if let Some(policy) = environment_policy {
             policy.apply_to(&mut config);
         }
+        // D616: Corbanu keeps host-loopback binding off unless it is configured. MXC cannot
+        // block loopback, so a remote MXC executor needs an explicit `true`.
+        anyhow::ensure!(
+            !config.enabled
+                || local_binding_policy != crate::LocalBindingPolicy::ExplicitTrue
+                || config.allow_local_binding.is_some(),
+            "{}",
+            crate::MXC_EXPLICIT_LOCAL_BINDING_REQUIRED
+        );
         config.allow_local_binding = Some(local_binding_policy.resolve(&config));
         anyhow::ensure!(
             environment_policy.is_none() || config.enabled,
@@ -1031,7 +1040,7 @@ impl NetworkProxy {
         );
         anyhow::ensure!(
             !config.enabled
-                || local_binding_policy != crate::LocalBindingPolicy::RequireTrue
+                || !local_binding_policy.requires_true()
                 || config.allow_local_binding(),
             "MXC cannot enforce allow_local_binding=false: native host-loopback access is bidirectional; use true or a different sandbox backend"
         );

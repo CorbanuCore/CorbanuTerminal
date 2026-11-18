@@ -3,6 +3,7 @@ use pretty_assertions::assert_eq;
 use super::RemoteNetworkProxyConfig;
 use super::RemoteNetworkProxyLaunchConfig;
 use crate::LocalBindingPolicy::DefaultFalse;
+use crate::LocalBindingPolicy::ExplicitTrue;
 use crate::LocalBindingPolicy::RequireTrue;
 use crate::MitmHookConfig;
 use crate::NetworkMitmCaConfig;
@@ -420,6 +421,10 @@ async fn local_binding_is_resolved_for_each_executor() -> anyhow::Result<()> {
         (Some(false), DefaultFalse, Some(false)),
         (Some(false), RequireTrue, None),
         (Some(true), DefaultFalse, Some(true)),
+        // D616: a remote MXC executor needs an explicit true.
+        (None, ExplicitTrue, None),
+        (Some(false), ExplicitTrue, None),
+        (Some(true), ExplicitTrue, Some(true)),
     ] {
         let config = NetworkProxyConfig {
             enabled: true,

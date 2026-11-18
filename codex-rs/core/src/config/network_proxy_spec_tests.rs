@@ -953,3 +953,58 @@ async fn environment_local_binding_preserves_explicit_denials_and_inherits_omitt
     }
     Ok(())
 }
+
+/// D616 (#2562): a remote MXC executor gets loopback binding only when the controller or
+/// the owner configures it as true; omission is refused with the reason, not defaulted on.
+#[test]
+fn d616_remote_mxc_requires_explicit_local_binding() -> anyhow::Result<()> {
+    use codex_network_proxy::LocalBindingPolicy::ExplicitTrue;
+
+    let profile = PermissionProfile::workspace_write();
+    for (controller_binding, owner_binding, expected) in [
+        (None, None, None),
+        (Some(true), None, Some(true)),
+        (None, Some(true), Some(true)),
+        (Some(false), None, Some(false)),
+    ] {
+        let controller = NetworkProxySpec::from_config_and_constraints(
+            NetworkProxyConfig {
+                enabled: true,
+                allow_local_binding: controller_binding,
+                ..Default::default()
+            },
+            /*requirements*/ None,
+            &profile,
+        )?;
+        let mut owner_config = NetworkProxyConfig {
+            allow_local_binding: owner_binding,
+            ..Default::default()
+        };
+        owner_config.set_allowed_domains(vec!["example.com".to_string()]);
+        let owner = EnvironmentNetworkPolicy::from_config(
+            &owner_config,
+            /*managed_allowed_domains_only*/ false,
+        );
+        let composed = NetworkProxySpec::for_environment(
+            Some(&controller),
+            &owner,
+            &profile,
+            &Policy::empty(),
+            ExplicitTrue,
+        );
+        match expected {
+            None => assert_eq!(
+                composed.expect_err("omission must be refused").to_string(),
+                codex_network_proxy::MXC_EXPLICIT_LOCAL_BINDING_REQUIRED
+            ),
+            // Explicit false resolves to false here; the remote launch then refuses it
+            // because MXC cannot enforce it (`remote_launch_config`).
+            Some(binding) => assert_eq!(
+                composed?.environment_policy().allow_local_binding,
+                Some(binding),
+                "{controller_binding:?} {owner_binding:?}"
+            ),
+        }
+    }
+    Ok(())
+}

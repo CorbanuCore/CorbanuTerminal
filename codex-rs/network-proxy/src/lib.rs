@@ -166,6 +166,7 @@ pub use runtime::ConfigReloader;
 pub use runtime::ConfigReloaderFuture;
 pub use runtime::ConfigState;
 pub use runtime::LocalBindingPolicy;
+pub use runtime::MXC_EXPLICIT_LOCAL_BINDING_REQUIRED;
 pub use runtime::NetworkProxyState;
 pub use secret_substitution::BodySecretReplacement;
 pub use secret_substitution::BodySecretSubstitutionConfig;
