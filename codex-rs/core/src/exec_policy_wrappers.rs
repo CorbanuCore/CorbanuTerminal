@@ -489,13 +489,17 @@ pub(super) fn check(
             let inner = &command[start..];
             let reading_from = matches.len();
             // #2601 (D553): a PowerShell command lowered for Windows that
-            // rebinds a name or runs code is unread, as bash's `alias` is.
-            let role = if platform == DangerousCommandPlatform::Windows
-                && roles::powershell_runs_code(inner)
-            {
-                Role::Unread
-            } else {
-                roles::role(&command[..start], inner, stdin)
+            // rebinds a name or runs code is unread, as bash's `alias` is;
+            // only where nothing else reads or asks, so script text read
+            // precisely (`eval git push alias:`) keeps its refusals.
+            let role = match roles::role(&command[..start], inner, stdin) {
+                Role::Argv
+                    if platform == DangerousCommandPlatform::Windows
+                        && roles::powershell_runs_code(inner) =>
+                {
+                    Role::Unread
+                }
+                role => role,
             };
             let ask = match role {
                 Role::Argv => None,

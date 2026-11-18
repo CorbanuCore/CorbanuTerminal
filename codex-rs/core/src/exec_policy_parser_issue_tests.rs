@@ -9,6 +9,7 @@
 //! one using a builtin that defines or runs code (`hash`, `alias`, `trap`,
 //! `enable`, `mapfile`), asks whenever a prompt or forbidden rule exists.
 use super::*;
+use pretty_assertions::assert_eq;
 
 const FORBID: &str = r#"prefix_rule(pattern=["git", "push"], decision="forbidden")"#;
 const PROMPT: &str = r#"prefix_rule(pattern=["git", "push"], decision="prompt")"#;
@@ -99,26 +100,28 @@ async fn failures_for(commands: Vec<Vec<String>>, rule_sets: &[&str]) -> Vec<Str
             let results = requirements(&command, rules).await;
             let last = results.len() - 1;
             for (mode, result) in results.into_iter().enumerate() {
-                // Sync (D691): where a forbidden rule could match, a fresh
-                // human decision; a prompt rule alone asks as on main.
-                let ok = match &result {
-                    ExecApprovalRequirement::Forbidden { .. } => rules != PROMPT || mode == last,
-                    ExecApprovalRequirement::NeedsHumanApproval { .. } => {
-                        rules != PROMPT && mode != last
-                    }
-                    ExecApprovalRequirement::NeedsApproval {
-                        proposed_execpolicy_amendment: None,
-                        ..
-                    } => rules == PROMPT && mode != last,
-                    _ => false,
-                };
-                if !ok {
+                if !acceptable(rules, &result, /*approvals_off*/ mode == last) {
                     failures.push(format!("{rules} mode {mode} {command:?}: {result:?}"));
                 }
             }
         }
     }
     failures
+}
+
+/// Asks (or refuses where the rule is forbidden), with no amendment; with
+/// approvals off, refused. Sync (D691): where a forbidden rule could match,
+/// a fresh human decision; a prompt rule alone asks as on main.
+fn acceptable(rules: &str, result: &ExecApprovalRequirement, approvals_off: bool) -> bool {
+    match result {
+        ExecApprovalRequirement::Forbidden { .. } => rules != PROMPT || approvals_off,
+        ExecApprovalRequirement::NeedsHumanApproval { .. } => rules != PROMPT && !approvals_off,
+        ExecApprovalRequirement::NeedsApproval {
+            proposed_execpolicy_amendment: None,
+            ..
+        } => rules == PROMPT && !approvals_off,
+        _ => false,
+    }
 }
 
 async fn assert_scripts_ask(scripts: &[&str], rule_sets: &[&str]) {
@@ -324,64 +327,155 @@ async fn parser_issue_controls_stay_precise() {
 /// #2601 in PowerShell: an alias, a function or a PowerShell drive named
 /// by a literal argument can rebind a command name, and
 /// `Invoke-Expression`, `Import-Module`, `Add-Type` and script-file jobs run
-/// code that is not their argv. On Windows the trusted parser reads these
-/// scripts as plain commands, so each such command fails closed as bash's
-/// `alias` does (a partial list: #2661). Elsewhere no PowerShell script is
-/// read, so each asks as an unread script.
+/// code that is not their argv (a partial list: #2661).
+const POWERSHELL_SCRIPTS: &[&str] = &[
+    "Set-Alias f git; f push",
+    "set-alias -Name f -Value git; f push",
+    "Microsoft.PowerShell.Utility\\Set-Alias f git; f push",
+    "New-Alias f git; f push",
+    "sal f git; f push",
+    "nal f git; f push",
+    "Import-Alias ./aliases.csv; f push",
+    "Set-Item alias:f git; f push",
+    "New-Item -Path Alias:f -Value git; f push",
+    "Set-Item -Path Microsoft.PowerShell.Core\\Alias::f -Value git; f push",
+    "Set-Item function:f 'git push'; f",
+    "Set-Location alias:; Set-Item f git; f push",
+    "New-PSDrive -Name a -PSProvider Alias -Root ''; Set-Item a:f git; f push",
+    "Invoke-Expression 'git push'",
+    "iex 'git push'",
+    "Import-Module ./m.psm1; f",
+    "ipmo ./m.psm1; f",
+    "Add-Type -Path ./m.dll",
+    "Invoke-Command -FilePath ./x.ps1",
+    "Start-Job -FilePath ./x.ps1",
+    // .NET may fold these non-ASCII letters to ASCII (review round 1).
+    "\u{131}ex 'git push'",
+    "\u{131}nvoke-expression 'git push'",
+    "\u{17f}al f git; f push",
+    "Set-Item al\u{131}as:f git; f push",
+    "\u{17f}et-location funct\u{131}on:; Set-Item f 'git push'; f",
+];
+
+/// Sync: on a host evaluating for its own platform, PowerShell is lowered
+/// only for Windows; elsewhere each line asks as one not lowered.
 #[tokio::test]
 async fn issue_2601_powershell_name_rebinding_and_code_asks() {
-    // The trusted parser reads the reproducer in full, as plain commands.
-    #[cfg(windows)]
-    {
-        use codex_shell_command::powershell::PowershellScriptRead;
-        use codex_shell_command::powershell::read_powershell_command_script;
-        use pretty_assertions::assert_eq;
-        assert_eq!(
-            read_powershell_command_script(&argv(&[
-                "powershell.exe",
-                "-Command",
-                "Set-Alias f git; f push"
-            ])),
-            Some(PowershellScriptRead::Commands(vec![
-                argv(&["Set-Alias", "f", "git"]),
-                argv(&["f", "push"]),
-            ]))
-        );
-    }
-    let scripts = [
-        "Set-Alias f git; f push",
-        "set-alias -Name f -Value git; f push",
-        "Microsoft.PowerShell.Utility\\Set-Alias f git; f push",
-        "New-Alias f git; f push",
-        "sal f git; f push",
-        "nal f git; f push",
-        "Import-Alias ./aliases.csv; f push",
-        "Set-Item alias:f git; f push",
-        "New-Item -Path Alias:f -Value git; f push",
-        "Set-Item -Path Microsoft.PowerShell.Core\\Alias::f -Value git; f push",
-        "Set-Item function:f 'git push'; f",
-        "Set-Location alias:; Set-Item f git; f push",
-        "New-PSDrive -Name a -PSProvider Alias -Root ''; Set-Item a:f git; f push",
-        "Invoke-Expression 'git push'",
-        "iex 'git push'",
-        "Import-Module ./m.psm1; f",
-        "ipmo ./m.psm1; f",
-        "Add-Type -Path ./m.dll",
-        "Invoke-Command -FilePath ./x.ps1",
-        "Start-Job -FilePath ./x.ps1",
-        // .NET may fold these non-ASCII letters to ASCII (review round 1).
-        "\u{131}ex 'git push'",
-        "\u{131}nvoke-expression 'git push'",
-        "\u{17f}al f git; f push",
-        "Set-Item al\u{131}as:f git; f push",
-        "\u{17f}et-location funct\u{131}on:; Set-Item f 'git push'; f",
-    ];
+    // The in-process parser reads the reproducer in full, as plain commands.
+    assert_eq!(
+        codex_shell_command::powershell::parse_powershell_script_into_plain_commands(
+            "Set-Alias f git; f push"
+        ),
+        Some(vec![argv(&["Set-Alias", "f", "git"]), argv(&["f", "push"])])
+    );
     let mut commands = Vec::new();
-    for script in scripts {
+    for script in POWERSHELL_SCRIPTS {
         for shell in ["powershell.exe", "pwsh.exe"] {
             commands.push(argv(&[shell, "-Command", script]));
         }
     }
     let failures = failures_for(commands, &[FORBID, PROMPT]).await;
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// Sync review round 1: PowerShell is lowered for the Windows command
+/// platform on any host (a Windows executor), so each lowered command that
+/// rebinds a name or runs code asks there, for a configured PowerShell and
+/// for an unfamiliar one.
+#[tokio::test]
+async fn issue_2601_powershell_asks_for_the_windows_platform_on_any_host() {
+    let mut failures = Vec::new();
+    for script in POWERSHELL_SCRIPTS {
+        let command = argv(&["pwsh", "-Command", script]);
+        for configured in ["pwsh", "other-shell"] {
+            let shell = crate::shell::Shell {
+                shell_type: crate::shell::ShellType::PowerShell,
+                shell_path: PathBuf::from(configured),
+            };
+            for rules in [FORBID, PROMPT] {
+                for (approval_policy, permission_profile, live_aggressive) in [
+                    (
+                        AskForApproval::OnRequest,
+                        PermissionProfile::Disabled,
+                        false,
+                    ),
+                    (
+                        AskForApproval::OnRequest,
+                        PermissionProfile::workspace_write(),
+                        false,
+                    ),
+                    (AskForApproval::Never, PermissionProfile::read_only(), true),
+                ] {
+                    let result = ExecPolicyManager::new(policy_from_src(Some(rules)))
+                        .create_exec_approval_requirement_for_shell(
+                            ExecApprovalRequest {
+                                command: &command,
+                                approval_policy,
+                                permission_profile,
+                                environment_policy: None,
+                                windows_sandbox_level: WindowsSandboxLevel::Disabled,
+                                sandbox_permissions: SandboxPermissions::UseDefault,
+                                prefix_rule: Some(command.clone()),
+                                allow_prefix_rules: AllowPrefixRules::Honor,
+                            },
+                            &shell,
+                            DangerousCommandPlatform::Windows,
+                            live_aggressive,
+                        )
+                        .await;
+                    if !acceptable(rules, &result, approval_policy == AskForApproval::Never) {
+                        failures.push(format!("{rules} {configured} {command:?}: {result:?}"));
+                    }
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// #2601 (sync review round 1): the PowerShell check only adds an ask where
+/// a command would otherwise run as its argv; script text read precisely
+/// (`eval`'s words, a shell's here-document) keeps its refusals even with a
+/// word on the alias drive.
+#[tokio::test]
+async fn powershell_check_keeps_refusals_of_read_scripts() {
+    for script in [
+        "eval git push alias:",
+        "eval git push \u{131}x:",
+        "bash -s alias: <<'E'\ngit push\nE",
+    ] {
+        for command in spellings(script) {
+            let mut results = requirements(&command, FORBID).await;
+            // Sync: the check applies for the Windows command platform.
+            for permission_profile in [
+                PermissionProfile::Disabled,
+                PermissionProfile::workspace_write(),
+            ] {
+                results.push(
+                    ExecPolicyManager::new(policy_from_src(Some(FORBID)))
+                        .create_exec_approval_requirement_for_command_platform(
+                            ExecApprovalRequest {
+                                command: &command,
+                                approval_policy: AskForApproval::OnRequest,
+                                permission_profile,
+                                environment_policy: None,
+                                windows_sandbox_level: WindowsSandboxLevel::Disabled,
+                                sandbox_permissions: SandboxPermissions::UseDefault,
+                                prefix_rule: Some(command.clone()),
+                                allow_prefix_rules: AllowPrefixRules::Honor,
+                            },
+                            DangerousCommandPlatform::Windows,
+                            /*live_aggressive*/ false,
+                        )
+                        .await,
+                );
+            }
+            assert!(
+                results
+                    .iter()
+                    .all(|result| matches!(result, ExecApprovalRequirement::Forbidden { .. })),
+                "{command:?}: {results:?}"
+            );
+        }
+    }
 }

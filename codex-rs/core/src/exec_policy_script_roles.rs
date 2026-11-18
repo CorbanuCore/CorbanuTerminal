@@ -103,8 +103,8 @@ pub(super) fn runs_shell(program: &str) -> bool {
 }
 
 /// #2601 (D553): PowerShell commands (and their aliases) that rebind a
-/// command name or run code that is not their argv: text, a module, a
-/// compiled type, a script file in a job.
+/// command name or run code that is not their argv: text, a module or
+/// snap-in, a compiled type, a script file in a job.
 const POWERSHELL_CODE_COMMANDS: &[&str] = &[
     "invoke-expression",
     "iex",
@@ -125,6 +125,8 @@ const POWERSHELL_CODE_COMMANDS: &[&str] = &[
     "start-job",
     "sajb",
     "start-threadjob",
+    "add-pssnapin",
+    "asnp",
 ];
 
 /// #2601 (D553): a PowerShell command that may change what a later command
