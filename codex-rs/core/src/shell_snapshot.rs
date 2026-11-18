@@ -204,7 +204,10 @@ impl ShellSnapshot {
         // PF-27-S02 launch contract (no refusal, no protected-read denial, no
         // environment scrub). While the contract is armed it is skipped; a
         // snapshot is only a speed-up, so skipping it fails closed.
-        if sandbox.is_some() && crate::security::launch_contract::active().is_some() {
+        if !sandboxed_snapshot_allowed(
+            sandbox.is_some(),
+            crate::security::launch_contract::active().is_some(),
+        ) {
             return None;
         }
         let snapshot_span = info_span!("shell_snapshot", thread_id = %config.session_id);
@@ -1142,6 +1145,12 @@ fn is_plain_env_name(name: &str) -> bool {
         .next()
         .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
         && chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
+}
+
+/// D544 (a): no sandboxed snapshot while the PF-27-S02 launch contract is armed (its login
+/// shell would start outside the contract); an unsandboxed snapshot is unaffected.
+fn sandboxed_snapshot_allowed(sandboxed: bool, launch_contract_armed: bool) -> bool {
+    !(sandboxed && launch_contract_armed)
 }
 
 /// #310: whether `name` is a provider credential variable the snapshot shell
