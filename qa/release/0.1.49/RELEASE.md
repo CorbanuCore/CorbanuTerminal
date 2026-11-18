@@ -34,6 +34,8 @@ this evidence commit. This record does not pre-approve those steps.
 
 ## Builds and automated checks
 
+Aarch64 musl uses the portable SHA path to avoid the sha2-asm Zig cross-toolchain build failure.
+
 All native builds used Rust 1.99.1, private targets, `--locked`, and disabled dev
 profile debug information. These are development binaries from the exact
 candidate source, **not the workflow's release archives**. One worker build ran
