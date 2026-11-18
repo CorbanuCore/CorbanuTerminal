@@ -1,5 +1,6 @@
 use crate::command_safety::is_safe_command::is_safe_git_command;
 use crate::powershell::PowershellScriptRead;
+use crate::powershell::extract_plain_powershell_command;
 use crate::powershell::read_script_with_trusted_parser;
 use std::path::Path;
 
@@ -16,128 +17,43 @@ pub fn is_safe_command_windows(command: &[String]) -> bool {
     }
 }
 
-/// Returns each command sequence if the invocation starts with a PowerShell binary.
-/// For example, the tokens from `pwsh Get-ChildItem | Measure-Object` become two sequences.
+/// Returns each command sequence if the invocation is a plain PowerShell
+/// `-Command` (see [`extract_plain_powershell_command`]): its script read as
+/// PowerShell joins it (#2568). For example, `pwsh -Command "Get-ChildItem |
+/// Measure-Object"` becomes two sequences. Any other form (`-File`,
+/// `-EncodedCommand`, a positional script, unknown parameters) is not
+/// treated as safe.
 fn try_parse_powershell_command_sequence(command: &[String]) -> Option<Vec<Vec<String>>> {
-    let (exe, rest) = command.split_first()?;
-    if is_powershell_executable(exe) {
-        parse_powershell_invocation(exe, rest)
-    } else {
-        None
-    }
-}
-
-/// Parses a PowerShell invocation into discrete command vectors, rejecting unsafe patterns.
-fn parse_powershell_invocation(executable: &str, args: &[String]) -> Option<Vec<Vec<String>>> {
-    if args.is_empty() {
-        // Examples rejected here: "pwsh" and "powershell.exe" with no additional arguments.
+    let (executable, args) = command.split_first()?;
+    // Spelled in any case (`PowerShell.exe`), read as the reader knows it.
+    let name = Path::new(executable)
+        .file_name()
+        .and_then(|name| name.to_str())?
+        .to_ascii_lowercase();
+    if !matches!(
+        name.as_str(),
+        "powershell" | "powershell.exe" | "pwsh" | "pwsh.exe"
+    ) {
         return None;
     }
-
-    let mut idx = 0;
-    while idx < args.len() {
-        let arg = &args[idx];
-        let lower = arg.to_ascii_lowercase();
-        match lower.as_str() {
-            "-command" | "/command" | "-c" => {
-                let script = args.get(idx + 1)?;
-                if idx + 2 != args.len() {
-                    // Reject if there is more than one token representing the actual command.
-                    // Examples rejected here: "pwsh -Command foo bar" and "powershell -c ls extra".
-                    return None;
-                }
-                return parse_powershell_script(executable, script);
-            }
-            _ if lower.starts_with("-command:") || lower.starts_with("/command:") => {
-                if idx + 1 != args.len() {
-                    // Reject if there are more tokens after the command itself.
-                    // Examples rejected here: "pwsh -Command:dir C:\\" and "powershell /Command:dir C:\\" with trailing args.
-                    return None;
-                }
-                let script = arg.split_once(':')?.1;
-                return parse_powershell_script(executable, script);
-            }
-
-            // Benign, no-arg flags we tolerate.
-            "-nologo" | "-noprofile" | "-noninteractive" | "-mta" | "-sta" => {
-                idx += 1;
-                continue;
-            }
-
-            // Explicitly forbidden/opaque or unnecessary for read-only operations.
-            "-encodedcommand" | "-ec" | "-file" | "/file" | "-windowstyle" | "-executionpolicy"
-            | "-workingdirectory" => {
-                // Examples rejected here: "pwsh -EncodedCommand ..." and "powershell -File script.ps1".
-                return None;
-            }
-
-            // Unknown switch → bail conservatively.
-            _ if lower.starts_with('-') => {
-                // Examples rejected here: "pwsh -UnknownFlag" and "powershell -foo bar".
-                return None;
-            }
-
-            // If we hit non-flag tokens, treat the remainder as a command sequence.
-            // This happens if powershell is invoked without -Command, e.g.
-            // ["pwsh", "-NoLogo", "git", "-c", "core.pager=cat", "status"]
-            _ => {
-                let script = join_arguments_as_script(&args[idx..]);
-                return parse_powershell_script(executable, &script);
-            }
-        }
-    }
-
-    // Examples rejected here: "pwsh" and "powershell.exe -NoLogo" without a script.
-    None
+    let mut normalized = Vec::with_capacity(command.len());
+    normalized.push(name);
+    normalized.extend_from_slice(args);
+    let (_, script) = extract_plain_powershell_command(&normalized)?;
+    parse_powershell_script(executable, &script)
 }
 
 /// Tokenizes an inline PowerShell script and delegates to the command splitter.
-/// Examples of when this is called: pwsh.exe -Command '<script>' or pwsh.exe -Command:<script>
 ///
 /// #2546 (D553): a trusted PowerShell of the same kind parses the script;
 /// `executable` itself is never started.
 fn parse_powershell_script(executable: &str, script: &str) -> Option<Vec<Vec<String>>> {
     match read_script_with_trusted_parser(executable, script) {
         PowershellScriptRead::Commands(commands) => Some(commands),
-        PowershellScriptRead::NotPlain | PowershellScriptRead::Unreadable => None,
+        PowershellScriptRead::NotPlain
+        | PowershellScriptRead::File(_)
+        | PowershellScriptRead::Unreadable => None,
     }
-}
-
-/// Returns true when the executable name is one of the supported PowerShell binaries.
-fn is_powershell_executable(exe: &str) -> bool {
-    let executable_name = Path::new(exe)
-        .file_name()
-        .and_then(|osstr| osstr.to_str())
-        .unwrap_or(exe)
-        .to_ascii_lowercase();
-
-    matches!(
-        executable_name.as_str(),
-        "powershell" | "powershell.exe" | "pwsh" | "pwsh.exe"
-    )
-}
-
-fn join_arguments_as_script(args: &[String]) -> String {
-    let mut words = Vec::with_capacity(args.len());
-    if let Some((first, rest)) = args.split_first() {
-        words.push(first.clone());
-        for arg in rest {
-            words.push(quote_argument(arg));
-        }
-    }
-    words.join(" ")
-}
-
-fn quote_argument(arg: &str) -> String {
-    if arg.is_empty() {
-        return "''".to_string();
-    }
-
-    if arg.chars().all(|ch| !ch.is_whitespace()) {
-        return arg.to_string();
-    }
-
-    format!("'{}'", arg.replace('\'', "''"))
 }
 
 /// Validates that a parsed PowerShell command stays within our read-only safelist.
@@ -249,7 +165,9 @@ mod tests {
             "git status",
         ])));
 
-        assert!(is_safe_command_windows(&vec_str(&[
+        // #2568: a positional script is a script for Windows PowerShell but
+        // a file for PowerShell 7; neither is read, so neither is safe.
+        assert!(!is_safe_command_windows(&vec_str(&[
             "powershell.exe",
             "Get-Content",
             "Cargo.toml",

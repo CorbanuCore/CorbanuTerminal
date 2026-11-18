@@ -173,6 +173,12 @@ pub(crate) enum ExecPolicyCommandOrigin {
     /// PowerShell wrapper, so use PowerShell-specific unmatched-command
     /// heuristics for the lowered words.
     PowerShell,
+    #[cfg(windows)]
+    /// #2568: the command words are the file and arguments of a top-level
+    /// PowerShell `-File`; its content is not read. Generic heuristics; the
+    /// PowerShell argv is checked too, and asks where any prompt or
+    /// forbidden rule exists.
+    PowerShellFile,
 }
 
 #[derive(Clone, Copy)]
@@ -453,8 +459,10 @@ impl ExecPolicyManager {
         #[cfg(windows)]
         let commands = {
             let mut commands = commands;
-            if command_origin == ExecPolicyCommandOrigin::PowerShell
-                && crate::security::tainted_action::policy_powershell_script(command).is_some()
+            // #2568: so does a `-File` invocation, whose script asks.
+            if (command_origin == ExecPolicyCommandOrigin::PowerShell
+                && crate::security::tainted_action::policy_powershell_script(command).is_some())
+                || command_origin == ExecPolicyCommandOrigin::PowerShellFile
             {
                 commands.push(command.to_vec());
             }
@@ -966,6 +974,8 @@ fn dangerous_command_match_for_origin(
     match command_origin {
         ExecPolicyCommandOrigin::Generic => dangerous_command_match(command),
         #[cfg(windows)]
+        ExecPolicyCommandOrigin::PowerShellFile => dangerous_command_match(command),
+        #[cfg(windows)]
         ExecPolicyCommandOrigin::PowerShell => {
             codex_shell_command::is_dangerous_command::dangerous_powershell_words_match(command)
         }
@@ -1010,6 +1020,8 @@ pub(crate) fn render_decision_for_unmatched_command(
     let file_system_sandbox_policy = permission_profile.file_system_sandbox_policy();
     let is_known_safe = match command_origin {
         ExecPolicyCommandOrigin::Generic => is_known_safe_command(command),
+        #[cfg(windows)]
+        ExecPolicyCommandOrigin::PowerShellFile => is_known_safe_command(command),
         #[cfg(windows)]
         ExecPolicyCommandOrigin::PowerShell => {
             codex_shell_command::is_safe_command::is_safe_powershell_words(command)
@@ -1314,17 +1326,32 @@ fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {
         // `pwsh -c`, `powershell.exe -Command`.
         // #2546 (D553): a trusted PowerShell reads the script, never the
         // command's own argv[0]; a script none can read asks (`wrappers`).
+        // #2568: the command line is read as PowerShell reads it (every
+        // argument after `-Command`, `-EncodedCommand` decoded); `-File`
+        // reads as its file and arguments, and asks (`wrappers`). Only a
+        // plain `-Command` can be known safe or proposed as an amendment,
+        // as before.
+        use codex_shell_command::powershell::PowershellScriptRead;
         let respelled = crate::security::tainted_action::policy_powershell_script(command);
-        if let Some(codex_shell_command::powershell::PowershellScriptRead::Commands(commands)) =
-            codex_shell_command::powershell::read_powershell_command_script(
-                respelled.as_deref().unwrap_or(command),
-            )
-            && !commands.is_empty()
-        {
+        let command = respelled.as_deref().unwrap_or(command);
+        let plain =
+            codex_shell_command::powershell::extract_plain_powershell_command(command).is_some();
+        let (commands, command_origin) =
+            match codex_shell_command::powershell::read_powershell_command_script(command) {
+                Some(PowershellScriptRead::Commands(commands)) => {
+                    (commands, ExecPolicyCommandOrigin::PowerShell)
+                }
+                Some(PowershellScriptRead::File(file)) => {
+                    (vec![file], ExecPolicyCommandOrigin::PowerShellFile)
+                }
+                _ => (Vec::new(), ExecPolicyCommandOrigin::Generic),
+            };
+        if !commands.is_empty() {
             return ExecPolicyCommands {
                 commands,
-                used_complex_parsing: false,
-                command_origin: ExecPolicyCommandOrigin::PowerShell,
+                used_complex_parsing: command_origin == ExecPolicyCommandOrigin::PowerShell
+                    && !plain,
+                command_origin,
             };
         }
     }
