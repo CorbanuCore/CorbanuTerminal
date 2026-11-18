@@ -1694,6 +1694,64 @@ async fn snapshot_shell_does_not_inherit_stdin() -> Result<()> {
     Ok(())
 }
 
+/// D544 (a) / #2562 (main ledger row 13): an armed launch contract refuses only the sandboxed
+/// snapshot. (Arming is one-way and process-wide, so the guard's inputs are pinned here.)
+#[test]
+fn armed_launch_contract_skips_only_sandboxed_snapshots() {
+    assert!(!sandboxed_snapshot_allowed(
+        /*sandboxed*/ true, /*launch_contract_armed*/ true
+    ));
+    assert!(sandboxed_snapshot_allowed(
+        /*sandboxed*/ true, /*launch_contract_armed*/ false
+    ));
+    assert!(sandboxed_snapshot_allowed(
+        /*sandboxed*/ false, /*launch_contract_armed*/ true
+    ));
+    assert!(sandboxed_snapshot_allowed(
+        /*sandboxed*/ false, /*launch_contract_armed*/ false
+    ));
+}
+
+/// #310 / #2562 (main ledger row 13): the capture shell never inherits a provider credential
+/// variable (`removed_env_vars`), matched case-insensitively, on the plain path.
+#[cfg(unix)]
+#[tokio::test]
+async fn snapshot_shell_does_not_inherit_removed_env_vars() -> Result<()> {
+    let probe = "CARGO_MANIFEST_DIR";
+    let expected = std::env::var(probe).context("cargo sets CARGO_MANIFEST_DIR for tests")?;
+    let dir = tempdir()?;
+    let cwd = dir.path().abs();
+    let shell = Shell {
+        shell_type: ShellType::Bash,
+        shell_path: PathBuf::from("/bin/bash"),
+    };
+    let script = format!("printf '%s\\n' \"${{{probe}-removed}}\"");
+    let run = |removed: Vec<String>| {
+        let shell = shell.clone();
+        let script = script.clone();
+        let cwd = cwd.clone();
+        async move {
+            run_script_with_timeout(
+                &shell,
+                &script,
+                Duration::from_secs(10),
+                SnapshotShellMode::NonLogin,
+                &cwd,
+                /*credential_broker*/ None,
+                /*sandbox*/ None,
+                &removed,
+            )
+            .await
+        }
+    };
+    assert_eq!(run(Vec::new()).await?.trim_end(), expected, "control");
+    assert_eq!(
+        run(vec![probe.to_ascii_lowercase()]).await?.trim_end(),
+        "removed"
+    );
+    Ok(())
+}
+
 #[cfg(target_os = "linux")]
 #[tokio::test]
 async fn timed_out_snapshot_shell_is_terminated() -> Result<()> {
