@@ -100,6 +100,18 @@ fn issue_2401_extracts_every_url_password() {
             "http://u:Pass@word,2401@host https://u:Pass@word;2401@other",
             &["Pass@word,2401", "Pass@word;2401"],
         ),
+        (
+            "http://pub.example,user:Pass,word-2401@proxy:3128",
+            &["Pass,word-2401"],
+        ),
+        (
+            "imap://user;AUTH=PLAIN:Pass;word-2401@mail.example.com",
+            &["Pass;word-2401"],
+        ),
+        (
+            "http://pub.example,user:Pa\"ss-2401@proxy:3128",
+            &["Pa\"ss-2401"],
+        ),
         ("user:p@ss@proxy", &["p@ss"]),
         ("http://u:p@host", &["p"]),
         ("http://user:@host user:@proxy http://user:   @host", &[]),

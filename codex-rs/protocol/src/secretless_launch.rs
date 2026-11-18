@@ -221,11 +221,16 @@ fn authority_password(rest: &str) -> Option<&str> {
         .split(|c: char| c.is_whitespace() || matches!(c, '/' | '?' | '#'))
         .next()?;
     let (userinfo, _) = authority.rsplit_once('@')?;
-    let colon = userinfo.find(':')?;
-    // A separator before userinfo's colon belongs to an earlier, public
-    // URL (the scheme-less pass handles the following credential item).
-    if authority[..colon].contains([',', ';']) {
-        return None;
+    let (user, full_password) = userinfo.split_once(':')?;
+    // Suppress a duplicate from an earlier public URL only when the
+    // scheme-less pass really extracts this same password. Otherwise retain
+    // the conservative explicit-URL match (userinfo can contain separators).
+    if let Some((_, item)) = authority[..user.len()].rsplit_once([',', ';']) {
+        let item_start = user.len() - item.len();
+        let item = authority[item_start..].split([',', ';']).next()?;
+        if schemeless_url_password(item) == Some(full_password) {
+            return None;
+        }
     }
     let at = authority.find('@')?;
     // Commas/semicolons can be password characters, even after a raw @.
