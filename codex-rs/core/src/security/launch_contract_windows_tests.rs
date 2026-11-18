@@ -781,3 +781,50 @@ fn pf_27_s07_armed_lock_refuses_links_and_deletion() {
     std::fs::hard_link(&target, &path).expect("hard link");
     assert!(super::open_armed_lock(dir.path(), /*group*/ None).is_err());
 }
+
+/// D609 (a) / #2562 (S3b row 566): a junctioned `CODEX_HOME` (the default home moved
+/// elsewhere) gets Core's new-file deny on its real folder, so a file written through the
+/// junction (a token refresh) inherits it; releasing through the junction removes it there.
+/// Exercises Core's own call path (`deny_new_codex_home_files`, `release_new_file_deny`).
+#[test]
+fn d609_junctioned_home_gets_and_loses_the_new_file_deny_on_its_real_folder() {
+    let tmp = tempfile::tempdir().expect("dir");
+    let real = tmp.path().join("real-home");
+    let link = tmp.path().join("home-junction");
+    std::fs::create_dir(&real).expect("real home");
+    let system_root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    let output = std::process::Command::new(
+        std::path::PathBuf::from(system_root)
+            .join("System32")
+            .join("cmd.exe"),
+    )
+    .args(["/d", "/c", "mklink", "/J"])
+    .arg(&link)
+    .arg(&real)
+    .output()
+    .expect("mklink");
+    assert!(output.status.success(), "mklink /J failed");
+    let group = codex_windows_sandbox::LocalSid::from_string(
+        "S-1-5-21-2718281828-3141592653-1618033988-1001",
+    )
+    .expect("group SID");
+    let on_real_folder = || {
+        // SAFETY: a valid SID and an existing directory.
+        unsafe {
+            codex_windows_sandbox::has_exact_deny_read_ace_for_new_files(
+                &real,
+                Some(group.as_ptr()),
+            )
+        }
+        .expect("read DACL")
+    };
+
+    assert!(super::deny_new_codex_home_files(&link, group.as_ptr()).expect("deny"));
+    assert!(on_real_folder());
+    // (A file written through the junction inherits it: codex-windows-sandbox
+    // `acl::tests::d609_new_file_deny_on_the_resolved_home_covers_files_created_through_a_junction`.)
+
+    assert!(super::release_new_file_deny(&link, group.as_ptr()).expect("release"));
+    assert!(!on_real_folder());
+    std::fs::remove_dir(&link).expect("remove the junction only");
+}

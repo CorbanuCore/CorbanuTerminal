@@ -663,3 +663,35 @@ fn issue_651_a_missing_database_folder_is_made_on_linux() {
         .expect("protectable");
     assert!(denies_backups(&protected.file_system_sandbox_policy()));
 }
+
+/// D609 (a) / #2562 (S3b row 566): a junctioned `CODEX_HOME` (the default home moved
+/// elsewhere) gets its new-file deny on the real folder, where the junction's files live.
+#[cfg(windows)]
+#[test]
+fn d609_codex_home_acl_target_is_the_real_folder_behind_a_junction() {
+    let tmp = tempfile::tempdir().expect("dir");
+    let real = tmp.path().join("real-home");
+    let link = tmp.path().join("home-junction");
+    std::fs::create_dir(&real).expect("real home");
+    let system_root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    let output = std::process::Command::new(
+        std::path::PathBuf::from(system_root)
+            .join("System32")
+            .join("cmd.exe"),
+    )
+    .args(["/d", "/c", "mklink", "/J"])
+    .arg(&link)
+    .arg(&real)
+    .output()
+    .expect("mklink");
+    assert!(output.status.success(), "mklink /J failed");
+    assert_eq!(
+        super::codex_home_acl_target(&link).expect("resolve"),
+        dunce::canonicalize(&real).expect("real path")
+    );
+    assert_eq!(
+        super::codex_home_acl_target(&real).expect("resolve"),
+        dunce::canonicalize(&real).expect("real path")
+    );
+    std::fs::remove_dir(&link).expect("remove the junction only");
+}

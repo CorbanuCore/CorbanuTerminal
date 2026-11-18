@@ -435,7 +435,7 @@ mod tests {
     /// paths outside it. Upstream sync: upstream resolves `:tmpdir` into
     /// ordinary entries, so `TEMP` and `TMP` naming one folder give one root,
     /// and the default `.git`/`.codex`/`.agents` protections now apply in it
-    /// too (stricter than D283's exemption; open S3b row).
+    /// too (D610 (a): stricter than D283's exemption).
     #[test]
     fn temp_root_carries_explicit_read_only_paths_inside_it() {
         let tmp = TempDir::new().expect("tempdir");
@@ -517,6 +517,84 @@ mod tests {
         ];
         expected.sort();
         assert_eq!(temp_roots, vec![expected]);
+    }
+
+    /// D610 (a) / #2562 (S3b row 565): a temp root gets the default `.git`/`.codex`/`.agents`
+    /// read-only protection like any other writable root, while D283's nested-folder walk still
+    /// skips roots that come only from `%TEMP%`/`%TMP%`.
+    #[test]
+    fn temp_root_gets_metadata_protection_but_stays_out_of_the_d283_walk() {
+        let tmp = TempDir::new().expect("tempdir");
+        let base = dunce::canonicalize(tmp.path()).expect("canonical tempdir");
+        let cwd = base.join("workspace");
+        let temp_dir = base.join("temp");
+        std::fs::create_dir_all(&cwd).expect("create cwd");
+        for name in [".git", ".codex", ".agents"] {
+            std::fs::create_dir_all(temp_dir.join(name)).expect("create metadata folder");
+        }
+        let permission_profile = PermissionProfile::Managed {
+            file_system: ManagedFileSystemPermissions::Restricted {
+                entries: vec![
+                    FileSystemSandboxEntry {
+                        path: FileSystemPath::Special {
+                            value: FileSystemSpecialPath::Root,
+                        },
+                        access: FileSystemAccessMode::Read,
+                        missing_path_behavior: None,
+                    },
+                    FileSystemSandboxEntry {
+                        path: FileSystemPath::Path {
+                            path: AbsolutePathBuf::from_absolute_path(cwd.clone())
+                                .expect("abs")
+                                .into(),
+                        },
+                        access: FileSystemAccessMode::Write,
+                        missing_path_behavior: None,
+                    },
+                    FileSystemSandboxEntry {
+                        path: FileSystemPath::Special {
+                            value: FileSystemSpecialPath::Tmpdir,
+                        },
+                        access: FileSystemAccessMode::Write,
+                        missing_path_behavior: None,
+                    },
+                ],
+                glob_scan_max_depth: None,
+            },
+            network: NetworkSandboxPolicy::Restricted,
+        };
+        let permissions =
+            ResolvedWindowsSandboxPermissions::try_from_permission_profile_for_workspace_roots(
+                &permission_profile,
+                workspace_roots_for(cwd.as_path()).as_slice(),
+            )
+            .expect("managed permission profile");
+        let env_map = HashMap::from([
+            ("TEMP".to_string(), temp_dir.to_string_lossy().into_owned()),
+            ("TMP".to_string(), temp_dir.to_string_lossy().into_owned()),
+        ]);
+
+        let temp_roots: Vec<_> = permissions
+            .writable_roots_for_cwd(&cwd, &env_map)
+            .into_iter()
+            .filter(|root| root.root == temp_dir)
+            .collect();
+        assert_eq!(temp_roots.len(), 1, "{temp_roots:?}");
+        for name in [".git", ".codex", ".agents"] {
+            assert!(
+                temp_roots[0]
+                    .read_only_subpaths
+                    .contains(&temp_dir.join(name)),
+                "{name} must be read-only in the temp root: {temp_roots:?}"
+            );
+        }
+        assert!(
+            permissions
+                .writable_roots_other_than_temp_for_cwd(&cwd)
+                .iter()
+                .all(|root| root.root != temp_dir),
+            "the D283 walk skips temp-only roots"
+        );
     }
 
     /// #1780: a writable root and explicit read-only (or deny) paths inside
