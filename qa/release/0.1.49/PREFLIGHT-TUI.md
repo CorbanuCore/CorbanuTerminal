@@ -3,7 +3,8 @@
 Date: 2026-11-17 UTC. These runs prepare and exercise the native harnesses while
 the release gates remain open. Repeat on the final release-branch build. No
 real-provider, elevated-Windows, live-repository or packaged-release acceptance
-is claimed.
+is claimed by these deterministic cases. Separate [live local-model fixture
+checks](LIVE-TUI-PREFLIGHT.md) subsequently exercised real tool reads/writes.
 
 Source: preparation commit `5fd571822bef255237f963c7bc18286a9110f58b`, which
 contains main `d3fe32513ee65deb397fa228c786212fb5afacd3` plus release evidence and

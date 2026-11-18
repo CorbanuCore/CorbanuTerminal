@@ -1,6 +1,6 @@
 # Corbanu Terminal 0.1.49 pre-publish QA plan
 
-Status: **preparation in progress; NOT READY; nothing published**.
+Status: **phase-1 preparation complete; merge gates pending; NOT READY; nothing published**.
 Owner authority: Travis, D701/D702, 2026-11-17. Executor: astra-rel149 (Astra High).
 The coordinator dispatches publication after the READY handoff. No additional
 Travis sign-off is requested. Missing evidence remains disclosed, never passed.
@@ -23,7 +23,8 @@ versioned QA/notes changes. D701 explicitly changes the base for 0.1.49 to main.
 
 - [ ] #2549 merged (quoted script command-rule bypass).
 - [ ] #2555 merged (trusted PowerShell parser).
-- [ ] #2558 merged (exact Windows allow-rule spelling).
+- [x] #2558 merged (exact Windows allow-rule spelling), 2026-11-18 00:29:16Z;
+  merge `135197a9a1f10d2cfd4af116af1c27e516e873b0`.
 - [ ] #2573 merged (fixing **issue** #2567, provider cooldown).
 - [ ] #2571 merged (astra-models62 new models).
 
@@ -48,7 +49,10 @@ Do not dispatch `corbanu-terminal-release.yml` during this worker's assignment.
 - [ ] Capture final PR CI, native Windows checks and relevant integration results.
 - [ ] Independent read-only Opus 5.5 High APPROVE on exact pushed head.
 
-Review budget: **2 total**, used 0. Extra rounds require the coordinator's written
+Review budget: **2 total**, used 1. Preparation review approved exact head
+`0c60eea1b13dcb9dd691fc50a83ec804d6fc7146`; its nonblocking documentation
+findings were addressed afterward. Round 2 is reserved for the final release
+head including subsequent changes. Extra rounds require the coordinator's written
 grant via `$W/astra-rel149.request.md`. Never post approval/request-changes under
 the maintainer account. Follow CODEOWNERS and exact-SHA security approval rules
 where applicable. Merge only after all checks complete successfully, using the
@@ -58,7 +62,10 @@ literal head SHA with `--merge --match-head-commit`.
 
 Current-main [native harness preflight](PREFLIGHT-TUI.md) passed the exercised
 macOS and Windows prompt/cancel/recovery flows. Its failed navigation/onboarding
-attempts are preserved. Final release-branch replays remain pending.
+attempts are preserved. [Live local-model fixture preflight](LIVE-TUI-PREFLIGHT.md)
+also passed on macOS, Linux and native Windows, with the stated sandbox limits.
+Canonical TensorCash/Isometric URLs were unavailable to this executor and no
+local overrides were configured. Final release-branch replays remain pending.
 
 Every run records source SHA, package/binary SHA-256, version, platform, profile,
 working directory, literal text/key events, visible checkpoints, exit status,
