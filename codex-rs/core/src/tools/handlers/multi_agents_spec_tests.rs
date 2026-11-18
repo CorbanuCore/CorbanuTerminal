@@ -62,9 +62,11 @@ fn model_lookup_and_compact_spawn_schema() {
         expose_service_tiers: true,
     }
     .spec();
-    let schemas = json!([spawn, lookup]);
+    let mut schemas = json!([spawn, lookup]);
     let serialized = serde_json::to_string(&schemas).unwrap();
     assert!(codex_utils_string::approx_token_count(&serialized) < 1_500);
+    // Sort only the snapshot: Bazel enables serde_json/preserve_order, unlike Cargo.
+    schemas.sort_all_objects();
     insta::assert_snapshot!(
         "model_lookup_and_compact_spawn",
         serde_json::to_string_pretty(&schemas).unwrap()
