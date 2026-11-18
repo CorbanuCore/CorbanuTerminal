@@ -39,9 +39,8 @@ use tracing::instrument;
 use crate::config::Config;
 use crate::sandboxing::SandboxPermissions;
 use crate::tools::sandboxing::ExecApprovalRequirement;
-use codex_shell_command::bash::ScriptCommands;
 use codex_shell_command::bash::parse_shell_lc_single_command_prefix;
-use codex_shell_command::bash::shell_lc_script_commands;
+use codex_shell_command::bash::shell_lc_script_read;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use shlex::try_join as shlex_try_join;
 
@@ -527,6 +526,23 @@ impl ExecPolicyManager {
             }
             evaluation.matched_rules.extend(literal);
         }
+        // #2548: a script outside the minimal lexical set that was checked
+        // as its one command (a here-document) asks where a strict rule
+        // exists, as one read in part does.
+        let unread_script_prompts = if (commands.len() != 1 || commands[0] != *command)
+            && wrappers::asks_outside_minimal_set(exec_policy.as_ref(), command, &match_options)
+        {
+            evaluation
+                .matched_rules
+                .push(RuleMatch::HeuristicsRuleMatch {
+                    command: command.to_vec(),
+                    decision: Decision::Prompt,
+                });
+            evaluation.decision = evaluation.decision.max(Decision::Prompt);
+            true
+        } else {
+            unread_script_prompts
+        };
         // #2543: an amendment for the script's literal argv cannot approve
         // the commands in it that need approval.
         let auto_amendment_allowed = auto_amendment_allowed && !unread_script_prompts;
@@ -1315,15 +1331,28 @@ fn program_key(token: &str) -> Option<String> {
 fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {
     // #2543: quoted words read as bash runs them (`'git' push`). A script
     // that is not plain is read for prompt and forbidden rules only, by
-    // `wrappers`.
-    if let Some(ScriptCommands::Plain(commands)) = shell_lc_script_commands(command)
-        && !commands.is_empty()
-    {
-        return ExecPolicyCommands {
-            commands,
-            used_complex_parsing: false,
-            command_origin: ExecPolicyCommandOrigin::Generic,
-        };
+    // `wrappers`; so is (#2548) one whose commands run more than their
+    // argv (`eval`, a shell's here-document), which stays whole here.
+    let read = shell_lc_script_read(command);
+    if let Some(read) = &read {
+        if wrappers::runs_more_than_argv(read) {
+            return ExecPolicyCommands {
+                commands: vec![command.to_vec()],
+                used_complex_parsing: false,
+                command_origin: ExecPolicyCommandOrigin::Generic,
+            };
+        }
+        if read.plain && !read.commands.is_empty() {
+            return ExecPolicyCommands {
+                commands: read
+                    .commands
+                    .iter()
+                    .map(|command| command.words.iter().flatten().cloned().collect())
+                    .collect(),
+                used_complex_parsing: false,
+                command_origin: ExecPolicyCommandOrigin::Generic,
+            };
+        }
     }
 
     #[cfg(windows)]

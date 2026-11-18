@@ -268,9 +268,10 @@ fn policy_shell_script_for(words: &[String], case: names::NameCase) -> Option<Ve
 
 /// Shells in [`SHELLS`] besides bash, zsh and sh that read a `-c` script
 /// with sh's syntax and quoting.
-const POSIX_SHELLS: &[&str] = &[
-    "dash", "ksh", "ash", "mksh", "yash", "rbash", "posh", "lksh", "oksh", "hush", "osh",
-];
+/// #2548: not the ksh family, yash, hush or osh, whose builtins and
+/// assignments run code (`alarm`, `typeset -F`, `x=(typeset -i …)`) where
+/// sh's do not: their `-c` scripts are not read, so they ask.
+const POSIX_SHELLS: &[&str] = &["dash", "ash", "rbash", "posh"];
 
 /// #2543: whether `program` may run a shell on this platform (see
 /// [`names`]), which runs any command its words give it.
@@ -278,6 +279,23 @@ pub(crate) fn policy_runs_shell(program: &str) -> bool {
     let case = names::PLATFORM;
     names::unsure(program, case)
         || SHELLS.contains(&names::launcher_name_for(program, case).as_ref())
+}
+
+/// #2548: the name `program` runs as on this platform (its file name,
+/// compared as [`names`] says), for looking up builtins a wrapper script
+/// such as macOS's `/usr/bin/read` runs.
+pub(crate) fn policy_program_name(program: &str) -> String {
+    names::launcher_name_for(program, names::PLATFORM).into_owned()
+}
+
+/// #2585: whether `program` may run PowerShell on this platform (see
+/// [`names`]), which runs any command its words give it.
+pub(crate) fn policy_runs_powershell(program: &str) -> bool {
+    codex_shell_command::powershell::is_powershell_program(program)
+        || matches!(
+            names::launcher_name_for(program, names::PLATFORM).as_ref(),
+            "pwsh" | "powershell"
+        )
 }
 
 /// A launcher with no command of its own. Under xargs (D677) stdin may

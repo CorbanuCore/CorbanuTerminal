@@ -41,6 +41,8 @@ struct Run {
     output: String,
     /// Warnings shown to the person.
     warnings: Vec<String>,
+    /// Approval requests raised (each approved).
+    approvals: usize,
 }
 
 /// What an agent command runs.
@@ -83,6 +85,18 @@ async fn run(
         Command::FindAbove => format!("find '{}'", above.display()),
         Command::ListAboveRecursively => format!("ls -aR '{}'", above.display()),
     };
+    // #2548 (coordinator decision A): Aggressive's rules include a forbidden
+    // one, so a script outside the minimal lexical set (`"$CODEX_HOME"`)
+    // asks before it runs, and with approvals off it would be refused
+    // before the sandbox is exercised. Such runs allow approvals and approve
+    // the prompt (the loop below); the sandbox still decides.
+    let reading_gate = level == SecurityLevel::Aggressive
+        && codex_shell_command::bash::read_script(&command).fails_closed();
+    let approval_policy = if reading_gate {
+        AskForApproval::OnRequest
+    } else {
+        AskForApproval::Never
+    };
     let server = start_mock_server().await;
     let captured = mount_sse_sequence(
         &server,
@@ -117,7 +131,7 @@ async fn run(
         .with_model("test-gpt-5.1-codex")
         .with_config(move |config| {
             config.security_level = level;
-            config.permissions.approval_policy = Constrained::allow_any(AskForApproval::Never);
+            config.permissions.approval_policy = Constrained::allow_any(approval_policy);
             config
                 .features
                 .enable(Feature::SourceEnvelopes)
@@ -167,6 +181,7 @@ async fn run(
         })
         .await?;
     let mut warnings = Vec::new();
+    let mut approvals = 0;
     // #505: once Aggressive is confirmed a person approves every command
     // that is not known read-only; approve it (the sandbox still decides).
     loop {
@@ -180,6 +195,7 @@ async fn run(
         {
             EventMsg::Warning(warning) => warnings.push(warning.message),
             EventMsg::ExecApprovalRequest(approval) => {
+                approvals += 1;
                 test.codex
                     .submit(Op::ExecApproval {
                         id: approval.effective_approval_id(),
@@ -196,6 +212,7 @@ async fn run(
     Ok(Run {
         output: last.function_call_output_text("call-0").unwrap_or_default(),
         warnings,
+        approvals,
     })
 }
 
@@ -234,6 +251,11 @@ async fn assert_listing_denied(
     );
     // As agents usually spell it.
     let variable = run(level, confirm, unified, Command::ListHomeVariable).await?;
+    // #2548: the script-reading prompt was raised (and approved).
+    assert!(
+        level != SecurityLevel::Aggressive || variable.approvals > 0,
+        "{context}: no approval asked for `\"$CODEX_HOME\"`"
+    );
     assert!(
         !variable.output.contains(CANARY),
         "{context}: {}",

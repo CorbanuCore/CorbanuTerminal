@@ -8,6 +8,19 @@ use tree_sitter_bash::LANGUAGE as BASH;
 use crate::shell_detect::ShellType;
 use crate::shell_detect::detect_shell_type;
 
+mod heredoc;
+
+mod script_lexical;
+mod script_read;
+pub use script_read::ARITHMETIC_TESTS;
+pub use script_read::CommandStdin;
+pub use script_read::RESERVED_WORDS;
+pub use script_read::ReadCommand;
+pub use script_read::ScriptRead;
+pub use script_read::numeric_operand;
+pub use script_read::read_script;
+pub use script_read::runs_code_from_variable;
+
 /// Parse the provided bash source using tree-sitter-bash, returning a Tree on
 /// success or None if parsing failed.
 pub fn try_parse_shell(shell_lc_arg: &str) -> Option<Tree> {
@@ -232,66 +245,11 @@ pub fn parse_shell_lc_plain_commands(command: &[String]) -> Option<Vec<Vec<Strin
     parse_shell_script_into_commands(script)
 }
 
-/// #2543: what command rules can know of a shell script before it runs.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ScriptCommands {
-    /// Plain commands joined only by `&&`, `||`, `;` and `|` (see
-    /// [`parse_shell_script_into_commands`]), each word as bash passes it
-    /// on once quotes are removed (`'git' push`, `g"i"t push`).
-    Plain(Vec<Vec<String>>),
-    /// Any other script: every command in it in source order, including
-    /// those in substitutions, control flow and function bodies, with
-    /// assignments and redirections left out. A word bash builds only as the
-    /// script runs (expansions, globs, braces, `~`) is `None`; it may also
-    /// become no word or several.
-    Partial(Vec<Vec<Option<String>>>),
-    /// The script does not parse.
-    Unreadable,
-}
-
-/// [`read_script_commands`] for a `bash -lc "..."`, `sh -c "..."` or
-/// `zsh -lc "..."` invocation; `None` for any other command.
-pub fn shell_lc_script_commands(command: &[String]) -> Option<ScriptCommands> {
+/// [`read_script`] for a `bash -lc "..."`, `sh -c "..."` or `zsh -lc "..."`
+/// invocation; `None` for any other command.
+pub fn shell_lc_script_read(command: &[String]) -> Option<ScriptRead> {
     let (_, script) = extract_bash_command(command)?;
-    Some(read_script_commands(script))
-}
-
-/// #2543: the commands of `script` as far as they are known before it runs.
-/// Unlike [`parse_shell_script_into_commands`], quoted command names are
-/// read (`'git' push` runs `git push`), and a word bash would still change
-/// (`g\it`, `/usr/bin/gi?`, `{git,}`) is never read as written.
-pub fn read_script_commands(script: &str) -> ScriptCommands {
-    let Some(tree) = try_parse_shell(script) else {
-        return ScriptCommands::Unreadable;
-    };
-    let root = tree.root_node();
-    if root.has_error() {
-        return ScriptCommands::Unreadable;
-    }
-    let mut command_nodes = Vec::new();
-    let mut stack = vec![root];
-    while let Some(node) = stack.pop() {
-        if node.kind() == "command" {
-            command_nodes.push(node);
-        }
-        let mut cursor = node.walk();
-        stack.extend(node.named_children(&mut cursor));
-    }
-    command_nodes.sort_by_key(Node::start_byte);
-    let commands: Vec<Vec<Option<String>>> = command_nodes
-        .into_iter()
-        .map(|node| script_command_words(node, script))
-        .filter(|words| !words.is_empty())
-        .collect();
-    if word_only_command_nodes(&tree).is_some() && commands.iter().flatten().all(Option::is_some) {
-        return ScriptCommands::Plain(
-            commands
-                .into_iter()
-                .map(|words| words.into_iter().flatten().collect())
-                .collect(),
-        );
-    }
-    ScriptCommands::Partial(commands)
+    Some(read_script(script))
 }
 
 /// The argv words of a command node; assignments, redirections and
@@ -364,7 +322,10 @@ fn unquoted_word(text: &str) -> Option<String> {
                 Some(escaped) => word.push(escaped),
                 None => word.push('\\'),
             },
-            '*' | '?' | '~' => return None,
+            // zsh's extended_glob (a user may set it) adds `#` and `^`.
+            '*' | '?' | '~' | '#' | '^' => return None,
+            // An expansion the grammar left in a word (zsh's `$=x`).
+            '$' => return None,
             // zsh's `=cmd` is the program's path.
             '=' if word.is_empty() => return None,
             // ksh's and extglob's `@(…)`, `+(…)`, `!(…)`.
@@ -453,7 +414,7 @@ pub fn parse_shell_lc_single_command_prefix(command: &[String]) -> Option<Vec<St
     let (_, script) = extract_bash_command(command)?;
     let tree = try_parse_shell(script)?;
     let root = tree.root_node();
-    if root.has_error() {
+    if root.has_error() || !heredoc::heredoc_boundaries_readable(root, script) {
         return None;
     }
     if !has_named_descendant_kind(root, "heredoc_redirect") {
@@ -1045,3 +1006,6 @@ mod tests {
 #[cfg(test)]
 #[path = "bash/script_commands_tests.rs"]
 mod script_commands_tests;
+#[cfg(test)]
+#[path = "bash/script_read_tests.rs"]
+mod script_read_tests;
