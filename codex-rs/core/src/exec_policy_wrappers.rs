@@ -74,6 +74,17 @@ pub(super) fn has_wrappers(
         // #2568: an amendment for a PowerShell command line whose script
         // rules cannot read cannot approve the commands inside.
         || unread_powershell_line(command).is_some()
+        // #2601: nor one for a PowerShell script not lowered off Windows.
+        || runs_powershell_unlowered(command, platform)
+}
+
+/// #2601 (D553): `command` runs PowerShell for a platform whose PowerShell
+/// scripts are not lowered into commands (any but Windows).
+fn runs_powershell_unlowered(command: &[String], platform: DangerousCommandPlatform) -> bool {
+    platform != DangerousCommandPlatform::Windows
+        && command
+            .first()
+            .is_some_and(|program| crate::security::tainted_action::policy_runs_powershell(program))
 }
 
 struct UnreadPowershellCommands {
@@ -342,6 +353,11 @@ pub(super) fn check(
             // cannot read (an unknown parameter, a script from stdin,
             // `-File`): every rule counts. A `-File` script's file and
             // arguments are checked as a command too.
+            // #2601 (D553): off Windows no PowerShell script is lowered, so
+            // any PowerShell command line runs commands rules cannot see.
+            if runs_powershell_unlowered(candidate, platform) {
+                raise(&mut heuristic, candidate, could_complete(&[]));
+            }
             if platform == DangerousCommandPlatform::Windows
                 && let Some(unread) = unread_powershell_line(candidate)
             {
@@ -472,7 +488,16 @@ pub(super) fn check(
         {
             let inner = &command[start..];
             let reading_from = matches.len();
-            let ask = match roles::role(&command[..start], inner, stdin) {
+            // #2601 (D553): a PowerShell command lowered for Windows that
+            // rebinds a name or runs code is unread, as bash's `alias` is.
+            let role = if platform == DangerousCommandPlatform::Windows
+                && roles::powershell_runs_code(inner)
+            {
+                Role::Unread
+            } else {
+                roles::role(&command[..start], inner, stdin)
+            };
+            let ask = match role {
                 Role::Argv => None,
                 Role::Unread | Role::File => any_rule(),
                 Role::Script { text, single } => {

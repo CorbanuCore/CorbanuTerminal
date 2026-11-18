@@ -102,6 +102,56 @@ pub(super) fn runs_shell(program: &str) -> bool {
     policy_runs_shell(program) || policy_runs_powershell(program)
 }
 
+/// #2601 (D553): PowerShell commands (and their aliases) that rebind a
+/// command name or run code that is not their argv: text, a module, a
+/// compiled type, a script file in a job.
+const POWERSHELL_CODE_COMMANDS: &[&str] = &[
+    "invoke-expression",
+    "iex",
+    "set-alias",
+    "sal",
+    "new-alias",
+    "nal",
+    "import-alias",
+    "ipal",
+    "new-psdrive",
+    "ndr",
+    "mount",
+    "import-module",
+    "ipmo",
+    "add-type",
+    "invoke-command",
+    "icm",
+    "start-job",
+    "sajb",
+    "start-threadjob",
+];
+
+/// #2601 (D553): a PowerShell command that may change what a later command
+/// name runs, or run code rules cannot read: one of
+/// [`POWERSHELL_CODE_COMMANDS`] (module-qualified too, any case, as
+/// PowerShell looks them up), or any command given a path on the alias or
+/// function drive (`Set-Item alias:f git`, `Set-Location function:`).
+/// Sync: the caller applies it to commands checked for the Windows command
+/// platform, whose PowerShell scripts are lowered into these commands.
+pub(super) fn powershell_runs_code(program_and_args: &[String]) -> bool {
+    let Some((program, args)) = program_and_args.split_first() else {
+        return false;
+    };
+    let name = program
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(program)
+        .to_ascii_lowercase();
+    POWERSHELL_CODE_COMMANDS.contains(&name.as_str())
+        || args.iter().any(|arg| {
+            let arg = arg.to_ascii_lowercase();
+            ["alias:", "function:"]
+                .iter()
+                .any(|drive| arg.starts_with(drive) || arg.contains(&format!("\\{drive}:")))
+        })
+}
+
 /// `NAME=value` for a variable that runs code ([`runs_code_from_variable`]).
 fn assigns_code_variable(word: &str) -> bool {
     word.split_once('=')

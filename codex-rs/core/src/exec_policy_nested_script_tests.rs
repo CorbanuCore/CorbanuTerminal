@@ -231,8 +231,10 @@ async fn nested_scripts_propose_no_amendment() {
 }
 
 /// #2524: PowerShell scripts are read on Windows only
-/// (`exec_policy_windows_tests`); elsewhere a respelled shell is treated
-/// exactly like the lowercase one.
+/// (`exec_policy_windows_tests`); elsewhere none is read, so a PowerShell
+/// command line asks under a prompt or forbidden rule (#2601), and a
+/// respelled shell this platform runs as PowerShell (`PWSH` on macOS,
+/// which folds name case) is treated exactly like the lowercase one.
 #[cfg(not(windows))]
 #[tokio::test]
 async fn respelled_powershell_matches_lowercase_off_windows() {
@@ -246,13 +248,20 @@ async fn respelled_powershell_matches_lowercase_off_windows() {
                     "git push".to_string(),
                 ]
             };
-            // The same decision; only the literal argv in an amendment
-            // differs.
-            assert_eq!(
-                std::mem::discriminant(&requirement(&line(respelled), rules).await),
-                std::mem::discriminant(&requirement(&line(lowercase), rules).await),
-                "{respelled}"
+            let lowercase_result = requirement(&line(lowercase), rules).await;
+            assert!(
+                !matches!(lowercase_result, ExecApprovalRequirement::Skip { .. }),
+                "{lowercase}: {lowercase_result:?}"
             );
+            if crate::security::tainted_action::policy_runs_powershell(respelled) {
+                // The same decision; only the literal argv in an amendment
+                // differs.
+                assert_eq!(
+                    std::mem::discriminant(&requirement(&line(respelled), rules).await),
+                    std::mem::discriminant(&lowercase_result),
+                    "{respelled}"
+                );
+            }
         }
     }
 }
