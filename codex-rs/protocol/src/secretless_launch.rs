@@ -7,6 +7,7 @@
 //! session can only become stricter. With the feature off nothing here runs.
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
@@ -199,56 +200,49 @@ pub fn value_has_url_password(value: &str) -> bool {
     url_passwords(value).next().is_some()
 }
 
-/// Every nonempty URL password in a value, including scheme-less proxy items.
+/// Distinct nonempty URL password candidates, including scheme-less proxies.
 /// Passwords are borrowed verbatim: percent escapes are preserved, not decoded.
-/// Consumers registering redactions must apply their minimum-length policy to
-/// the decoded password as well; launch filtering deliberately catches even
-/// short passwords.
+/// Ambiguous list separators retain both interpretations; neither parsing pass
+/// can suppress a candidate from the other. Consumers registering redactions
+/// must apply their minimum-length policy to the decoded password as well;
+/// launch filtering deliberately catches even short passwords.
 pub fn url_passwords(value: &str) -> impl Iterator<Item = &str> {
+    let mut seen = HashSet::new();
     value
         .match_indices("://")
-        .filter_map(|(index, _)| authority_password(&value[index + 3..]))
+        .flat_map(|(index, _)| {
+            let authority = value[index + 3..]
+                .split(|c: char| c.is_whitespace() || matches!(c, '/' | '?' | '#'))
+                .next()
+                .unwrap_or_default();
+            // A separator after @ may start another list item or belong to a
+            // password containing a raw @. Keep BOTH candidates, never choose
+            // one by asking whether the other parsing pass will recognize it.
+            let first_item = authority.find('@').and_then(|at| {
+                authority[at..]
+                    .find([',', ';'])
+                    .map(|offset| &authority[..at + offset])
+            });
+            [
+                authority_password(authority),
+                first_item.and_then(authority_password),
+            ]
+            .into_iter()
+            .flatten()
+        })
         .chain(
             value
                 .split(|c: char| c.is_whitespace() || c == ',' || c == ';')
                 .filter_map(schemeless_url_password),
         )
+        .filter(move |password| seen.insert(*password))
 }
 
 /// Extract userinfo only, never a colon or at-sign in a URL path/query.
-fn authority_password(rest: &str) -> Option<&str> {
-    let authority = rest
-        .split(|c: char| c.is_whitespace() || matches!(c, '/' | '?' | '#'))
-        .next()?;
+fn authority_password(authority: &str) -> Option<&str> {
     let (userinfo, _) = authority.rsplit_once('@')?;
-    let (user, full_password) = userinfo.split_once(':')?;
-    // Suppress a duplicate from an earlier public URL only when the
-    // scheme-less pass really extracts this same password. Otherwise retain
-    // the conservative explicit-URL match (userinfo can contain separators).
-    if let Some((_, item)) = authority[..user.len()].rsplit_once([',', ';']) {
-        let item_start = user.len() - item.len();
-        let item = rest[item_start..]
-            .split(|c: char| c.is_whitespace() || c == ',' || c == ';')
-            .next()?;
-        if schemeless_url_password(item) == Some(full_password) {
-            return None;
-        }
-    }
-    let at = authority.find('@')?;
-    // Commas/semicolons can be password characters, even after a raw @.
-    // End this authority only when a following item is itself a proxy URL.
-    let host_end = authority
-        .match_indices([',', ';'])
-        .find_map(|(index, _)| {
-            let next = rest[index + 1..]
-                .split(|c: char| c.is_whitespace() || c == ',' || c == ';')
-                .next()?;
-            (index > at && schemeless_url_password(next).is_some()).then_some(index)
-        })
-        .unwrap_or(authority.len());
-    let (userinfo, _) = authority[..host_end].rsplit_once('@')?;
     let (_, password) = userinfo.split_once(':')?;
-    (!password.is_empty()).then_some(password)
+    (!password.trim().is_empty()).then_some(password)
 }
 
 /// Prefixes written `prefix:name@host` that are not a user name: URI schemes

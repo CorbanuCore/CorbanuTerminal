@@ -72,6 +72,11 @@ fn issue_2401_url_passwords_are_redacted_in_later_output() {
             "ENCODED_PROXY",
             "u:Raw%40Pass-2401@proxy https://v:Next%3aPass-2401@host",
         ),
+        ("AMBIGUOUS_PROXY", "http://u:Pass@word,2401@host"),
+        (
+            "AMBIGUOUS_EMAIL",
+            "http://u:Secret-2401@proxy:3128,mail@example.com",
+        ),
     ]
     .map(|(name, value)| (OsString::from(name), OsString::from(value)));
     let values = env_values(vars);
@@ -89,6 +94,9 @@ fn issue_2401_url_passwords_are_redacted_in_later_output() {
             "Next:Pass-2401",
             "Raw%40Pass-2401",
             "Raw@Pass-2401",
+            "Pass@word,2401",
+            "Secret-2401@proxy:3128,mail",
+            "Secret-2401",
         ],
     );
     let gate = OutputGate::new();
@@ -107,6 +115,8 @@ fn issue_2401_url_passwords_are_redacted_in_later_output() {
         ("Raw@Pass-2401", "ENCODED_PROXY"),
         ("Next%3aPass-2401", "ENCODED_PROXY"),
         ("Next:Pass-2401", "ENCODED_PROXY"),
+        ("Pass@word,2401", "AMBIGUOUS_PROXY"),
+        ("Secret-2401", "AMBIGUOUS_EMAIL"),
     ] {
         let output = EventMsg::Error(ErrorEvent {
             message: format!("tool later printed {password}"),
@@ -121,6 +131,16 @@ fn issue_2401_url_passwords_are_redacted_in_later_output() {
             }),
         );
     }
+    // The conservative union also yields "Pass", but it must never be
+    // registered: short ordinary words remain unchanged in later output.
+    let ordinary = EventMsg::Error(ErrorEvent {
+        message: "Pass remains an ordinary short word".to_string(),
+        codex_error_info: None,
+    });
+    assert_eq!(
+        serde_json::to_value(present(&gate, ordinary.clone())).expect("serialize output"),
+        serde_json::to_value(ordinary).expect("serialize original"),
+    );
 }
 
 #[test]

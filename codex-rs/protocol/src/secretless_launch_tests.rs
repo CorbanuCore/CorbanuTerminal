@@ -75,6 +75,8 @@ fn pf_27_s02_url_passwords_are_detected() {
 
 #[test]
 fn issue_2401_extracts_every_url_password() {
+    // Ambiguous separators keep both candidates; exact duplicates from the
+    // two passes occur only once. Every original fixture remains covered.
     let cases: &[(&str, &[&str])] = &[
         (
             "http://a:First-2401@one https://b:Second-2401@two/path",
@@ -82,7 +84,7 @@ fn issue_2401_extracts_every_url_password() {
         ),
         (
             "https://public.example,user:Proxy-2401@proxy:3128;https://u:Last-2401@[::1]/",
-            &["Last-2401", "Proxy-2401"],
+            &["Proxy-2401", "Last-2401"],
         ),
         (
             "user:Raw%40Pass-2401@[2001:db8::1]:3128 https://u:Next%3aPass-2401@host",
@@ -94,11 +96,15 @@ fn issue_2401_extracts_every_url_password() {
         ),
         (
             "http://u:First,Part;2401@host;u:Second-2401@proxy",
-            &["First,Part;2401", "Second-2401"],
+            &[
+                "First,Part;2401@host;u:Second-2401",
+                "First,Part;2401",
+                "Second-2401",
+            ],
         ),
         (
             "http://u:Pass@word,2401@host https://u:Pass@word;2401@other",
-            &["Pass@word,2401", "Pass@word;2401"],
+            &["Pass@word,2401", "Pass", "Pass@word;2401"],
         ),
         (
             "http://pub.example,user:Pass,word-2401@proxy:3128",
@@ -117,6 +123,10 @@ fn issue_2401_extracts_every_url_password() {
         (
             "http://user@corp;AUTH=PLAIN:Pass-2401@proxy)/x",
             &["Pass-2401"],
+        ),
+        (
+            "http://u:Secret-2401@proxy:3128,mail@example.com",
+            &["Secret-2401@proxy:3128,mail", "Secret-2401"],
         ),
         ("user:p@ss@proxy", &["p@ss"]),
         ("http://u:p@host", &["p"]),
