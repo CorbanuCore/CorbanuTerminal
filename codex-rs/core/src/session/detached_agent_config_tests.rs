@@ -241,3 +241,142 @@ async fn issue_2015_windows_sandbox_is_never_lowered() {
         WindowsSandboxLevel::Elevated
     );
 }
+
+/// The loosest config a fork request could load: Permissive, no Windows
+/// sandbox.
+async fn loosest_fork_config(session: &super::super::session::Session) -> crate::config::Config {
+    let mut config = (*session.get_config().await).clone();
+    config.security_level = SecurityLevel::Permissive;
+    config.permissions.windows_sandbox_mode = None;
+    for feature in [
+        codex_features::Feature::WindowsSandbox,
+        codex_features::Feature::WindowsSandboxElevated,
+    ] {
+        config.features.disable(feature).expect("disable feature");
+    }
+    config
+}
+
+/// D711 (a): a thread forked from this one (upstream's replacement for a
+/// detached review) is held at this thread's current security level and
+/// Windows sandbox, as tightened mid-session, however low the fork asked;
+/// a stricter fork stays stricter.
+#[tokio::test]
+async fn d711_fork_is_held_at_the_parents_current_level_and_windows_sandbox() {
+    let (mut session, _turn) = make_session_and_context().await;
+    session.services.agent_control = session
+        .services
+        .agent_control
+        .clone()
+        .with_effective_security_policy(
+            SecurityLevel::Permissive,
+            session.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
+        .expect("security policy");
+    let mut fork = loosest_fork_config(&session).await;
+    session.hold_fork_to_current_floor(&mut fork).await;
+    assert_eq!(fork.security_level, SecurityLevel::Permissive);
+    assert_eq!(
+        WindowsSandboxLevel::from_config(&fork),
+        WindowsSandboxLevel::Disabled
+    );
+
+    // Tightened mid-session: a Windows sandbox set up and a stricter level.
+    session
+        .update_settings(SessionSettingsUpdate {
+            windows_sandbox_level: Some(WindowsSandboxLevel::RestrictedToken),
+            ..Default::default()
+        })
+        .await
+        .expect("sandbox setup");
+    let controller = session
+        .services
+        .agent_control
+        .trusted_security_controller()
+        .expect("trusted controller");
+    let change = controller
+        .confirm_level_change(
+            SecurityLevel::Aggressive,
+            codex_security_policy::RevocationState::new(),
+        )
+        .expect("confirm");
+    controller.apply_confirmed_change(change).expect("apply");
+
+    let mut fork = loosest_fork_config(&session).await;
+    session.hold_fork_to_current_floor(&mut fork).await;
+    assert_eq!(fork.security_level, SecurityLevel::Aggressive);
+    assert_eq!(
+        WindowsSandboxLevel::from_config(&fork),
+        WindowsSandboxLevel::RestrictedToken
+    );
+
+    let mut fork = loosest_fork_config(&session).await;
+    fork.set_windows_elevated_sandbox_enabled(/*value*/ true);
+    session.hold_fork_to_current_floor(&mut fork).await;
+    assert_eq!(
+        WindowsSandboxLevel::from_config(&fork),
+        WindowsSandboxLevel::Elevated
+    );
+}
+
+/// D711 (a), #2062: after a downgrade saved for the next start, the parent
+/// still runs at its stricter level, and so does a thread forked from it,
+/// although a new thread would recover the saved lower level.
+#[tokio::test]
+async fn d711_fork_keeps_the_parents_level_after_a_saved_downgrade() {
+    let (mut session, _turn) = make_session_and_context().await;
+    session.services.agent_control = session
+        .services
+        .agent_control
+        .clone()
+        .with_effective_security_policy(
+            SecurityLevel::Permissive,
+            session.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
+        .expect("security policy");
+    let controller = session
+        .services
+        .agent_control
+        .trusted_security_controller()
+        .expect("trusted controller");
+    let home = tempfile::tempdir().expect("home");
+    let store = crate::security::recovery::HomeTransitionStore::new(home.path());
+    for level in [SecurityLevel::Aggressive, SecurityLevel::Permissive] {
+        let epoch = session
+            .services
+            .agent_control
+            .effective_security_policy()
+            .snapshot_for_agent(session.thread_id)
+            .expect("parent policy")
+            .authority_epoch()
+            .expect("epoch");
+        let request = codex_protocol::security::SecurityControlRequest::new(
+            epoch,
+            codex_protocol::security::SecurityControlAction::SetLevel { level },
+        )
+        .expect("request");
+        let confirmed = controller
+            .confirm_security_request(request, /*now_unix_seconds*/ 1_000)
+            .expect("confirm");
+        let prepared = controller
+            .prepare_transition(confirmed, crate::security::transition::ProbeOutcome::Passed)
+            .expect("prepare");
+        controller
+            .commit_transition(prepared, &store, /*now_unix_seconds*/ 1_000)
+            .expect("commit");
+    }
+    let mut fork = loosest_fork_config(&session).await;
+    session.hold_fork_to_current_floor(&mut fork).await;
+    assert_eq!(fork.security_level, SecurityLevel::Aggressive);
+    // The fork's session start recovers from its config's level.
+    assert_eq!(
+        crate::security::recovery::recover(home.path(), fork.security_level).level,
+        SecurityLevel::Aggressive
+    );
+    assert_eq!(
+        crate::security::recovery::recover(home.path(), SecurityLevel::Permissive).level,
+        SecurityLevel::Permissive
+    );
+}

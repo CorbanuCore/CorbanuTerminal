@@ -1349,6 +1349,14 @@ impl CodexThread {
         self.session.thread_config_snapshot().await
     }
 
+    /// #2015 (D519, D711 (a)): `config` is for a thread a client forks from
+    /// this one (upstream's replacement for a detached review). Holds it at
+    /// least at this thread's current Windows sandbox and security level,
+    /// including changes since this thread started; never lowers it.
+    pub async fn hold_fork_to_current_floor(&self, config: &mut crate::config::Config) {
+        self.session.hold_fork_to_current_floor(config).await;
+    }
+
     /// PF-84-S06 (#658): whether a client is attached to this thread. A user
     /// thread nobody is attached to (one the user left, kept loaded for a
     /// while) does not count toward the account the process's own backend

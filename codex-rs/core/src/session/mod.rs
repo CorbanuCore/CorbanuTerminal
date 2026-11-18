@@ -253,6 +253,7 @@ mod config_refresh;
 mod confirmed_aggressive;
 pub(crate) mod context_window;
 mod daemon_recovery;
+mod detached_agent_config;
 mod environment;
 mod extension_interruption;
 pub(crate) mod extension_metrics;

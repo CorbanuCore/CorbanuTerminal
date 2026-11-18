@@ -1,9 +1,9 @@
-//! #2015: the config an agent started from this thread by a client (a
-//! detached review) runs with. It is this session's current effective
-//! settings, never the config the process started with: the approval policy
-//! and reviewer, the permission profile, the cwd and workspace roots, the
-//! Windows sandbox and the security level in force, including what changed
-//! since the thread started.
+//! #2015 (D519, D711): an agent a client starts from this thread. Upstream
+//! replaced the detached review with `thread/fork` + `turn/start`; the fork
+//! still runs with this session's current effective settings, never the
+//! config the process started with: the approval policy and reviewer, the
+//! permission profile, the Windows sandbox and the security level in force,
+//! including what changed since the thread started.
 
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_security_policy::SecurityLevel;
@@ -15,6 +15,8 @@ use crate::windows_sandbox::WindowsSandboxLevelExt;
 use crate::windows_sandbox::raise_windows_sandbox;
 
 impl Session {
+    /// This session's current effective config: its settings now, with the
+    /// Windows sandbox and security level in force.
     pub(crate) async fn detached_agent_config(&self) -> Config {
         let mut config = {
             let state = self.state.lock().await;
@@ -39,24 +41,39 @@ impl Session {
             ) => {}
             Err(_) => config.security_level = SecurityLevel::Aggressive,
         }
-        // Config was loaded before the parent's live security level changed.
-        // Replace only this derived notice, preserving unrelated warnings.
-        let old_notices = [SecurityLevel::Moderate, SecurityLevel::Aggressive]
-            .map(crate::security::windows_unsandboxed::startup_notice);
+        refresh_windows_unsandboxed_notice(&mut config);
+        config
+    }
+
+    /// D711 (a): `config` is for a thread a client forks from this one. It
+    /// never runs below this thread's current Windows sandbox or security
+    /// level, whatever the fork's own config layers or request asked for;
+    /// a stricter fork config stays stricter.
+    pub(crate) async fn hold_fork_to_current_floor(&self, config: &mut Config) {
+        let parent = self.detached_agent_config().await;
+        raise_windows_sandbox(config, WindowsSandboxLevel::from_config(&parent));
+        config.security_level = config.security_level.max(parent.security_level);
+        refresh_windows_unsandboxed_notice(config);
+    }
+}
+
+/// Config was loaded before the live security level or Windows sandbox
+/// changed. Replace only this derived notice, preserving unrelated warnings.
+fn refresh_windows_unsandboxed_notice(config: &mut Config) {
+    let old_notices = [SecurityLevel::Moderate, SecurityLevel::Aggressive]
+        .map(crate::security::windows_unsandboxed::startup_notice);
+    config
+        .startup_warnings
+        .retain(|warning| !old_notices.contains(warning));
+    if crate::security::windows_unsandboxed::applies(
+        config.security_level,
+        WindowsSandboxLevel::from_config(config),
+    ) {
         config
             .startup_warnings
-            .retain(|warning| !old_notices.contains(warning));
-        if crate::security::windows_unsandboxed::applies(
-            config.security_level,
-            WindowsSandboxLevel::from_config(&config),
-        ) {
-            config
-                .startup_warnings
-                .push(crate::security::windows_unsandboxed::startup_notice(
-                    config.security_level,
-                ));
-        }
-        config
+            .push(crate::security::windows_unsandboxed::startup_notice(
+                config.security_level,
+            ));
     }
 }
 
