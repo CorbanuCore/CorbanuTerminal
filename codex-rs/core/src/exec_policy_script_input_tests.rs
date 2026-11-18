@@ -549,6 +549,7 @@ async fn canonical_rule_still_folds_inside_an_unsplit_script() {
         "{reason}"
     );
 }
+
 /// CI on #2613 (upstream's `allowed_escalated_shell_command_inherits_active_
 /// permission_profile`): a shell running a named script file runs its argv,
 /// as `./build.sh` would, so a person's allow rule for exactly that argv
