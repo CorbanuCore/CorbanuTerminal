@@ -274,3 +274,47 @@ async fn empty_successful_polls_reset_consecutive_failure_cap() {
     assert!(!fatal.is_fatal());
     assert_eq!(calls.load(Ordering::SeqCst), 6);
 }
+
+#[tokio::test]
+async fn allowed_updates_hint_survives_failed_poll_until_one_succeeds() {
+    let hint = serde_json::json!(["message", "callback_query"]);
+    let (bot, calls, server) = scripted_bot(vec![
+        serde_json::json!({
+            "ok": false, "error_code": 500, "description": "Internal Server Error",
+            "_expected_request": {"offset": 0, "allowed_updates": hint}
+        }),
+        // The retry still carries the hint, or Telegram keeps the token's old list.
+        serde_json::json!({
+            "ok": true, "result": [],
+            "_expected_request": {"offset": 0, "allowed_updates": hint}
+        }),
+        // Telegram stores the list after a successful poll, so later polls omit it.
+        serde_json::json!({
+            "ok": true, "result": [{
+                "update_id": 42,
+                "message": {"message_id": 1, "date": 1,
+                    "chat": {"id": 99, "type": "private"}, "text": "hello"}
+            }],
+            "_expected_request": {"offset": 0, "allowed_updates": null}
+        }),
+    ])
+    .await;
+    let mut polling = guarded_polling(bot, /*max_consecutive_failures*/ 3, vec![]).await;
+    teloxide::update_listeners::UpdateListener::hint_allowed_updates(
+        &mut polling,
+        &mut [
+            teloxide::types::AllowedUpdate::Message,
+            teloxide::types::AllowedUpdate::CallbackQuery,
+        ]
+        .into_iter(),
+    );
+    let outcome = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut stream = polling.as_stream();
+        assert!(stream.next().await.unwrap().is_err());
+        stream.next().await.unwrap().unwrap().id.0
+    })
+    .await;
+    stop_server(server).await;
+    assert_eq!(outcome.unwrap(), 42);
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+}
