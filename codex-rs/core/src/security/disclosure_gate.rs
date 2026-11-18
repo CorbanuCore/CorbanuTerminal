@@ -916,26 +916,31 @@ where
         {
             values.push((format!("env:{name}"), Zeroizing::new(value.to_string())));
         }
-        if let Some(password) = url_password(value) {
-            values.push((format!("env:{name}:password"), password));
+        for password in secretless_launch::url_password_candidates(value, MIN_ENV_VALUE_BYTES) {
+            // Judge the decoded text so escapes cannot turn a short word into
+            // a plausible credential. Keep both spellings: tools can echo the
+            // URL verbatim or print its decoded password (#2401).
+            let decoded = Zeroizing::new(
+                urlencoding::decode(password)
+                    .map(std::borrow::Cow::into_owned)
+                    .unwrap_or_else(|_| password.to_string()),
+            );
+            if decoded.trim().is_empty() || !is_plausible_secret(&decoded) {
+                continue;
+            }
+            values.push((
+                format!("env:{name}:password"),
+                Zeroizing::new(password.to_string()),
+            ));
+            if decoded.as_str() != password {
+                values.push((format!("env:{name}:password"), decoded));
+            }
         }
         for (param, secret) in url_query_secrets(value) {
             values.push((format!("env:{name}:{param}"), secret));
         }
     }
     values
-}
-
-fn url_password(value: &str) -> Option<Zeroizing<String>> {
-    if !secretless_launch::value_has_url_password(value) {
-        return None;
-    }
-    let (_, rest) = value.split_once("://")?;
-    let authority = rest.split(['/', '?', '#']).next()?;
-    let (userinfo, _) = authority.rsplit_once('@')?;
-    let (_, password) = userinfo.split_once(':')?;
-    let password = password.trim();
-    is_plausible_secret(password).then(|| Zeroizing::new(password.to_string()))
 }
 
 /// Secret-named query parameters of a URL (`?token=`, `?api_key=`, `?sig=`).
@@ -1053,6 +1058,10 @@ fn push_secret(label: &str, text: &str, out: &mut Labeled) {
         out.push((label.to_string(), Zeroizing::new(token.trim().to_string())));
     }
 }
+
+#[cfg(test)]
+#[path = "issue_2401_url_password_tests.rs"]
+mod issue_2401_url_password_tests;
 
 #[cfg(test)]
 #[path = "disclosure_gate_tests.rs"]
