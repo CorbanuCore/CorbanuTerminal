@@ -1,0 +1,10 @@
+{
+  "binary_sha256": "53f77726294ee6323aa565ae1400ce4cf53a0e15ab305be9bb10ca3bb812cb57",
+  "source_commit": "5fd571822bef255237f963c7bc18286a9110f58b",
+  "checks": {
+    "first_response": true,
+    "cancel_then_recover": true,
+    "two_persisted_completions": true,
+    "persisted_abort": true
+  }
+}

@@ -1,0 +1,181 @@
+{
+  "source_commit": "e4e8d9b223215ffa9a7764ff2de32fded42b1e9b",
+  "phase": "rollback",
+  "version": "corbanu 0.1.48",
+  "binary_sha256": "d0763b4a36fd2589fe826143cac231ebcfa3fc13e2c6c043f84d0e789feba725",
+  "isolation": "Docker: no network; only worker fixture mounted; no host home/IPC/keyring mounts",
+  "checks": {
+    "response_completed": true,
+    "config_unchanged": true,
+    "vault_value_preserved": true
+  },
+  "config_byte_identity": true,
+  "vault_exit": 0,
+  "databases": {
+    "pfterminal_state_5.sqlite": {
+      "integrity": "ok",
+      "tables": [
+        "_sqlx_migrations",
+        "threads",
+        "sqlite_sequence",
+        "thread_dynamic_tools",
+        "backfill_state",
+        "thread_spawn_edges",
+        "remote_control_enrollments",
+        "external_agent_config_imports",
+        "provider_request_state",
+        "gpu_rentals",
+        "gpu_rental_operations",
+        "gpu_rental_notifications",
+        "gpu_provision_steps",
+        "gpu_runtime_providers",
+        "agent_mailbox_messages",
+        "thread_sections"
+      ],
+      "thread_count": 1,
+      "request_rows": [
+        [
+          "release-fixture",
+          "gpt-4.1",
+          "auth-mode:None",
+          0,
+          0
+        ],
+        [
+          "qa-idle",
+          "fixture",
+          "env:qa-idle",
+          0,
+          0
+        ],
+        [
+          "qa-cooldown",
+          "fixture",
+          "env:qa-cooldown",
+          1794988149658,
+          0
+        ],
+        [
+          "qa-lease",
+          "fixture",
+          "env:qa-lease",
+          0,
+          1794988149658
+        ],
+        [
+          "qa-days",
+          "fixture",
+          "env:qa-days",
+          1795292923658,
+          0
+        ],
+        [
+          "qa-unrelated",
+          "fixture",
+          "vault:qa-unrelated",
+          1794991749658,
+          0
+        ]
+      ],
+      "migration_versions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52
+      ]
+    },
+    "pfterminal_goals_1.sqlite": {
+      "integrity": "ok",
+      "tables": [
+        "_sqlx_migrations",
+        "thread_goals",
+        "thread_goal_continuation_deferrals"
+      ],
+      "migration_versions": [
+        1,
+        2
+      ]
+    },
+    "pfterminal_logs_2.sqlite": {
+      "integrity": "ok",
+      "tables": [
+        "_sqlx_migrations",
+        "sqlite_sequence",
+        "logs"
+      ],
+      "migration_versions": [
+        1,
+        2
+      ]
+    },
+    "pfterminal_memories_1.sqlite": {
+      "integrity": "ok",
+      "tables": [
+        "_sqlx_migrations",
+        "stage1_outputs",
+        "jobs"
+      ],
+      "migration_versions": [
+        1
+      ]
+    }
+  },
+  "rollouts": [
+    "sessions/2026/11/18/rollout-2026-11-18T05-20-41-01a1ed19-9c8b-7c61-82c1-c10f33cbb21c.jsonl"
+  ],
+  "history_exists": true,
+  "requests": [
+    {
+      "path": "/v1/responses",
+      "model": "gpt-4.1"
+    }
+  ]
+}

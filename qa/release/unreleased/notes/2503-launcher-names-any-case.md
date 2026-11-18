@@ -1,3 +1,0 @@
-## Security
-
-On macOS and Windows, command rules now see through launchers whatever their spelling (#2503, D688). These systems find programs without regard to letter case, so `SUDO`, `/usr/bin/Env`, `XARGS` or `Su -c` run the same launcher as `sudo`, `env`, `xargs` or `su`. Rules for the command such a launcher runs now apply as they do for the lower-case name, for every launcher command rules cover (`sudo`, `env`, `chroot`, `unshare`, `timeout`, `nice`, `xargs`, `su`, `busybox` and the others). Windows also reads `sudo.exe` and `C:\Tools\env.exe` as these launchers. On Linux, where `SUDO` is a different program, nothing changes.

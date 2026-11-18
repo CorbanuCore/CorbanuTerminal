@@ -124,6 +124,7 @@ mod issue_891_d48_known_tools;
 mod issue_891_one_run;
 mod items;
 mod json_result;
+mod list_models;
 mod live_cli;
 mod log_redaction;
 mod mcp_auth_elicitation;

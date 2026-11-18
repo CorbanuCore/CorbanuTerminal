@@ -7,6 +7,8 @@ $ProgressPreference = 'SilentlyContinue'
 #   { "id": <u64>, "payload": "<base64-encoded UTF-16LE script>" }
 # We answer with one compact JSON line per request:
 #   { "id": <same>, "status": "ok", "commands": [["Get-Content", "foo.txt"]] }
+# or a restrictive-only reading of an unsupported script:
+#   { "id": <same>, "status": "partial", "commands": [["git", "push"]] }
 # or:
 #   { "id": <same>, "status": "parse_failed" | "parse_errors" | "unsupported" }
 #
@@ -54,7 +56,7 @@ function Invoke-ParseRequest {
         $ast.UsingStatements.Count -gt 0 -or
         $ast.EndBlock.Traps.Count -gt 0
     ) {
-        return @{ id = $RequestId; status = 'unsupported' }
+        return Get-PartialCommands $RequestId $ast
     }
 
     # PowerShell's stop-parsing marker hands the remaining source text to native
@@ -62,7 +64,7 @@ function Invoke-ParseRequest {
     # flatten below. Keep that form out of the argv-like lowering path entirely.
     foreach ($token in $tokens) {
         if ($token.Text -eq '--%') {
-            return @{ id = $RequestId; status = 'unsupported' }
+            return Get-PartialCommands $RequestId $ast
         }
     }
 
@@ -100,10 +102,40 @@ function Invoke-ParseRequest {
     }
 
     if ($commands -eq $null) {
-        return @{ id = $RequestId; status = 'unsupported' }
+        return Get-PartialCommands $RequestId $ast
     }
 
     return @{ id = $RequestId; status = 'ok'; commands = $commands }
+}
+
+# Only literal command ASTs contribute restrictions. Never execute source, and
+# never treat these recovered commands as a complete reading of the script.
+function Get-PartialCommands {
+    param($RequestId, $Ast)
+
+    $commands = [System.Collections.ArrayList]::new()
+    foreach ($node in $Ast.FindAll({
+        param($n)
+        $n -is [System.Management.Automation.Language.CommandAst]
+    }, $true)) {
+        # A known prefix remains certain even if later arguments expand to
+        # zero or many words. Stop at the first unknown word or --%; never
+        # guess its value, nor treat subsequent words as fixed positions.
+        $words = @()
+        foreach ($element in $node.CommandElements) {
+            if ($element.Extent.Text -eq '--%') { break }
+            $converted = Convert-CommandElement $element
+            if ($null -eq $converted) { break }
+            $words += $converted
+        }
+        if ($words.Count -gt 0) {
+            $null = $commands.Add(@($words))
+        }
+    }
+    if ($commands.Count -eq 0) {
+        return @{ id = $RequestId; status = 'unsupported' }
+    }
+    return @{ id = $RequestId; status = 'partial'; commands = $commands }
 }
 
 function Write-Response {

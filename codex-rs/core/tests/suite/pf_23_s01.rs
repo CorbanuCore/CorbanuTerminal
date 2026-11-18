@@ -933,8 +933,10 @@ async fn approve_reading_gate(test: &TestCodex, level: SecurityLevel) -> anyhow:
     use codex_protocol::protocol::ReviewDecision;
     let mut gate_prompts = 0;
     while let Some(approval) = next_exec_approval(test).await {
-        let decision = if level == SecurityLevel::Aggressive && approval.reason.is_none() {
-            gate_prompts += 1;
+        // Counted at every level, so a prompt where none is expected fails.
+        let gate = approval.reason.is_none();
+        gate_prompts += usize::from(gate);
+        let decision = if level == SecurityLevel::Aggressive && gate {
             ReviewDecision::Approved
         } else {
             ReviewDecision::denied("a sandbox retry")

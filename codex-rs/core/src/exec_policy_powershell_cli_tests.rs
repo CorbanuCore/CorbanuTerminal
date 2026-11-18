@@ -4,6 +4,9 @@
 //! command line it cannot read that way asks wherever a prompt or forbidden
 //! rule could match; `-File` reads as its file and arguments, and asks too.
 
+#[path = "exec_policy_powershell_unread_tests.rs"]
+mod unread_tests;
+
 use super::*;
 use base64::Engine as _;
 use codex_shell_command::is_safe_command::is_known_safe_command;

@@ -1,0 +1,46 @@
+Corbanu Terminal couldn't start because its local database appears to be damaged.
+Run `corbanu doctor` to check your setup and get next-step guidance.
+If this keeps happening, share the technical details below when asking for help.
+Technical details:
+  Location: /work/profile/pfterminal_state_5.sqlite
+  Cause: failed to initialize state runtime at /work/profile: failed to validate migrations for state DB at /work/profile/pfterminal_state_5
+.sqlite: refusing to migrate /work/profile/pfterminal_state_5.sqlite: this database appears to belong to a different Codex/Corbanu Terminal
+distribution; foreign migrations: version 53 (checksum 1996e53b755717942d25b27a4b4551a68d015d9fc680760021f53d92213fe6c0ad7b22054b22eb7738a27
+c2f6b1ca1ad), version 70 (checksum 831937b876cfd94a181cac79cd24753ec9d312a595ccf659d6d99c91b08d1757724b24664e8197e368fdbee825cdcd9c); follow
+ the repair recipe in pfterminal_codex_home_collision_incident_20260710.md: refusing to migrate /work/profile/pfterminal_state_5.sqlite: thi
+s database appears to belong to a different Codex/Corbanu Terminal distribution; foreign migrations: version 53 (checksum 1996e53b755717942d
+25b27a4b4551a68d015d9fc680760021f53d92213fe6c0ad7b22054b22eb7738a27c2f6b1ca1ad), version 70 (checksum 831937b876cfd94a181cac79cd24753ec9d312
+a595ccf659d6d99c91b08d1757724b24664e8197e368fdbee825cdcd9c); follow the repair recipe in pfterminal_codex_home_collision_incident_20260710.m
+d
+ERROR: failed to initialize sqlite local db at /work/profile/pfterminal_state_5.sqlite: failed to initialize state runtime at /work/profile:
+ failed to validate migrations for state DB at /work/profile/pfterminal_state_5.sqlite: refusing to migrate /work/profile/pfterminal_state_5
+.sqlite: this database appears to belong to a different Codex/Corbanu Terminal distribution; foreign migrations: version 53 (checksum 1996e5
+3b755717942d25b27a4b4551a68d015d9fc680760021f53d92213fe6c0ad7b22054b22eb7738a27c2f6b1ca1ad), version 70 (checksum 831937b876cfd94a181cac79cd
+24753ec9d312a595ccf659d6d99c91b08d1757724b24664e8197e368fdbee825cdcd9c); follow the repair recipe in pfterminal_codex_home_collision_inciden
+t_20260710.md: refusing to migrate /work/profile/pfterminal_state_5.sqlite: this database appears to belong to a different Codex/Corbanu Ter
+minal distribution; foreign migrations: version 53 (checksum 1996e53b755717942d25b27a4b4551a68d015d9fc680760021f53d92213fe6c0ad7b22054b22eb7
+738a27c2f6b1ca1ad), version 70 (checksum 831937b876cfd94a181cac79cd24753ec9d312a595ccf659d6d99c91b08d1757724b24664e8197e368fdbee825cdcd9c);
+follow the repair recipe in pfterminal_codex_home_collision_incident_20260710.md
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Pane is dead (status 1, Wed Nov 18 06:49:53 2026)

@@ -1,0 +1,19 @@
+{
+  "source_commit": "c46a9d10edb39e3a44bc74b0705408269233eee3",
+  "binary_sha256": "13d3a99b5928a1b3fcf7f7e17e32fa24c5427fe6f0e4c27f8493cbac1dba8bb3",
+  "model": "Qwen3.8-Flash-Next-Uncensored-MLX-Serve-mixed-4-8bit",
+  "provider": "already-running local MLX; no credentials; no load/switch/settings change",
+  "checks": {
+    "input_preserved": true,
+    "tool_written_result_correct": true,
+    "persisted_tool_calls": true,
+    "persisted_completion": true
+  },
+  "limits": "one TUI task, 240-second cutoff; disposable fixture, not canonical live-repository or benchmark qualification",
+  "execution_sandbox": "external Seatbelt workspace-only writes, operator home and Keychain denied; candidate native sandbox disabled for this fixture",
+  "tool_names": [
+    "exec_command",
+    "exec_command"
+  ],
+  "elapsed_seconds": 103.97
+}

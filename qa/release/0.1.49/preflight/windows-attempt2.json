@@ -1,0 +1,6 @@
+{
+  "binary_sha256": "5e5173876cc2c300eaaac7f3143bdfc9be8bd88396f7d470da15d3a2d160c011",
+  "source_commit": "5fd571822bef255237f963c7bc18286a9110f58b",
+  "checks": {},
+  "error": "Missing checkpoint release-fixture"
+}

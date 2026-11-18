@@ -1,0 +1,41 @@
+{
+  "source_commit": "c46a9d10edb39e3a44bc74b0705408269233eee3",
+  "release_base": "ad2b22f0b287132dbc4dad48575614403c758fc6",
+  "source_archive_sha256": "23e437a2e58daf5f91f0dc5a5f970f3b743ebcd6bc1d6780020bc4ce7bd25728",
+  "toolchain": "Rust 1.99.1",
+  "profile": "dev, debug info disabled; not workflow-built release packages",
+  "builds": [
+    {
+      "platform": "macOS arm64",
+      "elapsed": "2m52s",
+      "jobs": 8,
+      "sha256": "13d3a99b5928a1b3fcf7f7e17e32fa24c5427fe6f0e4c27f8493cbac1dba8bb3",
+      "code_mode_host_sha256": "429fcd844d914e860cc269a1f2fda3eb9b5f8f1543ba1f1a9bb21f447c50720d",
+      "signature": "ad-hoc; strict verification passed; no TeamIdentifier"
+    },
+    {
+      "platform": "Linux x86_64 GNU",
+      "elapsed": "1m57s",
+      "jobs": 10,
+      "machine_wide_cargo_builds_before": 1,
+      "sha256": "dccaf6f6d147026224cd4a03214bb554ff7d745f8b9b2f6c28404d949daacfbc"
+    },
+    {
+      "platform": "native Windows x86_64",
+      "machine": "DESKTOP-UJS3HC4",
+      "elapsed": "2m27s",
+      "jobs": 8,
+      "sha256": "f7a9de7fc96ee44c3c20915e83c56e1dd21f1fd40da2da64f63e64b7b0caad52",
+      "signature": "NotSigned; helpers in windows-binaries.json"
+    }
+  ],
+  "checks": {
+    "release_note_tests": 6,
+    "linux_installer_contract_tests": 5,
+    "bazel_lock_update": "pass, no drift",
+    "assembled_notes_match_preview": true,
+    "notes_assembled": 141,
+    "remaining_fragments": 0,
+    "workflow_version_and_notes_validation": true
+  }
+}
