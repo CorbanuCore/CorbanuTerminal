@@ -1196,11 +1196,16 @@ async fn thread_fork_flushes_live_source_goal_progress_before_deferring() -> Res
         responses::ev_response_created("live-source-approval-turn"),
         responses::ev_function_call(
             "live-source-approval",
-            "shell_command",
+            // Sync: upstream removed `untrusted` and offers `exec_command` to
+            // this model; with `on-request` an escalation request raises the
+            // same command approval.
+            "exec_command",
             &serde_json::to_string(&json!({
-                "command": "python3 -c 'print(42)'",
+                "cmd": "python3 -c 'print(42)'",
                 "workdir": null,
-                "timeout_ms": 5000,
+                "yield_time_ms": 5000,
+                "sandbox_permissions": "require_escalated",
+                "justification": "Keep the source turn live.",
             }))?,
         ),
         responses::ev_completed_with_tokens("live-source-approval-turn", /*total_tokens*/ 0),
@@ -1220,7 +1225,7 @@ async fn thread_fork_flushes_live_source_goal_progress_before_deferring() -> Res
     .await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
-        .with_approval_policy("untrusted")
+        .with_approval_policy("on-request")
         .enable_feature(Feature::Goals)
         .write(codex_home.path())?;
 
