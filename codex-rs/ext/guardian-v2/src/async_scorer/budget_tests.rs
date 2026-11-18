@@ -35,7 +35,7 @@ async fn catalog_budget_fixture(base_url: String, window: i64) -> Result<Guardia
         })
         .build_with_auto_env(&server).await?;
     let mut builder = ExtensionRegistryBuilder::new();
-    super::super::install(
+    super::super::install_with_ungated_scoring_for_tests(
         &mut builder,
         test.thread_manager.auth_manager(),
         Arc::downgrade(&test.thread_manager),

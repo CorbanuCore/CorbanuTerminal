@@ -448,7 +448,8 @@ pub enum Feature {
     GuardianConversationHistoryTools,
     /// Enable Guardian V2 automatic approval reviews.
     GuardianV2,
-    /// Run Decisions alongside Guardian V2 for measurement without changing approvals.
+    /// Removed in Corbanu (D606): the Decisions comparison sampler posted transcripts to a
+    /// fixed endpoint. The key is still accepted so existing configs load; it does nothing.
     GuardianV2DecisionsComparison,
     /// Enable Guardian V3 integrations.
     GuardianV3,
@@ -2168,7 +2169,7 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::GuardianV2DecisionsComparison,
         key: "guardianv2_decisions_comparison",
-        stage: Stage::UnderDevelopment,
+        stage: Stage::Removed,
         default_enabled: false,
     },
     FeatureSpec {

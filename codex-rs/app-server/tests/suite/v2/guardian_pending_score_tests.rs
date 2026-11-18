@@ -6,6 +6,7 @@ use codex_app_server_protocol::ItemGuardianApprovalReviewCompletedNotification;
 use futures::StreamExt;
 use pretty_assertions::assert_eq;
 
+#[ignore = "D604 (#2562): background scoring stays off until disclosure-gated"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn later_low_does_not_release_earlier_review() -> Result<()> {
     skip_if_no_network!(Ok(()));

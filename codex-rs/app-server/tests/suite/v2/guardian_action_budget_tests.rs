@@ -2,6 +2,7 @@
 
 use super::*;
 use pretty_assertions::assert_eq;
+#[ignore = "D604 (#2562): background scoring stays off until disclosure-gated"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn oversized_async_action_requires_sync_review_and_later_scores_recover() -> Result<()> {
     skip_if_no_network!(Ok(()));
