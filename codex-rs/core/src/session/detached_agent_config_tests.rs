@@ -6,6 +6,7 @@ use codex_security_policy::SecurityLevel;
 use pretty_assertions::assert_eq;
 
 use super::super::session::SessionSettingsUpdate;
+use super::super::step_settings::StepSettingsUpdate;
 use super::super::tests::make_session_and_context;
 use super::super::tests::make_session_and_context_with_rx;
 use crate::windows_sandbox::WindowsSandboxLevelExt;
@@ -15,10 +16,13 @@ use crate::windows_sandbox::raise_windows_sandbox;
 /// settings, including changes made after the thread started.
 #[tokio::test]
 async fn issue_2015_detached_agent_config_follows_the_live_session() {
-    let (mut session, _turn) = make_session_and_context().await;
-    session.services.agent_control = session
+    let (session, _turn) = make_session_and_context().await;
+    // The clone shares the session's policy tree.
+    let control = session
         .services
         .agent_control
+        .local()
+        .expect("local agent backend")
         .clone()
         .with_effective_security_policy(
             SecurityLevel::Permissive,
@@ -28,8 +32,11 @@ async fn issue_2015_detached_agent_config_follows_the_live_session() {
         .expect("security policy");
     session
         .update_settings(SessionSettingsUpdate {
-            approval_policy: Some(AskForApproval::UnlessTrusted),
-            approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
+            step_settings: StepSettingsUpdate {
+                approval_policy: Some(AskForApproval::UnlessTrusted),
+                approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
+                ..Default::default()
+            },
             sandbox_policy: Some(SandboxPolicy::new_read_only_policy()),
             windows_sandbox_level: Some(WindowsSandboxLevel::RestrictedToken),
             ..Default::default()
@@ -40,9 +47,7 @@ async fn issue_2015_detached_agent_config_follows_the_live_session() {
         session.detached_agent_config().await.security_level,
         SecurityLevel::Permissive
     );
-    let controller = session
-        .services
-        .agent_control
+    let controller = control
         .trusted_security_controller()
         .expect("trusted controller");
     let change = controller
@@ -83,10 +88,13 @@ async fn issue_2015_detached_agent_config_follows_the_live_session() {
 /// #2062: a saved downgrade must not lower a review of a still-protected parent.
 #[tokio::test]
 async fn issue_2062_detached_review_keeps_the_parent_level_until_next_start() {
-    let (mut session, _turn) = make_session_and_context().await;
-    session.services.agent_control = session
+    let (session, _turn) = make_session_and_context().await;
+    // The clone shares the session's policy tree.
+    let control = session
         .services
         .agent_control
+        .local()
+        .expect("local agent backend")
         .clone()
         .with_effective_security_policy(
             SecurityLevel::Permissive,
@@ -94,9 +102,7 @@ async fn issue_2062_detached_review_keeps_the_parent_level_until_next_start() {
             /*inherits_from_spawn_parent*/ false,
         )
         .expect("security policy");
-    let controller = session
-        .services
-        .agent_control
+    let controller = control
         .trusted_security_controller()
         .expect("trusted controller");
     let home = tempfile::tempdir().expect("home");
@@ -104,9 +110,7 @@ async fn issue_2062_detached_review_keeps_the_parent_level_until_next_start() {
     // Exercise the trusted production transition: unlike the low-level test
     // state replacement, it retains the live level when saving a downgrade.
     for level in [SecurityLevel::Aggressive, SecurityLevel::Permissive] {
-        let epoch = session
-            .services
-            .agent_control
+        let epoch = control
             .effective_security_policy()
             .snapshot_for_agent(session.thread_id)
             .expect("parent policy")
@@ -148,10 +152,13 @@ async fn issue_2062_detached_review_keeps_the_parent_level_until_next_start() {
 
 #[tokio::test]
 async fn issue_2062_detached_review_refreshes_the_missing_windows_sandbox_notice() {
-    let (mut session, _turn) = make_session_and_context().await;
-    session.services.agent_control = session
+    let (session, _turn) = make_session_and_context().await;
+    // The clone shares the session's policy tree.
+    let control = session
         .services
         .agent_control
+        .local()
+        .expect("local agent backend")
         .clone()
         .with_effective_security_policy(
             SecurityLevel::Permissive,
@@ -159,9 +166,7 @@ async fn issue_2062_detached_review_refreshes_the_missing_windows_sandbox_notice
             /*inherits_from_spawn_parent*/ false,
         )
         .expect("security policy");
-    let controller = session
-        .services
-        .agent_control
+    let controller = control
         .trusted_security_controller()
         .expect("trusted controller");
     for level in [SecurityLevel::Moderate, SecurityLevel::Aggressive] {
@@ -263,10 +268,13 @@ async fn loosest_fork_config(session: &super::super::session::Session) -> crate:
 /// a stricter fork stays stricter.
 #[tokio::test]
 async fn d711_fork_is_held_at_the_parents_current_level_and_windows_sandbox() {
-    let (mut session, _turn) = make_session_and_context().await;
-    session.services.agent_control = session
+    let (session, _turn) = make_session_and_context().await;
+    // The clone shares the session's policy tree.
+    let control = session
         .services
         .agent_control
+        .local()
+        .expect("local agent backend")
         .clone()
         .with_effective_security_policy(
             SecurityLevel::Permissive,
@@ -290,9 +298,7 @@ async fn d711_fork_is_held_at_the_parents_current_level_and_windows_sandbox() {
         })
         .await
         .expect("sandbox setup");
-    let controller = session
-        .services
-        .agent_control
+    let controller = control
         .trusted_security_controller()
         .expect("trusted controller");
     let change = controller
@@ -325,10 +331,13 @@ async fn d711_fork_is_held_at_the_parents_current_level_and_windows_sandbox() {
 /// although a new thread would recover the saved lower level.
 #[tokio::test]
 async fn d711_fork_keeps_the_parents_level_after_a_saved_downgrade() {
-    let (mut session, _turn) = make_session_and_context().await;
-    session.services.agent_control = session
+    let (session, _turn) = make_session_and_context().await;
+    // The clone shares the session's policy tree.
+    let control = session
         .services
         .agent_control
+        .local()
+        .expect("local agent backend")
         .clone()
         .with_effective_security_policy(
             SecurityLevel::Permissive,
@@ -336,17 +345,13 @@ async fn d711_fork_keeps_the_parents_level_after_a_saved_downgrade() {
             /*inherits_from_spawn_parent*/ false,
         )
         .expect("security policy");
-    let controller = session
-        .services
-        .agent_control
+    let controller = control
         .trusted_security_controller()
         .expect("trusted controller");
     let home = tempfile::tempdir().expect("home");
     let store = crate::security::recovery::HomeTransitionStore::new(home.path());
     for level in [SecurityLevel::Aggressive, SecurityLevel::Permissive] {
-        let epoch = session
-            .services
-            .agent_control
+        let epoch = control
             .effective_security_policy()
             .snapshot_for_agent(session.thread_id)
             .expect("parent policy")

@@ -21,25 +21,26 @@ impl Session {
         let mut config = {
             let state = self.state.lock().await;
             let configuration = &state.session_configuration;
-            let mut config = Self::build_effective_session_config(configuration);
+            let mut config = self.build_effective_session_config(configuration);
             raise_windows_sandbox(&mut config, configuration.windows_sandbox_level);
             config
         };
         // A stricter level committed during this session holds for it until
         // the next start; the new agent starts at least there. A policy state
         // that can no longer be read fails closed.
-        match self
-            .services
-            .agent_control
-            .effective_security_policy()
-            .snapshot_for_agent(self.thread_id)
-        {
-            Ok(policy) => config.security_level = config.security_level.max(policy.level),
+        // A session starts only on the local backend, which holds the policy.
+        let policy = self.services.agent_control.local().map(|control| {
+            control
+                .effective_security_policy()
+                .snapshot_for_agent(self.thread_id)
+        });
+        match policy {
+            Some(Ok(policy)) => config.security_level = config.security_level.max(policy.level),
             // No level in force for this thread: the configured one stands.
-            Err(
+            Some(Err(
                 SecurityPolicyError::RuntimeNotInitialized | SecurityPolicyError::UnknownAgent(_),
-            ) => {}
-            Err(_) => config.security_level = SecurityLevel::Aggressive,
+            )) => {}
+            Some(Err(_)) | None => config.security_level = SecurityLevel::Aggressive,
         }
         refresh_windows_unsandboxed_notice(&mut config);
         config

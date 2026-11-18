@@ -58,6 +58,8 @@ async fn weak_server(codex_home: &Path, server_uri: &str) -> Result<TestAppServe
         .with_approval_policy("never")
         .with_sandbox_mode("danger-full-access")
         .disable_feature(Feature::ShellSnapshot)
+        // Moderate and Aggressive send nothing without source envelopes.
+        .enable_feature(Feature::SourceEnvelopes)
         .write(codex_home)?;
     TestAppServer::builder()
         .with_codex_home(codex_home)
@@ -298,7 +300,11 @@ async fn issue_2015_fork_keeps_a_windows_sandbox_set_up_after_start() -> Result<
     let requests = response_mock.requests();
     assert_eq!(requests.len(), 2);
     if cfg!(windows) {
-        assert_ne!(sandbox_tag(&requests[0]), "none", "the thread has the sandbox");
+        assert_ne!(
+            sandbox_tag(&requests[0]),
+            "none",
+            "the thread has the sandbox"
+        );
     }
     assert_eq!(sandbox_tag(&requests[1]), sandbox_tag(&requests[0]));
     Ok(())
