@@ -1762,7 +1762,7 @@ mod pf_27_s05 {
         set(&embedded, &format!("url=https://x.test/?k={key}&v=1"));
         set(&safe, "ordinary value");
         set(&path, "/usr/local/bin:/bin");
-        let mut expected = vec![header.clone(), embedded.clone(), exact.clone()];
+        let mut expected = vec![header, embedded, exact];
         #[cfg(unix)]
         {
             use std::os::unix::ffi::OsStringExt as _;
