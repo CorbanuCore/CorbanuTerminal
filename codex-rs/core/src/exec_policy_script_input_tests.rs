@@ -48,6 +48,8 @@ async fn literal_scripts_table() {
         "builtin eval 'git push'",
         "command eval 'git push'",
         "builtin -- builtin eval 'git push'",
+        "builtin command eval 'git push'",
+        "command builtin command eval 'git push'",
         "eval 'bash <<EOF\ngit push\nEOF'",
         "eval 'git' 'push'",
         "e'v'al 'g'\\'i\\'t push",
@@ -230,6 +232,39 @@ async fn negative_controls_and_no_rule() {
                 matches!(result, ExecApprovalRequirement::Skip { .. }),
                 "{script:?}: {result:?}"
             );
+        }
+    }
+}
+
+#[tokio::test]
+async fn ordinary_arguments_are_not_execution_text() {
+    for script in [
+        "/tmp/corbanu exec --skip-git-repo-check 'nested run' 2>&1; echo \"exit=$?\"",
+        "env FLAG=1 /tmp/corbanu exec arg 2>&1; echo \"exit=$?\"",
+        "sudo /tmp/corbanu eval arg 2>&1; echo \"exit=$?\"",
+        "unshare -Ur /tmp/corbanu exec arg 2>&1; echo \"exit=$?\"",
+        "git log -- source",
+        "git log -- source; echo \"exit=$?\"",
+        "/tmp/app . arg 2>&1; echo \"exit=$?\"",
+        "/tmp/app coproc arg 2>&1; echo \"exit=$?\"",
+        "echo eval | cat",
+        "echo source | cat",
+        "printf '%s' . | cat",
+        "xargs echo exec",
+        "builtin command echo exec",
+        "command builtin command echo source",
+    ] {
+        for script in [script.to_string(), nested(script)] {
+            for mode in 0..3 {
+                let baseline = check(&script, "", mode).await;
+                for rules in [FORBID, PROMPT] {
+                    assert_eq!(
+                        check(&script, rules, mode).await,
+                        baseline,
+                        "{mode} {script:?}: ordinary arguments must not activate unrelated rules"
+                    );
+                }
+            }
         }
     }
 }

@@ -83,6 +83,36 @@ fn shell_input_scripts(command: &[String]) -> impl Iterator<Item = Option<Vec<St
         eval.as_deref().unwrap_or(command),
         eval.is_some(),
         policy_runs_shell,
+        |words| {
+            let argv: Vec<_> = words
+                .iter()
+                .map(|word| word.clone().unwrap_or_else(|| UNKNOWN_WORD.to_string()))
+                .collect();
+            let mut pending = vec![argv.as_slice()];
+            while let Some(command) = pending.pop() {
+                let wrappers = policy_wrapper_commands(command);
+                if wrappers.uncertain {
+                    return true;
+                }
+                for start in wrappers.starts {
+                    let candidate = &command[start..];
+                    let inner = script_builtin(candidate);
+                    if inner.len() < candidate.len() {
+                        // `builtin command eval` may alternate builtin
+                        // prefixes with launchers. Each slice shrinks.
+                        pending.push(inner);
+                    } else if inner.first().is_some_and(|word| {
+                        matches!(
+                            word.as_str(),
+                            "eval" | "exec" | "coproc" | "." | "source" | UNKNOWN_WORD
+                        )
+                    }) {
+                        return true;
+                    }
+                }
+            }
+            false
+        },
     )
     .into_iter()
     .filter_map(|input| {

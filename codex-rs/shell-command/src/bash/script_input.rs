@@ -16,11 +16,14 @@ pub struct ScriptInput {
 
 /// Find stdin supplied by a pipeline or redirection, including input inherited
 /// by a command in a group. `eval_context` preserves the execution-text boundary
-/// while reading an eval body. A syntax error is handled by the script reader.
+/// while reading an eval body. `interprets_text` classifies executable positions
+/// using the policy reader's launcher rules, not arbitrary argument words.
+/// A syntax error is handled by the script reader.
 pub fn shell_lc_script_inputs(
     command: &[String],
     eval_context: bool,
     is_shell: impl Fn(&str) -> bool,
+    interprets_text: impl Fn(&[Option<String>]) -> bool,
 ) -> Vec<ScriptInput> {
     let Some((_, script)) = extract_bash_command(command) else {
         return Vec::new();
@@ -44,10 +47,9 @@ pub fn shell_lc_script_inputs(
         heredoc |= node.kind() == "heredoc_redirect";
         if node.kind() == "command" {
             let words = script_command_words(node, script);
-            interprets |= words
-                .iter()
-                .flatten()
-                .any(|word| matches!(word.as_str(), "eval" | "exec" | "coproc" | "." | "source"));
+            // The policy reader identifies command positions through known
+            // launchers; an ordinary argument such as `codex exec` is inert.
+            interprets |= interprets_text(&words);
             // Only these direct commands have understood stdin semantics here.
             // Launchers and all other prefixes retain an unknown-script floor.
             precise &= words
