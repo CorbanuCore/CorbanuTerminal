@@ -116,6 +116,22 @@ pub fn read_script(script: &str) -> ScriptRead {
     }
 }
 
+/// Whether `node` holds one of the anonymous `tokens`.
+fn has_token(node: Node<'_>, tokens: &[&str]) -> bool {
+    let mut stack = vec![node];
+    while let Some(node) = stack.pop() {
+        if !node.is_named() && tokens.contains(&node.kind()) {
+            return true;
+        }
+        stack.extend(
+            fields(node, /*named_only*/ false)
+                .into_iter()
+                .map(|(_, child)| child),
+        );
+    }
+    false
+}
+
 /// Where the syntax tree's here-document delimiter lines start, sorted.
 fn heredoc_ends(root: Node<'_>) -> Vec<usize> {
     let mut ends = Vec::new();
@@ -420,6 +436,13 @@ impl<'a> Reader<'a> {
     /// subscripts included: read only where both are numbers or `$?`, `$#`.
     fn test_command<'t>(&mut self, node: Node<'t>, stack: &mut Vec<(Node<'t>, Visit)>) {
         let single = !self.text(node).starts_with("[[");
+        // `[` is a simple command for bash: it ends at a newline, and `<`,
+        // `>` and `(` there are redirections or syntax, not test operators
+        // (`[⏎! sh -c …` runs `sh`).
+        if single && (self.text(node).contains('\n') || has_token(node, &["<", ">", "(", ")"])) {
+            self.deny(node, stack);
+            return;
+        }
         let mut inner = vec![node];
         while let Some(part) = inner.pop() {
             // In `[ … ]` the grammar takes `|`, `&`, `&&` and `||` for test

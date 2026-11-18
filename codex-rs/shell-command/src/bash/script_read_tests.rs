@@ -177,6 +177,10 @@ fn shapes_not_fully_understood_are_unread() {
         "commands=(ls /usr/bin/git)",
         "functions+=(x y)",
         "PROMPT4='$(git push)'",
+        // `[` ends at a newline for bash.
+        "[\n! sh -c 'git push' ]",
+        "[ x < y ]",
+        "[ ( x ) ]",
         "coproc nocorrect X=1 git push",
         "echo /(e:'git push':)",
         "X==(git push)",

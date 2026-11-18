@@ -234,6 +234,8 @@ async fn unknown_scripts_table() {
         "zsh -c \"printf '%2\\$d %1\\$s' 5 'path[\\$(git push)]'\"",
         "zsh -c 'X==(git push)'",
         "zsh -c \"echo /(e:'git push':)\"",
+        "[\n! sh -c 'git push' ]",
+        "[ -n x\n] && git push",
         "env A=1 bash -c 'source ./x.sh'",
         "sudo sh -c 'source ./x.sh'",
         "xargs sh -c 'source ./x.sh'",

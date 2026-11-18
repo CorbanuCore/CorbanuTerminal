@@ -10,7 +10,7 @@ const SEED: u64 = 0x2548_b00c_5eed_0001;
 const CASES: usize = 300;
 const MAX_LAYERS: u64 = 4;
 /// How many constructs [`wrap`] chooses from.
-const CONSTRUCTS: u64 = 72;
+const CONSTRUCTS: u64 = 73;
 
 /// xorshift64*: deterministic, no dependency.
 struct Rng(u64);
@@ -172,6 +172,8 @@ fn wrap(rng: &mut Rng, inner: &str, delimiter: &str) -> String {
             single_quoted(&format!("printf '%2$d %1$s' 5 {arithmetic}"))
         ),
         71 => format!("cat <<'{delimiter}' && echo $(\n{inner}\n)\n{delimiter}"),
+        // `[` across a newline (review round 4 log).
+        72 => format!("[\n! sh -c {} ]", single_quoted(inner)),
         _ => format!("noglob {inner}"),
     }
 }
