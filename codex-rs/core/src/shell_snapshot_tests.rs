@@ -1856,12 +1856,15 @@ async fn brokered_snapshot_drops_secret_and_provider_names_case_insensitively() 
 }
 
 /// #2147 review r2 / #310: a zsh startup file (`.zshenv`, which the brokered
-/// non-login capture reads) ties a secret-named array to a
-/// copy of a brokered credential. Core's secret-name filter drops the export,
-/// and the snapshot is still written (no `invalid_export` bail): the alias
-/// reaches neither the file, nor a replay of it, nor a brokered child, which
-/// gets no copy of the credential. A non-secret export in the same file is
-/// kept. Runs where zsh is native (macOS).
+/// non-login capture reads) exports a brokered GitHub token and ties the
+/// secret-named array `deploy_token` to `DEPLOY_TOKEN`, a copy of it. Core's
+/// secret-name filter drops the export (its value check would too), and the
+/// capture still records `DEPLOY_TOKEN` as an alias of the brokered token
+/// instead of bailing on it (`invalid_export`): the snapshot is written, the
+/// alias reaches neither the file nor a replay of it, and a brokered child that
+/// inherited the token and the alias gets neither the alias nor any copy of the
+/// token (D640: no placeholders for aliases). A non-secret export in the same
+/// file is kept. Runs where zsh is native (macOS).
 #[cfg(target_os = "macos")]
 #[tokio::test]
 async fn zsh_secret_named_tied_credential_alias_is_dropped_without_bailing() -> Result<()> {
@@ -1871,11 +1874,10 @@ async fn zsh_secret_named_tied_credential_alias_is_dropped_without_bailing() -> 
         dir.path().join(".zshenv"),
         format!(
             "export GITHUB_TOKEN='{SECRET}'\n\
-             typeset -T MY_TOKEN_PATH my_token_path\n\
-             my_token_path=(prefix \"Bearer $GITHUB_TOKEN\")\n\
-             export MY_TOKEN_PATH\n\
-             export KEEP_ME_VISIBLE=plainvaluethree\n\
-             unset GITHUB_TOKEN\n"
+             typeset -T DEPLOY_TOKEN deploy_token\n\
+             deploy_token=(prefix \"Bearer $GITHUB_TOKEN\")\n\
+             export DEPLOY_TOKEN\n\
+             export KEEP_ME_VISIBLE=plainvaluethree\n"
         ),
     )?;
     let started_proxy = credential_snapshot_proxy().await?;
@@ -1908,13 +1910,19 @@ async fn zsh_secret_named_tied_credential_alias_is_dropped_without_bailing() -> 
         snapshot.contains("KEEP_ME_VISIBLE"),
         "control: the startup export is captured: {snapshot}"
     );
-    for hidden in ["MY_TOKEN_PATH", "my_token_path", SECRET, "Bearer"] {
+    for hidden in ["DEPLOY_TOKEN", "deploy_token", SECRET, "Bearer"] {
         assert!(!snapshot.contains(hidden), "{hidden} reached the file");
     }
+    assert!(
+        credentials
+            .as_ref()
+            .is_some_and(|credentials| credentials.fail_open_aliases.contains_key("DEPLOY_TOKEN")),
+        "control: the capture saw DEPLOY_TOKEN as an alias of the brokered token"
+    );
     let replay = Command::new("/bin/zsh")
         .arg("-f")
         .arg("-c")
-        .arg(". \"$1\" && printf '%s|%s' \"${MY_TOKEN_PATH-unset}\" \"${KEEP_ME_VISIBLE-unset}\"")
+        .arg(". \"$1\" && printf '%s|%s' \"${DEPLOY_TOKEN-unset}\" \"${KEEP_ME_VISIBLE-unset}\"")
         .arg("snapshot")
         .arg(path.as_path())
         .env_clear()
@@ -1927,7 +1935,14 @@ async fn zsh_secret_named_tied_credential_alias_is_dropped_without_bailing() -> 
         path,
         credentials,
     };
-    let mut brokered_env = HashMap::new();
+    // As if the command inherited the token and its alias.
+    let mut brokered_env = HashMap::from([
+        ("GITHUB_TOKEN".to_string(), SECRET.to_string()),
+        (
+            "DEPLOY_TOKEN".to_string(),
+            format!("prefix:Bearer {SECRET}"),
+        ),
+    ]);
     let credential_context =
         snapshot_file.restore_credentials(&mut brokered_env, &shell_environment_policy);
     brokered_env = credential_context
@@ -1938,10 +1953,10 @@ async fn zsh_secret_named_tied_credential_alias_is_dropped_without_bailing() -> 
         )?
         .env;
     snapshot_file.restore_fail_open_aliases(&mut brokered_env, /*environment_id*/ None);
-    assert_eq!(brokered_env.get("MY_TOKEN_PATH"), None);
+    assert_eq!(brokered_env.get("DEPLOY_TOKEN"), None);
     assert!(
         brokered_env.values().all(|value| !value.contains(SECRET)),
-        "a brokered child got a copy of the credential"
+        "a brokered child got a copy of the credential: {brokered_env:?}"
     );
     Ok(())
 }
