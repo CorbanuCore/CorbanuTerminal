@@ -280,6 +280,16 @@ pub(crate) fn policy_runs_shell(program: &str) -> bool {
         || SHELLS.contains(&names::launcher_name_for(program, case).as_ref())
 }
 
+/// #2585: whether `program` may run PowerShell on this platform (see
+/// [`names`]), which runs any command its words give it.
+pub(crate) fn policy_runs_powershell(program: &str) -> bool {
+    codex_shell_command::powershell::is_powershell_program(program)
+        || matches!(
+            names::launcher_name_for(program, names::PLATFORM).as_ref(),
+            "pwsh" | "powershell"
+        )
+}
+
 /// A launcher with no command of its own. Under xargs (D677) stdin may
 /// supply one, which no rule has seen.
 fn no_command(mut result: PolicyWrapperCommands) -> PolicyWrapperCommands {

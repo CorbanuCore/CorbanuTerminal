@@ -1,10 +1,40 @@
-//! #2543: [`read_script_commands`] reads quoted words as bash does, and
-//! never reads a word bash still changes as written.
+//! #2543: [`read_script`] reads quoted words as bash does, and never reads
+//! a word bash still changes as written.
 
-use super::ScriptCommands;
-use super::read_script_commands;
-use super::shell_lc_script_commands;
+use super::read_script;
+use super::shell_lc_script_read;
 use pretty_assertions::assert_eq;
+
+/// What these tests check of a [`super::ScriptRead`].
+#[derive(Debug, PartialEq, Eq)]
+enum ScriptCommands {
+    Plain(Vec<Vec<String>>),
+    Partial(Vec<Vec<Option<String>>>),
+    Unreadable,
+}
+
+fn read_script_commands(script: &str) -> ScriptCommands {
+    summary(read_script(script))
+}
+
+fn shell_lc_script_commands(command: &[String]) -> Option<ScriptCommands> {
+    shell_lc_script_read(command).map(summary)
+}
+
+fn summary(read: super::ScriptRead) -> ScriptCommands {
+    let words = read.commands.into_iter().map(|command| command.words);
+    if read.unread {
+        ScriptCommands::Unreadable
+    } else if read.plain {
+        ScriptCommands::Plain(
+            words
+                .map(|words| words.into_iter().flatten().collect())
+                .collect(),
+        )
+    } else {
+        ScriptCommands::Partial(words.collect())
+    }
+}
 
 fn plain(commands: &[&[&str]]) -> ScriptCommands {
     ScriptCommands::Plain(

@@ -1,0 +1,169 @@
+//! #2548 (D553): scripts composed at random from bash grammar constructs
+//! around a `git push` that a rule refuses or prompts for. Every one is
+//! refused or asks; none runs unasked. A fixed seed keeps CI reproducible.
+
+use super::*;
+
+const FORBID: &str = r#"prefix_rule(pattern=["git", "push"], decision="forbidden")"#;
+const PROMPT: &str = r#"prefix_rule(pattern=["git", "push"], decision="prompt")"#;
+const SEED: u64 = 0x2548_b00c_5eed_0001;
+const CASES: usize = 300;
+const MAX_LAYERS: u64 = 4;
+
+/// xorshift64*: deterministic, no dependency.
+struct Rng(u64);
+
+impl Rng {
+    fn next(&mut self) -> u64 {
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
+    }
+
+    fn below(&mut self, bound: u64) -> u64 {
+        self.next() % bound
+    }
+}
+
+fn single_quoted(text: &str) -> String {
+    format!("'{}'", text.replace('\'', r#"'\''"#))
+}
+
+fn double_quoted(text: &str) -> String {
+    let mut quoted = String::from("\"");
+    for ch in text.chars() {
+        if matches!(ch, '\\' | '$' | '`' | '"') {
+            quoted.push('\\');
+        }
+        quoted.push(ch);
+    }
+    quoted.push('"');
+    quoted
+}
+
+/// Bash grammar constructs that run `inner`, a command that runs the
+/// payload. `delimiter` is unique to the layer.
+fn wrap(rng: &mut Rng, inner: &str, delimiter: &str) -> String {
+    let heredoc =
+        |head: &str, tail: &str| format!("{head}<<'{delimiter}'\n{inner}\n{delimiter}{tail}");
+    match rng.below(46) {
+        0 => format!("time {inner}"),
+        1 => format!("time -p {inner}"),
+        2 => format!("! {inner}"),
+        3 => format!("command {inner}"),
+        4 => format!("builtin eval {}", single_quoted(inner)),
+        5 => format!("coproc {inner}"),
+        6 => format!("nohup {inner}"),
+        7 => format!("env A=1 {inner}"),
+        8 => format!("sudo {inner}"),
+        9 => format!("xargs {inner}"),
+        10 => format!("( {inner}\n)"),
+        11 => format!("{{ {inner}\n}}"),
+        12 => format!("f() {{ {inner}\n}}; f"),
+        13 => format!("function f {{ {inner}\n}}; f"),
+        14 => format!("true | {inner}"),
+        15 => format!("{{ {inner}\n}} | cat"),
+        16 => format!("true && {inner}"),
+        17 => format!("false || {inner}"),
+        18 => format!("if true; then {inner}\nfi"),
+        19 => format!("for i in 1; do {inner}\ndone"),
+        20 => format!("while true; do {inner}\nbreak; done"),
+        21 => format!("echo $({inner}\n)"),
+        22 if !inner.contains(['`', '\\']) => format!("x=`{inner}`"),
+        23 => format!("eval {}", single_quoted(inner)),
+        24 => format!("eval {}", double_quoted(inner)),
+        25 => format!("exec {inner}"),
+        26 => format!("bash -c {}", single_quoted(inner)),
+        27 => format!("sh -c {}", double_quoted(inner)),
+        28 => format!("echo {} | bash", single_quoted(inner)),
+        29 => heredoc("bash ", ""),
+        30 => format!("bash <<< {}", single_quoted(inner)),
+        31 => heredoc("exec ", "\nbash"),
+        32 => heredoc("source /dev/stdin ", ""),
+        33 => format!(". <(echo {})", single_quoted(inner)),
+        34 => format!("trap {} EXIT", single_quoted(inner)),
+        35 => heredoc("f() { bash; }; f ", ""),
+        36 => format!("alias g={}; g", single_quoted(inner)),
+        37 => format!("timeout 5 {inner}"),
+        38 => format!("command eval {}", single_quoted(inner)),
+        39 => format!("{{ {inner}\n}} & wait"),
+        40 => format!("case x in x) {inner}\n;; esac"),
+        41 => heredoc("time ! bash ", ""),
+        42 => format!(
+            "coproc bash; echo {} >&\"${{COPROC[1]}}\"",
+            single_quoted(inner)
+        ),
+        43 => format!("printf '%s\\n' {} | sh -s", single_quoted(inner)),
+        44 => format!("x={}; eval \"$x\"", single_quoted(inner)),
+        _ => format!("noglob {inner}"),
+    }
+}
+
+fn scripts() -> Vec<String> {
+    let mut rng = Rng(SEED);
+    let payloads = ["git push", "git push --force origin main", "'git' 'push'"];
+    (0..CASES)
+        .map(|case| {
+            let mut script = payloads[rng.below(payloads.len() as u64) as usize].to_string();
+            for layer in 0..=rng.below(MAX_LAYERS) {
+                script = wrap(&mut rng, &script, &format!("E{case}_{layer}"));
+            }
+            script
+        })
+        .collect()
+}
+
+async fn check(script: &str, rules: &str, mode: usize) -> ExecApprovalRequirement {
+    exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+        policy_src: Some(rules.to_string()),
+        command: vec!["bash".into(), "-lc".into(), script.into()],
+        approval_policy: AskForApproval::OnRequest,
+        permission_profile: if mode == 0 {
+            PermissionProfile::Disabled
+        } else {
+            PermissionProfile::workspace_write()
+        },
+        sandbox_permissions: if mode == 2 {
+            SandboxPermissions::RequireEscalated
+        } else {
+            SandboxPermissions::UseDefault
+        },
+        prefix_rule: None,
+    })
+    .await
+}
+
+#[tokio::test]
+async fn composed_scripts_never_run_unasked() {
+    let scripts = scripts();
+    // The generator covers every construct (no layer kind is unreachable).
+    assert!(scripts.iter().any(|script| script.contains("coproc")));
+    assert!(scripts.iter().any(|script| script.contains("<<'E")));
+    let mut failures = Vec::new();
+    for script in &scripts {
+        for rules in [FORBID, PROMPT] {
+            for mode in 0..3 {
+                let result = check(script, rules, mode).await;
+                let held = match &result {
+                    ExecApprovalRequirement::Forbidden { .. } => true,
+                    ExecApprovalRequirement::NeedsApproval {
+                        proposed_execpolicy_amendment,
+                        ..
+                    } => proposed_execpolicy_amendment.is_none(),
+                    ExecApprovalRequirement::Skip { .. } => false,
+                };
+                if !held {
+                    failures.push(format!("{rules} mode {mode} {script:?}: {result:?}"));
+                }
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} of {} checks ran unasked:\n{}",
+        failures.len(),
+        scripts.len() * 6,
+        failures.join("\n")
+    );
+}

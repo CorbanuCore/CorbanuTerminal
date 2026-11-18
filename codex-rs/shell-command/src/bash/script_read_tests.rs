@@ -1,0 +1,199 @@
+//! #2548: the reader accepts only shapes it fully understands, reports where
+//! each command's input comes from, and reads bash's reserved prefixes.
+
+use super::CommandStdin;
+use super::parse_shell_lc_single_command_prefix;
+use super::read_script;
+use pretty_assertions::assert_eq;
+
+fn words(script: &str) -> Vec<Vec<Option<String>>> {
+    read_script(script)
+        .commands
+        .into_iter()
+        .map(|command| command.words)
+        .collect()
+}
+
+fn known(words: &[&str]) -> Vec<Option<String>> {
+    words.iter().map(|word| Some(word.to_string())).collect()
+}
+
+/// The input of the `bash` command in `script`.
+fn bash_stdin(script: &str) -> CommandStdin {
+    let read = read_script(script);
+    let mut found = read
+        .commands
+        .into_iter()
+        .filter(|command| command.words.first() == Some(&Some("bash".to_string())));
+    let command = found.next().expect(script);
+    assert_eq!(found.next(), None, "{script:?}");
+    command.stdin
+}
+
+#[test]
+fn stdin_is_literal_only_for_a_commands_own_literal_input() {
+    let literal = |text: &str| CommandStdin::Literal(text.to_string());
+    for (script, stdin) in [
+        ("bash <<EOF\ngit push\nEOF", literal("git push\n")),
+        ("bash <<'EOF'\n$cmd\nEOF", literal("$cmd\n")),
+        ("bash <<-'EOF'\n\tgit push\n\tEOF", literal("git push\n")),
+        ("bash <<< 'git push'", literal("git push\n")),
+        (
+            "{ bash <<EOF\ngit push\nEOF\n} < /dev/null",
+            literal("git push\n"),
+        ),
+        ("bash <<EOF\n$cmd\nEOF", CommandStdin::Redirected),
+        ("bash <<EOF\n`cmd`\nEOF", CommandStdin::Redirected),
+        ("bash <<< \"$x\"", CommandStdin::Redirected),
+        ("echo hi | bash", CommandStdin::Redirected),
+        // The grammar puts this here-document on the whole pipeline, so it
+        // is not taken as the shell's text.
+        (
+            "echo hi | bash <<EOF\ngit push\nEOF",
+            CommandStdin::Redirected,
+        ),
+        ("bash < file", CommandStdin::Redirected),
+        ("bash <&3", CommandStdin::Redirected),
+        ("bash 0<file", CommandStdin::Redirected),
+        (
+            "bash <<EOF < file\necho safe\nEOF",
+            CommandStdin::Redirected,
+        ),
+        ("coproc bash", CommandStdin::Redirected),
+        ("echo hi | (bash)", CommandStdin::Inherited),
+        ("{ bash; } <<EOF\ngit push\nEOF", CommandStdin::Inherited),
+        (
+            "f() { bash; }; f <<EOF\ngit push\nEOF",
+            CommandStdin::Inherited,
+        ),
+        ("bash", CommandStdin::Inherited),
+        ("bash > log", CommandStdin::Inherited),
+        ("bash 2> log 3< file", CommandStdin::Inherited),
+        ("bash | cat", CommandStdin::Inherited),
+    ] {
+        assert_eq!(bash_stdin(script), stdin, "{script:?}");
+    }
+}
+
+#[test]
+fn reserved_prefixes_are_read_in_any_order() {
+    for script in [
+        "time ! git push",
+        "! time git push",
+        "time -p -- git push",
+        "! ! git push",
+        "time ! time -p ! git push",
+        "coproc git push",
+        "time coproc git push",
+    ] {
+        let read = read_script(script);
+        assert!(!read.unread, "{script:?}");
+        assert_eq!(words(script), vec![known(&["git", "push"])], "{script:?}");
+    }
+    // Quoted, they are programs (`'time'` is /usr/bin/time).
+    assert_eq!(
+        words("'time' git push"),
+        vec![known(&["time", "git", "push"])]
+    );
+}
+
+#[test]
+fn shapes_not_fully_understood_are_unread() {
+    for script in [
+        // Arithmetic evaluates subscripts in variables' values.
+        "echo $((x))",
+        "((x++))",
+        "for ((i=0; i<2; i++)); do :; done",
+        "[[ $x -eq 1 ]]",
+        "[ \"$n\" -gt 0 ]",
+        "[[ -v x ]]",
+        "echo ${x:1}",
+        "echo ${a[1]}",
+        "echo ${!x}",
+        "echo ${x@P}",
+        "echo ${(e)x}",
+        "a[$i]=1",
+        "a=([1]=x)",
+        "declare -i n",
+        "declare -n r=x",
+        "local -a a",
+        "export \"$x\"",
+        "unset 'a[1]'",
+        "unset \"$x\"",
+        // Backquotes nest by escaping, which the grammar misreads.
+        "echo `echo \\`git push\\``",
+        // Variables that run code.
+        "BASH_ENV=./x.sh bash -c true",
+        "export PS4='$(git push)'",
+        "SHELLOPTS=xtrace true",
+        // Reserved words the reader does not strip.
+        "coproc NAME { git push; }",
+        "repeat 2 git push",
+        // Words after a here-document's start nest in it.
+        "cat <<EOF | bash\ngit push\nEOF",
+        "bash <<'A' -c 'git push'\necho safe\nA",
+        "git <<'A' push --force\nA",
+        // Here-documents the grammar may end in the wrong place.
+        "cat <<E\"O\"F\necho safe\nE\"O\"F",
+        "cat <<EOF\nx\nEO\\\nF\ngit push\nEOF",
+        "cat <<EOF\necho safe\nEOFX\necho later\nEOF",
+        // Does not parse.
+        "git push (",
+        "echo *(e:'git push':)",
+    ] {
+        assert!(read_script(script).unread, "{script:?}");
+    }
+}
+
+#[test]
+fn understood_shapes_are_read() {
+    for script in [
+        "git status",
+        "x=$(git log -1); echo \"$x\"",
+        "for f in *.rs; do wc -l \"$f\"; done",
+        "while read -r line; do echo \"$line\"; done < file",
+        "if [ -f x ]; then echo a; elif [[ -d y && $z == *.rs ]]; then :; else exit 1; fi",
+        "case $x in a|b) echo a;; *) :;; esac",
+        "f() { echo \"$1\"; }; f x",
+        "export PATH=\"$HOME/bin:$PATH\"; local x=1; readonly R=2; declare -x A",
+        "unset x y",
+        "echo ${x:-default} ${x#*/} ${x%%.*} ${#x} ${x/a/b} \"${@}\" $1 $?",
+        "[ $? -eq 0 ] && [[ \"$#\" -gt 1 ]]",
+        "cat <<'EOF' > out.txt\nhello $x\nEOF",
+        "diff <(sort a) <(sort b) 2>&1 | head",
+        "cmd & other; wait",
+        "a=(x y \"$z\")",
+        "set -euo pipefail",
+    ] {
+        let read = read_script(script);
+        assert!(!read.unread, "{script:?}: {read:?}");
+    }
+}
+
+#[test]
+fn unread_parts_still_report_their_commands() {
+    assert_eq!(
+        words("echo $((1)) && git push; for ((;;)); do git push --force; done"),
+        vec![
+            vec![Some("echo".to_string()), None],
+            known(&["git", "push"]),
+            known(&["git", "push", "--force"]),
+        ]
+    );
+}
+
+#[test]
+fn ambiguous_heredocs_are_not_reduced_to_one_command() {
+    for script in [
+        "cat <<E\"O\"F\necho safe\nE\"O\"F",
+        "cat <<EOF\nx\nEO\\\nF\ngit push\nEOF",
+        "bash <<'A' -c 'git push'\necho safe\nA",
+    ] {
+        let argv = vec!["sh".to_string(), "-c".to_string(), script.to_string()];
+        assert_eq!(
+            parse_shell_lc_single_command_prefix(&argv),
+            None,
+            "{script:?}"
+        );
+    }
+}
