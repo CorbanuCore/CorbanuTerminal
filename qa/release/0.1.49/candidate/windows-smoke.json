@@ -1,0 +1,51 @@
+{
+  "binary_sha256": "f7a9de7fc96ee44c3c20915e83c56e1dd21f1fd40da2da64f63e64b7b0caad52",
+  "source_commit": "c46a9d10edb39e3a44bc74b0705408269233eee3",
+  "checks": {
+    "native_tui_ready": true,
+    "/status": true,
+    "/model": true,
+    "/providers": true,
+    "/docs": true,
+    "/security": true,
+    "/": true,
+    "typing_does_not_accept_approval": true,
+    "approval_cancelled": true,
+    "first_response": true,
+    "cancel_then_recover": true,
+    "two_persisted_completions": true,
+    "persisted_abort": true
+  },
+  "fixture_acls": [
+    {
+      "sddl": "O:S-1-5-21-1082928048-1218671854-3184771072-1001G:S-1-5-21-1082928048-1218671854-3184771072-513D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;S-1-5-21-1082928048-1218671854-3184771072-1001)",
+      "path": "C:/CorbanuQA/astra-rel149/acl-parent-candidate-smoke-01/fixture/os-home/AppData/Local",
+      "owner_sid": "S-1-5-21-1082928048-1218671854-3184771072-1001",
+      "protected": true
+    },
+    {
+      "sddl": "O:S-1-5-21-1082928048-1218671854-3184771072-1001G:S-1-5-21-1082928048-1218671854-3184771072-513D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;S-1-5-21-1082928048-1218671854-3184771072-1001)",
+      "path": "C:/CorbanuQA/astra-rel149/acl-parent-candidate-smoke-01/fixture/workspace",
+      "owner_sid": "S-1-5-21-1082928048-1218671854-3184771072-1001",
+      "protected": true
+    }
+  ],
+  "known_folder_path": "C:/CorbanuQA/astra-rel149/acl-parent-candidate-smoke-01/fixture/os-home\\AppData\\Local",
+  "launcher_token": [
+    {
+      "label": "NT AUTHORITY\\Local account and member of Administrators group",
+      "sid": "S-1-5-114",
+      "attributes": "Group used for deny only"
+    },
+    {
+      "label": "BUILTIN\\Administrators",
+      "sid": "S-1-5-32-544",
+      "attributes": "Group used for deny only"
+    },
+    {
+      "label": "Mandatory Label\\Medium Mandatory Level",
+      "sid": "S-1-16-8192",
+      "attributes": ""
+    }
+  ]
+}

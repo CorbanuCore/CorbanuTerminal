@@ -1,0 +1,9 @@
+{
+  "source_commit": "e4e8d9b223215ffa9a7764ff2de32fded42b1e9b",
+  "phase": "downgrade",
+  "version": "corbanu 0.1.48",
+  "binary_sha256": "d0763b4a36fd2589fe826143cac231ebcfa3fc13e2c6c043f84d0e789feba725",
+  "isolation": "Docker: no network; only worker fixture mounted; no host home/IPC/keyring mounts",
+  "checks": {},
+  "error": "checkpoint absent: UPGRADE_REPLY; capture reply"
+}

@@ -1,0 +1,31 @@
+{
+  "readonly_root": true,
+  "privileged": false,
+  "memory": 4294967296,
+  "pids_limit": 256,
+  "cap_drop": [
+    "ALL"
+  ],
+  "security_opt": [
+    "no-new-privileges"
+  ],
+  "network": "host",
+  "user": "1000:1000",
+  "mounts": [
+    {
+      "Source": "/home/ambient/corbanu-rtx/astra-rel149/live-qa-current",
+      "Destination": "/work",
+      "RW": true
+    },
+    {
+      "Source": "/home/ambient/corbanu-rtx/astra-rel149/target/debug/corbanu",
+      "Destination": "/candidate/corbanu",
+      "RW": false
+    },
+    {
+      "Source": "/home/ambient/corbanu-rtx/astra-rel149/linux-live.py",
+      "Destination": "/qa/live.py",
+      "RW": false
+    }
+  ]
+}
