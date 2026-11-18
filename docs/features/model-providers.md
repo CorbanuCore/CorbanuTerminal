@@ -73,8 +73,9 @@ same limit.
 If the provider's allowance has already reset, select the affected model and run
 `/model clear-cooldown`. From the command line, use
 `corbanu -m MODEL -c 'model_provider="PROVIDER"' model clear-cooldown`, with the
-same profile and credential selection as the affected request. This clears only
-that provider/model/credential's cooldown and backoff; an active request keeps
+same profile and credential selection as the affected request. Include
+`--account [PROVIDER:]NAME` when the request selected a named account. This clears
+only that provider/model/credential's cooldown and backoff; an active request keeps
 its lease. It does not change the provider's allowance. For a remote session,
 run the CLI command on the app-server host.
 

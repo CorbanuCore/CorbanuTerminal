@@ -31,6 +31,7 @@ async fn model_clear_cooldown_dispatches_only_the_current_provider_and_model() {
 #[tokio::test]
 async fn model_clear_cooldown_keeps_existing_inline_model_settings() {
     let (mut chat, mut rx, mut ops) = make_chatwidget_manual(Some("gpt-5.5")).await;
+    chat.thread_id = Some(ThreadId::new());
     drain_insert_history(&mut rx);
 
     chat.dispatch_command_with_args(
