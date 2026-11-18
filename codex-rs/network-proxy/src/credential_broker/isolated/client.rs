@@ -491,7 +491,26 @@ impl IsolatedBrokerClient {
         &self,
         text: &str,
     ) -> Result<bool, IsolatedBrokerError> {
-        if !self.is_alive() || text.len() > codex_secret_broker::output_gate::MAX_SCAN_BYTES {
+        Ok(self
+            .model_credential_occurrences(&[text], /*min_len*/ 0)?
+            .first()
+            .copied()
+            .unwrap_or(false))
+    }
+
+    /// Which of `texts` contain a held key, with one fingerprint request
+    /// (D685 bounds, as [`Self::model_credential_occurs_in`]). Keys shorter
+    /// than `min_len` bytes are not looked for.
+    pub(crate) fn model_credential_occurrences(
+        &self,
+        texts: &[&str],
+        min_len: usize,
+    ) -> Result<Vec<bool>, IsolatedBrokerError> {
+        if !self.is_alive()
+            || texts
+                .iter()
+                .any(|text| text.len() > codex_secret_broker::output_gate::MAX_SCAN_BYTES)
+        {
             return Err(IsolatedBrokerError::Unavailable);
         }
         let mut key = Zeroizing::new([0u8; 32]);
@@ -501,8 +520,19 @@ impl IsolatedBrokerClient {
         })?;
         match response {
             ControlResponse::SnapshotFingerprints { records } if records.len() <= 128 => {
-                crate::credential_broker::model_snapshot::scan_fingerprints(text, &key, &records)
-                    .map_err(|_| IsolatedBrokerError::Unavailable)
+                let records: Vec<_> = records
+                    .into_iter()
+                    .filter(|(length, _)| *length >= min_len)
+                    .collect();
+                texts
+                    .iter()
+                    .map(|text| {
+                        crate::credential_broker::model_snapshot::scan_fingerprints(
+                            text, &key, &records,
+                        )
+                        .map_err(|_| IsolatedBrokerError::Unavailable)
+                    })
+                    .collect()
             }
             _ => Err(self.fail(IsolatedBrokerError::Control)),
         }
