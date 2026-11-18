@@ -1,7 +1,6 @@
 use crate::decision::Decision;
 use crate::error::Error;
 use crate::error::Result;
-use crate::policy::MatchOptions;
 use crate::policy::Policy;
 use caseless::Caseless;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -262,15 +261,9 @@ pub(crate) fn validate_match_examples(
     matches: &[Vec<String>],
 ) -> Result<()> {
     let mut unmatched_examples = Vec::new();
-    let options = MatchOptions {
-        resolve_host_executables: true,
-    };
 
     for example in matches {
-        if !policy
-            .matches_for_command_with_options(example, /*heuristics_fallback*/ None, &options)
-            .is_empty()
-        {
+        if !policy.example_matches(example).is_empty() {
             continue;
         }
 
@@ -297,15 +290,8 @@ pub(crate) fn validate_not_match_examples(
     _rules: &[RuleRef],
     not_matches: &[Vec<String>],
 ) -> Result<()> {
-    let options = MatchOptions {
-        resolve_host_executables: true,
-    };
-
     for example in not_matches {
-        if let Some(rule) = policy
-            .matches_for_command_with_options(example, /*heuristics_fallback*/ None, &options)
-            .first()
-        {
+        if let Some(rule) = policy.example_matches(example).first() {
             return Err(Error::ExampleDidMatch {
                 rule: format!("{rule:?}"),
                 example: try_join(example.iter().map(String::as_str))

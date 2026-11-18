@@ -1,0 +1,118 @@
+---
+source: tui/src/chatwidget/tests/november_models.rs
+expression: "serde_json::to_string_pretty(&models).unwrap()"
+---
+[
+  [
+    "claude-fable-5-2",
+    "anthropic",
+    "high",
+    [
+      {
+        "effort": "low",
+        "description": "Lower latency and token use for narrow edits."
+      },
+      {
+        "effort": "medium",
+        "description": "Moderate reasoning for everyday coding."
+      },
+      {
+        "effort": "high",
+        "description": "Default Fable 5.2 reasoning for complex coding."
+      },
+      {
+        "effort": "xhigh",
+        "description": "Deeper reasoning for difficult implementation work."
+      },
+      {
+        "effort": "max",
+        "description": "Maximum adaptive reasoning; use when token spend is acceptable."
+      }
+    ],
+    false,
+    true,
+    []
+  ],
+  [
+    "gpt-6.2-astra",
+    "openai",
+    "medium",
+    [
+      {
+        "effort": "low",
+        "description": "Fast responses with lighter reasoning"
+      },
+      {
+        "effort": "medium",
+        "description": "Balances speed and reasoning depth for everyday tasks"
+      },
+      {
+        "effort": "high",
+        "description": "Greater reasoning depth for complex problems"
+      },
+      {
+        "effort": "xhigh",
+        "description": "Extra high reasoning depth for complex problems"
+      },
+      {
+        "effort": "max",
+        "description": "Maximum reasoning depth for the hardest problems"
+      }
+    ],
+    false,
+    true,
+    [
+      {
+        "id": "priority",
+        "name": "Fast",
+        "description": "Faster responses at additional cost."
+      },
+      {
+        "id": "ultrafast",
+        "name": "Ultrafast",
+        "description": "Fastest responses at additional cost. Requires eligible account access."
+      }
+    ]
+  ],
+  [
+    "gpt-6.2-sol",
+    "openai",
+    "medium",
+    [
+      {
+        "effort": "low",
+        "description": "Fast responses with lighter reasoning"
+      },
+      {
+        "effort": "medium",
+        "description": "Balances speed and reasoning depth for everyday tasks"
+      },
+      {
+        "effort": "high",
+        "description": "Greater reasoning depth for complex problems"
+      },
+      {
+        "effort": "xhigh",
+        "description": "Extra high reasoning depth for complex problems"
+      },
+      {
+        "effort": "max",
+        "description": "Maximum reasoning depth for the hardest problems"
+      }
+    ],
+    false,
+    true,
+    [
+      {
+        "id": "priority",
+        "name": "Fast",
+        "description": "Faster responses at additional cost."
+      },
+      {
+        "id": "ultrafast",
+        "name": "Ultrafast",
+        "description": "Fastest responses at additional cost. Requires eligible account access."
+      }
+    ]
+  ]
+]
