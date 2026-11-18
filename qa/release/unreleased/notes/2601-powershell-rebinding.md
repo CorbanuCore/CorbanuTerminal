@@ -1,0 +1,3 @@
+## Security
+
+On macOS and Linux, a PowerShell command line (`pwsh -Command …`) now asks for approval whenever a prompt or forbidden command rule exists, because PowerShell scripts are read only on Windows. On Windows, PowerShell commands that rebind a command name (`Set-Alias`, `New-Alias`, paths on the `alias:` or `function:` drive, `New-PSDrive`) or run code that is not their arguments (`Invoke-Expression`, `Import-Module`, `Add-Type`, `Invoke-Command`, `Start-Job`) ask the same way, as bash's `alias`, `hash -p` and `trap` already do. With no prompt or forbidden rule, nothing changes (#2601, D553).

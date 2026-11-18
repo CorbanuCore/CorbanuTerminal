@@ -115,7 +115,10 @@ async fn failures_for(commands: Vec<Vec<String>>, rule_sets: &[&str]) -> Vec<Str
 }
 
 async fn assert_scripts_ask(scripts: &[&str], rule_sets: &[&str]) {
-    let commands = scripts.iter().flat_map(|script| spellings(script)).collect();
+    let commands = scripts
+        .iter()
+        .flat_map(|script| spellings(script))
+        .collect();
     let failures = failures_for(commands, rule_sets).await;
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
@@ -232,6 +235,44 @@ async fn issue_2601_name_rebinding_and_callbacks_ask() {
     .await;
 }
 
+/// #2613 review follow-up: a shell running a named script file keeps an
+/// exact allow rule for its argv (`script_file_runs_keep_allow_rules_and_
+/// ask_with_strict_rules`), but the file is unread, so with a prompt or
+/// forbidden rule it asks behind launchers, nested, respelled, with
+/// options and with its input redirected too.
+#[tokio::test]
+async fn script_file_run_shapes_ask_with_strict_rules() {
+    const ALLOW_FILE_AND_FORBID: &str = r#"
+prefix_rule(pattern=["sh", "./build.sh"], decision="allow")
+prefix_rule(pattern=["git", "push"], decision="forbidden")
+"#;
+    assert_scripts_ask(
+        &[
+            "sh ./build.sh",
+            "sh ./build.sh arg && echo done",
+            "sudo sh ./build.sh",
+            "env A=1 sh ./build.sh",
+            "timeout 5 sh ./build.sh",
+            "nice sh ./build.sh",
+            "command sh ./build.sh",
+            "exec sh ./build.sh",
+            "bash -c 'sh ./build.sh'",
+            "eval 'sh ./build.sh'",
+            "/bin/sh ./build.sh",
+            "dash ./build.sh",
+            "sh -e ./build.sh",
+            "sh -- ./build.sh",
+            "sh ./build.sh <<EOF\nx\nEOF",
+            "sh ./build.sh <<< x",
+            "echo x | sh ./build.sh",
+            "sh ./build.sh < in",
+            "fish ./x.fish",
+        ],
+        &[FORBID, PROMPT, ALLOW_FILE_AND_FORBID],
+    )
+    .await;
+}
+
 /// Controls: the fail-closed floor is not unconditional. Without a prompt
 /// or forbidden rule nothing changes (the reproducers run as before), and
 /// plain commands and `hash -r` stay read precisely.
@@ -275,26 +316,29 @@ async fn parser_issue_controls_stay_precise() {
 
 /// #2601 in PowerShell: an alias, a function or a PowerShell drive can
 /// rebind a command name, and `Invoke-Expression`, `Import-Module`,
-/// `Add-Type` and script-file jobs run code that is not their argv. The
-/// trusted parser reads these scripts as plain commands, so each such
-/// command fails closed as bash's `alias` does.
-#[cfg(windows)]
+/// `Add-Type` and script-file jobs run code that is not their argv. On
+/// Windows the trusted parser reads these scripts as plain commands, so each such
+/// command fails closed as bash's `alias` does. Elsewhere no PowerShell
+/// script is read, so each asks as an unread script.
 #[tokio::test]
 async fn issue_2601_powershell_name_rebinding_and_code_asks() {
-    use codex_shell_command::powershell::PowershellScriptRead;
-    use codex_shell_command::powershell::read_powershell_command_script;
     // The trusted parser reads the reproducer in full, as plain commands.
-    assert_eq!(
-        read_powershell_command_script(&argv(&[
-            "powershell.exe",
-            "-Command",
-            "Set-Alias f git; f push"
-        ])),
-        Some(PowershellScriptRead::Commands(vec![
-            argv(&["Set-Alias", "f", "git"]),
-            argv(&["f", "push"]),
-        ]))
-    );
+    #[cfg(windows)]
+    {
+        use codex_shell_command::powershell::PowershellScriptRead;
+        use codex_shell_command::powershell::read_powershell_command_script;
+        assert_eq!(
+            read_powershell_command_script(&argv(&[
+                "powershell.exe",
+                "-Command",
+                "Set-Alias f git; f push"
+            ])),
+            Some(PowershellScriptRead::Commands(vec![
+                argv(&["Set-Alias", "f", "git"]),
+                argv(&["f", "push"]),
+            ]))
+        );
+    }
     let scripts = [
         "Set-Alias f git; f push",
         "set-alias -Name f -Value git; f push",
