@@ -16,18 +16,19 @@ Settings:
   stream: true
   tool_choice: "auto"
 -- request 1 (turn) --
-00:additional_tools/developer (3; hash=a1a667755ae63070):
-        - namespace/functions; hash=028af59ad835936d
+00:additional_tools/developer (3; hash=1b61263f28f785fa):
+        - namespace/functions; hash=af90ca1a548a8d5a
           - function/exec_command
           - function/write_stdin
           - function/request_user_input
           - function/request_permissions
           - function/view_image
+          - function/list_models
           - function/get_goal
           - function/create_goal
           - function/update_goal
           - function/parent_tool
-        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=73249b19a8f1c2de
+        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=d49cd801fdb7049b
           - function/close_agent
           - function/resume_agent
           - function/send_input
@@ -81,18 +82,19 @@ Settings:
 ## Window 2 (after request 2: input repeated)
 Settings: same as window 1
 -- request 3 (turn) --
-00:additional_tools/developer (3; hash=a1a667755ae63070):
-        - namespace/functions; hash=028af59ad835936d
+00:additional_tools/developer (3; hash=1b61263f28f785fa):
+        - namespace/functions; hash=af90ca1a548a8d5a
           - function/exec_command
           - function/write_stdin
           - function/request_user_input
           - function/request_permissions
           - function/view_image
+          - function/list_models
           - function/get_goal
           - function/create_goal
           - function/update_goal
           - function/parent_tool
-        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=73249b19a8f1c2de
+        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=d49cd801fdb7049b
           - function/close_agent
           - function/resume_agent
           - function/send_input
@@ -145,18 +147,19 @@ Settings: same as window 1
 ## Window 3 (after request 3: input repeated)
 Settings: same as window 1
 -- request 4 (turn) --
-00:additional_tools/developer (3; hash=a1a667755ae63070):
-        - namespace/functions; hash=028af59ad835936d
+00:additional_tools/developer (3; hash=1b61263f28f785fa):
+        - namespace/functions; hash=af90ca1a548a8d5a
           - function/exec_command
           - function/write_stdin
           - function/request_user_input
           - function/request_permissions
           - function/view_image
+          - function/list_models
           - function/get_goal
           - function/create_goal
           - function/update_goal
           - function/parent_tool
-        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=73249b19a8f1c2de
+        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=d49cd801fdb7049b
           - function/close_agent
           - function/resume_agent
           - function/send_input

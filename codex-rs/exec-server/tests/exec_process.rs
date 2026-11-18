@@ -1148,7 +1148,17 @@ async fn remote_sandboxed_process_preserves_custom_arg0() -> Result<()> {
     let denied_file = outside_workspace.path().join("denied.txt");
     std::fs::write(&denied_file, b"denied")?;
     let cwd = PathUri::from_host_native_path(workspace.path())?;
+    // macOS Minimal permits reads under /tmp and /var/tmp (including their
+    // /private aliases), so TMPDIR may place this fixture in a readable root.
+    // Deny it explicitly so custom argv[0] must preserve sandbox enforcement.
     let policy = FileSystemSandboxPolicy::restricted(vec![
+        FileSystemSandboxEntry {
+            path: FileSystemPath::Path {
+                path: PathUri::from_host_native_path(&denied_file)?,
+            },
+            access: FileSystemAccessMode::Deny,
+            missing_path_behavior: None,
+        },
         FileSystemSandboxEntry {
             path: FileSystemPath::Special {
                 value: FileSystemSpecialPath::Minimal,
