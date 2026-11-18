@@ -315,6 +315,93 @@ async fn file_system_operations_can_reject_junctions_in_any_path_component(
     Ok(())
 }
 
+/// D537 (b): file tools reach files through these operations, and a
+/// `\\localhost` path is refused before any access, as on main (#1863),
+/// whatever the spelling. The same file through its local path stays readable.
+#[test_case(FileSystemImplementation::Local ; "local")]
+#[test_case(FileSystemImplementation::Remote ; "remote")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn file_system_operations_refuse_localhost_unc_paths(
+    implementation: FileSystemImplementation,
+) -> Result<()> {
+    let context = create_file_system_context(implementation).await?;
+    let tmp = tempfile::TempDir::new()?;
+    let existing = tmp.path().join("existing.txt");
+    std::fs::write(&existing, "unchanged")?;
+    let local = existing.to_string_lossy().into_owned();
+    let (drive, rest) = local.split_once(":\\").context("drive-letter temp path")?;
+    let read = ReadFileOptions {
+        follow_symlinks: true,
+    };
+    assert_eq!(
+        context
+            .file_system
+            .read_file(
+                &PathUri::from_host_native_path(&existing)?,
+                read,
+                /*sandbox*/ None
+            )
+            .await?,
+        b"unchanged"
+    );
+
+    for share in [
+        format!(r"\\localhost\{drive}$\{rest}"),
+        format!(r"\\LOCALHOST\{drive}$\{rest}"),
+        format!(r"\\?\UNC\localhost\{drive}$\{rest}"),
+    ] {
+        let uri = PathUri::from_host_native_path(Path::new(&share))?;
+        let refused = |result: Result<(), String>, operation: &str| {
+            let error = result.expect_err(&format!("{operation} {share}"));
+            assert!(
+                error.contains(r"is a network (UNC) path on \\localhost"),
+                "{operation} {share}: {error}"
+            );
+        };
+        refused(
+            context
+                .file_system
+                .read_file(&uri, read, /*sandbox*/ None)
+                .await
+                .map(drop)
+                .map_err(|error| error.to_string()),
+            "read",
+        );
+        refused(
+            context
+                .file_system
+                .write_file(
+                    &uri,
+                    b"changed".to_vec(),
+                    WriteFileOptions {
+                        follow_symlinks: true,
+                    },
+                    /*sandbox*/ None,
+                )
+                .await
+                .map_err(|error| error.to_string()),
+            "write",
+        );
+        refused(
+            context
+                .file_system
+                .get_metadata(
+                    &uri,
+                    GetMetadataOptions {
+                        follow_symlinks: true,
+                    },
+                    /*sandbox*/ None,
+                )
+                .await
+                .map(drop)
+                .map_err(|error| error.to_string()),
+            "metadata",
+        );
+    }
+    assert_eq!(std::fs::read_to_string(&existing)?, "unchanged");
+    Ok(())
+}
+
 #[test_case(FileSystemImplementation::Local ; "local")]
 #[test_case(FileSystemImplementation::Remote ; "remote")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -524,6 +611,7 @@ async fn file_system_elevated_relative_read_denial_uses_policy_cwd(
         FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
                 pattern: "files/*.env".to_string(),
+                scan: None,
             },
             FileSystemAccessMode::Deny,
         ),

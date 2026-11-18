@@ -74,6 +74,7 @@ mod external_agent_config;
 mod external_agent_import_sync;
 mod external_agent_memory_concurrency;
 mod feedback;
+mod fork_parent_settings;
 mod frozen_cloud_skills;
 mod fs;
 #[path = "gateway_oauth_tests.rs"]

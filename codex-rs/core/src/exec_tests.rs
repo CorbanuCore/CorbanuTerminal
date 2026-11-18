@@ -1797,3 +1797,34 @@ fn d541_mcp_sandbox_state_with_mxc_refused_when_corbanu_protections_apply() {
         assert!(err.to_string().contains("prefer_mxc"), "{err}");
     }
 }
+
+/// D537 (b): agent commands and command/exec refuse every spelling of a
+/// `\\localhost` working folder, including forward slashes; other network
+/// folders are left to the later checks.
+#[cfg(windows)]
+#[test]
+fn d537_localhost_unc_folders_are_refused_in_every_spelling() {
+    for folder in [
+        r"\\localhost\C$\work",
+        r"\\LOCALHOST\share\src",
+        "//localhost/C$/work",
+        r"\\?\UNC\localhost\C$\work",
+        r"\\.\UNC\LocalHost\C$\work",
+    ] {
+        let path = AbsolutePathBuf::from_absolute_path_checked(folder).expect(folder);
+        let err = refuse_localhost_unc_folder(&path).expect_err(folder);
+        assert!(
+            err.to_string()
+                .contains(r"is a network (UNC) path on \\localhost"),
+            "{folder}: {err}"
+        );
+    }
+    for folder in [
+        r"C:\work",
+        r"\\server\share\src",
+        r"\\localhost.example\share",
+    ] {
+        let path = AbsolutePathBuf::from_absolute_path_checked(folder).expect(folder);
+        refuse_localhost_unc_folder(&path).expect(folder);
+    }
+}

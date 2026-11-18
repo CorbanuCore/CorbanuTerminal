@@ -6142,7 +6142,10 @@ impl ThreadRequestProcessor {
             !has_permission_override(request_overrides.as_ref(), &typesafe_overrides);
         let needs_latest_settings =
             restore_approval_policy || restore_approvals_reviewer || restore_permission_profile;
-        let loaded_parent_settings = if paginated_source && needs_latest_settings {
+        // #2015 (D519, D711 (a)): a loaded parent's live settings are its
+        // current ones, also for a legacy source whose history has not yet
+        // recorded a change made since its last turn.
+        let loaded_parent_settings = if needs_latest_settings {
             if let Some(parent) = loaded_parent.as_ref() {
                 let snapshot = parent.thread_settings_snapshot().await;
                 Some(PersistedResumeSettings::from(&snapshot))
@@ -6238,7 +6241,7 @@ impl ThreadRequestProcessor {
             &mut typesafe_overrides,
         );
         let (inherited_options, inherited_settings) = inherited_fork.unzip();
-        let options = if let Some(options) = inherited_options {
+        let mut options = if let Some(options) = inherited_options {
             *options
         } else {
             // Derive a Config using the same logic as new conversation, honoring overrides if provided.
@@ -6252,6 +6255,12 @@ impl ThreadRequestProcessor {
                 ..StartThreadOptions::new(config)
             }
         };
+        // #2015 (D519, D711 (a)): the fork never runs below its loaded
+        // parent's current Windows sandbox or security level, including
+        // changes since the parent started, whatever this request asked for.
+        if let Some(parent) = loaded_parent.as_ref() {
+            parent.hold_fork_to_current_floor(&mut options.config).await;
+        }
         let goals_enabled = options.config.features.enabled(Feature::Goals);
 
         let fallback_model_provider = options.config.model_provider_id.clone();
