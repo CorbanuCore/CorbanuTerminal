@@ -59,7 +59,26 @@ pub(super) fn has_wrappers(
         || (read_own_scripts && script_commands(command, platform).is_some())
         // #2568: an amendment for a PowerShell command line whose script
         // rules cannot read cannot approve the commands inside.
-        || unread_powershell_command_line(command).is_some()
+        || unread_powershell_line(command).is_some()
+}
+
+/// #2568 (D553): how `command`, a PowerShell command line, runs a script
+/// rules cannot read: `Some(Some(file and arguments))` for `-File`,
+/// `Some(None)` for a command line read otherwise than PowerShell reads it,
+/// `None` for any other command. #2524 (D688): a PowerShell spelled as
+/// Windows runs it (`PWSH`, `PowerShell.EXE`) is read as the reader knows
+/// it, as main's `powershell_script_unreadable` does (#2582 review r3).
+fn unread_powershell_line(command: &[String]) -> Option<Option<Vec<String>>> {
+    #[cfg(windows)]
+    let respelled = crate::security::tainted_action::policy_powershell_script(command);
+    #[cfg(not(windows))]
+    let respelled: Option<Vec<String>> = None;
+    unread_powershell_command_line(respelled.as_deref().unwrap_or(command)).map(|unread| {
+        match unread {
+            UnreadPowershell::File(file) => Some(file.to_vec()),
+            UnreadPowershell::Unreadable => None,
+        }
+    })
 }
 
 /// D677/D686 (#2506), D691 and #2519: what a command gets for a rule that
@@ -286,12 +305,12 @@ pub(super) fn check(
             // `-File`): every rule counts. A `-File` script's file and
             // arguments are checked as a command too.
             if platform == DangerousCommandPlatform::Windows
-                && let Some(unread) = unread_powershell_command_line(candidate)
+                && let Some(file) = unread_powershell_line(candidate)
             {
                 raise(&mut heuristic, candidate, could_complete(&[]));
-                if let UnreadPowershell::File(file) = unread {
+                if let Some(file) = file {
                     pending.push(Pending {
-                        command: file.to_vec(),
+                        command: file,
                         restrict_only,
                         depth,
                     });

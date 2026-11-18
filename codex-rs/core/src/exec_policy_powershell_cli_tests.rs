@@ -190,3 +190,38 @@ async fn file_reads_as_its_file_and_asks() {
         );
     }
 }
+
+/// #2524 + #2568 (sync, #2582 review r3): PowerShell spelled as Windows runs
+/// it (`PWSH`, `PowerShell.EXE`) reads its command line like `pwsh`: an
+/// unread one asks, offers no amendment, and `-File` still checks the file
+/// and its arguments.
+#[tokio::test]
+async fn respelled_powershell_unread_lines_ask() {
+    const FORBID_DEPLOY: &str = r#"prefix_rule(pattern=["deploy.ps1"], decision="forbidden")"#;
+    for command in [
+        words(&["PWSH", "-File", "deploy.ps1", "-Force"]),
+        words(&["PowerShell.EXE", "-f", "deploy.ps1"]),
+    ] {
+        let result = requirement(command.clone(), Some(FORBID_DEPLOY)).await;
+        assert!(
+            matches!(result, ExecApprovalRequirement::Forbidden { .. }),
+            "{command:?}: {result:?}"
+        );
+        let result = requirement(command.clone(), Some(FORBID_GIT_PUSH)).await;
+        assert!(asked(&result), "{command:?}: {result:?}");
+    }
+    for command in [
+        words(&["PWSH", "-Foo", "-Command", "git push"]),
+        words(&["PowerShell.EXE", "-NoExit", "-Command", "git push"]),
+        words(&[
+            r"C:\Windows\System32\WindowsPowerShell\v1.0\POWERSHELL.EXE",
+            "-Command",
+            "-",
+        ]),
+    ] {
+        for rules in [FORBID_GIT_PUSH, FORBID_RM] {
+            let result = requirement(command.clone(), Some(rules)).await;
+            assert!(asked(&result), "{command:?} {rules}: {result:?}");
+        }
+    }
+}
