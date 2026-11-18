@@ -123,13 +123,21 @@ pub fn dangerous_powershell_literal_words_match(
         .then_some(DangerousCommandMatch::Other)
 }
 
+/// The name a program word runs as. D692 (#2543), stricter only: where
+/// programs are found without regard to case (Windows NTFS; macOS APFS
+/// when this host is a Mac), `RM`, `/bin/Rm` and `ſudo` run `rm` and
+/// `sudo`, so names compare case-folded; Windows also ignores trailing dots
+/// and spaces. Used by the dangerous-command check only.
 fn executable_name_lookup_key(raw: &str, platform: DangerousCommandPlatform) -> Option<String> {
     match platform {
-        DangerousCommandPlatform::Posix => raw
-            .rsplit('/')
-            .next()
-            .filter(|name| !name.is_empty())
-            .map(str::to_owned),
+        DangerousCommandPlatform::Posix => {
+            let name = raw.rsplit('/').next().filter(|name| !name.is_empty())?;
+            Some(if cfg!(target_os = "macos") {
+                fold_name(name, /*windows*/ false)
+            } else {
+                name.to_owned()
+            })
+        }
         DangerousCommandPlatform::Windows => {
             let name = raw
                 .rsplit(['/', '\\'])
@@ -139,7 +147,7 @@ fn executable_name_lookup_key(raw: &str, platform: DangerousCommandPlatform) -> 
                 [drive, b':', ..] if drive.is_ascii_alphabetic() => &name[2..],
                 _ => name,
             };
-            let name = name.to_ascii_lowercase();
+            let name = fold_name(name.trim_end_matches(['.', ' ']), /*windows*/ true);
             for suffix in [".exe", ".cmd", ".bat", ".com"] {
                 if let Some(stripped) = name.strip_suffix(suffix) {
                     return Some(stripped.to_string());
@@ -148,6 +156,18 @@ fn executable_name_lookup_key(raw: &str, platform: DangerousCommandPlatform) -> 
             (!name.is_empty()).then_some(name)
         }
     }
+}
+
+/// ASCII lowercase, and the non-ASCII letters whose case folding is ASCII.
+fn fold_name(name: &str, windows: bool) -> String {
+    name.chars()
+        .map(|ch| match ch {
+            '\u{17f}' => 's',
+            '\u{212a}' => 'k',
+            '\u{131}' if windows => 'i',
+            _ => ch.to_ascii_lowercase(),
+        })
+        .collect()
 }
 
 fn dangerous_command_match_for_exec(
@@ -379,6 +399,51 @@ mod tests {
                 dangerous_powershell_words_match(&command, DangerousCommandPlatform::host()),
                 None
             );
+        }
+    }
+    #[test]
+    fn program_names_fold_case_where_the_platform_does() {
+        // D692 (#2543, stricter only): Windows, and macOS hosts, run `RM`,
+        // `/bin/Rm` and `ſudo` as `rm` and `sudo`; Linux runs other programs.
+        for (platform, folds) in [
+            (DangerousCommandPlatform::Windows, true),
+            (DangerousCommandPlatform::Posix, cfg!(target_os = "macos")),
+        ] {
+            for command in [
+                vec_str(&["RM", "-rf", "x"]),
+                vec_str(&["Rm", "-f", "x"]),
+                vec_str(&["/bin/RM", "-rf", "x"]),
+                vec_str(&["SUDO", "rm", "-rf", "x"]),
+                vec_str(&["\u{17f}\u{75}do", "RM", "-rf", "x"]),
+                vec_str(&["Env", "A=1", "rM", "-rf", "x"]),
+            ] {
+                let expected = folds.then_some(DangerousCommandMatch::ForcedRm);
+                assert_eq!(
+                    dangerous_command_match_for_platform(&command, platform),
+                    expected,
+                    "{platform:?} {command:?}"
+                );
+            }
+        }
+        for program in ["RM.EXE", "rm.exe.", "Rm.Exe . "] {
+            let command = vec_str(&[program, "-rf", "x"]);
+            assert_eq!(
+                dangerous_command_match_for_platform(&command, DangerousCommandPlatform::Windows),
+                Some(DangerousCommandMatch::ForcedRm),
+                "{command:?}"
+            );
+        }
+        for command in [vec_str(&["RM", "-r", "x"]), vec_str(&["RMX", "-rf", "x"])] {
+            for platform in [
+                DangerousCommandPlatform::Windows,
+                DangerousCommandPlatform::Posix,
+            ] {
+                assert_eq!(
+                    dangerous_command_match_for_platform(&command, platform),
+                    None,
+                    "{command:?}"
+                );
+            }
         }
     }
 }

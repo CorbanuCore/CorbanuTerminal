@@ -63,6 +63,8 @@ mod windows_reads;
 mod windows_shell;
 mod work;
 
+pub(crate) use indirect::indirect_exec_policy::policy_posix_shell_script;
+pub(crate) use indirect::indirect_exec_policy::policy_runs_shell;
 pub(crate) use indirect::indirect_exec_policy::policy_wrapper_commands;
 pub(crate) use paths::USER_PERSISTENCE;
 pub(crate) use paths::WORKSPACE_AGENT_SETTINGS;
