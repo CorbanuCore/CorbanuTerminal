@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use zeroize::Zeroizing;
 
 static ARMED: AtomicBool = AtomicBool::new(false);
 
@@ -645,21 +646,20 @@ pub struct UrlPasswordBudget {
 /// The credentials one environment variable carries, labelled for a secret
 /// registry: its whole (trimmed) value when the name is credential-bearing and
 /// the value looks like a credential, URL passwords, and secret-named URL
-/// query parameters. Secrets are slices of `value` except decoded passwords,
-/// so callers decide how to hold copies (for example in `Zeroizing`). Use one
-/// `budget` per scan of an environment.
-pub fn env_credential_values<'a>(
+/// query parameters. Use one `budget` per scan of an environment.
+pub fn env_credential_values(
     name: &str,
-    value: &'a str,
+    value: &str,
     budget: &mut UrlPasswordBudget,
-) -> Vec<(String, Cow<'a, str>)> {
+) -> Vec<(String, Zeroizing<String>)> {
     let mut values = Vec::new();
+    let secret = |text: &str| Zeroizing::new(text.to_string());
     let value = value.trim();
     if is_credential_env_name(name)
         && !value.contains(char::is_whitespace)
         && is_plausible_secret(value)
     {
-        values.push((format!("env:{name}"), Cow::Borrowed(value)));
+        values.push((format!("env:{name}"), secret(value)));
     }
     // The first URL's password exactly as before #2401, at any length and
     // outside the limits below, so no value loses what it registered.
@@ -667,7 +667,7 @@ pub fn env_credential_values<'a>(
     if let Some(password) = first
         && is_plausible_secret(password)
     {
-        values.push((format!("env:{name}:password"), Cow::Borrowed(password)));
+        values.push((format!("env:{name}:password"), secret(password)));
     }
     // Every other reading, raw spellings before decoded ones: tools can echo
     // the URL verbatim or print its decoded password. Escapes of whitespace
@@ -675,16 +675,20 @@ pub fn env_credential_values<'a>(
     let mut raw = Vec::new();
     let mut decoded = Vec::new();
     for password in url_password_candidates(value, MIN_ENV_VALUE_BYTES) {
-        let plain = urlencoding::decode(password).unwrap_or(Cow::Borrowed(password));
+        let plain = Zeroizing::new(
+            urlencoding::decode(password)
+                .map(Cow::into_owned)
+                .unwrap_or_else(|_| password.to_string()),
+        );
         if plain.trim().is_empty() {
             continue;
         }
         let plain_plausible = is_plausible_secret(&plain);
         if (plain_plausible || is_plausible_secret(password)) && Some(password) != first {
-            raw.push(Cow::Borrowed(password));
+            raw.push(secret(password));
         }
-        if plain_plausible && plain != password && Some(plain.as_ref()) != first {
-            decoded.push(Cow::Owned(plain.into_owned()));
+        if plain_plausible && plain.as_str() != password && Some(plain.as_str()) != first {
+            decoded.push(plain);
         }
     }
     for (count, password) in raw.into_iter().chain(decoded).enumerate() {
@@ -698,8 +702,8 @@ pub fn env_credential_values<'a>(
         budget.bytes += password.len();
         values.push((format!("env:{name}:password"), password));
     }
-    for (param, secret) in url_query_secrets(value) {
-        values.push((format!("env:{name}:{param}"), Cow::Borrowed(secret)));
+    for (param, query_secret) in url_query_secrets(value) {
+        values.push((format!("env:{name}:{param}"), secret(query_secret)));
     }
     values
 }

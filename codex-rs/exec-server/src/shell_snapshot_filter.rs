@@ -224,11 +224,9 @@ fn push_env_values(
     budget: &mut secretless_launch::UrlPasswordBudget,
     values: &mut Vec<(String, Zeroizing<String>)>,
 ) {
-    values.extend(
-        secretless_launch::env_credential_values(name, value, budget)
-            .into_iter()
-            .map(|(label, secret)| (label, Zeroizing::new(secret.into_owned()))),
-    );
+    values.extend(secretless_launch::env_credential_values(
+        name, value, budget,
+    ));
 }
 
 #[cfg(test)]

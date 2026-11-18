@@ -826,11 +826,11 @@ where
         let (Some(name), Some(value)) = (name.to_str(), value.to_str()) else {
             continue;
         };
-        values.extend(
-            secretless_launch::env_credential_values(name, value, &mut budget)
-                .into_iter()
-                .map(|(label, secret)| (label, Zeroizing::new(secret.into_owned()))),
-        );
+        values.extend(secretless_launch::env_credential_values(
+            name,
+            value,
+            &mut budget,
+        ));
     }
     values
 }
