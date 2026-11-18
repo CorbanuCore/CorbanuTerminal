@@ -274,7 +274,8 @@ instructions, use `thread/fork` followed by `turn/start`.
 
 A thread forked from a loaded thread starts with that thread's current approval
 policy, approvals reviewer, permissions and sandbox (unless the `thread/fork`
-request sets them), including changes made since it started. Its Windows
+request sets them through its `approvalPolicy`, `approvalsReviewer`, `sandbox` or
+`permissions` fields), including changes made since it started. Its Windows
 sandbox and Corbanu security level are never below the loaded thread's current
 ones, whatever the request or the server's start-up config says (#2015).
 
