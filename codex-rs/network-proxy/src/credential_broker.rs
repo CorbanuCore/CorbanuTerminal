@@ -815,9 +815,10 @@ impl CredentialBroker {
     /// Fail closed around `virtualize`, the hardened engine's pass: drop each
     /// provider's environment variables first (keys a built-in provider owns
     /// stay with the hardened engine), then drop any variable still carrying
-    /// one of their values, from the child or from Core's own environment. A
-    /// built-in variable the hardened engine masked holds a placeholder by
-    /// then and is kept.
+    /// one of their values, from the child or from Core's own environment.
+    /// That includes a built-in key a provider names: if the hardened engine
+    /// masked it, it holds a placeholder by then and is kept; if it left it raw
+    /// (e.g. `GH_ENTERPRISE_TOKEN` without `GH_HOST`), it is dropped (D612).
     fn virtualize_withholding_configured_sources(
         &self,
         env: &mut HashMap<String, String>,
@@ -825,7 +826,7 @@ impl CredentialBroker {
     ) {
         /// Shorter values are too common to match other variables on.
         const MIN_COPIED_VALUE_BYTES: usize = 8;
-        let keys = {
+        let configured_keys = {
             let state = self.read_state();
             if !state.enabled {
                 Vec::new()
@@ -834,28 +835,32 @@ impl CredentialBroker {
                     .configured_provider_configs
                     .values()
                     .flat_map(|provider| provider.env.iter().cloned())
-                    .filter(|key| {
-                        !providers::credential_env_keys()
-                            .any(|builtin| env_key_matches(key, builtin))
-                    })
                     .collect::<Vec<_>>()
             }
         };
-        if keys.is_empty() {
+        if configured_keys.is_empty() {
             virtualize(env);
             return;
         }
-        let is_source = |name: &str| keys.iter().any(|key| env_key_matches(name, key));
+        let is_builtin = |key: &str| {
+            providers::credential_env_keys().any(|builtin| env_key_matches(key, builtin))
+        };
+        let is_configured =
+            |name: &str| configured_keys.iter().any(|key| env_key_matches(name, key));
         let mut values = env
             .iter()
-            .filter(|(name, _)| is_source(name))
+            .filter(|(name, _)| is_configured(name))
             .map(|(_, value)| value.clone())
-            .chain(keys.iter().filter_map(|key| std::env::var(key).ok()))
+            .chain(
+                configured_keys
+                    .iter()
+                    .filter_map(|key| std::env::var(key).ok()),
+            )
             .filter(|value| value.len() >= MIN_COPIED_VALUE_BYTES)
             .collect::<Vec<_>>();
         values.sort_unstable();
         values.dedup();
-        env.retain(|name, _| !is_source(name));
+        env.retain(|name, _| !is_configured(name) || is_builtin(name));
         virtualize(env);
         env.retain(|_, value| !values.iter().any(|secret| value.contains(secret.as_str())));
     }
