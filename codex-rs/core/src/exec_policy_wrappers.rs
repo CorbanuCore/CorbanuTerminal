@@ -303,9 +303,10 @@ pub(super) fn check(
                 && let Some((inner_commands, used_complex_parsing)) =
                     script_commands(parsed_as, platform)
             {
-                // Sync (#2575): a heredoc in a script read only in part adds
-                // no prompt of its own; its command's rules still apply.
-                if used_complex_parsing && !restrict_only {
+                // A heredoc asks, as main's `used_complex_parsing` does, also
+                // in a script read only in part (#2575 had skipped that
+                // prompt; review r1 of #2582 matched main, the stricter).
+                if used_complex_parsing {
                     push_prompt(&mut matches, inner);
                 }
                 if !reads_past_bound {
