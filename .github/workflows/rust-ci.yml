@@ -71,13 +71,16 @@ jobs:
           # tests use it or that it uses: network-proxy, process-hardening
           # and sandboxing (#1813, after #1795 merged unseen); exec-server,
           # which has whole Windows-only test files; utils/pty (Windows-only
-          # pipe and ConPTY tests) and app-server (#1839).
+          # pipe and ConPTY tests) and app-server (#1839); shell-command,
+          # whose Windows-only exec-policy PowerShell tests never ran on PRs
+          # (#2568).
           windows_native_tests=false
           windows_native_core=false
           windows_native_sandbox=false
           windows_native_other=false
           windows_native_pty=false
           windows_native_app_server=false
+          windows_native_shell=false
           # Schema fixture tests run on PRs that change the protocol crates,
           # a crate whose types they export (security-policy, absolute-path,
           # path-uri, ext/items), the experimental API macros, the workspace
@@ -95,7 +98,8 @@ jobs:
             [[ $f == codex-rs/exec-server/* ]] && windows_native_other=true windows_native_tests=true
             [[ $f == codex-rs/utils/pty/* ]] && windows_native_pty=true windows_native_tests=true
             [[ $f == codex-rs/app-server/* ]] && windows_native_app_server=true windows_native_tests=true
-            [[ $f == .github/workflows/rust-ci-windows-native-tests.yml ]] && windows_native_core=true windows_native_sandbox=true windows_native_other=true windows_native_pty=true windows_native_app_server=true windows_native_tests=true
+            [[ $f == codex-rs/shell-command/* ]] && windows_native_shell=true windows_native_tests=true
+            [[ $f == .github/workflows/rust-ci-windows-native-tests.yml ]] && windows_native_core=true windows_native_sandbox=true windows_native_other=true windows_native_pty=true windows_native_app_server=true windows_native_shell=true windows_native_tests=true
             [[ $f == codex-rs/protocol/* || $f == codex-rs/app-server-protocol/* || $f == .github/workflows/rust-ci.yml ]] && app_server_schema=true
             [[ $f == codex-rs/security-policy/* || $f == codex-rs/utils/absolute-path/* || $f == codex-rs/utils/path-uri/* || $f == codex-rs/ext/items/* ]] && app_server_schema=true
             [[ $f == codex-rs/codex-experimental-api-macros/* || $f == codex-rs/Cargo.toml || $f == codex-rs/Cargo.lock ]] && app_server_schema=true
@@ -136,6 +140,9 @@ jobs:
           fi
           if [[ $windows_native_app_server == true ]]; then
             windows_native_targets+=" //codex-rs/app-server/..."
+          fi
+          if [[ $windows_native_shell == true ]]; then
+            windows_native_targets+=" //codex-rs/shell-command/..."
           fi
           windows_native_targets="${windows_native_targets# }"
           echo "Windows native test targets: ${windows_native_targets:-none}"
@@ -270,7 +277,8 @@ jobs:
   # 2026-10-15): Windows-only test failures in these crates broke nightly
   # after merging. Since #1813 also windows-sandbox-rs with network-proxy,
   # process-hardening and sandboxing, and exec-server; since #1839 also
-  # utils/pty and app-server. Only the changed groups' targets run (see
+  # utils/pty and app-server; since #2568 also shell-command. Only the
+  # changed groups' targets run (see
   # `changed`). Restore-only, like every PR job.
   windows_native_tests:
     name: Windows native tests
