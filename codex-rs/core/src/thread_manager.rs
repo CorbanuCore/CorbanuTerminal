@@ -2734,6 +2734,9 @@ impl ThreadManagerState {
                     &config.workspace_roots,
                 )
             });
+        let carried_untrusted_content = thread_extension_init
+            .remove::<CarriedUntrustedContent>()
+            .is_some();
         let is_resumed_thread = matches!(&initial_history, InitialHistory::Resumed(_));
         if reserved_thread_id.is_some() && matches!(&initial_history, InitialHistory::Resumed(_)) {
             return Err(CodexErr::InvalidRequest(
@@ -2762,6 +2765,15 @@ impl ThreadManagerState {
                             resumed.conversation_id
                         )));
                     }
+                    // D624 (a): a copy reloaded meanwhile (between `thread/revert`'s unload
+                    // and its reload) is flagged too, never handed back unflagged.
+                    if carried_untrusted_content {
+                        thread
+                            .session
+                            .services
+                            .model_client()
+                            .note_unrecorded_input_for_taint();
+                    }
                     let session_configured =
                         thread.startup_metadata().to_session_configured_event();
                     startup_state.release_membership();
@@ -2778,9 +2790,6 @@ impl ThreadManagerState {
                 thread.session.services.mcp_runtime.revoke_ema();
             }
         }
-        let carried_untrusted_content = thread_extension_init
-            .remove::<CarriedUntrustedContent>()
-            .is_some();
         let supplied_thread_instructions =
             thread_extension_init.remove::<InheritedThreadInstructions>();
         let supplied_exec_policy = thread_extension_init.remove::<InheritedExecPolicy>();

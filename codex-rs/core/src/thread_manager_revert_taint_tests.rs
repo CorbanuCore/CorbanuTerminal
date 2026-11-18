@@ -3,14 +3,21 @@
 use super::*;
 use pretty_assertions::assert_eq;
 
-/// A manager on an in-memory store and a stopped root thread to reload, as `thread/revert` does.
-async fn reverted_root() -> (
+type RootThread = (
     tempfile::TempDir,
     Config,
     ThreadManager,
     Arc<AuthManager>,
     ThreadId,
-) {
+);
+
+/// A manager on an in-memory store and a stopped root thread to reload, as `thread/revert` does.
+async fn reverted_root() -> RootThread {
+    root_thread(/*keep_running*/ false).await
+}
+
+/// The same root, optionally still loaded and running.
+async fn root_thread(keep_running: bool) -> RootThread {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;
     config.codex_home = temp_dir.path().join("codex-home").abs();
@@ -48,12 +55,14 @@ async fn reverted_root() -> (
         .start_thread(StartThreadOptions::new(config.clone()))
         .await
         .expect("start source thread");
-    source
-        .thread
-        .shutdown_and_wait()
-        .await
-        .expect("shutdown source thread");
-    let _ = manager.remove_thread(&source.thread_id).await;
+    if !keep_running {
+        source
+            .thread
+            .shutdown_and_wait()
+            .await
+            .expect("shutdown source thread");
+        let _ = manager.remove_thread(&source.thread_id).await;
+    }
     (temp_dir, config, manager, auth_manager, source.thread_id)
 }
 
@@ -93,8 +102,8 @@ async fn revert_past_untrusted_content_keeps_the_session_flagged() {
         .expect("reload after revert");
     assert_eq!(reloaded.thread_id, thread_id);
     assert!(reloaded.thread.untrusted_content_seen());
-    // Grants and approvals are judged against this generation: post-taint checks stay on and
-    // anything recorded before the reload (generation 0) is stale.
+    // The post-taint gate reads this generation: post-taint checks stay on in the reloaded
+    // session. Approvals and grants from before the revert ended with the old session.
     assert!(
         post_taint_generation(&reloaded).is_some_and(|generation| generation > 0),
         "{:?}",
@@ -132,4 +141,40 @@ async fn revert_of_a_clean_session_stays_clean() {
         .shutdown_and_wait()
         .await
         .expect("shutdown reloaded thread");
+}
+
+#[tokio::test]
+async fn revert_reload_that_meets_a_running_copy_flags_it() {
+    // Something reloaded the thread between `thread/revert`'s unload and its reload: the copy
+    // handed back must be flagged too.
+    let (_home, config, manager, auth_manager, thread_id) =
+        root_thread(/*keep_running*/ true).await;
+    let running = manager.get_thread(thread_id).await.expect("running thread");
+    assert!(!running.untrusted_content_seen());
+    let reloaded = manager
+        .resume_thread_after_revert(
+            config,
+            remaining_history(thread_id),
+            auth_manager,
+            /*parent_trace*/ None,
+            ClientMcpExtensions::default(),
+            /*untrusted_content_seen*/ true,
+        )
+        .await
+        .expect("reload after revert");
+    assert!(
+        Arc::ptr_eq(&reloaded.thread, &running),
+        "the running copy is returned"
+    );
+    assert!(reloaded.thread.untrusted_content_seen());
+    assert!(
+        post_taint_generation(&reloaded).is_some_and(|generation| generation > 0),
+        "{:?}",
+        post_taint_generation(&reloaded)
+    );
+    reloaded
+        .thread
+        .shutdown_and_wait()
+        .await
+        .expect("shutdown thread");
 }
