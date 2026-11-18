@@ -562,6 +562,7 @@ fn denied_parents_are_created_before_glob_expansion() -> Result<()> {
         FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
                 pattern: "**/missing".to_owned(),
+                scan: None,
             },
             FileSystemAccessMode::Deny,
         ),
