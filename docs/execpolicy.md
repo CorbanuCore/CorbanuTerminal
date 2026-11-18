@@ -61,14 +61,14 @@ Do not assume `bash -lc "bash -c 'git push'"` receives the same inner-rule check
 as on main. A saved approval for an outer shell is not a substitute for checks
 on the commands it runs.
 
-## When the command cannot be determined
+## When a POSIX shell command cannot be determined
 
-Rules also inspect commands in scripts with redirections, substitutions, loops,
-and functions. This partial reading can add a prompt or refusal; it cannot use
+For POSIX shells such as bash, rules also inspect commands in scripts with
+redirections, substitutions, loops, and functions. This partial reading can add a prompt or refusal; it cannot use
 an allow rule to approve the complex script.
 
-If a command cannot be determined and a prompt or forbidden rule could match,
-Corbanu asks. For example, with the `git push` prompt rule above:
+If a command in that POSIX script cannot be determined and a prompt or forbidden
+rule could match, Corbanu asks (with the PowerShell exception below). For example, with the `git push` prompt rule above:
 
 ```text
 bash -c '$x push'
@@ -108,7 +108,7 @@ normalization for restrictive rules.
 Sync supports explicit `canonical_matching=True` on a rule, which compares all
 prefix words without regard to case using Unicode canonical matching. This is
 opt-in and can affect allow rules and arguments too. See the
-[policy reference](../codex-rs/execpolicy/README.md#canonical-matching).
+[policy reference](https://github.com/CorbanuCore/CorbanuTerminal/blob/sync/upstream-rust-v0.167.0/codex-rs/execpolicy/README.md#canonical-matching).
 
 Ordinary allow rules require the exact program spelling on every platform. On Windows,
 an allow rule for `git` does not also approve `GIT` or `git.exe`. Failure to match
@@ -128,7 +128,7 @@ prefix_rule(pattern = ["git", "status"], decision = "allow")
 An allow match then requires the listed path's spelling, including the drive
 letter's case. **A host-executable list also limits prompt and forbidden
 basename rules to listed paths.** It is not a way to prohibit every other copy
-of that program. See the [policy reference](../codex-rs/execpolicy/README.md) for
+of that program. See the [policy reference](https://github.com/CorbanuCore/CorbanuTerminal/blob/sync/upstream-rust-v0.167.0/codex-rs/execpolicy/README.md) for
 exact-match precedence and path resolution.
 
 ## xargs
@@ -171,5 +171,5 @@ corbanu execpolicy check --rules path/to/policy.rules --pretty git push origin m
 
 This diagnostic checks the supplied words. It does not reproduce runtime
 wrapper expansion, nested-script inspection, or approval and sandbox decisions.
-Explicit `canonical_matching=True` rules do apply to this diagnostic. See the [policy reference](../codex-rs/execpolicy/README.md)
+Explicit `canonical_matching=True` rules do apply to this diagnostic. See the [policy reference](https://github.com/CorbanuCore/CorbanuTerminal/blob/sync/upstream-rust-v0.167.0/codex-rs/execpolicy/README.md)
 for its JSON output and optional absolute-path resolution.
