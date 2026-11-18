@@ -125,6 +125,8 @@ async fn tmpdir_uses_command_environment_over_rpc(
     std::fs::create_dir(&server_temp)?;
     let outside = server_temp.join("outside.txt");
     std::fs::write(&outside, "original")?;
+    let command_temp_file = command_temp.join("outside-session.txt");
+    std::fs::write(&command_temp_file, "original")?;
     let server = common::exec_server::exec_server_with_env(
         [
             ("TEMP", server_temp.as_os_str()),
@@ -157,8 +159,8 @@ async fn tmpdir_uses_command_environment_over_rpc(
     let env = HashMap::from([
         ("SystemRoot".to_owned(), std::env::var("SystemRoot")?),
         (
-            "ALLOWED_FILE".to_owned(),
-            format!("\"{}\"", command_temp.join("allowed.txt").display()),
+            "COMMAND_TEMP_FILE".to_owned(),
+            format!("\"{}\"", command_temp_file.display()),
         ),
         (
             "OUTSIDE_FILE".to_owned(),
@@ -187,7 +189,7 @@ async fn tmpdir_uses_command_environment_over_rpc(
                 "/D".to_owned(),
                 "/S".to_owned(),
                 "/C".to_owned(),
-                "echo CHILD-TEMP:%TEMP% & echo allowed>%ALLOWED_FILE% & echo modified>%OUTSIDE_FILE% & exit /b 0".to_owned(),
+                r#"echo CHILD-TEMP:%TEMP% & echo allowed>"%TEMP%\allowed.txt" & echo modified>%COMMAND_TEMP_FILE% & echo modified>%OUTSIDE_FILE% & exit /b 0"#.to_owned(),
             ],
             cwd,
             env_policy: Some(ExecEnvPolicy {
@@ -216,17 +218,40 @@ async fn tmpdir_uses_command_environment_over_rpc(
     )
     .await?;
     assert_eq!(
-        (stdout.trim(), code, exited),
-        (
-            format!("CHILD-TEMP:{}", command_temp.display()).as_str(),
-            Some(0),
-            true
-        ),
+        (code, exited),
+        (Some(0), true),
         "unexpected launch result, stderr: {stderr}"
     );
+    let actual_temp = std::path::PathBuf::from(
+        stdout
+            .trim()
+            .strip_prefix("CHILD-TEMP:")
+            .context("child TEMP output")?,
+    );
+    if selection == WindowsSandboxSelection::Elevated {
+        // D377: only the private session subfolder is writable, never the
+        // command's parent temp folder or the server's separate temp folder.
+        assert_eq!(
+            std::fs::canonicalize(actual_temp.parent().context("session temp parent")?)?,
+            std::fs::canonicalize(&command_temp)?,
+        );
+        assert!(
+            actual_temp
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("corbanu-sandbox-tmp-"))
+        );
+        assert_eq!(std::fs::read_to_string(&command_temp_file)?, "original");
+    } else {
+        assert_eq!(actual_temp, command_temp);
+        assert_eq!(
+            std::fs::read_to_string(&command_temp_file)?.trim_end(),
+            "modified"
+        );
+    }
     assert_eq!(
         (
-            std::fs::read_to_string(command_temp.join("allowed.txt"))?
+            std::fs::read_to_string(actual_temp.join("allowed.txt"))?
                 .trim_end()
                 .to_owned(),
             std::fs::read_to_string(outside)?

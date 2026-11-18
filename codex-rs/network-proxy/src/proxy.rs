@@ -2679,14 +2679,23 @@ mod tests {
             config
         };
 
-        // Flag off: today's grants reach the OS sandbox unchanged.
+        // Flag off: supported grants reach the OS sandbox unchanged;
+        // Windows always drops Unix-socket permissions.
         let open = NetworkProxy::builder()
             .state(Arc::new(network_proxy_state_for_policy(config(false))))
             .build()
             .await?;
         assert!(open.allow_local_binding());
-        assert!(open.dangerously_allow_all_unix_sockets());
-        assert_eq!(open.allow_unix_sockets().len(), 1);
+        assert_eq!(
+            open.dangerously_allow_all_unix_sockets(),
+            !cfg!(target_os = "windows")
+        );
+        let expected_unix_sockets: &[String] = if cfg!(target_os = "windows") {
+            &[]
+        } else {
+            &["/tmp/pf-33-s02.sock".to_string()]
+        };
+        assert_eq!(open.allow_unix_sockets().as_ref(), expected_unix_sockets);
 
         // Guarded: loopback-wide, port 53 and Unix-socket grants are dropped,
         // so the sandbox may reach only the proxy's own loopback ports.

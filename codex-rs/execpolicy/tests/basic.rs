@@ -1432,6 +1432,51 @@ fn strictest_rule_matching_more_args_folds_only_strict_rules() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn partial_allow_rules_need_exact_host_spelling() -> Result<()> {
+    let mut parser = PolicyParser::new();
+    parser.parse(
+        "test.rules",
+        r#"prefix_rule(pattern=["git", "push"], decision="allow")"#,
+    )?;
+    let policy = parser.build();
+    for fold_program_case in [false, true] {
+        let options = MatchOptions {
+            resolve_host_executables: true,
+            fold_program_case,
+        };
+        for program in ["git".to_string(), host_absolute_path(&["tools", "git"])] {
+            assert_eq!(
+                policy.strictest_rule_matching_more_args(&tokens(&[&program]), &options),
+                Some(Decision::Allow),
+                "{program}"
+            );
+        }
+        for program in [
+            "GIT".to_string(),
+            "git.exe".to_string(),
+            "GIT.EXE".to_string(),
+            host_absolute_path(&["tools", "GIT"]),
+            host_absolute_path(&["tools", "git.exe"]),
+        ] {
+            assert_eq!(
+                policy.strictest_rule_matching_more_args(&tokens(&[&program]), &options),
+                None,
+                "{program}"
+            );
+            // Eligibility is checked before callers map rule decisions.
+            assert_eq!(
+                policy.strictest_rule_matching_more_args_by(&tokens(&[&program]), &options, |_| {
+                    Some(Decision::Forbidden)
+                },),
+                None,
+                "{program}"
+            );
+        }
+    }
+    Ok(())
+}
+
 fn ask_all(_: &[String]) -> Decision {
     Decision::Prompt
 }
