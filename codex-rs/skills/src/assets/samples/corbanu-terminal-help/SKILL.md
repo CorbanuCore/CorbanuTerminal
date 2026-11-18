@@ -23,6 +23,28 @@ Do not turn product help into a code tour. Do not ask the user to paste API keys
 | Use Post Fiat Task Node | `/tasknode` | Use the dedicated Task Node skill for submission and verification workflows. |
 | Diagnose current state | See the status map below | Read the authoritative surface before proposing resets or reconfiguration. |
 
+## Command rules and approvals
+
+For command rules, use the bundled `docs/execpolicy.md` guide and `/permissions`
+for session permissions. There is no `/rules` slash command in this version.
+Rules live in `.rules` files under the active home's `rules/` directory;
+remembered approvals use `rules/default.rules`.
+
+Explain a prompt in terms of the command inside recognized launchers and shells,
+not just its outer name. Literal quotes do not hide words. In POSIX scripts,
+unreadable or run-time words can require approval when a restrictive rule could
+match (subject to the documented PowerShell gap); with
+approvals disabled, that means refusal. Allow rules require exact spelling,
+including Windows executable suffixes and listed drive-letter case. On macOS
+and Windows, prompt/forbidden program names match without regard to case.
+
+Do not promise complete shell interpretation: the guide records the nested
+script bound, xargs input checks, trusted Windows PowerShell parsing, and open
+limits for eval/shell input, complex PowerShell scripts (#2556/#2583), and
+run-time PowerShell words inside POSIX scripts (#2585).
+The `corbanu execpolicy check` command tests supplied prefixes, not the complete
+runtime decision. Avoid recommending an outer-shell allow rule as a workaround.
+
 ## Providers and models
 
 Use `/providers` to view sign-in and credential status for account plans, Corbanu Plan, and supported API-key providers. Selecting an API-key provider opens masked entry and stores the key in the encrypted vault. Environment-provided keys may appear as available without being copied into the vault.

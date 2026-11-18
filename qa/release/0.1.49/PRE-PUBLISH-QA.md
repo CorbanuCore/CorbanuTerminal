@@ -62,8 +62,10 @@ after [postmerge CI run 44247625166](https://github.com/CorbanuCore/CorbanuTermi
 completed successfully (verified 2026-11-18 06:41Z). All eight gate merge commits
 are ancestors of that base, including the named-account cooldown follow-up #2589.
 Candidate build source: `c46a9d10edb39e3a44bc74b0705408269233eee3`.
-All platforms receive that exact source; later evidence-only commits are recorded
-separately. The source archive SHA-256 is
+All tested platforms received that exact source. Later #2595 integration changes
+only documentation, including the embedded help Markdown. The coordinator authorized
+no binary QA replay for that delta; [provenance](candidate/documentation-delta.json)
+keeps the earlier binaries and final documentation distinct. The source archive SHA-256 is
 `23e437a2e58daf5f91f0dc5a5f970f3b743ebcd6bc1d6780020bc4ce7bd25728`.
 
 ## Notes and automated checks
@@ -83,11 +85,13 @@ separately. The source archive SHA-256 is
 - [ ] Capture final PR CI, native Windows checks and relevant integration results.
 - [ ] Independent read-only Opus 5.5 High APPROVE on exact pushed head.
 
-Review budget: **2 total**, used 1. Preparation review approved exact head
-`0c60eea1b13dcb9dd691fc50a83ec804d6fc7146`; its nonblocking documentation
-findings were addressed afterward. Round 2 is reserved for the final release
-head including subsequent changes. Extra rounds require the coordinator's written
-grant via `$W/astra-rel149.request.md`. Never post approval/request-changes under
+Initial review budget: **2**, both used. Round 1 approved preparation head
+`0c60eea1b13dcb9dd691fc50a83ec804d6fc7146`; its nonblocking findings were fixed.
+Round 2 approved `a9f033833a4da28df67c8e4a3bb37a74a638c599`. The coordinator's
+2026-11-18 07:07Z grant authorizes **one extra delta-only round 3** for #2595's
+documentation, reassembly and provenance, with complete-PR scope confirmed at
+07:16Z. Any further round requires a new written grant via
+`$W/astra-rel149.request.md`. Never post approval/request-changes under
 the maintainer account. Follow CODEOWNERS and exact-SHA security approval rules
 where applicable. Merge only after all checks complete successfully, using the
 literal head SHA with `--merge --match-head-commit`.

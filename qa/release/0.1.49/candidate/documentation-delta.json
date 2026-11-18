@@ -1,0 +1,31 @@
+{
+  "tested_build_source": "c46a9d10edb39e3a44bc74b0705408269233eee3",
+  "prior_approved_head": "a9f033833a4da28df67c8e4a3bb37a74a638c599",
+  "documentation_pr": 2595,
+  "documentation_pr_head": "ca5d4b301cf1facaf3d00da846ee3bdfcee768de",
+  "documentation_merge": "edfc83dcfe5c36b993d9db43a6a93235e4207d87",
+  "coordinator_authority": [
+    "2026-11-18 07:07Z: integrate documentation, grant one extra delta-only Opus round 3, no binary QA rerun",
+    "2026-11-18 07:16Z: integrate complete merged PR; disclose embedded help Markdown"
+  ],
+  "documentation_paths": [
+    "codex-rs/execpolicy/README.md",
+    "codex-rs/skills/src/assets/samples/corbanu-terminal-help/SKILL.md",
+    "docs/execpolicy.md",
+    "docs/slash_commands.md"
+  ],
+  "corrected_fragment_ids": [
+    2455,
+    2543,
+    2546,
+    2553,
+    2568
+  ],
+  "assembled_fragment_count": 141,
+  "remaining_fragments": 0,
+  "only_compiled_input_delta": "codex-rs/skills/src/assets/samples/corbanu-terminal-help/SKILL.md, embedded by include_dir! in skills/src/lib.rs:22",
+  "rust_executable_source_changed": false,
+  "binary_qa_repeated": false,
+  "qa_provenance": "All candidate binary hashes and functional results remain those of tested_build_source. They do not claim testing of the later embedded help text.",
+  "assembly_link_adjustment": "One command-rules link rebased from ../../../../docs/execpolicy.md to ../../../docs/execpolicy.md for qa/release/0.1.49/RELEASE_NOTES.md."
+}

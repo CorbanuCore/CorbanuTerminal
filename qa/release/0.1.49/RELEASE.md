@@ -17,13 +17,20 @@ this evidence commit. This record does not pre-approve those steps.
   #2555, #2558, #2573 (issue #2567), #2571, #2580 (issue #2568), #2586
   (issue #2584), and #2591 (issue #2590). The named-account cooldown follow-up
   #2589 is also included. Exact gate SHAs are in [the plan](PRE-PUBLISH-QA.md).
-- Eight preparation commits were carried forward. Product changes relative to
-  the main base are only the workspace version and its lockfile entries; the
-  release workflow's default input changes to 0.1.49. Subsequent evidence
-  commits do not change the compiled source.
-- All 141 fragments were assembled into [release notes](RELEASE_NOTES.md).
-  The assembled body exactly matches the frozen pre-assembly preview. No
-  fragments remain. [Coverage audit](NOTES-AUDIT.md) records verified additions.
+- Eight preparation commits were carried forward. The workspace and its lockfile
+  entries move to 0.1.49; the release workflow's default input follows.
+- After binary QA, the coordinator requested the complete documentation PR #2595,
+  merged on main as `edfc83dcfe5c36b993d9db43a6a93235e4207d87`. It updates command-rule
+  guidance and five release claims. The only compiled-input change since tested
+  source `c46a9d10` is embedded help Markdown; no Rust or other executable source
+  changes. The earlier binary hashes/results remain accurately attributed to
+  that tested source. Per the coordinator's 07:07Z grant and 07:16Z confirmation,
+  binary QA was not repeated for this documentation-only delta. See
+  [delta provenance](candidate/documentation-delta.json).
+- All 141 fragments were reassembled with those five corrections. The body matches
+  the updated preview apart from one relative command-rules link rebased for the
+  versioned directory. No fragments remain. [Coverage audit](NOTES-AUDIT.md)
+  records verified additions.
 
 ## Builds and automated checks
 
@@ -156,9 +163,10 @@ migration are not claimed.
   has no explicit Developer ID signing/notarization step. Those artifact checks
   remain coordinator post-build work; they are not reported as passes here.
 - Final exact-head Opus review and release-PR CI must finish before merge/READY.
-  Review budget remains two total rounds; the second is reserved for this final
-  candidate and the delta after preparation review. Do not alter the reviewed
-  head without following the review-budget rules.
+  Initial Opus rounds 1 and 2 approved preparation and candidate head `a9f03383`.
+  The coordinator granted one extra delta-only round 3 for #2595's documentation,
+  reassembly and provenance. Final exact-head review/approval is recorded on the
+  PR; do not alter that head without following the review-budget rules.
 
 Once the PR is reviewed, green and merged, the coordinator uses workflow
 `corbanu-terminal-release.yml`, ref `release/corbanu-0.1.49`,
