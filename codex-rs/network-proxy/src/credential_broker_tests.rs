@@ -2520,9 +2520,15 @@ fn main_engine_withholds_unbrokered_configured_provider_sources() {
         )]),
         ..NetworkProxyConfig::default()
     });
+    // #2269 r2 (D612, #2562): raw copies of the configured value in built-in
+    // variables. The hardened engine leaves the context variable unmasked, so it
+    // is dropped; the built-in token variable is masked, so it keeps a placeholder.
+    let base_url_copy = format!("https://{ALIAS_VALUE}.example/v1");
     let base = env_map([
         ("ALIAS_TEST_TOKEN", ALIAS_VALUE),
         ("COPIED", ALIAS_VALUE),
+        ("OPENAI_BASE_URL", base_url_copy.as_str()),
+        ("GITHUB_TOKEN", ALIAS_VALUE),
         ("GH_TOKEN", PF28_S02_TOKEN),
         ("PATH", "/usr/bin"),
     ]);
@@ -2534,12 +2540,17 @@ fn main_engine_withholds_unbrokered_configured_provider_sources() {
     for env in [&child, &snapshot] {
         assert!(!env.contains_key("ALIAS_TEST_TOKEN"), "{env:?}");
         assert!(!env.contains_key("COPIED"), "{env:?}");
+        assert!(!env.contains_key("OPENAI_BASE_URL"), "{env:?}");
         assert!(env.values().all(|value| !value.contains(ALIAS_VALUE)));
         assert_eq!(env.get("PATH").map(String::as_str), Some("/usr/bin"));
     }
-    // The built-in source is still virtualized (masked), not dropped.
+    // The built-in sources are still virtualized (masked), not dropped.
     let masked = child.get("GH_TOKEN").expect("GH_TOKEN stays brokered");
     assert_ne!(masked, PF28_S02_TOKEN);
+    let masked_copy = child
+        .get("GITHUB_TOKEN")
+        .expect("GITHUB_TOKEN stays brokered");
+    assert_ne!(masked_copy, ALIAS_VALUE);
 }
 
 #[test]
